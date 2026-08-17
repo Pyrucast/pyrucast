@@ -20,9 +20,9 @@
 //! use pyrucast::atoms::ElementType;
 //! use pyrucast::containers::mesh::SubMesh;
 //! use pyrucast::atoms::Node;
-//! use pyrucast::store::{insert, read};
+//! use pyrucast::store::Handle;
 //!
-//! let coords = insert(Coords::new(2).unwrap());
+//! let coords = Handle::new(Coords::new(2).unwrap());
 //! let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
 //! let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
 //! let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
@@ -32,17 +32,16 @@
 //! assert_eq!(sm.cell_count(), 1);
 //!
 //! // The SubMesh holds refs on the 3 nodes, in addition to the `Node`s.
-//! assert_eq!(read(&coords).unwrap().refcount(a.id()), 2);
+//! assert_eq!(coords.read().refcount(a.id()), 2);
 //! drop(sm);  // decrements the referenced nodes
-//! assert_eq!(read(&coords).unwrap().refcount(a.id()), 1);
+//! assert_eq!(coords.read().refcount(a.id()), 1);
 //! ```
 
 use crate::aggregate::Aggregate;
 use crate::atoms::{Cell, CellIter, ElementType, Node, NodeId, RgbColor};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
-use crate::store::{insert, read, write, Handle};
-use serde::{Deserialize, Serialize};
+use crate::store::Handle;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::OnceLock;
@@ -57,7 +56,6 @@ use std::sync::OnceLock;
 /// A [`RgbColor`] is attached as the **face colour** used by the
 /// visualization layer (`viz` feature); it has no effect on numerics and
 /// defaults to a light blue.
-#[derive(Serialize, Deserialize)]
 pub struct SubMesh {
     element_type: ElementType,
     coords: Handle<Coords>,
@@ -65,7 +63,6 @@ pub struct SubMesh {
     connectivity: Vec<NodeId>,
     /// Face colour used by the viz layer. `serde(default)` keeps older
     /// snapshots (without the field) readable.
-    #[serde(default)]
     face_color: RgbColor,
     /// Once **sealed**, the connectivity is frozen: [`SubMesh::add_cell`] and
     /// [`SubMesh::add_cell_taking`] refuse to run. A submesh is sealed the
@@ -73,7 +70,6 @@ pub struct SubMesh {
     /// captures its handle, so those consumers can never be left referencing
     /// stale cells. The seal is permanent for the object's lifetime.
     /// `serde(default)` keeps older snapshots (without the field) readable.
-    #[serde(default)]
     sealed: bool,
     /// Lazily-built `NodeId → index` map over the **distinct** nodes of the
     /// connectivity, in first-appearance order. Consumers that need a node
@@ -83,7 +79,6 @@ pub struct SubMesh {
     /// derived from `connectivity` and rebuilt on demand after a reload. Only
     /// ever populated once the submesh is sealed (its connectivity frozen),
     /// so it can never go stale.
-    #[serde(skip)]
     node_index: OnceLock<HashMap<NodeId, usize>>,
     /// Lazily-built **canonical POI1 companion**: the node cloud of this
     /// submesh's distinct nodes, materialised once and shared. Every consumer
@@ -95,7 +90,6 @@ pub struct SubMesh {
     /// directly. Not serialized (derived from `connectivity`, rebuilt on
     /// demand). Only ever populated once the submesh is sealed, so it can never
     /// go stale.
-    #[serde(skip)]
     poi1_companion: OnceLock<Handle<SubMesh>>,
 }
 
@@ -177,7 +171,7 @@ impl SubMesh {
             )));
         }
         {
-            let mut c = write(&self.coords)?;
+            let mut c = self.coords.write();
             for (acquired, &n) in nodes.iter().enumerate() {
                 if let Err(e) = c.incref(n) {
                     // Roll back the increfs already done for this cell.
@@ -219,7 +213,7 @@ impl SubMesh {
             )));
         }
         {
-            let c = read(&self.coords)?;
+            let c = self.coords.read();
             for &n in nodes {
                 if !c.is_alive(n) {
                     return Err(PyrucastError::Message(format!(
@@ -305,7 +299,7 @@ impl SubMesh {
         }
 
         {
-            let mut c = write(&self.coords)?;
+            let mut c = self.coords.write();
             // Incref the images first: until they have all succeeded, nothing
             // has been given up, so a rollback restores the initial state.
             for (done, &(_, _, new)) in changes.iter().enumerate() {
@@ -418,8 +412,8 @@ impl SubMesh {
         // Build (write-locks `Coords`) and seal the companion. `self` is behind
         // the caller's read guard on this submesh — a different slot than the
         // POI1 companion and `Coords` — so no lock inversion (same discipline
-        // the previous `insert(read(sm)?.to_poi1()?)` idiom already relied on).
-        let handle = insert(SubMesh::poi1_from_node_ids(self.coords.clone(), &seen)?);
+        // the previous `Handle::new(sm.read().to_poi1()?)` idiom already relied on).
+        let handle = Handle::new(SubMesh::poi1_from_node_ids(self.coords.clone(), &seen)?);
         seal(&handle)?;
         if self.sealed {
             // Frozen source ⇒ safe to memoize. On a race the loser drops its
@@ -490,20 +484,19 @@ impl SubMesh {
 /// **write** guard on the same slot is held is still a deadlock (the slot lock is
 /// not reentrant — see [`crate::store`]); only the sealed-read case is relaxed.
 pub fn seal(handle: &Handle<SubMesh>) -> Result<Handle<SubMesh>> {
-    if read(handle)?.is_sealed() {
+    if handle.read().is_sealed() {
         return Ok(handle.clone());
     }
-    write(handle)?.seal();
+    handle.write().seal();
     Ok(handle.clone())
 }
 
 impl Drop for SubMesh {
     fn drop(&mut self) {
         // One lock acquisition for all decrefs.
-        if let Ok(mut c) = write(&self.coords) {
-            for &n in &self.connectivity {
-                let _ = c.decref(n);
-            }
+        let mut c = self.coords.write();
+        for &n in &self.connectivity {
+            let _ = c.decref(n);
         }
     }
 }
@@ -560,7 +553,7 @@ impl crate::dump::Dump for SubMesh {
 /// Mesh: aggregate of submeshes. Each submesh carries its own
 /// `Handle<Coords>`; the mesh itself imposes no constraint on
 /// `Coords` homogeneity.
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Default)]
 pub struct Mesh {
     subs: Vec<Handle<SubMesh>>,
 }
@@ -577,8 +570,8 @@ crate::impl_aggregate!(Mesh, SubMesh, submesh, "submesh(es)", {
             return Ok(());
         }
         let a = self.coords()?;
-        let b = read(h)?.coords();
-        if a.index() != b.index() || a.generation() != b.generation() {
+        let b = h.read().coords();
+        if !a.same_object(&b) {
             Err(PyrucastError::Message("mismatched Coords".into()))
         } else {
             Ok(())
@@ -611,7 +604,7 @@ impl Mesh {
     pub fn union_node(&self, node: &Node) -> Result<Mesh> {
         let sub = self.unit()?;
         let (et, coords, mut ids) = {
-            let s = read(&sub)?;
+            let s = sub.read();
             (s.element_type(), s.coords(), s.connectivity().to_vec())
         };
         if et != ElementType::POI1 {
@@ -631,7 +624,7 @@ impl Mesh {
     pub fn cell_count(&self) -> Result<usize> {
         let mut total = 0usize;
         for sm in self {
-            total += read(sm)?.cell_count();
+            total += sm.read().cell_count();
         }
         Ok(total)
     }
@@ -644,7 +637,7 @@ impl Mesh {
             .items()
             .first()
             .ok_or_else(|| PyrucastError::Message("coords: mesh has no submeshes".into()))?;
-        Ok(read(sm)?.coords())
+        Ok(sm.read().coords())
     }
 
     /// Create a mesh wrapping a single `SubMesh`. Config-free at the Mesh
@@ -652,7 +645,7 @@ impl Mesh {
     /// pure aggregate of submeshes). The submesh is moved into the store.
     pub fn from_submesh(sub: SubMesh) -> Self {
         let mut mesh = Self::default();
-        mesh.subs.push(insert(sub));
+        mesh.subs.push(Handle::new(sub));
         mesh
     }
 
@@ -663,8 +656,8 @@ impl Mesh {
     pub fn duplicate(&self) -> Result<Mesh> {
         let mut copy = Self::default();
         for sm in self {
-            let dup = read(sm)?.duplicate()?;
-            copy.subs.push(insert(dup));
+            let dup = sm.read().duplicate()?;
+            copy.subs.push(Handle::new(dup));
         }
         Ok(copy)
     }
@@ -676,17 +669,17 @@ impl Mesh {
                 "add_cell: mesh must have exactly one submesh".into(),
             ));
         }
-        write(&self.subs[0])?.add_cell(nodes)
+        self.subs[0].write().add_cell(nodes)
     }
 
     /// Element type of each submesh, in order.
     pub fn element_types(&self) -> Result<Vec<ElementType>> {
-        self.iter().map(|sm| Ok(read(sm)?.element_type())).collect()
+        self.iter().map(|sm| Ok(sm.read().element_type())).collect()
     }
 
     /// Cell count of each submesh, in order.
     pub fn cell_counts(&self) -> Result<Vec<usize>> {
-        self.iter().map(|sm| Ok(read(sm)?.cell_count())).collect()
+        self.iter().map(|sm| Ok(sm.read().cell_count())).collect()
     }
 
     /// A POI1 mesh holding exactly `nodes` — the named constructor of a point
@@ -717,14 +710,14 @@ impl Mesh {
         // Gather the unique node ids the mesh references, across all submeshes.
         let mut seen: HashSet<NodeId> = HashSet::new();
         for sm in self {
-            let s = read(sm)?;
+            let s = sm.read();
             for &nid in s.connectivity() {
                 seen.insert(nid);
             }
         }
 
         let best = {
-            let c = read(&coords_handle)?;
+            let c = coords_handle.read();
             if point.len() != c.dim() as usize {
                 return Err(PyrucastError::Message(format!(
                     "nearest_node: point has {} coordinates, mesh is {}-D",
@@ -756,7 +749,7 @@ impl Mesh {
     pub fn node(&self, submesh_idx: usize, cell_idx: usize, node_idx: usize) -> Result<Node> {
         let sm = self.get(submesh_idx)?;
         let (nid, coords) = {
-            let s = read(&sm)?;
+            let s = sm.read();
             let npc = s.element_type.nodes_per_cell();
             let n = s.cell_count();
             if cell_idx >= n {
@@ -789,7 +782,7 @@ impl Mesh {
     /// Iterator over every cell of submesh `submesh_idx`.
     pub fn cells(&self, submesh_idx: usize) -> Result<CellIter> {
         let sm = self.get(submesh_idx)?;
-        let end = read(&sm)?.cell_count();
+        let end = sm.read().cell_count();
         Ok(CellIter::new(sm, end))
     }
 
@@ -862,11 +855,11 @@ impl Mesh {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     #[test]
     fn submesh_poi1_is_node_list() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
 
@@ -880,7 +873,7 @@ mod tests {
 
     #[test]
     fn poi1_from_nodes_derives_config_and_builds() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
 
@@ -901,7 +894,7 @@ mod tests {
 
     #[test]
     fn submesh_tri3_increfs_and_drop_decrefs() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
@@ -910,14 +903,14 @@ mod tests {
         sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         // SubMesh increfed each of the 3 nodes, in addition to the Nodes.
         {
-            let cf = read(&coords).unwrap();
+            let cf = coords.read();
             assert_eq!(cf.refcount(a.id()), 2);
             assert_eq!(cf.refcount(b.id()), 2);
             assert_eq!(cf.refcount(c.id()), 2);
         }
         drop(sm);
         {
-            let cf = read(&coords).unwrap();
+            let cf = coords.read();
             assert_eq!(cf.refcount(a.id()), 1);
             assert_eq!(cf.refcount(b.id()), 1);
             assert_eq!(cf.refcount(c.id()), 1);
@@ -926,7 +919,7 @@ mod tests {
 
     #[test]
     fn node_index_maps_distinct_nodes_in_first_appearance_order() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
@@ -954,7 +947,7 @@ mod tests {
 
     #[test]
     fn sealed_submesh_refuses_add_cell() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
 
@@ -974,30 +967,30 @@ mod tests {
         ));
         assert_eq!(sm.cell_count(), 1);
         // The refused cell left no lingering incref on b.
-        assert_eq!(read(&coords).unwrap().refcount(b.id()), 1);
+        assert_eq!(coords.read().refcount(b.id()), 1);
     }
 
     #[test]
     fn seal_via_handle_and_is_idempotent() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
-        let h = insert({
+        let h = Handle::new({
             let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
             sm.add_cell(&[a.id()]).unwrap();
             sm
         });
         seal(&h).unwrap();
         seal(&h).unwrap(); // idempotent
-        assert!(read(&h).unwrap().is_sealed());
+        assert!(h.read().is_sealed());
         assert!(matches!(
-            write(&h).unwrap().add_cell(&[a.id()]).unwrap_err(),
+            h.write().add_cell(&[a.id()]).unwrap_err(),
             PyrucastError::MeshSealed
         ));
     }
 
     #[test]
     fn duplicate_is_unsealed_and_reincrefs() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
@@ -1012,7 +1005,7 @@ mod tests {
         assert_eq!(copy.connectivity(), sm.connectivity());
         // Each node is now referenced by the original AND the copy (+ Node).
         {
-            let cf = read(&coords).unwrap();
+            let cf = coords.read();
             assert_eq!(cf.refcount(a.id()), 3);
         }
         // The copy is editable even though the source is frozen.
@@ -1024,7 +1017,7 @@ mod tests {
 
     #[test]
     fn remap_nodes_rewrites_connectivity_and_moves_refcounts() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
@@ -1035,8 +1028,8 @@ mod tests {
         sm.add_cell(&[b2.id(), c.id(), a.id()]).unwrap();
 
         // b2 appears twice in the connectivity: two units, plus its Node.
-        assert_eq!(read(&coords).unwrap().refcount(b2.id()), 3);
-        assert_eq!(read(&coords).unwrap().refcount(b.id()), 1);
+        assert_eq!(coords.read().refcount(b2.id()), 3);
+        assert_eq!(coords.read().refcount(b.id()), 1);
 
         let map = HashMap::from([(b2.id(), b.id()), (a.id(), a.id())]);
         assert_eq!(sm.remap_nodes(&map).unwrap(), 2, "two slots rewritten");
@@ -1045,8 +1038,8 @@ mod tests {
         assert_eq!(sm.connectivity()[1], b.id());
         assert_eq!(sm.connectivity()[3], b.id());
         // The two units moved from b2 to b; the identity entry moved nothing.
-        assert_eq!(read(&coords).unwrap().refcount(b2.id()), 1);
-        assert_eq!(read(&coords).unwrap().refcount(b.id()), 3);
+        assert_eq!(coords.read().refcount(b2.id()), 1);
+        assert_eq!(coords.read().refcount(b.id()), 3);
 
         // Re-applying the same map is a no-op (idempotent by construction).
         assert_eq!(sm.remap_nodes(&map).unwrap(), 0);
@@ -1054,7 +1047,7 @@ mod tests {
 
     #[test]
     fn remap_nodes_drops_the_derived_caches() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let b2 = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
@@ -1075,7 +1068,7 @@ mod tests {
 
     #[test]
     fn remap_nodes_refuses_a_sealed_submesh() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let b2 = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
@@ -1094,7 +1087,7 @@ mod tests {
 
     #[test]
     fn mesh_duplicate_yields_editable_copy() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
 
@@ -1112,25 +1105,25 @@ mod tests {
 
     #[test]
     fn submesh_add_cell_invalid_arity() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
 
         let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
         let err = sm.add_cell(&[a.id()]).unwrap_err();
         assert!(matches!(err, PyrucastError::Message(_)));
         // No increment should have survived the failure.
-        assert_eq!(read(&coords).unwrap().refcount(a.id()), 1);
+        assert_eq!(coords.read().refcount(a.id()), 1);
     }
 
     #[test]
     fn submesh_add_cell_collected_node_rollback() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
-        let dead_id = write(&coords).unwrap().add_node(&[2.0]).unwrap();
+        let dead_id = coords.write().add_node(&[2.0]).unwrap();
         // dead_id starts at refcount=1; decrement then collect.
         {
-            let mut c = write(&coords).unwrap();
+            let mut c = coords.write();
             c.decref(dead_id).unwrap();
             assert_eq!(c.gc(), 1);
         }
@@ -1141,7 +1134,7 @@ mod tests {
         let err = sm.add_cell(&[a.id(), b.id(), dead_id]).unwrap_err();
         assert!(matches!(err, PyrucastError::Message(_)));
         {
-            let cf = read(&coords).unwrap();
+            let cf = coords.read();
             assert_eq!(cf.refcount(a.id()), 1, "a must be rolled back");
             assert_eq!(cf.refcount(b.id()), 1, "b must be rolled back");
         }
@@ -1150,7 +1143,7 @@ mod tests {
 
     #[test]
     fn mesh_aggregates_submeshes_same_config() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let cc = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
@@ -1159,12 +1152,12 @@ mod tests {
             let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
             sm.add_cell(&[a.id()]).unwrap();
             sm.add_cell(&[b.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sm_tri = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[a.id(), b.id(), cc.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
 
         let mut mesh = Mesh::empty();
@@ -1176,7 +1169,7 @@ mod tests {
 
     #[test]
     fn mesh_element_types_and_cell_counts() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
@@ -1187,7 +1180,7 @@ mod tests {
         let sm_tri = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         m.add_sub(sm_tri).unwrap();
 
@@ -1200,7 +1193,7 @@ mod tests {
 
     #[test]
     fn mesh_index_and_iter_sugar() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
@@ -1210,25 +1203,22 @@ mod tests {
         let sm_tri = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         m.add_sub(sm_tri).unwrap();
 
-        let et0 = read(&m[0]).unwrap().element_type();
-        let et1 = read(&m[1]).unwrap().element_type();
+        let et0 = m[0].read().element_type();
+        let et1 = m[1].read().element_type();
         assert_eq!(et0, ElementType::POI1);
         assert_eq!(et1, ElementType::TRI3);
 
-        let types: Vec<ElementType> = (&m)
-            .into_iter()
-            .map(|h| read(h).unwrap().element_type())
-            .collect();
+        let types: Vec<ElementType> = (&m).into_iter().map(|h| h.read().element_type()).collect();
         assert_eq!(types, vec![ElementType::POI1, ElementType::TRI3]);
     }
 
     #[test]
     fn mesh_node_access_by_indices() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
@@ -1245,7 +1235,7 @@ mod tests {
 
     #[test]
     fn mesh_merge_combines_submeshes() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
@@ -1264,7 +1254,7 @@ mod tests {
 
     #[test]
     fn debug_and_display_submesh_and_mesh() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let sm = SubMesh::new(coords.clone(), ElementType::SEG2);
         let d = format!("{:?}", sm);
         let s = format!("{}", sm);
@@ -1278,40 +1268,40 @@ mod tests {
 
     #[test]
     fn aggregate_union_sub_and_sub_union_sub() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
-        let s1 = insert(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
-        let s2 = insert(SubMesh::poi1_from_nodes(std::slice::from_ref(&b)).unwrap());
+        let s1 = Handle::new(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
+        let s2 = Handle::new(SubMesh::poi1_from_nodes(std::slice::from_ref(&b)).unwrap());
 
         // sub | sub → Mesh
         let m = Mesh::union_subs(&s1, &s2).unwrap();
         assert_eq!(m.len(), 2);
 
         // aggregate | sub → Mesh
-        let s3 = insert(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
+        let s3 = Handle::new(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
         let m2 = m.union_sub(&s3).unwrap();
         assert_eq!(m2.len(), 3);
     }
 
     #[test]
     fn node_union_node_and_mesh_union_node() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
 
         let m = a.union(&b).unwrap();
         assert_eq!(m.len(), 1);
-        assert_eq!(read(&m.unit().unwrap()).unwrap().cell_count(), 2);
+        assert_eq!(m.unit().unwrap().read().cell_count(), 2);
 
         let m2 = m.union_node(&c).unwrap();
-        assert_eq!(read(&m2.unit().unwrap()).unwrap().cell_count(), 3);
+        assert_eq!(m2.unit().unwrap().read().cell_count(), 3);
     }
 
     #[test]
     fn mesh_union_node_rejects_non_unitary_poi1() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
@@ -1323,30 +1313,30 @@ mod tests {
 
     #[test]
     fn to_poi1_caches_companion_on_a_sealed_submesh() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
 
         let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
         sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-        let h = insert(sm);
+        let h = Handle::new(sm);
 
         // Unsealed: nothing memoized — a fresh cloud each call.
-        let u1 = read(&h).unwrap().to_poi1().unwrap();
-        let u2 = read(&h).unwrap().to_poi1().unwrap();
-        assert!(!u1.same_slot(&u2), "unsealed submesh is not memoized");
+        let u1 = h.read().to_poi1().unwrap();
+        let u2 = h.read().to_poi1().unwrap();
+        assert!(!u1.same_object(&u2), "unsealed submesh is not memoized");
 
         // Sealed: the companion is built once and every call shares its slot.
         seal(&h).unwrap();
-        let p1 = read(&h).unwrap().to_poi1().unwrap();
-        let p2 = read(&h).unwrap().to_poi1().unwrap();
+        let p1 = h.read().to_poi1().unwrap();
+        let p2 = h.read().to_poi1().unwrap();
         assert!(
-            p1.same_slot(&p2),
+            p1.same_object(&p2),
             "sealed submesh memoizes its POI1 companion"
         );
-        assert_eq!(read(&p1).unwrap().element_type(), ElementType::POI1);
-        assert_eq!(read(&p1).unwrap().cell_count(), 3); // three distinct nodes
+        assert_eq!(p1.read().element_type(), ElementType::POI1);
+        assert_eq!(p1.read().cell_count(), 3); // three distinct nodes
     }
 }
 
@@ -1357,11 +1347,11 @@ mod nearest_node_tests {
     use crate::atoms::Node;
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     #[test]
     fn nearest_on_grid() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let n00 = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let n10 = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let n11 = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
@@ -1380,7 +1370,7 @@ mod nearest_node_tests {
 
     #[test]
     fn dimension_mismatch_errors() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let mut sm = SubMesh::new(coords, ElementType::SEG2);

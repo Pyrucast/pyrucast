@@ -14,7 +14,7 @@ use crate::atoms::Node;
 use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
-use crate::store::{insert, read};
+use crate::store::Handle;
 use std::collections::HashMap;
 
 /// The quadratic element type of a linear one, together with its edges as
@@ -51,7 +51,7 @@ pub fn to_quadratic(mesh: &Mesh) -> Result<Mesh> {
     let mut result = Mesh::empty();
     for sm_h in mesh {
         let (et, color, conn) = {
-            let s = read(sm_h)?;
+            let s = sm_h.read();
             (s.element_type(), s.face_color(), s.connectivity().to_vec())
         };
         let (quad_et, edges) = quadratic_of(et)?;
@@ -74,7 +74,7 @@ pub fn to_quadratic(mesh: &Mesh) -> Result<Mesh> {
                         // Read both corner coordinates (dropping the guard
                         // before creating, which takes a write lock).
                         let midpoint: Vec<f64> = {
-                            let c = read(&coords)?;
+                            let c = coords.read();
                             let ca = c.position(na)?;
                             let cb = c.position(nb)?;
                             ca.iter().zip(cb).map(|(&x, &y)| 0.5 * (x + y)).collect()
@@ -89,7 +89,7 @@ pub fn to_quadratic(mesh: &Mesh) -> Result<Mesh> {
             }
             new_sm.add_cell(&nodes)?;
         }
-        result.add_sub(insert(new_sm))?;
+        result.add_sub(Handle::new(new_sm))?;
     }
     Ok(result)
 }
@@ -98,13 +98,13 @@ pub fn to_quadratic(mesh: &Mesh) -> Result<Mesh> {
 mod tests {
     use super::*;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     #[test]
     fn tri3_to_tri6_shares_edge_midpoints() {
         // Two triangles sharing edge (b, c): the shared edge yields ONE mid
         // node, referenced by both quadratic cells.
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 2.0]).unwrap();
@@ -137,7 +137,7 @@ mod tests {
 
     #[test]
     fn seg2_to_seg3_reuses_endpoints() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[4.0]).unwrap();
         let mut seg = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
@@ -153,7 +153,7 @@ mod tests {
     #[test]
     fn tet4_to_tet10_node_count() {
         // One tetra → one TET10 with 4 corners + 6 mid-edge nodes.
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let n: Vec<_> = [
             [0.0, 0.0, 0.0],
             [1.0, 0.0, 0.0],
@@ -183,7 +183,7 @@ mod tests {
 
     #[test]
     fn rejects_poi1_and_already_quadratic() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let mut pts = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         pts.add_cell(&[a.id()]).unwrap();

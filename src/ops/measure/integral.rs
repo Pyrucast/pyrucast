@@ -24,7 +24,6 @@ use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
 use crate::models::kernel;
-use crate::store::read;
 use std::collections::HashMap;
 
 /// `∫_Ω f dΩ` of a **nodal** `field`, interpolated with the FE shape functions
@@ -37,8 +36,8 @@ pub fn integral(field: &NodeField, fespace: &FiniteElementSpace, component: &str
     let view = field.view()?;
     let mut total = 0.0;
     for sub_h in fespace {
-        let submesh = read(sub_h)?.submesh();
-        let conn: Vec<NodeId> = read(&submesh)?.connectivity().to_vec();
+        let submesh = sub_h.read().submesh();
+        let conn: Vec<NodeId> = submesh.read().connectivity().to_vec();
 
         // Gather this subspace's nodal values for `component` once (serial), so
         // the parallel per-cell kernel does O(1) look-ups and never re-reads the
@@ -77,7 +76,7 @@ pub fn integral_element(field: &ElementField, component: &str) -> Result<f64> {
     let mut total = 0.0;
     let mut found = false;
     for sub_h in field {
-        let s = read(sub_h)?;
+        let s = sub_h.read();
         if s.component_index(component).is_none() {
             continue; // this zone does not carry the component — skip it
         }
@@ -112,20 +111,20 @@ mod tests {
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::node_field::SubNodeField;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     /// Nodal integral on SEG2 `[0, 1]` of the linear field `f(x) = x`
     /// (`f_0 = 0`, `f_1 = 1`): `∫₀¹ x dx = 1/2`. Exercises the `N_i` lift.
     #[test]
     fn nodal_integral_of_linear_field_is_half() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 
-        let support = insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap());
+        let support = Handle::new(SubMesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap());
         let mut f = SubNodeField::from_poi1(&support, vec!["f".into()]).unwrap();
         f.set_value(a.id(), "f", 0.0).unwrap();
         f.set_value(b.id(), "f", 1.0).unwrap();
@@ -139,7 +138,7 @@ mod tests {
     /// unit right TRI3 (area 1/2), `f ≡ 4` ⇒ `∫ = 2`.
     #[test]
     fn nodal_integral_of_constant_is_value_times_area() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -147,7 +146,8 @@ mod tests {
         mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 
-        let support = insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone(), c.clone()]).unwrap());
+        let support =
+            Handle::new(SubMesh::poi1_from_nodes(&[a.clone(), b.clone(), c.clone()]).unwrap());
         let mut f = SubNodeField::from_poi1(&support, vec!["f".into()]).unwrap();
         for n in [&a, &b, &c] {
             f.set_value(n.id(), "f", 4.0).unwrap();
@@ -162,7 +162,7 @@ mod tests {
     /// `c ≡ 3` on the unit right TRI3 (area 1/2) integrates to `3 × 1/2 = 3/2`.
     #[test]
     fn element_integral_of_constant_is_value_times_area() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -173,7 +173,7 @@ mod tests {
         let mut ef = SubElementField::new(fes.get(0).unwrap(), vec!["c".into()]).unwrap();
         ef.set_uniform("c", 3.0).unwrap();
         let mut field = ElementField::empty();
-        field.add_sub(insert(ef)).unwrap();
+        field.add_sub(Handle::new(ef)).unwrap();
 
         let got = integral_element(&field, "c").unwrap();
         assert!((got - 1.5).abs() < 1e-12, "got {got}");
@@ -184,7 +184,7 @@ mod tests {
     /// the Gauss points.
     #[test]
     fn nodal_and_element_agree_on_constant() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 3.0]).unwrap();
@@ -192,7 +192,8 @@ mod tests {
         mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 
-        let support = insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone(), c.clone()]).unwrap());
+        let support =
+            Handle::new(SubMesh::poi1_from_nodes(&[a.clone(), b.clone(), c.clone()]).unwrap());
         let mut nf = SubNodeField::from_poi1(&support, vec!["v".into()]).unwrap();
         for n in [&a, &b, &c] {
             nf.set_value(n.id(), "v", 1.5).unwrap();
@@ -202,7 +203,7 @@ mod tests {
         let mut ef = SubElementField::new(fes.get(0).unwrap(), vec!["v".into()]).unwrap();
         ef.set_uniform("v", 1.5).unwrap();
         let mut ef_agg = ElementField::empty();
-        ef_agg.add_sub(insert(ef)).unwrap();
+        ef_agg.add_sub(Handle::new(ef)).unwrap();
 
         let via_nodes = integral(&nf, &fes, "v").unwrap();
         let via_gauss = integral_element(&ef_agg, "v").unwrap();
@@ -215,7 +216,7 @@ mod tests {
     /// An unknown component on the element integral is rejected.
     #[test]
     fn element_integral_unknown_component_errors() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -224,7 +225,7 @@ mod tests {
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let ef = SubElementField::new(fes.get(0).unwrap(), vec!["c".into()]).unwrap();
         let mut field = ElementField::empty();
-        field.add_sub(insert(ef)).unwrap();
+        field.add_sub(Handle::new(ef)).unwrap();
         assert!(integral_element(&field, "nope").is_err());
     }
 }

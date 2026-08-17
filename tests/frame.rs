@@ -21,7 +21,7 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::ops::mesh;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::insert;
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 #[test]
@@ -44,7 +44,7 @@ fn frame_inclined_cantilever_perpendicular_load() -> Result<()> {
     let h = L / N as f64;
 
     // ── Maillage : N éléments SEG2 le long de la direction à 45° ───────────
-    let coords = insert(Coords::new(2)?);
+    let coords = Handle::new(Coords::new(2)?);
     let nodes: Vec<Node> = (0..=N)
         .map(|i| Node::create_in(coords.clone(), &[i as f64 * h * c, i as f64 * h * s]))
         .collect::<Result<_>>()?;
@@ -81,7 +81,7 @@ fn frame_inclined_cantilever_perpendicular_load() -> Result<()> {
     // ── Chargement : force P perpendiculaire à la poutre, au bout libre ────
     let mut load_sm = SubMesh::new(coords.clone(), ElementType::POI1);
     load_sm.add_cell(&[nodes[N].id()])?;
-    let load_sm = insert(load_sm);
+    let load_sm = Handle::new(load_sm);
     let mut rhs = SubNodeField::from_poi1(&load_sm, vec!["f_x".into(), "f_y".into()])?;
     rhs.set_value(nodes[N].id(), "f_x", P * px)?;
     rhs.set_value(nodes[N].id(), "f_y", P * py)?;

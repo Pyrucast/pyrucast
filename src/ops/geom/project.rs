@@ -28,7 +28,6 @@ use crate::atoms::{ElementType, NodeId};
 use crate::containers::mesh::Mesh;
 use crate::error::{PyrucastError, Result};
 use crate::parallel::*;
-use crate::store::read;
 
 use super::locate::{interpolation_for, reference_centroid, solve_normal};
 
@@ -77,11 +76,11 @@ pub fn project_points(surface: &Mesh, points: &[Vec<f64>]) -> Result<Vec<Project
         hi: Vec<f64>,
     }
 
-    let sdim = read(&surface.coords()?)?.dim() as usize;
+    let sdim = surface.coords()?.read().dim() as usize;
     let mut facets: Vec<Facet> = Vec::new();
     for (s_idx, sm_handle) in surface.into_iter().enumerate() {
         let (element_type, conn, coords_handle) = {
-            let sm = read(sm_handle)?;
+            let sm = sm_handle.read();
             (sm.element_type(), sm.connectivity().to_vec(), sm.coords())
         };
         if element_type.topological_dim() + 1 != sdim {
@@ -93,7 +92,7 @@ pub fn project_points(surface: &Mesh, points: &[Vec<f64>]) -> Result<Vec<Project
             )));
         }
         let npc = element_type.nodes_per_cell();
-        let c = read(&coords_handle)?;
+        let c = coords_handle.read();
         for cell in 0..conn.len() / npc {
             let ids = &conn[cell * npc..(cell + 1) * npc];
             let coords: Vec<Vec<f64>> = ids
@@ -308,12 +307,12 @@ mod tests {
     use crate::atoms::Node;
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     fn mesh_2d_segment() -> Mesh {
         // One SEG2 from (0,0) to (2,0): tangent +x ⇒ normal (0,−1)… wait,
         // n = (t_y, −t_x)/‖t‖ = (0, −1). Points above have negative gap.
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
         let mut sm = SubMesh::new(coords, ElementType::SEG2);
@@ -350,7 +349,7 @@ mod tests {
     /// Projection onto a TRI3 in 3D: interior foot, oriented normal, edge clamp.
     #[test]
     fn project_onto_tri3_3d() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let v = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]];
         let ids: Vec<_> = v
             .iter()
@@ -388,7 +387,7 @@ mod tests {
     /// Several facets: each point picks its closest one (bbox pruning exact).
     #[test]
     fn picks_the_closest_facet() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
         // A polyline y = 0 for x ∈ [0, 4], four segments.
         let ids: Vec<_> = (0..=4)
@@ -414,7 +413,7 @@ mod tests {
     /// A volume element is not a surface: clear error.
     #[test]
     fn rejects_non_surface_mesh() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let v = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]];
         let ids: Vec<_> = v
             .iter()

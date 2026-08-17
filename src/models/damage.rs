@@ -48,7 +48,7 @@ use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::{self, ElasticityModel};
 use crate::models::owned_components;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
-use crate::store::{read, Handle};
+use crate::store::Handle;
 use serde::{Deserialize, Serialize};
 
 /// Axis suffixes for the vector components, indexed by spatial direction.
@@ -246,7 +246,7 @@ fn stress_names(space_dim: usize, model: ElasticityModel) -> Vec<String> {
 /// Damage on an FE subspace. Same supports as
 /// [`crate::models::elasticity::Elasticity`]; material is supplied at
 /// assembly / integration time.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct Damage {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
     /// POI1 support over the subspace's unique nodes (row/col support).
@@ -272,7 +272,7 @@ impl Damage {
         law: DamageLaw,
     ) -> Result<Self> {
         let (submesh, space_dim, ref_dim, axisymmetric) = {
-            let s = read(&fespace)?;
+            let s = fespace.read();
             (
                 s.submesh(),
                 s.space_dim(),
@@ -307,7 +307,7 @@ impl Damage {
                     .into()
             }));
         }
-        let support = read(&submesh)?.to_poi1()?;
+        let support = submesh.read().to_poi1()?;
         Ok(Self {
             fespace,
             support,
@@ -407,7 +407,7 @@ impl SubModelKind for Damage {
     fn render(&self, _opts: &DumpOptions) -> String {
         let primal = self.primal_vars().join(", ");
         let dual = self.dual_vars().join(", ");
-        let n = read(&self.support).map(|s| s.cell_count()).unwrap_or(0);
+        let n = self.support.read().cell_count();
         format!(
             "SubModel<Damage({:?}, {})>\n  primal var(s): {primal}\n  dual var(s):   {dual}\n  \
              support: {n} node(s)",
@@ -579,10 +579,10 @@ mod tests {
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::Mesh;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     fn unit_quad(model: ElasticityModel) -> Damage {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
@@ -606,7 +606,7 @@ mod tests {
         mat.set_uniform("B_t", 20_000.0).unwrap();
         mat.set_uniform("A_c", 1.4).unwrap();
         mat.set_uniform("B_c", 1_900.0).unwrap();
-        insert(mat)
+        Handle::new(mat)
     }
 
     fn strain_field(mz: &Damage, eps_xx: f64) -> Handle<SubElementField> {
@@ -616,7 +616,7 @@ mod tests {
         )
         .unwrap();
         s.set_uniform("eps_xx", eps_xx).unwrap();
-        insert(s)
+        Handle::new(s)
     }
 
     #[test]
@@ -684,7 +684,7 @@ mod tests {
         let d1 = st1.value(0, 0, "damage").unwrap();
 
         // Unload to 2e-4, feeding the step-1 state (κ) via `prev`.
-        let prev = insert(st1);
+        let prev = Handle::new(st1);
         let s2 = strain_field(&mz, 2e-4);
         let st2 = mz
             .integrate_behavior(&s2, Some(&prev), Some(&mat), None)
@@ -697,7 +697,7 @@ mod tests {
     /// Solid 3-D uniaxial tension also triggers tensile damage.
     #[test]
     fn solid_3d_damages() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let p = |x: f64, y: f64, z: f64| Node::create_in(coords.clone(), &[x, y, z]).unwrap();
         let n = [
             p(0.0, 0.0, 0.0),
@@ -724,7 +724,7 @@ mod tests {
         )
         .unwrap();
         s.set_uniform("eps_xx", 5e-4).unwrap();
-        let s = insert(s);
+        let s = Handle::new(s);
         let out = mz.integrate_behavior(&s, None, Some(&mat), None).unwrap();
         for g in 0..out.gauss_count() {
             assert!(out.value(0, g, "damage").unwrap() > 0.0);

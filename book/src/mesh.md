@@ -119,9 +119,9 @@ use pyrucast::coords::Coords;
 use pyrucast::atoms::ElementType;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::atoms::Node;
-use pyrucast::store::insert;
+use pyrucast::store::Handle;
 
-let coords = insert(Coords::new(2).unwrap());
+let coords = Handle::new(Coords::new(2).unwrap());
 let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
 let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
 let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
@@ -129,7 +129,7 @@ let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
 let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
 sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 
-let sm_handle = insert(sm);
+let sm_handle = Handle::new(sm);
 let mut mesh = Mesh::new(coords.clone());
 mesh.add_sub(sm_handle).unwrap();
 assert_eq!(mesh.cell_count().unwrap(), 1);
@@ -158,19 +158,13 @@ quad = pyrucast.Mesh(c, "QUA4")
 # … add_cell … ;  combined = mesh | quad
 ```
 
-## Sûreté du swap
+## Durée de vie et refcount
 
-Les `SubMesh` et `Mesh` portent des effets de bord dans leur `Drop`
-(décrément du refcount des nœuds). Le store traite leur swap correctement :
-
-- `swap_out` n'exécute **pas** le `Drop` de la valeur évincée
-  (`std::mem::forget` interne) — l'objet est logiquement vivant, juste
-  relocalisé ;
-- le `Drop` final s'exécute après rechargement depuis le disque si nécessaire,
-  garantissant que les refcounts sont décrémentés **exactement une fois** sur
-  la durée de vie de l'objet.
-
-Le détail est dans le chapitre [Modèle mémoire](memory-model.md).
+Les `SubMesh` et `Mesh` portent un effet de bord dans leur `Drop` : ils
+décrémentent le refcount des nœuds qu'ils référencent dans la `Coords`. Cet
+effet a lieu **exactement une fois**, quand le dernier `Handle` sur le maillage
+disparaît. Le détail est dans le chapitre
+[Modèle mémoire](memory-model.md).
 
 ## Visualisation
 

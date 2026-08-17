@@ -33,9 +33,9 @@
 //! use pyrucast::containers::mesh::SubMesh;
 //! use pyrucast::atoms::Node;
 //! use pyrucast::containers::node_field::SubNodeField;
-//! use pyrucast::store::insert;
+//! use pyrucast::store::Handle;
 //!
-//! let coords = insert(Coords::new(2).unwrap());
+//! let coords = Handle::new(Coords::new(2).unwrap());
 //! let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
 //! let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
 //!
@@ -44,7 +44,7 @@
 //!     let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
 //!     sm.add_cell(&[a.id()]).unwrap();
 //!     sm.add_cell(&[b.id()]).unwrap();
-//!     insert(sm)
+//!     Handle::new(sm)
 //! };
 //!
 //! let mut field = SubNodeField::from_poi1(
@@ -65,10 +65,7 @@ use crate::containers::field::SubField;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
-#[cfg(test)]
-use crate::store::write;
-use crate::store::{insert, read, Handle};
-use serde::{Deserialize, Serialize};
+use crate::store::Handle;
 use std::fmt;
 use std::ops::{Index, IndexMut};
 
@@ -78,7 +75,6 @@ use std::ops::{Index, IndexMut};
 ///
 /// Values are stored row-major: component `c` of node `i` is at index
 /// `i * component_count + c` in the internal flat buffer.
-#[derive(Serialize, Deserialize)]
 pub struct SubNodeField {
     /// POI1 SubMesh owning the per-node refcounts. The field keeps a
     /// clone of this handle for its whole lifetime; that is the only
@@ -105,7 +101,7 @@ impl SubNodeField {
         crate::containers::field::check_components("SubNodeField", &components)?;
 
         let nodes: Vec<NodeId> = {
-            let sm = read(submesh)?;
+            let sm = submesh.read();
             if sm.element_type() != ElementType::POI1 {
                 return Err(PyrucastError::Message(format!(
                     "SubNodeField requires a POI1 SubMesh, got {}",
@@ -137,7 +133,7 @@ impl SubNodeField {
     /// (and the stiffness block / `divergence` / `flux` output over it) shares
     /// one support slot and pairs under `same_support`.
     pub fn from_support(submesh: &Handle<SubMesh>, components: Vec<String>) -> Result<Self> {
-        let element_type = read(submesh)?.element_type();
+        let element_type = submesh.read().element_type();
         if element_type == ElementType::POI1 {
             return Self::from_poi1(submesh, components);
         }
@@ -145,7 +141,7 @@ impl SubNodeField {
         // `to_poi1` may memoize the companion), then share that cached POI1
         // support. `from_poi1` validates `components`.
         crate::containers::mesh::seal(submesh)?;
-        let poi = read(submesh)?.to_poi1()?;
+        let poi = submesh.read().to_poi1()?;
         Self::from_poi1(&poi, components)
     }
 
@@ -164,9 +160,7 @@ impl SubNodeField {
 
     /// Handle to the owning `Coords` (derived from the support).
     pub fn coords(&self) -> Handle<Coords> {
-        read(&self.support)
-            .expect("SubNodeField support handle is held by self → must be alive")
-            .coords()
+        self.support.read().coords()
     }
 
     /// Handle to the POI1 SubMesh backing this field's support.
@@ -215,7 +209,7 @@ impl SubNodeField {
     ///
     /// [`index_of_with`]: SubNodeField::index_of_with
     pub fn index_of(&self, nid: NodeId) -> Option<usize> {
-        let support = read(&self.support).ok()?;
+        let support = self.support.read();
         self.index_of_with(&support, nid)
     }
 
@@ -239,9 +233,9 @@ impl SubNodeField {
     /// use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// use pyrucast::atoms::Node;
     /// use pyrucast::containers::node_field::SubNodeField;
-    /// use pyrucast::store::insert;
+    /// use pyrucast::store::Handle;
     ///
-    /// let coords = insert(Coords::new(2).unwrap());
+    /// let coords = Handle::new(Coords::new(2).unwrap());
     /// let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
     /// let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
     ///
@@ -249,7 +243,7 @@ impl SubNodeField {
     ///     let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
     ///     sm.add_cell(&[a.id()]).unwrap();
     ///     sm.add_cell(&[b.id()]).unwrap();
-    ///     insert(sm)
+    ///     Handle::new(sm)
     /// };
     ///
     /// let field = SubNodeField::from_poi1(&sm_handle, vec!["T".into()]).unwrap();
@@ -257,7 +251,7 @@ impl SubNodeField {
     /// assert_eq!(sm2.cell_count(), 2);
     /// // Verify node order via Mesh::node (public API).
     /// let mut m = Mesh::empty();
-    /// m.add_sub(insert(sm2)).unwrap();
+    /// m.add_sub(Handle::new(sm2)).unwrap();
     /// assert_eq!(m.node(0, 0, 0).unwrap().id(), a.id());
     /// assert_eq!(m.node(0, 1, 0).unwrap().id(), b.id());
     /// ```
@@ -268,7 +262,7 @@ impl SubNodeField {
     /// Build a [`Mesh`] with a single POI1 submesh mirroring the support of
     /// this field.
     pub fn support_mesh(&self) -> Result<Mesh> {
-        let sm_handle = insert(self.support_submesh()?);
+        let sm_handle = Handle::new(self.support_submesh()?);
         let mut mesh = Mesh::empty();
         mesh.add_sub(sm_handle)?;
         Ok(mesh)
@@ -492,7 +486,7 @@ crate::impl_subfield_field_ops!(SubNodeField);
 /// sub defining `(node, component)`; whether the duplicates agree is
 /// verified on demand by [`NodeField::check`]. Writes go through the subs
 /// (`with_mut` on `field.get(i)`), exactly like `ElementField`.
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Default)]
 pub struct NodeField {
     subs: Vec<Handle<SubNodeField>>,
 }
@@ -503,8 +497,8 @@ crate::impl_aggregate!(NodeField, SubNodeField, subfield, "subfield(s)", {
             return Ok(());
         }
         let a = self.coords()?;
-        let b = read(h)?.coords();
-        if a.index() != b.index() || a.generation() != b.generation() {
+        let b = h.read().coords();
+        if !a.same_object(&b) {
             Err(PyrucastError::Message("mismatched Coords".into()))
         } else {
             Ok(())
@@ -557,7 +551,7 @@ impl NodeField {
         let mut field = Self::default();
         for h in mesh {
             let sub = SubNodeField::from_support(h, components.clone())?;
-            field.add_sub(insert(sub))?;
+            field.add_sub(Handle::new(sub))?;
         }
         Ok(field)
     }
@@ -580,7 +574,7 @@ impl NodeField {
         let mut field = Self::default();
         for (h, comps) in mesh.iter().zip(components_per_submesh) {
             let sub = SubNodeField::from_support(h, comps.clone())?;
-            field.add_sub(insert(sub))?;
+            field.add_sub(Handle::new(sub))?;
         }
         Ok(field)
     }
@@ -588,14 +582,16 @@ impl NodeField {
     /// Single-zone `NodeField` over the distinct nodes of one [`SubMesh`].
     pub fn from_submesh(submesh: &Handle<SubMesh>, components: Vec<String>) -> Result<Self> {
         let mut field = Self::default();
-        field.add_sub(insert(SubNodeField::from_support(submesh, components)?))?;
+        field.add_sub(Handle::new(SubNodeField::from_support(
+            submesh, components,
+        )?))?;
         Ok(field)
     }
 
     /// Wrap a single [`SubNodeField`] into a unitary aggregate.
     pub fn from_sub(sub: SubNodeField) -> Self {
         let mut field = Self::default();
-        field.subs.push(insert(sub));
+        field.subs.push(Handle::new(sub));
         field
     }
 
@@ -603,7 +599,7 @@ impl NodeField {
     /// Errors if the aggregate is empty.
     pub fn coords(&self) -> Result<Handle<Coords>> {
         let h = self.get(0)?;
-        Ok(read(&h)?.coords())
+        Ok(h.read().coords())
     }
 
     /// Value at `(node, component)` — the **first** sub defining both
@@ -621,7 +617,7 @@ impl NodeField {
     /// `(node, component)`.
     pub fn value_opt(&self, nid: NodeId, component: &str) -> Result<Option<f64>> {
         for h in self {
-            if let Some(v) = read(h)?.component_value_opt(nid, component) {
+            if let Some(v) = h.read().component_value_opt(nid, component) {
                 return Ok(Some(v));
             }
         }
@@ -645,7 +641,7 @@ impl NodeField {
     pub fn node_ids(&self) -> Result<Vec<NodeId>> {
         let mut out: Vec<NodeId> = Vec::new();
         for h in self {
-            let s = read(h)?;
+            let s = h.read();
             for &nid in s.nodes() {
                 if !out.contains(&nid) {
                     out.push(nid);
@@ -689,7 +685,7 @@ impl NodeField {
         use std::collections::HashMap;
         let mut seen: HashMap<(NodeId, String), f64> = HashMap::new();
         for h in self {
-            let s = read(h)?;
+            let s = h.read();
             let (nodes, comps, values) = (s.nodes(), SubField::components(&*s), s.values());
             let ncomp = comps.len();
             for (ni, &nid) in nodes.iter().enumerate() {
@@ -767,7 +763,7 @@ impl NodeField {
         }
         // POI1 support over the distinct nodes; the submesh and field both land
         // in the store and cascade-decref their nodes on drop.
-        let sm_h = insert(SubMesh::poi1_from_node_ids(coords, &unique_nodes)?);
+        let sm_h = Handle::new(SubMesh::poi1_from_node_ids(coords, &unique_nodes)?);
         let mut sub = SubNodeField::from_poi1(&sm_h, unique_components)?;
         // Resolve component indices once and hoist one read guard on the
         // support over the whole write loop (O(1) node lookups, no re-locking).
@@ -778,7 +774,7 @@ impl NodeField {
             .map(|(i, c)| (c.as_str(), i))
             .collect();
         {
-            let support = read(&sub.support)?;
+            let support = sub.support.read();
             let ncomp = sub.components.len();
             for ((nid, name), &v) in dofs.iter().zip(values) {
                 let ni = *support
@@ -816,11 +812,7 @@ impl NodeFieldView {
     /// each zone's support so its node-index map can be queried lock-free.
     pub(crate) fn new(field: &NodeField) -> Result<Self> {
         let inner = crate::containers::field::Field::view(field)?;
-        let supports = inner
-            .zones
-            .iter()
-            .map(|z| read(&z.support))
-            .collect::<Result<_>>()?;
+        let supports = inner.zones.iter().map(|z| z.support.read()).collect();
         Ok(Self { inner, supports })
     }
 
@@ -863,10 +855,10 @@ impl NodeFieldView {
 mod tests {
     use super::*;
     use crate::atoms::Node;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     fn make_poi1_with(n_nodes: usize) -> (Handle<Coords>, Vec<Node>, Handle<SubMesh>) {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let nodes: Vec<Node> = (0..n_nodes)
             .map(|i| Node::create_in(coords.clone(), &[i as f64, 0.0]).unwrap())
             .collect();
@@ -875,7 +867,7 @@ mod tests {
             for n in &nodes {
                 sm.add_cell(&[n.id()]).unwrap();
             }
-            insert(sm)
+            Handle::new(sm)
         };
         (coords, nodes, sm_handle)
     }
@@ -893,8 +885,8 @@ mod tests {
 
     #[test]
     fn from_poi1_rejects_non_poi1() {
-        let coords = insert(Coords::new(2).unwrap());
-        let sm = insert(SubMesh::new(coords, ElementType::SEG2));
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let sm = Handle::new(SubMesh::new(coords, ElementType::SEG2));
         let err = SubNodeField::from_poi1(&sm, vec!["X".into()]).unwrap_err();
         assert!(matches!(err, PyrucastError::Message(_)));
     }
@@ -918,7 +910,7 @@ mod tests {
         let (coords, nodes, sm) = make_poi1_with(2);
         // Each node has refcount = 2 (Node + SubMesh).
         {
-            let c = read(&coords).unwrap();
+            let c = coords.read();
             assert_eq!(c.refcount(nodes[0].id()), 2);
             assert_eq!(c.refcount(nodes[1].id()), 2);
         }
@@ -926,13 +918,13 @@ mod tests {
         // The field shares the SubMesh handle, so per-node refcounts
         // are unchanged.
         {
-            let c = read(&coords).unwrap();
+            let c = coords.read();
             assert_eq!(c.refcount(nodes[0].id()), 2);
             assert_eq!(c.refcount(nodes[1].id()), 2);
         }
         drop(f);
         {
-            let c = read(&coords).unwrap();
+            let c = coords.read();
             assert_eq!(c.refcount(nodes[0].id()), 2);
             assert_eq!(c.refcount(nodes[1].id()), 2);
         }
@@ -980,13 +972,13 @@ mod tests {
 
     #[test]
     fn protects_nodes_from_gc_after_node_and_submesh_drop() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let n = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let nid = n.id();
         let sm_handle = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
             sm.add_cell(&[nid]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let field = SubNodeField::from_poi1(&sm_handle, vec!["T".into()]).unwrap();
         // Drop the Node and the user's SubMesh handle; the field still
@@ -994,11 +986,11 @@ mod tests {
         // alive, which keeps the nodes alive.
         drop(n);
         drop(sm_handle);
-        assert_eq!(write(&coords).unwrap().gc(), 0);
-        assert!(read(&coords).unwrap().is_alive(nid));
+        assert_eq!(coords.write().gc(), 0);
+        assert!(coords.read().is_alive(nid));
         drop(field);
-        assert_eq!(write(&coords).unwrap().gc(), 1);
-        assert!(!read(&coords).unwrap().is_alive(nid));
+        assert_eq!(coords.write().gc(), 1);
+        assert!(!coords.read().is_alive(nid));
     }
 
     #[test]
@@ -1007,11 +999,11 @@ mod tests {
         let f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
         // refcount before: Node + SubMesh = 2 each (the field shares
         // the user's SubMesh, no extra per-node incref).
-        assert_eq!(read(&coords).unwrap().refcount(nodes[0].id()), 2);
+        assert_eq!(coords.read().refcount(nodes[0].id()), 2);
 
         let sm2 = f.support_submesh().unwrap();
         // the freshly built SubMesh adds one incref each → 3
-        assert_eq!(read(&coords).unwrap().refcount(nodes[0].id()), 3);
+        assert_eq!(coords.read().refcount(nodes[0].id()), 3);
 
         assert_eq!(sm2.cell_count(), 3);
         let conn = sm2.connectivity();
@@ -1021,7 +1013,7 @@ mod tests {
 
         drop(sm2);
         // back to 2
-        assert_eq!(read(&coords).unwrap().refcount(nodes[0].id()), 2);
+        assert_eq!(coords.read().refcount(nodes[0].id()), 2);
     }
 
     #[test]
@@ -1114,7 +1106,7 @@ mod tests {
 
     /// Two TRI3 zones sharing an interface edge (nodes n1, n2).
     fn make_two_zone_mesh() -> (Handle<Coords>, Vec<Node>, Mesh) {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let n0 = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let n1 = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let n2 = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -1123,12 +1115,12 @@ mod tests {
         let sm_a = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sm_b = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[n1.id(), n3.id(), n2.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         mesh.add_sub(sm_a).unwrap();
         mesh.add_sub(sm_b).unwrap();
@@ -1142,8 +1134,8 @@ mod tests {
         assert_eq!(f.len(), 2);
         // 4 distinct nodes; interface nodes n1, n2 stored in both subs.
         assert_eq!(f.node_count().unwrap(), 4);
-        assert_eq!(read(&f.get(0).unwrap()).unwrap().node_count(), 3);
-        assert_eq!(read(&f.get(1).unwrap()).unwrap().node_count(), 3);
+        assert_eq!(f.get(0).unwrap().read().node_count(), 3);
+        assert_eq!(f.get(1).unwrap().read().node_count(), 3);
         // Zero-initialized everywhere.
         assert_eq!(f.value(nodes[1].id(), "T").unwrap(), 0.0);
     }
@@ -1173,19 +1165,22 @@ mod tests {
         let f = NodeField::new(&mesh, vec!["T".into()]).unwrap();
         let interface = nodes[1].id();
         // Diverging interface values: reads pick sub 0, check() errors.
-        write(&f.get(0).unwrap())
+        f.get(0)
             .unwrap()
+            .write()
             .set_value(interface, "T", 1.0)
             .unwrap();
-        write(&f.get(1).unwrap())
+        f.get(1)
             .unwrap()
+            .write()
             .set_value(interface, "T", 2.0)
             .unwrap();
         assert_eq!(f.value(interface, "T").unwrap(), 1.0);
         assert!(f.check().is_err());
         // Re-aligned values: check() passes.
-        write(&f.get(1).unwrap())
+        f.get(1)
             .unwrap()
+            .write()
             .set_value(interface, "T", 1.0)
             .unwrap();
         f.check().unwrap();
@@ -1197,7 +1192,7 @@ mod tests {
         let f = NodeField::new(&mesh, vec!["T".into()]).unwrap();
         {
             // n0 and n2 both live in zone 0 (the TRI3 n0-n1-n2).
-            let mut z0 = write(&f.get(0).unwrap()).unwrap();
+            let mut z0 = f.get(0).unwrap().write();
             z0.set_value(nodes[0].id(), "T", 10.0).unwrap();
             z0.set_value(nodes[2].id(), "T", 30.0).unwrap();
         }
@@ -1226,21 +1221,21 @@ mod tests {
         let c = a.union(&b).unwrap();
         assert_eq!(c.len(), 2);
         // Sub-handles are shared, not copied.
-        assert_eq!(c.get(0).unwrap().index(), a.get(0).unwrap().index());
+        assert!(c.get(0).unwrap().same_object(&a.get(0).unwrap()));
     }
 
     #[test]
     fn nf_check_push_rejects_mismatched_cfg() {
         let (_cfg, _nodes, mesh) = make_two_zone_mesh();
         let mut f = NodeField::new(&mesh, vec!["T".into()]).unwrap();
-        let cfg2 = insert(Coords::new(1).unwrap());
+        let cfg2 = Handle::new(Coords::new(1).unwrap());
         let n = Node::create_in(cfg2.clone(), &[0.0]).unwrap();
         let sm = {
             let mut sm = SubMesh::new(cfg2, ElementType::POI1);
             sm.add_cell(&[n.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
-        let alien = insert(SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap());
+        let alien = Handle::new(SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap());
         assert!(f.add_sub(alien).is_err());
     }
 
@@ -1248,8 +1243,8 @@ mod tests {
     fn nf_from_support_poi1_shares_handle() {
         let (_cfg, _nodes, sm) = make_poi1_with(2);
         let f = NodeField::from_submesh(&sm, vec!["T".into()]).unwrap();
-        let support = read(&f.get(0).unwrap()).unwrap().support();
-        assert_eq!(support.index(), sm.index());
+        let support = f.get(0).unwrap().read().support();
+        assert!(support.same_object(&sm));
     }
 
     #[test]
@@ -1307,12 +1302,12 @@ mod tests {
         let g = f.clone();
         // Both fields share the same SubMesh handle, so per-node
         // refcounts in the Coords stay at 2 (Node + SubMesh).
-        assert_eq!(read(&coords).unwrap().refcount(nodes[0].id()), 2);
+        assert_eq!(coords.read().refcount(nodes[0].id()), 2);
         // Mutation of f does not affect g (values are independent).
         f.set(0, 0, 99.0).unwrap();
         assert_eq!(g.get(0, 0).unwrap(), 42.0);
         drop(g);
-        assert_eq!(read(&coords).unwrap().refcount(nodes[0].id()), 2);
+        assert_eq!(coords.read().refcount(nodes[0].id()), 2);
     }
 
     // ── Opérateurs +,-,*,/ avec f64 ─────────────────────────────────────────

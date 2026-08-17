@@ -16,9 +16,9 @@
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
 //! use pyrucast::containers::mesh::{Mesh, SubMesh};
 //! use pyrucast::atoms::Node;
-//! use pyrucast::store::insert;
+//! use pyrucast::store::Handle;
 //!
-//! let coords = insert(Coords::new(1).unwrap());
+//! let coords = Handle::new(Coords::new(1).unwrap());
 //! let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
 //! let b = Node::create_in(coords.clone(), &[2.0]).unwrap();
 //! let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
@@ -39,7 +39,7 @@ use crate::atoms::Cell;
 use crate::atoms::NodeId;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::error::{PyrucastError, Result};
-use crate::store::{read, Handle};
+use crate::store::Handle;
 
 /// Lightweight view on a single element of a [`SubFiniteElementSpace`].
 #[derive(Clone)]
@@ -51,7 +51,7 @@ pub struct Element {
 impl Element {
     /// Build an element view. Errors if `idx ≥ cell_count()`.
     pub fn new(fespace: Handle<SubFiniteElementSpace>, idx: usize) -> Result<Self> {
-        let n = read(&fespace)?.cell_count()?;
+        let n = fespace.read().cell_count()?;
         if idx >= n {
             return Err(PyrucastError::Message(format!(
                 "element index {idx} out of range (cell_count={n})"
@@ -72,7 +72,7 @@ impl Element {
 
     /// Underlying [`Cell`] view in the parent submesh.
     pub fn cell(&self) -> Result<Cell> {
-        let sm = read(&self.fespace)?.submesh();
+        let sm = self.fespace.read().submesh();
         Cell::new(sm, self.idx)
     }
 
@@ -80,23 +80,23 @@ impl Element {
 
     /// Number of nodes per element (= element type's nodes_per_cell).
     pub fn nodes_per_cell(&self) -> Result<usize> {
-        read(&self.fespace)?.nodes_per_cell()
+        self.fespace.read().nodes_per_cell()
     }
 
     /// Geometric (physical) dimension of the underlying `Coords`.
     pub fn space_dim(&self) -> Result<usize> {
-        Ok(read(&self.fespace)?.space_dim())
+        Ok(self.fespace.read().space_dim())
     }
 
     /// Reference dimension (= topological dim of the element type).
     pub fn ref_dim(&self) -> Result<usize> {
-        read(&self.fespace)?.ref_dim()
+        self.fespace.read().ref_dim()
     }
 
     /// Number of Gauss points per element.
     pub fn gauss_count(&self) -> usize {
         // Static across the fespace; cheap to look up under the guard.
-        read(&self.fespace).map(|s| s.gauss_count()).unwrap_or(0)
+        self.fespace.read().gauss_count()
     }
 
     /// Connectivity (node ids) of this element.
@@ -108,41 +108,41 @@ impl Element {
 
     /// Reference coordinates of the `g`-th Gauss point.
     pub fn gauss_xi(&self, g: usize) -> Result<Vec<f64>> {
-        Ok(read(&self.fespace)?.gauss_xi(g)?.to_vec())
+        Ok(self.fespace.read().gauss_xi(g)?.to_vec())
     }
 
     /// Weight of the `g`-th Gauss point.
     pub fn gauss_weight(&self, g: usize) -> Result<f64> {
-        read(&self.fespace)?.gauss_weight(g)
+        self.fespace.read().gauss_weight(g)
     }
 
     /// `N_i(ξ_g)` for all nodes `i` at the `g`-th Gauss point.
     pub fn n_at_g(&self, g: usize) -> Result<Vec<f64>> {
-        Ok(read(&self.fespace)?.n_at_g(g)?.to_vec())
+        Ok(self.fespace.read().n_at_g(g)?.to_vec())
     }
 
     /// `∂N_i/∂ξ_j(ξ_g)` for all nodes at the `g`-th Gauss point
     /// (flat row-major `[i * ref_dim + j]`).
     pub fn dn_at_g(&self, g: usize) -> Result<Vec<f64>> {
-        Ok(read(&self.fespace)?.dn_at_g(g)?.to_vec())
+        Ok(self.fespace.read().dn_at_g(g)?.to_vec())
     }
 
     // ── Physical quantities (cell-specific, on-the-fly) ─────────────────
 
     /// Jacobian `J = ∂x/∂ξ` at the `g`-th Gauss point of this element.
     pub fn jacobian(&self, g: usize) -> Result<Vec<f64>> {
-        read(&self.fespace)?.jacobian(self.idx, g)
+        self.fespace.read().jacobian(self.idx, g)
     }
 
     /// `|J|` (measure scaling factor) at the `g`-th Gauss point.
     pub fn det_jacobian(&self, g: usize) -> Result<f64> {
-        read(&self.fespace)?.det_jacobian(self.idx, g)
+        self.fespace.read().det_jacobian(self.idx, g)
     }
 
     /// Physical derivatives `∂N_i/∂x_a` at the `g`-th Gauss point
     /// (flat row-major `[i * space_dim + a]`).
     pub fn dn_dx(&self, g: usize) -> Result<Vec<f64>> {
-        read(&self.fespace)?.dn_dx(self.idx, g)
+        self.fespace.read().dn_dx(self.idx, g)
     }
 }
 
@@ -230,10 +230,10 @@ mod tests {
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     fn seg2_fes() -> (Handle<Coords>, Vec<Node>, FiniteElementSpace) {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let n1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let n2 = Node::create_in(coords.clone(), &[2.0]).unwrap();

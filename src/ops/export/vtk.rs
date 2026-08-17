@@ -44,7 +44,7 @@ use crate::containers::mesh::{Mesh, SubMesh};
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
 use crate::parallel::*;
-use crate::store::{read, Handle};
+use crate::store::Handle;
 use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::path::Path;
@@ -78,7 +78,7 @@ struct Geometry {
 /// Flatten a mesh into VTK points and cells (submesh by submesh, in order).
 fn geometry(mesh: &Mesh) -> Result<Geometry> {
     let coords_h = mesh.coords()?;
-    let coords = read(&coords_h)?;
+    let coords = coords_h.read();
     let dim = (coords.dim() as usize).min(3);
 
     let mut points: Vec<[f64; 3]> = Vec::new();
@@ -87,7 +87,7 @@ fn geometry(mesh: &Mesh) -> Result<Geometry> {
     let mut cells: Vec<VtkCell> = Vec::new();
 
     for sm_h in mesh {
-        let sm = read(sm_h)?;
+        let sm = sm_h.read();
         let et = sm.element_type();
         let npc = et.nodes_per_cell();
         let cell_type = vtk_cell_type(et);
@@ -217,9 +217,9 @@ pub fn vtk_element_field_string(mesh: &Mesh, field: &ElementField) -> Result<Str
         |submesh: &Handle<SubMesh>, component: &str, cell: usize| -> Result<Option<f64>> {
             let mut found: Option<f64> = None;
             for z in &zones {
-                let sub = read(z)?;
-                let sm = read(&sub.support())?.submesh();
-                if sm.index() != submesh.index() || sm.generation() != submesh.generation() {
+                let sub = z.read();
+                let sm = sub.support().read().submesh();
+                if !sm.same_object(submesh) {
                     continue;
                 }
                 if !sub.components().iter().any(|c| c == component) {
@@ -251,12 +251,12 @@ pub fn vtk_element_field_string(mesh: &Mesh, field: &ElementField) -> Result<Str
     // cell count. A field from a space built on a *different* mesh leaves some
     // submesh uncovered → error.
     for sm_h in mesh {
-        let submesh_cells = read(sm_h)?.cell_count();
+        let submesh_cells = sm_h.read().cell_count();
         let mut covered = false;
         for z in &zones {
-            let sub = read(z)?;
-            let sm = read(&sub.support())?.submesh();
-            if sm.index() == sm_h.index() && sm.generation() == sm_h.generation() {
+            let sub = z.read();
+            let sm = sub.support().read().submesh();
+            if sm.same_object(sm_h) {
                 if sub.cell_count() != submesh_cells {
                     return Err(PyrucastError::Message(format!(
                         "vtk: element field has {} cell(s) on a submesh with {} — \
@@ -286,7 +286,7 @@ pub fn vtk_element_field_string(mesh: &Mesh, field: &ElementField) -> Result<Str
         let _ = writeln!(out, "SCALARS {} double 1", sanitize(&comp));
         out.push_str("LOOKUP_TABLE default\n");
         for sm_h in mesh {
-            let n = read(sm_h)?.cell_count();
+            let n = sm_h.read().cell_count();
             for cell in 0..n {
                 let v = cell_value(sm_h, &comp, cell)?.unwrap_or(0.0);
                 let _ = writeln!(out, "{v}");
@@ -323,11 +323,11 @@ mod tests {
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     /// Unit square as two TRI3 on a 2-D Coords, plus the four nodes.
     fn square() -> (Mesh, Vec<Node>) {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
             .iter()
             .map(|c| Node::create_in(coords.clone(), c).unwrap())
@@ -359,7 +359,7 @@ mod tests {
     fn node_field_point_data() {
         use crate::containers::node_field::SubNodeField;
         let (mesh, n) = square();
-        let support = insert(SubMesh::poi1_from_nodes(&n).unwrap());
+        let support = Handle::new(SubMesh::poi1_from_nodes(&n).unwrap());
         let mut sub = SubNodeField::from_poi1(&support, vec!["T".into()]).unwrap();
         for (i, node) in n.iter().enumerate() {
             sub.set_value(node.id(), "T", i as f64 * 10.0).unwrap();
@@ -383,7 +383,7 @@ mod tests {
         // Set every Gauss point of cell 0 to 2.0 and cell 1 to 5.0.
         for sub_h in field.iter() {
             // single sub for a single-type mesh
-            let mut sub = crate::store::write(sub_h).unwrap();
+            let mut sub = sub_h.write();
             let ng = sub.gauss_count();
             for g in 0..ng {
                 sub.set_value(0, g, "s", 2.0).unwrap();

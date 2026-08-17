@@ -34,7 +34,7 @@ use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::ops::element_field;
 use pyrucast::ops::element_field::material_field;
 use pyrucast::ops::solver::lu::{solve, solve_with_options, SolveMethod, SolveOptions};
-use pyrucast::store::insert;
+use pyrucast::store::Handle;
 
 /// Grid side for the assembly / integration groups.
 ///
@@ -79,7 +79,7 @@ struct Grid {
 /// translation leaves the Cartesian Jacobian untouched, so it costs the plane
 /// case nothing and makes the two directly comparable.
 fn elasticity_grid_with(n: usize, model_kind: ElasticityModel) -> Grid {
-    let coords = insert(if model_kind.is_axisymmetric() {
+    let coords = Handle::new(if model_kind.is_axisymmetric() {
         Coords::axisymmetric().unwrap()
     } else {
         Coords::new(2).unwrap()
@@ -108,7 +108,7 @@ fn elasticity_grid_with(n: usize, model_kind: ElasticityModel) -> Grid {
     let materials = material_field(&model, &[("E", 210e9), ("nu", 0.3)]).unwrap();
 
     // A smooth displacement field u = (0.01·x, −0.005·y) → constant strain.
-    let support = insert(SubMesh::poi1_from_node_ids(coords.clone(), &ids).unwrap());
+    let support = Handle::new(SubMesh::poi1_from_node_ids(coords.clone(), &ids).unwrap());
     let mut u = SubNodeField::from_poi1(&support, vec!["u_x".into(), "u_y".into()]).unwrap();
     for j in 0..=n {
         for i in 0..=n {
@@ -137,7 +137,7 @@ fn elasticity_grid(n: usize) -> Grid {
 /// system on an `n × n` grid, finalized, plus a unit right-hand side. Used to
 /// benchmark the solver without needing boundary conditions.
 fn spd_system(n: usize) -> (Matrix, NodeField) {
-    let coords = insert(Coords::new(2).unwrap());
+    let coords = Handle::new(Coords::new(2).unwrap());
     let mut ids: Vec<NodeId> = Vec::with_capacity((n + 1) * (n + 1));
     for j in 0..=n {
         for i in 0..=n {
@@ -155,7 +155,7 @@ fn spd_system(n: usize) -> (Matrix, NodeField) {
         for &id in &ids {
             sm.add_cell(&[id]).unwrap();
         }
-        insert(sm)
+        Handle::new(sm)
     };
     let mut block = SubMatrix::new(
         sm.clone(),
@@ -192,7 +192,7 @@ fn spd_system(n: usize) -> (Matrix, NodeField) {
         }
     }
     let mut m = Matrix::empty();
-    m.add_sub(insert(block)).unwrap();
+    m.add_sub(Handle::new(block)).unwrap();
     m.finalize().unwrap();
 
     let mut rhs = SubNodeField::from_poi1(&sm, vec!["q".into()]).unwrap();

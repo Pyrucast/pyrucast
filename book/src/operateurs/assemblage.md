@@ -109,7 +109,7 @@ voisine `finalize`. Elle reconstruit le motif creux depuis les **blocs seuls**
 
 ```rust,ignore
 let mut k = matrix::stiffness(&model, &materials)?;
-k.add_sub(insert(bloc_supplementaire))?;   // invalide l'état assemblé
+k.add_sub(Handle::new(bloc_supplementaire))?;   // invalide l'état assemblé
 k.assemble()?;                             // réassemble, nouveau bloc inclus
 ```
 

@@ -63,16 +63,16 @@ use pyrucast::coords::Coords;
 use pyrucast::atoms::ElementType;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::atoms::Node;
-use pyrucast::store::insert;
+use pyrucast::store::Handle;
 
-let coords = insert(Coords::new(2).unwrap());
+let coords = Handle::new(Coords::new(2).unwrap());
 let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
 let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
 
 let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
 sm.add_cell(&[a.id(), b.id()]).unwrap();
 
-let sm_h = insert(sm);
+let sm_h = Handle::new(sm);
 let mut mesh = Mesh::new(coords);
 mesh.add_sub(sm_h).unwrap();
 println!("{}", mesh); // Mesh: 1 submesh(es), 1 cell(s) total

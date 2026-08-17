@@ -14,7 +14,7 @@ du **conteneur qu'il produit**.
 src/
 ├── lib.rs              # racine de la crate + #[pymodule] (enregistrement Python)
 │
-├── store.rs            # le store à handles : slots, générations, refcount, swap
+├── store.rs            # Handle<T> : Arc<RwLock<T>>, guards possédés, identité
 ├── persist.rs          # trait Persist (serde + bincode), format portable
 ├── error.rs            # PyrucastError + Result (l'unique type d'erreur)
 ├── dump.rs             # trait Dump (3ᵉ niveau d'affichage : contenu intégral)
@@ -118,7 +118,6 @@ python/pyrucast/
 ├── node_field.py      #   en rendant leur vrai nom aux homonymes
 ├── element_field.py   #   (`consolidate_mesh as consolidate`, …)
 ├── matrix.py, field.py, measure.py, export.py, solver.py, coords.py
-├── store.py           # swap_dir / set_swap_dir
 ├── thermomechanics.py # couche Python pure de haut niveau
 ├── py.typed
 └── _pyrucast/

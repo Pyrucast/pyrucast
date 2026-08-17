@@ -17,25 +17,25 @@
 //! ```
 //! use pyrucast::coords::Coords;
 //! use pyrucast::atoms::Node;
-//! use pyrucast::store::{insert, read, write};
+//! use pyrucast::store::Handle;
 //!
-//! let coords = insert(Coords::new(2).unwrap());
+//! let coords = Handle::new(Coords::new(2).unwrap());
 //! let n = Node::create_in(coords.clone(), &[1.0, 2.0]).unwrap();
 //! assert_eq!(n.position().unwrap(), vec![1.0, 2.0]);
 //!
 //! // The GC does not touch a node that a live Node still references.
-//! assert_eq!(write(&coords).unwrap().gc(), 0);
+//! assert_eq!(coords.write().gc(), 0);
 //!
 //! let id = n.id();
 //! drop(n);
 //! // Now the refcount is 0; gc collects.
-//! assert_eq!(write(&coords).unwrap().gc(), 1);
-//! assert!(!read(&coords).unwrap().is_alive(id));
+//! assert_eq!(coords.write().gc(), 1);
+//! assert!(!coords.read().is_alive(id));
 //! ```
 
 use crate::coords::Coords;
 use crate::error::Result;
-use crate::store::{read, write, Handle};
+use crate::store::Handle;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -72,13 +72,13 @@ impl Node {
     /// referencing it (refcount = 1).
     pub fn create_in(coords: Handle<Coords>, coord: &[f64]) -> Result<Self> {
         // `add_node` initializes refcount = 1; this Node takes that unit.
-        let id = write(&coords)?.add_node(coord)?;
+        let id = coords.write().add_node(coord)?;
         Ok(Self { handle: coords, id })
     }
 
     /// Build an additional `Node` for an existing id (refcount += 1).
     pub fn acquire(coords: Handle<Coords>, id: NodeId) -> Result<Self> {
-        write(&coords)?.incref(id)?;
+        coords.write().incref(id)?;
         Ok(Self { handle: coords, id })
     }
 
@@ -102,21 +102,19 @@ impl Node {
 
     /// Coordinates (copied) in the `Coords`'s active set.
     pub fn position(&self) -> Result<Vec<f64>> {
-        Ok(read(&self.handle)?.position(self.id)?.to_vec())
+        Ok(self.handle.read().position(self.id)?.to_vec())
     }
 
     /// Set the coordinates of the node in the active set.
     pub fn set_position(&self, coords: &[f64]) -> Result<()> {
-        write(&self.handle)?.set_position(self.id, coords)?;
+        self.handle.write().set_position(self.id, coords)?;
         Ok(())
     }
 }
 
 impl Clone for Node {
     fn clone(&self) -> Self {
-        if let Ok(mut c) = write(&self.handle) {
-            let _ = c.incref(self.id);
-        }
+        let _ = self.handle.write().incref(self.id);
         Self {
             handle: self.handle.clone(),
             id: self.id,
@@ -126,9 +124,7 @@ impl Clone for Node {
 
 impl Drop for Node {
     fn drop(&mut self) {
-        if let Ok(mut c) = write(&self.handle) {
-            let _ = c.decref(self.id);
-        }
+        let _ = self.handle.write().decref(self.id);
     }
 }
 
@@ -174,49 +170,49 @@ impl crate::dump::Dump for Node {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     #[test]
     fn node_protects_from_gc() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let n = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let id = n.id();
-        assert_eq!(write(&coords).unwrap().gc(), 0);
-        assert!(read(&coords).unwrap().is_alive(id));
+        assert_eq!(coords.write().gc(), 0);
+        assert!(coords.read().is_alive(id));
         drop(n);
-        assert_eq!(write(&coords).unwrap().gc(), 1);
-        assert!(!read(&coords).unwrap().is_alive(id));
+        assert_eq!(coords.write().gc(), 1);
+        assert!(!coords.read().is_alive(id));
     }
 
     #[test]
     fn clone_and_drop_maintain_refcount() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let n = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let id = n.id();
         let m = n.clone();
-        assert_eq!(read(&coords).unwrap().refcount(id), 2);
+        assert_eq!(coords.read().refcount(id), 2);
         drop(n);
-        assert_eq!(read(&coords).unwrap().refcount(id), 1);
+        assert_eq!(coords.read().refcount(id), 1);
         drop(m);
-        assert_eq!(read(&coords).unwrap().refcount(id), 0);
+        assert_eq!(coords.read().refcount(id), 0);
     }
 
     #[test]
     fn acquire_shares_same_id() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let n = Node::create_in(coords.clone(), &[7.0]).unwrap();
         let id = n.id();
         let m = Node::acquire(coords.clone(), id).unwrap();
         assert_eq!(n.id(), m.id());
-        assert_eq!(read(&coords).unwrap().refcount(id), 2);
+        assert_eq!(coords.read().refcount(id), 2);
         drop(n);
         drop(m);
-        assert_eq!(read(&coords).unwrap().refcount(id), 0);
+        assert_eq!(coords.read().refcount(id), 0);
     }
 
     #[test]
     fn position_and_set_position() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let n = Node::create_in(coords, &[1.0, 2.0]).unwrap();
         assert_eq!(n.position().unwrap(), vec![1.0, 2.0]);
         n.set_position(&[5.0, 6.0]).unwrap();
@@ -225,7 +221,7 @@ mod tests {
 
     #[test]
     fn debug_and_display() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let n = Node::create_in(coords, &[1.5, 2.5]).unwrap();
         let d = format!("{:?}", n);
         assert!(d.contains("Node"));

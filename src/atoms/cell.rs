@@ -13,9 +13,9 @@
 //! use pyrucast::atoms::ElementType;
 //! use pyrucast::containers::mesh::{Mesh, SubMesh};
 //! use pyrucast::atoms::Node;
-//! use pyrucast::store::insert;
+//! use pyrucast::store::Handle;
 //!
-//! let coords = insert(Coords::new(2).unwrap());
+//! let coords = Handle::new(Coords::new(2).unwrap());
 //! let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
 //! let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
 //! let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
@@ -37,7 +37,7 @@ use crate::atoms::Node;
 use crate::atoms::NodeId;
 use crate::containers::mesh::SubMesh;
 use crate::error::{PyrucastError, Result};
-use crate::store::{read, Handle};
+use crate::store::Handle;
 
 /// Lightweight view on a single cell of a `SubMesh`.
 #[derive(Clone)]
@@ -50,7 +50,7 @@ impl Cell {
     /// Build a cell view. Errors if `idx` is past the submesh's
     /// `cell_count`.
     pub fn new(sm: Handle<SubMesh>, idx: usize) -> Result<Self> {
-        let n = read(&sm)?.cell_count();
+        let n = sm.read().cell_count();
         if idx >= n {
             return Err(PyrucastError::Message(format!(
                 "cell index {idx} out of range (cell_count={n})"
@@ -66,17 +66,17 @@ impl Cell {
 
     /// Element type of this cell (same as the parent submesh).
     pub fn element_type(&self) -> Result<ElementType> {
-        Ok(read(&self.sm)?.element_type())
+        Ok(self.sm.read().element_type())
     }
 
     /// Number of nodes that make up this cell (= `element_type().nodes_per_cell()`).
     pub fn nodes_per_cell(&self) -> Result<usize> {
-        Ok(read(&self.sm)?.element_type().nodes_per_cell())
+        Ok(self.sm.read().element_type().nodes_per_cell())
     }
 
     /// Raw connectivity (node ids) of this cell, in submesh order.
     pub fn node_ids(&self) -> Result<Vec<NodeId>> {
-        let s = read(&self.sm)?;
+        let s = self.sm.read();
         let npc = s.element_type().nodes_per_cell();
         Ok(s.connectivity()[self.idx * npc..(self.idx + 1) * npc].to_vec())
     }
@@ -85,7 +85,7 @@ impl Cell {
     /// increments the node's refcount in the owning `Coords`,
     /// matching the behaviour of `Coords::add_node`.
     pub fn nodes(&self) -> Result<Vec<Node>> {
-        let coords = read(&self.sm)?.coords();
+        let coords = self.sm.read().coords();
         let ids = self.node_ids()?;
         ids.into_iter()
             .map(|id| Node::acquire(coords.clone(), id))
@@ -120,9 +120,9 @@ impl crate::dump::Dump for Cell {
         };
         // Per-node coordinate table (one lock on the Coords).
         let body = (|| -> Result<String> {
-            let coords = read(&self.sm)?.coords();
+            let coords = self.sm.read().coords();
             let ids = self.node_ids()?;
-            let c = read(&coords)?;
+            let c = coords.read();
             let mut rows: Vec<Vec<String>> = Vec::with_capacity(ids.len());
             let mut dim = 0usize;
             for &id in &ids {
@@ -192,18 +192,18 @@ mod tests {
     use crate::atoms::Node;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     #[test]
     fn cell_exposes_ids_and_nodes() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
 
         let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
         sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-        let h = insert(sm);
+        let h = Handle::new(sm);
 
         let cell = Cell::new(h, 0).unwrap();
         assert_eq!(cell.element_type().unwrap(), ElementType::TRI3);
@@ -216,21 +216,21 @@ mod tests {
 
     #[test]
     fn cell_new_rejects_out_of_range() {
-        let coords = insert(Coords::new(2).unwrap());
-        let sm = insert(SubMesh::new(coords, ElementType::TRI3));
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let sm = Handle::new(SubMesh::new(coords, ElementType::TRI3));
         assert!(Cell::new(sm, 0).is_err());
     }
 
     #[test]
     fn cell_dump_renders_coordinate_table() {
         use crate::dump::{Dump, DumpOptions};
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
         let mut sm = SubMesh::new(coords, ElementType::TRI3);
         sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-        let cell = Cell::new(insert(sm), 0).unwrap();
+        let cell = Cell::new(Handle::new(sm), 0).unwrap();
 
         let s = cell.render(&DumpOptions::default());
         assert!(s.starts_with("Cell<TRI3> #0"), "header:\n{s}");
@@ -243,7 +243,7 @@ mod tests {
 
     #[test]
     fn cells_iterator_yields_all_cells() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[2.0]).unwrap();

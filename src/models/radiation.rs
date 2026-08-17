@@ -54,8 +54,7 @@ use crate::dump::DumpOptions;
 use crate::error::Result;
 use crate::models::owned_components;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
-use crate::store::{read, Handle};
-use serde::{Deserialize, Serialize};
+use crate::store::Handle;
 
 /// Column DOF name (temperature) — shared with heat conduction.
 pub const PRIMAL_VAR: &str = "T";
@@ -81,7 +80,7 @@ const OUTPUT_FLUX: &str = "flux";
 const OUTPUT_TANGENT: &str = "ktan";
 
 /// Radiation to infinity on a boundary FE subspace.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct Radiation {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
     /// POI1 support over the boundary's unique nodes (row/col support).
@@ -94,8 +93,8 @@ impl Radiation {
     /// is already consumed in writing `q·n = σε(T⁴ − T_∞⁴)`, and what remains
     /// under the integral is a scalar times the surface measure.
     pub fn new(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
-        let submesh = read(&fespace)?.submesh();
-        let support = read(&submesh)?.to_poi1()?;
+        let submesh = fespace.read().submesh();
+        let support = submesh.read().to_poi1()?;
         Ok(Self { fespace, support })
     }
 
@@ -201,7 +200,7 @@ impl SubModelKind for Radiation {
     }
 
     fn render(&self, _opts: &DumpOptions) -> String {
-        let n = read(&self.support).map(|s| s.cell_count()).unwrap_or(0);
+        let n = self.support.read().cell_count();
         format!(
             "SubModel<Radiation>\n  primal var(s): {PRIMAL_VAR}\n  \
              dual var(s):   {DUAL_VAR}\n  support: {n} node(s)"

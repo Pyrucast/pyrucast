@@ -13,7 +13,7 @@ use crate::py::finite_element_space::{PyFiniteElementSpace, PySubFiniteElementSp
 use crate::py::mesh::PyMesh;
 use crate::py::node::PyNode;
 use crate::py::node_field::PyNodeField;
-use crate::store::{read, Handle};
+use crate::store::Handle;
 use pyo3::prelude::*;
 
 /// Parse a physics-nature tag — the one thing a free component list cannot
@@ -88,12 +88,12 @@ pub struct PySubModel {
 impl PySubModel {
     /// Names of the primal (primary) variables of this sub-model.
     fn primal_vars(&self) -> PyResult<Vec<String>> {
-        Ok(read(&self.handle)?.primal_vars())
+        Ok(self.handle.read().primal_vars())
     }
 
     /// Names of the dual variables of this sub-model.
     fn dual_vars(&self) -> PyResult<Vec<String>> {
-        Ok(read(&self.handle)?.dual_vars())
+        Ok(self.handle.read().dual_vars())
     }
 
     /// `sub.fespace()` — the `SubFiniteElementSpace` this sub-model integrates
@@ -101,7 +101,9 @@ impl PySubModel {
     /// which integrate nothing). The per-sub-model counterpart of
     /// `Model.fespace()`.
     fn fespace(&self) -> PyResult<Option<PySubFiniteElementSpace>> {
-        Ok(read(&self.handle)?
+        Ok(self
+            .handle
+            .read()
             .behavior_fespace()
             .map(|handle| PySubFiniteElementSpace { handle }))
     }
@@ -110,7 +112,9 @@ impl PySubModel {
     /// `"thermal"`, `"constraint"`, `"other"`). Determined entirely by the physics
     /// kind — one tag for a plain physics, several for a coupled one.
     fn physics(&self) -> PyResult<Vec<String>> {
-        Ok(read(&self.handle)?
+        Ok(self
+            .handle
+            .read()
             .physics()
             .iter()
             .map(|p| p.to_tag().to_string())
@@ -121,14 +125,16 @@ impl PySubModel {
     /// otherwise). Build a load `SubNodeField` on `mesh[0]` to impose the
     /// constrained values, or read the nodes via `mesh.node(0, i, 0)`.
     fn multiplier_mesh(&self) -> PyResult<PyMesh> {
-        let mesh = read(&self.handle)?.multiplier_mesh()?;
+        let mesh = self.handle.read().multiplier_mesh()?;
         Ok(PyMesh { inner: mesh })
     }
 
     /// Names of the material components this sub-model expects, or
     /// `None` for physics that don't need material data (Dirichlet, …).
     fn material_components(&self) -> PyResult<Option<Vec<String>>> {
-        Ok(read(&self.handle)?
+        Ok(self
+            .handle
+            .read()
             .material_components()
             .map(|c| c.iter().map(|s| s.to_string()).collect()))
     }
@@ -137,15 +143,15 @@ impl PySubModel {
     /// integrated with `deformation` / `integrate_behavior` (`True` for
     /// volumetric physics, `False` for constraints like Dirichlet).
     fn has_behavior(&self) -> PyResult<bool> {
-        Ok(read(&self.handle)?.has_behavior())
+        Ok(self.handle.read().has_behavior())
     }
 
     fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", &*read(&self.handle)?))
+        Ok(format!("{:?}", &*self.handle.read()))
     }
 
     fn __str__(&self) -> PyResult<String> {
-        Ok(format!("{}", &*read(&self.handle)?))
+        Ok(format!("{}", &*self.handle.read()))
     }
 }
 
@@ -1018,7 +1024,7 @@ class PyModel:
         with this one (no deep copy)."""
     def __or__(self, other: pyo3_stub_gen.RustType["PyModel"] | pyo3_stub_gen.RustType["PySubModel"]) -> pyo3_stub_gen.RustType["PyModel"]:
         """`model | other` → a fresh `Model` holding the terms of both, in
-        first-seen order and deduplicated by store slot. This is how a problem
+        first-seen order and deduplicated by object identity. This is how a problem
         is composed: physics | boundary conditions | constraints."""
     def __ror__(self, other: pyo3_stub_gen.RustType["PySubModel"]) -> pyo3_stub_gen.RustType["PyModel"]:
         """`sub_model | model` — the mirror of `model | sub_model`, differing

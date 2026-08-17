@@ -113,7 +113,7 @@ Cela suppose l'invariant de champ (au plus une zone par `(support, composante)`,
 garanti par l'union `|`) ; la sortie l'hérite par construction.
 
 > **« Même support » = le même objet, pas la même géométrie.** L'appariement se
-> fait par **identité de slot** (`Handle::same_slot`, via
+> fait par **identité d'objet** (`Handle::same_object`, via
 > `SubField::same_support`), jamais en comparant les nœuds. Deux supports
 > distincts qui portent les mêmes nœuds — ou qui n'en partagent que quelques-uns,
 > comme deux régions de bord adjacentes assemblées chacune de son côté — comptent

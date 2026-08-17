@@ -32,9 +32,9 @@
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
 //! use pyrucast::containers::mesh::{Mesh, SubMesh};
 //! use pyrucast::atoms::Node;
-//! use pyrucast::store::{insert, read};
+//! use pyrucast::store::Handle;
 //!
-//! let coords = insert(Coords::new(2).unwrap());
+//! let coords = Handle::new(Coords::new(2).unwrap());
 //! let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
 //! let b = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
 //! let c = Node::create_in(coords.clone(), &[0.0, 2.0]).unwrap();
@@ -44,7 +44,7 @@
 //!
 //! let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 //! let sub = fes.get(0).unwrap();
-//! let s = read(&sub).unwrap();
+//! let s = sub.read();
 //! assert_eq!(s.gauss_count(), 3);
 //! // |J| of a triangle with vertices (0,0), (2,0), (0,2): the mapping
 //! // is linear, |J| = 4 (twice the area, since ref triangle has area 1/2).
@@ -67,8 +67,7 @@ use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
-use crate::store::{insert, read, Handle};
-use serde::{Deserialize, Serialize};
+use crate::store::Handle;
 use std::fmt;
 use std::sync::OnceLock;
 
@@ -78,7 +77,6 @@ use std::sync::OnceLock;
 ///
 /// Stores only the **reference-space** tables (independent of the node
 /// coordinates); physical quantities are computed on the fly.
-#[derive(Serialize, Deserialize)]
 pub struct SubFiniteElementSpace {
     submesh: Handle<SubMesh>,
     interpolation: Interpolation,
@@ -93,7 +91,6 @@ pub struct SubFiniteElementSpace {
     /// `Coords`). Carried here so the parallel drivers snapshot it once instead
     /// of re-reading the store per cell. `#[serde(default)]` for subspaces
     /// serialised before the frame existed.
-    #[serde(default)]
     axisymmetric: bool,
 
     // Reference-space tables (invariant under mesh deformation):
@@ -110,21 +107,17 @@ pub struct SubFiniteElementSpace {
     /// Flat `n_g × shape_count` values of the **field** basis. Empty when it
     /// coincides with the geometric one (every Lagrange space), so the common
     /// case costs no memory and the accessor falls back.
-    #[serde(default)]
     field_n_at_g: Vec<f64>,
     /// Flat `n_g × shape_count × ref_dim` field `∂N_i/∂ξ_j(ξ_g)`. Same fallback.
-    #[serde(default)]
     field_dn_at_g: Vec<f64>,
     /// Flat `n_g × shape_count × ref_dim` field `∂²N_i/∂ξ_j²(ξ_g)`. Only the C¹
     /// families fill it; empty otherwise.
-    #[serde(default)]
     field_d2n_at_g: Vec<f64>,
 
     /// Cell colouring for conflict-free parallel assembly, computed once and
     /// memoised. Topological (depends only on the frozen connectivity), so it is
     /// invariant for the subspace's lifetime. Not serialised — recomputed after
     /// a load, like the lazy index maps on `SubMatrix`.
-    #[serde(skip)]
     coloring: OnceLock<Vec<Vec<usize>>>,
 }
 
@@ -142,7 +135,7 @@ impl SubFiniteElementSpace {
         quadrature: QuadratureRule,
     ) -> Result<Self> {
         let (et, coords) = {
-            let s = read(&submesh)?;
+            let s = submesh.read();
             (s.element_type(), s.coords())
         };
         if et == ElementType::POI1 {
@@ -163,7 +156,7 @@ impl SubFiniteElementSpace {
             )));
         }
         let (space_dim, axisymmetric) = {
-            let c = read(&coords)?;
+            let c = coords.read();
             (c.dim() as usize, c.is_axisymmetric())
         };
         let ref_dim = et.topological_dim();
@@ -256,7 +249,7 @@ impl SubFiniteElementSpace {
 
     /// Handle to the owning `Coords` (internal clone).
     pub fn coords(&self) -> Result<Handle<Coords>> {
-        Ok(read(&self.submesh)?.coords())
+        Ok(self.submesh.read().coords())
     }
 
     /// Interpolation in use.
@@ -271,7 +264,7 @@ impl SubFiniteElementSpace {
 
     /// Element type of the submesh.
     pub fn element_type(&self) -> Result<ElementType> {
-        Ok(read(&self.submesh)?.element_type())
+        Ok(self.submesh.read().element_type())
     }
 
     /// Reference dimension (= topological dim of the element type).
@@ -300,7 +293,7 @@ impl SubFiniteElementSpace {
 
     /// Number of cells in the underlying submesh.
     pub fn cell_count(&self) -> Result<usize> {
-        Ok(read(&self.submesh)?.cell_count())
+        Ok(self.submesh.read().cell_count())
     }
 
     /// Number of Gauss points per cell.
@@ -482,7 +475,7 @@ impl SubFiniteElementSpace {
     fn cell_node_coords(&self, cell_idx: usize) -> Result<Vec<f64>> {
         let n_nodes = self.nodes_per_cell()?;
         let (coords, ids): (Handle<Coords>, Vec<NodeId>) = {
-            let s = read(&self.submesh)?;
+            let s = self.submesh.read();
             let total = s.cell_count();
             if cell_idx >= total {
                 return Err(PyrucastError::Message(format!(
@@ -495,7 +488,7 @@ impl SubFiniteElementSpace {
             (s.coords(), ids)
         };
         let mut out = Vec::with_capacity(n_nodes * self.space_dim);
-        let c = read(&coords)?;
+        let c = coords.read();
         for id in ids {
             out.extend_from_slice(c.position(id)?);
         }
@@ -571,7 +564,7 @@ impl crate::dump::Dump for SubFiniteElementSpace {
 /// each `SubFiniteElementSpace` captures its `SubMesh` handle. The node coordinates
 /// in the underlying `Coords` may evolve later; the on-the-fly
 /// Jacobian computation always reflects the current coordinates.
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Default)]
 pub struct FiniteElementSpace {
     subs: Vec<Handle<SubFiniteElementSpace>>,
 }
@@ -609,7 +602,7 @@ impl FiniteElementSpace {
         for (i, &(interp, quad)) in choices.iter().enumerate() {
             let sm = mesh.get(i)?;
             let sub = SubFiniteElementSpace::new(sm, interp, quad)?;
-            subs.push(insert(sub));
+            subs.push(Handle::new(sub));
         }
         Ok(Self { subs })
     }
@@ -639,7 +632,7 @@ impl FiniteElementSpace {
     /// Iterator over every element of subspace `subspace_idx`.
     pub fn elements(&self, subspace_idx: usize) -> Result<ElementIter> {
         let sub = self.get(subspace_idx)?;
-        let n = read(&sub)?.cell_count()?;
+        let n = sub.read().cell_count()?;
         Ok(ElementIter::new(sub, n))
     }
 
@@ -649,8 +642,8 @@ impl FiniteElementSpace {
     pub fn mesh(&self) -> Result<Mesh> {
         let mut mesh = Mesh::empty();
         for sub in self.iter() {
-            let submesh = read(sub)?.submesh();
-            if !mesh.items().iter().any(|h| h.same_slot(&submesh)) {
+            let submesh = sub.read().submesh();
+            if !mesh.items().iter().any(|h| h.same_object(&submesh)) {
                 mesh.add_sub(submesh)?;
             }
         }
@@ -801,14 +794,14 @@ mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
     use crate::atoms::Node;
-    use crate::store::{insert, read, write};
+    use crate::store::Handle;
 
     fn cfg2d() -> Handle<Coords> {
-        insert(Coords::new(2).unwrap())
+        Handle::new(Coords::new(2).unwrap())
     }
 
     fn cfg3d() -> Handle<Coords> {
-        insert(Coords::new(3).unwrap())
+        Handle::new(Coords::new(3).unwrap())
     }
 
     #[test]
@@ -820,7 +813,7 @@ mod tests {
         let sm = {
             let mut sm = SubMesh::new(coords, ElementType::TRI3);
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
             .unwrap();
@@ -842,19 +835,16 @@ mod tests {
         let sm = {
             let mut sm = SubMesh::new(coords, ElementType::TRI3);
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
-        assert!(!read(&sm).unwrap().is_sealed());
+        assert!(!sm.read().is_sealed());
         let _sub =
             SubFiniteElementSpace::new(sm.clone(), Interpolation::Lagrange1, QuadratureRule::Gauss)
                 .unwrap();
         // Building the space froze the submesh: no more cells can be added.
-        assert!(read(&sm).unwrap().is_sealed());
+        assert!(sm.read().is_sealed());
         assert!(matches!(
-            write(&sm)
-                .unwrap()
-                .add_cell(&[a.id(), b.id(), c.id()])
-                .unwrap_err(),
+            sm.write().add_cell(&[a.id(), b.id(), c.id()]).unwrap_err(),
             PyrucastError::MeshSealed
         ));
     }
@@ -868,7 +858,7 @@ mod tests {
         let sm = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
             sm.add_cell(&[n.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let err = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
             .unwrap_err();
@@ -878,14 +868,14 @@ mod tests {
     #[test]
     fn rejects_mesh_with_lower_space_dim_than_ref_dim() {
         // 1-D Coords but TRI3 (ref_dim = 2) → must be rejected.
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[2.0]).unwrap();
         let sm = {
             let mut sm = SubMesh::new(coords, ElementType::TRI3);
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         assert!(
             SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
@@ -898,13 +888,13 @@ mod tests {
     /// SEG2 of length L in 1-D: J is constant, |J| = L/2.
     #[test]
     fn seg2_jacobian_1d() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[5.0]).unwrap();
         let sm = {
             let mut sm = SubMesh::new(coords, ElementType::SEG2);
             sm.add_cell(&[a.id(), b.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
             .unwrap();
@@ -926,7 +916,7 @@ mod tests {
         let sm = {
             let mut sm = SubMesh::new(coords, ElementType::SEG2);
             sm.add_cell(&[a.id(), b.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
             .unwrap();
@@ -950,7 +940,7 @@ mod tests {
         let sm = {
             let mut sm = SubMesh::new(coords, ElementType::TRI3);
             sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
             .unwrap();
@@ -971,7 +961,7 @@ mod tests {
         let sm = {
             let mut sm = SubMesh::new(coords, ElementType::TRI3);
             sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
             .unwrap();
@@ -995,7 +985,7 @@ mod tests {
         let sm = {
             let mut sm = SubMesh::new(coords, ElementType::QUA4);
             sm.add_cell(&[n0.id(), n1.id(), n2.id(), n3.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
             .unwrap();
@@ -1032,7 +1022,7 @@ mod tests {
         let sm = {
             let mut sm = SubMesh::new(coords, ElementType::QUA9);
             sm.add_cell(&ids).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange2, QuadratureRule::Gauss)
             .unwrap();
@@ -1064,7 +1054,7 @@ mod tests {
             let mut sm = SubMesh::new(coords, ElementType::PENTA6);
             sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>())
                 .unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
             .unwrap();
@@ -1096,7 +1086,7 @@ mod tests {
         let sm = {
             let mut sm = SubMesh::new(coords, et);
             sm.add_cell(&ids).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange2, QuadratureRule::Gauss)
             .unwrap();
@@ -1200,7 +1190,7 @@ mod tests {
         let sm = {
             let mut sm = SubMesh::new(coords, ElementType::HEX27);
             sm.add_cell(&ids).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange2, QuadratureRule::Gauss)
             .unwrap();
@@ -1260,7 +1250,7 @@ mod tests {
             let mut sm = SubMesh::new(coords, ElementType::HEX8);
             sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>())
                 .unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
             .unwrap();
@@ -1284,7 +1274,7 @@ mod tests {
         let sm = {
             let mut sm = SubMesh::new(coords, ElementType::TRI3);
             sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
             .unwrap();
@@ -1314,7 +1304,7 @@ mod tests {
         let sm = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
             sm.add_cell(&[a.id(), b.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
             .unwrap();
@@ -1323,10 +1313,7 @@ mod tests {
         assert!((dj_before - 0.5).abs() < 1e-12);
 
         // Stretch the SEG2 to length 4 (move node b from x=1 to x=4).
-        write(&coords)
-            .unwrap()
-            .set_position(b.id(), &[4.0, 0.0])
-            .unwrap();
+        coords.write().set_position(b.id(), &[4.0, 0.0]).unwrap();
 
         let dj_after = sub.det_jacobian(0, 0).unwrap();
         assert!((dj_after - 2.0).abs() < 1e-12);
@@ -1346,12 +1333,12 @@ mod tests {
         let sm_tri = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sm_qua = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::QUA4);
             sm.add_cell(&[n0.id(), n1.id(), n3.id(), n2.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         mesh.add_sub(sm_tri).unwrap();
         mesh.add_sub(sm_qua).unwrap();
@@ -1359,12 +1346,12 @@ mod tests {
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         assert_eq!(fes.len(), 2);
         {
-            let s = read(&fes.get(0).unwrap()).unwrap();
+            let s = fes.get(0).unwrap().read();
             assert_eq!(s.element_type().unwrap(), ElementType::TRI3);
             assert_eq!(s.gauss_count(), 3);
         }
         {
-            let s = read(&fes.get(1).unwrap()).unwrap();
+            let s = fes.get(1).unwrap().read();
             assert_eq!(s.element_type().unwrap(), ElementType::QUA4);
             assert_eq!(s.gauss_count(), 4);
         }
@@ -1422,7 +1409,7 @@ mod tests {
         assert!(d.contains("FiniteElementSpace"));
 
         {
-            let sub = read(&fes.get(0).unwrap()).unwrap();
+            let sub = fes.get(0).unwrap().read();
             let s = format!("{}", &*sub);
             assert!(s.contains("SubFiniteElementSpace"));
             assert!(s.contains("TRI3"));
@@ -1437,7 +1424,7 @@ mod tests {
         // off-centre: the volume is base × height / 3 whatever the apex does,
         // which is a check the quadrature rule has to pass and a wrong Jacobi
         // weight would fail.
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let ids: Vec<NodeId> = [
             [0.0, 0.0, 0.0],
             [2.0, 0.0, 0.0],
@@ -1451,7 +1438,7 @@ mod tests {
         let sm = {
             let mut sm = SubMesh::new(coords, ElementType::PYRA5);
             sm.add_cell(&ids).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sub = SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
             .unwrap();

@@ -26,7 +26,7 @@ mod tests {
     use crate::containers::mesh::SubMesh;
     use crate::containers::node_field::SubNodeField;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     /// Single-zone POI1 field over the given nodes (attached to `coords`).
     fn poi1_field(
@@ -38,25 +38,25 @@ mod tests {
         for nd in nodes {
             sm.add_cell(&[nd.id()]).unwrap();
         }
-        NodeField::from_sub(SubNodeField::from_poi1(&insert(sm), components).unwrap())
+        NodeField::from_sub(SubNodeField::from_poi1(&Handle::new(sm), components).unwrap())
     }
 
     #[test]
     fn merge_compatible() {
         // a: [na, nb] T = [5, 3] ; b: [nb, nc] T = [3, 9] (nb shared, equal).
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let na = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let nb = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let nc = Node::create_in(coords.clone(), &[2.0]).unwrap();
         let a = poi1_field(&coords, &[&na, &nb], vec!["T".into()]);
         let b = poi1_field(&coords, &[&nb, &nc], vec!["T".into()]);
         {
-            let mut s = crate::store::write(&a.get(0).unwrap()).unwrap();
+            let mut s = a.get(0).unwrap().write();
             s.set(0, 0, 5.0).unwrap();
             s.set(1, 0, 3.0).unwrap();
         }
         {
-            let mut s = crate::store::write(&b.get(0).unwrap()).unwrap();
+            let mut s = b.get(0).unwrap().write();
             s.set(0, 0, 3.0).unwrap();
             s.set(1, 0, 9.0).unwrap();
         }
@@ -74,7 +74,7 @@ mod tests {
 
     #[test]
     fn merge_distinct_component_sets_stay_separate() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let n = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let a = poi1_field(&coords, &[&n], vec!["T".into()]);
         let b = poi1_field(&coords, &[&n], vec!["P".into()]);
@@ -85,25 +85,19 @@ mod tests {
 
     #[test]
     fn merge_conflict_errors() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let n = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let a = poi1_field(&coords, &[&n], vec!["T".into()]);
         let b = poi1_field(&coords, &[&n], vec!["T".into()]);
-        crate::store::write(&a.get(0).unwrap())
-            .unwrap()
-            .set(0, 0, 1.0)
-            .unwrap();
-        crate::store::write(&b.get(0).unwrap())
-            .unwrap()
-            .set(0, 0, 2.0)
-            .unwrap();
+        a.get(0).unwrap().write().set(0, 0, 1.0).unwrap();
+        b.get(0).unwrap().write().set(0, 0, 2.0).unwrap();
         assert!(merge(&a, &b).is_err());
     }
 
     #[test]
     fn merge_incompatible_cfg_errors() {
-        let cfg1 = insert(Coords::new(1).unwrap());
-        let cfg2 = insert(Coords::new(1).unwrap());
+        let cfg1 = Handle::new(Coords::new(1).unwrap());
+        let cfg2 = Handle::new(Coords::new(1).unwrap());
         let n1 = Node::create_in(cfg1.clone(), &[0.0]).unwrap();
         let n2 = Node::create_in(cfg2.clone(), &[0.0]).unwrap();
         let a = poi1_field(&cfg1, &[&n1], vec!["T".into()]);

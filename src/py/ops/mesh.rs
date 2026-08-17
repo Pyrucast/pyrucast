@@ -12,7 +12,6 @@ use crate::py::mesh::PyMesh;
 use crate::py::node::PyNode;
 use crate::py::node_field::{PyNodeField, PySubNodeField};
 use crate::py::signals::PySignals;
-use crate::store::read;
 use pyo3::exceptions::PyTypeError;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -1133,9 +1132,9 @@ pub fn select(
     } else if let Ok(f) = field.extract::<PyRef<PyElementField>>() {
         crate::ops::mesh::select_cells(&f.inner, &band, components)?
     } else if let Ok(f) = field.extract::<PyRef<PySubNodeField>>() {
-        crate::ops::mesh::select_sub_nodes(&*read(&f.handle)?, &band, components)?
+        crate::ops::mesh::select_sub_nodes(&*f.handle.read(), &band, components)?
     } else if let Ok(f) = field.extract::<PyRef<PySubElementField>>() {
-        crate::ops::mesh::select_sub_cells(&*read(&f.handle)?, &band, components)?
+        crate::ops::mesh::select_sub_cells(&*f.handle.read(), &band, components)?
     } else {
         return Err(PyTypeError::new_err(
             "expected a NodeField, SubNodeField, ElementField or SubElementField",

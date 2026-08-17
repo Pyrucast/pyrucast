@@ -4,7 +4,7 @@
 use crate::py::element_field::{PyElementField, PySubElementField};
 use crate::py::mesh::PyMesh;
 use crate::py::node_field::{PyNodeField, PySubNodeField};
-use crate::store::{insert, read};
+use crate::store::Handle;
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 
@@ -55,11 +55,11 @@ pub fn psca(py: Python<'_>, x: &Bound<'_, PyAny>, y: &Bound<'_, PyAny>) -> PyRes
         let b = y
             .extract::<PyRef<PySubNodeField>>()
             .map_err(|_| PyTypeError::new_err("psca: both operands must be SubNodeFields"))?;
-        let out = read(&a.handle)?.pscal(&*read(&b.handle)?)?;
+        let out = a.handle.read().pscal(&*b.handle.read())?;
         return Ok(Py::new(
             py,
             PySubNodeField {
-                handle: insert(out),
+                handle: Handle::new(out),
             },
         )?
         .into_any());
@@ -68,11 +68,11 @@ pub fn psca(py: Python<'_>, x: &Bound<'_, PyAny>, y: &Bound<'_, PyAny>) -> PyRes
         let b = y
             .extract::<PyRef<PySubElementField>>()
             .map_err(|_| PyTypeError::new_err("psca: both operands must be SubElementFields"))?;
-        let out = read(&a.handle)?.pscal(&*read(&b.handle)?)?;
+        let out = a.handle.read().pscal(&*b.handle.read())?;
         return Ok(Py::new(
             py,
             PySubElementField {
-                handle: insert(out),
+                handle: Handle::new(out),
             },
         )?
         .into_any());
@@ -118,21 +118,21 @@ macro_rules! py_field_unary {
                 .into_any());
             }
             if let Ok(f) = field.extract::<PyRef<PySubNodeField>>() {
-                let out = op(&*read(&f.handle)?)?;
+                let out = op(&*f.handle.read())?;
                 return Ok(Py::new(
                     py,
                     PySubNodeField {
-                        handle: insert(out),
+                        handle: Handle::new(out),
                     },
                 )?
                 .into_any());
             }
             if let Ok(f) = field.extract::<PyRef<PySubElementField>>() {
-                let out = op(&*read(&f.handle)?)?;
+                let out = op(&*f.handle.read())?;
                 return Ok(Py::new(
                     py,
                     PySubElementField {
-                        handle: insert(out),
+                        handle: Handle::new(out),
                     },
                 )?
                 .into_any());
@@ -433,89 +433,89 @@ impl PyElementField {
 impl PySubNodeField {
     /// Voir `pyrucast.field.abs`.
     fn abs(&self) -> PyResult<PySubNodeField> {
-        let out = crate::ops::field::abs(&*read(&self.handle)?)?;
+        let out = crate::ops::field::abs(&*self.handle.read())?;
         Ok(PySubNodeField {
-            handle: insert(out),
+            handle: Handle::new(out),
         })
     }
 
     /// Voir `pyrucast.field.sqrt`.
     fn sqrt(&self) -> PyResult<PySubNodeField> {
-        let out = crate::ops::field::sqrt(&*read(&self.handle)?)?;
+        let out = crate::ops::field::sqrt(&*self.handle.read())?;
         Ok(PySubNodeField {
-            handle: insert(out),
+            handle: Handle::new(out),
         })
     }
 
     /// Voir `pyrucast.field.exp`.
     fn exp(&self) -> PyResult<PySubNodeField> {
-        let out = crate::ops::field::exp(&*read(&self.handle)?)?;
+        let out = crate::ops::field::exp(&*self.handle.read())?;
         Ok(PySubNodeField {
-            handle: insert(out),
+            handle: Handle::new(out),
         })
     }
 
     /// Voir `pyrucast.field.log`.
     fn log(&self) -> PyResult<PySubNodeField> {
-        let out = crate::ops::field::log(&*read(&self.handle)?)?;
+        let out = crate::ops::field::log(&*self.handle.read())?;
         Ok(PySubNodeField {
-            handle: insert(out),
+            handle: Handle::new(out),
         })
     }
 
     /// Voir `pyrucast.field.log10`.
     fn log10(&self) -> PyResult<PySubNodeField> {
-        let out = crate::ops::field::log10(&*read(&self.handle)?)?;
+        let out = crate::ops::field::log10(&*self.handle.read())?;
         Ok(PySubNodeField {
-            handle: insert(out),
+            handle: Handle::new(out),
         })
     }
 
     /// Voir `pyrucast.field.cos`.
     fn cos(&self) -> PyResult<PySubNodeField> {
-        let out = crate::ops::field::cos(&*read(&self.handle)?)?;
+        let out = crate::ops::field::cos(&*self.handle.read())?;
         Ok(PySubNodeField {
-            handle: insert(out),
+            handle: Handle::new(out),
         })
     }
 
     /// Voir `pyrucast.field.sin`.
     fn sin(&self) -> PyResult<PySubNodeField> {
-        let out = crate::ops::field::sin(&*read(&self.handle)?)?;
+        let out = crate::ops::field::sin(&*self.handle.read())?;
         Ok(PySubNodeField {
-            handle: insert(out),
+            handle: Handle::new(out),
         })
     }
 
     /// Voir `pyrucast.field.tan`.
     fn tan(&self) -> PyResult<PySubNodeField> {
-        let out = crate::ops::field::tan(&*read(&self.handle)?)?;
+        let out = crate::ops::field::tan(&*self.handle.read())?;
         Ok(PySubNodeField {
-            handle: insert(out),
+            handle: Handle::new(out),
         })
     }
 
     /// Voir `pyrucast.field.sinh`.
     fn sinh(&self) -> PyResult<PySubNodeField> {
-        let out = crate::ops::field::sinh(&*read(&self.handle)?)?;
+        let out = crate::ops::field::sinh(&*self.handle.read())?;
         Ok(PySubNodeField {
-            handle: insert(out),
+            handle: Handle::new(out),
         })
     }
 
     /// Voir `pyrucast.field.cosh`.
     fn cosh(&self) -> PyResult<PySubNodeField> {
-        let out = crate::ops::field::cosh(&*read(&self.handle)?)?;
+        let out = crate::ops::field::cosh(&*self.handle.read())?;
         Ok(PySubNodeField {
-            handle: insert(out),
+            handle: Handle::new(out),
         })
     }
 
     /// Voir `pyrucast.field.tanh`.
     fn tanh(&self) -> PyResult<PySubNodeField> {
-        let out = crate::ops::field::tanh(&*read(&self.handle)?)?;
+        let out = crate::ops::field::tanh(&*self.handle.read())?;
         Ok(PySubNodeField {
-            handle: insert(out),
+            handle: Handle::new(out),
         })
     }
 
@@ -530,9 +530,9 @@ impl PySubNodeField {
         components: Option<Vec<String>>,
     ) -> PyResult<PySubNodeField> {
         let band = crate::atoms::Band::new(ge, gt, le, lt)?;
-        let out = crate::ops::node_field::mask_sub(&*read(&self.handle)?, &band, components);
+        let out = crate::ops::node_field::mask_sub(&*self.handle.read(), &band, components);
         Ok(PySubNodeField {
-            handle: insert(out),
+            handle: Handle::new(out),
         })
     }
 
@@ -548,7 +548,7 @@ impl PySubNodeField {
     ) -> PyResult<PyMesh> {
         let band = crate::atoms::Band::new(ge, gt, le, lt)?;
         Ok(PyMesh {
-            inner: crate::ops::mesh::select_sub_nodes(&*read(&self.handle)?, &band, components)?,
+            inner: crate::ops::mesh::select_sub_nodes(&*self.handle.read(), &band, components)?,
         })
     }
 
@@ -556,18 +556,18 @@ impl PySubNodeField {
     fn filter_components(&self, components: &Bound<'_, PyAny>) -> PyResult<PySubNodeField> {
         use crate::containers::field::SubField;
         let wanted = extract_names(components)?;
-        let out = read(&self.handle)?.select_components(wanted.as_slice())?;
+        let out = self.handle.read().select_components(wanted.as_slice())?;
         Ok(PySubNodeField {
-            handle: insert(out),
+            handle: Handle::new(out),
         })
     }
 
     /// Voir `pyrucast.field.rename_component`.
     fn rename_component(&self, old: &str, new: &str) -> PyResult<PySubNodeField> {
         use crate::containers::field::SubField;
-        let out = read(&self.handle)?.rename_component(old, new)?;
+        let out = self.handle.read().rename_component(old, new)?;
         Ok(PySubNodeField {
-            handle: insert(out),
+            handle: Handle::new(out),
         })
     }
 }
@@ -577,89 +577,89 @@ impl PySubNodeField {
 impl PySubElementField {
     /// Voir `pyrucast.field.abs`.
     fn abs(&self) -> PyResult<PySubElementField> {
-        let out = crate::ops::field::abs(&*read(&self.handle)?)?;
+        let out = crate::ops::field::abs(&*self.handle.read())?;
         Ok(PySubElementField {
-            handle: insert(out),
+            handle: Handle::new(out),
         })
     }
 
     /// Voir `pyrucast.field.sqrt`.
     fn sqrt(&self) -> PyResult<PySubElementField> {
-        let out = crate::ops::field::sqrt(&*read(&self.handle)?)?;
+        let out = crate::ops::field::sqrt(&*self.handle.read())?;
         Ok(PySubElementField {
-            handle: insert(out),
+            handle: Handle::new(out),
         })
     }
 
     /// Voir `pyrucast.field.exp`.
     fn exp(&self) -> PyResult<PySubElementField> {
-        let out = crate::ops::field::exp(&*read(&self.handle)?)?;
+        let out = crate::ops::field::exp(&*self.handle.read())?;
         Ok(PySubElementField {
-            handle: insert(out),
+            handle: Handle::new(out),
         })
     }
 
     /// Voir `pyrucast.field.log`.
     fn log(&self) -> PyResult<PySubElementField> {
-        let out = crate::ops::field::log(&*read(&self.handle)?)?;
+        let out = crate::ops::field::log(&*self.handle.read())?;
         Ok(PySubElementField {
-            handle: insert(out),
+            handle: Handle::new(out),
         })
     }
 
     /// Voir `pyrucast.field.log10`.
     fn log10(&self) -> PyResult<PySubElementField> {
-        let out = crate::ops::field::log10(&*read(&self.handle)?)?;
+        let out = crate::ops::field::log10(&*self.handle.read())?;
         Ok(PySubElementField {
-            handle: insert(out),
+            handle: Handle::new(out),
         })
     }
 
     /// Voir `pyrucast.field.cos`.
     fn cos(&self) -> PyResult<PySubElementField> {
-        let out = crate::ops::field::cos(&*read(&self.handle)?)?;
+        let out = crate::ops::field::cos(&*self.handle.read())?;
         Ok(PySubElementField {
-            handle: insert(out),
+            handle: Handle::new(out),
         })
     }
 
     /// Voir `pyrucast.field.sin`.
     fn sin(&self) -> PyResult<PySubElementField> {
-        let out = crate::ops::field::sin(&*read(&self.handle)?)?;
+        let out = crate::ops::field::sin(&*self.handle.read())?;
         Ok(PySubElementField {
-            handle: insert(out),
+            handle: Handle::new(out),
         })
     }
 
     /// Voir `pyrucast.field.tan`.
     fn tan(&self) -> PyResult<PySubElementField> {
-        let out = crate::ops::field::tan(&*read(&self.handle)?)?;
+        let out = crate::ops::field::tan(&*self.handle.read())?;
         Ok(PySubElementField {
-            handle: insert(out),
+            handle: Handle::new(out),
         })
     }
 
     /// Voir `pyrucast.field.sinh`.
     fn sinh(&self) -> PyResult<PySubElementField> {
-        let out = crate::ops::field::sinh(&*read(&self.handle)?)?;
+        let out = crate::ops::field::sinh(&*self.handle.read())?;
         Ok(PySubElementField {
-            handle: insert(out),
+            handle: Handle::new(out),
         })
     }
 
     /// Voir `pyrucast.field.cosh`.
     fn cosh(&self) -> PyResult<PySubElementField> {
-        let out = crate::ops::field::cosh(&*read(&self.handle)?)?;
+        let out = crate::ops::field::cosh(&*self.handle.read())?;
         Ok(PySubElementField {
-            handle: insert(out),
+            handle: Handle::new(out),
         })
     }
 
     /// Voir `pyrucast.field.tanh`.
     fn tanh(&self) -> PyResult<PySubElementField> {
-        let out = crate::ops::field::tanh(&*read(&self.handle)?)?;
+        let out = crate::ops::field::tanh(&*self.handle.read())?;
         Ok(PySubElementField {
-            handle: insert(out),
+            handle: Handle::new(out),
         })
     }
 
@@ -674,9 +674,9 @@ impl PySubElementField {
         components: Option<Vec<String>>,
     ) -> PyResult<PySubElementField> {
         let band = crate::atoms::Band::new(ge, gt, le, lt)?;
-        let out = crate::ops::element_field::mask_sub(&*read(&self.handle)?, &band, components);
+        let out = crate::ops::element_field::mask_sub(&*self.handle.read(), &band, components);
         Ok(PySubElementField {
-            handle: insert(out),
+            handle: Handle::new(out),
         })
     }
 
@@ -692,7 +692,7 @@ impl PySubElementField {
     ) -> PyResult<PyMesh> {
         let band = crate::atoms::Band::new(ge, gt, le, lt)?;
         Ok(PyMesh {
-            inner: crate::ops::mesh::select_sub_cells(&*read(&self.handle)?, &band, components)?,
+            inner: crate::ops::mesh::select_sub_cells(&*self.handle.read(), &band, components)?,
         })
     }
 
@@ -700,18 +700,18 @@ impl PySubElementField {
     fn filter_components(&self, components: &Bound<'_, PyAny>) -> PyResult<PySubElementField> {
         use crate::containers::field::SubField;
         let wanted = extract_names(components)?;
-        let out = read(&self.handle)?.select_components(wanted.as_slice())?;
+        let out = self.handle.read().select_components(wanted.as_slice())?;
         Ok(PySubElementField {
-            handle: insert(out),
+            handle: Handle::new(out),
         })
     }
 
     /// Voir `pyrucast.field.rename_component`.
     fn rename_component(&self, old: &str, new: &str) -> PyResult<PySubElementField> {
         use crate::containers::field::SubField;
-        let out = read(&self.handle)?.rename_component(old, new)?;
+        let out = self.handle.read().rename_component(old, new)?;
         Ok(PySubElementField {
-            handle: insert(out),
+            handle: Handle::new(out),
         })
     }
 }

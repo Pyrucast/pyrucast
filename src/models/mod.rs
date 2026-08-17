@@ -31,7 +31,7 @@ use crate::containers::mesh::{Mesh, SubMesh};
 use crate::containers::node_field::SubNodeField;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::store::{read, Handle};
+use crate::store::Handle;
 use serde::{Deserialize, Serialize};
 
 pub mod beam;
@@ -613,7 +613,7 @@ pub trait SubModelKind: Sync {
                 self.label()
             )));
         };
-        let stress_guard = read(stress)?;
+        let stress_guard = stress.read();
         kernel::scatter_to_nodes(
             &layout.fespaces,
             &layout.support,
@@ -764,8 +764,8 @@ pub(crate) fn constraint_block_pair(
     imposed_value: &str,
     coefficient: f64,
 ) -> Result<(SubMatrix, SubMatrix)> {
-    let mult_nodes: Vec<NodeId> = read(multiplier_sm)?.connectivity().to_vec();
-    let cons_nodes: Vec<NodeId> = read(constrained_sm)?.connectivity().to_vec();
+    let mult_nodes: Vec<NodeId> = multiplier_sm.read().connectivity().to_vec();
+    let cons_nodes: Vec<NodeId> = constrained_sm.read().connectivity().to_vec();
     // C block: rows = multiplier × imposed_value, cols = constrained × variable.
     let mut c = SubMatrix::new(
         multiplier_sm.clone(),
@@ -927,7 +927,7 @@ pub trait Domain: Sync {
     ) -> Result<SubElementField> {
         let fespace = self.behavior_fespace();
         let out_components = self.behavior_output_components()?;
-        let prev_guard = prev.map(read).transpose()?;
+        let prev_guard = prev.map(|h| h.read());
         let prev_ref = prev_guard.as_deref();
         kernel::element_pointwise(
             &fespace,

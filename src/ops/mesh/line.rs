@@ -24,7 +24,7 @@ pub fn line(a: &Node, b: &Node, n_elems: usize, element_type: ElementType) -> Re
     }
     let coords = a.coords();
     let coords_b = b.coords();
-    if coords.index() != coords_b.index() || coords.generation() != coords_b.generation() {
+    if !coords.same_object(&coords_b) {
         return Err(PyrucastError::Message(
             "line: nodes belong to different Coords".into(),
         ));
@@ -68,11 +68,11 @@ mod tests {
     use crate::atoms::ElementType;
     use crate::atoms::Node;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     #[test]
     fn line_basic() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[6.0]).unwrap();
 
@@ -94,7 +94,7 @@ mod tests {
 
     #[test]
     fn line_one_element() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
 
@@ -106,7 +106,7 @@ mod tests {
 
     #[test]
     fn line_zero_elems_is_error() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
         assert!(line(&a, &b, 0, ElementType::SEG2).is_err());
@@ -114,7 +114,7 @@ mod tests {
 
     #[test]
     fn line_seg3_basic() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[4.0]).unwrap();
 
@@ -136,7 +136,7 @@ mod tests {
 
     #[test]
     fn line_unsupported_element_type_is_error() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
         assert!(line(&a, &b, 1, ElementType::TRI3).is_err());

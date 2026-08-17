@@ -35,7 +35,7 @@ use pyrucast::models::Physics;
 use pyrucast::ops::mesh;
 use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::insert;
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 const E: f64 = 210_000.0;
@@ -143,7 +143,7 @@ fn square(
     pyrucast::store::Handle<Coords>,
     usize,
 )> {
-    let coords = insert(Coords::new(2)?);
+    let coords = Handle::new(Coords::new(2)?);
     let step = L / n as f64;
     let mut grid = Vec::new();
     for j in 0..=n {

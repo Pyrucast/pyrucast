@@ -31,39 +31,34 @@ fonction libre* est dans [Conventions](conventions.md).
    pyrucast.matrix.stiffness     fonction de module              ops::matrix::stiffness
 ```
 
-## Tout vit dans un store, adressé par des handles
+## Les objets se désignent par des handles
 
-pyrucast n'utilise **ni** `Arc<Coords>` **ni** références Rust directes pour
-relier les objets entre eux. Tous les objets vivent dans un **store global**
-au processus (un grand tableau par type), et on les désigne par un
-**`Handle<T>`** — un ticket compact `(index, génération)`. C'est l'héritage
-direct du modèle mémoire de cast3m : une pile d'objets unique, adressable.
+Les objets ne se relient pas entre eux par des références Rust directes, mais
+par un **`Handle<T>`** : une référence comptée munie de son propre verrou
+(`Arc<RwLock<T>>`). Pas de store à interroger, pas de session à passer — le
+handle *est* l'adresse de l'objet.
 
-Ce choix donne quatre propriétés qui structurent tout le reste de la
+Trois propriétés en découlent, et elles structurent tout le reste de la
 librairie :
 
-1. **Libération automatique.** Un `Handle` est **compté par référence**
-   (`Clone` incrémente, `Drop` décrémente). Quand le dernier handle d'un objet
-   disparaît, son slot est libéré — aucune fonction `remove()` à appeler.
-2. **Sécurité d'accès.** Le champ *génération* invalide les vieux tickets
-   pointant sur un slot recyclé : un *use-after-free* devient une erreur
-   `StaleHandle` récupérable, jamais une corruption silencieuse.
-3. **Identité ≠ placement.** Le store peut **déplacer** un objet (vers le
-   disque par swap, demain vers une autre case par compactage) sans casser les
-   handles : ils désignent l'identité logique, pas l'adresse.
-4. **Sérialisation.** Un `Handle` n'est que deux entiers : il se sérialise, se
-   sauvegarde, se relit — le graphe d'objets survit à un aller-retour disque.
+1. **Libération automatique.** `Clone` partage, `Drop` relâche. Quand le
+   dernier handle d'un objet disparaît, l'objet est détruit — aucune fonction
+   `remove()` à appeler.
+2. **Toujours valide.** Détenir un handle maintient l'objet en vie : il n'y a
+   pas de référence périmée, et `read` / `write` ne peuvent pas échouer.
+3. **L'identité, c'est le pointeur.** `same_object` dit si deux références
+   désignent le même objet — la base de l'union des agrégats.
 
-L'accès à un objet passe par un **guard** (`read` / `write`) qui verrouille ce
-seul objet le temps de l'opération (RAII). Le détail complet — slots,
-générations, free-list, verrouillage par objet, compactage — est dans
+L'accès passe par un **guard** (`read` / `write`) qui verrouille ce seul objet
+le temps de l'opération (RAII). Le détail — guards possédés, granularité du
+verrouillage, compteur par nœud — est dans
 [Modèle mémoire](memory-model.md).
 
 ## Refcount à deux niveaux
 
 La gestion de durée de vie opère à **deux échelles** indépendantes :
 
-- au niveau **slot** : le `Handle<T>` décide si un objet entier (un `Coords`,
+- au niveau **objet** : le `Handle<T>` décide si un objet entier (un `Coords`,
   un `SubMesh`…) est vivant ;
 - au niveau **interne** : à l'intérieur d'un `Coords`, un second compteur par
   **nœud** décide si tel nœud est vivant. Le ramasse-miettes manuel
@@ -121,10 +116,9 @@ seul type d'erreur dans la librairie — voir [Conventions](conventions.md).
 ## Persistance portable
 
 Un trait unique, `Persist` (`serde` + `bincode`), produit un format binaire
-**portable Linux ↔ Windows**. Ce même socle sert au **swap disque** (délester
-la RAM, slot par slot) et à la future **sauvegarde / reprise** d'une session
-(graphe complet d'objets). Voir [Conventions](conventions.md) et
-[Modèle mémoire](memory-model.md).
+**portable Linux ↔ Windows**. C'est le socle de la future
+**sauvegarde / reprise** d'une session (graphe complet d'objets). Voir
+[Conventions](conventions.md) et [Modèle mémoire](memory-model.md).
 
 ## Pour le développeur
 

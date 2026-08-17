@@ -59,7 +59,7 @@ use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::owned_components;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
-use crate::store::{insert, read, Handle};
+use crate::store::Handle;
 use serde::{Deserialize, Serialize};
 
 /// Primal DOF names — three translations and three rotations, as for a space
@@ -130,7 +130,7 @@ impl std::fmt::Display for ShellModel {
 }
 
 /// Shell physics on a **surface** FE subspace in 3-D.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct Shell {
     /// Full-quadrature subspace — membrane and bending.
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
@@ -148,9 +148,9 @@ impl Shell {
     /// **manifold** of TRI3 or QUA4 in a 3-D configuration.
     pub fn new(fespace: Handle<SubFiniteElementSpace>, model: ShellModel) -> Result<Self> {
         let (submesh, space_dim, ref_dim, element) = {
-            let s = read(&fespace)?;
+            let s = fespace.read();
             let sm = s.submesh();
-            let element = read(&sm)?.element_type();
+            let element = sm.read().element_type();
             (sm, s.space_dim(), s.ref_dim()?, element)
         };
         if space_dim != 3 || ref_dim != 2 {
@@ -177,13 +177,13 @@ impl Shell {
                 Interpolation::Lagrange1,
                 QuadratureRule::Reduced,
             )
-            .map(insert)
+            .map(Handle::new)
         });
         let shear = match shear {
             Some(r) => Some(r?),
             None => None,
         };
-        let support = read(&submesh)?.to_poi1()?;
+        let support = submesh.read().to_poi1()?;
         Ok(Self {
             fespace,
             shear,
@@ -251,7 +251,7 @@ impl SubModelKind for Shell {
     fn render(&self, _opts: &DumpOptions) -> String {
         let primal = self.primal_vars().join(", ");
         let dual = self.dual_vars().join(", ");
-        let n = read(&self.support).map(|s| s.cell_count()).unwrap_or(0);
+        let n = self.support.read().cell_count();
         format!(
             "SubModel<Shell({})>\n  primal var(s): {primal}\n  dual var(s):   {dual}\n  \
              support: {n} node(s)",

@@ -37,7 +37,7 @@ use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::{Cancel, NoCancel};
 use crate::parallel::*;
-use crate::store::{insert, Handle};
+use crate::store::Handle;
 use std::collections::{HashMap, VecDeque};
 
 // Ruppert refinement provably terminates for a minimum-angle threshold up
@@ -1772,12 +1772,12 @@ fn materialize(
     let mut mesh = Mesh::empty();
     if let Some(q) = quad_sub {
         if q.cell_count() > 0 {
-            mesh.add_sub(insert(q))?;
+            mesh.add_sub(Handle::new(q))?;
         }
     }
     if let Some(t) = tri_sub {
         if t.cell_count() > 0 {
-            mesh.add_sub(insert(t))?;
+            mesh.add_sub(Handle::new(t))?;
         }
     }
     drop(kept_nodes);
@@ -1795,7 +1795,7 @@ fn materialize(
 mod tests {
     use super::*;
     use crate::coords::Coords;
-    use crate::store::{insert, read};
+    use crate::store::Handle;
     use std::collections::HashSet;
 
     fn loop_mesh(coords: Handle<Coords>, pts: &[(f64, f64)]) -> Mesh {
@@ -1862,7 +1862,7 @@ mod tests {
 
     #[test]
     fn square_tri3_conserves_area() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let contour = discretized_square(coords, 1.0, 8);
         let mesh = triangulate_surface(&contour, ElementType::TRI3, Some(0.15)).unwrap();
         assert_eq!(mesh.element_types().unwrap(), vec![ElementType::TRI3]);
@@ -1877,7 +1877,7 @@ mod tests {
     #[test]
     fn square_tri3_coarse_still_covers_boundary() {
         // Size larger than the square: still must mesh from the 4 corners alone.
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let contour = square(coords, 1.0);
         let mesh = triangulate_surface(&contour, ElementType::TRI3, Some(10.0)).unwrap();
         assert!(mesh.cell_count().unwrap() >= 2);
@@ -1886,7 +1886,7 @@ mod tests {
 
     #[test]
     fn square_qua4_conserves_area() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let contour = discretized_square(coords, 1.0, 6);
         let mesh = triangulate_surface(&contour, ElementType::QUA4, Some(0.2)).unwrap();
         assert!(mesh.element_types().unwrap().contains(&ElementType::QUA4));
@@ -1899,7 +1899,7 @@ mod tests {
 
     #[test]
     fn square_with_hole_conserves_area() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let mut contour = square(coords.clone(), 2.0);
         // CW hole: a small square traversed clockwise.
         let hole = loop_mesh(coords, &[(0.9, 0.9), (0.9, 1.1), (1.1, 1.1), (1.1, 0.9)]);
@@ -1915,7 +1915,7 @@ mod tests {
 
     #[test]
     fn two_disjoint_squares_are_independent_domains() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let mut contour = loop_mesh(
             coords.clone(),
             &[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
@@ -1930,17 +1930,17 @@ mod tests {
     fn contour_nodes_are_frozen() {
         // The meshed result must reuse exactly the input contour nodes (same
         // NodeId, same position) and add no node on a contour edge.
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let contour = discretized_square(coords.clone(), 1.0, 10);
         let mut boundary: HashSet<NodeId> = HashSet::new();
         for sm in &contour {
-            for &nid in read(sm).unwrap().connectivity() {
+            for &nid in sm.read().connectivity() {
                 boundary.insert(nid);
             }
         }
         let before: HashMap<NodeId, Vec<f64>> = boundary
             .iter()
-            .map(|&nid| (nid, read(&coords).unwrap().position(nid).unwrap().to_vec()))
+            .map(|&nid| (nid, coords.read().position(nid).unwrap().to_vec()))
             .collect();
 
         // A fine target size that would trigger heavy Ruppert refinement.
@@ -1948,14 +1948,14 @@ mod tests {
 
         let mut used: HashSet<NodeId> = HashSet::new();
         for sm in &mesh {
-            for &nid in read(sm).unwrap().connectivity() {
+            for &nid in sm.read().connectivity() {
                 used.insert(nid);
             }
         }
         // Every input boundary node is still used, unmoved.
         for (&nid, p0) in &before {
             assert!(used.contains(&nid), "contour node {nid:?} dropped");
-            let p1 = read(&coords).unwrap().position(nid).unwrap().to_vec();
+            let p1 = coords.read().position(nid).unwrap().to_vec();
             assert_eq!(&p1, p0, "contour node {nid:?} moved");
         }
         // No new node sits on the (axis-aligned) contour edges.
@@ -1963,7 +1963,7 @@ mod tests {
             if boundary.contains(&nid) {
                 continue;
             }
-            let p = read(&coords).unwrap().position(nid).unwrap().to_vec();
+            let p = coords.read().position(nid).unwrap().to_vec();
             let on_edge = (p[0] <= 1e-12 || (p[0] - 1.0).abs() <= 1e-12)
                 || (p[1] <= 1e-12 || (p[1] - 1.0).abs() <= 1e-12);
             assert!(
@@ -1975,14 +1975,14 @@ mod tests {
 
     #[test]
     fn rejects_bad_element_type() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let contour = square(coords, 1.0);
         assert!(triangulate_surface(&contour, ElementType::TET4, None).is_err());
     }
 
     #[test]
     fn rejects_non_seg2_contour() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -1994,7 +1994,7 @@ mod tests {
 
     #[test]
     fn rejects_open_loop() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -2008,7 +2008,7 @@ mod tests {
 
     #[test]
     fn rejects_all_holes_no_outer() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         // Clockwise loop only: no outer (CCW) boundary.
         let contour = loop_mesh(coords, &[(0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0)]);
         assert!(triangulate_surface(&contour, ElementType::TRI3, None).is_err());
@@ -2016,7 +2016,7 @@ mod tests {
 
     #[test]
     fn planar_3d_contour_is_meshed_in_its_plane() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let ids: Vec<NodeId> = [
             (0.0, 0.0, 0.0),
             (1.0, 0.0, 1.0),
@@ -2039,7 +2039,7 @@ mod tests {
     #[test]
     fn cancellable_stops_on_preset_flag() {
         use std::sync::atomic::AtomicBool;
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let contour = square(coords, 1.0);
         let flag = AtomicBool::new(true);
         let err = triangulate_surface_cancellable(&contour, ElementType::TRI3, Some(0.1), &flag)
@@ -2052,7 +2052,7 @@ mod tests {
     fn perf_hundred_k_triangles_under_30s() {
         // A plate-with-hole domain at the scale of formation/maillage_test.py:
         // 0.30 x 0.10 m rectangle with a r=0.035 m circular hole.
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let mut contour = loop_mesh(
             coords.clone(),
             &[(0.0, 0.0), (0.30, 0.0), (0.30, 0.10), (0.0, 0.10)],

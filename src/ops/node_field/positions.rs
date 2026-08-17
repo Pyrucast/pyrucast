@@ -3,7 +3,7 @@ use crate::atoms::NodeId;
 use crate::containers::mesh::Mesh;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
-use crate::store::{insert, read};
+use crate::store::Handle;
 
 /// Map a coordinate-component name (`"X"`, `"Y"`, `"Z"`) to its axis index.
 fn axis_index(name: &str) -> Option<usize> {
@@ -31,7 +31,7 @@ fn axis_index(name: &str) -> Option<usize> {
 /// not have (e.g. `"Z"` on a 2-D mesh).
 pub fn positions(mesh: &Mesh, components: Option<Vec<String>>) -> Result<NodeField> {
     let coords = mesh.coords()?;
-    let dim = read(&coords)?.dim() as usize;
+    let dim = coords.read().dim() as usize;
 
     // Default component list = the axes present in this dimension.
     let components = match components {
@@ -68,7 +68,7 @@ pub fn positions(mesh: &Mesh, components: Option<Vec<String>>) -> Result<NodeFie
         // Read this zone's coordinates under a single Coords lock.
         let nodes: Vec<NodeId> = sub.nodes().to_vec();
         let coords: Vec<Vec<f64>> = {
-            let c = read(&coords)?;
+            let c = coords.read();
             nodes
                 .iter()
                 .map(|&nid| c.position(nid).map(|s| s.to_vec()))
@@ -79,7 +79,7 @@ pub fn positions(mesh: &Mesh, components: Option<Vec<String>>) -> Result<NodeFie
                 sub.set(ni, ci, coord[axis])?;
             }
         }
-        out.add_sub(insert(sub))?;
+        out.add_sub(Handle::new(sub))?;
     }
     Ok(out)
 }
@@ -92,11 +92,11 @@ mod tests {
     use crate::containers::field::Field;
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     #[test]
     fn poi1_mesh_positions_xyz() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let a = Node::create_in(coords.clone(), &[1.0, 2.0, 3.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[4.0, 5.0, 6.0]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
@@ -115,7 +115,7 @@ mod tests {
 
     #[test]
     fn non_poi1_mesh_uses_distinct_nodes() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
@@ -136,7 +136,7 @@ mod tests {
 
     #[test]
     fn one_sub_per_submesh_with_coherent_interface() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let n0 = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let n1 = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let n2 = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -145,7 +145,7 @@ mod tests {
         for cell in [[n0.id(), n1.id(), n2.id()], [n1.id(), n3.id(), n2.id()]] {
             let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&cell).unwrap();
-            mesh.add_sub(insert(sm)).unwrap();
+            mesh.add_sub(Handle::new(sm)).unwrap();
         }
 
         let f = positions(&mesh, None).unwrap();
@@ -158,7 +158,7 @@ mod tests {
 
     #[test]
     fn default_components_follow_dimension() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[7.0, 8.0]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         mesh.add_cell(&[a.id()]).unwrap();
@@ -169,7 +169,7 @@ mod tests {
 
     #[test]
     fn explicit_component_subset() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let a = Node::create_in(coords.clone(), &[1.0, 2.0, 3.0]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         mesh.add_cell(&[a.id()]).unwrap();
@@ -182,7 +182,7 @@ mod tests {
 
     #[test]
     fn rejects_unknown_component() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         mesh.add_cell(&[a.id()]).unwrap();
@@ -191,7 +191,7 @@ mod tests {
 
     #[test]
     fn rejects_axis_beyond_dimension() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         mesh.add_cell(&[a.id()]).unwrap();

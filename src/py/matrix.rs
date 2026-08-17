@@ -7,7 +7,7 @@ use crate::models::Physics;
 use crate::py::mesh::submesh_handle;
 use crate::py::node::PyNode;
 use crate::py::node_field::PyNodeField;
-use crate::store::{insert, read, write, Handle};
+use crate::store::Handle;
 use pyo3::prelude::*;
 
 /// Flattened COO entries as exposed to Python: one
@@ -39,7 +39,9 @@ impl PySubMatrix {
         value: f64,
     ) -> PyResult<()> {
         let (rn, cn) = (row_node.as_node().id(), col_node.as_node().id());
-        write(&self.handle)?.add_entry(rn, row_field, cn, col_field, value)?;
+        self.handle
+            .write()
+            .add_entry(rn, row_field, cn, col_field, value)?;
         Ok(())
     }
 
@@ -52,35 +54,35 @@ impl PySubMatrix {
         col_field: &str,
     ) -> PyResult<f64> {
         let (rn, cn) = (row_node.as_node().id(), col_node.as_node().id());
-        Ok(read(&self.handle)?.get(rn, row_field, cn, col_field))
+        Ok(self.handle.read().get(rn, row_field, cn, col_field))
     }
 
     /// Number of rows of this block.
     fn n_rows(&self) -> PyResult<usize> {
-        Ok(read(&self.handle)?.n_rows())
+        Ok(self.handle.read().n_rows())
     }
 
     /// Number of columns of this block.
     fn n_cols(&self) -> PyResult<usize> {
-        Ok(read(&self.handle)?.n_cols())
+        Ok(self.handle.read().n_cols())
     }
 
     /// Number of stored COO entries.
     fn entry_count(&self) -> PyResult<usize> {
-        Ok(read(&self.handle)?.entry_count())
+        Ok(self.handle.read().entry_count())
     }
 
     /// Whether this block is declared symmetric.
     #[getter]
     fn symmetric(&self) -> PyResult<bool> {
-        Ok(read(&self.handle)?.symmetric())
+        Ok(self.handle.read().symmetric())
     }
 
     /// The scalar factor applied to every value this block emits (`1.0` unless
     /// the parent `Matrix` was built via `matrix * scalar` / `matrix / scalar`).
     #[getter]
     fn factor(&self) -> PyResult<f64> {
-        Ok(read(&self.handle)?.factor())
+        Ok(self.handle.read().factor())
     }
 
     /// The physics nature(s) of the sub-model that produced this block, as a list
@@ -88,7 +90,9 @@ impl PySubMatrix {
     /// for a block built outside assembly (the "rien" case), or several tags for a
     /// coupled physics. Set by the assembler; used by `Matrix.filter`.
     fn physics(&self) -> PyResult<Vec<String>> {
-        Ok(read(&self.handle)?
+        Ok(self
+            .handle
+            .read()
             .physics()
             .iter()
             .map(|p| p.to_tag().to_string())
@@ -97,12 +101,14 @@ impl PySubMatrix {
 
     /// Variable (field) names this block addresses.
     fn field_names(&self) -> PyResult<Vec<String>> {
-        Ok(read(&self.handle)?.field_names())
+        Ok(self.handle.read().field_names())
     }
 
     /// `(node_id, field_name)` tuples for each row, in order.
     fn row_dofs(&self) -> PyResult<Vec<(u32, String)>> {
-        Ok(read(&self.handle)?
+        Ok(self
+            .handle
+            .read()
             .row_dofs()
             .into_iter()
             .map(|(nid, name)| (nid.0, name))
@@ -111,7 +117,9 @@ impl PySubMatrix {
 
     /// `(node_id, field_name)` tuples for each column, in order.
     fn col_dofs(&self) -> PyResult<Vec<(u32, String)>> {
-        Ok(read(&self.handle)?
+        Ok(self
+            .handle
+            .read()
             .col_dofs()
             .into_iter()
             .map(|(nid, name)| (nid.0, name))
@@ -120,18 +128,20 @@ impl PySubMatrix {
 
     /// Dense row-major buffer, length `n_rows × n_cols`.
     fn dense(&self) -> PyResult<Vec<f64>> {
-        Ok(read(&self.handle)?.dense())
+        Ok(self.handle.read().dense())
     }
 
     /// `y = A · x` (dense).
     fn mul_dense(&self, x: Vec<f64>) -> PyResult<Vec<f64>> {
-        Ok(read(&self.handle)?.mul_dense(&x)?)
+        Ok(self.handle.read().mul_dense(&x)?)
     }
 
     /// List of `(row_node, row_field, col_node, col_field, value)`
     /// tuples, in insertion order.
     fn entries(&self) -> PyResult<PyMatrixEntries> {
-        Ok(read(&self.handle)?
+        Ok(self
+            .handle
+            .read()
             .iter_entries()
             .into_iter()
             .map(|(rn, rf, cn, cf, v)| (rn.0, rf, cn.0, cf, v))
@@ -139,15 +149,15 @@ impl PySubMatrix {
     }
 
     fn __len__(&self) -> PyResult<usize> {
-        Ok(read(&self.handle)?.entry_count())
+        Ok(self.handle.read().entry_count())
     }
 
     fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", &*read(&self.handle)?))
+        Ok(format!("{:?}", &*self.handle.read()))
     }
 
     fn __str__(&self) -> PyResult<String> {
-        Ok(format!("{}", &*read(&self.handle)?))
+        Ok(format!("{}", &*self.handle.read()))
     }
 }
 
@@ -207,7 +217,7 @@ impl PyMatrix {
         let sub = SubMatrix::new(row, col, dual_vars, primal_vars, ord, symmetric)
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
         let mut m = Matrix::empty();
-        m.add_sub(insert(sub))?;
+        m.add_sub(Handle::new(sub))?;
         Ok(Self { inner: m })
     }
 
@@ -406,7 +416,7 @@ class PyMatrix:
         with this one (no deep copy)."""
     def __or__(self, other: pyo3_stub_gen.RustType["PyMatrix"] | pyo3_stub_gen.RustType["PySubMatrix"]) -> pyo3_stub_gen.RustType["PyMatrix"]:
         """`matrix | other` → a fresh `Matrix` holding the blocks of both, in
-        first-seen order and deduplicated by store slot. Assemble the global
+        first-seen order and deduplicated by object identity. Assemble the global
         operator this way, then call `finalize()` before solving."""
     def __ror__(self, other: pyo3_stub_gen.RustType["PySubMatrix"]) -> pyo3_stub_gen.RustType["PyMatrix"]:
         """`sub_matrix | matrix` — the mirror of `matrix | sub_matrix`,

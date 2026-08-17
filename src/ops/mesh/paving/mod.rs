@@ -45,7 +45,7 @@ use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::Cancel;
 use crate::ops::mesh::contour::{Contour, Domain};
-use crate::store::insert;
+use crate::store::Handle;
 use front::Front;
 use geom::segments_cross;
 use proximity::EdgeGrid;
@@ -417,12 +417,12 @@ pub fn materialize(parsed: &Contour, fabrics: Vec<Fabric>, op: &str) -> Result<M
     let mut mesh = Mesh::empty();
     if let Some(q) = quad_sub {
         if q.cell_count() > 0 {
-            mesh.add_sub(insert(q))?;
+            mesh.add_sub(Handle::new(q))?;
         }
     }
     if let Some(t) = tri_sub {
         if t.cell_count() > 0 {
-            mesh.add_sub(insert(t))?;
+            mesh.add_sub(Handle::new(t))?;
         }
     }
     drop(kept);

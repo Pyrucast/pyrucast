@@ -52,7 +52,6 @@ from . import (
     mesh as mesh,
     node_field as node_field,
     solver as solver,
-    store as store,
 )
 
 # ── Couche Python pure de plus haut niveau ──────────────────────────────────
@@ -88,7 +87,6 @@ __all__ = [
     "mesh",
     "node_field",
     "solver",
-    "store",
     # couche haut niveau
     "thermomechanics",
 ]

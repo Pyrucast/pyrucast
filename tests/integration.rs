@@ -8,7 +8,7 @@ use pyrucast::atoms::NodeId;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::coords::Coords;
 use pyrucast::persist::Persist;
-use pyrucast::store::{compact, insert, live_count, read, swap_out, write};
+use pyrucast::store::Handle;
 use pyrucast::{PyrucastError, Result};
 
 #[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
@@ -30,8 +30,8 @@ fn persist_roundtrip_via_public_api() -> Result<()> {
 fn human_display_for_error() {
     let e = PyrucastError::Message("test".into());
     assert_eq!(e.to_string(), "test");
-    let e = PyrucastError::StaleHandle;
-    assert!(e.to_string().contains("stale handle"));
+    let e = PyrucastError::MeshSealed;
+    assert!(e.to_string().contains("sealed"));
 }
 
 #[test]
@@ -39,66 +39,64 @@ fn version_exposed() {
     assert_eq!(pyrucast::VERSION, env!("CARGO_PKG_VERSION"));
 }
 
-// ─── Store integration tests (Phase 1) ──────────────────────────────────────
+// ─── Handle integration tests ───────────────────────────────────────────────
 
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(Debug)]
 struct IntegrationSample {
     values: Vec<f64>,
     name: String,
 }
 
 #[test]
-fn full_store_cycle_via_public_api() -> Result<()> {
-    let h = insert(IntegrationSample {
+fn full_handle_cycle_via_public_api() {
+    let h = Handle::new(IntegrationSample {
         values: vec![1.0, 2.0, 3.0],
         name: "alpha".into(),
     });
     {
-        let e = read(&h)?;
+        let e = h.read();
         assert_eq!(e.values, vec![1.0, 2.0, 3.0]);
         assert_eq!(e.name, "alpha");
     }
 
-    write(&h)?.values.push(4.0);
-    assert_eq!(read(&h)?.values.len(), 4);
+    h.write().values.push(4.0);
+    assert_eq!(h.read().values.len(), 4);
 
-    swap_out(&h)?;
-    assert_eq!(read(&h)?.name, "alpha");
-
+    // A clone names the same object; the object outlives the first handle.
+    let g = h.clone();
+    assert!(g.same_object(&h));
     drop(h);
-    assert_eq!(live_count::<IntegrationSample>(), 0);
-    compact::<IntegrationSample>();
-    Ok(())
+    assert_eq!(g.read().name, "alpha");
 }
 
 // ─── Coords + Node integration tests (Phase 2) ───────────────────────
 
 #[test]
 fn coords_cycle_via_store() -> Result<()> {
-    let h = insert(Coords::new(2)?);
-    let a: NodeId = write(&h)?.add_node(&[0.0, 0.0])?;
-    let b: NodeId = write(&h)?.add_node(&[1.0, 0.0])?;
+    let h = Handle::new(Coords::new(2)?);
+    let a: NodeId = h.write().add_node(&[0.0, 0.0])?;
+    let b: NodeId = h.write().add_node(&[1.0, 0.0])?;
 
     {
-        let c = read(&h)?;
+        let c = h.read();
         assert_eq!(c.node_count(), 2);
         assert!(c.is_alive(a));
         assert!(c.is_alive(b));
     }
 
     // Initial refcount = 1 ⇒ gc collects nothing.
-    assert_eq!(write(&h)?.gc(), 0);
+    assert_eq!(h.write().gc(), 0);
 
     // decrefs + gc collects both.
     {
-        let mut c = write(&h)?;
+        let mut c = h.write();
         c.decref(a).unwrap();
         c.decref(b).unwrap();
         assert_eq!(c.gc(), 2);
     }
 
     {
-        let c = read(&h)?;
+        let c = h.read();
         assert!(!c.is_alive(a));
         assert!(!c.is_alive(b));
     }
@@ -107,19 +105,19 @@ fn coords_cycle_via_store() -> Result<()> {
 
 #[test]
 fn node_protects_from_gc() -> Result<()> {
-    let h = insert(Coords::new(2)?);
+    let h = Handle::new(Coords::new(2)?);
     let n = Node::create_in(h.clone(), &[3.0, 4.0])?;
     let id = n.id();
     assert_eq!(n.position()?, vec![3.0, 4.0]);
 
     // Cloning shares the id and doubles the refcount.
     let m = n.clone();
-    assert_eq!(read(&h)?.refcount(id), 2);
+    assert_eq!(h.read().refcount(id), 2);
     drop(n);
-    assert_eq!(read(&h)?.refcount(id), 1);
-    assert_eq!(write(&h)?.gc(), 0);
+    assert_eq!(h.read().refcount(id), 1);
+    assert_eq!(h.write().gc(), 0);
     drop(m);
-    assert_eq!(write(&h)?.gc(), 1);
+    assert_eq!(h.write().gc(), 1);
     Ok(())
 }
 
@@ -127,7 +125,7 @@ fn node_protects_from_gc() -> Result<()> {
 
 #[test]
 fn submesh_protects_nodes_via_refcount() -> Result<()> {
-    let coords = insert(Coords::new(2)?);
+    let coords = Handle::new(Coords::new(2)?);
     let a = Node::create_in(coords.clone(), &[0.0, 0.0])?;
     let b = Node::create_in(coords.clone(), &[1.0, 0.0])?;
     let cc = Node::create_in(coords.clone(), &[0.5, 1.0])?;
@@ -135,12 +133,12 @@ fn submesh_protects_nodes_via_refcount() -> Result<()> {
     let sm_handle = {
         let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
         sm.add_cell(&[a.id(), b.id(), cc.id()])?;
-        insert(sm)
+        Handle::new(sm)
     };
 
     // Nodes AND SubMesh each hold one ref ⇒ refcount = 2.
     {
-        let c = read(&coords)?;
+        let c = coords.read();
         assert_eq!(c.refcount(a.id()), 2);
         assert_eq!(c.refcount(b.id()), 2);
         assert_eq!(c.refcount(cc.id()), 2);
@@ -152,17 +150,17 @@ fn submesh_protects_nodes_via_refcount() -> Result<()> {
     drop(b);
     drop(cc);
     {
-        let c = read(&coords)?;
+        let c = coords.read();
         assert_eq!(c.refcount(ida), 1);
         assert_eq!(c.refcount(idb), 1);
         assert_eq!(c.refcount(idc), 1);
     }
     // gc must still collect nothing.
-    assert_eq!(write(&coords)?.gc(), 0);
+    assert_eq!(coords.write().gc(), 0);
 
     // Drop the SubMesh ⇒ all nodes drop to 0 ⇒ gc collects.
     drop(sm_handle);
-    assert_eq!(write(&coords)?.gc(), 3);
+    assert_eq!(coords.write().gc(), 3);
     Ok(())
 }
 
@@ -172,7 +170,7 @@ fn triangulate_surface_from_circle_contour() -> Result<()> {
     // with TRI3 through the public API. The constrained-Delaunay mesher
     // creates interior nodes, so it yields more than the boundary-only 6
     // triangles, while conserving the inscribed octagon's area.
-    let coords = insert(Coords::new(2)?);
+    let coords = Handle::new(Coords::new(2)?);
     let center = Node::create_in(coords.clone(), &[0.0, 0.0])?;
     let circle = pyrucast::ops::mesh::circle(&center, &[0.0, 0.0, 1.0], 1.0, 8, ElementType::SEG2)?;
     let tri = pyrucast::ops::mesh::triangulate_surface(&circle, ElementType::TRI3, Some(0.25))?;
@@ -202,7 +200,7 @@ fn triangulate_surface_from_circle_contour() -> Result<()> {
 
 #[test]
 fn mesh_composed_of_multiple_submeshes() -> Result<()> {
-    let coords = insert(Coords::new(2)?);
+    let coords = Handle::new(Coords::new(2)?);
     let a = Node::create_in(coords.clone(), &[0.0, 0.0])?;
     let b = Node::create_in(coords.clone(), &[1.0, 0.0])?;
     let cc = Node::create_in(coords.clone(), &[0.5, 1.0])?;
@@ -212,12 +210,12 @@ fn mesh_composed_of_multiple_submeshes() -> Result<()> {
         sm.add_cell(&[a.id()])?;
         sm.add_cell(&[b.id()])?;
         sm.add_cell(&[cc.id()])?;
-        insert(sm)
+        Handle::new(sm)
     };
     let sm_tri = {
         let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
         sm.add_cell(&[a.id(), b.id(), cc.id()])?;
-        insert(sm)
+        Handle::new(sm)
     };
 
     let mesh = {

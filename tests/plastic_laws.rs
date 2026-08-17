@@ -32,7 +32,7 @@ use pyrucast::models::plastic::PlasticLaw;
 use pyrucast::ops::element_field::{behavior::integrate, deformation, material_field};
 use pyrucast::ops::matrix::tangent;
 use pyrucast::ops::node_field::internal_forces;
-use pyrucast::store::{insert, read};
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 const AXES: [&str; 3] = ["x", "y", "z"];
@@ -343,7 +343,7 @@ struct Cube {
 
 impl Cube {
     fn new(law: PlasticLaw, material: &[(&str, f64)]) -> Result<Self> {
-        let coords = insert(Coords::new(3)?);
+        let coords = Handle::new(Coords::new(3)?);
         let nodes: Vec<Node> = CORNERS
             .iter()
             .map(|c| Node::create_in(coords.clone(), c))
@@ -362,7 +362,7 @@ impl Cube {
     }
 
     fn displacement(&self, disp: &[f64]) -> Result<NodeField> {
-        let support = insert(SubMesh::poi1_from_nodes(&self.nodes)?);
+        let support = Handle::new(SubMesh::poi1_from_nodes(&self.nodes)?);
         let comps: Vec<String> = (0..3).map(|a| format!("u_{}", AXES[a])).collect();
         let mut u = SubNodeField::from_poi1(&support, comps)?;
         for (i, n) in self.nodes.iter().enumerate() {
@@ -377,7 +377,7 @@ impl Cube {
     fn stress(&self, disp: &[f64]) -> Result<State> {
         let strain = deformation(&self.displacement(disp)?, &self.fes)?;
         let state = integrate(&self.model, &strain, None, &self.materials, None)?;
-        let sub = read(&state.get(0)?)?;
+        let sub = state.get(0)?.read();
         let names = ["xx", "yy", "zz", "yz", "xz", "xy"];
         let mut sigma = [0.0; 6];
         for (i, n) in names.iter().enumerate() {

@@ -92,9 +92,9 @@ use pyrucast::atoms::{ElementType, Node};
 use pyrucast::coords::Coords;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::node_field::NodeField;
-use pyrucast::store::{insert, write};
+use pyrucast::store::Handle;
 
-let coords = insert(Coords::new(2).unwrap());
+let coords = Handle::new(Coords::new(2).unwrap());
 let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
 let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
 
@@ -103,7 +103,7 @@ let sm = {
     let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
     sm.add_cell(&[a.id()]).unwrap();
     sm.add_cell(&[b.id()]).unwrap();
-    insert(sm)
+    Handle::new(sm)
 };
 
 // Champ de déplacement 2D mono-zone : composantes UX, UY.
@@ -155,7 +155,7 @@ f.check()  # cohérence des interfaces (lève sinon)
 g = pyrucast.node_field.consolidate(f)  # fusion au plus juste
 ```
 
-## Refcount et sûreté du swap
+## Refcount et durée de vie
 
 Le champ ne fait **aucune** comptabilité par nœud : il garde un clone du
 `Handle<SubMesh>` de son support, et c'est le SubMesh qui possède les
@@ -164,10 +164,10 @@ increfs par nœud dans la `Coords` (cf.
 son support l'est aussi, donc ses nœuds aussi — même si tous les `Node`
 utilisateurs ont disparu.
 
-Côté swap disque, l'effet de bord au `Drop` (décrément du refcount du
-SubMesh dans le store) suit le mécanisme général du
-[Modèle mémoire](memory-model.md) : `swap_out` n'exécute pas le `Drop` de
-la valeur évincée, le `Drop` final est rejoué une seule fois.
+La libération est automatique : quand le dernier `Handle` sur une zone
+disparaît, la zone est détruite, son clone du handle de support avec elle, et
+les nœuds redeviennent collectables si plus rien ne les retient (cf.
+[Modèle mémoire](memory-model.md)).
 
 ## Opérateurs consommant un champ
 

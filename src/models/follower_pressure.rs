@@ -84,8 +84,7 @@ use crate::models::owned_components;
 use crate::models::{
     CellGeom, Contribution, Domain, MatrixKind, MatrixLayout, Physics, SubModelKind,
 };
-use crate::store::{read, Handle};
-use serde::{Deserialize, Serialize};
+use crate::store::Handle;
 
 /// Axis suffixes for the vector components, indexed by spatial direction.
 const AXES: [&str; 3] = ["x", "y", "z"];
@@ -106,7 +105,7 @@ fn traction_names(space_dim: usize) -> Vec<String> {
 }
 
 /// Follower pressure on a boundary FE subspace.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct FollowerPressure {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
     /// POI1 support over the boundary's unique nodes.
@@ -120,7 +119,7 @@ impl FollowerPressure {
     /// surface, and a cell that fills its space has no normal to follow.
     pub fn new(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
         let (submesh, space_dim, ref_dim) = {
-            let s = read(&fespace)?;
+            let s = fespace.read();
             (s.submesh(), s.space_dim(), s.ref_dim()?)
         };
         if ref_dim + 1 != space_dim {
@@ -130,7 +129,7 @@ impl FollowerPressure {
                  and needs a normal to follow"
             )));
         }
-        let support = read(&submesh)?.to_poi1()?;
+        let support = submesh.read().to_poi1()?;
         Ok(Self {
             fespace,
             support,
@@ -213,7 +212,7 @@ impl SubModelKind for FollowerPressure {
     fn render(&self, _opts: &DumpOptions) -> String {
         let primal = self.primal_vars().join(", ");
         let dual = self.dual_vars().join(", ");
-        let n = read(&self.support).map(|s| s.cell_count()).unwrap_or(0);
+        let n = self.support.read().cell_count();
         format!(
             "SubModel<FollowerPressure>\n  primal var(s): {primal}\n  \
              dual var(s):   {dual}\n  support: {n} node(s)"

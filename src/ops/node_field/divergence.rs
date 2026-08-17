@@ -23,7 +23,7 @@ use crate::containers::field::SubField;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
 use crate::models::kernel::{self, CellGeom};
-use crate::store::{insert, read, Handle};
+use crate::store::Handle;
 
 /// Weak divergence `div F` of a per-element vector `field` (see the module
 /// docs), as a [`NodeField`] — one zone per input subspace, component `"div"`.
@@ -35,17 +35,17 @@ use crate::store::{insert, read, Handle};
 pub fn divergence(field: &ElementField) -> Result<NodeField> {
     let mut out = NodeField::empty();
     for sub in field {
-        out.add_sub(insert(subspace_divergence(sub)?))?;
+        out.add_sub(Handle::new(subspace_divergence(sub)?))?;
     }
     Ok(out)
 }
 
 /// Weak divergence on a single subspace, via the `Bᵀ` driver.
 fn subspace_divergence(field: &Handle<SubElementField>) -> Result<SubNodeField> {
-    let f = read(field)?;
+    let f = field.read();
     let fespace = f.support();
     let (submesh, space_dim) = {
-        let s = read(&fespace)?;
+        let s = fespace.read();
         (s.submesh(), s.space_dim())
     };
     let n_comps = f.components().len();
@@ -59,7 +59,7 @@ fn subspace_divergence(field: &Handle<SubElementField>) -> Result<SubNodeField> 
 
     // The field guard is captured by the element closure (borrowed in place) and
     // held across the parallel scatter.
-    let support = read(&submesh)?.to_poi1()?;
+    let support = submesh.read().to_poi1()?;
     kernel::scatter_to_nodes(
         std::slice::from_ref(&fespace),
         &support,
@@ -106,7 +106,7 @@ mod tests {
     /// constant field), `±a` flux at the ends.
     #[test]
     fn divergence_of_uniform_1d_field_telescopes() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let n1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let n2 = Node::create_in(coords.clone(), &[2.0]).unwrap();
@@ -119,7 +119,7 @@ mod tests {
         let mut field = SubElementField::new(fes.get(0).unwrap(), vec!["Fx".into()]).unwrap();
         field.set_uniform("Fx", a).unwrap();
         let mut ef = ElementField::empty();
-        ef.add_sub(insert(field)).unwrap();
+        ef.add_sub(Handle::new(field)).unwrap();
 
         let div = divergence(&ef).unwrap();
         let view = div.view().unwrap();
@@ -133,7 +133,7 @@ mod tests {
     #[test]
     fn divergence_is_adjoint_of_gradient() {
         use crate::containers::node_field::SubNodeField;
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -142,7 +142,8 @@ mod tests {
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 
         // Nodal field f and a per-element vector field F.
-        let support = insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone(), c.clone()]).unwrap());
+        let support =
+            Handle::new(SubMesh::poi1_from_nodes(&[a.clone(), b.clone(), c.clone()]).unwrap());
         let mut f = SubNodeField::from_poi1(&support, vec!["f".into()]).unwrap();
         f.set_value(a.id(), "f", 0.5).unwrap();
         f.set_value(b.id(), "f", 1.5).unwrap();
@@ -154,12 +155,12 @@ mod tests {
         ff.set_uniform("Fx", 1.3).unwrap();
         ff.set_uniform("Fy", -0.7).unwrap();
         let mut ef = ElementField::empty();
-        ef.add_sub(insert(ff)).unwrap();
+        ef.add_sub(Handle::new(ff)).unwrap();
 
         // ⟨∇f, F⟩ over the Gauss points (with |J|·w).
         let grad = crate::ops::element_field::gradient(&f, &fes).unwrap();
-        let gsub = read(&grad.get(0).unwrap()).unwrap();
-        let s = read(&fes.get(0).unwrap()).unwrap();
+        let gsub = grad.get(0).unwrap().read();
+        let s = fes.get(0).unwrap().read();
         let mut lhs = 0.0;
         for cell in 0..s.cell_count().unwrap() {
             for g in 0..s.gauss_count() {
@@ -183,7 +184,7 @@ mod tests {
 
     #[test]
     fn wrong_component_count_is_rejected() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -193,7 +194,7 @@ mod tests {
         // 1 component on a 2-D space (needs 2).
         let field = SubElementField::new(fes.get(0).unwrap(), vec!["Fx".into()]).unwrap();
         let mut ef = ElementField::empty();
-        ef.add_sub(insert(field)).unwrap();
+        ef.add_sub(Handle::new(field)).unwrap();
         assert!(divergence(&ef).is_err());
     }
 }

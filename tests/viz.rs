@@ -11,7 +11,7 @@ use pyrucast::atoms::element_type::ElementType;
 use pyrucast::atoms::node::Node;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::coords::Coords;
-use pyrucast::store::insert;
+use pyrucast::store::Handle;
 use pyrucast::viz::{ColorScale, MeshStyle, View};
 
 fn tmpdir() -> std::path::PathBuf {
@@ -28,7 +28,7 @@ fn tmpdir() -> std::path::PathBuf {
 }
 
 fn build_two_triangles() -> SubMesh {
-    let coords = insert(Coords::new(3).unwrap());
+    let coords = Handle::new(Coords::new(3).unwrap());
     let a = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0]).unwrap();
     let b = Node::create_in(coords.clone(), &[1.0, 0.0, 0.0]).unwrap();
     let c = Node::create_in(coords.clone(), &[1.0, 1.0, 0.0]).unwrap();
@@ -117,7 +117,7 @@ fn submesh_default_view_is_iso() {
 #[test]
 fn submesh_renders_every_element_type() {
     use pyrucast::atoms::NodeId;
-    let coords = insert(Coords::new(3).unwrap());
+    let coords = Handle::new(Coords::new(3).unwrap());
     let n: Vec<_> = [
         [0.0, 0.0, 0.0],
         [1.0, 0.0, 0.0],
@@ -174,7 +174,7 @@ fn unsupported_extension_errors() {
 
 #[test]
 fn mesh_plot_renders_each_submesh_with_its_color() {
-    let coords = insert(Coords::new(3).unwrap());
+    let coords = Handle::new(Coords::new(3).unwrap());
     let a = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0]).unwrap();
     let b = Node::create_in(coords.clone(), &[1.0, 0.0, 0.0]).unwrap();
     let c = Node::create_in(coords.clone(), &[0.0, 1.0, 0.0]).unwrap();
@@ -185,13 +185,13 @@ fn mesh_plot_renders_each_submesh_with_its_color() {
         let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
         sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         sm.set_face_color(RgbColor::new(220, 60, 60));
-        insert(sm)
+        Handle::new(sm)
     };
     let sm_blue_handle = {
         let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
         sm.add_cell(&[b.id(), d.id(), e.id()]).unwrap();
         sm.set_face_color(RgbColor::new(60, 60, 220));
-        insert(sm)
+        Handle::new(sm)
     };
 
     let mut mesh = Mesh::empty();
@@ -217,7 +217,7 @@ fn mesh_plot_renders_each_submesh_with_its_color() {
 
 #[test]
 fn mesh_renders_mixed_element_types() {
-    let coords = insert(Coords::new(2).unwrap());
+    let coords = Handle::new(Coords::new(2).unwrap());
     let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
     let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
     let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
@@ -225,12 +225,12 @@ fn mesh_renders_mixed_element_types() {
     let sm_pts = {
         let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
         sm.add_cell(&[a.id()]).unwrap();
-        insert(sm)
+        Handle::new(sm)
     };
     let sm_tri = {
         let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
         sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-        insert(sm)
+        Handle::new(sm)
     };
 
     let mut mesh = Mesh::empty();
@@ -247,14 +247,14 @@ fn mesh_renders_mixed_element_types() {
 fn mesh_plot_with_field_export_svg_contains_overlay_label() {
     use pyrucast::containers::node_field::{NodeField, SubNodeField};
 
-    let coords = insert(Coords::new(2).unwrap());
+    let coords = Handle::new(Coords::new(2).unwrap());
     let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
     let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
     let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
 
     let mut tri = SubMesh::new(coords.clone(), ElementType::TRI3);
     tri.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-    let tri_h = insert(tri);
+    let tri_h = Handle::new(tri);
     let mut mesh = Mesh::empty();
     mesh.add_sub(tri_h).unwrap();
 
@@ -263,7 +263,7 @@ fn mesh_plot_with_field_export_svg_contains_overlay_label() {
     poi1.add_cell(&[a.id()]).unwrap();
     poi1.add_cell(&[b.id()]).unwrap();
     poi1.add_cell(&[c.id()]).unwrap();
-    let poi1_h = insert(poi1);
+    let poi1_h = Handle::new(poi1);
     let mut field = SubNodeField::from_poi1(&poi1_h, vec!["T".into()]).unwrap();
     field.set_value(a.id(), "T", 0.0).unwrap();
     field.set_value(b.id(), "T", 1.0).unwrap();
@@ -296,14 +296,14 @@ fn mesh_plot_with_field_export_svg_contains_overlay_label() {
 fn plot_with_field_colorbar_uses_explicit_bounds() {
     use pyrucast::containers::node_field::{NodeField, SubNodeField};
 
-    let coords = insert(Coords::new(2).unwrap());
+    let coords = Handle::new(Coords::new(2).unwrap());
     let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
     let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
     let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
 
     let mut tri = SubMesh::new(coords.clone(), ElementType::TRI3);
     tri.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-    let tri_h = insert(tri);
+    let tri_h = Handle::new(tri);
     let mut mesh = Mesh::empty();
     mesh.add_sub(tri_h).unwrap();
 
@@ -311,7 +311,7 @@ fn plot_with_field_colorbar_uses_explicit_bounds() {
     poi1.add_cell(&[a.id()]).unwrap();
     poi1.add_cell(&[b.id()]).unwrap();
     poi1.add_cell(&[c.id()]).unwrap();
-    let poi1_h = insert(poi1);
+    let poi1_h = Handle::new(poi1);
     let mut field = SubNodeField::from_poi1(&poi1_h, vec!["T".into()]).unwrap();
     field.set_value(a.id(), "T", 0.0).unwrap();
     field.set_value(b.id(), "T", 1.0).unwrap();
@@ -349,20 +349,20 @@ fn plot_with_field_colorbar_uses_explicit_bounds() {
 fn plot_with_field_explicit_component_choice() {
     use pyrucast::containers::node_field::{NodeField, SubNodeField};
 
-    let coords = insert(Coords::new(2).unwrap());
+    let coords = Handle::new(Coords::new(2).unwrap());
     let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
     let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
     let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
 
     let mut tri = SubMesh::new(coords.clone(), ElementType::TRI3);
     tri.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-    let tri_h = insert(tri);
+    let tri_h = Handle::new(tri);
 
     let mut poi1 = SubMesh::new(coords.clone(), ElementType::POI1);
     poi1.add_cell(&[a.id()]).unwrap();
     poi1.add_cell(&[b.id()]).unwrap();
     poi1.add_cell(&[c.id()]).unwrap();
-    let poi1_h = insert(poi1);
+    let poi1_h = Handle::new(poi1);
     let mut field = SubNodeField::from_poi1(&poi1_h, vec!["UX".into(), "UY".into()]).unwrap();
     // Default component would be "UX"; ask explicitly for "UY".
     field.set_value(a.id(), "UY", 3.2).unwrap();
@@ -389,7 +389,7 @@ fn plot_with_field_explicit_component_choice() {
 
 #[test]
 fn figure_title_is_engraved_at_the_bottom_of_a_saved_image() {
-    let coords = insert(Coords::new(2).unwrap());
+    let coords = Handle::new(Coords::new(2).unwrap());
     let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
     let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
     let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -423,17 +423,17 @@ fn figure_title_is_engraved_at_the_bottom_of_a_saved_image() {
 fn plot_with_field_unknown_component_errors() {
     use pyrucast::containers::node_field::{NodeField, SubNodeField};
 
-    let coords = insert(Coords::new(1).unwrap());
+    let coords = Handle::new(Coords::new(1).unwrap());
     let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
     let mut poi1 = SubMesh::new(coords.clone(), ElementType::POI1);
     poi1.add_cell(&[a.id()]).unwrap();
-    let poi1_h = insert(poi1);
+    let poi1_h = Handle::new(poi1);
     let field = NodeField::from_sub(SubNodeField::from_poi1(&poi1_h, vec!["T".into()]).unwrap());
 
     let mut tri = SubMesh::new(coords.clone(), ElementType::SEG2);
     let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
     tri.add_cell(&[a.id(), b.id()]).unwrap();
-    let tri_h = insert(tri);
+    let tri_h = Handle::new(tri);
     let dir = tmpdir();
     let path = dir.join("nope.svg");
     let err = pyrucast::viz::render_submesh_with_field(
@@ -453,12 +453,10 @@ fn plot_with_field_unknown_component_errors() {
 
 #[test]
 fn face_color_roundtrip_on_submesh() {
-    let coords = insert(Coords::new(2).unwrap());
-    let sm_handle = insert(SubMesh::new(coords, ElementType::TRI3));
-    pyrucast::store::write(&sm_handle)
-        .unwrap()
-        .set_face_color(RgbColor::new(1, 2, 3));
-    let c = pyrucast::store::read(&sm_handle).unwrap().face_color();
+    let coords = Handle::new(Coords::new(2).unwrap());
+    let sm_handle = Handle::new(SubMesh::new(coords, ElementType::TRI3));
+    sm_handle.write().set_face_color(RgbColor::new(1, 2, 3));
+    let c = sm_handle.read().face_color();
     assert_eq!(c, RgbColor::new(1, 2, 3));
 }
 
@@ -467,7 +465,7 @@ fn plot_mesh_with_element_field_writes_svg() {
     use pyrucast::containers::element_field::ElementField;
     use pyrucast::containers::finite_element_space::FiniteElementSpace;
 
-    let coords = insert(Coords::new(2).unwrap());
+    let coords = Handle::new(Coords::new(2).unwrap());
     let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
     let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
     let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -481,7 +479,7 @@ fn plot_mesh_with_element_field_writes_svg() {
     // Discontinuous Gauss-point field: 1.0 on cell 0, 5.0 on cell 1.
     let ef = ElementField::new(&fes, vec!["flux".into()]).unwrap();
     {
-        let mut zone = pyrucast::store::write(&ef.get(0).unwrap()).unwrap();
+        let mut zone = ef.get(0).unwrap().write();
         zone.set_cell_uniform(0, "flux", 1.0).unwrap();
         zone.set_cell_uniform(1, "flux", 5.0).unwrap();
     }
@@ -511,13 +509,13 @@ fn plot_mesh_with_element_field_writes_svg() {
 fn node_field_standalone_plot_is_point_cloud() {
     use pyrucast::containers::node_field::{NodeField, SubNodeField};
 
-    let coords = insert(Coords::new(2).unwrap());
+    let coords = Handle::new(Coords::new(2).unwrap());
     let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
     let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
     let mut poi1 = SubMesh::new(coords.clone(), ElementType::POI1);
     poi1.add_cell(&[a.id()]).unwrap();
     poi1.add_cell(&[b.id()]).unwrap();
-    let poi1_h = insert(poi1);
+    let poi1_h = Handle::new(poi1);
     let mut f = SubNodeField::from_poi1(&poi1_h, vec!["T".into()]).unwrap();
     f.set_value(a.id(), "T", 1.0).unwrap();
     f.set_value(b.id(), "T", 2.0).unwrap();
@@ -543,7 +541,7 @@ fn element_field_standalone_plot_reconstructs_mesh() {
     use pyrucast::containers::element_field::ElementField;
     use pyrucast::containers::finite_element_space::FiniteElementSpace;
 
-    let coords = insert(Coords::new(2).unwrap());
+    let coords = Handle::new(Coords::new(2).unwrap());
     let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
     let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
     let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -552,8 +550,9 @@ fn element_field_standalone_plot_reconstructs_mesh() {
     let mesh = Mesh::from_submesh(sm);
     let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
     let ef = ElementField::new(&fes, vec!["q".into()]).unwrap();
-    pyrucast::store::write(&ef.get(0).unwrap())
+    ef.get(0)
         .unwrap()
+        .write()
         .set_cell_uniform(0, "q", 2.5)
         .unwrap();
 
@@ -581,7 +580,7 @@ fn element_field_standalone_plot_reconstructs_mesh() {
 /// Python sibling of this test lives in `tests/python/test_viz.py`.
 #[test]
 fn mesh_wireframe_has_no_filled_faces() {
-    let coords = insert(Coords::new(3).unwrap());
+    let coords = Handle::new(Coords::new(3).unwrap());
     let n: Vec<_> = [
         [0.0, 0.0, 0.0],
         [1.0, 0.0, 0.0],

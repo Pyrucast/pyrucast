@@ -36,10 +36,10 @@
 //! use pyrucast::ops::matrix;
 //! use pyrucast::ops::mesh;
 //! use pyrucast::ops::solver::lu::solve;
-//! use pyrucast::store::insert;
+//! use pyrucast::store::Handle;
 //!
 //! // 1-D Poisson on [0, 1] with one SEG2 element, k = 1.
-//! let coords = insert(Coords::new(1).unwrap());
+//! let coords = Handle::new(Coords::new(1).unwrap());
 //! let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
 //! let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
 //! let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
@@ -49,11 +49,11 @@
 //! let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
 //! mat.set_uniform("k", 1.0).unwrap();
 //! let mut materials = ElementField::empty();
-//! materials.add_sub(insert(mat)).unwrap();
+//! materials.add_sub(Handle::new(mat)).unwrap();
 //!
 //! let mut model = Model::empty();
 //! model
-//!     .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
+//!     .add_sub(Handle::new(SubModel::heat_conduction(sub).unwrap()))
 //!     .unwrap();
 //! // Dirichlet at both ends: imposed POI1 meshes + colocated multiplier
 //! // supports minted by `barycenter`.
@@ -65,14 +65,14 @@
 //! let dir_b = SubModel::dirichlet("T".into(), "q".into(), &imposed_b, &mult_mesh_b, None, None, Default::default()).unwrap();
 //! let mult_a = dir_a.multiplier_nodes().unwrap()[0];
 //! let mult_b = dir_b.multiplier_nodes().unwrap()[0];
-//! model.add_sub(insert(dir_a)).unwrap();
-//! model.add_sub(insert(dir_b)).unwrap();
+//! model.add_sub(Handle::new(dir_a)).unwrap();
+//! model.add_sub(Handle::new(dir_b)).unwrap();
 //!
 //! // Load: imposed values T_a = 0, T_b = 1 at the multiplier nodes (slot "imposed_T").
 //! let mut load_sm = SubMesh::new(coords.clone(), ElementType::POI1);
 //! load_sm.add_cell(&[mult_a]).unwrap();
 //! load_sm.add_cell(&[mult_b]).unwrap();
-//! let load_sm_h = insert(load_sm);
+//! let load_sm_h = Handle::new(load_sm);
 //! let mut rhs = SubNodeField::from_poi1(&load_sm_h, vec!["imposed_T".into()]).unwrap();
 //! rhs.set_value(mult_a, "imposed_T", 0.0).unwrap();
 //! rhs.set_value(mult_b, "imposed_T", 1.0).unwrap();
@@ -328,7 +328,7 @@ mod tests {
     use crate::containers::model::{Model, SubModel};
     use crate::containers::node_field::SubNodeField;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     /// 1-D Poisson `-u'' = 0` on `[0, 1]` with `u(0) = 0` and `u(1) = 1`,
     /// discretized with `n` SEG2 elements. The analytical solution is
@@ -339,7 +339,7 @@ mod tests {
     fn poisson_1d_dirichlet_at_both_ends_recovers_linear_solution() {
         let n_elems = 4;
         let h = 1.0 / n_elems as f64;
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let nodes: Vec<Node> = (0..=n_elems)
             .map(|i| Node::create_in(coords.clone(), &[i as f64 * h]).unwrap())
             .collect();
@@ -356,12 +356,12 @@ mod tests {
         let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
         mat.set_uniform("k", 1.0).unwrap();
         let mut materials = crate::containers::element_field::ElementField::empty();
-        materials.add_sub(insert(mat)).unwrap();
+        materials.add_sub(Handle::new(mat)).unwrap();
 
         // Model.
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
+            .add_sub(Handle::new(SubModel::heat_conduction(sub).unwrap()))
             .unwrap();
         let imposed_left =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[0])).unwrap());
@@ -392,15 +392,15 @@ mod tests {
         .unwrap();
         let mult_left = left_dir.multiplier_nodes().unwrap()[0];
         let mult_right = right_dir.multiplier_nodes().unwrap()[0];
-        model.add_sub(insert(left_dir)).unwrap();
-        model.add_sub(insert(right_dir)).unwrap();
+        model.add_sub(Handle::new(left_dir)).unwrap();
+        model.add_sub(Handle::new(right_dir)).unwrap();
 
         // Build rhs: T_left = 0 at mult_left, T_right = 1 at mult_right
         // (imposed value goes to the "imposed_T" slot).
         let mut rhs_sm = SubMesh::new(coords.clone(), ElementType::POI1);
         rhs_sm.add_cell(&[mult_left]).unwrap();
         rhs_sm.add_cell(&[mult_right]).unwrap();
-        let rhs_sm_h = insert(rhs_sm);
+        let rhs_sm_h = Handle::new(rhs_sm);
         let mut rhs = SubNodeField::from_poi1(&rhs_sm_h, vec!["imposed_T".into()]).unwrap();
         rhs.set_value(mult_left, "imposed_T", 0.0).unwrap();
         rhs.set_value(mult_right, "imposed_T", 1.0).unwrap();
@@ -438,7 +438,7 @@ mod tests {
     fn singular_matrix_yields_error() {
         // 2-node SEG2 with no Dirichlet → K is the discrete Laplacian
         // [[1, -1], [-1, 1]], singular (kernel = constants).
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
@@ -448,10 +448,10 @@ mod tests {
         let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
         mat.set_uniform("k", 1.0).unwrap();
         let mut materials = crate::containers::element_field::ElementField::empty();
-        materials.add_sub(insert(mat)).unwrap();
+        materials.add_sub(Handle::new(mat)).unwrap();
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
+            .add_sub(Handle::new(SubModel::heat_conduction(sub).unwrap()))
             .unwrap();
         let k = crate::ops::matrix::stiffness(&model, &materials).unwrap();
 
@@ -459,7 +459,7 @@ mod tests {
         // Coords of the result SubNodeField.
         let mut rhs_sm = SubMesh::new(coords.clone(), ElementType::POI1);
         rhs_sm.add_cell(&[a.id()]).unwrap();
-        let rhs_sm_h = insert(rhs_sm);
+        let rhs_sm_h = Handle::new(rhs_sm);
         let rhs =
             NodeField::from_sub(SubNodeField::from_poi1(&rhs_sm_h, vec!["q".into()]).unwrap());
         // K is singular ⇒ solve must err.
@@ -467,13 +467,13 @@ mod tests {
     }
 
     /// The solution's zones live on the matrix blocks' **own** column supports
-    /// (`same_slot`), so consecutive solves — and any block-shaped field —
+    /// (`same_object`), so consecutive solves — and any block-shaped field —
     /// align by support instead of falling into merge passthrough. Two solves
     /// on the same matrix share the very same support handles.
     #[test]
     fn solution_zones_share_the_blocks_column_supports() {
         // 1-D Poisson with one Dirichlet end (multi-block: K + C/Cᵀ).
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let nodes: Vec<Node> = (0..3)
             .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
             .collect();
@@ -486,10 +486,10 @@ mod tests {
         let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
         mat.set_uniform("k", 1.0).unwrap();
         let mut materials = crate::containers::element_field::ElementField::empty();
-        materials.add_sub(insert(mat)).unwrap();
+        materials.add_sub(Handle::new(mat)).unwrap();
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
+            .add_sub(Handle::new(SubModel::heat_conduction(sub).unwrap()))
             .unwrap();
         // Ground both ends so K-with-constraints is nonsingular.
         for end in [0usize, 2] {
@@ -498,7 +498,7 @@ mod tests {
             );
             let mult = crate::ops::mesh::barycenter(&imposed).unwrap();
             model
-                .add_sub(insert(
+                .add_sub(Handle::new(
                     SubModel::dirichlet(
                         "T".into(),
                         "q".into(),
@@ -516,7 +516,7 @@ mod tests {
         let rhs_sm = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
             sm.add_cell(&[nodes[0].id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let rhs = NodeField::from_sub(SubNodeField::from_poi1(&rhs_sm, vec!["q".into()]).unwrap());
 
@@ -525,26 +525,23 @@ mod tests {
         sol_a.check().unwrap();
 
         // Each zone's support is one of the blocks' column supports.
-        let block_col_supports: Vec<_> = k
-            .iter()
-            .map(|h| crate::store::read(h).unwrap().col_support().clone())
-            .collect();
+        let block_col_supports: Vec<_> = k.iter().map(|h| h.read().col_support().clone()).collect();
         assert!(sol_a.len() > 1, "multi-block model ⇒ multi-zone solution");
         for zh in &sol_a {
-            let zone_support = crate::store::read(zh).unwrap().support();
+            let zone_support = zh.read().support();
             assert!(
                 block_col_supports
                     .iter()
-                    .any(|bs| bs.same_slot(&zone_support)),
+                    .any(|bs| bs.same_object(&zone_support)),
                 "zone support must be one of the blocks' col supports"
             );
         }
-        // Consecutive solves share the same support handles (same_slot),
+        // Consecutive solves share the same support handles (same_object),
         // so their arithmetic aligns by support.
         for (za, zb) in sol_a.iter().zip(sol_b.iter()) {
-            let sa = crate::store::read(za).unwrap().support();
-            let sb = crate::store::read(zb).unwrap().support();
-            assert!(sa.same_slot(&sb));
+            let sa = za.read().support();
+            let sb = zb.read().support();
+            assert!(sa.same_object(&sb));
         }
     }
 
@@ -552,7 +549,7 @@ mod tests {
     fn rectangular_matrix_yields_error() {
         use crate::containers::matrix::{DofOrdering, SubMatrix};
         // 2-row support, 1-col support → 2×1 rectangular block.
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let r0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let r1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let c0 = Node::create_in(coords.clone(), &[2.0]).unwrap();
@@ -562,8 +559,8 @@ mod tests {
         let mut col_sm = SubMesh::new(coords.clone(), ElementType::POI1);
         col_sm.add_cell(&[c0.id()]).unwrap();
         let mut block = SubMatrix::new(
-            insert(row_sm),
-            insert(col_sm),
+            Handle::new(row_sm),
+            Handle::new(col_sm),
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
@@ -574,14 +571,14 @@ mod tests {
         block.add_entry(r1.id(), "q", c0.id(), "T", 1.0).unwrap();
         // 2 rows × 1 col — rectangular.
         let mut m = crate::containers::matrix::Matrix::empty();
-        m.add_sub(insert(block)).unwrap();
+        m.add_sub(Handle::new(block)).unwrap();
         m.finalize().unwrap();
 
         // Build a minimal rhs on the same coords.
         let mut rhs_sm = SubMesh::new(coords.clone(), ElementType::POI1);
         rhs_sm.add_cell(&[r0.id()]).unwrap();
         let rhs = NodeField::from_sub(
-            SubNodeField::from_poi1(&insert(rhs_sm), vec!["q".into()]).unwrap(),
+            SubNodeField::from_poi1(&Handle::new(rhs_sm), vec!["q".into()]).unwrap(),
         );
         assert!(solve(&m, &rhs).is_err());
     }
@@ -589,12 +586,12 @@ mod tests {
     /// A solvable 1×1 system `2·T = b` and a rhs carrying `b` at the row DOF.
     fn tiny_system() -> (crate::containers::matrix::Matrix, NodeField, NodeId) {
         use crate::containers::matrix::{DofOrdering, SubMatrix};
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let sm = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
             sm.add_cell(&[a.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let mut block = SubMatrix::new(
             sm.clone(),
@@ -607,7 +604,7 @@ mod tests {
         .unwrap();
         block.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
         let mut m = crate::containers::matrix::Matrix::empty();
-        m.add_sub(insert(block)).unwrap();
+        m.add_sub(Handle::new(block)).unwrap();
         m.finalize().unwrap();
 
         let mut rhs = SubNodeField::from_poi1(&sm, vec!["q".into()]).unwrap();
@@ -637,12 +634,13 @@ mod tests {
     #[test]
     fn empty_matrix_yields_error() {
         let m = crate::containers::matrix::Matrix::empty();
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let mut sm = SubMesh::new(coords, ElementType::POI1);
         sm.add_cell(&[a.id()]).unwrap();
-        let rhs =
-            NodeField::from_sub(SubNodeField::from_poi1(&insert(sm), vec!["q".into()]).unwrap());
+        let rhs = NodeField::from_sub(
+            SubNodeField::from_poi1(&Handle::new(sm), vec!["q".into()]).unwrap(),
+        );
         assert!(solve(&m, &rhs).is_err());
     }
 
@@ -664,12 +662,12 @@ mod tests {
         assert_eq!(s1.value(a, "T").unwrap(), s2.value(a, "T").unwrap());
 
         // Mutating the matrix invalidates the cache.
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let sm = {
             let mut sm = SubMesh::new(coords, ElementType::POI1);
             sm.add_cell(&[b.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let mut block = SubMatrix::new(
             sm.clone(),
@@ -681,7 +679,7 @@ mod tests {
         )
         .unwrap();
         block.add_entry(b.id(), "q", b.id(), "T", 4.0).unwrap();
-        m.add_sub(insert(block)).unwrap();
+        m.add_sub(Handle::new(block)).unwrap();
         assert!(m.cached_factorization::<Factorization>().is_none());
     }
 

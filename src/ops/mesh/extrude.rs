@@ -27,11 +27,11 @@ mod tests {
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
     use crate::ops::mesh::line::line;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     #[test]
     fn extrude_seg2_to_qua4() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
         let seg = line(&a, &b, 2, ElementType::SEG2).unwrap();
@@ -49,7 +49,7 @@ mod tests {
 
     #[test]
     fn extrude_seg2_shared_nodes_stay_shared() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
         let seg = line(&a, &b, 2, ElementType::SEG2).unwrap();
@@ -62,7 +62,7 @@ mod tests {
 
     #[test]
     fn extrude_qua4_to_hex8() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let n0 = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0]).unwrap();
         let n1 = Node::create_in(coords.clone(), &[1.0, 0.0, 0.0]).unwrap();
         let n2 = Node::create_in(coords.clone(), &[1.0, 1.0, 0.0]).unwrap();
@@ -86,7 +86,7 @@ mod tests {
 
     #[test]
     fn extrude_tri3_to_penta6() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let n0 = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0]).unwrap();
         let n1 = Node::create_in(coords.clone(), &[1.0, 0.0, 0.0]).unwrap();
         let n2 = Node::create_in(coords.clone(), &[0.0, 1.0, 0.0]).unwrap();
@@ -108,7 +108,7 @@ mod tests {
 
     #[test]
     fn extrude_rejects_zero_layers() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let seg = line(&a, &b, 1, ElementType::SEG2).unwrap();
@@ -117,7 +117,7 @@ mod tests {
 
     #[test]
     fn extrude_rejects_wrong_direction_dim() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let seg = line(&a, &b, 1, ElementType::SEG2).unwrap();
@@ -127,7 +127,7 @@ mod tests {
     #[test]
     fn extrude_rejects_unsupported_element_type() {
         // POI1 has no reference frame to extrude into a higher-dimension cell.
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let mut pts = Mesh::from_submesh(SubMesh::new(coords, ElementType::POI1));
         pts.add_cell(&[a.id()]).unwrap();

@@ -15,14 +15,14 @@
 //! Two kinds of atom live here, and they are not quite alike:
 //!
 //! - **designators** — [`Node`], [`Cell`], [`Element`]: they carry an
-//!   identity (a store handle, or an index into a container) and name one
-//!   piece of something bigger;
+//!   identity (a [`Handle`](crate::store::Handle), or an index into a
+//!   container) and name one piece of something bigger;
 //! - **values** — [`ElementType`], [`Point2`]/[`Point3`],
 //!   [`Vector2`]/[`Vector3`], [`RgbColor`], [`Band`]: `Copy`, identity-free,
 //!   they *are* their content.
 //!
 //! [`crate::coords::Coords`] belongs to neither: it is the coordinate
-//! **store**, and it lives at the crate root next to [`crate::store`].
+//! **table** the designators point into, and it lives at the crate root.
 
 pub mod band;
 pub mod cell;

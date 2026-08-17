@@ -38,7 +38,7 @@ use pyrucast::models::shell::ShellModel;
 use pyrucast::ops::mesh;
 use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::insert;
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 const E: f64 = 210_000.0;
@@ -268,7 +268,7 @@ fn rigid_drilling(formulation: ShellModel) -> Result<()> {
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
 
     // A rigid rotation of the whole plate about z: u = (−y, x, 0), θ_z = 1.
-    let sm = insert(SubMesh::poi1_from_nodes(&grid)?);
+    let sm = Handle::new(SubMesh::poi1_from_nodes(&grid)?);
     let mut field = SubNodeField::from_poi1(&sm, comps_of())?;
     for node in &grid {
         let p = node.position()?;
@@ -323,7 +323,7 @@ fn a_rigid_tilt_of_the_plate_costs_no_energy() -> Result<()> {
             )?;
             let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
 
-            let sm = insert(SubMesh::poi1_from_nodes(&grid)?);
+            let sm = Handle::new(SubMesh::poi1_from_nodes(&grid)?);
             let mut field = SubNodeField::from_poi1(&sm, comps_of())?;
             for node in &grid {
                 field.set_value(node.id(), "u_z", node.position()?[0])?;
@@ -398,7 +398,7 @@ fn plate(
     pyrucast::store::Handle<Coords>,
     usize,
 )> {
-    let coords = insert(Coords::new(3)?);
+    let coords = Handle::new(Coords::new(3)?);
     let step = A / n as f64;
     let mut grid = Vec::new();
     for j in 0..=n {

@@ -45,7 +45,6 @@ use crate::containers::model::Model;
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::{Cancel, NoCancel};
-use crate::store::read;
 use nalgebra::DVector;
 use nalgebra_sparse::{CooMatrix, CscMatrix, CsrMatrix};
 use std::collections::{HashMap, HashSet};
@@ -221,7 +220,7 @@ fn solve_inner(
 /// Whether `model` carries at least one constraint sub-model.
 fn has_constraint(model: &Model) -> Result<bool> {
     for h in model {
-        if read(h)?.as_kind().as_constraint().is_some() {
+        if h.read().as_kind().as_constraint().is_some() {
             return Ok(true);
         }
     }
@@ -237,7 +236,7 @@ fn build_condensation(model: &Model, matrix: &Matrix) -> Result<Condensation> {
     // multi-component constraint (`Embedded`) reads each component's own g slot.
     let mut relations: Vec<(crate::models::Relation, String)> = Vec::new();
     for h in model {
-        let sub = read(h)?;
+        let sub = h.read();
         if let Some(constraint) = sub.as_kind().as_constraint() {
             for rel in constraint.relations()? {
                 // Condensation enforces its relations unconditionally — a
@@ -464,18 +463,18 @@ mod tests {
     use crate::containers::mesh::SubMesh;
     use crate::containers::node_field::SubNodeField;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     /// A constraint-free model must route through the plain LU solver: a
     /// standalone `2·T = 6` system (no constraints) solves to `T = 3`.
     #[test]
     fn empty_model_falls_back_to_plain_solve() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let sm = {
             let mut sm = SubMesh::new(coords, ElementType::POI1);
             sm.add_cell(&[a.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let mut block = SubMatrix::new(
             sm.clone(),
@@ -488,7 +487,7 @@ mod tests {
         .unwrap();
         block.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
         let mut m = Matrix::empty();
-        m.add_sub(insert(block)).unwrap();
+        m.add_sub(Handle::new(block)).unwrap();
         m.finalize().unwrap();
 
         let mut rhs = SubNodeField::from_poi1(&sm, vec!["q".into()]).unwrap();

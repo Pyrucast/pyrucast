@@ -30,7 +30,6 @@ use crate::atoms::{ElementType, NodeId};
 use crate::containers::mesh::Mesh;
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::Cancel;
-use crate::store::read;
 
 use super::intersect::first_self_intersection;
 use super::predicates::collinear3d;
@@ -86,7 +85,7 @@ impl Envelope {
             ));
         }
         let coords_handle = mesh.coords()?;
-        let dim = read(&coords_handle)?.dim();
+        let dim = coords_handle.read().dim();
         if dim != 3 {
             return Err(PyrucastError::Message(format!(
                 "triangulate_volume: the envelope must be 3-D, got dim={dim}"
@@ -99,7 +98,7 @@ impl Envelope {
         let mut local: HashMap<NodeId, u32> = HashMap::new();
         let mut facets: Vec<[u32; 3]> = Vec::new();
         for sm_handle in mesh {
-            let sm = read(sm_handle)?;
+            let sm = sm_handle.read();
             let et = sm.element_type();
             if et != ElementType::TRI3 {
                 return Err(PyrucastError::Message(format!(
@@ -121,7 +120,7 @@ impl Envelope {
         }
 
         let points: Vec<[f64; 3]> = {
-            let c = read(&coords_handle)?;
+            let c = coords_handle.read();
             node_ids
                 .iter()
                 .map(|&nid| {
@@ -610,7 +609,6 @@ mod tests {
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
     use crate::interrupt::NoCancel;
-    use crate::store::insert;
     use crate::store::Handle;
 
     /// The eight corners of an axis-aligned box, in the order
@@ -667,7 +665,7 @@ mod tests {
 
     #[test]
     fn accepts_a_box_and_measures_its_volume() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let env = Envelope::extract(&unit_box(&coords), &NoCancel).unwrap();
         assert_eq!(env.points().len(), 8);
         assert_eq!(env.facets().len(), 12);
@@ -679,7 +677,7 @@ mod tests {
     fn volume_is_measured_far_from_the_origin() {
         // The apex of the volume sum is the bounding-box centre, so a body
         // sitting a long way out keeps its precision.
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [1e6, 1e6, 1e6], [1e6 + 2.0, 1e6 + 3.0, 1e6 + 4.0]);
         let env = Envelope::extract(&surface(&coords, &nodes, &BOX_FACETS), &NoCancel).unwrap();
         assert!((env.volume() - 24.0).abs() < 1e-9, "{}", env.volume());
@@ -689,7 +687,7 @@ mod tests {
     fn accepts_a_hollow_box_and_subtracts_the_cavity() {
         // Outer shell outward, inner shell inward: a 1×1×1 box with a
         // 0.5-side cavity holds 1 − 0.125 of material.
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let outer = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let inner = box_nodes(&coords, [0.25, 0.25, 0.25], [0.75, 0.75, 0.75]);
         let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
@@ -711,7 +709,7 @@ mod tests {
 
     #[test]
     fn rejects_a_non_tri3_envelope() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let n = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let mut sm = SubMesh::new(coords.clone(), ElementType::QUA4);
         sm.add_cell(&[n[0], n[1], n[2], n[3]]).unwrap();
@@ -722,7 +720,7 @@ mod tests {
 
     #[test]
     fn rejects_a_two_dimensional_coords() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let ids: Vec<NodeId> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
             .iter()
             .map(|p| Node::create_in(coords.clone(), p).unwrap().id())
@@ -735,7 +733,7 @@ mod tests {
 
     #[test]
     fn rejects_an_open_surface() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         // Drop one facet: the box now has a triangular hole.
         let err = message(
@@ -746,7 +744,7 @@ mod tests {
 
     #[test]
     fn rejects_an_inconsistently_oriented_surface() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let mut facets = BOX_FACETS.to_vec();
         facets[5].swap(1, 2); // one facet now faces the other way
@@ -757,7 +755,7 @@ mod tests {
 
     #[test]
     fn rejects_inward_normals() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let flipped: Vec<[usize; 3]> = BOX_FACETS.iter().map(|f| [f[0], f[2], f[1]]).collect();
         let err =
@@ -767,7 +765,7 @@ mod tests {
 
     #[test]
     fn rejects_a_duplicated_facet() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let mut facets = BOX_FACETS.to_vec();
         facets.push(BOX_FACETS[0]);
@@ -778,7 +776,7 @@ mod tests {
 
     #[test]
     fn rejects_a_repeated_node_in_a_facet() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let mut facets = BOX_FACETS.to_vec();
         facets[0] = [0, 3, 3];
@@ -789,7 +787,7 @@ mod tests {
 
     #[test]
     fn rejects_coincident_nodes() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let mut nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         // A ninth node exactly on top of corner 0, used in its place by one
         // facet: the surface looks torn even though it draws the same shape.
@@ -806,7 +804,7 @@ mod tests {
 
     #[test]
     fn rejects_a_flat_facet() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let mut nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         // A node exactly halfway along the edge 0-1, used to build a facet
         // whose three nodes are collinear.
@@ -824,7 +822,7 @@ mod tests {
 
     #[test]
     fn rejects_an_envelope_too_small_to_close() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let err = message(
             Envelope::extract(&surface(&coords, &nodes, &BOX_FACETS[..2]), &NoCancel).unwrap_err(),
@@ -836,7 +834,7 @@ mod tests {
     fn rejects_a_self_intersecting_envelope() {
         // Two boxes that overlap in space but share no node: closed,
         // manifold, consistently oriented — and yet with no inside.
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let a = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let b = box_nodes(&coords, [0.5, 0.5, 0.5], [1.5, 1.5, 1.5]);
         let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
@@ -854,7 +852,7 @@ mod tests {
     fn accepts_two_disjoint_bodies() {
         // Nothing in the contract forbids meshing two separate solids at
         // once: each is closed, and the volumes simply add up.
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let a = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let b = box_nodes(&coords, [5.0, 0.0, 0.0], [7.0, 1.0, 1.0]);
         let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
@@ -871,7 +869,7 @@ mod tests {
     #[test]
     fn stops_on_a_preset_cancellation_flag() {
         use std::sync::atomic::AtomicBool;
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let flag = AtomicBool::new(true);
         let err = Envelope::extract(&unit_box(&coords), &flag).unwrap_err();
         assert!(matches!(err, PyrucastError::Interrupted));
@@ -887,7 +885,7 @@ mod tests {
     fn accepts_an_envelope_split_across_submeshes() {
         // `skin` hands back one submesh per flat face; the envelope is the
         // union of them and must be read as a single surface.
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let mut mesh = Mesh::empty();
         for pair in BOX_FACETS.chunks(2) {
@@ -896,7 +894,7 @@ mod tests {
                 sm.add_cell(&[nodes[f[0]], nodes[f[1]], nodes[f[2]]])
                     .unwrap();
             }
-            mesh.add_sub(insert(sm)).unwrap();
+            mesh.add_sub(Handle::new(sm)).unwrap();
         }
         let env = Envelope::extract(&mesh, &NoCancel).unwrap();
         assert_eq!(env.facets().len(), 12);
@@ -906,11 +904,11 @@ mod tests {
 
     #[test]
     fn local_indices_map_back_to_the_input_nodes() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let env = Envelope::extract(&surface(&coords, &nodes, &BOX_FACETS), &NoCancel).unwrap();
         // Every envelope node is one of the input nodes, at its position.
-        let c = read(&coords).unwrap();
+        let c = coords.read();
         for (i, &nid) in env.node_ids().iter().enumerate() {
             assert!(nodes.contains(&nid));
             assert_eq!(c.position(nid).unwrap(), env.points()[i]);

@@ -24,7 +24,6 @@ use crate::error::{PyrucastError, Result};
 use crate::models::kernel;
 use crate::ops::coloring;
 use crate::parallel::*;
-use crate::store::read;
 use nalgebra_sparse::CsrMatrix;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicU64;
@@ -64,7 +63,7 @@ pub fn build_pattern(k: &Matrix) -> Result<AssemblyPattern> {
     }
     let mut block_entries: Vec<BlockEntries> = Vec::new();
     for blk_h in k {
-        let blk = read(blk_h)?;
+        let blk = blk_h.read();
         let trow: Vec<usize> = blk.row_dofs().iter().map(|d| row_map[d]).collect();
         let tcol: Vec<usize> = blk.col_dofs().iter().map(|d| col_map[d]).collect();
         match blk.recipe() {
@@ -178,12 +177,12 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix
 
     let mut values = vec![0.0f64; pattern.nnz()];
     for (bi, blk_h) in k.into_iter().enumerate() {
-        let blk = read(blk_h)?;
+        let blk = blk_h.read();
         match blk.recipe() {
             Some(recipe) => {
                 // Read the sub-model once (not per cell) so the element kernel
                 // stays lock-free while it runs in parallel over cells.
-                let sm = read(&recipe.submodel)?;
+                let sm = recipe.submodel.read();
                 let phys = sm.as_kind();
                 // Per-cell triplets so the value stream lines up cell-for-cell
                 // with the precomputed slots (same `(li,di,lj,pj)` order).
@@ -276,10 +275,10 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatr
     let values: Vec<AtomicU64> = (0..pattern.nnz()).map(|_| AtomicU64::new(0)).collect();
 
     for (bi, blk_h) in k.into_iter().enumerate() {
-        let blk = read(blk_h)?;
+        let blk = blk_h.read();
         match blk.recipe() {
             Some(recipe) => {
-                let sm = read(&recipe.submodel)?;
+                let sm = recipe.submodel.read();
                 let phys = sm.as_kind();
                 // Element matrices, evaluated in parallel, one triplet list per
                 // cell (grouping needed for the colour-driven scatter).
@@ -323,9 +322,9 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatr
                 if recipe.col_fespaces.is_empty() {
                     // Cell colouring (cached on the primary FE subspace): two cells
                     // sharing a node conflict, so one colour's cells touch disjoint DOFs.
-                    let fe = read(&recipe.fespaces[0])?;
+                    let fe = recipe.fespaces[0].read();
                     let submesh = fe.submesh();
-                    let submesh_g = read(&submesh)?;
+                    let submesh_g = submesh.read();
                     let conn = submesh_g.connectivity();
                     let n_cells = fe.cell_count()?;
                     let keys_per_cell = conn.len().checked_div(n_cells).unwrap_or(0);

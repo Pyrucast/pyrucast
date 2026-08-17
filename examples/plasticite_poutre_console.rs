@@ -78,7 +78,7 @@ use pyrucast::ops::node_field::internal_forces;
 use pyrucast::ops::node_field::{flux, FluxDensity};
 use pyrucast::ops::node_field::{positions, restrict, restrict_like};
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::insert;
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 fn env_usize(key: &str, default: usize) -> usize {
@@ -116,7 +116,7 @@ fn main() -> Result<()> {
         (nx + 1) * (ny + 1),
         nx * ny
     );
-    let coords = insert(Coords::new(2)?);
+    let coords = Handle::new(Coords::new(2)?);
     let pt_a = Node::create_in(coords.clone(), &[0., 0.])?;
     let pt_b = Node::create_in(coords.clone(), &[0., height])?;
     let pt_c = Node::create_in(coords.clone(), &[length, 0.])?;
@@ -194,7 +194,7 @@ fn main() -> Result<()> {
         OutOfRange::Clamp,
     )?;
     let mut load_evo = Evolution::default();
-    load_evo.add_sub(insert(load_curve))?;
+    load_evo.add_sub(Handle::new(load_curve))?;
 
     // ── État de la simulation (persistant entre les pas) ────────────────────
     // Déplacement cumulé u (u_x, u_y sur tous les nœuds), initialement nul.

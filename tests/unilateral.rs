@@ -25,7 +25,7 @@ use pyrucast::models::RelationSense;
 use pyrucast::ops::matrix::stiffness;
 use pyrucast::ops::mesh::barycenter;
 use pyrucast::ops::solver::{eliminate, lu, unilateral};
-use pyrucast::store::{insert, Handle};
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 const N_ELEMS: usize = 4;
@@ -35,7 +35,7 @@ const TOL: f64 = 1e-10;
 /// Build the `[0, 1]` SEG2 bar with a `k = 1` heat-conduction sub-model already
 /// added; returns the nodes, the shared coords, the model and the material.
 fn heat_bar() -> Result<(Vec<Node>, Handle<Coords>, Model, ElementField)> {
-    let coords = insert(Coords::new(1)?);
+    let coords = Handle::new(Coords::new(1)?);
     let nodes: Vec<Node> = (0..=N_ELEMS)
         .map(|i| Node::create_in(coords.clone(), &[i as f64 * H]))
         .collect::<Result<_>>()?;
@@ -50,10 +50,10 @@ fn heat_bar() -> Result<(Vec<Node>, Handle<Coords>, Model, ElementField)> {
     let mut mat = SubElementField::new(sub.clone(), vec!["k".into()])?;
     mat.set_uniform("k", 1.0)?;
     let mut materials = ElementField::empty();
-    materials.add_sub(insert(mat))?;
+    materials.add_sub(Handle::new(mat))?;
 
     let mut model = Model::empty();
-    model.add_sub(insert(SubModel::heat_conduction(sub)?))?;
+    model.add_sub(Handle::new(SubModel::heat_conduction(sub)?))?;
 
     Ok((nodes, coords, model, materials))
 }
@@ -92,21 +92,21 @@ fn bounded_bar(q: f64, bound: f64, sense: RelationSense) -> Result<Setup> {
         Default::default(),
     )?;
     let dir_mult = dir.multiplier_nodes()?[0];
-    model.add_sub(insert(dir))?;
+    model.add_sub(Handle::new(dir))?;
 
     // Unilateral bound T(1) ⋈ bound.
     let imposed1 = poi1(&nodes[N_ELEMS])?;
     let mult1 = barycenter(&imposed1)?;
     let uni = SubModel::dirichlet("T".into(), "q".into(), &imposed1, &mult1, None, None, sense)?;
     let uni_mult = uni.multiplier_nodes()?[0];
-    model.add_sub(insert(uni))?;
+    model.add_sub(Handle::new(uni))?;
 
     // RHS: flux q at the right physics node, u_d at both multiplier slots.
     let mut rhs_sm = SubMesh::new(coords, ElementType::POI1);
     rhs_sm.add_cell(&[nodes[N_ELEMS].id()])?;
     rhs_sm.add_cell(&[dir_mult])?;
     rhs_sm.add_cell(&[uni_mult])?;
-    let rhs_sm = insert(rhs_sm);
+    let rhs_sm = Handle::new(rhs_sm);
     let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["q".into(), "imposed_T".into()])?;
     rhs.set_value(nodes[N_ELEMS].id(), "q", q)?;
     rhs.set_value(dir_mult, "imposed_T", 0.0)?;
@@ -220,7 +220,7 @@ fn unilateral_mpc_difference_relation() -> Result<()> {
             Default::default(),
         )?;
         let dir_mult = dir.multiplier_nodes()?[0];
-        model.add_sub(insert(dir))?;
+        model.add_sub(Handle::new(dir))?;
 
         let dual = model.dual_of("T")?.expect("heat conduction declares T");
         let mesh_last = poi1(&nodes[N_ELEMS])?;
@@ -238,12 +238,12 @@ fn unilateral_mpc_difference_relation() -> Result<()> {
             RelationSense::GreaterEqual,
         )?;
         let mpc_mult = mpc.multiplier_nodes()?[0];
-        model.add_sub(insert(mpc))?;
+        model.add_sub(Handle::new(mpc))?;
 
         let mut rhs_sm = SubMesh::new(coords, ElementType::POI1);
         rhs_sm.add_cell(&[dir_mult])?;
         rhs_sm.add_cell(&[mpc_mult])?;
-        let rhs_sm = insert(rhs_sm);
+        let rhs_sm = Handle::new(rhs_sm);
         let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["imposed_T".into(), "mpc_rhs".into()])?;
         rhs.set_value(dir_mult, "imposed_T", 0.0)?;
         rhs.set_value(mpc_mult, "mpc_rhs", g)?;
@@ -340,14 +340,14 @@ fn schur_falls_back_when_base_is_singular() -> Result<()> {
         RelationSense::LessEqual,
     )?;
     let uni_mult = uni.multiplier_nodes()?[0];
-    model.add_sub(insert(uni))?;
+    model.add_sub(Handle::new(uni))?;
 
     // Flux q = 5 at the right end drives T up into the bound ⇒ the relation is
     // active, `T ≡ 2` (a flat field satisfying the pinned end and zero flux).
     let mut rhs_sm = SubMesh::new(coords, ElementType::POI1);
     rhs_sm.add_cell(&[nodes[N_ELEMS].id()])?;
     rhs_sm.add_cell(&[uni_mult])?;
-    let rhs_sm = insert(rhs_sm);
+    let rhs_sm = Handle::new(rhs_sm);
     let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["q".into(), "imposed_T".into()])?;
     rhs.set_value(nodes[N_ELEMS].id(), "q", 5.0)?;
     rhs.set_value(uni_mult, "imposed_T", 2.0)?;

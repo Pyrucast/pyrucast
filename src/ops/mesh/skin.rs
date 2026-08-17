@@ -17,7 +17,7 @@ use crate::atoms::{ElementType, NodeId};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
-use crate::store::{insert, read, Handle};
+use crate::store::Handle;
 use std::collections::HashMap;
 
 /// Default coplanarity threshold: two boundary facets whose outward normals
@@ -116,7 +116,7 @@ pub fn skin(mesh: &Mesh, angle_deg: Option<f64>) -> Result<Mesh> {
 
     let coords = mesh.coords()?;
     {
-        let c = read(&coords)?;
+        let c = coords.read();
         if c.dim() != 3 {
             return Err(PyrucastError::Message(format!(
                 "skin: only 3-D volume meshes are supported, got dim={}",
@@ -137,7 +137,7 @@ pub fn skin(mesh: &Mesh, angle_deg: Option<f64>) -> Result<Mesh> {
     };
     for sm in mesh {
         let (et, conn) = {
-            let s = read(sm)?;
+            let s = sm.read();
             (s.element_type(), s.connectivity().to_vec())
         };
         if et == ElementType::POI1 {
@@ -171,10 +171,10 @@ pub fn skin(mesh: &Mesh, angle_deg: Option<f64>) -> Result<Mesh> {
     //    a deterministic order so the grouping is reproducible.
     let mut facets: Vec<BoundaryFacet> = Vec::new();
     {
-        let c = read(&coords)?;
+        let c = coords.read();
         for sm in mesh {
             let (et, conn) = {
-                let s = read(sm)?;
+                let s = sm.read();
                 (s.element_type(), s.connectivity().to_vec())
             };
             if et == ElementType::POI1 {
@@ -284,7 +284,7 @@ fn emit_submesh(
     for facet in facets {
         sub.add_cell(&facet.nodes)?;
     }
-    result.add_sub(insert(sub))?;
+    result.add_sub(Handle::new(sub))?;
     Ok(())
 }
 
@@ -292,7 +292,7 @@ fn emit_submesh(
 mod tests {
     use super::*;
     use crate::atoms::Node;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     /// Eight corner nodes of the unit cube, indexed as HEX8 expects:
     /// bottom CCW (z=0) then top CCW (z=1).
@@ -314,7 +314,7 @@ mod tests {
 
     #[test]
     fn single_hex_gives_six_quad_faces() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let n = cube_nodes(&coords);
         let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::HEX8));
         m.add_cell(&n).unwrap();
@@ -335,7 +335,7 @@ mod tests {
     /// Reading the element's own facets covers it.
     #[test]
     fn pyramid_gives_a_quad_base_and_four_tri_sides() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let pts = [
             [0.0, 0.0, 0.0],
             [1.0, 0.0, 0.0],
@@ -370,7 +370,7 @@ mod tests {
     /// the skin of a TET10 is a TRI6 surface rather than a TRI3 one.
     #[test]
     fn quadratic_tet_gives_four_tri6_faces_carrying_their_mid_nodes() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         // Corners of the unit tet, then the six edge midpoints in TET10 order:
         // (0,1), (1,2), (2,0), (0,3), (1,3), (2,3).
         let pts = [
@@ -398,9 +398,9 @@ mod tests {
 
         // Every emitted node is one of the ten, and each face carries three
         // mid-side nodes — i.e. the skin really is quadratic.
-        let c = read(&coords).unwrap();
+        let c = coords.read();
         for sub in &sk {
-            let s = read(sub).unwrap();
+            let s = sub.read();
             for cell in s.connectivity().chunks(6) {
                 for (i, &node) in cell.iter().enumerate() {
                     let p = c.position(node).unwrap();
@@ -419,7 +419,7 @@ mod tests {
     /// A quadratic hex has nine-node faces: the centre node must travel too.
     #[test]
     fn hex27_gives_qua9_faces() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let k = ElementType::HEX27.as_kind();
         let n: Vec<NodeId> = k
             .ref_nodes()
@@ -437,7 +437,7 @@ mod tests {
 
     #[test]
     fn single_tet_gives_four_tri_faces() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0, 0.0]).unwrap();
@@ -456,7 +456,7 @@ mod tests {
         // Split the unit cube in two along z = 0.5. The interior shared face
         // must cancel, and the two coplanar halves of each lateral side must
         // merge into a single flat face.
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let node =
             |x: f64, y: f64, z: f64| Node::create_in(coords.clone(), &[x, y, z]).unwrap().id();
         // z = 0, 0.5, 1 layers, each a CCW square.
@@ -487,7 +487,7 @@ mod tests {
 
     #[test]
     fn prism_gives_two_tri_caps_and_three_quad_sides() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let node =
             |x: f64, y: f64, z: f64| Node::create_in(coords.clone(), &[x, y, z]).unwrap().id();
         let n = [
@@ -524,7 +524,7 @@ mod tests {
 
     #[test]
     fn large_angle_merges_all_faces_of_a_cube() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let n = cube_nodes(&coords);
         let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::HEX8));
         m.add_cell(&n).unwrap();
@@ -537,22 +537,22 @@ mod tests {
 
     #[test]
     fn reuses_nodes_and_increfs() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let n = cube_nodes(&coords);
         let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::HEX8));
         m.add_cell(&n).unwrap();
 
         // corner 0 is used by 3 of the cube's 6 faces.
-        let before = read(&coords).unwrap().refcount(n[0]);
+        let before = coords.read().refcount(n[0]);
         let sk = skin(&m, None).unwrap();
-        assert_eq!(read(&coords).unwrap().refcount(n[0]), before + 3);
+        assert_eq!(coords.read().refcount(n[0]), before + 3);
         drop(sk);
-        assert_eq!(read(&coords).unwrap().refcount(n[0]), before);
+        assert_eq!(coords.read().refcount(n[0]), before);
     }
 
     #[test]
     fn surface_cells_are_rejected() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0, 0.0]).unwrap();
@@ -563,7 +563,7 @@ mod tests {
 
     #[test]
     fn no_volume_cells_is_error() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0]).unwrap();
         let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         m.add_cell(&[a.id()]).unwrap();

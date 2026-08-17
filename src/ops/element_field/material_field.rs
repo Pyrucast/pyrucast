@@ -2,7 +2,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::model::{Model, SubModel};
 use crate::error::{PyrucastError, Result};
-use crate::store::{insert, read};
+use crate::store::Handle;
 
 /// Build the material [`SubElementField`] of a single material-hungry
 /// sub-model from uniform `(component, value)` pairs.
@@ -68,7 +68,7 @@ pub fn material_field(
     let mut out = ElementField::empty();
     for h in model {
         let opt_sub = {
-            let sub = read(h)?;
+            let sub = h.read();
             if sub.material_fespace().is_none() {
                 None
             } else {
@@ -76,7 +76,7 @@ pub fn material_field(
             }
         };
         if let Some(sub) = opt_sub {
-            out.add_sub(insert(sub))?;
+            out.add_sub(Handle::new(sub))?;
         }
     }
     Ok(out)
@@ -105,8 +105,8 @@ pub fn material_field_per_sub_model(
         if spec.is_empty() {
             continue;
         }
-        let sub = sub_material_field(&*read(h)?, spec)?;
-        out.add_sub(insert(sub))?;
+        let sub = sub_material_field(&h.read(), spec)?;
+        out.add_sub(Handle::new(sub))?;
     }
     Ok(out)
 }
@@ -130,7 +130,7 @@ mod tests {
         length: f64,
         dirichlet_at_left: bool,
     ) -> (Handle<Coords>, NodeId, NodeId, Model) {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[length]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
@@ -138,7 +138,7 @@ mod tests {
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let mut model = Model::empty();
         model
-            .add_sub(insert(
+            .add_sub(Handle::new(
                 SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
             ))
             .unwrap();
@@ -147,7 +147,7 @@ mod tests {
                 Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
             let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
             model
-                .add_sub(insert(
+                .add_sub(Handle::new(
                     SubModel::dirichlet(
                         "T".into(),
                         "q".into(),
@@ -165,7 +165,7 @@ mod tests {
     }
 
     fn single_hc_sub() -> (Handle<Coords>, SubModel) {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
@@ -182,7 +182,7 @@ mod tests {
         let (_cfg, hc) = single_hc_sub();
         let sub = hc.material_fespace().unwrap();
         let mat = sub_material_field(&hc, &[("k", 2.5)]).unwrap();
-        let n_g = read(&sub).unwrap().gauss_count();
+        let n_g = sub.read().gauss_count();
         for g in 0..n_g {
             assert!((mat.value(0, g, "k").unwrap() - 2.5).abs() < 1e-12);
         }
@@ -190,7 +190,7 @@ mod tests {
 
     #[test]
     fn sub_errors_on_dirichlet() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
@@ -247,7 +247,7 @@ mod tests {
     /// Elasticity on a single TRI3 (plane stress).
     fn single_elasticity_sub() -> (Handle<Coords>, SubModel) {
         use crate::models::elasticity::ElasticityModel;
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -313,7 +313,7 @@ mod tests {
 
     #[test]
     fn per_sub_model_two_zones() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let n1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let n2 = Node::create_in(coords.clone(), &[2.0]).unwrap();
@@ -321,12 +321,12 @@ mod tests {
         let sm_a = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
             sm.add_cell(&[n0.id(), n1.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sm_b = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
             sm.add_cell(&[n1.id(), n2.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         mesh.add_sub(sm_a).unwrap();
         mesh.add_sub(sm_b).unwrap();
@@ -334,7 +334,7 @@ mod tests {
 
         let mut model = Model::empty();
         model
-            .add_sub(insert(
+            .add_sub(Handle::new(
                 SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
             ))
             .unwrap();
@@ -342,7 +342,7 @@ mod tests {
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&n0)).unwrap());
         let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
         model
-            .add_sub(insert(
+            .add_sub(Handle::new(
                 SubModel::dirichlet(
                     "T".into(),
                     "q".into(),
@@ -356,7 +356,7 @@ mod tests {
             ))
             .unwrap();
         model
-            .add_sub(insert(
+            .add_sub(Handle::new(
                 SubModel::heat_conduction(fes.get(1).unwrap()).unwrap(),
             ))
             .unwrap();

@@ -14,8 +14,7 @@ use crate::error::Result;
 use crate::models::owned_components;
 use crate::models::symmetry::{self, MaterialSymmetry};
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
-use crate::store::{read, Handle};
-use serde::{Deserialize, Serialize};
+use crate::store::Handle;
 
 /// Column DOF name (temperature).
 pub const PRIMAL_VAR: &str = "T";
@@ -88,7 +87,7 @@ fn flux_components(space_dim: usize) -> Vec<String> {
 /// - dual variable:   `"q"` (heat flux row labels).
 /// - Material data (conductivity `"k"`, …) is **not** stored here; it is
 ///   supplied at assembly time via [`crate::ops::matrix::stiffness`].
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct HeatConduction {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
     /// POI1 SubMesh covering the unique nodes of `fespace`'s submesh,
@@ -116,10 +115,10 @@ impl HeatConduction {
         symmetry: MaterialSymmetry,
     ) -> Result<Self> {
         let (submesh, space_dim) = {
-            let s = read(&fespace)?;
+            let s = fespace.read();
             (s.submesh(), s.space_dim())
         };
-        let support = read(&submesh)?.to_poi1()?;
+        let support = submesh.read().to_poi1()?;
         Ok(Self {
             fespace,
             support,
@@ -227,7 +226,7 @@ impl SubModelKind for HeatConduction {
     fn render(&self, _opts: &DumpOptions) -> String {
         let primal = self.primal_vars().join(", ");
         let dual = self.dual_vars().join(", ");
-        let n = read(&self.support).map(|s| s.cell_count()).unwrap_or(0);
+        let n = self.support.read().cell_count();
         format!(
             "SubModel<HeatConduction({})>\n  primal var(s): {primal}\n  \
              dual var(s):   {dual}\n  support: {n} node(s)",
@@ -259,7 +258,7 @@ impl Domain for HeatConduction {
     }
 
     fn behavior_output_components(&self) -> Result<Vec<String>> {
-        Ok(flux_components(read(&self.fespace)?.space_dim()))
+        Ok(flux_components(self.fespace.read().space_dim()))
     }
 
     /// Linear constitutive law: weak-form flux = k·∇T at one Gauss point.
@@ -396,11 +395,11 @@ mod tests {
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::Mesh;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     /// HeatConduction on a single SEG2 of length `L`.
     fn seg2_hc(length: f64) -> HeatConduction {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[length]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
@@ -413,8 +412,7 @@ mod tests {
     fn behavior_fespace_is_the_physics_fespace() {
         let hc = seg2_hc(1.0);
         let fe = hc.behavior_fespace();
-        assert_eq!(fe.index(), hc.fespace.index());
-        assert_eq!(fe.generation(), hc.fespace.generation());
+        assert!(fe.same_object(&hc.fespace));
     }
 
     /// COMP on a linear law returns the weak-form flux `k·∇T` — the exact
@@ -429,12 +427,12 @@ mod tests {
 
         let mut def = SubElementField::new(hc.fespace.clone(), deformation_components(1)).unwrap();
         def.set_uniform("grad_T_x", grad).unwrap();
-        let def = insert(def);
+        let def = Handle::new(def);
 
         let mut mat =
             SubElementField::new(hc.fespace.clone(), vec![MATERIAL_COMPONENT.to_string()]).unwrap();
         mat.set_uniform(MATERIAL_COMPONENT, k).unwrap();
-        let mat = insert(mat);
+        let mat = Handle::new(mat);
 
         let flux = hc.integrate_behavior(&def, None, Some(&mat), None).unwrap();
         assert_eq!(flux.components(), &["flux_x".to_string()]);

@@ -8,12 +8,12 @@ use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::coords::Coords;
-use pyrucast::store::insert;
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 /// A single SEG2 bar from the origin to `(dx, dy)`, with its FE space + two nodes.
 fn bar_2d(dx: f64, dy: f64) -> Result<(FiniteElementSpace, Node, Node, f64)> {
-    let coords = insert(Coords::new(2)?);
+    let coords = Handle::new(Coords::new(2)?);
     let a = Node::create_in(coords.clone(), &[0.0, 0.0])?;
     let b = Node::create_in(coords.clone(), &[dx, dy])?;
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
@@ -26,7 +26,7 @@ fn bar_2d(dx: f64, dy: f64) -> Result<(FiniteElementSpace, Node, Node, f64)> {
 fn axial_force(fes: &FiniteElementSpace, n: f64) -> Result<ElementField> {
     let sub = SubElementField::from_uniform_per_component(fes.get(0)?, vec!["n".into()], &[n])?;
     let mut f = ElementField::empty();
-    f.add_sub(insert(sub))?;
+    f.add_sub(Handle::new(sub))?;
     Ok(f)
 }
 
@@ -172,7 +172,7 @@ fn frame_geometric_stiffens_transverse_only() -> Result<()> {
     )?;
     let sub = SubElementField::from_uniform_per_component(fes.get(0)?, vec!["N".into()], &[N])?;
     let mut state = ElementField::empty();
-    state.add_sub(insert(sub))?;
+    state.add_sub(Handle::new(sub))?;
 
     let kg = pyrucast::ops::matrix::geometric(&model, &materials, &state)?;
     let tol = 1e-12;
@@ -193,7 +193,7 @@ fn timoshenko_consistent_mass_matches_closed_form() -> Result<()> {
     const AREA: f64 = 3.0;
     const I: f64 = 0.5;
     const L: f64 = 2.0;
-    let coords = insert(Coords::new(1)?);
+    let coords = Handle::new(Coords::new(1)?);
     let a = Node::create_in(coords.clone(), &[0.0])?;
     let b = Node::create_in(coords.clone(), &[L])?;
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
@@ -242,7 +242,7 @@ fn timoshenko_consistent_mass_matches_closed_form() -> Result<()> {
 
 /// A single SEG2 along global x in 3-D, with its FE space + two nodes.
 fn bar_3d(len: f64) -> Result<(FiniteElementSpace, Node, Node)> {
-    let coords = insert(Coords::new(3)?);
+    let coords = Handle::new(Coords::new(3)?);
     let a = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0])?;
     let b = Node::create_in(coords.clone(), &[len, 0.0, 0.0])?;
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
@@ -318,7 +318,7 @@ fn frame3d_geometric_stiffens_both_transverse() -> Result<()> {
     let materials = frame3d_materials(&model, 1.0, 1.0, 1.0, 1.0)?;
     let sub = SubElementField::from_uniform_per_component(fes.get(0)?, vec!["N".into()], &[N])?;
     let mut state = ElementField::empty();
-    state.add_sub(insert(sub))?;
+    state.add_sub(Handle::new(sub))?;
 
     let kg = pyrucast::ops::matrix::geometric(&model, &materials, &state)?;
     let tol = 1e-12;

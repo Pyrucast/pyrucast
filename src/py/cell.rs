@@ -3,7 +3,6 @@
 use crate::atoms::Cell;
 use crate::atoms::Node;
 use crate::py::node::PyNode;
-use crate::store::read;
 use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
 
@@ -62,7 +61,7 @@ impl PyCell {
         }
         let ids = self.inner.node_ids()?;
         let id = ids[normalized as usize];
-        let coords = read(&self.inner.sm)?.coords();
+        let coords = self.inner.sm.read().coords();
         let node = Node::acquire(coords, id)?;
         Ok(PyNode::from_node(node))
     }

@@ -31,7 +31,7 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::ops::mesh;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::{insert, read};
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 const E: f64 = 210_000.0;
@@ -41,7 +41,7 @@ const L: f64 = 2.0;
 #[test]
 fn a_cantilever_under_a_tip_load_matches_its_closed_form() -> Result<()> {
     const P: f64 = 50.0;
-    let coords = insert(Coords::new(1)?);
+    let coords = Handle::new(Coords::new(1)?);
     let a = Node::create_in(coords.clone(), &[0.0])?;
     let b = Node::create_in(coords.clone(), &[L])?;
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
@@ -66,7 +66,7 @@ fn a_cantilever_under_a_tip_load_matches_its_closed_form() -> Result<()> {
     let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("I", I)])?;
 
     // A point load at the free end.
-    let load_sm = insert(SubMesh::poi1_from_nodes(std::slice::from_ref(&b))?);
+    let load_sm = Handle::new(SubMesh::poi1_from_nodes(std::slice::from_ref(&b))?);
     let mut rhs = SubNodeField::from_poi1(&load_sm, vec!["f_w".into()])?;
     rhs.set_value(b.id(), "f_w", P)?;
 
@@ -101,7 +101,7 @@ fn a_tip_moment_matches_its_closed_form() -> Result<()> {
     let model = clamped_1d(&a, &fes)?;
     let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("I", I)])?;
 
-    let load_sm = insert(SubMesh::poi1_from_nodes(std::slice::from_ref(&b))?);
+    let load_sm = Handle::new(SubMesh::poi1_from_nodes(std::slice::from_ref(&b))?);
     let mut rhs = SubNodeField::from_poi1(&load_sm, vec!["m_theta".into()])?;
     rhs.set_value(b.id(), "m_theta", M)?;
 
@@ -121,7 +121,7 @@ fn a_tip_moment_matches_its_closed_form() -> Result<()> {
 fn a_plane_frame_carries_axial_and_bending_independently() -> Result<()> {
     const A: f64 = 1e-2;
     const N: f64 = 1_000.0;
-    let coords = insert(Coords::new(2)?);
+    let coords = Handle::new(Coords::new(2)?);
     let a = Node::create_in(coords.clone(), &[0.0, 0.0])?;
     let b = Node::create_in(coords.clone(), &[L, 0.0])?;
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
@@ -145,7 +145,7 @@ fn a_plane_frame_carries_axial_and_bending_independently() -> Result<()> {
     let materials =
         pyrucast::ops::element_field::material_field(&model, &[("E", E), ("A", A), ("I", I)])?;
 
-    let load_sm = insert(SubMesh::poi1_from_nodes(std::slice::from_ref(&b))?);
+    let load_sm = Handle::new(SubMesh::poi1_from_nodes(std::slice::from_ref(&b))?);
     let mut rhs = SubNodeField::from_poi1(&load_sm, vec!["f_x".into()])?;
     rhs.set_value(b.id(), "f_x", N)?;
 
@@ -168,7 +168,7 @@ fn a_space_frame_twists_by_its_closed_form() -> Result<()> {
     const G: f64 = 80_000.0;
     const J: f64 = 2e-5;
     const T: f64 = 40.0;
-    let coords = insert(Coords::new(3)?);
+    let coords = Handle::new(Coords::new(3)?);
     let a = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0])?;
     let b = Node::create_in(coords.clone(), &[L, 0.0, 0.0])?;
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
@@ -208,7 +208,7 @@ fn a_space_frame_twists_by_its_closed_form() -> Result<()> {
         ],
     )?;
 
-    let load_sm = insert(SubMesh::poi1_from_nodes(std::slice::from_ref(&b))?);
+    let load_sm = Handle::new(SubMesh::poi1_from_nodes(std::slice::from_ref(&b))?);
     let mut rhs = SubNodeField::from_poi1(&load_sm, vec!["m_x".into()])?;
     rhs.set_value(b.id(), "m_x", T)?;
 
@@ -234,7 +234,7 @@ fn bernoulli_and_timoshenko_differ_only_for_a_stocky_beam() -> Result<()> {
     // two **theories**, not about either one's discretisation.
     const N_ELEMS: usize = 40;
     let tip = |shear_area: f64, length: f64| -> Result<(f64, f64)> {
-        let coords = insert(Coords::new(1)?);
+        let coords = Handle::new(Coords::new(1)?);
         let h = length / N_ELEMS as f64;
         let nodes: Vec<Node> = (0..=N_ELEMS)
             .map(|i| Node::create_in(coords.clone(), &[i as f64 * h]))
@@ -269,7 +269,7 @@ fn bernoulli_and_timoshenko_differ_only_for_a_stocky_beam() -> Result<()> {
             }
             Ok(m)
         };
-        let load_sm = insert(SubMesh::poi1_from_nodes(std::slice::from_ref(&b))?);
+        let load_sm = Handle::new(SubMesh::poi1_from_nodes(std::slice::from_ref(&b))?);
         let mut rhs = SubNodeField::from_poi1(&load_sm, vec!["f_w".into()])?;
         rhs.set_value(b.id(), "f_w", P)?;
         let rhs = NodeField::from_sub(rhs);
@@ -313,7 +313,7 @@ fn beam_1d() -> Result<(
     FiniteElementSpace,
     pyrucast::store::Handle<Coords>,
 )> {
-    let coords = insert(Coords::new(1)?);
+    let coords = Handle::new(Coords::new(1)?);
     let a = Node::create_in(coords.clone(), &[0.0])?;
     let b = Node::create_in(coords.clone(), &[L])?;
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
@@ -361,7 +361,7 @@ fn a_bernoulli_beam_recovers_its_section_forces() -> Result<()> {
     let model = clamped_1d(&a, &fes)?;
     let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("I", I)])?;
 
-    let load_sm = insert(SubMesh::poi1_from_nodes(std::slice::from_ref(&b))?);
+    let load_sm = Handle::new(SubMesh::poi1_from_nodes(std::slice::from_ref(&b))?);
     let mut rhs = SubNodeField::from_poi1(&load_sm, vec!["m_theta".into()])?;
     rhs.set_value(b.id(), "m_theta", M)?;
     let rhs = NodeField::from_sub(rhs);
@@ -371,7 +371,7 @@ fn a_bernoulli_beam_recovers_its_section_forces() -> Result<()> {
     let forces = pyrucast::ops::element_field::behavior::integrate(
         &model, &strains, None, &materials, None,
     )?;
-    let f = read(&forces.get(0)?)?;
+    let f = forces.get(0)?.read();
     assert_eq!(f.components(), &["M".to_string()]);
     for g in 0..f.gauss_count() {
         let m = f.value(0, g, "M")?;
@@ -419,7 +419,7 @@ fn a_bernoulli_beam_has_a_consistent_mass() -> Result<()> {
     assert!(m.get(a.id(), "f_w", a.id(), "theta")?.abs() > 1e-6);
 
     // 2-D: the same, once the element is rotated into the plane.
-    let coords = insert(Coords::new(2)?);
+    let coords = Handle::new(Coords::new(2)?);
     let a2 = Node::create_in(coords.clone(), &[0.0, 0.0])?;
     let b2 = Node::create_in(coords.clone(), &[L, 0.0])?;
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
@@ -462,7 +462,7 @@ fn only_an_axial_configuration_can_buckle() -> Result<()> {
         &[10.0],
     )?;
     let mut state = pyrucast::containers::element_field::ElementField::empty();
-    state.add_sub(insert(sub))?;
+    state.add_sub(Handle::new(sub))?;
     let kg = pyrucast::ops::matrix::geometric(&model, &mat, &state)?;
     assert_eq!(
         kg.len(),
@@ -471,7 +471,7 @@ fn only_an_axial_configuration_can_buckle() -> Result<()> {
     );
 
     // The plane configuration does.
-    let coords = insert(Coords::new(2)?);
+    let coords = Handle::new(Coords::new(2)?);
     let a2 = Node::create_in(coords.clone(), &[0.0, 0.0])?;
     let b2 = Node::create_in(coords.clone(), &[L, 0.0])?;
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
@@ -486,7 +486,7 @@ fn only_an_axial_configuration_can_buckle() -> Result<()> {
         &[10.0],
     )?;
     let mut state2 = pyrucast::containers::element_field::ElementField::empty();
-    state2.add_sub(insert(sub2))?;
+    state2.add_sub(Handle::new(sub2))?;
     let kg2 = pyrucast::ops::matrix::geometric(&model2, &mat2, &state2)?;
     assert!(kg2.get(a2.id(), "f_y", a2.id(), "u_y")?.abs() > 1e-9);
     Ok(())

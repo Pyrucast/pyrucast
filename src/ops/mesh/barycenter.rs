@@ -11,7 +11,7 @@ use crate::aggregate::Aggregate;
 use crate::atoms::{ElementType, NodeId};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::Result;
-use crate::store::{insert, read, write};
+use crate::store::Handle;
 
 /// Build a POI1 mesh of per-element centroids, preserving submesh structure.
 ///
@@ -30,7 +30,7 @@ pub fn barycenter(mesh: &Mesh) -> Result<Mesh> {
     let mut result = Mesh::empty();
     for sm_handle in mesh {
         let (coords, element_type, conn) = {
-            let sm = read(sm_handle)?;
+            let sm = sm_handle.read();
             (sm.coords(), sm.element_type(), sm.connectivity().to_vec())
         };
         let npc = element_type.nodes_per_cell();
@@ -40,7 +40,7 @@ pub fn barycenter(mesh: &Mesh) -> Result<Mesh> {
         // a write lock — two separate critical sections (and `add_cell_taking`
         // takes its own read lock, so it must run after the write lock drops).
         let centroids: Vec<Vec<f64>> = {
-            let c = read(&coords)?;
+            let c = coords.read();
             (0..n_cells)
                 .map(|cell| {
                     let ids = &conn[cell * npc..(cell + 1) * npc];
@@ -60,7 +60,7 @@ pub fn barycenter(mesh: &Mesh) -> Result<Mesh> {
         };
 
         let new_ids: Vec<NodeId> = {
-            let mut c = write(&coords)?;
+            let mut c = coords.write();
             centroids
                 .iter()
                 .map(|coord| c.add_node(coord))
@@ -71,7 +71,7 @@ pub fn barycenter(mesh: &Mesh) -> Result<Mesh> {
         for nid in &new_ids {
             out_sm.add_cell_taking(&[*nid])?;
         }
-        result.add_sub(insert(out_sm))?;
+        result.add_sub(Handle::new(out_sm))?;
     }
     Ok(result)
 }
@@ -83,13 +83,13 @@ mod tests {
     use crate::atoms::Node;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
-    use crate::store::{insert, read};
+    use crate::store::Handle;
 
     /// A POI1 input yields one colocated (same coordinates) fresh node per
     /// point, with distinct ids.
     #[test]
     fn poi1_input_colocates_fresh_nodes() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[3.0, 1.0]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
@@ -106,7 +106,7 @@ mod tests {
         // Fresh nodes, distinct from the inputs but at the same coordinates.
         assert_ne!(m0.id(), a.id());
         assert_ne!(m1.id(), b.id());
-        let c = read(&coords).unwrap();
+        let c = coords.read();
         assert_eq!(c.position(m0.id()).unwrap(), &[0.0, 0.0]);
         assert_eq!(c.position(m1.id()).unwrap(), &[3.0, 1.0]);
     }
@@ -114,7 +114,7 @@ mod tests {
     /// A TRI3 element yields a single POI1 node at the triangle's centroid.
     #[test]
     fn tri3_centroid_is_mean_of_vertices() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[3.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 3.0]).unwrap();
@@ -124,7 +124,7 @@ mod tests {
         let bary = barycenter(&mesh).unwrap();
         assert_eq!(bary.cell_count().unwrap(), 1);
         let centroid = bary.node(0, 0, 0).unwrap();
-        let cf = read(&coords).unwrap();
+        let cf = coords.read();
         assert_eq!(cf.position(centroid.id()).unwrap(), &[1.0, 1.0]);
     }
 
@@ -133,7 +133,7 @@ mod tests {
     /// the output mesh).
     #[test]
     fn preserves_submesh_count_and_owns_new_nodes() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[1.0, 3.0]).unwrap();
@@ -143,7 +143,7 @@ mod tests {
         let sm_tri = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         mesh.add_sub(sm_tri).unwrap();
 
@@ -160,7 +160,7 @@ mod tests {
         let m_tri = bary.node(1, 0, 0).unwrap();
         let (pid, tid) = (m_point.id(), m_tri.id());
         {
-            let cf = read(&coords).unwrap();
+            let cf = coords.read();
             // refcount 2: the output POI1 submesh + the `Node` handle above.
             assert_eq!(cf.refcount(pid), 2);
             assert_eq!(cf.refcount(tid), 2);
@@ -170,7 +170,7 @@ mod tests {
         drop(bary);
         // After dropping the output mesh (and the `Node` handles), the minted
         // nodes are released — refcount back to 0.
-        let cf = read(&coords).unwrap();
+        let cf = coords.read();
         assert_eq!(cf.refcount(pid), 0);
         assert_eq!(cf.refcount(tid), 0);
     }

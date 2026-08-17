@@ -85,12 +85,12 @@ mod tests {
     use crate::containers::mesh::SubMesh;
     use crate::containers::node_field::{NodeField, SubNodeField};
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     /// Build a single-zone `SubNodeField` named "T" carrying `values`,
     /// returning it together with the node ids (to read values back).
     fn make_field(values: &[f64]) -> (SubNodeField, Vec<NodeId>) {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let nodes: Vec<Node> = (0..values.len())
             .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
             .collect();
@@ -100,7 +100,7 @@ mod tests {
             for n in &nodes {
                 sm.add_cell(&[n.id()]).unwrap();
             }
-            insert(sm)
+            Handle::new(sm)
         };
         let mut f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
         for (i, &v) in values.iter().enumerate() {

@@ -11,7 +11,6 @@ use crate::atoms::NodeId;
 use crate::containers::field::Field;
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
-use crate::store::{read, write};
 
 /// Resolve the per-axis component names: one name per spatial axis, in axis
 /// order. `None` falls back to `default[..dim]`. Errors if the count does
@@ -71,10 +70,10 @@ fn per_node_values(field: &NodeField, comps: &[String]) -> Result<Vec<(NodeId, V
 /// `Coords`.
 pub fn set(field: &NodeField, components: Option<Vec<String>>) -> Result<()> {
     let coords = field.coords()?;
-    let dim = read(&coords)?.dim() as usize;
+    let dim = coords.read().dim() as usize;
     let comps = resolve_axis_components(field, components, dim, &["X", "Y", "Z"])?;
     let targets = per_node_values(field, &comps)?;
-    let mut c = write(&coords)?;
+    let mut c = coords.write();
     for (nid, coord) in &targets {
         c.set_position(*nid, coord)?;
     }
@@ -89,10 +88,10 @@ pub fn set(field: &NodeField, components: Option<Vec<String>>) -> Result<()> {
 /// In-place on the field's `Coords`.
 pub fn displace(field: &NodeField, components: Option<Vec<String>>) -> Result<()> {
     let coords = field.coords()?;
-    let dim = read(&coords)?.dim() as usize;
+    let dim = coords.read().dim() as usize;
     let comps = resolve_axis_components(field, components, dim, &["ux", "uy", "uz"])?;
     let increments = per_node_values(field, &comps)?;
-    let mut c = write(&coords)?;
+    let mut c = coords.write();
     for (nid, inc) in &increments {
         let mut coord = c.position(*nid)?.to_vec();
         for (a, dv) in inc.iter().enumerate() {
@@ -112,11 +111,11 @@ mod tests {
     use crate::containers::node_field::SubNodeField;
     use crate::coords::Coords;
     use crate::ops::node_field::positions;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     #[test]
     fn set_writes_active_config() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
@@ -126,14 +125,14 @@ mod tests {
         // Field of target positions (X/Y), round-tripped from the reader.
         let f = positions(&mesh, None).unwrap();
         {
-            let mut s = write(&f.get(0).unwrap()).unwrap();
+            let mut s = f.get(0).unwrap().write();
             s.set_value(a.id(), "X", 10.0).unwrap();
             s.set_value(a.id(), "Y", 20.0).unwrap();
         }
 
         set(&f, None).unwrap();
         {
-            let c = read(&coords).unwrap();
+            let c = coords.read();
             assert_eq!(c.position(a.id()).unwrap(), &[10.0, 20.0]);
             assert_eq!(c.position(b.id()).unwrap(), &[1.0, 1.0]);
         }
@@ -141,10 +140,10 @@ mod tests {
 
     #[test]
     fn displace_adds_to_active_config() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
-        let support = insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap());
+        let support = Handle::new(SubMesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap());
         let mut d = SubNodeField::from_poi1(&support, vec!["ux".into(), "uy".into()]).unwrap();
         d.set_value(a.id(), "ux", 5.0).unwrap();
         d.set_value(a.id(), "uy", -1.0).unwrap();
@@ -152,7 +151,7 @@ mod tests {
 
         displace(&NodeField::from_sub(d), None).unwrap();
         {
-            let c = read(&coords).unwrap();
+            let c = coords.read();
             assert_eq!(c.position(a.id()).unwrap(), &[5.0, -1.0]);
             assert_eq!(c.position(b.id()).unwrap(), &[3.0, 1.0]);
         }
@@ -161,29 +160,30 @@ mod tests {
     #[test]
     fn displace_moves_interface_nodes_once() {
         // Two zones sharing node `s`: the increment must apply once, not twice.
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let s = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let mut mesh = Mesh::empty();
         for _ in 0..2 {
             let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
             sm.add_cell(&[s.id()]).unwrap();
-            mesh.add_sub(insert(sm)).unwrap();
+            mesh.add_sub(Handle::new(sm)).unwrap();
         }
         let f = NodeField::new(&mesh, vec!["ux".into()]).unwrap();
         for i in 0..2 {
-            write(&f.get(i).unwrap())
+            f.get(i)
                 .unwrap()
+                .write()
                 .set_value(s.id(), "ux", 0.5)
                 .unwrap();
         }
 
         displace(&f, None).unwrap();
-        assert_eq!(read(&coords).unwrap().position(s.id()).unwrap(), &[1.5]);
+        assert_eq!(coords.read().position(s.id()).unwrap(), &[1.5]);
     }
 
     #[test]
     fn writers_reject_wrong_component_count() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         mesh.add_cell(&[a.id()]).unwrap();

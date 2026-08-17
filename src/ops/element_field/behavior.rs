@@ -27,7 +27,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::element_field::ElementField;
 use crate::containers::model::Model;
 use crate::error::Result;
-use crate::store::{insert, read};
+use crate::store::Handle;
 
 /// Integrate the constitutive law of `model` (Cast3m `COMP`), stepping A → B.
 ///
@@ -54,7 +54,7 @@ pub fn integrate(
         // Cheap read under the sub-model lock: which FE subspaces this
         // sub-model wants for its deformation and its material.
         let (beh_fespace, mat_fespace, mat_components) = {
-            let sub = read(h)?;
+            let sub = h.read();
             (
                 sub.behavior_fespace(),
                 sub.material_fespace(),
@@ -85,8 +85,9 @@ pub fn integrate(
         };
 
         let state =
-            read(h)?.integrate_behavior(&input, prev_zone.as_ref(), material.as_ref(), dt)?;
-        out.add_sub(insert(state))?;
+            h.read()
+                .integrate_behavior(&input, prev_zone.as_ref(), material.as_ref(), dt)?;
+        out.add_sub(Handle::new(state))?;
     }
     Ok(out)
 }
@@ -110,7 +111,7 @@ mod tests {
     /// left node), and the linear nodal solution `T(a)=0, T(b)=dt`. Returns
     /// `(model, fes, solution)`.
     fn seg2(length: f64, dt: f64, dirichlet: bool) -> (Model, FiniteElementSpace, NodeField) {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[length]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
@@ -119,7 +120,7 @@ mod tests {
 
         let mut model = Model::empty();
         model
-            .add_sub(insert(
+            .add_sub(Handle::new(
                 SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
             ))
             .unwrap();
@@ -128,7 +129,7 @@ mod tests {
                 Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
             let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
             model
-                .add_sub(insert(
+                .add_sub(Handle::new(
                     SubModel::dirichlet(
                         "T".into(),
                         "q".into(),
@@ -143,7 +144,7 @@ mod tests {
                 .unwrap();
         }
 
-        let support = insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap());
+        let support = Handle::new(SubMesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap());
         let mut sol = SubNodeField::from_poi1(&support, vec!["T".into()]).unwrap();
         sol.set_value(a.id(), "T", 0.0).unwrap();
         sol.set_value(b.id(), "T", dt).unwrap();
@@ -161,7 +162,7 @@ mod tests {
         let state = integrate(&model, &def, None, &materials, None).unwrap();
         assert_eq!(state.len(), 1, "only the HC sub-model carries a behaviour");
         {
-            let s = read(&state.get(0).unwrap()).unwrap();
+            let s = state.get(0).unwrap().read();
             assert_eq!(s.components(), &["flux_x".to_string()]);
             // weak-form flux = k·∇T = 1.5 · (3/2) = 2.25.
             for g in 0..s.gauss_count() {
@@ -183,7 +184,7 @@ mod tests {
     /// material per zone, exactly like `crate::ops::matrix::stiffness`.
     #[test]
     fn integrate_picks_per_zone_material() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let n1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let n2 = Node::create_in(coords.clone(), &[2.0]).unwrap();
@@ -191,24 +192,24 @@ mod tests {
         for pair in [[&n0, &n1], [&n1, &n2]] {
             let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
             sm.add_cell(&[pair[0].id(), pair[1].id()]).unwrap();
-            mesh.add_sub(insert(sm)).unwrap();
+            mesh.add_sub(Handle::new(sm)).unwrap();
         }
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let mut model = Model::empty();
         model
-            .add_sub(insert(
+            .add_sub(Handle::new(
                 SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
             ))
             .unwrap();
         model
-            .add_sub(insert(
+            .add_sub(Handle::new(
                 SubModel::heat_conduction(fes.get(1).unwrap()).unwrap(),
             ))
             .unwrap();
 
         // Linear ramp T = x ⇒ ∇T = 1 everywhere.
         let support =
-            insert(SubMesh::poi1_from_nodes(&[n0.clone(), n1.clone(), n2.clone()]).unwrap());
+            Handle::new(SubMesh::poi1_from_nodes(&[n0.clone(), n1.clone(), n2.clone()]).unwrap());
         let mut sol = SubNodeField::from_poi1(&support, vec!["T".into()]).unwrap();
         sol.set_value(n0.id(), "T", 0.0).unwrap();
         sol.set_value(n1.id(), "T", 1.0).unwrap();
@@ -222,11 +223,11 @@ mod tests {
         assert_eq!(state.len(), 2);
         // Zone A: k = 1 ⇒ flux = 1; zone B: k = 4 ⇒ flux = 4.
         {
-            let s = read(&state.get(0).unwrap()).unwrap();
+            let s = state.get(0).unwrap().read();
             assert!((s.value(0, 0, "flux_x").unwrap() - 1.0).abs() < 1e-12);
         }
         {
-            let s = read(&state.get(1).unwrap()).unwrap();
+            let s = state.get(1).unwrap().read();
             assert!((s.value(0, 0, "flux_x").unwrap() - 4.0).abs() < 1e-12);
         }
     }
@@ -239,7 +240,7 @@ mod tests {
     fn integrate_returns_frame_section_forces() {
         let l = 2.0;
         let (e, area, i, g, a_s) = (3.0, 4.0, 2.0, 5.0, 2.0);
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[l, 0.0]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
@@ -249,12 +250,14 @@ mod tests {
 
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::timoshenko(fes.get(0).unwrap()).unwrap()))
+            .add_sub(Handle::new(
+                SubModel::timoshenko(fes.get(0).unwrap()).unwrap(),
+            ))
             .unwrap();
 
         // Kinematics: u_x = 0.5·x ⇒ ε = 0.5; rz = 0.25·x ⇒ κ = 0.25;
         // u_y = 0, so γ = w'/L − θ_centre = 0 − (0 + 0.5)/2 = −0.25.
-        let support = insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap());
+        let support = Handle::new(SubMesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap());
         let mut sol =
             SubNodeField::from_poi1(&support, vec!["u_x".into(), "u_y".into(), "r_z".into()])
                 .unwrap();
@@ -273,12 +276,12 @@ mod tests {
 
         let state = integrate(&model, &def, None, &materials, None).unwrap();
         assert_eq!(state.len(), 1);
-        let s = read(&state.get(0).unwrap()).unwrap();
+        let s = state.get(0).unwrap().read();
         assert_eq!(
             s.components(),
             &["N".to_string(), "M".to_string(), "V".to_string()]
         );
-        let sub = read(&fes.get(0).unwrap()).unwrap();
+        let sub = fes.get(0).unwrap().read();
         // The axial force is constant — a bar's field really is linear — and so
         // is the shear, an unloaded span carrying a constant `V`.
         let v0 = s.value(0, 0, "V").unwrap();

@@ -787,11 +787,11 @@ mod tests {
     use crate::atoms::ElementType;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     /// A closed box of six QUA4 facets, normals outward.
     fn box_front(hi: [f64; 3]) -> Front {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let n: Vec<NodeId> = (0..8)
             .map(|i| {
                 let p = [
@@ -842,7 +842,7 @@ mod tests {
         // A tetrahedron's corner is the case the averaged normal cannot do at
         // all: it lies *in* one of the incident faces, which a step along it
         // then fails to offset by anything.
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let n: Vec<NodeId> = [
             [0.0, 0.0, 0.0],
             [1.0, 0.0, 0.0],
@@ -891,7 +891,7 @@ mod tests {
     /// a node on the top face and the one below it do **not** share a facet
     /// and can therefore seam.
     fn slab_front(n: usize, thickness: f64) -> Front {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let w = n + 1;
         let at = |i: usize, j: usize, top: bool| (if top { w * w } else { 0 }) + j * w + i;
         let mut ids = Vec::new();

@@ -55,7 +55,7 @@ use crate::containers::field::SubField;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::Result;
-use crate::store::{insert, read};
+use crate::store::Handle;
 
 use crate::atoms::Band;
 
@@ -125,8 +125,8 @@ fn sub_element_submesh(
     let values = sub.values();
 
     // Underlying mesh of the FE subspace — read its connectivity once.
-    let smh = read(&SubField::support(sub))?.submesh();
-    let smr = read(&smh)?;
+    let smh = SubField::support(sub).read().submesh();
+    let smr = smh.read();
     let et = smr.element_type();
     let npc = et.nodes_per_cell();
     let conn = smr.connectivity();
@@ -157,8 +157,8 @@ pub fn select_nodes(
 ) -> Result<Mesh> {
     let mut out = Mesh::empty();
     for h in field.iter() {
-        if let Some(sm) = sub_node_submesh(&*read(h)?, band, &components)? {
-            out.add_sub(insert(sm))?;
+        if let Some(sm) = sub_node_submesh(&h.read(), band, &components)? {
+            out.add_sub(Handle::new(sm))?;
         }
     }
     Ok(out)
@@ -177,8 +177,8 @@ pub fn select_cells(
 ) -> Result<Mesh> {
     let mut out = Mesh::empty();
     for h in field.iter() {
-        if let Some(sm) = sub_element_submesh(&*read(h)?, band, &components)? {
-            out.add_sub(insert(sm))?;
+        if let Some(sm) = sub_element_submesh(&h.read(), band, &components)? {
+            out.add_sub(Handle::new(sm))?;
         }
     }
     Ok(out)
@@ -193,7 +193,7 @@ pub fn select_sub_nodes(
 ) -> Result<Mesh> {
     let mut out = Mesh::empty();
     if let Some(sm) = sub_node_submesh(sub, band, &components)? {
-        out.add_sub(insert(sm))?;
+        out.add_sub(Handle::new(sm))?;
     }
     Ok(out)
 }
@@ -207,7 +207,7 @@ pub fn select_sub_cells(
 ) -> Result<Mesh> {
     let mut out = Mesh::empty();
     if let Some(sm) = sub_element_submesh(sub, band, &components)? {
-        out.add_sub(insert(sm))?;
+        out.add_sub(Handle::new(sm))?;
     }
     Ok(out)
 }
@@ -221,11 +221,11 @@ mod tests {
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::node_field::{NodeField, SubNodeField};
     use crate::coords::Coords;
-    use crate::store::{insert, read, write};
+    use crate::store::Handle;
 
     /// Single-zone POI1 NodeField over `n` 1-D nodes; returns (nodes, field).
     fn poi1_field(n: usize, components: Vec<String>) -> (Vec<Node>, NodeField) {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let nodes: Vec<Node> = (0..n)
             .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
             .collect();
@@ -233,23 +233,21 @@ mod tests {
         for nd in &nodes {
             sm.add_cell(&[nd.id()]).unwrap();
         }
-        let field = NodeField::from_sub(SubNodeField::from_poi1(&insert(sm), components).unwrap());
+        let field =
+            NodeField::from_sub(SubNodeField::from_poi1(&Handle::new(sm), components).unwrap());
         (nodes, field)
     }
 
     /// Node ids of the (single) zone of a selection mesh, in order.
     fn picked(mesh: &Mesh, zone: usize) -> Vec<NodeId> {
-        read(&mesh.get(zone).unwrap())
-            .unwrap()
-            .connectivity()
-            .to_vec()
+        mesh.get(zone).unwrap().read().connectivity().to_vec()
     }
 
     #[test]
     fn select_nodes_min_max_band() {
         let (nodes, f) = poi1_field(5, vec!["T".into()]);
         {
-            let mut s = write(&f.get(0).unwrap()).unwrap();
+            let mut s = f.get(0).unwrap().write();
             for i in 0..5 {
                 s.set(i, 0, i as f64 * 10.0).unwrap(); // 0,10,20,30,40
             }
@@ -270,7 +268,7 @@ mod tests {
     fn select_nodes_open_bounds() {
         let (nodes, f) = poi1_field(3, vec!["T".into()]);
         {
-            let mut s = write(&f.get(0).unwrap()).unwrap();
+            let mut s = f.get(0).unwrap().write();
             s.set(0, 0, -1.0).unwrap();
             s.set(1, 0, 5.0).unwrap();
             s.set(2, 0, 9.0).unwrap();
@@ -287,7 +285,7 @@ mod tests {
     fn select_nodes_all_components_and_semantics() {
         let (nodes, f) = poi1_field(3, vec!["U".into(), "V".into()]);
         {
-            let mut s = write(&f.get(0).unwrap()).unwrap();
+            let mut s = f.get(0).unwrap().write();
             // node0: U=1 V=1 ; node1: U=1 V=9 ; node2: U=1 V=2
             s.set(0, 0, 1.0).unwrap();
             s.set(0, 1, 1.0).unwrap();
@@ -310,7 +308,7 @@ mod tests {
     fn select_nodes_component_filter_restricts_test() {
         let (nodes, f) = poi1_field(3, vec!["U".into(), "V".into()]);
         {
-            let mut s = write(&f.get(0).unwrap()).unwrap();
+            let mut s = f.get(0).unwrap().write();
             s.set(0, 0, 1.0).unwrap();
             s.set(0, 1, 1.0).unwrap();
             s.set(1, 0, 1.0).unwrap();
@@ -334,14 +332,14 @@ mod tests {
     #[test]
     fn select_nodes_skips_zone_missing_requested_component() {
         // Two zones: zone0 has "T", zone1 has "P".
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let n: Vec<Node> = (0..2)
             .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
             .collect();
         let mk = |nid: NodeId, comp: &str| {
             let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
             sm.add_cell(&[nid]).unwrap();
-            SubNodeField::from_poi1(&insert(sm), vec![comp.into()]).unwrap()
+            SubNodeField::from_poi1(&Handle::new(sm), vec![comp.into()]).unwrap()
         };
         let f = NodeField::from_sub(mk(n[0].id(), "T"))
             .union(&NodeField::from_sub(mk(n[1].id(), "P")))
@@ -368,12 +366,12 @@ mod tests {
         )
         .unwrap();
         assert_eq!(sel.len(), 1, "processed zone still yields a submesh");
-        assert_eq!(read(&sel.get(0).unwrap()).unwrap().cell_count(), 0);
+        assert_eq!(sel.get(0).unwrap().read().cell_count(), 0);
     }
 
     /// One TRI3 + one QUA4 zone, lagrange-1; returns the ElementField.
     fn two_zone_element_field() -> (Vec<Node>, ElementField) {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         #[rustfmt::skip]
         let n: Vec<Node> = [
             [0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [2.0, 0.0], [2.0, 1.0],
@@ -385,13 +383,13 @@ mod tests {
         let tri = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let qua = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::QUA4);
             sm.add_cell(&[n[1].id(), n[3].id(), n[4].id(), n[2].id()])
                 .unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         mesh.add_sub(tri).unwrap();
         mesh.add_sub(qua).unwrap();
@@ -404,13 +402,10 @@ mod tests {
     fn select_cells_all_gauss_must_pass() {
         let (_n, ef) = two_zone_element_field();
         // Zone0 (TRI3): s = 2 everywhere → in band [0,5].
-        write(&ef.get(0).unwrap())
-            .unwrap()
-            .set_uniform("s", 2.0)
-            .unwrap();
+        ef.get(0).unwrap().write().set_uniform("s", 2.0).unwrap();
         // Zone1 (QUA4): one Gauss point at 100 → cell fails.
         {
-            let mut s = write(&ef.get(1).unwrap()).unwrap();
+            let mut s = ef.get(1).unwrap().write();
             s.set_uniform("s", 2.0).unwrap();
             s.set_value(0, 0, "s", 100.0).unwrap();
         }
@@ -422,15 +417,9 @@ mod tests {
         .unwrap();
         assert_eq!(sel.len(), 2, "one submesh per zone");
         // TRI3 cell kept, QUA4 cell dropped.
-        assert_eq!(read(&sel.get(0).unwrap()).unwrap().cell_count(), 1);
-        assert_eq!(
-            read(&sel.get(0).unwrap()).unwrap().element_type(),
-            ElementType::TRI3
-        );
-        assert_eq!(read(&sel.get(1).unwrap()).unwrap().cell_count(), 0);
-        assert_eq!(
-            read(&sel.get(1).unwrap()).unwrap().element_type(),
-            ElementType::QUA4
-        );
+        assert_eq!(sel.get(0).unwrap().read().cell_count(), 1);
+        assert_eq!(sel.get(0).unwrap().read().element_type(), ElementType::TRI3);
+        assert_eq!(sel.get(1).unwrap().read().cell_count(), 0);
+        assert_eq!(sel.get(1).unwrap().read().element_type(), ElementType::QUA4);
     }
 }

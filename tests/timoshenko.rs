@@ -20,7 +20,7 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::ops::mesh;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::insert;
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 #[test]
@@ -34,7 +34,7 @@ fn timoshenko_cantilever_converges_without_locking() -> Result<()> {
     const N: usize = 40; // beam elements
 
     // ── Maillage : N éléments SEG2 alignés sur [0, L] (config 1-D) ─────────
-    let coords = insert(Coords::new(1)?);
+    let coords = Handle::new(Coords::new(1)?);
     let h = L / N as f64;
     let nodes: Vec<Node> = (0..=N)
         .map(|i| Node::create_in(coords.clone(), &[i as f64 * h]))
@@ -72,7 +72,7 @@ fn timoshenko_cantilever_converges_without_locking() -> Result<()> {
     // ── Chargement : force transverse P au bout libre (composante f_w) ─────
     let mut load_sm = SubMesh::new(coords.clone(), ElementType::POI1);
     load_sm.add_cell(&[nodes[N].id()])?;
-    let load_sm = insert(load_sm);
+    let load_sm = Handle::new(load_sm);
     let mut rhs = SubNodeField::from_poi1(&load_sm, vec!["f_w".into()])?;
     rhs.set_value(nodes[N].id(), "f_w", P)?;
     let rhs = NodeField::from_sub(rhs);
@@ -98,7 +98,7 @@ fn timoshenko_cantilever_converges_without_locking() -> Result<()> {
 #[test]
 fn timoshenko_section_forces_cantilever() -> Result<()> {
     use pyrucast::aggregate::Aggregate;
-    use pyrucast::store::read;
+    use pyrucast::store::Handle;
 
     const E: f64 = 1.0;
     const I: f64 = 1.0;
@@ -109,7 +109,7 @@ fn timoshenko_section_forces_cantilever() -> Result<()> {
     const N: usize = 40;
     let h = L / N as f64;
 
-    let coords = insert(Coords::new(1)?);
+    let coords = Handle::new(Coords::new(1)?);
     let nodes: Vec<Node> = (0..=N)
         .map(|i| Node::create_in(coords.clone(), &[i as f64 * h]))
         .collect::<Result<_>>()?;
@@ -142,7 +142,7 @@ fn timoshenko_section_forces_cantilever() -> Result<()> {
 
     let mut load_sm = SubMesh::new(coords.clone(), ElementType::POI1);
     load_sm.add_cell(&[nodes[N].id()])?;
-    let load_sm = insert(load_sm);
+    let load_sm = Handle::new(load_sm);
     let mut rhs = SubNodeField::from_poi1(&load_sm, vec!["f_w".into()])?;
     rhs.set_value(nodes[N].id(), "f_w", P)?;
     let rhs = NodeField::from_sub(rhs);
@@ -157,7 +157,7 @@ fn timoshenko_section_forces_cantilever() -> Result<()> {
         &materials,
         None,
     )?;
-    let f = read(&forces.get(0)?)?;
+    let f = forces.get(0)?.read();
 
     for cell in 0..f.cell_count() {
         assert!(

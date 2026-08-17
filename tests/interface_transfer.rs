@@ -34,7 +34,7 @@ use pyrucast::models::Physics;
 use pyrucast::ops::mesh;
 use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::insert;
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 /// The diffusing species — every name of the Fick physics carries it.
@@ -130,7 +130,7 @@ fn the_four_blocks_sum_to_a_symmetric_operator() -> Result<()> {
 /// rather than resolved by a silent projection.
 #[test]
 fn a_non_conforming_interface_is_rejected() -> Result<()> {
-    let coords = insert(Coords::new(2)?);
+    let coords = Handle::new(Coords::new(2)?);
     let node = |x: f64, y: f64| Node::create_in(coords.clone(), &[x, y]);
     let edge = |a: &Node, b: &Node| -> Result<FiniteElementSpace> {
         let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
@@ -164,7 +164,7 @@ struct Geometry {
 /// Two QUA4 squares with **duplicated** nodes at `x = 1`, their diffusion models,
 /// and the interface law tying them.
 fn two_square_model(h: f64) -> Result<(Geometry, Model, ElementField)> {
-    let coords = insert(Coords::new(2)?);
+    let coords = Handle::new(Coords::new(2)?);
     let node = |x: f64, y: f64| Node::create_in(coords.clone(), &[x, y]);
 
     // Left square [0,1]², right square [1,2]×[0,1]. The two pairs at x = 1 are
@@ -254,14 +254,14 @@ fn solve_two_squares(h: f64) -> Result<(Geometry, NodeField)> {
     let mut imposed_sm = SubMesh::new(coords, ElementType::POI1);
     let mut mults = Vec::new();
     for i in 0..mult_mesh.len() {
-        let cells = pyrucast::store::read(&mult_mesh.get(i)?)?.cell_count();
+        let cells = mult_mesh.get(i)?.read().cell_count();
         for cell in 0..cells {
             let id = mult_mesh.node(i, cell, 0)?.id();
             imposed_sm.add_cell(&[id])?;
             mults.push(id);
         }
     }
-    let imposed_sm = insert(imposed_sm);
+    let imposed_sm = Handle::new(imposed_sm);
     let mut imposed = SubNodeField::from_poi1(&imposed_sm, vec![format!("imposed_c_{SPECIES}")])?;
     for id in &mults {
         imposed.set_value(*id, &format!("imposed_c_{SPECIES}"), C_RIGHT)?;

@@ -2,7 +2,7 @@
 //!
 //! The element-field twin of [`crate::ops::node_field::consolidate`](fn@crate::ops::node_field::consolidate). Sub-fields
 //! defined on the *same* `SubFiniteElementSpace` (matched by handle identity,
-//! [`crate::store::Handle::same_slot`]) are fused into a single
+//! [`crate::store::Handle::same_object`]) are fused into a single
 //! [`SubElementField`] carrying the **union of their components**. A
 //! component defined by several of those sub-fields must hold the **same**
 //! value at every `(cell, Gauss point)` (exact comparison) — anything else
@@ -19,7 +19,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::field::SubField;
 use crate::error::{PyrucastError, Result};
-use crate::store::{insert, read, Handle};
+use crate::store::Handle;
 
 /// Fuse the zones of `field` that share the same support
 /// `SubFiniteElementSpace`. See the module documentation. Errors if two
@@ -36,7 +36,7 @@ pub fn consolidate(field: &ElementField) -> Result<ElementField> {
     let mut snaps: Vec<Snap> = Vec::with_capacity(field.len());
     for h in field {
         let (fespace, components, n_cells, n_gauss, values) = {
-            let s = read(h)?;
+            let s = h.read();
             (
                 s.support(),
                 s.components().to_vec(),
@@ -60,7 +60,7 @@ pub fn consolidate(field: &ElementField) -> Result<ElementField> {
     for (i, snap) in snaps.iter().enumerate() {
         match groups
             .iter_mut()
-            .find(|idxs| snaps[idxs[0]].fespace.same_slot(&snap.fespace))
+            .find(|idxs| snaps[idxs[0]].fespace.same_object(&snap.fespace))
         {
             Some(idxs) => idxs.push(i),
             None => groups.push(vec![i]),
@@ -114,7 +114,7 @@ pub fn consolidate(field: &ElementField) -> Result<ElementField> {
                 }
             }
         }
-        out.add_sub(insert(fused))?;
+        out.add_sub(Handle::new(fused))?;
     }
     Ok(out)
 }
@@ -131,22 +131,19 @@ pub fn consolidate(field: &ElementField) -> Result<ElementField> {
 /// double-count), so it is rejected. Call
 /// [`consolidate`] explicitly to fuse zones instead.
 pub fn check_unique_component_per_support(field: &ElementField) -> Result<()> {
-    // (support slot, generation, component) already seen.
-    let mut seen: Vec<(u32, u32, String)> = Vec::new();
+    // (support identity, component) already seen.
+    let mut seen: Vec<(usize, String)> = Vec::new();
     for h in field {
-        let s = read(h)?;
+        let s = h.read();
         let support = s.support();
         for comp in s.components() {
-            let key = (support.index(), support.generation(), comp.clone());
+            let key = (support.id(), comp.clone());
             if seen.contains(&key) {
                 return Err(PyrucastError::Message(format!(
-                    "ElementField: component {} is carried by two zones on the \
-                     same support (slot {}, generation {}). Component fields must \
-                     be unique per support; call consolidate to fuse zones \
-                     that legitimately share a support.",
-                    comp,
-                    support.index(),
-                    support.generation(),
+                    "ElementField: component {comp} is carried by two zones on \
+                     the same support {support}. Component fields must be unique \
+                     per support; call consolidate to fuse zones that \
+                     legitimately share a support."
                 )));
             }
             seen.push(key);
@@ -165,11 +162,11 @@ mod tests {
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     /// Single-subspace Lagrange-1 FE space over one TRI3 cell.
     fn one_tri3_fes() -> FiniteElementSpace {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -196,19 +193,13 @@ mod tests {
         let fes = one_tri3_fes();
         let a = field_on(&fes, vec!["E".into()]);
         let b = field_on(&fes, vec!["nu".into()]);
-        crate::store::write(&a.get(0).unwrap())
-            .unwrap()
-            .set_uniform("E", 210.0)
-            .unwrap();
-        crate::store::write(&b.get(0).unwrap())
-            .unwrap()
-            .set_uniform("nu", 0.3)
-            .unwrap();
+        a.get(0).unwrap().write().set_uniform("E", 210.0).unwrap();
+        b.get(0).unwrap().write().set_uniform("nu", 0.3).unwrap();
 
         let c = consolidate(&two_zone(&a, &b)).unwrap();
         assert_eq!(c.len(), 1, "same support ⇒ one fused zone");
         assert_eq!(Field::components(&c).unwrap(), vec!["E", "nu"]);
-        let s = read(&c.get(0).unwrap()).unwrap();
+        let s = c.get(0).unwrap().read();
         assert_eq!(s.value(0, 0, "E").unwrap(), 210.0);
         assert_eq!(s.value(0, 0, "nu").unwrap(), 0.3);
     }
@@ -231,14 +222,8 @@ mod tests {
         let fes = one_tri3_fes();
         let a = field_on(&fes, vec!["E".into()]);
         let b = field_on(&fes, vec!["E".into()]);
-        crate::store::write(&a.get(0).unwrap())
-            .unwrap()
-            .set_uniform("E", 1.0)
-            .unwrap();
-        crate::store::write(&b.get(0).unwrap())
-            .unwrap()
-            .set_uniform("E", 1.0)
-            .unwrap();
+        a.get(0).unwrap().write().set_uniform("E", 1.0).unwrap();
+        b.get(0).unwrap().write().set_uniform("E", 1.0).unwrap();
         // Even with identical values, the duplicate component is rejected.
         assert!(a.union(&b).is_err());
     }

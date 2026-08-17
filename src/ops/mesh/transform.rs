@@ -31,7 +31,7 @@ use crate::atoms::Node;
 use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
-use crate::store::{insert, read};
+use crate::store::Handle;
 use std::collections::HashMap;
 
 /// Copy `mesh` into a fresh mesh, applying `f` to every node's coordinates.
@@ -55,9 +55,9 @@ fn map_coords(
     // here since the map is keyed by the original id).
     let mut fresh: HashMap<NodeId, NodeId> = HashMap::new();
     for sm in mesh {
-        for &id in read(sm)?.connectivity() {
+        for &id in sm.read().connectivity() {
             if let std::collections::hash_map::Entry::Vacant(e) = fresh.entry(id) {
-                let old = read(&coords)?.position(id)?.to_vec();
+                let old = coords.read().position(id)?.to_vec();
                 let new_coord = f(&old)?;
                 let node = Node::create_in(coords.clone(), &new_coord)?;
                 e.insert(node.id());
@@ -68,7 +68,7 @@ fn map_coords(
     let mut result = Mesh::empty();
     for sm_handle in mesh {
         let (et, color, conn) = {
-            let s = read(sm_handle)?;
+            let s = sm_handle.read();
             (s.element_type(), s.face_color(), s.connectivity().to_vec())
         };
         let mut new_sm = SubMesh::new(coords.clone(), et);
@@ -83,7 +83,7 @@ fn map_coords(
             };
             new_sm.add_cell(&mapped)?;
         }
-        result.add_sub(insert(new_sm))?;
+        result.add_sub(Handle::new(new_sm))?;
     }
     Ok(result)
 }
@@ -93,7 +93,7 @@ fn map_coords(
 /// `vector` must match the mesh's coordinate dimension. The original mesh is
 /// left untouched.
 pub fn translate(mesh: &Mesh, vector: &[f64]) -> Result<Mesh> {
-    let dim = read(&mesh.coords()?)?.dim() as usize;
+    let dim = mesh.coords()?.read().dim() as usize;
     if vector.len() != dim {
         return Err(PyrucastError::Message(format!(
             "translate: vector has {} components but the mesh is {}-D",
@@ -116,7 +116,7 @@ pub fn translate(mesh: &Mesh, vector: &[f64]) -> Result<Mesh> {
 ///   `axis`. `axis` is required and must be non-degenerate; it need not be
 ///   normalized.
 pub fn rotate(mesh: &Mesh, angle: f64, center: &[f64], axis: Option<&[f64]>) -> Result<Mesh> {
-    let dim = read(&mesh.coords()?)?.dim() as usize;
+    let dim = mesh.coords()?.read().dim() as usize;
     if center.len() != dim {
         return Err(PyrucastError::Message(format!(
             "rotate: center has {} components but the mesh is {}-D",
@@ -181,7 +181,7 @@ pub fn rotate(mesh: &Mesh, angle: f64, center: &[f64], axis: Option<&[f64]>) -> 
 /// The coordinate dimension of `mesh`, checking that `point` (named `name`
 /// in the error message) matches it.
 fn dim_of(mesh: &Mesh, point: &[f64], name: &str, op: &str) -> Result<usize> {
-    let dim = read(&mesh.coords()?)?.dim() as usize;
+    let dim = mesh.coords()?.read().dim() as usize;
     if point.len() != dim {
         return Err(PyrucastError::Message(format!(
             "{op}: {name} has {} components but the mesh is {}-D",
@@ -326,7 +326,7 @@ mod tests {
     use super::*;
     use crate::atoms::ElementType;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
     use std::f64::consts::PI;
 
     fn tri2d(coords: &crate::store::Handle<Coords>, pts: [[f64; 2]; 3]) -> (Mesh, [Node; 3]) {
@@ -340,7 +340,7 @@ mod tests {
 
     #[test]
     fn translate_makes_fresh_nodes() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let (m, src) = tri2d(&coords, [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]);
 
         let out = translate(&m, &[10.0, 5.0]).unwrap();
@@ -359,7 +359,7 @@ mod tests {
 
     #[test]
     fn translate_keeps_shared_nodes_shared() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -378,7 +378,7 @@ mod tests {
 
     #[test]
     fn rotate_2d_quarter_turn() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let (m, _) = tri2d(&coords, [[1.0, 0.0], [2.0, 0.0], [1.0, 1.0]]);
 
         let out = rotate(&m, PI / 2.0, &[0.0, 0.0], None).unwrap();
@@ -390,7 +390,7 @@ mod tests {
 
     #[test]
     fn rotate_3d_about_z() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let n0 = Node::create_in(coords.clone(), &[1.0, 0.0, 5.0]).unwrap();
         let n1 = Node::create_in(coords.clone(), &[0.0, 1.0, 5.0]).unwrap();
         let n2 = Node::create_in(coords.clone(), &[0.0, 0.0, 5.0]).unwrap();
@@ -407,7 +407,7 @@ mod tests {
 
     #[test]
     fn rotate_3d_needs_axis() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let n0 = Node::create_in(coords.clone(), &[1.0, 0.0, 0.0]).unwrap();
         let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         m.add_cell(&[n0.id()]).unwrap();
@@ -450,7 +450,7 @@ mod tests {
 
     #[test]
     fn symmetry_point_2d_is_a_half_turn() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let (m, src) = tri2d(&coords, [[1.0, 0.0], [2.0, 0.0], [1.0, 1.0]]);
 
         let out = symmetry_point(&m, &[0.0, 0.0]).unwrap();
@@ -464,7 +464,7 @@ mod tests {
 
     #[test]
     fn symmetry_point_3d_keeps_the_jacobian_positive() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let m = tet(
             &coords,
             [
@@ -497,7 +497,7 @@ mod tests {
 
     #[test]
     fn symmetry_line_2d_mirrors_and_reverses() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let (m, _) = tri2d(&coords, [[0.0, 1.0], [1.0, 1.0], [0.0, 3.0]]);
 
         // Mirror about the x axis: y ↦ −y.
@@ -513,7 +513,7 @@ mod tests {
 
     #[test]
     fn symmetry_line_3d_is_a_half_turn() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let m = tet(
             &coords,
             [
@@ -537,7 +537,7 @@ mod tests {
 
     #[test]
     fn symmetry_plane_3d_mirrors_and_reverses() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let m = tet(
             &coords,
             [
@@ -568,7 +568,7 @@ mod tests {
 
     #[test]
     fn symmetry_plane_ignores_the_order_of_its_three_points() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let m = tet(
             &coords,
             [
@@ -593,7 +593,7 @@ mod tests {
 
     #[test]
     fn symmetry_keeps_shared_nodes_shared() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -613,14 +613,14 @@ mod tests {
 
     #[test]
     fn symmetry_rejects_bad_geometry() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let (flat, _) = tri2d(&coords, [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]);
         assert!(symmetry_point(&flat, &[0.0, 0.0, 0.0]).is_err());
         assert!(symmetry_line(&flat, &[0.0, 0.0], &[0.0, 0.0]).is_err());
         // A plane needs three points in space: no 2-D mesh, no aligned points.
         assert!(symmetry_plane(&flat, &[0.0, 0.0], &[1.0, 0.0], &[2.0, 0.0]).is_err());
 
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let m = tet(
             &coords,
             [
@@ -638,7 +638,7 @@ mod tests {
 
     #[test]
     fn translate_rejects_wrong_dim() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let (m, _) = tri2d(&coords, [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]);
         assert!(translate(&m, &[1.0, 2.0, 3.0]).is_err());
     }

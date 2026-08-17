@@ -9,8 +9,8 @@ courantes (ajouter une physique, ajouter un élément fini).
   chaque morceau (`containers/`, `ops/`, `models/`, `py/`, `viz/`…).
 - [Conventions & philosophie](conventions.md) — méthode vs fonction libre,
   erreurs, `Display`/`Debug`/`dump`, sérialisation, *Definition of Done*.
-- [Modèle mémoire](memory-model.md) — le store à handles : slots, générations,
-  refcount, swap disque, compactage, et les évolutions prévues.
+- [Modèle mémoire](memory-model.md) — les objets derrière un `Handle`, les
+  guards, et le compteur par nœud de `Coords`.
 - [Parallélisme](developper/parallelisme.md) — rayon porté *au-dessus* des
   noyaux, zéro-copie, déterminisme, et ce qui reste séquentiel.
 - [Compilation et tests](compilation.md) — installation détaillée, *features*

@@ -21,7 +21,7 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::ops::mesh;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::insert;
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 #[test]
@@ -34,7 +34,7 @@ fn thermal_line_recovers_analytical_solution() -> Result<()> {
     let h = 1.0 / N_ELEMS as f64;
 
     // ── Maillage : une ligne de SEG2 sur [0, 1] ────────────────────────────
-    let coords = insert(Coords::new(1)?);
+    let coords = Handle::new(Coords::new(1)?);
     let nodes: Vec<Node> = (0..=N_ELEMS)
         .map(|i| Node::create_in(coords.clone(), &[i as f64 * h]))
         .collect::<Result<_>>()?;
@@ -74,7 +74,7 @@ fn thermal_line_recovers_analytical_solution() -> Result<()> {
     let mut load_sm = SubMesh::new(coords.clone(), ElementType::POI1);
     load_sm.add_cell(&[node0])?;
     load_sm.add_cell(&[mult])?;
-    let load_sm = insert(load_sm);
+    let load_sm = Handle::new(load_sm);
     let mut rhs = SubNodeField::from_poi1(&load_sm, vec!["imposed_T".into(), "q".into()])?;
     rhs.set_value(node0, "q", Q)?;
     rhs.set_value(mult, "imposed_T", T_IMPOSED)?;

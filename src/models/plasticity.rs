@@ -56,8 +56,7 @@ use crate::models::elasticity::{self, ElasticityModel};
 use crate::models::owned_components;
 use crate::models::plastic::{self, MatParams, PlasticLaw, PrevState};
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
-use crate::store::{read, Handle};
-use serde::{Deserialize, Serialize};
+use crate::store::Handle;
 
 /// Axis suffixes for the vector components, indexed by spatial direction.
 const AXES: [&str; 3] = ["x", "y", "z"];
@@ -141,7 +140,7 @@ fn echoes_sigma_zz(space_dim: usize, model: ElasticityModel) -> bool {
 ///
 /// Holds the same supports as [`crate::models::elasticity::Elasticity`];
 /// material (`E`, `nu`, `sigma_y`) is supplied at assembly / integration time.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct Plasticity {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
     /// POI1 support over the subspace's unique nodes (row/col support).
@@ -168,7 +167,7 @@ impl Plasticity {
         law: PlasticLaw,
     ) -> Result<Self> {
         let (submesh, space_dim, ref_dim, axisymmetric) = {
-            let s = read(&fespace)?;
+            let s = fespace.read();
             (
                 s.submesh(),
                 s.space_dim(),
@@ -204,7 +203,7 @@ impl Plasticity {
                     .into()
             }));
         }
-        let support = read(&submesh)?.to_poi1()?;
+        let support = submesh.read().to_poi1()?;
         Ok(Self {
             fespace,
             support,
@@ -326,7 +325,7 @@ impl SubModelKind for Plasticity {
     fn render(&self, _opts: &DumpOptions) -> String {
         let primal = self.primal_vars().join(", ");
         let dual = self.dual_vars().join(", ");
-        let n = read(&self.support).map(|s| s.cell_count()).unwrap_or(0);
+        let n = self.support.read().cell_count();
         format!(
             "SubModel<Plasticity({:?})>\n  primal var(s): {primal}\n  dual var(s):   {dual}\n  \
              support: {n} node(s)",
@@ -598,10 +597,10 @@ mod tests {
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::Mesh;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     fn unit_quad(model: ElasticityModel) -> Plasticity {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
@@ -613,7 +612,7 @@ mod tests {
     }
 
     fn unit_hex() -> Plasticity {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let p = |x: f64, y: f64, z: f64| Node::create_in(coords.clone(), &[x, y, z]).unwrap();
         let n = [
             p(0.0, 0.0, 0.0),
@@ -641,7 +640,7 @@ mod tests {
         mat.set_uniform("E", e).unwrap();
         mat.set_uniform("nu", nu).unwrap();
         mat.set_uniform("sigma_y", sy).unwrap();
-        insert(mat)
+        Handle::new(mat)
     }
 
     #[test]
@@ -669,7 +668,7 @@ mod tests {
         )
         .unwrap();
         strain.set_uniform("eps_xx", 1e-4).unwrap();
-        let strain = insert(strain);
+        let strain = Handle::new(strain);
         let out = pl
             .integrate_behavior(&strain, None, Some(&mat), None)
             .unwrap();
@@ -697,7 +696,7 @@ mod tests {
         )
         .unwrap();
         strain.set_uniform("eps_xx", 1e-2).unwrap();
-        let strain = insert(strain);
+        let strain = Handle::new(strain);
         let out = pl
             .integrate_behavior(&strain, None, Some(&mat), None)
             .unwrap();
@@ -733,7 +732,7 @@ mod tests {
         )
         .unwrap();
         strain.set_uniform("eps_xx", eps0).unwrap();
-        let strain = insert(strain);
+        let strain = Handle::new(strain);
         let out = pl
             .integrate_behavior(&strain, None, Some(&mat), None)
             .unwrap();
@@ -754,7 +753,7 @@ mod tests {
         let comps: Vec<String> = TENSOR_SUFFIXES.iter().map(|s| format!("eps_{s}")).collect();
         let mut s = SubElementField::new(pl.fespace.clone(), comps).unwrap();
         s.set_uniform("eps_xx", val).unwrap();
-        insert(s)
+        Handle::new(s)
     }
 
     /// Internal state round-trips through `prev`: feeding the previous step's
@@ -773,7 +772,7 @@ mod tests {
 
         // Second step: larger ε(B); the state of A is fed via `prev` (the step-1
         // output), *not* merged into the deformation field.
-        let prev = insert(st1);
+        let prev = Handle::new(st1);
         let st2 = pl
             .integrate_behavior(&uniaxial(&pl, 6e-3), Some(&prev), Some(&mat), None)
             .unwrap();
@@ -805,9 +804,9 @@ mod tests {
             let out = pl
                 .integrate_behavior(&uniaxial(&pl, val), prev.as_ref(), Some(&mat), None)
                 .unwrap();
-            prev = Some(insert(out));
+            prev = Some(Handle::new(out));
         }
-        let multi = read(&prev.unwrap()).unwrap();
+        let multi = prev.unwrap().read();
         for comp in [
             "sigma_xx", "sigma_yy", "sigma_zz", "p", "eps_p_xx", "eps_p_yy",
         ] {
@@ -830,11 +829,11 @@ mod tests {
         let mat = material(&pl, e, nu, sy);
 
         // Load well past yield.
-        let loaded = insert(
+        let loaded = Handle::new(
             pl.integrate_behavior(&uniaxial(&pl, 1e-2), None, Some(&mat), None)
                 .unwrap(),
         );
-        let p1 = read(&loaded).unwrap().value(0, 0, "p").unwrap();
+        let p1 = loaded.read().value(0, 0, "p").unwrap();
         assert!(p1 > 0.0);
 
         // Small unload (still far past yield), threading the loaded state as `prev`.
@@ -869,7 +868,7 @@ mod tests {
         let mat = material(&pl, 200.0, 0.3, 250.0);
         let blocks = pl.build_stiffness_blocks(Some(&mat)).unwrap();
         let k = &blocks[0];
-        let nodes: Vec<NodeId> = read(&pl.support).unwrap().connectivity().to_vec();
+        let nodes: Vec<NodeId> = pl.support.read().connectivity().to_vec();
         for &ni in &nodes {
             for &nj in &nodes {
                 for a in ["x", "y"] {

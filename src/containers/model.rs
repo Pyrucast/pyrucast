@@ -74,10 +74,10 @@
 //! use pyrucast::atoms::Node;
 //! use pyrucast::ops::matrix;
 //! use pyrucast::ops::mesh;
-//! use pyrucast::store::insert;
+//! use pyrucast::store::Handle;
 //!
 //! // 1-D Coords with two nodes spanning [0, 1].
-//! let coords = insert(Coords::new(1).unwrap());
+//! let coords = Handle::new(Coords::new(1).unwrap());
 //! let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
 //! let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
 //! let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
@@ -90,18 +90,18 @@
 //! mat.set_uniform("k", 1.0).unwrap();
 //! use pyrucast::containers::element_field::ElementField;
 //! let mut materials = ElementField::empty();
-//! materials.add_sub(insert(mat)).unwrap();
+//! materials.add_sub(Handle::new(mat)).unwrap();
 //!
 //! let mut model = Model::empty();
 //! model
-//!     .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
+//!     .add_sub(Handle::new(SubModel::heat_conduction(sub).unwrap()))
 //!     .unwrap();
 //! // Dirichlet on node `a`: the imposed POI1 mesh + a colocated multiplier
 //! // support minted by the `barycenter` mesher.
 //! let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
 //! let multiplier = mesh::barycenter(&imposed).unwrap();
 //! model
-//!     .add_sub(insert(
+//!     .add_sub(Handle::new(
 //!         SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None, Default::default())
 //!             .unwrap(),
 //!     ))
@@ -128,8 +128,7 @@ use crate::models::{
     follower_pressure, heat_conduction, interface_transfer, mpc, plastic, plasticity, radiation,
     shell, timoshenko, truss, Constraint, MatrixKind, Physics, RelationSense, SubModelKind,
 };
-use crate::store::{insert, read, Handle};
-use serde::{Deserialize, Serialize};
+use crate::store::Handle;
 use std::fmt;
 use std::sync::{Arc, OnceLock};
 
@@ -167,7 +166,6 @@ fn insert_relation_value(
 ///
 /// Adding a physics means adding **one variant here** and **one arm to
 /// [`SubModel::as_kind`]** — no other site in this file changes.
-#[derive(Serialize, Deserialize)]
 pub enum SubModel {
     /// Linear heat conduction — see [`heat_conduction::HeatConduction`].
     HeatConduction(heat_conduction::HeatConduction),
@@ -574,7 +572,7 @@ impl SubModel {
         let mut out = Vec::new();
         if let Some(constraint) = self.as_kind().as_constraint() {
             for sm in constraint.multiplier_mesh() {
-                out.extend(read(sm)?.connectivity().iter().copied());
+                out.extend(sm.read().connectivity().iter().copied());
             }
         }
         Ok(out)
@@ -746,7 +744,7 @@ impl SubModel {
         let mut field = NodeField::default();
         for sm in &self.multiplier_mesh()? {
             let mut sub = SubNodeField::from_poi1(sm, components.to_vec())?;
-            let nids: Vec<NodeId> = read(sm)?.connectivity().to_vec();
+            let nids: Vec<NodeId> = sm.read().connectivity().to_vec();
             for nid in nids {
                 for comp in components {
                     if let Some(&g) = values.get(&(nid, comp.clone())) {
@@ -754,7 +752,7 @@ impl SubModel {
                     }
                 }
             }
-            field.add_sub(insert(sub))?;
+            field.add_sub(Handle::new(sub))?;
         }
         Ok(field)
     }
@@ -886,7 +884,7 @@ impl crate::dump::Dump for SubModel {
 /// `PySubModel`) references it; dropping the last reference triggers the
 /// sub-model's `Drop` (which releases the Lagrange-multiplier nodes for
 /// Dirichlet sub-models).
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Default)]
 pub struct Model {
     subs: Vec<Handle<SubModel>>,
     /// Memoised global CSR sparsity, **one slot per [`MatrixKind`]** (see
@@ -894,7 +892,6 @@ pub struct Model {
     /// stiffness may span different sub-models), hence its own sparsity. Derived
     /// state: never serialized, and cleared whenever the model changes
     /// (`add_sub` → `post_push`), since a new sub-model changes the DOF layout.
-    #[serde(skip)]
     matrix_patterns: [OnceLock<Arc<AssemblyPattern>>; MatrixKind::COUNT],
 }
 
@@ -954,7 +951,7 @@ impl Model {
     ) -> Result<Self> {
         let mut model = Self::empty();
         for sub in fes {
-            model.add_sub(insert(SubModel::heat_conduction_with_symmetry(
+            model.add_sub(Handle::new(SubModel::heat_conduction_with_symmetry(
                 sub.clone(),
                 symmetry,
             )?))?;
@@ -979,7 +976,7 @@ impl Model {
     ) -> Result<Self> {
         let mut model = Self::empty();
         for sub in fes {
-            model.add_sub(insert(SubModel::fick_with_symmetry(
+            model.add_sub(Handle::new(SubModel::fick_with_symmetry(
                 sub.clone(),
                 symmetry,
                 species,
@@ -994,7 +991,7 @@ impl Model {
     pub fn radiation(fes: &FiniteElementSpace) -> Result<Self> {
         let mut model = Self::empty();
         for sub in fes {
-            model.add_sub(insert(SubModel::radiation(sub.clone())?))?;
+            model.add_sub(Handle::new(SubModel::radiation(sub.clone())?))?;
         }
         Ok(model)
     }
@@ -1004,7 +1001,7 @@ impl Model {
     pub fn bernoulli(fes: &FiniteElementSpace) -> Result<Self> {
         let mut out = Self::empty();
         for sub in fes {
-            out.add_sub(insert(SubModel::bernoulli(sub.clone())?))?;
+            out.add_sub(Handle::new(SubModel::bernoulli(sub.clone())?))?;
         }
         Ok(out)
     }
@@ -1014,7 +1011,7 @@ impl Model {
     pub fn shell(fes: &FiniteElementSpace, model: shell::ShellModel) -> Result<Self> {
         let mut out = Self::empty();
         for sub in fes {
-            out.add_sub(insert(SubModel::shell(sub.clone(), model)?))?;
+            out.add_sub(Handle::new(SubModel::shell(sub.clone(), model)?))?;
         }
         Ok(out)
     }
@@ -1024,7 +1021,7 @@ impl Model {
     pub fn follower_pressure(fes: &FiniteElementSpace) -> Result<Self> {
         let mut model = Self::empty();
         for sub in fes {
-            model.add_sub(insert(SubModel::follower_pressure(sub.clone())?))?;
+            model.add_sub(Handle::new(SubModel::follower_pressure(sub.clone())?))?;
         }
         Ok(model)
     }
@@ -1054,7 +1051,7 @@ impl Model {
         }
         let mut model = Self::empty();
         for (a, b) in side_a.into_iter().zip(side_b) {
-            model.add_sub(insert(SubModel::interface_transfer(
+            model.add_sub(Handle::new(SubModel::interface_transfer(
                 a.clone(),
                 b.clone(),
                 components.clone(),
@@ -1082,7 +1079,7 @@ impl Model {
     ) -> Result<Self> {
         let mut model = Self::empty();
         for sub in fes {
-            model.add_sub(insert(SubModel::boundary_transfer(
+            model.add_sub(Handle::new(SubModel::boundary_transfer(
                 sub.clone(),
                 components.clone(),
                 physics,
@@ -1097,7 +1094,7 @@ impl Model {
     pub fn truss(fes: &FiniteElementSpace) -> Result<Self> {
         let mut model = Self::empty();
         for sub in fes {
-            model.add_sub(insert(SubModel::truss(sub.clone())?))?;
+            model.add_sub(Handle::new(SubModel::truss(sub.clone())?))?;
         }
         Ok(model)
     }
@@ -1120,7 +1117,7 @@ impl Model {
     ) -> Result<Self> {
         let mut out = Self::empty();
         for sub in fes {
-            out.add_sub(insert(SubModel::elasticity_with_symmetry(
+            out.add_sub(Handle::new(SubModel::elasticity_with_symmetry(
                 sub.clone(),
                 model,
                 symmetry,
@@ -1147,7 +1144,7 @@ impl Model {
     ) -> Result<Self> {
         let mut out = Self::empty();
         for sub in fes {
-            out.add_sub(insert(SubModel::plasticity_with_law(
+            out.add_sub(Handle::new(SubModel::plasticity_with_law(
                 sub.clone(),
                 model,
                 law,
@@ -1174,7 +1171,11 @@ impl Model {
     ) -> Result<Self> {
         let mut out = Self::empty();
         for sub in fes {
-            out.add_sub(insert(SubModel::damage_with_law(sub.clone(), model, law)?))?;
+            out.add_sub(Handle::new(SubModel::damage_with_law(
+                sub.clone(),
+                model,
+                law,
+            )?))?;
         }
         Ok(out)
     }
@@ -1185,7 +1186,7 @@ impl Model {
     pub fn timoshenko(fes: &FiniteElementSpace) -> Result<Self> {
         let mut out = Self::empty();
         for sub in fes {
-            out.add_sub(insert(SubModel::timoshenko(sub.clone())?))?;
+            out.add_sub(Handle::new(SubModel::timoshenko(sub.clone())?))?;
         }
         Ok(out)
     }
@@ -1206,7 +1207,7 @@ impl Model {
         sense: RelationSense,
     ) -> Result<Self> {
         let mut model = Self::empty();
-        model.add_sub(insert(SubModel::dirichlet(
+        model.add_sub(Handle::new(SubModel::dirichlet(
             imposed_variable,
             target_dual,
             imposed_mesh,
@@ -1230,7 +1231,7 @@ impl Model {
         sense: RelationSense,
     ) -> Result<Self> {
         let mut model = Self::empty();
-        model.add_sub(insert(SubModel::mpc(
+        model.add_sub(Handle::new(SubModel::mpc(
             terms,
             multiplier_mesh,
             multiplier,
@@ -1255,7 +1256,7 @@ impl Model {
         tol: Option<f64>,
     ) -> Result<Self> {
         let mut model = Self::empty();
-        model.add_sub(insert(SubModel::embedded(
+        model.add_sub(Handle::new(SubModel::embedded(
             immersed,
             host,
             components,
@@ -1279,7 +1280,7 @@ impl Model {
         imposed_value: Option<String>,
     ) -> Result<Self> {
         let mut model = Self::empty();
-        model.add_sub(insert(SubModel::contact(
+        model.add_sub(Handle::new(SubModel::contact(
             slave,
             master,
             components,
@@ -1299,7 +1300,7 @@ impl Model {
     pub fn contact_gaps(&self) -> Result<NodeField> {
         let mut found: Option<Handle<SubModel>> = None;
         for h in self {
-            if matches!(&*read(h)?, SubModel::Contact(_)) {
+            if matches!(&*h.read(), SubModel::Contact(_)) {
                 if found.is_some() {
                     return Err(PyrucastError::Message(
                         "contact_gaps: model holds several contact sub-models; call it on \
@@ -1313,7 +1314,7 @@ impl Model {
         let handle = found.ok_or_else(|| {
             PyrucastError::Message("contact_gaps: model holds no contact sub-model".into())
         })?;
-        let sub = read(&handle)?;
+        let sub = handle.read();
         let SubModel::Contact(c) = &*sub else {
             unreachable!("filtered on Contact above");
         };
@@ -1334,7 +1335,7 @@ impl Model {
     pub fn multiplier_mesh(&self) -> Result<Mesh> {
         let mut mesh = Mesh::empty();
         for h in self {
-            if let Some(constraint) = read(h)?.as_kind().as_constraint() {
+            if let Some(constraint) = h.read().as_kind().as_constraint() {
                 for sm in constraint.multiplier_mesh() {
                     mesh.add_sub(sm.clone())?;
                 }
@@ -1349,7 +1350,7 @@ impl Model {
     /// dual to pass in an [`mpc::MpcTerm`].
     pub fn dual_of(&self, variable: &str) -> Result<Option<String>> {
         for h in self {
-            if let Some(dual) = read(h)?.dual_of(variable) {
+            if let Some(dual) = h.read().dual_of(variable) {
                 return Ok(Some(dual));
             }
         }
@@ -1363,7 +1364,7 @@ impl Model {
     /// [`SubModel::constraint_rhs`], whose doc describes the node keying and the
     /// returned field.
     pub fn constraint_rhs(&self, imposed: &[(NodeId, f64)]) -> Result<NodeField> {
-        read(&self.sole_constraint()?)?.constraint_rhs(imposed)
+        self.sole_constraint()?.read().constraint_rhs(imposed)
     }
 
     /// Build the constraint load from `(relation_index, g)` pairs — the
@@ -1371,7 +1372,9 @@ impl Model {
     /// [`SubModel::constraint_rhs_by_index`] (relation keyed by its index rather
     /// than a node). The model must hold **exactly one** constraint sub-model.
     pub fn constraint_rhs_by_index(&self, imposed: &[(usize, f64)]) -> Result<NodeField> {
-        read(&self.sole_constraint()?)?.constraint_rhs_by_index(imposed)
+        self.sole_constraint()?
+            .read()
+            .constraint_rhs_by_index(imposed)
     }
 
     /// The model's single constraint sub-model, or an error when it holds none
@@ -1379,7 +1382,7 @@ impl Model {
     fn sole_constraint(&self) -> Result<Handle<SubModel>> {
         let mut found: Option<Handle<SubModel>> = None;
         for h in self {
-            if read(h)?.as_kind().as_constraint().is_some() {
+            if h.read().as_kind().as_constraint().is_some() {
                 if found.is_some() {
                     return Err(PyrucastError::Message(
                         "constraint_rhs: model holds several constraint sub-models; call it \
@@ -1401,7 +1404,7 @@ impl Model {
     pub fn primal_vars(&self) -> Result<Vec<String>> {
         let mut all: Vec<String> = Vec::new();
         for h in self {
-            all.extend(read(h)?.primal_vars());
+            all.extend(h.read().primal_vars());
         }
         Ok(union_names(all))
     }
@@ -1412,7 +1415,7 @@ impl Model {
     pub fn dual_vars(&self) -> Result<Vec<String>> {
         let mut all: Vec<String> = Vec::new();
         for h in self {
-            all.extend(read(h)?.dual_vars());
+            all.extend(h.read().dual_vars());
         }
         Ok(union_names(all))
     }
@@ -1430,7 +1433,7 @@ impl Model {
     pub fn fespace(&self) -> Result<FiniteElementSpace> {
         let mut fes = FiniteElementSpace::empty();
         for h in self {
-            if let Some(sub) = read(h)?.behavior_fespace() {
+            if let Some(sub) = h.read().behavior_fespace() {
                 fes.add_sub(sub)?;
             }
         }
@@ -1453,7 +1456,7 @@ impl Model {
     pub fn filter(&self, physics: Physics) -> Result<Model> {
         let mut indices: Vec<usize> = Vec::new();
         for (i, h) in self.iter().enumerate() {
-            if read(h)?.physics().contains(&physics) {
+            if h.read().physics().contains(&physics) {
                 indices.push(i);
             }
         }
@@ -1488,7 +1491,7 @@ mod tests {
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
     use crate::models::owned_components;
-    use crate::store::{insert, write};
+    use crate::store::Handle;
 
     /// Returns `(coords, a_id, b_id, model, materials)`.
     fn build_seg2_heat_model(
@@ -1496,7 +1499,7 @@ mod tests {
         k: f64,
         dirichlet_at_left: bool,
     ) -> (Handle<Coords>, NodeId, NodeId, Model, ElementField) {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[length]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
@@ -1507,18 +1510,18 @@ mod tests {
         let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
         mat.set_uniform("k", k).unwrap();
         let mut materials = ElementField::empty();
-        materials.add_sub(insert(mat)).unwrap();
+        materials.add_sub(Handle::new(mat)).unwrap();
 
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
+            .add_sub(Handle::new(SubModel::heat_conduction(sub).unwrap()))
             .unwrap();
         if dirichlet_at_left {
             let imposed =
                 Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
             let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
             model
-                .add_sub(insert(
+                .add_sub(Handle::new(
                     SubModel::dirichlet(
                         "T".into(),
                         "q".into(),
@@ -1561,10 +1564,8 @@ mod tests {
     fn physics_nature_per_submodel() {
         // Heat conduction (Thermal) + a Dirichlet constraint (Constraint).
         let (_cfg, _, _, model, _mat) = build_seg2_heat_model(1.0, 1.0, true);
-        let natures: Vec<Vec<Physics>> = model
-            .iter()
-            .map(|h| read(h).unwrap().physics().to_vec())
-            .collect();
+        let natures: Vec<Vec<Physics>> =
+            model.iter().map(|h| h.read().physics().to_vec()).collect();
         assert_eq!(
             natures,
             vec![vec![Physics::Thermal], vec![Physics::Constraint]]
@@ -1579,14 +1580,14 @@ mod tests {
         let thermal = model.filter(Physics::Thermal).unwrap();
         assert_eq!(thermal.len(), 1);
         assert_eq!(
-            read(&thermal.get(0).unwrap()).unwrap().physics(),
+            thermal.get(0).unwrap().read().physics(),
             &[Physics::Thermal]
         );
 
         let constraint = model.filter(Physics::Constraint).unwrap();
         assert_eq!(constraint.len(), 1);
         assert_eq!(
-            read(&constraint.get(0).unwrap()).unwrap().physics(),
+            constraint.get(0).unwrap().read().physics(),
             &[Physics::Constraint]
         );
 
@@ -1597,17 +1598,13 @@ mod tests {
 
     #[test]
     fn assembled_blocks_carry_physics_and_matrix_filters() {
-        use crate::store::read as store_read;
         // Heat conduction (one computed block) + Dirichlet (a literal C/Cᵀ pair).
         let (_cfg, _, _, model, materials) = build_seg2_heat_model(1.0, 1.0, true);
         let k = crate::ops::matrix::stiffness(&model, &materials).unwrap();
 
         // Every assembled block is tagged (non-empty), computed and literal alike.
         for h in &k {
-            assert!(
-                !store_read(h).unwrap().physics().is_empty(),
-                "assembled block is tagged"
-            );
+            assert!(!h.read().physics().is_empty(), "assembled block is tagged");
         }
         // The matrix as a whole reports both natures present.
         let present = k.physics().unwrap();
@@ -1618,7 +1615,7 @@ mod tests {
         let constraint = k.filter(Physics::Constraint).unwrap();
         assert_eq!(constraint.len(), 2);
         for h in &constraint {
-            assert_eq!(store_read(h).unwrap().physics(), &[Physics::Constraint]);
+            assert_eq!(h.read().physics(), &[Physics::Constraint]);
         }
 
         // The thermal filter keeps only the heat-conduction block.
@@ -1649,7 +1646,7 @@ mod tests {
     /// tridiagonal `(1, -2, 1)` pattern after assembly.
     #[test]
     fn two_seg2_assembly_is_tridiagonal() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let n1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let n2 = Node::create_in(coords.clone(), &[2.0]).unwrap();
@@ -1661,11 +1658,11 @@ mod tests {
         let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
         mat.set_uniform("k", 1.0).unwrap();
         let mut materials = ElementField::empty();
-        materials.add_sub(insert(mat)).unwrap();
+        materials.add_sub(Handle::new(mat)).unwrap();
 
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
+            .add_sub(Handle::new(SubModel::heat_conduction(sub).unwrap()))
             .unwrap();
         let k = crate::ops::matrix::stiffness(&model, &materials).unwrap();
         assert_eq!(k.n_rows().unwrap(), 3);
@@ -1692,7 +1689,7 @@ mod tests {
         let (coords, a_id, _b_id, model, materials) = build_seg2_heat_model(1.0, 1.0, true);
 
         // The Coords grew by one node (the multiplier).
-        let n_nodes = read(&coords).unwrap().node_count();
+        let n_nodes = coords.read().node_count();
         assert_eq!(n_nodes, 3);
 
         let k = crate::ops::matrix::stiffness(&model, &materials).unwrap();
@@ -1728,7 +1725,7 @@ mod tests {
     /// The sub-model creates no node and never mutates the Coords.
     #[test]
     fn multiplier_nodes_live_with_their_mesh() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
 
         let imposed =
@@ -1737,7 +1734,7 @@ mod tests {
         // The multiplier node is owned by the multiplier submesh (refcount 1;
         // the transient Node below is dropped at the end of the statement).
         let mult_id = multiplier.node(0, 0, 0).unwrap().id();
-        assert_eq!(read(&coords).unwrap().refcount(mult_id), 1);
+        assert_eq!(coords.read().refcount(mult_id), 1);
 
         let sub = SubModel::dirichlet(
             "T".into(),
@@ -1750,19 +1747,19 @@ mod tests {
         )
         .unwrap();
         // Sharing the submesh handles does not touch node refcounts.
-        assert_eq!(read(&coords).unwrap().refcount(mult_id), 1);
+        assert_eq!(coords.read().refcount(mult_id), 1);
         assert_eq!(sub.multiplier_nodes().unwrap(), vec![mult_id]);
 
         // Drop the user's multiplier mesh: the sub-model still holds the
         // submesh, so the node lives on.
         drop(multiplier);
-        assert_eq!(read(&coords).unwrap().refcount(mult_id), 1);
+        assert_eq!(coords.read().refcount(mult_id), 1);
 
         // Drop the sub-model too: the last holder of the multiplier submesh is
         // gone ⇒ the node is released and collectable.
         drop(sub);
-        assert_eq!(read(&coords).unwrap().refcount(mult_id), 0);
-        assert_eq!(write(&coords).unwrap().gc(), 1);
+        assert_eq!(coords.read().refcount(mult_id), 0);
+        assert_eq!(coords.write().gc(), 1);
     }
 
     #[test]
@@ -1783,7 +1780,7 @@ mod tests {
     #[test]
     fn heat_conduction_errors_on_missing_k_component() {
         // Material has only "rho_cp", not "k": stiffness assembly must fail.
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
@@ -1792,10 +1789,10 @@ mod tests {
         let sub = fes.get(0).unwrap();
         let mat = SubElementField::new(sub.clone(), vec!["rho_cp".into()]).unwrap();
         let mut materials = ElementField::empty();
-        materials.add_sub(insert(mat)).unwrap();
+        materials.add_sub(Handle::new(mat)).unwrap();
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
+            .add_sub(Handle::new(SubModel::heat_conduction(sub).unwrap()))
             .unwrap();
         assert!(crate::ops::matrix::stiffness(&model, &materials).is_err());
     }
@@ -1815,7 +1812,7 @@ mod tests {
     /// `union` composes it with a Dirichlet `Model`.
     #[test]
     fn parent_constructors_span_subspaces_and_compose() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let n1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let n2 = Node::create_in(coords.clone(), &[2.0]).unwrap();
@@ -1825,12 +1822,12 @@ mod tests {
         let sm_a = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
             sm.add_cell(&[n0.id(), n1.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sm_b = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
             sm.add_cell(&[n1.id(), n2.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         mesh.add_sub(sm_a).unwrap();
         mesh.add_sub(sm_b).unwrap();
@@ -1867,7 +1864,7 @@ mod tests {
     /// Single-subspace `fes` → unit `Model` (the common case).
     #[test]
     fn parent_heat_conduction_unit_case() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
@@ -1893,7 +1890,7 @@ mod tests {
     /// SubFiniteElementSpace.
     #[test]
     fn assemble_picks_per_zone_material() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let n1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let n2 = Node::create_in(coords.clone(), &[2.0]).unwrap();
@@ -1904,12 +1901,12 @@ mod tests {
         let sm_a = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
             sm.add_cell(&[n0.id(), n1.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sm_b = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
             sm.add_cell(&[n1.id(), n2.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         mesh.add_sub(sm_a).unwrap();
         mesh.add_sub(sm_b).unwrap();
@@ -1926,15 +1923,15 @@ mod tests {
         let mut mat_b = SubElementField::new(sub_b.clone(), vec!["k".into()]).unwrap();
         mat_b.set_uniform("k", k_b).unwrap();
         let mut materials = ElementField::empty();
-        materials.add_sub(insert(mat_a)).unwrap();
-        materials.add_sub(insert(mat_b)).unwrap();
+        materials.add_sub(Handle::new(mat_a)).unwrap();
+        materials.add_sub(Handle::new(mat_b)).unwrap();
 
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::heat_conduction(sub_a).unwrap()))
+            .add_sub(Handle::new(SubModel::heat_conduction(sub_a).unwrap()))
             .unwrap();
         model
-            .add_sub(insert(SubModel::heat_conduction(sub_b).unwrap()))
+            .add_sub(Handle::new(SubModel::heat_conduction(sub_b).unwrap()))
             .unwrap();
 
         let k = crate::ops::matrix::stiffness(&model, &materials).unwrap();
@@ -1956,7 +1953,7 @@ mod tests {
 
     #[test]
     fn physics_declares_material_components() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
@@ -1986,7 +1983,7 @@ mod tests {
     /// SubElementField matches a HeatConduction's FE subspace.
     #[test]
     fn assemble_errors_when_no_material_matches_fespace() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
@@ -1998,7 +1995,7 @@ mod tests {
         let materials = ElementField::empty();
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
+            .add_sub(Handle::new(SubModel::heat_conduction(sub).unwrap()))
             .unwrap();
         let err = crate::ops::matrix::stiffness(&model, &materials).unwrap_err();
         assert!(format!("{}", err).contains("no SubElementField"));
@@ -2011,7 +2008,7 @@ mod tests {
     /// lives on the multiplier — not the constrained — node.
     #[test]
     fn constraint_rhs_dirichlet_writes_g_at_multiplier() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords, &[0.0]).unwrap();
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
@@ -2038,7 +2035,7 @@ mod tests {
     /// the same multiplier node and value. Non-cited relations default to 0.
     #[test]
     fn constraint_rhs_mpc_keyed_by_any_term_node() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords, &[1.0]).unwrap();
         let mesh_a =
@@ -2071,7 +2068,7 @@ mod tests {
     /// ambiguous and rejected; a node keying a single relation still resolves.
     #[test]
     fn constraint_rhs_rejects_node_keying_several_relations() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[2.0]).unwrap();
@@ -2115,7 +2112,7 @@ mod tests {
     /// rejects an out-of-range index.
     #[test]
     fn constraint_rhs_by_index_writes_and_bounds_checks() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords, &[0.0]).unwrap();
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());

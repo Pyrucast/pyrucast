@@ -27,7 +27,7 @@ use crate::atoms::{ElementType, NodeId, Point2, Point3, Vector3};
 use crate::containers::mesh::Mesh;
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
-use crate::store::{read, Handle};
+use crate::store::Handle;
 use std::collections::{HashMap, HashSet};
 
 /// One closed boundary loop, still in world coordinates.
@@ -61,7 +61,7 @@ pub struct Contour {
 /// and only ever appears in error messages.
 pub fn parse(contour: &Mesh, op: &str) -> Result<Contour> {
     let coords = contour.coords()?;
-    let dim = read(&coords)?.dim();
+    let dim = coords.read().dim();
     if dim != 2 && dim != 3 {
         return Err(PyrucastError::Message(format!(
             "{op}: contour must be 2-D or 3-D, got dim={dim}"
@@ -95,10 +95,10 @@ pub fn parse(contour: &Mesh, op: &str) -> Result<Contour> {
 /// Walk each `SEG2` submesh into a single closed simple loop of nodes.
 pub fn extract_loops(mesh: &Mesh, op: &str) -> Result<Vec<LoopData>> {
     let coords = mesh.coords()?;
-    let c = read(&coords)?;
+    let c = coords.read();
     let mut loops = Vec::new();
     for sm in mesh {
-        let s = read(sm)?;
+        let s = sm.read();
         if s.element_type() != ElementType::SEG2 {
             return Err(PyrucastError::Message(format!(
                 "{op}: contour submeshes must be SEG2, got {}",

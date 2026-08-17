@@ -21,8 +21,7 @@ use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::owned_components;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
-use crate::store::{read, Handle};
-use serde::{Deserialize, Serialize};
+use crate::store::Handle;
 
 /// Axis suffixes for the vector components, indexed by spatial direction.
 pub(crate) const AXES: [&str; 3] = ["x", "y", "z"];
@@ -53,7 +52,7 @@ fn strain_names(space_dim: usize) -> Vec<String> {
 ///
 /// Material data (`E`, `A`) is supplied at assembly time via
 /// [`crate::ops::matrix::stiffness`], not stored here.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct Truss {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
     /// POI1 support covering the subspace's unique nodes (row/col support of
@@ -68,7 +67,7 @@ impl Truss {
     /// [`SubMesh`] over the subspace's unique nodes.
     pub fn new(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
         let (submesh, space_dim, axisymmetric) = {
-            let s = read(&fespace)?;
+            let s = fespace.read();
             (s.submesh(), s.space_dim(), s.is_axisymmetric())
         };
         // A segment in a meridian plane sweeps a cone of revolution, not a bar:
@@ -80,7 +79,7 @@ impl Truss {
                     .into(),
             ));
         }
-        let support = read(&submesh)?.to_poi1()?;
+        let support = submesh.read().to_poi1()?;
         Ok(Self {
             fespace,
             support,
@@ -190,7 +189,7 @@ impl SubModelKind for Truss {
     fn render(&self, _opts: &DumpOptions) -> String {
         let primal = self.primal_vars().join(", ");
         let dual = self.dual_vars().join(", ");
-        let n = read(&self.support).map(|s| s.cell_count()).unwrap_or(0);
+        let n = self.support.read().cell_count();
         format!(
             "SubModel<Truss>\n  primal var(s): {primal}\n  dual var(s):   {dual}\n  \
              support: {n} node(s)"
@@ -371,11 +370,11 @@ mod tests {
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::Mesh;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     /// Truss on a single inclined SEG2 in 2-D, returns `(model, a_id, b_id)`.
     fn inclined_bar(e: f64, area: f64, dx: f64, dy: f64) -> (Truss, NodeId, NodeId, f64, [f64; 2]) {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[dx, dy]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
@@ -392,7 +391,7 @@ mod tests {
             SubElementField::new(truss.fespace.clone(), vec!["E".into(), "A".into()]).unwrap();
         m.set_uniform("E", e).unwrap();
         m.set_uniform("A", area).unwrap();
-        insert(m)
+        Handle::new(m)
     }
 
     #[test]
@@ -435,7 +434,7 @@ mod tests {
         strain.set_uniform("eps_xx", eps0 * c[0] * c[0]).unwrap();
         strain.set_uniform("eps_xy", eps0 * c[0] * c[1]).unwrap();
         strain.set_uniform("eps_yy", eps0 * c[1] * c[1]).unwrap();
-        let strain = insert(strain);
+        let strain = Handle::new(strain);
 
         let out = truss
             .integrate_behavior(&strain, None, Some(&mat), None)

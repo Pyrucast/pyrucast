@@ -5,7 +5,7 @@ use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
-use crate::store::{read, Handle};
+use crate::store::Handle;
 
 /// Build a structured surface bounded by four `SEG2` sides, by (discrete)
 /// transfinite interpolation — the Coons-patch generalization of
@@ -44,7 +44,7 @@ fn transfinite_qua4(side1: &Mesh, side2: &Mesh, side3: &Mesh, side4: &Mesh) -> R
         ("side3", &coords3),
         ("side4", &coords4),
     ] {
-        if coords.index() != c.index() || coords.generation() != c.generation() {
+        if !coords.same_object(c) {
             return Err(PyrucastError::Message(format!(
                 "transfinite: side1 and {label} belong to different Coords"
             )));
@@ -161,7 +161,7 @@ fn side_columns(mesh: &Mesh, label: &str) -> Result<SideColumns> {
     }
     let sm = mesh.get(0)?;
     let (coords, et, n_elems, conn) = {
-        let s = read(&sm)?;
+        let s = sm.read();
         (
             s.coords(),
             s.element_type(),
@@ -179,7 +179,7 @@ fn side_columns(mesh: &Mesh, label: &str) -> Result<SideColumns> {
         .collect();
     let coord_vals: Vec<Vec<f64>> = ids
         .iter()
-        .map(|&id| -> Result<Vec<f64>> { Ok(read(&coords)?.position(id)?.to_vec()) })
+        .map(|&id| -> Result<Vec<f64>> { Ok(coords.read().position(id)?.to_vec()) })
         .collect::<Result<_>>()?;
     Ok((coords, ids, coord_vals))
 }
@@ -191,12 +191,12 @@ mod tests {
     use crate::atoms::Node;
     use crate::coords::Coords;
     use crate::ops::mesh::line::line;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     /// Builds the unit-square contour, corners shared between adjacent
     /// sides, `n1` elements on side1/side3 and `n2` on side2/side4.
     fn unit_square(n1: usize, n2: usize) -> (Mesh, Mesh, Mesh, Mesh) {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let p0 = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let p1 = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let p2 = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
@@ -298,7 +298,7 @@ mod tests {
 
     #[test]
     fn transfinite_rejects_mismatched_opposite_side_counts() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let p0 = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let p1 = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let p2 = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
@@ -314,7 +314,7 @@ mod tests {
 
     #[test]
     fn transfinite_rejects_open_contour() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let p0 = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let p1 = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let p2 = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();

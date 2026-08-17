@@ -44,16 +44,16 @@
 //! use pyrucast::atoms::ElementType;
 //! use pyrucast::containers::mesh::SubMesh;
 //! use pyrucast::atoms::Node;
-//! use pyrucast::containers::matrix::{SubMatrix, DofOrdering};
-//! use pyrucast::store::insert;
+//! use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+//! use pyrucast::store::Handle;
 //!
-//! let coords = insert(Coords::new(1).unwrap());
+//! let coords = Handle::new(Coords::new(1).unwrap());
 //! let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
 //! let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
 //! let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
 //! sm.add_cell(&[a.id()]).unwrap();
 //! sm.add_cell(&[b.id()]).unwrap();
-//! let support = insert(sm);
+//! let support = Handle::new(sm);
 //!
 //! let mut k = SubMatrix::new(
 //!     support.clone(), support.clone(),
@@ -83,7 +83,7 @@ use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
 use crate::models::{MatrixKind, Physics};
 use crate::parallel::*;
-use crate::store::{insert, read, Handle};
+use crate::store::Handle;
 use nalgebra::{DMatrix, DVector};
 use nalgebra_sparse::{CooMatrix, CscMatrix, CsrMatrix};
 use serde::{Deserialize, Serialize};
@@ -155,7 +155,7 @@ impl crate::dump::Dump for DofOrdering {
 /// over `fespace`'s cells and scatters the result straight into the global
 /// matrix — a computed block never materialises a COO (its own `coo` stays an
 /// empty, correctly-sized placeholder, so structural queries still work).
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct ComputedRecipe {
     /// Sub-model whose element kernel produces the contribution.
     pub submodel: Handle<SubModel>,
@@ -169,27 +169,18 @@ pub struct ComputedRecipe {
     /// dispatches on to pick the sub-model's kernel
     /// ([`SubModelKind::matrix_element`](crate::models::SubModelKind::matrix_element)).
     /// Defaults to [`MatrixKind::Stiffness`] for backward-compatible deserialization.
-    #[serde(default)]
     pub kind: MatrixKind,
     /// Current stress / algorithmic-tangent field the kernel reads — `Some` only
     /// for the state-dependent kinds (geometric stiffness, consistent tangent).
-    #[serde(default)]
     pub state: Option<Handle<SubElementField>>,
     /// FE subspaces carrying the **columns** when this block couples two meshes
     /// (an interface exchange law). **Empty** — the overwhelming case — means
     /// rows and columns live on the same mesh and `fespaces` drives both; the
     /// scatter routes on exactly that emptiness.
-    #[serde(default)]
     pub col_fespaces: Vec<Handle<SubFiniteElementSpace>>,
 }
 
-/// Default value of [`SubMatrix::factor`] for pre-existing serialized data
-/// that predates the field.
-fn default_factor() -> f64 {
-    1.0
-}
-
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct SubMatrix {
     /// POI1 mesh: cell `k` holds the k-th row-support node.
     row_support: Handle<SubMesh>,
@@ -206,14 +197,12 @@ pub struct SubMatrix {
     /// `(node_local, var_idx)` ↔ matrix index mapping.
     ordering: DofOrdering,
     /// COO data, sized `(n_row_nodes × n_dual_vars) × (n_col_nodes × n_primal_vars)`.
-    #[serde(with = "coo_serde")]
     coo: CooMatrix<f64>,
     symmetric: bool,
     /// `Some` ⇒ this is a **computed** block: `coo` is an empty placeholder and
     /// the contribution is produced on the fly by the global assembler from this
     /// recipe. `None` ⇒ **literal** block, `coo` holds the values (the historical
     /// behaviour, unchanged).
-    #[serde(default)]
     recipe: Option<ComputedRecipe>,
     /// The set of [`Physics`] natures of the sub-model that produced this block,
     /// set by the assembler ([`crate::ops::matrix`]) for **both** the computed
@@ -221,7 +210,6 @@ pub struct SubMatrix {
     /// for a block built directly, outside assembly (the « rien » case), or
     /// carrying several natures for a coupled physics. Consumed by
     /// [`Matrix::filter`](Matrix::filter).
-    #[serde(default)]
     physics: Vec<Physics>,
     /// Lazy scalar scale applied to every value this block emits — at direct
     /// accessors (`get`, `dense`, …) and at global assembly (`build_global_triplets`,
@@ -231,14 +219,11 @@ pub struct SubMatrix {
     /// values don't exist until assembly evaluates the recipe). Never touches
     /// `local_coo_arrays`/`local_triplets`, which stay raw — every consumer of
     /// those applies the factor itself.
-    #[serde(default = "default_factor")]
     factor: f64,
     /// `NodeId → local position` for O(1) `add_entry`, derived from
     /// `row_nodes` / `col_nodes`. Not serialized; built lazily on first use
     /// (the support is fixed at construction).
-    #[serde(skip)]
     row_index: HashMap<NodeId, u32>,
-    #[serde(skip)]
     col_index: HashMap<NodeId, u32>,
 }
 
@@ -256,8 +241,8 @@ impl SubMatrix {
         ordering: DofOrdering,
         symmetric: bool,
     ) -> Result<Self> {
-        let row_nodes: Vec<NodeId> = read(&row_support)?.connectivity().to_vec();
-        let col_nodes: Vec<NodeId> = read(&col_support)?.connectivity().to_vec();
+        let row_nodes: Vec<NodeId> = row_support.read().connectivity().to_vec();
+        let col_nodes: Vec<NodeId> = col_support.read().connectivity().to_vec();
         // The block's row/col numbering snapshots these supports; freeze them.
         crate::containers::mesh::seal(&row_support)?;
         crate::containers::mesh::seal(&col_support)?;
@@ -296,8 +281,8 @@ impl SubMatrix {
         symmetric: bool,
         recipe: ComputedRecipe,
     ) -> Result<Self> {
-        let row_nodes: Vec<NodeId> = read(&row_support)?.connectivity().to_vec();
-        let col_nodes: Vec<NodeId> = read(&col_support)?.connectivity().to_vec();
+        let row_nodes: Vec<NodeId> = row_support.read().connectivity().to_vec();
+        let col_nodes: Vec<NodeId> = col_support.read().connectivity().to_vec();
         // The block's row/col numbering snapshots these supports; freeze them.
         crate::containers::mesh::seal(&row_support)?;
         crate::containers::mesh::seal(&col_support)?;
@@ -336,8 +321,8 @@ impl SubMatrix {
         symmetric: bool,
         coo: CooMatrix<f64>,
     ) -> Result<Self> {
-        let row_nodes: Vec<NodeId> = read(&row_support)?.connectivity().to_vec();
-        let col_nodes: Vec<NodeId> = read(&col_support)?.connectivity().to_vec();
+        let row_nodes: Vec<NodeId> = row_support.read().connectivity().to_vec();
+        let col_nodes: Vec<NodeId> = col_support.read().connectivity().to_vec();
         // The block's row/col numbering snapshots these supports; freeze them.
         crate::containers::mesh::seal(&row_support)?;
         crate::containers::mesh::seal(&col_support)?;
@@ -587,7 +572,7 @@ impl SubMatrix {
     /// Handle to the `Coords` backing this block's row support (the col support
     /// shares it in any assembled system).
     pub fn coords(&self) -> Result<Handle<Coords>> {
-        Ok(read(&self.row_support)?.coords())
+        Ok(self.row_support.read().coords())
     }
 
     /// Sum of all entries at `(row_node, row_var) × (col_node, col_var)`.
@@ -845,52 +830,6 @@ impl crate::dump::Dump for SubMatrix {
     }
 }
 
-// ─── CooMatrix serde ───────────────────────────────────────────────────────
-
-mod coo_serde {
-    use nalgebra_sparse::CooMatrix;
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
-    #[derive(Serialize, Deserialize)]
-    struct CooData {
-        nrows: usize,
-        ncols: usize,
-        row_indices: Vec<usize>,
-        col_indices: Vec<usize>,
-        values: Vec<f64>,
-    }
-
-    pub fn serialize<S: Serializer>(
-        coo: &CooMatrix<f64>,
-        s: S,
-    ) -> std::result::Result<S::Ok, S::Error> {
-        CooData {
-            nrows: coo.nrows(),
-            ncols: coo.ncols(),
-            row_indices: coo.row_indices().to_vec(),
-            col_indices: coo.col_indices().to_vec(),
-            values: coo.values().to_vec(),
-        }
-        .serialize(s)
-    }
-
-    pub fn deserialize<'de, D: Deserializer<'de>>(
-        d: D,
-    ) -> std::result::Result<CooMatrix<f64>, D::Error> {
-        let data = CooData::deserialize(d)?;
-        let mut coo = CooMatrix::new(data.nrows, data.ncols);
-        for ((r, c), v) in data
-            .row_indices
-            .into_iter()
-            .zip(data.col_indices)
-            .zip(data.values)
-        {
-            coo.push(r, c, v);
-        }
-        Ok(coo)
-    }
-}
-
 // ─── Matrix (aggregate) ────────────────────────────────────────────────────
 
 /// Snapshot produced by [`Matrix::finalize`]: DOF tables + assembled CSR.
@@ -906,17 +845,15 @@ struct AssembledData {
 /// (`to_csr`, `to_dmatrix`, `mul_dense`, `dense`, `to_coo`, `to_csc`) return
 /// an error if the matrix has not been finalized. `add_sub` invalidates the
 /// assembled state.
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Default)]
 pub struct Matrix {
     subs: Vec<Handle<SubMatrix>>,
-    #[serde(skip)]
     assembled: Option<AssembledData>,
     /// Transparently cached factorization (e.g. the solver's sparse LU), reused
     /// across solves on the same matrix. Derived state: never serialized,
     /// type-erased so `containers` stays decoupled from the solver, and cleared
     /// whenever the matrix changes (`add_sub` → `post_push`). Interior mutability
     /// so `solve(&Matrix)` can fill it under a shared store read lock.
-    #[serde(skip)]
     factorization: parking_lot::Mutex<Option<std::sync::Arc<dyn std::any::Any + Send + Sync>>>,
 }
 
@@ -1102,7 +1039,7 @@ impl Matrix {
         // the global assembler in `ops::matrix::stiffness` handles computed
         // blocks and injects the finished CSR via `set_assembled`.
         for h in &*self {
-            if read(h)?.is_computed() {
+            if h.read().is_computed() {
                 return Err(PyrucastError::Message(
                     "Matrix::finalize: this matrix carries a computed block; \
                      assemble it with m.assemble() (or \
@@ -1193,7 +1130,7 @@ impl Matrix {
         let mut seen: std::collections::HashSet<NamedDof> = std::collections::HashSet::new();
         let mut out: Vec<NamedDof> = Vec::new();
         for h in self {
-            let sub = read(h)?;
+            let sub = h.read();
             let dofs = if row { sub.row_dofs() } else { sub.col_dofs() };
             for d in dofs {
                 if seen.insert(d.clone()) {
@@ -1202,8 +1139,8 @@ impl Matrix {
             }
         }
         if let Some(first) = self.iter().next() {
-            let coords_h = read(first)?.coords()?;
-            if let Some(perm) = read(&coords_h)?.permutation() {
+            let coords_h = first.read().coords()?;
+            if let Some(perm) = coords_h.read().permutation() {
                 out.sort_by_key(|(n, _)| perm[n.0 as usize]);
             }
         }
@@ -1235,7 +1172,7 @@ impl Matrix {
             .collect();
         let mut out: Vec<(usize, usize, f64)> = Vec::new();
         for h in self {
-            let sub = read(h)?;
+            let sub = h.read();
             // local DOF index → global index (the "simple remap").
             let trow: Vec<usize> = sub.row_dofs().iter().map(|d| row_map[d]).collect();
             let tcol: Vec<usize> = sub.col_dofs().iter().map(|d| col_map[d]).collect();
@@ -1261,7 +1198,7 @@ impl Matrix {
     /// empty aggregate.
     pub fn symmetric(&self) -> Result<bool> {
         for h in self {
-            if !read(h)?.symmetric() {
+            if !h.read().symmetric() {
                 return Ok(false);
             }
         }
@@ -1290,7 +1227,7 @@ impl Matrix {
     pub fn field_names(&self) -> Result<Vec<String>> {
         let mut out: Vec<String> = Vec::new();
         for h in self {
-            for name in read(h)?.field_names() {
+            for name in h.read().field_names() {
                 if !out.contains(&name) {
                     out.push(name);
                 }
@@ -1313,7 +1250,7 @@ impl Matrix {
     pub fn entry_count(&self) -> Result<usize> {
         let mut total = 0usize;
         for h in self {
-            total += read(h)?.entry_count();
+            total += h.read().entry_count();
         }
         Ok(total)
     }
@@ -1345,7 +1282,7 @@ impl Matrix {
         }
         let mut total = 0.0;
         for h in self {
-            total += read(h)?.get(row_node, row_field, col_node, col_field);
+            total += h.read().get(row_node, row_field, col_node, col_field);
         }
         Ok(total)
     }
@@ -1354,7 +1291,7 @@ impl Matrix {
     pub fn iter_entries(&self) -> Result<Vec<MatrixEntry>> {
         let mut out = Vec::new();
         for h in self {
-            out.extend(read(h)?.iter_entries());
+            out.extend(h.read().iter_entries());
         }
         Ok(out)
     }
@@ -1458,7 +1395,7 @@ impl Matrix {
     pub fn filter(&self, physics: Physics) -> Result<Matrix> {
         let mut indices: Vec<usize> = Vec::new();
         for (i, h) in self.iter().enumerate() {
-            if read(h)?.physics().contains(&physics) {
+            if h.read().physics().contains(&physics) {
                 indices.push(i);
             }
         }
@@ -1472,7 +1409,7 @@ impl Matrix {
     pub fn physics(&self) -> Result<Vec<Physics>> {
         let mut out: Vec<Physics> = Vec::new();
         for h in self {
-            for &p in read(h)?.physics() {
+            for &p in h.read().physics() {
                 if !out.contains(&p) {
                     out.push(p);
                 }
@@ -1485,13 +1422,13 @@ impl Matrix {
     fn support_mesh(&self, rows: bool) -> Result<Mesh> {
         let mut out = Mesh::empty();
         for h in self {
-            let s = read(h)?;
+            let s = h.read();
             let sup = if rows {
                 s.row_support.clone()
             } else {
                 s.col_support.clone()
             };
-            if !out.iter().any(|m| m.same_slot(&sup)) {
+            if !out.iter().any(|m| m.same_object(&sup)) {
                 out.add_sub(sup)?;
             }
         }
@@ -1553,13 +1490,13 @@ impl Matrix {
         }
         let mut groups: Vec<Group> = Vec::new();
         for h in self {
-            let s = read(h)?;
+            let s = h.read();
             let (support, nodes, vars) = if rows {
                 (s.row_support.clone(), &s.row_nodes, s.dual_vars())
             } else {
                 (s.col_support.clone(), &s.col_nodes, s.primal_vars())
             };
-            match groups.iter_mut().find(|g| g.support.same_slot(&support)) {
+            match groups.iter_mut().find(|g| g.support.same_object(&support)) {
                 Some(g) => {
                     for v in vars {
                         if !g.vars.contains(v) {
@@ -1592,7 +1529,7 @@ impl Matrix {
                     }
                 }
             }
-            out.add_sub(insert(sub))?;
+            out.add_sub(Handle::new(sub))?;
         }
         Ok(out)
     }
@@ -1630,8 +1567,8 @@ impl Matrix {
     fn map_blocks(&self, f: impl Fn(SubMatrix) -> SubMatrix) -> Result<Matrix> {
         let mut out = Matrix::empty();
         for h in self {
-            let scaled = f((*read(h)?).clone());
-            out.add_sub(insert(scaled))?;
+            let scaled = f((*h.read()).clone());
+            out.add_sub(Handle::new(scaled))?;
         }
         Ok(out)
     }
@@ -1744,12 +1681,12 @@ mod tests {
     use crate::atoms::ElementType;
     use crate::atoms::Node;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     /// Build a POI1 SubMesh with `n` fresh nodes in a new 1-D Coords.
     /// Returns `(coords, nodes, support_handle)`.
     fn make_poi1(n: usize) -> (Handle<Coords>, Vec<Node>, Handle<SubMesh>) {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let nodes: Vec<Node> = (0..n)
             .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
             .collect();
@@ -1757,7 +1694,7 @@ mod tests {
         for node in &nodes {
             sm.add_cell(&[node.id()]).unwrap();
         }
-        (coords, nodes, insert(sm))
+        (coords, nodes, Handle::new(sm))
     }
 
     // ── SubMatrix tests ─────────────────────────────────────────────────────
@@ -1992,56 +1929,6 @@ mod tests {
     }
 
     #[test]
-    fn sub_round_trip_serde() {
-        let (_cfg, nodes, sup) = make_poi1(2);
-        let (a, b) = (nodes[0].id(), nodes[1].id());
-        let mut m = SubMatrix::new(
-            sup.clone(),
-            sup,
-            vec!["q".into()],
-            vec!["T".into()],
-            DofOrdering::NodesThenVars,
-            true,
-        )
-        .unwrap();
-        m.add_entry(a, "q", a, "T", 2.0).unwrap();
-        m.add_entry(a, "q", b, "T", -1.0).unwrap();
-        m.add_entry(b, "q", b, "T", 2.0).unwrap();
-        m.set_physics(vec![Physics::Thermal]);
-        use crate::persist::Persist;
-        let bytes = m.to_bytes().unwrap();
-        let m2 = SubMatrix::from_bytes(&bytes).unwrap();
-        assert_eq!(m2.n_rows(), 2);
-        assert_eq!(m2.n_cols(), 2);
-        assert!(m2.symmetric());
-        assert_eq!(m2.get(a, "q", a, "T"), 2.0);
-        // The physics tag set survives the round trip.
-        assert_eq!(m2.physics(), &[Physics::Thermal]);
-    }
-
-    #[test]
-    fn sub_round_trip_serde_with_non_default_factor() {
-        let (_cfg, nodes, sup) = make_poi1(1);
-        let a = nodes[0].id();
-        let mut m = SubMatrix::new(
-            sup.clone(),
-            sup,
-            vec!["q".into()],
-            vec!["T".into()],
-            DofOrdering::NodesThenVars,
-            true,
-        )
-        .unwrap();
-        m.add_entry(a, "q", a, "T", 2.0).unwrap();
-        let m = m * 2.5;
-        use crate::persist::Persist;
-        let bytes = m.to_bytes().unwrap();
-        let m2 = SubMatrix::from_bytes(&bytes).unwrap();
-        assert_eq!(m2.factor(), 2.5);
-        assert_eq!(m2.get(a, "q", a, "T"), 5.0);
-    }
-
-    #[test]
     fn sub_matrix_mul_and_div_scale_only_the_factor() {
         let (_cfg, nodes, sup) = make_poi1(1);
         let a = nodes[0].id();
@@ -2112,9 +1999,9 @@ mod tests {
         other.set_physics(vec![Physics::Other]);
 
         let mut k = Matrix::empty();
-        k.add_sub(insert(bare)).unwrap();
-        k.add_sub(insert(coupled)).unwrap();
-        k.add_sub(insert(other)).unwrap();
+        k.add_sub(Handle::new(bare)).unwrap();
+        k.add_sub(Handle::new(coupled)).unwrap();
+        k.add_sub(Handle::new(other)).unwrap();
         let _ = a; // silence unused in some build configs
 
         // Containment: the coupled block appears under both its natures.
@@ -2245,8 +2132,8 @@ mod tests {
         col_a.add_cell(&[ca0]).unwrap();
         col_a.add_cell(&[ca1]).unwrap();
         let mut a = SubMatrix::new(
-            insert(row_a),
-            insert(col_a),
+            Handle::new(row_a),
+            Handle::new(col_a),
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
@@ -2264,8 +2151,8 @@ mod tests {
         col_b.add_cell(&[m0]).unwrap();
         col_b.add_cell(&[m1]).unwrap();
         let mut b = SubMatrix::new(
-            insert(row_b),
-            insert(col_b),
+            Handle::new(row_b),
+            Handle::new(col_b),
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
@@ -2277,8 +2164,8 @@ mod tests {
         b.add_entry(m1, "q", m1, "T", 2.0).unwrap();
 
         let mut k = Matrix::empty();
-        k.add_sub(insert(a)).unwrap();
-        k.add_sub(insert(b)).unwrap();
+        k.add_sub(Handle::new(a)).unwrap();
+        k.add_sub(Handle::new(b)).unwrap();
 
         // Union of row DOFs: (na,"q"), (m0,"q"), (m1,"q") — 3
         // Union of col DOFs: (ca0,"T"), (ca1,"T"), (m0,"T"), (m1,"T") — 4
@@ -2308,8 +2195,8 @@ mod tests {
         )
         .unwrap();
         let mut k = Matrix::empty();
-        k.add_sub(insert(a)).unwrap();
-        k.add_sub(insert(b)).unwrap();
+        k.add_sub(Handle::new(a)).unwrap();
+        k.add_sub(Handle::new(b)).unwrap();
         assert!(!k.symmetric().unwrap());
     }
 
@@ -2329,14 +2216,14 @@ mod tests {
         blk.add_entry(a, "q", a, "T", 2.0).unwrap();
         blk.add_entry(b, "q", b, "T", 3.0).unwrap();
         let mut orig = Matrix::empty();
-        orig.add_sub(insert(blk)).unwrap();
+        orig.add_sub(Handle::new(blk)).unwrap();
 
         let scaled = (&orig * 10.0).unwrap();
 
         // A new store slot per block — no aliasing with the source's blocks.
         let orig_h = orig.iter().next().unwrap();
         let scaled_h = scaled.iter().next().unwrap();
-        assert!(!orig_h.same_slot(scaled_h));
+        assert!(!orig_h.same_object(scaled_h));
 
         // Values diverge accordingly: the source is untouched.
         assert_eq!(orig.get(a, "q", a, "T").unwrap(), 2.0);
@@ -2370,7 +2257,7 @@ mod tests {
         sup_k.add_cell(&[a]).unwrap();
         sup_k.add_cell(&[b]).unwrap();
         sup_k.add_cell(&[c]).unwrap();
-        let sup_k = insert(sup_k);
+        let sup_k = Handle::new(sup_k);
         let mut k_blk = SubMatrix::new(
             sup_k.clone(),
             sup_k,
@@ -2386,12 +2273,12 @@ mod tests {
         k_blk.add_entry(b, "q", b, "T", 2.0).unwrap();
         k_blk.add_entry(c, "q", c, "T", 5.0).unwrap(); // Lagrange-only DOF
         let mut k = Matrix::empty();
-        k.add_sub(insert(k_blk)).unwrap();
+        k.add_sub(Handle::new(k_blk)).unwrap();
 
         let mut sup_m = SubMesh::new(coords.clone(), ElementType::POI1);
         sup_m.add_cell(&[a]).unwrap();
         sup_m.add_cell(&[b]).unwrap();
-        let sup_m = insert(sup_m);
+        let sup_m = Handle::new(sup_m);
         let mut m_blk = SubMatrix::new(
             sup_m.clone(),
             sup_m,
@@ -2404,7 +2291,7 @@ mod tests {
         m_blk.add_entry(a, "q", a, "T", 4.0).unwrap();
         m_blk.add_entry(b, "q", b, "T", 4.0).unwrap();
         let mut m = Matrix::empty();
-        m.add_sub(insert(m_blk)).unwrap();
+        m.add_sub(Handle::new(m_blk)).unwrap();
 
         let dt = 0.5;
         let m_dt = (&m / dt).unwrap(); // factor = 1/0.5 = 2 ⇒ diag(8, 8)
@@ -2431,11 +2318,11 @@ mod tests {
 
         let mut sm_a = SubMesh::new(coords.clone(), ElementType::POI1);
         sm_a.add_cell(&[na]).unwrap();
-        let sup_a = insert(sm_a);
+        let sup_a = Handle::new(sm_a);
 
         let mut sm_b = SubMesh::new(coords.clone(), ElementType::POI1);
         sm_b.add_cell(&[nb]).unwrap();
-        let sup_b = insert(sm_b);
+        let sup_b = Handle::new(sm_b);
 
         let mut a = SubMatrix::new(
             sup_a.clone(),
@@ -2460,8 +2347,8 @@ mod tests {
         b.add_entry(nb, "q", nb, "T", 3.0).unwrap();
 
         let mut k = Matrix::empty();
-        k.add_sub(insert(a)).unwrap();
-        k.add_sub(insert(b)).unwrap();
+        k.add_sub(Handle::new(a)).unwrap();
+        k.add_sub(Handle::new(b)).unwrap();
         k.finalize().unwrap();
 
         let d = k.to_dmatrix().unwrap();
@@ -2484,7 +2371,7 @@ mod tests {
         let mk = |nid| {
             let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
             sm.add_cell(&[nid]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sup_a = mk(na);
         let sup_b = mk(nb);
@@ -2510,17 +2397,14 @@ mod tests {
         b.add_entry(nb, "q", nb, "T", 3.0).unwrap();
 
         let mut k = Matrix::empty();
-        k.add_sub(insert(a)).unwrap();
-        k.add_sub(insert(b)).unwrap();
+        k.add_sub(Handle::new(a)).unwrap();
+        k.add_sub(Handle::new(b)).unwrap();
 
         // Transposition of the identity ⇒ nb sorts before na.
-        let cap = read(&coords).unwrap().capacity();
+        let cap = coords.read().capacity();
         let mut perm: Vec<u32> = (0..cap as u32).collect();
         perm.swap(na.0 as usize, nb.0 as usize);
-        crate::store::write(&coords)
-            .unwrap()
-            .set_permutation(perm)
-            .unwrap();
+        coords.write().set_permutation(perm).unwrap();
 
         k.finalize().unwrap();
 
@@ -2547,7 +2431,7 @@ mod tests {
         .unwrap();
         m.add_entry(a, "q", a, "T", 1.0).unwrap();
         let mut k = Matrix::empty();
-        k.add_sub(insert(m)).unwrap();
+        k.add_sub(Handle::new(m)).unwrap();
         // must not succeed before finalize
         assert!(k.to_csr().is_err());
         assert!(k.to_dmatrix().is_err());
@@ -2561,9 +2445,9 @@ mod tests {
         let (_cfg_a, nodes_a, sup_a) = make_poi1(2);
         let (na0, na1) = (nodes_a[0].id(), nodes_a[1].id());
         // row block a: only node na0 as row
-        let mut row_a = SubMesh::new(read(&sup_a).unwrap().coords(), ElementType::POI1);
+        let mut row_a = SubMesh::new(sup_a.read().coords(), ElementType::POI1);
         row_a.add_cell(&[na0]).unwrap();
-        let row_a_h = insert(row_a);
+        let row_a_h = Handle::new(row_a);
 
         let mut a = SubMatrix::new(
             row_a_h,
@@ -2577,9 +2461,9 @@ mod tests {
         a.add_entry(na0, "q", na0, "T", 2.0).unwrap();
         a.add_entry(na0, "q", na1, "T", -1.0).unwrap();
 
-        let mut row_b = SubMesh::new(read(&sup_a).unwrap().coords(), ElementType::POI1);
+        let mut row_b = SubMesh::new(sup_a.read().coords(), ElementType::POI1);
         row_b.add_cell(&[na1]).unwrap();
-        let row_b_h = insert(row_b);
+        let row_b_h = Handle::new(row_b);
 
         let mut b = SubMatrix::new(
             row_b_h,
@@ -2594,8 +2478,8 @@ mod tests {
         b.add_entry(na1, "q", na1, "T", 2.0).unwrap();
 
         let mut k = Matrix::empty();
-        k.add_sub(insert(a)).unwrap();
-        k.add_sub(insert(b)).unwrap();
+        k.add_sub(Handle::new(a)).unwrap();
+        k.add_sub(Handle::new(b)).unwrap();
         k.finalize().unwrap();
 
         assert_eq!(k.mul_dense(&[1.0, 1.0]).unwrap(), vec![1.0, 1.0]);
@@ -2623,7 +2507,7 @@ mod tests {
         sm.add_entry(b, "q", a, "T", -1.0).unwrap();
         sm.add_entry(b, "q", b, "T", 2.0).unwrap();
         let mut k = Matrix::empty();
-        k.add_sub(insert(sm)).unwrap();
+        k.add_sub(Handle::new(sm)).unwrap();
         k.finalize().unwrap();
 
         // x = T:[1, 2] over both column nodes ⇒ y = K·x = [0, 3] at the "q" rows.
@@ -2683,8 +2567,8 @@ mod tests {
         b.add_entry(nb, "q", nb, "T", 2.0).unwrap();
 
         let mut k = Matrix::empty();
-        k.add_sub(insert(a)).unwrap();
-        k.add_sub(insert(b)).unwrap();
+        k.add_sub(Handle::new(a)).unwrap();
+        k.add_sub(Handle::new(b)).unwrap();
 
         let entries = k.iter_entries().unwrap();
         assert_eq!(entries.len(), 2);
@@ -2707,7 +2591,7 @@ mod tests {
         .unwrap();
         a.add_entry(a_id, "q", a_id, "T", 2.0).unwrap();
         let mut k = Matrix::empty();
-        k.add_sub(insert(a)).unwrap();
+        k.add_sub(Handle::new(a)).unwrap();
         let d = format!("{:?}", k);
         assert!(d.contains("Matrix"));
         let s = format!("{}", k);
@@ -2724,7 +2608,7 @@ mod tests {
     #[test]
     fn field_from_col_values_shares_block_supports_and_orders_values() {
         // Two supports on one Coords: phys (2 nodes) and mult (1 node).
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let phys_nodes: Vec<Node> = (0..2)
             .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
             .collect();
@@ -2734,12 +2618,12 @@ mod tests {
             for n in &phys_nodes {
                 sm.add_cell(&[n.id()]).unwrap();
             }
-            insert(sm)
+            Handle::new(sm)
         };
         let mult = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
             sm.add_cell(&[mult_node.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
 
         // K (phys × phys), C (mult × phys), Cᵀ (phys × mult).
@@ -2778,9 +2662,9 @@ mod tests {
             .unwrap();
 
         let mut m = Matrix::empty();
-        m.add_sub(insert(k)).unwrap();
-        m.add_sub(insert(c)).unwrap();
-        m.add_sub(insert(ct)).unwrap();
+        m.add_sub(Handle::new(k)).unwrap();
+        m.add_sub(Handle::new(c)).unwrap();
+        m.add_sub(Handle::new(ct)).unwrap();
 
         // Not finalized yet ⇒ error.
         assert!(m.field_from_col_values(&[0.0]).is_err());
@@ -2794,8 +2678,8 @@ mod tests {
         // One zone per distinct column support (phys ← K+C, mult ← Cᵀ),
         // each sharing the block's own handle — nothing rebuilt.
         assert_eq!(f.len(), 2);
-        assert!(read(&f.get(0).unwrap()).unwrap().support().same_slot(&phys));
-        assert!(read(&f.get(1).unwrap()).unwrap().support().same_slot(&mult));
+        assert!(f.get(0).unwrap().read().support().same_object(&phys));
+        assert!(f.get(1).unwrap().read().support().same_object(&mult));
 
         // Every column DOF reads back its slot; the aggregate is coherent.
         for (i, (nid, var)) in col_dofs.iter().enumerate() {
@@ -2837,8 +2721,8 @@ mod tests {
             .unwrap();
 
         let mut m = Matrix::empty();
-        m.add_sub(insert(a)).unwrap();
-        m.add_sub(insert(b)).unwrap();
+        m.add_sub(Handle::new(a)).unwrap();
+        m.add_sub(Handle::new(b)).unwrap();
         m.finalize().unwrap();
 
         let col_dofs = m.col_dofs().unwrap();
@@ -2847,8 +2731,8 @@ mod tests {
 
         assert_eq!(f.len(), 1, "same support ⇒ one zone");
         {
-            let z = read(&f.get(0).unwrap()).unwrap();
-            assert!(z.support().same_slot(&sup));
+            let z = f.get(0).unwrap().read();
+            assert!(z.support().same_object(&sup));
             assert_eq!(SubField::components(&*z), &["T", "P"]);
         }
         for (i, (nid, var)) in col_dofs.iter().enumerate() {
@@ -2864,7 +2748,7 @@ mod tests {
     fn row_mesh_enables_zone_aligned_residual() {
         use crate::containers::node_field::SubNodeField;
         // Saddle-point shape: phys (2 nodes) and mult (1 node) supports.
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let n1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let nm = Node::create_in(coords.clone(), &[10.0]).unwrap();
@@ -2872,12 +2756,12 @@ mod tests {
             let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
             sm.add_cell(&[n0.id()]).unwrap();
             sm.add_cell(&[n1.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let mult = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
             sm.add_cell(&[nm.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         // K (phys × phys) and C (mult × phys): row supports {phys, mult},
         // col supports {phys} — K and C share the phys column support.
@@ -2904,17 +2788,17 @@ mod tests {
         c.add_entry(nm.id(), "imposed_T", n0.id(), "T", 1.0)
             .unwrap();
         let mut m = Matrix::empty();
-        m.add_sub(insert(k)).unwrap();
-        m.add_sub(insert(c)).unwrap();
+        m.add_sub(Handle::new(k)).unwrap();
+        m.add_sub(Handle::new(c)).unwrap();
 
         // Meshes: available pre-finalize, deduplicated, sharing the handles.
         let rm = m.row_mesh().unwrap();
         assert_eq!(rm.len(), 2);
-        assert!(rm.get(0).unwrap().same_slot(&phys));
-        assert!(rm.get(1).unwrap().same_slot(&mult));
+        assert!(rm.get(0).unwrap().same_object(&phys));
+        assert!(rm.get(1).unwrap().same_object(&mult));
         let cm = m.col_mesh().unwrap();
         assert_eq!(cm.len(), 1, "K and C share the phys column support");
-        assert!(cm.get(0).unwrap().same_slot(&phys));
+        assert!(cm.get(0).unwrap().same_object(&phys));
 
         m.finalize().unwrap();
 
@@ -2936,17 +2820,17 @@ mod tests {
             let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
             sm.add_cell(&[n0.id()]).unwrap();
             sm.add_cell(&[n1.id()]).unwrap();
-            let mut s = SubNodeField::from_poi1(&insert(sm), vec!["q".into()]).unwrap();
+            let mut s = SubNodeField::from_poi1(&Handle::new(sm), vec!["q".into()]).unwrap();
             s.set_value(n0.id(), "q", 5.0).unwrap();
             s.set_value(n1.id(), "q", 5.0).unwrap();
             NodeField::from_sub(s)
         };
         let f_ext_r = crate::ops::node_field::restrict(&f_ext, &rm).unwrap();
         for (za, zb) in f_ext_r.iter().zip(f_int.iter()) {
-            let sa = read(za).unwrap().support();
-            let sb = read(zb).unwrap().support();
+            let sa = za.read().support();
+            let sb = zb.read().support();
             assert!(
-                sa.same_slot(&sb),
+                sa.same_object(&sb),
                 "restrict must land on the block supports"
             );
         }
@@ -2972,7 +2856,7 @@ mod tests {
     /// Row-side twin: zones on the blocks' row supports, dual variables.
     #[test]
     fn field_from_row_values_uses_row_supports_and_dual_vars() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let r0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let r1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let c0 = Node::create_in(coords.clone(), &[2.0]).unwrap();
@@ -2980,12 +2864,12 @@ mod tests {
             let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
             sm.add_cell(&[r0.id()]).unwrap();
             sm.add_cell(&[r1.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sup_c = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
             sm.add_cell(&[c0.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let mut blk = SubMatrix::new(
             sup_r.clone(),
@@ -2999,15 +2883,12 @@ mod tests {
         blk.add_entry(r0.id(), "q", c0.id(), "T", 1.0).unwrap();
 
         let mut m = Matrix::empty();
-        m.add_sub(insert(blk)).unwrap();
+        m.add_sub(Handle::new(blk)).unwrap();
         m.finalize().unwrap();
 
         let f = m.field_from_row_values(&[3.0, 7.0]).unwrap();
         assert_eq!(f.len(), 1);
-        assert!(read(&f.get(0).unwrap())
-            .unwrap()
-            .support()
-            .same_slot(&sup_r));
+        assert!(f.get(0).unwrap().read().support().same_object(&sup_r));
         assert_eq!(f.value(r0.id(), "q").unwrap(), 3.0);
         assert_eq!(f.value(r1.id(), "q").unwrap(), 7.0);
     }

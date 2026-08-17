@@ -559,7 +559,7 @@ fn materialize(
 mod tests {
     use super::*;
     use crate::coords::Coords;
-    use crate::store::{insert, read, Handle};
+    use crate::store::Handle;
 
     /// The eight corners of an axis-aligned box, ordered
     /// `000, 100, 110, 010, 001, 101, 111, 011`.
@@ -641,7 +641,7 @@ mod tests {
 
     #[test]
     fn meshes_a_box_and_keeps_its_volume() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let mesh = triangulate_volume(&surface(&coords, &nodes, &BOX_FACETS), None, false).unwrap();
 
@@ -653,7 +653,7 @@ mod tests {
 
     #[test]
     fn the_envelope_nodes_are_reused_and_none_is_added_on_it() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let envelope = surface(&coords, &nodes, &BOX_FACETS);
         let mesh = triangulate_volume(&envelope, None, false).unwrap();
@@ -681,7 +681,7 @@ mod tests {
 
     #[test]
     fn the_skin_of_the_result_is_the_envelope() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let env = surface(&coords, &nodes, &BOX_FACETS);
         let mesh = triangulate_volume(&env, None, false).unwrap();
@@ -712,7 +712,7 @@ mod tests {
             [3, 0, 4],
             [3, 4, 7],
         ];
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let err =
             triangulate_volume(&surface(&coords, &nodes, &UNFILLABLE), None, false).unwrap_err();
@@ -727,7 +727,7 @@ mod tests {
 
     #[test]
     fn meshes_a_single_tetrahedron_as_one_cell() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let n: Vec<NodeId> = [
             [0.0, 0.0, 0.0],
             [1.0, 0.0, 0.0],
@@ -745,7 +745,7 @@ mod tests {
 
     #[test]
     fn meshes_two_disjoint_bodies_at_once() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let a = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let b = box_nodes(&coords, [5.0, 0.0, 0.0], [7.0, 1.0, 1.0]);
         let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
@@ -763,7 +763,7 @@ mod tests {
     fn meshes_a_box_with_an_internal_cavity() {
         // Outer shell outward, inner shell inward: the cavity is declared by
         // its orientation alone, and the cells filling it must be dropped.
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let outer = box_nodes(&coords, [0.0, 0.0, 0.0], [3.0, 3.0, 3.0]);
         let inner = box_nodes(&coords, [1.0, 1.0, 1.0], [2.0, 2.0, 2.0]);
         let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
@@ -785,7 +785,7 @@ mod tests {
     fn meshes_a_concave_solid() {
         // An L-shaped prism: the reflex edge is what a convex-hull-based
         // mesher gets wrong, so the volume check is the real assertion here.
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let base = [
             [0.0, 0.0],
             [2.0, 0.0],
@@ -957,7 +957,7 @@ mod tests {
         // A plate meshed, extruded and peeled, at a size that gives a few
         // thousand cells: the shape of input the mesher is actually for, as
         // opposed to the eight-corner puzzles above.
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let envelope = extruded_plate(&coords, 8, 0.15);
         let mesh = triangulate_volume(&envelope, None, true).unwrap();
 
@@ -978,10 +978,10 @@ mod tests {
         // envelope had to be cut, the points that did the cutting are handed
         // back as part of the result, so the caller can see exactly where its
         // surface stopped matching.
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let envelope = extruded_plate(&coords, 5, 0.25);
         let given: Vec<Vec<f64>> = {
-            let c = read(&coords).unwrap();
+            let c = coords.read();
             c.iter_live()
                 .map(|id| c.position(id).unwrap().to_vec())
                 .collect()
@@ -1011,7 +1011,7 @@ mod tests {
 
     #[test]
     fn a_mesh_that_needed_no_extra_node_has_no_poi1_submesh() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let mesh = triangulate_volume(&surface(&coords, &nodes, &BOX_FACETS), None, true).unwrap();
         assert_eq!(mesh.element_types().unwrap(), vec![ElementType::TET4]);
@@ -1019,7 +1019,7 @@ mod tests {
 
     #[test]
     fn meshes_the_envelope_of_an_extruded_plate() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let envelope = extruded_plate(&coords, 2, 0.5);
         let mesh = triangulate_volume(&envelope, None, false).unwrap();
         assert_eq!(mesh.element_types().unwrap(), vec![ElementType::TET4]);
@@ -1034,7 +1034,7 @@ mod tests {
         // mesh at all. Retriangulating the pocket around a stuck facet
         // settles them, so the strict contract holds here: the envelope
         // comes back exactly as it went in.
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let envelope = extruded_plate(&coords, 3, 0.35);
 
         let mesh = triangulate_volume(&envelope, None, false).unwrap();
@@ -1058,10 +1058,10 @@ mod tests {
         // the same surface, cut finer. Interior nodes are another matter and
         // are not in question here, so the check is made on the skin of the
         // result — the only place a node could have moved the boundary.
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let envelope = extruded_plate(&coords, 5, 0.25);
         let given: Vec<Vec<f64>> = {
-            let c = read(&coords).unwrap();
+            let c = coords.read();
             c.iter_live()
                 .map(|id| c.position(id).unwrap().to_vec())
                 .collect()
@@ -1159,7 +1159,7 @@ mod tests {
         // element matrix is close to singular — and a handful of them is
         // enough to sink a computation. This is what refinement and the
         // sliver pass are for, so this is what has to be measured.
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let envelope = extruded_plate(&coords, 6, 0.2);
         let mesh = triangulate_volume(&envelope, None, true).unwrap();
 
@@ -1206,7 +1206,7 @@ mod tests {
         // refusal is exercised on its own. What matters about it is not that
         // it happens but what it says: the caller can only act on *where* and
         // *what to do*.
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let (envelope, _) = subdivided_blob(&coords, 3);
         let env = Envelope::extract(&envelope, &NoCancel).unwrap();
         let mesh = TetMesh::delaunay(env.points(), &NoCancel).unwrap();
@@ -1235,7 +1235,7 @@ mod tests {
         // It used to be refused: one cell of it was flat and beyond every
         // move the sliver pass had. Taking the cell's own edges out reaches
         // it, so the envelope goes through as given.
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let (envelope, volume) = subdivided_blob(&coords, 3);
         let mesh = triangulate_volume(&envelope, None, false).unwrap();
         let v = volume_of(&mesh);
@@ -1244,7 +1244,7 @@ mod tests {
 
     #[test]
     fn rejects_a_bad_size() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let err = triangulate_volume(&surface(&coords, &nodes, &BOX_FACETS), Some(0.0), false)
             .unwrap_err();
@@ -1254,7 +1254,7 @@ mod tests {
     #[test]
     fn stops_on_a_preset_cancellation_flag() {
         use std::sync::atomic::AtomicBool;
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let nodes = box_nodes(&coords, [0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let flag = AtomicBool::new(true);
         let err = triangulate_volume_cancellable(

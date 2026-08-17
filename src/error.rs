@@ -16,20 +16,15 @@ pub type Result<T> = std::result::Result<T, PyrucastError>;
 /// ```
 /// use pyrucast::PyrucastError;
 ///
-/// let e = PyrucastError::StaleHandle;
-/// assert_eq!(
-///     e.to_string(),
-///     "stale handle (slot freed or generation mismatch)"
-/// );
+/// let e = PyrucastError::MeshSealed;
+/// assert!(e.to_string().starts_with("submesh is sealed"));
 /// ```
 #[derive(Debug)]
 pub enum PyrucastError {
-    /// I/O error (disk swap, file save/load).
+    /// I/O error (file save/load).
     Io(String),
     /// (De)serialization failure.
     Serialization(String),
-    /// Stale handle: slot freed or generation mismatch.
-    StaleHandle,
     /// The computation was cancelled by its [`crate::interrupt::Cancel`]
     /// token (e.g. a `Ctrl+C`, a timeout, or an external stop flag). On the
     /// Python side this surfaces as `KeyboardInterrupt`.
@@ -48,9 +43,6 @@ impl fmt::Display for PyrucastError {
         match self {
             PyrucastError::Io(m) => write!(f, "I/O error: {m}"),
             PyrucastError::Serialization(m) => write!(f, "serialization error: {m}"),
-            PyrucastError::StaleHandle => {
-                write!(f, "stale handle (slot freed or generation mismatch)")
-            }
             PyrucastError::Interrupted => write!(f, "computation interrupted"),
             PyrucastError::MeshSealed => write!(
                 f,

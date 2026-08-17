@@ -150,8 +150,6 @@ def test_rust_only_entries_are_documented_and_real():
 # méthode — l'asymétrie que la convention interdit, invisible au balayage
 # ci-dessus. Les deux ont depuis été retirées.
 PYTHON_ONLY = {
-    "set_swap_dir": "configuration du store, pas un opérateur",
-    "swap_dir": "configuration du store, pas un opérateur",
     "mask_node": "nom plat de `node_field.mask` (namespace `_pyrucast` plat)",
     "mask_element": "nom plat de `element_field.mask`",
     "consolidate_mesh": "nom plat de `mesh.consolidate`",

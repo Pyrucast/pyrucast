@@ -55,8 +55,7 @@ use crate::error::{PyrucastError, Result};
 use crate::models::beam::{bending_4x4, mass_4x4, BeamModel};
 use crate::models::owned_components;
 use crate::models::{frame, frame3d, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
-use crate::store::{read, Handle};
-use serde::{Deserialize, Serialize};
+use crate::store::Handle;
 
 /// The material a configuration needs. `G` and `A_s` are what the theory adds
 /// over [Bernoulli](crate::models::bernoulli): the shear compliance.
@@ -79,7 +78,7 @@ fn behavior_of(model: BeamModel) -> &'static [&'static str] {
 }
 
 /// Timoshenko beam physics on a `SEG2` FE subspace.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct Timoshenko {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
     /// POI1 support over the unique nodes (row/col support of the block).
@@ -92,7 +91,7 @@ impl Timoshenko {
     /// dimension of the mesh; the subspace must be `MODEL_EMBEDDED`.
     pub fn new(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
         let (submesh, space_dim, et, axisymmetric, interpolation) = {
-            let s = read(&fespace)?;
+            let s = fespace.read();
             (
                 s.submesh(),
                 s.space_dim(),
@@ -122,7 +121,7 @@ impl Timoshenko {
         }
         let model = BeamModel::from_space_dim(space_dim)
             .map_err(|e| PyrucastError::Message(format!("Timoshenko: {e}")))?;
-        let support = read(&submesh)?.to_poi1()?;
+        let support = submesh.read().to_poi1()?;
         Ok(Self {
             fespace,
             support,
@@ -234,7 +233,7 @@ impl SubModelKind for Timoshenko {
     fn render(&self, _opts: &DumpOptions) -> String {
         let primal = self.primal_vars().join(", ");
         let dual = self.dual_vars().join(", ");
-        let n = read(&self.support).map(|s| s.cell_count()).unwrap_or(0);
+        let n = self.support.read().cell_count();
         format!(
             "SubModel<Timoshenko({})>\n  primal var(s): {primal}\n  dual var(s):   {dual}\n  \
              support: {n} node(s)",
@@ -382,11 +381,11 @@ mod tests {
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::Mesh;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     /// One `SEG2` from `a` to `b`, in whatever dimension the coordinates have.
     fn one_beam(a: &[f64], b: &[f64]) -> (Timoshenko, NodeId, NodeId) {
-        let coords = insert(Coords::new(a.len() as u8).unwrap());
+        let coords = Handle::new(Coords::new(a.len() as u8).unwrap());
         let na = Node::create_in(coords.clone(), a).unwrap();
         let nb = Node::create_in(coords.clone(), b).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
@@ -402,7 +401,7 @@ mod tests {
         for (c, v) in pairs {
             m.set_uniform(c, *v).unwrap();
         }
-        insert(m)
+        Handle::new(m)
     }
 
     /// The configuration is read from the mesh, and with it every DOF name.
@@ -420,7 +419,7 @@ mod tests {
     /// leaving the caller to guess which space a beam wants.
     #[test]
     fn a_lagrange_subspace_is_refused() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));

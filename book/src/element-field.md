@@ -109,9 +109,9 @@ use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::atoms::{ElementType, Node};
 use pyrucast::coords::Coords;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
-use pyrucast::store::{insert, write};
+use pyrucast::store::Handle;
 
-let coords = insert(Coords::new(2).unwrap());
+let coords = Handle::new(Coords::new(2).unwrap());
 let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
 let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
 let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -196,10 +196,10 @@ de sorte que les **discontinuités (flux, contraintes) restent visibles**. Voir
 ## Sérialisation
 
 `SubElementField` (et donc `ElementField`) implémente `Persist` via `serde`
-comme tous les objets pyrucast. Le swap disque et la future sauvegarde fichier
-le traversent sans intervention : seuls le buffer de valeurs, la liste de noms
-et le `Handle<SubFiniteElementSpace>` voyagent dans le format binaire portable
-Linux ↔ Windows.
+comme tous les objets pyrucast : le buffer de valeurs et la liste de noms
+voyagent dans le format binaire portable Linux ↔ Windows. Le lien vers l'espace
+EF, lui, est un `Handle` — il relèvera de la sauvegarde de graphe, encore à
+écrire (cf. [Modèle mémoire](memory-model.md)).
 
 ## Limitations actuelles
 

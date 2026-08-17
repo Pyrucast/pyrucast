@@ -559,7 +559,7 @@ impl<'a> Drawable for FieldDrawable<'a> {
     fn bbox(&self) -> Result<Bbox3> {
         match &self.source {
             GeomSource::Mesh(m) => m.bbox(),
-            GeomSource::SubMesh(sm) => crate::store::read(sm)?.bbox(),
+            GeomSource::SubMesh(sm) => sm.read().bbox(),
         }
     }
 
@@ -595,9 +595,7 @@ impl<'a> Drawable for FieldDrawable<'a> {
     fn is_axisymmetric(&self) -> bool {
         match &self.source {
             GeomSource::Mesh(m) => m.is_axisymmetric(),
-            GeomSource::SubMesh(sm) => crate::store::read(sm)
-                .map(|sm| sm.is_axisymmetric())
-                .unwrap_or(false),
+            GeomSource::SubMesh(sm) => sm.read().is_axisymmetric(),
         }
     }
 }

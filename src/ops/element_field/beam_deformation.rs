@@ -50,7 +50,7 @@ use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteEleme
 use crate::containers::node_field::{NodeField, NodeFieldView};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
-use crate::store::{insert, read, Handle};
+use crate::store::Handle;
 
 /// Output component names of the 1-D beam section strains.
 const COMPONENTS_1D: &[&str] = &["kappa", "gamma"];
@@ -80,7 +80,7 @@ pub fn beam_deformation(
     let mut out = ElementField::empty();
     for sub in fespace {
         let mat = material.sub_for_fespace(sub)?;
-        out.add_sub(insert(subspace_beam_deformation(
+        out.add_sub(Handle::new(subspace_beam_deformation(
             sub,
             &view,
             &components,
@@ -99,7 +99,7 @@ fn subspace_beam_deformation(
     material: &Handle<SubElementField>,
 ) -> Result<SubElementField> {
     // One read guard on the subspace, held for every property we read off it.
-    let s = read(fespace)?;
+    let s = fespace.read();
     let space_dim = s.space_dim();
     let (dofs, out_comps): (&[&str], &[&str]) = match space_dim {
         1 => (DOFS_1D, COMPONENTS_1D),
@@ -131,12 +131,12 @@ fn subspace_beam_deformation(
 
     // Hold the mesh guard over the whole loop and read the connectivity in
     // place (sequential loop ⇒ no need to copy it out).
-    let mat = read(material)?;
+    let mat = material.read();
     let submesh = s.submesh();
-    let mesh = read(&submesh)?;
+    let mesh = submesh.read();
     let conn = mesh.connectivity();
     let coords_h: Handle<Coords> = mesh.coords();
-    let coords = read(&coords_h)?;
+    let coords = coords_h.read();
 
     let n_comp = out_comps.len();
     let mut field = SubElementField::new(
@@ -354,7 +354,7 @@ mod tests {
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::node_field::SubNodeField;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     /// Build a one-cell frame FE space between two nodes plus a `(w,θ)`/DOF
     /// node field, returning `(fespace, node_a, node_b, field)`. `space_dim`
@@ -364,13 +364,13 @@ mod tests {
         a: &[f64],
         b: &[f64],
     ) -> (FiniteElementSpace, Node, Node, Handle<SubMesh>) {
-        let coords = insert(Coords::new(space_dim).unwrap());
+        let coords = Handle::new(Coords::new(space_dim).unwrap());
         let na = Node::create_in(coords.clone(), a).unwrap();
         let nb = Node::create_in(coords.clone(), b).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
         mesh.add_cell(&[na.id(), nb.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        let support = insert(SubMesh::poi1_from_nodes(&[na.clone(), nb.clone()]).unwrap());
+        let support = Handle::new(SubMesh::poi1_from_nodes(&[na.clone(), nb.clone()]).unwrap());
         (fes, na, nb, support)
     }
 
@@ -383,7 +383,7 @@ mod tests {
             m.set_uniform(c, *v).unwrap();
         }
         let mut out = ElementField::empty();
-        out.add_sub(insert(m)).unwrap();
+        out.add_sub(Handle::new(m)).unwrap();
         out
     }
 
@@ -397,7 +397,7 @@ mod tests {
         comp: &str,
         l: f64,
     ) -> f64 {
-        let sub = read(&fes.get(0).unwrap()).unwrap();
+        let sub = fes.get(0).unwrap().read();
         (0..sub.gauss_count())
             .map(|g| s.value(0, g, comp).unwrap() * sub.gauss_weight(g).unwrap())
             .sum::<f64>()
@@ -426,7 +426,7 @@ mod tests {
         );
 
         let def = beam_deformation(&f, &fes, &mat).unwrap();
-        let s = read(&def.get(0).unwrap()).unwrap();
+        let s = def.get(0).unwrap().read();
         assert_eq!(s.components(), &["eps", "kappa", "gamma"]);
         for g in 0..s.gauss_count() {
             assert!((s.value(0, g, "eps").unwrap() - 0.5).abs() < 1e-12);
@@ -462,7 +462,7 @@ mod tests {
         );
 
         let def = beam_deformation(&f, &fes, &mat).unwrap();
-        let s = read(&def.get(0).unwrap()).unwrap();
+        let s = def.get(0).unwrap().read();
         for g in 0..s.gauss_count() {
             assert!((s.value(0, g, "eps").unwrap() - 0.5).abs() < 1e-12);
         }
@@ -504,7 +504,7 @@ mod tests {
         );
 
         let def = beam_deformation(&f, &fes, &mat).unwrap();
-        let s = read(&def.get(0).unwrap()).unwrap();
+        let s = def.get(0).unwrap().read();
         for g in 0..s.gauss_count() {
             assert!((s.value(0, g, "eps").unwrap() - 0.5).abs() < 1e-12);
             assert!((s.value(0, g, "torsion").unwrap() - 0.1).abs() < 1e-12);

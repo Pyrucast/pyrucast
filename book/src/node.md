@@ -23,14 +23,14 @@ dans [Coordonnées](coords.md).
 ```rust,ignore
 use pyrucast::atoms::Node;
 use pyrucast::coords::Coords;
-use pyrucast::store::{insert, write};
+use pyrucast::store::Handle;
 
-let coords = insert(Coords::new(2).unwrap());
+let coords = Handle::new(Coords::new(2).unwrap());
 let n = Node::create_in(coords.clone(), &[1.0, 2.0]).unwrap();
 let m = n.clone();             // refcount = 2
 drop(n);                       // refcount = 1
 drop(m);                       // refcount = 0
-write(&coords).unwrap().gc();  // collecte
+coords.write().gc();  // collecte
 ```
 
 Le code interne peut toujours manipuler directement les `NodeId` sans passer

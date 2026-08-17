@@ -16,7 +16,7 @@ use crate::atoms::Node;
 use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
-use crate::store::{insert, read};
+use crate::store::Handle;
 
 /// Sweep between two SEG2 contour meshes to produce a QUA4 strip.
 ///
@@ -43,20 +43,20 @@ pub fn qua4_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Mes
     }
     let sm_a = mesh_a.get(0)?;
     let sm_b = mesh_b.get(0)?;
-    let coords_a = read(&sm_a)?.coords();
-    let coords_b = read(&sm_b)?.coords();
-    if coords_a.index() != coords_b.index() || coords_a.generation() != coords_b.generation() {
+    let coords_a = sm_a.read().coords();
+    let coords_b = sm_b.read().coords();
+    if !coords_a.same_object(&coords_b) {
         return Err(PyrucastError::Message(
             "sweep: meshes are attached to different Coords".into(),
         ));
     }
 
     let (et_a, n_elems, conn_a) = {
-        let s = read(&sm_a)?;
+        let s = sm_a.read();
         (s.element_type(), s.cell_count(), s.connectivity().to_vec())
     };
     let (et_b, n_elems_b, conn_b) = {
-        let s = read(&sm_b)?;
+        let s = sm_b.read();
         (s.element_type(), s.cell_count(), s.connectivity().to_vec())
     };
 
@@ -90,11 +90,11 @@ pub fn qua4_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Mes
 
     let coords_a: Vec<Vec<f64>> = col_ids_a
         .iter()
-        .map(|&id| -> Result<Vec<f64>> { Ok(read(&coords)?.position(id)?.to_vec()) })
+        .map(|&id| -> Result<Vec<f64>> { Ok(coords.read().position(id)?.to_vec()) })
         .collect::<Result<_>>()?;
     let coords_b: Vec<Vec<f64>> = col_ids_b
         .iter()
-        .map(|&id| -> Result<Vec<f64>> { Ok(read(&coords)?.position(id)?.to_vec()) })
+        .map(|&id| -> Result<Vec<f64>> { Ok(coords.read().position(id)?.to_vec()) })
         .collect::<Result<_>>()?;
 
     // layers[k][j] = Node at layer k, column j.
@@ -173,7 +173,7 @@ fn columns(mesh: &Mesh, op: &str) -> Result<Columns> {
     let mut index: std::collections::HashMap<NodeId, usize> = std::collections::HashMap::new();
     let mut ids: Vec<NodeId> = Vec::new();
     for sm in mesh {
-        for id in read(sm)?.connectivity().to_vec() {
+        for id in sm.read().connectivity().to_vec() {
             index.entry(id).or_insert_with(|| {
                 let col = ids.len();
                 ids.push(id);
@@ -186,7 +186,7 @@ fn columns(mesh: &Mesh, op: &str) -> Result<Columns> {
     }
     let positions: Vec<Vec<f64>> = ids
         .iter()
-        .map(|&id| -> Result<Vec<f64>> { Ok(read(&coords)?.position(id)?.to_vec()) })
+        .map(|&id| -> Result<Vec<f64>> { Ok(coords.read().position(id)?.to_vec()) })
         .collect::<Result<_>>()?;
     Ok(Columns {
         ids,
@@ -246,7 +246,7 @@ fn layered(
     let mut result = Mesh::empty();
     for sm_handle in mesh {
         let (et, n_cells, conn) = {
-            let s = read(sm_handle)?;
+            let s = sm_handle.read();
             (s.element_type(), s.cell_count(), s.connectivity().to_vec())
         };
         let npc = et.nodes_per_cell();
@@ -261,7 +261,7 @@ fn layered(
                 )))
             }
         };
-        let dim = read(&coords)?.dim() as usize;
+        let dim = coords.read().dim() as usize;
         if swept_et.topological_dim() > dim {
             return Err(PyrucastError::Message(format!(
                 "{op}: sweeping {et} elements produces {swept_et}, which needs 3-D coordinates \
@@ -296,7 +296,7 @@ fn layered(
             }
         }
 
-        result.add_sub(insert(sm_out))?;
+        result.add_sub(Handle::new(sm_out))?;
     }
 
     Ok(result)
@@ -322,7 +322,7 @@ pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> 
             "extrude: n_layers must be ≥ 1".into(),
         ));
     }
-    let dim = read(&mesh.coords()?)?.dim() as usize;
+    let dim = mesh.coords()?.read().dim() as usize;
     if direction.len() != dim {
         return Err(PyrucastError::Message(format!(
             "extrude: direction has {} components but node dimension is {}",
@@ -402,7 +402,7 @@ pub fn revolve(
     }
     let closed = (angle.abs() - TWO_PI).abs() <= TWO_PI * TURN_TOL;
 
-    let dim = read(&mesh.coords()?)?.dim() as usize;
+    let dim = mesh.coords()?.read().dim() as usize;
     if center.len() != dim {
         return Err(PyrucastError::Message(format!(
             "revolve: center has {} components but the mesh is {}-D",
@@ -530,20 +530,20 @@ pub fn solid_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Me
     }
     let sm_a = mesh_a.get(0)?;
     let sm_b = mesh_b.get(0)?;
-    let coords = read(&sm_a)?.coords();
-    let coords_b = read(&sm_b)?.coords();
-    if coords.index() != coords_b.index() || coords.generation() != coords_b.generation() {
+    let coords = sm_a.read().coords();
+    let coords_b = sm_b.read().coords();
+    if !coords.same_object(&coords_b) {
         return Err(PyrucastError::Message(
             "sweep_solid: meshes are attached to different Coords".into(),
         ));
     }
 
     let (et_a, conn_a) = {
-        let s = read(&sm_a)?;
+        let s = sm_a.read();
         (s.element_type(), s.connectivity().to_vec())
     };
     let (et_b, conn_b) = {
-        let s = read(&sm_b)?;
+        let s = sm_b.read();
         (s.element_type(), s.connectivity().to_vec())
     };
     if et_a != et_b {
@@ -596,11 +596,11 @@ pub fn solid_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Me
     let n_cols = cols_a.len();
     let base_a: Vec<Vec<f64>> = cols_a
         .iter()
-        .map(|&id| -> Result<Vec<f64>> { Ok(read(&coords)?.position(id)?.to_vec()) })
+        .map(|&id| -> Result<Vec<f64>> { Ok(coords.read().position(id)?.to_vec()) })
         .collect::<Result<_>>()?;
     let base_b: Vec<Vec<f64>> = cols_b
         .iter()
-        .map(|&id| -> Result<Vec<f64>> { Ok(read(&coords)?.position(id)?.to_vec()) })
+        .map(|&id| -> Result<Vec<f64>> { Ok(coords.read().position(id)?.to_vec()) })
         .collect::<Result<_>>()?;
 
     // layers[k][col]: layer 0 re-acquires mesh_a nodes, layer n_layers

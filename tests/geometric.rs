@@ -15,11 +15,11 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::coords::Coords;
 use pyrucast::models::elasticity::ElasticityModel;
-use pyrucast::store::insert;
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 fn unit_quad() -> Result<(FiniteElementSpace, [Node; 4])> {
-    let coords = insert(Coords::new(2)?);
+    let coords = Handle::new(Coords::new(2)?);
     let n0 = Node::create_in(coords.clone(), &[0.0, 0.0])?;
     let n1 = Node::create_in(coords.clone(), &[1.0, 0.0])?;
     let n2 = Node::create_in(coords.clone(), &[1.0, 1.0])?;
@@ -45,7 +45,7 @@ fn geometric_stiffness_uniaxial_stress_unit_quad() -> Result<()> {
         &[SIG, 0.0, 0.0],
     )?;
     let mut stress = ElementField::empty();
-    stress.add_sub(insert(stress_sub))?;
+    stress.add_sub(Handle::new(stress_sub))?;
 
     let kg = pyrucast::ops::matrix::geometric(&model, &materials, &stress)?;
     let tol = 1e-12;
@@ -79,7 +79,7 @@ fn geometric_stiffness_is_symmetric() -> Result<()> {
         &[SIG, 0.5 * SIG, 0.25 * SIG],
     )?;
     let mut stress = ElementField::empty();
-    stress.add_sub(insert(stress_sub))?;
+    stress.add_sub(Handle::new(stress_sub))?;
 
     let kg = pyrucast::ops::matrix::geometric(&model, &materials, &stress)?;
     let tol = 1e-12;

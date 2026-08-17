@@ -48,8 +48,6 @@ use crate::models::{
     constraint_block_pair, Constraint, ConstraintTerm, Contribution, MatrixKind, Physics, Relation,
     RelationSense, SubModelKind,
 };
-use crate::store::read;
-use serde::{Deserialize, Serialize};
 
 /// Default multiplier (primal) name shared by every relation of an MPC.
 pub fn default_multiplier() -> String {
@@ -63,7 +61,6 @@ pub fn default_imposed_value() -> String {
 
 /// One term `coefficient · u(node, variable)` shared by every relation of an
 /// [`Mpc`]. Its mesh is POI1: cell `r` holds the node of relation `r`.
-#[derive(Serialize, Deserialize)]
 pub struct MpcTerm {
     /// POI1 mesh, paired element-for-element with the other terms and the
     /// multiplier mesh (cell `r` = the node of relation `r` for this term).
@@ -102,7 +99,6 @@ impl MpcTerm {
 /// `g` is **not** stored here: the user supplies it through the load
 /// `SubNodeField` at the multiplier node's `imposed_value` component (default
 /// `g = 0`).
-#[derive(Serialize, Deserialize)]
 pub struct Mpc {
     /// The terms summed on the left-hand side of every relation (at least one).
     pub(crate) terms: Vec<MpcTerm>,
@@ -114,7 +110,6 @@ pub struct Mpc {
     pub(crate) imposed_value: String,
     /// Equality (default) or unilateral inequality (`Σ aₖ·uₖ ≥ g` / `≤ g`),
     /// solved by the active-set operator.
-    #[serde(default)]
     pub(crate) sense: RelationSense,
 }
 
@@ -157,7 +152,7 @@ impl Mpc {
         for i in 0..n_sub {
             let mult_sm = multiplier_mesh.get(i)?;
             let (met, mcount) = {
-                let s = read(&mult_sm)?;
+                let s = mult_sm.read();
                 (s.element_type(), s.cell_count())
             };
             if met != ElementType::POI1 {
@@ -171,9 +166,7 @@ impl Mpc {
         // Every term: shared Coords, same submesh count, POI1 + equal cell counts.
         for (t_idx, t) in terms.iter().enumerate() {
             let coords_t = t.mesh.coords()?;
-            if coords_t.index() != coords_m.index()
-                || coords_t.generation() != coords_m.generation()
-            {
+            if !coords_t.same_object(&coords_m) {
                 return Err(PyrucastError::Message(format!(
                     "Mpc: term {t_idx} mesh and multiplier_mesh must share a Coords"
                 )));
@@ -187,7 +180,7 @@ impl Mpc {
             for i in 0..n_sub {
                 let term_sm = t.mesh.get(i)?;
                 let (tet, tcount) = {
-                    let s = read(&term_sm)?;
+                    let s = term_sm.read();
                     (s.element_type(), s.cell_count())
                 };
                 if tet != ElementType::POI1 {
@@ -313,12 +306,12 @@ impl Constraint for Mpc {
         let mut relations = Vec::new();
         for i in 0..n_sub {
             let mult_nodes: Vec<NodeId> =
-                read(&self.multiplier_mesh.get(i)?)?.connectivity().to_vec();
+                self.multiplier_mesh.get(i)?.read().connectivity().to_vec();
             // One node list per term for this submesh (relation r = index r).
             let term_nodes: Vec<Vec<NodeId>> = self
                 .terms
                 .iter()
-                .map(|t| Ok(read(&t.mesh.get(i)?)?.connectivity().to_vec()))
+                .map(|t| Ok(t.mesh.get(i)?.read().connectivity().to_vec()))
                 .collect::<Result<Vec<_>>>()?;
             for (r, mult) in mult_nodes.iter().enumerate() {
                 let terms = self
@@ -361,7 +354,7 @@ mod tests {
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
     use crate::ops::mesh::barycenter;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     fn poi1(node: &Node) -> Mesh {
         Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node)).unwrap())
@@ -369,7 +362,7 @@ mod tests {
 
     #[test]
     fn empty_terms_rejected() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let n = Node::create_in(coords, &[0.0]).unwrap();
         let mult = barycenter(&poi1(&n)).unwrap();
         assert!(Mpc::new(vec![], &mult, None, None, Default::default()).is_err());
@@ -377,7 +370,7 @@ mod tests {
 
     #[test]
     fn mismatched_cell_count_rejected() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
         // Term mesh with two nodes, but the multiplier mesh has one → rejected.
@@ -392,7 +385,7 @@ mod tests {
 
     #[test]
     fn relations_flatten_terms() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords, &[1.0]).unwrap();
         let mesh_a = poi1(&a);

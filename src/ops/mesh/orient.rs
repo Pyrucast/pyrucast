@@ -42,7 +42,7 @@ use crate::atoms::ElementType;
 use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::Result;
-use crate::store::{insert, read};
+use crate::store::Handle;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 
@@ -60,7 +60,7 @@ pub fn invert(mesh: &Mesh) -> Result<Mesh> {
     let mut result = Mesh::empty();
     for sm_handle in mesh {
         let (et, color, conn) = {
-            let s = read(sm_handle)?;
+            let s = sm_handle.read();
             (s.element_type(), s.face_color(), s.connectivity().to_vec())
         };
         let perm = et.reversal_permutation();
@@ -71,7 +71,7 @@ pub fn invert(mesh: &Mesh) -> Result<Mesh> {
             let reordered: Vec<NodeId> = perm.iter().map(|&i| chunk[i]).collect();
             new_sm.add_cell(&reordered)?;
         }
-        result.add_sub(insert(new_sm))?;
+        result.add_sub(Handle::new(new_sm))?;
     }
     Ok(result)
 }
@@ -102,7 +102,7 @@ pub fn orient(mesh: &Mesh) -> Result<Mesh> {
 
     for sm_handle in mesh {
         let (et, conn) = {
-            let s = read(sm_handle)?;
+            let s = sm_handle.read();
             (s.element_type(), s.connectivity().to_vec())
         };
         let npc = et.nodes_per_cell();
@@ -168,7 +168,7 @@ pub fn orient(mesh: &Mesh) -> Result<Mesh> {
     let mut gid = 0usize;
     for sm_handle in mesh {
         let (et, color, conn) = {
-            let s = read(sm_handle)?;
+            let s = sm_handle.read();
             (s.element_type(), s.face_color(), s.connectivity().to_vec())
         };
         let perm = et.reversal_permutation();
@@ -184,7 +184,7 @@ pub fn orient(mesh: &Mesh) -> Result<Mesh> {
             new_sm.add_cell(&reordered)?;
             gid += 1;
         }
-        result.add_sub(insert(new_sm))?;
+        result.add_sub(Handle::new(new_sm))?;
     }
     Ok(result)
 }
@@ -294,7 +294,7 @@ mod tests {
     }
 
     fn signed_area(coords: &Handle<Coords>, tri: &[u32]) -> f64 {
-        let c = read(coords).unwrap();
+        let c = coords.read();
         let p: Vec<Vec<f64>> = tri
             .iter()
             .map(|&i| c.position(NodeId(i)).unwrap().to_vec())
@@ -304,7 +304,7 @@ mod tests {
     }
 
     fn signed_volume(coords: &Handle<Coords>, tet: &[u32]) -> f64 {
-        let c = read(coords).unwrap();
+        let c = coords.read();
         let p: Vec<Vec<f64>> = tet
             .iter()
             .map(|&i| c.position(NodeId(i)).unwrap().to_vec())
@@ -319,7 +319,7 @@ mod tests {
 
     #[test]
     fn orient_harmonises_a_mixed_winding_surface() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let n: Vec<NodeId> = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
             .iter()
             .map(|c| Node::create_in(coords.clone(), c).unwrap().id())
@@ -349,7 +349,7 @@ mod tests {
 
     #[test]
     fn invert_flips_every_cell() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let n: Vec<NodeId> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
             .iter()
             .map(|c| Node::create_in(coords.clone(), c).unwrap().id())
@@ -368,7 +368,7 @@ mod tests {
 
     #[test]
     fn orient_chains_segments_head_to_tail() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let n: Vec<NodeId> = [[0.0, 0.0], [1.0, 0.0], [0.5, 1.0]]
             .iter()
             .map(|c| Node::create_in(coords.clone(), c).unwrap().id())
@@ -387,7 +387,7 @@ mod tests {
 
     #[test]
     fn orient_harmonises_adjacent_tets() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let n: Vec<NodeId> = [
             [0.0, 0.0, 0.0],
             [1.0, 0.0, 0.0],
@@ -412,7 +412,7 @@ mod tests {
 
     #[test]
     fn operators_share_coords_and_preserve_nodes() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let n: Vec<NodeId> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
             .iter()
             .map(|c| Node::create_in(coords.clone(), c).unwrap().id())
@@ -423,7 +423,7 @@ mod tests {
 
         // Output reuses the same Coords and the same node ids (no fresh nodes).
         let out = orient(&mesh).unwrap();
-        assert!(out.coords().unwrap().same_slot(&coords));
+        assert!(out.coords().unwrap().same_object(&coords));
         let mut ids = conn_of(&out, 0)[0].clone();
         ids.sort_unstable();
         assert_eq!(ids, vec![n[0].0, n[1].0, n[2].0]);

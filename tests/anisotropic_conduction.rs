@@ -34,7 +34,7 @@ use pyrucast::coords::Coords;
 use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::ops::mesh;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::insert;
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 /// `N×N` QUA4 grid on the unit square.
@@ -156,7 +156,7 @@ fn unit_square() -> Result<(
     pyrucast::store::Handle<Coords>,
 )> {
     let h = 1.0 / N as f64;
-    let coords = insert(Coords::new(2)?);
+    let coords = Handle::new(Coords::new(2)?);
     let mut grid: Vec<Node> = Vec::new();
     for j in 0..=N {
         for i in 0..=N {
@@ -230,7 +230,7 @@ fn solve_patch(
     for (mult, _) in multipliers {
         load_sm.add_cell(&[*mult])?;
     }
-    let load_sm = insert(load_sm);
+    let load_sm = Handle::new(load_sm);
     let mut rhs = SubNodeField::from_poi1(&load_sm, vec!["imposed_T".into()])?;
     for (mult, value) in multipliers {
         rhs.set_value(*mult, "imposed_T", *value)?;
@@ -251,7 +251,7 @@ fn uniform_flux(
 ) -> Result<(f64, f64)> {
     // `solve` returns the Lagrange multipliers alongside the temperature;
     // restrict onto a temperature-shaped field before differentiating.
-    let sm = insert(SubMesh::poi1_from_nodes(grid)?);
+    let sm = Handle::new(SubMesh::poi1_from_nodes(grid)?);
     let zero = SubNodeField::from_poi1(&sm, vec!["T".to_string()])?;
     let temperature =
         pyrucast::ops::node_field::restrict_like(solution, &NodeField::from_sub(zero))?;
@@ -259,6 +259,6 @@ fn uniform_flux(
     let flux =
         pyrucast::ops::element_field::behavior::integrate(model, &gradient, None, materials, None)?;
     let sub = flux.get(0)?;
-    let sub = pyrucast::store::read(&sub)?;
+    let sub = sub.read();
     Ok((sub.value(0, 0, "flux_x")?, sub.value(0, 0, "flux_y")?))
 }

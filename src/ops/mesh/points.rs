@@ -45,7 +45,7 @@ use crate::aggregate::Aggregate;
 use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
-use crate::store::{insert, read};
+use crate::store::Handle;
 use std::collections::HashSet;
 
 // ---------------------------------------------------------------------------
@@ -438,7 +438,7 @@ impl Context {
                 op,
             });
         }
-        let dim = read(&mesh.coords()?)?.dim() as usize;
+        let dim = mesh.coords()?.read().dim() as usize;
         let tol = match tol {
             Some(t) => t,
             None => default_tol(mesh)?,
@@ -531,7 +531,7 @@ impl Context {
             // the POI1 increfs in `Coords`, which takes a write lock, and no
             // long-lived read guard may straddle that.
             let (coords, nodes) = {
-                let s = read(sm)?;
+                let s = sm.read();
                 let conn = s.connectivity();
                 let mut known: HashSet<NodeId> = HashSet::with_capacity(conn.len());
                 let unique: Vec<NodeId> = conn
@@ -542,7 +542,7 @@ impl Context {
                 (s.coords(), unique)
             };
             let kept: Vec<NodeId> = {
-                let c = read(&coords)?;
+                let c = coords.read();
                 let mut kept = Vec::new();
                 for nid in nodes {
                     if keep(c.position(nid)?) {
@@ -551,7 +551,7 @@ impl Context {
                 }
                 kept
             };
-            out.add_sub(insert(SubMesh::poi1_from_node_ids(coords, &kept)?))?;
+            out.add_sub(Handle::new(SubMesh::poi1_from_node_ids(coords, &kept)?))?;
         }
         Ok(out)
     }
@@ -661,12 +661,12 @@ fn signed_gap(x: &[f64], origin: &[f64], normal: &[f64]) -> f64 {
 /// of and gets an exact test (`0`).
 fn default_tol(mesh: &Mesh) -> Result<f64> {
     let coords = mesh.coords()?;
-    let c = read(&coords)?;
+    let c = coords.read();
     let dim = c.dim() as usize;
     let mut lo = vec![f64::INFINITY; dim];
     let mut hi = vec![f64::NEG_INFINITY; dim];
     for sm in mesh {
-        let s = read(sm)?;
+        let s = sm.read();
         for &nid in s.connectivity() {
             for (k, &v) in c.position(nid)?.iter().enumerate() {
                 lo[k] = lo[k].min(v);
@@ -695,13 +695,13 @@ mod tests {
     use super::*;
     use crate::atoms::{ElementType, Node};
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     /// A 3×3 grid of POI1 nodes over [0, 2]², one node per integer pair, as a
     /// single-submesh mesh. Returns the mesh and the node ids row by row
     /// (`y` slowest).
     fn grid2d() -> (Mesh, Vec<NodeId>) {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         let mut ids = Vec::new();
         for j in 0..3 {
@@ -716,7 +716,7 @@ mod tests {
 
     /// The node ids of a single-submesh POI1 selection, in order.
     fn selected(mesh: &Mesh) -> Vec<NodeId> {
-        let s = read(&mesh.items()[0]).unwrap();
+        let s = mesh.items()[0].read();
         s.connectivity().to_vec()
     }
 
@@ -772,7 +772,7 @@ mod tests {
 
     #[test]
     fn cylinder_lateral_surface_excludes_the_caps() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         // On the tube (r = 1, z within [0, 2]), on the axis at mid-height,
         // on the bottom cap disc, and past the top.
@@ -806,7 +806,7 @@ mod tests {
 
     #[test]
     fn cone_tapers_between_its_end_radii() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         // Cone from radius 2 at z = 0 to an apex at z = 2: the local radius is
         // 1 at mid-height. On the surface, inside, and outside.
@@ -840,7 +840,7 @@ mod tests {
 
     #[test]
     fn torus_is_a_tube_around_its_directrix() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         // Directrix: the circle of radius 2 in z = 0; minor radius 0.5.
         let pts = [
@@ -870,7 +870,7 @@ mod tests {
 
     #[test]
     fn result_mirrors_the_submeshes_including_the_empty_ones() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.5, 5.0]).unwrap();
@@ -881,7 +881,7 @@ mod tests {
         let far = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
             sm.add_cell(&[c.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         mesh.add_sub(far).unwrap();
 
@@ -897,7 +897,7 @@ mod tests {
 
     #[test]
     fn nodes_are_de_duplicated_in_order_of_first_appearance() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
@@ -913,7 +913,7 @@ mod tests {
 
     #[test]
     fn explicit_tolerance_widens_the_band() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.01]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));

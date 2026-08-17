@@ -29,7 +29,7 @@ use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::ops::{element_field, measure, mesh, node_field};
-use pyrucast::store::{insert, read};
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 use std::f64::consts::PI;
@@ -44,7 +44,7 @@ fn annulus(
     nr: usize,
     nz: usize,
 ) -> Result<(Vec<Node>, Mesh, FiniteElementSpace)> {
-    let coords = insert(Coords::axisymmetric()?);
+    let coords = Handle::new(Coords::axisymmetric()?);
     let idx = |i: usize, j: usize| j * (nr + 1) + i;
     let mut grid: Vec<Node> = Vec::new();
     for j in 0..=nz {
@@ -92,7 +92,7 @@ fn clamp(nodes: &[Node], var: &str, dual: &str) -> Result<Model> {
 fn integral_measures_the_revolved_volume() -> Result<()> {
     let (grid, _mesh, fes) = annulus(1.0, 3.0, 2.0, 4, 2)?;
 
-    let support = insert(SubMesh::poi1_from_nodes(&grid)?);
+    let support = Handle::new(SubMesh::poi1_from_nodes(&grid)?);
     let mut ones = pyrucast::containers::node_field::SubNodeField::from_poi1(
         &support,
         vec!["one".to_string()],
@@ -127,7 +127,7 @@ fn mass_matrix_weighs_the_whole_ring() -> Result<()> {
     // 1ᵀ M 1 on the radial component: ∫ ρ (Σ_i N_i)(Σ_j N_j) dΩ = ρ·volume, the
     // shape functions being a partition of unity. So a unit radial "displacement"
     // gives nodal forces summing to the ring's mass.
-    let support = insert(SubMesh::poi1_from_nodes(&_grid)?);
+    let support = Handle::new(SubMesh::poi1_from_nodes(&_grid)?);
     let mut ones = pyrucast::containers::node_field::SubNodeField::from_poi1(
         &support,
         vec!["u_x".to_string(), "u_y".to_string()],
@@ -158,7 +158,7 @@ fn mass_matrix_weighs_the_whole_ring() -> Result<()> {
 #[test]
 fn axial_translation_is_rigid_but_radial_translation_is_not() -> Result<()> {
     let (grid, _mesh, fes) = annulus(1.0, 2.0, 1.0, 2, 1)?;
-    let support = insert(SubMesh::poi1_from_nodes(&grid)?);
+    let support = Handle::new(SubMesh::poi1_from_nodes(&grid)?);
 
     let uniform = |ur: f64, uz: f64| -> Result<NodeField> {
         let mut u = pyrucast::containers::node_field::SubNodeField::from_poi1(
@@ -174,7 +174,7 @@ fn axial_translation_is_rigid_but_radial_translation_is_not() -> Result<()> {
 
     // Axial translation: every component vanishes, hoop included.
     let strain = element_field::deformation(&uniform(0.0, 0.5)?, &fes)?;
-    let s = read(&strain.get(0)?)?;
+    let s = strain.get(0)?.read();
     for g in 0..s.gauss_count() {
         for c in ["eps_xx", "eps_yy", "eps_xy", "eps_zz"] {
             assert!(
@@ -188,7 +188,7 @@ fn axial_translation_is_rigid_but_radial_translation_is_not() -> Result<()> {
 
     // Radial translation: meridian strains vanish, the hoop does not.
     let strain = element_field::deformation(&uniform(0.5, 0.0)?, &fes)?;
-    let s = read(&strain.get(0)?)?;
+    let s = strain.get(0)?.read();
     for g in 0..s.gauss_count() {
         for c in ["eps_xx", "eps_yy", "eps_xy"] {
             assert!(s.value(0, g, c)?.abs() < 1e-14);
@@ -210,7 +210,7 @@ fn uniform_dilation_is_an_exact_constant_strain_state() -> Result<()> {
     const C: f64 = 1e-3;
     const EZ: f64 = -4e-4;
     let (grid, _mesh, fes) = annulus(1.0, 3.0, 2.0, 3, 2)?;
-    let support = insert(SubMesh::poi1_from_nodes(&grid)?);
+    let support = Handle::new(SubMesh::poi1_from_nodes(&grid)?);
 
     let mut u = pyrucast::containers::node_field::SubNodeField::from_poi1(
         &support,
@@ -227,7 +227,7 @@ fn uniform_dilation_is_an_exact_constant_strain_state() -> Result<()> {
     let u = NodeField::from_sub(u);
 
     let strain = element_field::deformation(&u, &fes)?;
-    let s = read(&strain.get(0)?)?;
+    let s = strain.get(0)?.read();
     for cell in 0..s.cell_count() {
         for g in 0..s.gauss_count() {
             assert!((s.value(cell, g, "eps_xx")? - C).abs() < 1e-14);
@@ -265,7 +265,7 @@ fn lame_case(nr: usize, quadratic: bool) -> Result<(f64, f64)> {
     const B: f64 = 2.0;
     const H: f64 = 0.5;
 
-    let coords = insert(Coords::axisymmetric()?);
+    let coords = Handle::new(Coords::axisymmetric()?);
     let idx = |i: usize, j: usize| j * (nr + 1) + i;
     let mut grid: Vec<Node> = Vec::new();
     for j in 0..=1 {
@@ -288,8 +288,8 @@ fn lame_case(nr: usize, quadratic: bool) -> Result<(f64, f64)> {
     }
     let mut edge = SubMesh::new(coords.clone(), ElementType::SEG2);
     edge.add_cell(&[grid[idx(0, 0)].id(), grid[idx(0, 1)].id()])?;
-    mesh.add_sub(insert(solid))?;
-    mesh.add_sub(insert(edge))?;
+    mesh.add_sub(Handle::new(solid))?;
+    mesh.add_sub(Handle::new(edge))?;
 
     let (mesh, interp) = if quadratic {
         (mesh::to_quadratic(&mesh)?, Interpolation::Lagrange2)
@@ -306,7 +306,7 @@ fn lame_case(nr: usize, quadratic: bool) -> Result<(f64, f64)> {
     // Plane strain: u_z = 0 on both z faces (every node on them, mid-edge
     // nodes included — hence the coordinate filter rather than an index list).
     let poi1 = mesh::to_poi1(&solid_mesh)?;
-    let nodes: Vec<Node> = (0..read(&poi1.get(0)?)?.cell_count())
+    let nodes: Vec<Node> = (0..poi1.get(0)?.read().cell_count())
         .map(|c| poi1.node(0, c, 0))
         .collect::<Result<_>>()?;
     let ends: Vec<Node> = nodes
@@ -341,7 +341,7 @@ fn lame_case(nr: usize, quadratic: bool) -> Result<(f64, f64)> {
     // ── Stresses against Lamé, at the Gauss points ─────────────────────────
     // `solve` returns the Lagrange multipliers alongside the displacement, so
     // restrict onto a displacement-shaped field before differentiating.
-    let sm = insert(SubMesh::poi1_from_nodes(&nodes)?);
+    let sm = Handle::new(SubMesh::poi1_from_nodes(&nodes)?);
     let zero = pyrucast::containers::node_field::SubNodeField::from_poi1(
         &sm,
         vec!["u_x".to_string(), "u_y".to_string()],
@@ -353,7 +353,7 @@ fn lame_case(nr: usize, quadratic: bool) -> Result<(f64, f64)> {
     // The radius at each Gauss point, obtained the same way any field is: the
     // nodal coordinates interpolated onto the quadrature.
     let gauss_r = element_field::interp_to_gauss(&node_field::positions(&solid_mesh, None)?, &fes)?;
-    let (s, rg) = (read(&stress.get(0)?)?, read(&gauss_r.get(0)?)?);
+    let (s, rg) = (stress.get(0)?.read(), gauss_r.get(0)?.read());
     let mut worst_s = 0.0_f64;
     for cell in 0..s.cell_count() {
         for g in 0..s.gauss_count() {
@@ -427,7 +427,7 @@ fn internal_forces_match_stiffness_times_displacement() -> Result<()> {
     const E: f64 = 210_000.0;
     const NU: f64 = 0.3;
     let (grid, _mesh, fes) = annulus(1.0, 2.5, 1.0, 4, 3)?;
-    let support = insert(SubMesh::poi1_from_nodes(&grid)?);
+    let support = Handle::new(SubMesh::poi1_from_nodes(&grid)?);
 
     let model = Model::elasticity(&fes, ElasticityModel::Axisymmetric)?;
     let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("nu", NU)])?;
@@ -517,7 +517,7 @@ fn heat_conduction_through_a_hollow_cylinder_is_logarithmic() -> Result<()> {
     }
     let materials = pyrucast::ops::element_field::material_field(&model, &[("k", 1.0)])?;
 
-    let mult_sm = insert(SubMesh::poi1_from_nodes(
+    let mult_sm = Handle::new(SubMesh::poi1_from_nodes(
         &mult_nodes
             .iter()
             .map(|(n, _)| n.clone())
@@ -560,7 +560,7 @@ fn model_and_geometry_must_agree() -> Result<()> {
     assert!(format!("{err}").contains("axisymmetric geometry"));
 
     // And the axisymmetric model on a plain Cartesian geometry.
-    let coords = insert(Coords::new(2)?);
+    let coords = Handle::new(Coords::new(2)?);
     let a = Node::create_in(coords.clone(), &[0.0, 0.0])?;
     let b = Node::create_in(coords.clone(), &[1.0, 0.0])?;
     let c = Node::create_in(coords.clone(), &[0.0, 1.0])?;
@@ -589,7 +589,7 @@ fn model_and_geometry_must_agree() -> Result<()> {
 #[test]
 fn a_boundary_mesh_is_not_a_solid() -> Result<()> {
     for axisymmetric in [true, false] {
-        let coords = insert(if axisymmetric {
+        let coords = Handle::new(if axisymmetric {
             Coords::axisymmetric()?
         } else {
             Coords::new(2)?
@@ -628,7 +628,7 @@ fn nonlinear_cell(
     axisymmetric: bool,
 ) -> Result<(Model, ElementField, FiniteElementSpace)> {
     let (mesh, model_kind) = if axisymmetric {
-        let coords = insert(Coords::axisymmetric()?);
+        let coords = Handle::new(Coords::axisymmetric()?);
         let n: Vec<Node> = [(1.0, 0.0), (2.0, 0.0), (2.0, 1.0), (1.0, 1.0)]
             .iter()
             .map(|&(r, z)| Node::create_in(coords.clone(), &[r, z]))
@@ -637,7 +637,7 @@ fn nonlinear_cell(
         m.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>())?;
         (m, ElasticityModel::Axisymmetric)
     } else {
-        let coords = insert(Coords::new(3)?);
+        let coords = Handle::new(Coords::new(3)?);
         let n: Vec<Node> = [
             (0.0, 0.0, 0.0),
             (1.0, 0.0, 0.0),
@@ -702,7 +702,7 @@ fn stress_of(
     sub.set_uniform("eps_zz", hoop)?;
     sub.set_uniform("eps_xy", rz)?;
     let mut strain = ElementField::empty();
-    strain.add_sub(insert(sub))?;
+    strain.add_sub(Handle::new(sub))?;
     pyrucast::ops::element_field::behavior::integrate(model, &strain, prev, materials, None)
 }
 
@@ -735,7 +735,7 @@ fn nonlinear_laws_agree_with_their_3d_twin() -> Result<()> {
         for (step, &eps) in path.iter().enumerate() {
             let a = stress_of(&axi_m, &axi_mat, &axi_fes, true, eps, axi_prev.as_ref())?;
             let s = stress_of(&sol_m, &sol_mat, &sol_fes, false, eps, sol_prev.as_ref())?;
-            let (ga, gs) = (read(&a.get(0)?)?, read(&s.get(0)?)?);
+            let (ga, gs) = (a.get(0)?.read(), s.get(0)?.read());
             let mut peak = 0.0_f64;
             for comp in ["sigma_xx", "sigma_yy", "sigma_zz", "sigma_xy"] {
                 let (va, vs) = (ga.value(0, 0, comp)?, gs.value(0, 0, comp)?);

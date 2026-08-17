@@ -134,7 +134,7 @@ mod tests {
     use crate::atoms::{Node, NodeId, Point2};
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
-    use crate::store::{insert, read};
+    use crate::store::Handle;
     use std::collections::HashMap;
     use std::sync::atomic::AtomicBool;
 
@@ -193,7 +193,7 @@ mod tests {
     fn inspect(mesh: &Mesh) -> Report {
         use crate::ops::mesh::paving::geom::{orient, quad_quality, tri_quality};
         let coords = mesh.coords().unwrap();
-        let c = read(&coords).unwrap();
+        let c = coords.read();
         let at = |id: NodeId| {
             let v = c.position(id).unwrap();
             Point2::new(v[0], v[1])
@@ -211,7 +211,7 @@ mod tests {
             *edges.entry(k).or_insert(0) += 1;
         };
         for sm in mesh {
-            let s = read(sm).unwrap();
+            let s = sm.read();
             let npc = s.element_type().nodes_per_cell();
             for cell in s.connectivity().chunks(npc) {
                 for i in 0..npc {
@@ -235,7 +235,7 @@ mod tests {
 
     #[test]
     fn a_square_is_paved_with_quadrangles_only() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let contour = loop_mesh(coords, &rect_loop(1.0, 1.0, 8, 8));
         let mesh = pave_surface(&contour, ElementType::QUA4, Some(0.125), false).unwrap();
         let r = inspect(&mesh);
@@ -247,7 +247,7 @@ mod tests {
 
     #[test]
     fn a_plate_with_a_hole_is_paved_and_covers_its_area() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let outer = loop_mesh(coords.clone(), &rect_loop(3.0, 1.0, 30, 10));
         let hole = loop_mesh(coords, &circle_loop(2.25, 0.5, 0.35, 32, true));
         let contour = outer.union(&hole).unwrap();
@@ -259,10 +259,10 @@ mod tests {
         {
             let all: std::collections::HashSet<NodeId> = mesh
                 .into_iter()
-                .flat_map(|sm| read(sm).unwrap().connectivity().to_vec())
+                .flat_map(|sm| sm.read().connectivity().to_vec())
                 .collect();
             for sub in [&outer[0], &hole[0]] {
-                for n in read(sub).unwrap().connectivity() {
+                for n in sub.read().connectivity() {
                     assert!(all.contains(n), "contour node {n:?} was seamed away");
                 }
             }
@@ -280,7 +280,7 @@ mod tests {
 
     #[test]
     fn cancellable_stops_on_a_preset_flag() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let contour = loop_mesh(coords, &rect_loop(1.0, 1.0, 20, 20));
         let flag = AtomicBool::new(true);
         let err = pave_surface_cancellable(&contour, ElementType::QUA4, Some(0.02), false, &flag)
@@ -290,7 +290,7 @@ mod tests {
 
     #[test]
     fn a_concave_l_shape_is_paved_without_leaving_the_material() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let mut pts = Vec::new();
         let step = 0.1;
         for i in 0..20 {
@@ -331,7 +331,7 @@ mod tests {
         // behind. A row laid on a slither used to reverse its loop, after
         // which every further row inflated it until it left the material
         // entirely — reported, much later and far away, as a fold.
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let (u, v) = (0.6 / 9.0, 0.3 / 40.0);
         let levels = [40.0, 3.0, 6.0, 4.0, 6.0, 4.0, 6.0, 3.0, 40.0];
         let mut corners: Vec<(f64, f64)> = vec![(0.0, 0.0), (0.6, 0.0)];
@@ -369,7 +369,7 @@ mod tests {
         // has no filling by quadrangles alone, and the contour is the
         // caller's: nothing here may add a node to it to even the count out.
         // So the honest answer is to say so.
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let mut pts = rect_loop(1.0, 1.0, 4, 4);
         pts.push((0.0, 0.125));
         assert_eq!(pts.len() % 2, 1);
@@ -394,19 +394,19 @@ mod tests {
 
     #[test]
     fn the_contour_nodes_come_back_untouched() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let pts = rect_loop(1.0, 1.0, 6, 6);
         let contour = loop_mesh(coords.clone(), &pts);
         let before: Vec<(NodeId, Vec<f64>)> = {
-            let c = read(&coords).unwrap();
-            let s = read(&contour[0]).unwrap();
+            let c = coords.read();
+            let s = contour[0].read();
             s.connectivity()
                 .iter()
                 .map(|&n| (n, c.position(n).unwrap().to_vec()))
                 .collect()
         };
         let mesh = pave_surface(&contour, ElementType::QUA4, Some(0.15), false).unwrap();
-        let c = read(&coords).unwrap();
+        let c = coords.read();
         for (id, coord) in &before {
             assert_eq!(
                 &c.position(*id).unwrap().to_vec(),
@@ -417,7 +417,7 @@ mod tests {
         // And they are still the ones the mesh is built on.
         let used: HashMap<NodeId, ()> = mesh
             .into_iter()
-            .flat_map(|sm| read(sm).unwrap().connectivity().to_vec())
+            .flat_map(|sm| sm.read().connectivity().to_vec())
             .map(|n| (n, ()))
             .collect();
         for (id, _) in &before {
@@ -431,14 +431,14 @@ mod tests {
         // boundary edge of the mesh, and there is no other boundary edge —
         // so no node was added on the boundary, none was dropped, and no hole
         // was left anywhere inside.
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let pts = rect_loop(3.0, 1.0, 30, 10);
         let contour = loop_mesh(coords, &pts);
         let mesh = pave_surface(&contour, ElementType::QUA4, Some(0.1), false).unwrap();
 
         let mut used: HashMap<(NodeId, NodeId), usize> = HashMap::new();
         for sm in &mesh {
-            let s = read(sm).unwrap();
+            let s = sm.read();
             let npc = s.element_type().nodes_per_cell();
             for cell in s.connectivity().chunks(npc) {
                 for i in 0..npc {
@@ -448,7 +448,7 @@ mod tests {
                 }
             }
         }
-        let contour_conn = read(&contour[0]).unwrap();
+        let contour_conn = contour[0].read();
         for seg in contour_conn.connectivity().chunks(2) {
             let key = if seg[0].0 < seg[1].0 {
                 (seg[0], seg[1])
@@ -473,7 +473,7 @@ mod tests {
     #[test]
     fn a_planar_contour_in_3d_is_paved_in_its_own_plane() {
         // The formation benchmark lives in the y = 0 plane of a 3-D Coords.
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let ids: Vec<NodeId> = rect_loop(1.0, 1.0, 6, 6)
             .iter()
             .map(|&(x, z)| Node::create_in(coords.clone(), &[x, 0.0, z]).unwrap().id())
@@ -485,9 +485,9 @@ mod tests {
         }
         let contour = Mesh::from_submesh(sm);
         let mesh = pave_surface(&contour, ElementType::QUA4, Some(0.2), false).unwrap();
-        let c = read(&coords).unwrap();
+        let c = coords.read();
         for sm in &mesh {
-            for &node in read(sm).unwrap().connectivity() {
+            for &node in sm.read().connectivity() {
                 assert!(
                     c.position(node).unwrap()[1].abs() < 1e-12,
                     "a node left the y = 0 plane"
@@ -498,18 +498,18 @@ mod tests {
 
     #[test]
     fn quadratic_forms_are_derived_from_the_quadrangles() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let contour = loop_mesh(coords, &rect_loop(1.0, 1.0, 4, 4));
         for (et, npc) in [(ElementType::QUA8, 8), (ElementType::QUA9, 9)] {
             let mesh = pave_surface(&contour, et, Some(0.25), true).unwrap();
             assert_eq!(mesh.element_types().unwrap(), vec![et]);
-            assert_eq!(read(&mesh[0]).unwrap().element_type().nodes_per_cell(), npc);
+            assert_eq!(mesh[0].read().element_type().nodes_per_cell(), npc);
         }
     }
 
     #[test]
     fn bad_input_is_rejected_with_a_named_error() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let contour = loop_mesh(coords.clone(), &rect_loop(1.0, 1.0, 4, 4));
         for err in [
             pave_surface(&contour, ElementType::TRI3, None, false).unwrap_err(),
@@ -535,7 +535,7 @@ mod tests {
 
     #[test]
     fn the_default_size_follows_the_contour_discretisation() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let contour = loop_mesh(coords, &rect_loop(1.0, 1.0, 10, 10));
         let mesh = pave_surface(&contour, ElementType::QUA4, None, false).unwrap();
         let r = inspect(&mesh);
@@ -555,7 +555,7 @@ mod tests {
     #[ignore = "performance check, run explicitly with --ignored"]
     fn perf_and_quality_plate_with_hole_under_30s() {
         use crate::ops::mesh::paving::geom::{quad_quality, tri_quality};
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let outer = loop_mesh(coords.clone(), &rect_loop(0.30, 0.10, 60, 20));
         let hole = loop_mesh(coords, &circle_loop(0.225, 0.05, 0.035, 64, true));
         let contour = outer.union(&hole).unwrap();
@@ -564,7 +564,7 @@ mod tests {
         let mesh = pave_surface(&contour, ElementType::QUA4, Some(0.00029), false).unwrap();
         let dt = t0.elapsed();
 
-        let c = read(&mesh.coords().unwrap()).unwrap();
+        let c = mesh.coords().unwrap().read();
         let at = |id: NodeId| {
             let v = c.position(id).unwrap();
             Point2::new(v[0], v[1])
@@ -573,7 +573,7 @@ mod tests {
         let mut worst = f64::INFINITY;
         let mut under = 0usize;
         for sm in &mesh {
-            let s = read(sm).unwrap();
+            let s = sm.read();
             let npc = s.element_type().nodes_per_cell();
             for cell in s.connectivity().chunks(npc) {
                 let p: Vec<Point2> = cell.iter().map(|&n| at(n)).collect();
@@ -618,7 +618,7 @@ mod tests {
     #[ignore = "reporting run, not an assertion"]
     fn quality_report_plate_with_hole() {
         use crate::ops::mesh::paving::geom::{quad_quality, tri_quality};
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let outer = loop_mesh(coords.clone(), &rect_loop(0.30, 0.10, 60, 20));
         let hole = loop_mesh(coords, &circle_loop(0.225, 0.05, 0.035, 64, true));
         let contour = outer.union(&hole).unwrap();
@@ -628,7 +628,7 @@ mod tests {
         let mesh = pave_surface(&contour, ElementType::QUA4, Some(target), false).unwrap();
         let dt = t0.elapsed();
 
-        let c = read(&mesh.coords().unwrap()).unwrap();
+        let c = mesh.coords().unwrap().read();
         let at = |id: NodeId| {
             let v = c.position(id).unwrap();
             Point2::new(v[0], v[1])
@@ -643,7 +643,7 @@ mod tests {
         let (mut nq, mut nt) = (0usize, 0usize);
 
         for sm in &mesh {
-            let s = read(sm).unwrap();
+            let s = sm.read();
             let npc = s.element_type().nodes_per_cell();
             for cell in s.connectivity().chunks(npc) {
                 let p: Vec<Point2> = cell.iter().map(|&n| at(n)).collect();

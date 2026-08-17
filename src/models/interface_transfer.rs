@@ -75,11 +75,10 @@ use crate::models::transfer::{
 use crate::models::{
     CellGeom, Contribution, CouplingLayout, Domain, MatrixKind, MatrixLayout, Physics, SubModelKind,
 };
-use crate::store::{read, Handle};
-use serde::{Deserialize, Serialize};
+use crate::store::Handle;
 
 /// Exchange law between two conforming boundary FE subspaces.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct InterfaceTransfer {
     pub(crate) side_a: Handle<SubFiniteElementSpace>,
     pub(crate) side_b: Handle<SubFiniteElementSpace>,
@@ -105,10 +104,10 @@ impl InterfaceTransfer {
         tol: f64,
     ) -> Result<Self> {
         material_contract("InterfaceTransfer", &components)?;
-        let (mesh_a, mesh_b) = (read(&side_a)?.submesh(), read(&side_b)?.submesh());
+        let (mesh_a, mesh_b) = (side_a.read().submesh(), side_b.read().submesh());
         check_conforming_geometry(&mesh_a, &mesh_b, tol)?;
-        let support_a = read(&mesh_a)?.to_poi1()?;
-        let support_b = read(&mesh_b)?.to_poi1()?;
+        let support_a = mesh_a.read().to_poi1()?;
+        let support_b = mesh_b.read().to_poi1()?;
         Ok(Self {
             side_a,
             side_b,
@@ -247,7 +246,7 @@ impl SubModelKind for InterfaceTransfer {
     fn render(&self, _opts: &DumpOptions) -> String {
         let primal = self.primal_vars().join(", ");
         let dual = self.dual_vars().join(", ");
-        let cells = read(&self.side_a).and_then(|f| f.cell_count()).unwrap_or(0);
+        let cells = self.side_a.read().cell_count().unwrap_or(0);
         format!(
             "SubModel<InterfaceTransfer>\n  primal var(s): {primal}\n  \
              dual var(s):   {dual}\n  interface: {cells} facing cell pair(s)"
@@ -313,7 +312,7 @@ fn check_conforming_geometry(
     mesh_b: &Handle<SubMesh>,
     tol: f64,
 ) -> Result<()> {
-    let (a, b) = (read(mesh_a)?, read(mesh_b)?);
+    let (a, b) = (mesh_a.read(), mesh_b.read());
     if a.element_type() != b.element_type() {
         return Err(PyrucastError::Message(format!(
             "InterfaceTransfer: the two sides must carry the same element type — \
@@ -330,7 +329,7 @@ fn check_conforming_geometry(
         )));
     }
     let (coords_a_h, coords_b_h) = (a.coords(), b.coords());
-    let (guard_a, guard_b) = (read(&coords_a_h)?, read(&coords_b_h)?);
+    let (guard_a, guard_b) = (coords_a_h.read(), coords_b_h.read());
     let (coords_a, coords_b): (&Coords, &Coords) = (&guard_a, &guard_b);
     for (k, (&na, &nb)) in a.connectivity().iter().zip(b.connectivity()).enumerate() {
         let (pa, pb) = (coords_a.position(na)?, coords_b.position(nb)?);

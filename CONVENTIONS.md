@@ -213,8 +213,8 @@ expose en `pub`.
 - **Côté Rust (couche bas niveau).** `SubMesh::new`, `SubElementField::new`,
   `SubMatrix::new`, `SubModel::heat_conduction` / `dirichlet`, … restent
   `pub`. La couche qui écrit les mailleurs, les assembleurs et les
-  constructeurs parent *doit* pouvoir fabriquer des `Sub*` et les insérer
-  dans le store ; le contrôle total est le rôle de l'API Rust.
+  constructeurs parent *doit* pouvoir fabriquer des `Sub*` et les placer
+  derrière un `Handle` ; le contrôle total est le rôle de l'API Rust.
 - **Côté Python (surface curée).** Les `Sub*` sont des **vues** obtenues par
   indexation du parent (`parent[i]`) ; ils ne se **construisent pas**
   directement. On construit au niveau parent et on compose par `|` (union,
@@ -317,8 +317,8 @@ Trois conséquences mécaniques :
 3. **Le `Sub*` est une vue, pas un point de construction (surface Python).**
    On y accède par indexation (`parent[i]`), exactement comme
    `submesh[j] → Cell` et `cell[k] → Node` sont déjà des vues. Le `Sub*`
-   garde une identité dans le store (refcount, partage de `Handle`), mais il
-   sort du chemin de construction **côté Python** : les constructeurs
+   garde son identité propre (partage de `Handle`, comptage de références),
+   mais il sort du chemin de construction **côté Python** : les constructeurs
    `Sub*` n'y sont pas exposés (c'est l'« Exception assumée : Rust bas
    niveau, Python curé » ci-dessus). **Côté Rust**, `SubMesh::new` & co.
    restent `pub` — la couche bas niveau en a besoin.

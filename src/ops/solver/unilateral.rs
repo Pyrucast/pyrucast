@@ -48,7 +48,6 @@ use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::{Cancel, NoCancel};
 use crate::models::RelationSense;
-use crate::store::read;
 use faer::sparse::{SparseColMat, Triplet};
 use nalgebra::{DMatrix, DVector};
 use parking_lot::Mutex;
@@ -614,7 +613,7 @@ fn build_state(model: &Model, matrix: &Matrix) -> Result<ActiveSetState> {
 
     let mut inequalities = Vec::new();
     for h in model {
-        let sub = read(h)?;
+        let sub = h.read();
         let kind = sub.as_kind();
         let Some(constraint) = kind.as_constraint() else {
             continue;
@@ -754,7 +753,7 @@ mod tests {
     use crate::coords::Coords;
     use crate::ops::matrix::stiffness;
     use crate::ops::mesh::barycenter;
-    use crate::store::insert;
+    use crate::store::Handle;
     use std::sync::atomic::Ordering;
 
     /// A 2-element heat bar on `[0, 1]` (`k = 1`) with `T(0) = 0` (equality) and
@@ -763,7 +762,7 @@ mod tests {
     /// is positive, so **both bounds release** — a two-status-iteration problem
     /// starting from the all-active warm start.
     fn two_loose_bounds(q: f64) -> (Model, ElementField, Matrix, NodeField, Vec<Node>) {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let nodes: Vec<Node> = (0..=2)
             .map(|i| Node::create_in(coords.clone(), &[i as f64 * 0.5]).unwrap())
             .collect();
@@ -776,11 +775,11 @@ mod tests {
         let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
         mat.set_uniform("k", 1.0).unwrap();
         let mut materials = ElementField::empty();
-        materials.add_sub(insert(mat)).unwrap();
+        materials.add_sub(Handle::new(mat)).unwrap();
 
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::heat_conduction(sub).unwrap()))
+            .add_sub(Handle::new(SubModel::heat_conduction(sub).unwrap()))
             .unwrap();
 
         let poi1 = |n: &Node| {
@@ -801,7 +800,7 @@ mod tests {
         )
         .unwrap();
         let dir_mult = dir.multiplier_nodes().unwrap()[0];
-        model.add_sub(insert(dir)).unwrap();
+        model.add_sub(Handle::new(dir)).unwrap();
 
         // Two loose lower bounds at nodes 1 and 2.
         let mut bound_mults = Vec::new();
@@ -819,7 +818,7 @@ mod tests {
             )
             .unwrap();
             bound_mults.push(b.multiplier_nodes().unwrap()[0]);
-            model.add_sub(insert(b)).unwrap();
+            model.add_sub(Handle::new(b)).unwrap();
         }
 
         // rhs: flux q at the right node, imposed values at every multiplier slot.
@@ -828,7 +827,7 @@ mod tests {
         rhs_sm.add_cell(&[dir_mult]).unwrap();
         rhs_sm.add_cell(&[bound_mults[0]]).unwrap();
         rhs_sm.add_cell(&[bound_mults[1]]).unwrap();
-        let rhs_sm = insert(rhs_sm);
+        let rhs_sm = Handle::new(rhs_sm);
         let mut rhs =
             SubNodeField::from_poi1(&rhs_sm, vec!["q".into(), "imposed_T".into()]).unwrap();
         rhs.set_value(nodes[2].id(), "q", q).unwrap();

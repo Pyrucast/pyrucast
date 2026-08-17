@@ -15,7 +15,7 @@ use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::containers::node_field::NodeField;
 use crate::error::Result;
 use crate::models::kernel;
-use crate::store::insert;
+use crate::store::Handle;
 
 /// Interpolate a nodal `field` to the Gauss points of every subspace of
 /// `fespace`: `f(ξ_g) = Σ_i f_i N_i(ξ_g)`.
@@ -41,7 +41,7 @@ pub fn interp_to_gauss(field: &NodeField, fespace: &FiniteElementSpace) -> Resul
             }
             Ok(())
         })?;
-        out.add_sub(insert(sf))?;
+        out.add_sub(Handle::new(sf))?;
     }
     Ok(out)
 }
@@ -56,13 +56,13 @@ mod tests {
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::node_field::SubNodeField;
     use crate::coords::Coords;
-    use crate::store::{insert, read};
+    use crate::store::Handle;
 
     /// Constant nodal field ⇒ same value at every Gauss point, same component
     /// names as the input.
     #[test]
     fn constant_field_is_reproduced_at_every_gauss_point() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -70,7 +70,8 @@ mod tests {
         mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 
-        let support = insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone(), c.clone()]).unwrap());
+        let support =
+            Handle::new(SubMesh::poi1_from_nodes(&[a.clone(), b.clone(), c.clone()]).unwrap());
         let mut t = SubNodeField::from_poi1(&support, vec!["T".into()]).unwrap();
         for n in [&a, &b, &c] {
             t.set_value(n.id(), "T", 42.0).unwrap();
@@ -78,7 +79,7 @@ mod tests {
         let t = NodeField::from_sub(t);
 
         let elem = interp_to_gauss(&t, &fes).unwrap();
-        let s = read(&elem.get(0).unwrap()).unwrap();
+        let s = elem.get(0).unwrap().read();
         assert_eq!(s.components(), &["T".to_string()]);
         for g in 0..s.gauss_count() {
             assert!((s.value(0, g, "T").unwrap() - 42.0).abs() < 1e-12);
@@ -89,21 +90,21 @@ mod tests {
     /// interpolation is exact, so `T` at each Gauss point equals `1 + 3·x_g`.
     #[test]
     fn linear_field_interpolated_exactly_on_seg2() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[2.0]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 
-        let support = insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap());
+        let support = Handle::new(SubMesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap());
         let mut t = SubNodeField::from_poi1(&support, vec!["T".into()]).unwrap();
         t.set_value(a.id(), "T", 1.0).unwrap(); // 1 + 3·0
         t.set_value(b.id(), "T", 7.0).unwrap(); // 1 + 3·2
         let t = NodeField::from_sub(t);
 
         let elem = interp_to_gauss(&t, &fes).unwrap();
-        let s = read(&elem.get(0).unwrap()).unwrap();
+        let s = elem.get(0).unwrap().read();
         // The average of the two Gauss values equals the midpoint value 1 + 3·1 = 4.
         let mean: f64 = (0..s.gauss_count())
             .map(|g| s.value(0, g, "T").unwrap())
@@ -121,7 +122,7 @@ mod tests {
     /// a multi-zone FE space gets its own zone.
     #[test]
     fn multi_component_multi_subspace() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let n0 = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let n1 = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let n2 = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -130,18 +131,18 @@ mod tests {
         let sm_tri = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sm_qua = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::QUA4);
             sm.add_cell(&[n0.id(), n1.id(), n3.id(), n2.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         mesh.add_sub(sm_tri).unwrap();
         mesh.add_sub(sm_qua).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 
-        let support = insert(
+        let support = Handle::new(
             SubMesh::poi1_from_nodes(&[n0.clone(), n1.clone(), n2.clone(), n3.clone()]).unwrap(),
         );
         let mut f = SubNodeField::from_poi1(&support, vec!["a".into(), "b".into()]).unwrap();
@@ -154,7 +155,7 @@ mod tests {
         let elem = interp_to_gauss(&f, &fes).unwrap();
         assert_eq!(elem.len(), 2);
         for zone in 0..2 {
-            let s = read(&elem.get(zone).unwrap()).unwrap();
+            let s = elem.get(zone).unwrap().read();
             for g in 0..s.gauss_count() {
                 assert!((s.value(0, g, "a").unwrap() - 5.0).abs() < 1e-12);
                 assert!((s.value(0, g, "b").unwrap() + 2.0).abs() < 1e-12);

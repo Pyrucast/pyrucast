@@ -17,16 +17,16 @@
 //! use pyrucast::containers::mesh::SubMesh;
 //! use pyrucast::coords::Coords;
 //! use pyrucast::containers::node_field::SubNodeField;
-//! use pyrucast::store::insert;
+//! use pyrucast::store::Handle;
 //!
-//! let coords = insert(Coords::new(1).unwrap());
+//! let coords = Handle::new(Coords::new(1).unwrap());
 //! let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
 //! let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
 //! let sm = {
 //!     let mut sm = SubMesh::new(coords, ElementType::POI1);
 //!     sm.add_cell(&[a.id()]).unwrap();
 //!     sm.add_cell(&[b.id()]).unwrap();
-//!     insert(sm)
+//!     Handle::new(sm)
 //! };
 //! let mut f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
 //! f.set(0, 0, -3.0).unwrap();
@@ -40,8 +40,7 @@ use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
 use crate::parallel::*;
-use crate::persist::Persist;
-use crate::store::{insert, read, write, Handle, ReadGuard};
+use crate::store::{Handle, ReadGuard};
 use std::any::Any;
 
 /// Validate a component-name list: non-empty, no duplicate names.
@@ -123,12 +122,12 @@ impl<const N: usize> IntoComponentNames for [&str; N] {
 ///
 /// The kind-specific reading methods live next to each concrete sub
 /// type, on the `NodeFieldView` and `ElementFieldView` aliases.
-pub struct FieldView<S: Persist + Any + Send + Sync> {
+pub struct FieldView<S: Any + Send + Sync> {
     pub(crate) zones: Vec<ReadGuard<S>>,
     components: Vec<String>,
 }
 
-impl<S: Persist + Any + Send + Sync> FieldView<S> {
+impl<S: Any + Send + Sync> FieldView<S> {
     /// Union of the zones' component names, first-seen order.
     pub fn components(&self) -> &[String] {
         &self.components
@@ -147,15 +146,15 @@ pub trait SubField {
     /// Type of the object backing this sub-field's support — a `SubMesh` for
     /// node fields, a `SubFiniteElementSpace` for element fields. Its store
     /// slot identity defines [`SubField::same_support`].
-    type Support: Persist + Any + Send + Sync;
+    type Support: Any + Send + Sync;
 
     /// Handle to the support backing this sub-field.
     fn support(&self) -> Handle<Self::Support>;
 
     /// Whether `self` and `other` are backed by the **same** support slot
-    /// ([`Handle::same_slot`]) — the precondition for combining them.
+    /// ([`Handle::same_object`]) — the precondition for combining them.
     fn same_support(&self, other: &Self) -> bool {
-        self.support().same_slot(&other.support())
+        self.support().same_object(&other.support())
     }
 
     /// Component names, in order.
@@ -756,7 +755,7 @@ where
     fn components(&self) -> Result<Vec<String>> {
         let mut out: Vec<String> = Vec::new();
         for h in self.iter() {
-            let s = read(h)?;
+            let s = h.read();
             for c in s.components() {
                 if !out.contains(c) {
                     out.push(c.clone());
@@ -790,7 +789,7 @@ where
         let per_sub: Vec<Option<f64>> = handles
             .par_iter()
             .map(|h| -> Result<Option<f64>> {
-                let s = read(h)?;
+                let s = h.read();
                 if s.component_index(component).is_none() {
                     Ok(None)
                 } else {
@@ -813,7 +812,7 @@ where
     fn xtx(&self) -> Result<f64> {
         let mut acc = 0.0;
         for h in self.iter() {
-            acc += SubField::xtx(&*read(h)?);
+            acc += SubField::xtx(&*h.read());
         }
         Ok(acc)
     }
@@ -827,7 +826,7 @@ where
         let mut acc = 0.0;
         let mut any = false;
         for h in self.iter() {
-            let s = read(h)?;
+            let s = h.read();
             // A zone missing all selected components contributes nothing;
             // one carrying some contributes their squares.
             if components.iter().any(|c| s.component_index(c).is_some()) {
@@ -850,7 +849,7 @@ where
     fn view(&self) -> Result<FieldView<Self::Sub>> {
         Ok(FieldView {
             components: self.components()?,
-            zones: self.iter().map(read).collect::<Result<_>>()?,
+            zones: self.iter().map(|h| h.read()).collect(),
         })
     }
 
@@ -868,11 +867,11 @@ where
         let handles: Vec<&Handle<Self::Sub>> = self.iter().collect();
         let subs: Vec<Self::Sub> = handles
             .par_iter()
-            .map(|h| f(&*read(h)?))
+            .map(|h| f(&*h.read()))
             .collect::<Result<_>>()?;
         let mut out = Self::default();
         for s in subs {
-            out.add_sub(insert(s))?;
+            out.add_sub(Handle::new(s))?;
         }
         Ok(out)
     }
@@ -907,7 +906,7 @@ where
     ) -> Result<()> {
         let mut found = false;
         for h in self.iter() {
-            let mut s = write(h)?;
+            let mut s = h.write();
             if s.component_index(component).is_some() {
                 s.map_component(component, f)?;
                 found = true;
@@ -972,14 +971,8 @@ where
         // Snapshot both sides' zones (clone out of the store) so we never hold
         // two guards at once — safe even when `other` shares handles with
         // `self`.
-        let lefts: Vec<Self::Sub> = self
-            .iter()
-            .map(|h| read(h).map(|g| (*g).clone()))
-            .collect::<Result<_>>()?;
-        let rights: Vec<Self::Sub> = other
-            .iter()
-            .map(|h| read(h).map(|g| (*g).clone()))
-            .collect::<Result<_>>()?;
+        let lefts: Vec<Self::Sub> = self.iter().map(|h| (*h.read()).clone()).collect();
+        let rights: Vec<Self::Sub> = other.iter().map(|h| (*h.read()).clone()).collect();
 
         let mut out = Self::default();
         let mut right_used = vec![false; rights.len()];
@@ -988,16 +981,16 @@ where
         for l in &lefts {
             match rights.iter().position(|r| l.same_support(r)) {
                 Some(j) => {
-                    out.add_sub(insert(l.merge_components(&rights[j], op)?))?;
+                    out.add_sub(Handle::new(l.merge_components(&rights[j], op)?))?;
                     right_used[j] = true;
                 }
-                None => out.add_sub(insert(l.clone()))?,
+                None => out.add_sub(Handle::new(l.clone()))?,
             }
         }
         // Right zones whose support was absent on the left: pass through.
         for (j, r) in rights.iter().enumerate() {
             if !right_used[j] {
-                out.add_sub(insert(r.clone()))?;
+                out.add_sub(Handle::new(r.clone()))?;
             }
         }
         Ok(out)
@@ -1015,13 +1008,10 @@ where
     {
         // Snapshot other's zones so we never hold two guards at once — safe
         // even when `other` shares handles with `self` (mirrors merge_field).
-        let others: Vec<Self::Sub> = other
-            .iter()
-            .map(|h| read(h).map(|g| (*g).clone()))
-            .collect::<Result<_>>()?;
+        let others: Vec<Self::Sub> = other.iter().map(|h| (*h.read()).clone()).collect();
         let mut acc = 0.0;
         for h in self.iter() {
-            let s = read(h)?;
+            let s = h.read();
             // At most one right zone shares the support (field invariant).
             if let Some(os) = others.iter().find(|os| s.same_support(os)) {
                 acc += s.dot(os)?;
@@ -1043,16 +1033,13 @@ where
     {
         // Snapshot other's zones so we never hold two guards at once — safe
         // even when `other` shares handles with `self` (mirrors merge_field).
-        let others: Vec<Self::Sub> = other
-            .iter()
-            .map(|h| read(h).map(|g| (*g).clone()))
-            .collect::<Result<_>>()?;
+        let others: Vec<Self::Sub> = other.iter().map(|h| (*h.read()).clone()).collect();
         let mut out = Self::default();
         for h in self.iter() {
-            let s = read(h)?;
+            let s = h.read();
             // At most one right zone shares the support (field invariant).
             if let Some(os) = others.iter().find(|os| s.same_support(os)) {
-                out.add_sub(insert(s.pscal(os)?))?;
+                out.add_sub(Handle::new(s.pscal(os)?))?;
             }
         }
         Ok(out)
@@ -1070,12 +1057,12 @@ where
         let mut out = Self::default();
         let mut matched = false;
         for h in self.iter() {
-            let s = read(h)?;
+            let s = h.read();
             if s.same_support(sub) {
-                out.add_sub(insert(s.merge_components(sub, op)?))?;
+                out.add_sub(Handle::new(s.merge_components(sub, op)?))?;
                 matched = true;
             } else {
-                out.add_sub(insert((*s).clone()))?;
+                out.add_sub(Handle::new((*s).clone()))?;
             }
         }
         if !matched {
@@ -1108,7 +1095,7 @@ where
         let wanted = wanted.into_names();
         let mut out = Self::default();
         for h in self.iter() {
-            let s = read(h)?;
+            let s = h.read();
             let n_present = s
                 .components()
                 .iter()
@@ -1121,7 +1108,7 @@ where
                 // Filter is a no-op on this zone: share the handle untouched.
                 out.add_sub(h.clone())?;
             } else {
-                out.add_sub(insert(s.select_components(wanted.as_slice())?))?;
+                out.add_sub(Handle::new(s.select_components(wanted.as_slice())?))?;
             }
         }
         if out.is_empty() {
@@ -1145,9 +1132,9 @@ where
         let mut out = Self::default();
         let mut found = false;
         for h in self.iter() {
-            let s = read(h)?;
+            let s = h.read();
             if s.component_index(from).is_some() {
-                out.add_sub(insert(s.rename_component(from, to)?))?;
+                out.add_sub(Handle::new(s.rename_component(from, to)?))?;
                 found = true;
             } else {
                 out.add_sub(h.clone())?;
@@ -1252,7 +1239,7 @@ where
     let per_sub: Vec<Option<f64>> = handles
         .par_iter()
         .map(|h| -> Result<Option<f64>> {
-            let s = read(h)?;
+            let s = h.read();
             if s.component_index(component).is_none() {
                 Ok(None)
             } else {
@@ -1280,10 +1267,10 @@ mod tests {
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::node_field::SubNodeField;
     use crate::coords::Coords;
-    use crate::store::{insert, write, Handle};
+    use crate::store::Handle;
 
     fn make_node_field(values: &[f64]) -> SubNodeField {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let nodes: Vec<Node> = (0..values.len())
             .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
             .collect();
@@ -1292,7 +1279,7 @@ mod tests {
             for n in &nodes {
                 sm.add_cell(&[n.id()]).unwrap();
             }
-            insert(sm)
+            Handle::new(sm)
         };
         let mut f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
         for (i, &v) in values.iter().enumerate() {
@@ -1318,14 +1305,14 @@ mod tests {
     #[test]
     fn subfield_min_max_isolates_components() {
         // Two components: min/max must stride over the right offsets.
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let sm = {
             let mut sm = SubMesh::new(coords, ElementType::POI1);
             sm.add_cell(&[a.id()]).unwrap();
             sm.add_cell(&[b.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let mut f = SubNodeField::from_poi1(&sm, vec!["U".into(), "V".into()]).unwrap();
         f.set(0, 0, 10.0).unwrap();
@@ -1340,22 +1327,22 @@ mod tests {
 
     #[test]
     fn subfield_min_on_empty_support_errors() {
-        let coords = insert(Coords::new(1).unwrap());
-        let sm: Handle<SubMesh> = insert(SubMesh::new(coords, ElementType::POI1));
+        let coords = Handle::new(Coords::new(1).unwrap());
+        let sm: Handle<SubMesh> = Handle::new(SubMesh::new(coords, ElementType::POI1));
         let f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
         assert!(SubField::min(&f, "T").is_err());
     }
 
     #[test]
     fn subfield_sum_and_xtx() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let sm = {
             let mut sm = SubMesh::new(coords, ElementType::POI1);
             sm.add_cell(&[a.id()]).unwrap();
             sm.add_cell(&[b.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let mut f = SubNodeField::from_poi1(&sm, vec!["U".into(), "V".into()]).unwrap();
         f.set(0, 0, 10.0).unwrap();
@@ -1371,15 +1358,15 @@ mod tests {
 
     #[test]
     fn subfield_sum_on_empty_support_is_zero() {
-        let coords = insert(Coords::new(1).unwrap());
-        let sm: Handle<SubMesh> = insert(SubMesh::new(coords, ElementType::POI1));
+        let coords = Handle::new(Coords::new(1).unwrap());
+        let sm: Handle<SubMesh> = Handle::new(SubMesh::new(coords, ElementType::POI1));
         let f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
         assert_eq!(SubField::sum(&f, "T").unwrap(), 0.0);
         assert_eq!(SubField::xtx(&f), 0.0);
     }
 
     fn make_two_zone_element_field() -> ElementField {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let n0 = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let n1 = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let n2 = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -1388,12 +1375,12 @@ mod tests {
         let sm_tri = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sm_qua = {
             let mut sm = SubMesh::new(coords, ElementType::QUA4);
             sm.add_cell(&[n0.id(), n1.id(), n3.id(), n2.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         mesh.add_sub(sm_tri).unwrap();
         mesh.add_sub(sm_qua).unwrap();
@@ -1410,12 +1397,9 @@ mod tests {
     #[test]
     fn field_min_max_fold_across_subs() {
         let ef = make_two_zone_element_field();
-        write(&ef.get(0).unwrap())
-            .unwrap()
-            .set_uniform("k", 3.0)
-            .unwrap();
+        ef.get(0).unwrap().write().set_uniform("k", 3.0).unwrap();
         {
-            let mut s = write(&ef.get(1).unwrap()).unwrap();
+            let mut s = ef.get(1).unwrap().write();
             s.set_uniform("k", -2.0).unwrap();
             s.set_uniform("E", 210e9).unwrap();
         }
@@ -1436,26 +1420,23 @@ mod tests {
     #[test]
     fn field_sum_and_xtx_fold_across_subs() {
         let ef = make_two_zone_element_field();
-        write(&ef.get(0).unwrap())
-            .unwrap()
-            .set_uniform("k", 3.0)
-            .unwrap();
+        ef.get(0).unwrap().write().set_uniform("k", 3.0).unwrap();
         {
-            let mut s = write(&ef.get(1).unwrap()).unwrap();
+            let mut s = ef.get(1).unwrap().write();
             s.set_uniform("k", -2.0).unwrap();
             s.set_uniform("E", 5.0).unwrap();
         }
         // Field-level folds equal the sum of the per-zone reductions (no need to
         // know the Gauss-point counts).
-        let z0 = SubField::sum(&*read(&ef.get(0).unwrap()).unwrap(), "k").unwrap();
-        let z1 = SubField::sum(&*read(&ef.get(1).unwrap()).unwrap(), "k").unwrap();
+        let z0 = SubField::sum(&*ef.get(0).unwrap().read(), "k").unwrap();
+        let z1 = SubField::sum(&*ef.get(1).unwrap().read(), "k").unwrap();
         assert!((Field::sum(&ef, "k").unwrap() - (z0 + z1)).abs() < 1e-12);
         // E lives on zone 1 only.
-        let e1 = SubField::sum(&*read(&ef.get(1).unwrap()).unwrap(), "E").unwrap();
+        let e1 = SubField::sum(&*ef.get(1).unwrap().read(), "E").unwrap();
         assert!((Field::sum(&ef, "E").unwrap() - e1).abs() < 1e-12);
         // xtx over the whole field = Σ of the per-zone xtx.
-        let x0 = SubField::xtx(&*read(&ef.get(0).unwrap()).unwrap());
-        let x1 = SubField::xtx(&*read(&ef.get(1).unwrap()).unwrap());
+        let x0 = SubField::xtx(&*ef.get(0).unwrap().read());
+        let x1 = SubField::xtx(&*ef.get(1).unwrap().read());
         assert!((Field::xtx(&ef).unwrap() - (x0 + x1)).abs() < 1e-9);
         assert!(Field::sum(&ef, "missing").is_err());
     }
@@ -1485,30 +1466,18 @@ mod tests {
     #[test]
     fn field_xtx_components_folds_selected_across_zones() {
         let ef = make_two_zone_element_field(); // zone0: [k], zone1: [E, k]
-        write(&ef.get(0).unwrap())
-            .unwrap()
-            .set_uniform("k", 3.0)
-            .unwrap();
+        ef.get(0).unwrap().write().set_uniform("k", 3.0).unwrap();
         {
-            let mut s = write(&ef.get(1).unwrap()).unwrap();
+            let mut s = ef.get(1).unwrap().write();
             s.set_uniform("k", -2.0).unwrap();
             s.set_uniform("E", 5.0).unwrap();
         }
         // "k" lives on both zones: Σ of the per-zone k-only xtx.
-        let k0 = read(&ef.get(0).unwrap())
-            .unwrap()
-            .xtx_components(&["k"])
-            .unwrap();
-        let k1 = read(&ef.get(1).unwrap())
-            .unwrap()
-            .xtx_components(&["k"])
-            .unwrap();
+        let k0 = ef.get(0).unwrap().read().xtx_components(&["k"]).unwrap();
+        let k1 = ef.get(1).unwrap().read().xtx_components(&["k"]).unwrap();
         assert!((ef.xtx_components(&["k"]).unwrap() - (k0 + k1)).abs() < 1e-9);
         // "E" lives on zone 1 only; zone 0 (no E) is skipped, not an error.
-        let e1 = read(&ef.get(1).unwrap())
-            .unwrap()
-            .xtx_components(&["E"])
-            .unwrap();
+        let e1 = ef.get(1).unwrap().read().xtx_components(&["E"]).unwrap();
         assert!((ef.xtx_components(&["E"]).unwrap() - e1).abs() < 1e-9);
         // No zone defines "missing" ⇒ error.
         assert!(ef.xtx_components(&["missing"]).is_err());
@@ -1563,8 +1532,8 @@ mod tests {
         assert_eq!(out.len(), 2);
         assert_eq!(Field::components(&out).unwrap(), vec!["k"]);
         // zone0 handle shared untouched; zone1 rebuilt (fresh slot).
-        assert!(out.get(0).unwrap().same_slot(&ef.get(0).unwrap()));
-        assert!(!out.get(1).unwrap().same_slot(&ef.get(1).unwrap()));
+        assert!(out.get(0).unwrap().same_object(&ef.get(0).unwrap()));
+        assert!(!out.get(1).unwrap().same_object(&ef.get(1).unwrap()));
 
         // Keep only "E": zone0 (no E) is dropped, zone1 kept.
         let only_e = ef.filter_components("E").unwrap();
@@ -1599,7 +1568,7 @@ mod tests {
         let ef = make_two_zone_element_field(); // zone0: [k], zone1: [E, k]
         let out = ef.rename_component("E", "young").unwrap();
         // zone0 has no E ⇒ handle shared; zone1 rebuilt with the new name.
-        assert!(out.get(0).unwrap().same_slot(&ef.get(0).unwrap()));
+        assert!(out.get(0).unwrap().same_object(&ef.get(0).unwrap()));
         assert_eq!(Field::components(&out).unwrap(), vec!["k", "young"]);
         // No zone carries the source ⇒ error.
         assert!(ef.rename_component("missing", "x").is_err());
@@ -1609,7 +1578,7 @@ mod tests {
 
     /// POI1 support over `n` nodes, plus the nodes (for `value(nid, …)`).
     fn poi1_support(n: usize) -> (Handle<SubMesh>, Vec<Node>) {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let nodes: Vec<Node> = (0..n)
             .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
             .collect();
@@ -1618,7 +1587,7 @@ mod tests {
             for nd in &nodes {
                 sm.add_cell(&[nd.id()]).unwrap();
             }
-            insert(sm)
+            Handle::new(sm)
         };
         (sm, nodes)
     }
@@ -1794,14 +1763,14 @@ mod tests {
         use crate::containers::node_field::NodeField;
         // Two POI1 zones sharing one Coords: dot_field must pair each zone by
         // support and sum both contributions.
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let node = |x: f64| Node::create_in(coords.clone(), &[x]).unwrap();
         let poi1 = |ns: &[&Node]| {
             let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
             for n in ns {
                 sm.add_cell(&[n.id()]).unwrap();
             }
-            insert(sm)
+            Handle::new(sm)
         };
         let (na, nb, nc) = (node(0.0), node(1.0), node(2.0));
         let sm_a = poi1(&[&na, &nb]);
@@ -1812,7 +1781,7 @@ mod tests {
         let mut zb = SubNodeField::from_poi1(&sm_b, vec!["T".into()]).unwrap();
         zb.set(0, 0, 5.0).unwrap();
         let mut nf = NodeField::from_sub(za);
-        nf.add_sub(insert(zb)).unwrap();
+        nf.add_sub(Handle::new(zb)).unwrap();
         // Dot with itself = Σ value²: 2² + 3² (zone A) + 5² (zone B) = 38.
         assert_eq!(nf.dot_field(&nf).unwrap(), 38.0);
     }
@@ -1892,14 +1861,14 @@ mod tests {
     #[test]
     fn field_pscal_field_one_zone_per_zone() {
         use crate::containers::node_field::NodeField;
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let node = |x: f64| Node::create_in(coords.clone(), &[x]).unwrap();
         let poi1 = |ns: &[&Node]| {
             let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
             for n in ns {
                 sm.add_cell(&[n.id()]).unwrap();
             }
-            insert(sm)
+            Handle::new(sm)
         };
         let (na, nb) = (node(0.0), node(1.0));
         let sm_a = poi1(&[&na]);
@@ -1909,7 +1878,7 @@ mod tests {
         let mut zb = SubNodeField::from_poi1(&sm_b, vec!["T".into()]).unwrap();
         zb.set(0, 0, 5.0).unwrap();
         let mut nf = NodeField::from_sub(za);
-        nf.add_sub(insert(zb)).unwrap();
+        nf.add_sub(Handle::new(zb)).unwrap();
         // pscal with itself → per-node square, two zones preserved.
         let p = nf.pscal_field(&nf).unwrap();
         let view = p.view().unwrap();
@@ -1921,7 +1890,7 @@ mod tests {
 
     /// Single-zone Lagrange-1 FE space on one TRI3 cell.
     fn one_tri3_fes() -> FiniteElementSpace {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -1929,7 +1898,7 @@ mod tests {
         let sm = {
             let mut sm = SubMesh::new(coords, ElementType::TRI3);
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         mesh.add_sub(sm).unwrap();
         FiniteElementSpace::lagrange1(&mesh).unwrap()
@@ -1938,43 +1907,19 @@ mod tests {
     #[test]
     fn field_combine_scalar_hits_every_zone() {
         let ef = make_two_zone_element_field();
-        write(&ef.get(0).unwrap())
-            .unwrap()
-            .set_uniform("k", 1.0)
-            .unwrap();
-        write(&ef.get(1).unwrap())
-            .unwrap()
-            .set_uniform("k", 2.0)
-            .unwrap();
+        ef.get(0).unwrap().write().set_uniform("k", 1.0).unwrap();
+        ef.get(1).unwrap().write().set_uniform("k", 2.0).unwrap();
         let out = ef.combine_scalar(|a, b| a + b, 10.0).unwrap();
-        assert_eq!(
-            read(&out.get(0).unwrap())
-                .unwrap()
-                .value(0, 0, "k")
-                .unwrap(),
-            11.0
-        );
-        assert_eq!(
-            read(&out.get(1).unwrap())
-                .unwrap()
-                .value(0, 0, "k")
-                .unwrap(),
-            12.0
-        );
+        assert_eq!(out.get(0).unwrap().read().value(0, 0, "k").unwrap(), 11.0);
+        assert_eq!(out.get(1).unwrap().read().value(0, 0, "k").unwrap(), 12.0);
     }
 
     #[test]
     fn field_add_to_component_present_zones_only() {
         let ef = make_two_zone_element_field(); // zone0 ["k"], zone1 ["E","k"]
-        write(&ef.get(1).unwrap())
-            .unwrap()
-            .set_uniform("E", 100.0)
-            .unwrap();
+        ef.get(1).unwrap().write().set_uniform("E", 100.0).unwrap();
         ef.add_to_component("E", 1.0).unwrap(); // E only on zone 1
-        assert_eq!(
-            read(&ef.get(1).unwrap()).unwrap().value(0, 0, "E").unwrap(),
-            101.0
-        );
+        assert_eq!(ef.get(1).unwrap().read().value(0, 0, "E").unwrap(), 101.0);
         assert!(ef.add_to_component("missing", 1.0).is_err());
     }
 
@@ -1983,16 +1928,10 @@ mod tests {
         let fes = one_tri3_fes();
         let f = ElementField::new(&fes, vec!["E".into()]).unwrap();
         let g = ElementField::new(&fes, vec!["E".into()]).unwrap();
-        write(&f.get(0).unwrap())
-            .unwrap()
-            .set_uniform("E", 3.0)
-            .unwrap();
-        write(&g.get(0).unwrap())
-            .unwrap()
-            .set_uniform("E", 4.0)
-            .unwrap();
+        f.get(0).unwrap().write().set_uniform("E", 3.0).unwrap();
+        g.get(0).unwrap().write().set_uniform("E", 4.0).unwrap();
         let s = f.merge_field(&g, |a, b| a + b).unwrap();
-        let z = read(&s.get(0).unwrap()).unwrap();
+        let z = s.get(0).unwrap().read();
         for gp in 0..z.gauss_count() {
             assert_eq!(z.value(0, gp, "E").unwrap(), 7.0);
         }
@@ -2003,24 +1942,12 @@ mod tests {
         // Distinct supports ⇒ union: both zones pass through unchanged.
         let f = ElementField::new(&one_tri3_fes(), vec!["E".into()]).unwrap();
         let g = ElementField::new(&one_tri3_fes(), vec!["E".into()]).unwrap();
-        write(&f.get(0).unwrap())
-            .unwrap()
-            .set_uniform("E", 3.0)
-            .unwrap();
-        write(&g.get(0).unwrap())
-            .unwrap()
-            .set_uniform("E", 4.0)
-            .unwrap();
+        f.get(0).unwrap().write().set_uniform("E", 3.0).unwrap();
+        g.get(0).unwrap().write().set_uniform("E", 4.0).unwrap();
         let s = f.merge_field(&g, |a, b| a + b).unwrap();
         assert_eq!(s.len(), 2, "distinct supports ⇒ two zones");
-        assert_eq!(
-            read(&s.get(0).unwrap()).unwrap().value(0, 0, "E").unwrap(),
-            3.0
-        );
-        assert_eq!(
-            read(&s.get(1).unwrap()).unwrap().value(0, 0, "E").unwrap(),
-            4.0
-        );
+        assert_eq!(s.get(0).unwrap().read().value(0, 0, "E").unwrap(), 3.0);
+        assert_eq!(s.get(1).unwrap().read().value(0, 0, "E").unwrap(), 4.0);
     }
 
     #[test]
@@ -2029,18 +1956,15 @@ mod tests {
         let fes = one_tri3_fes();
         let f = ElementField::new(&fes, vec!["E".into()]).unwrap();
         let g = ElementField::new(&fes, vec!["E".into(), "nu".into()]).unwrap();
-        write(&f.get(0).unwrap())
-            .unwrap()
-            .set_uniform("E", 3.0)
-            .unwrap();
+        f.get(0).unwrap().write().set_uniform("E", 3.0).unwrap();
         {
-            let mut z = write(&g.get(0).unwrap()).unwrap();
+            let mut z = g.get(0).unwrap().write();
             z.set_uniform("E", 4.0).unwrap();
             z.set_uniform("nu", 0.3).unwrap();
         }
         let s = f.merge_field(&g, |a, b| a + b).unwrap();
         assert_eq!(s.len(), 1);
-        let z = read(&s.get(0).unwrap()).unwrap();
+        let z = s.get(0).unwrap().read();
         assert_eq!(z.components(), &["E".to_string(), "nu".to_string()]);
         assert_eq!(z.value(0, 0, "E").unwrap(), 7.0, "shared: op applied");
         assert_eq!(z.value(0, 0, "nu").unwrap(), 0.3, "g-only: passthrough");
@@ -2052,17 +1976,14 @@ mod tests {
         let fes = one_tri3_fes();
         let a = ElementField::new(&fes, vec!["E".into()]).unwrap();
         let b = ElementField::new(&fes, vec!["E".into(), "nu".into()]).unwrap();
-        write(&a.get(0).unwrap())
-            .unwrap()
-            .set_uniform("E", 10.0)
-            .unwrap();
+        a.get(0).unwrap().write().set_uniform("E", 10.0).unwrap();
         {
-            let mut z = write(&b.get(0).unwrap()).unwrap();
+            let mut z = b.get(0).unwrap().write();
             z.set_uniform("E", 4.0).unwrap();
             z.set_uniform("nu", 0.3).unwrap();
         }
         let s = a.merge_field(&b, |x, y| x - y).unwrap();
-        let z = read(&s.get(0).unwrap()).unwrap();
+        let z = s.get(0).unwrap().read();
         assert_eq!(z.value(0, 0, "E").unwrap(), 6.0);
         assert_eq!(
             z.value(0, 0, "nu").unwrap(),
@@ -2074,28 +1995,19 @@ mod tests {
     #[test]
     fn field_merge_subfield_targets_matching_zone() {
         let ef = make_two_zone_element_field(); // zone0 ["k"], zone1 ["E","k"]
-        write(&ef.get(0).unwrap())
-            .unwrap()
-            .set_uniform("k", 1.0)
-            .unwrap();
+        ef.get(0).unwrap().write().set_uniform("k", 1.0).unwrap();
         {
-            let mut z1 = write(&ef.get(1).unwrap()).unwrap();
+            let mut z1 = ef.get(1).unwrap().write();
             z1.set_uniform("k", 2.0).unwrap();
             z1.set_uniform("E", 5.0).unwrap();
         }
         // A sub on zone 0's support, k = 10.
-        let mut sub = (*read(&ef.get(0).unwrap()).unwrap()).clone();
+        let mut sub = (*ef.get(0).unwrap().read()).clone();
         sub.set_uniform("k", 10.0).unwrap();
         let out = ef.merge_subfield(&sub, |a, b| a + b).unwrap();
         assert_eq!(out.len(), 2);
-        assert_eq!(
-            read(&out.get(0).unwrap())
-                .unwrap()
-                .value(0, 0, "k")
-                .unwrap(),
-            11.0
-        );
-        let z1 = read(&out.get(1).unwrap()).unwrap();
+        assert_eq!(out.get(0).unwrap().read().value(0, 0, "k").unwrap(), 11.0);
+        let z1 = out.get(1).unwrap().read();
         assert_eq!(z1.value(0, 0, "k").unwrap(), 2.0);
         assert_eq!(z1.value(0, 0, "E").unwrap(), 5.0);
     }
@@ -2105,7 +2017,7 @@ mod tests {
         let ef = make_two_zone_element_field();
         // A sub on a brand-new, unrelated FE support.
         let other = ElementField::new(&one_tri3_fes(), vec!["k".into()]).unwrap();
-        let sub = (*read(&other.get(0).unwrap()).unwrap()).clone();
+        let sub = (*other.get(0).unwrap().read()).clone();
         assert!(ef.merge_subfield(&sub, |a, b| a + b).is_err());
     }
 
@@ -2179,21 +2091,15 @@ mod tests {
         let fes = one_tri3_fes();
         let f = ElementField::new(&fes, vec!["E".into()]).unwrap();
         let g = ElementField::new(&fes, vec!["E".into()]).unwrap();
-        write(&f.get(0).unwrap())
-            .unwrap()
-            .set_uniform("E", 3.0)
-            .unwrap();
-        write(&g.get(0).unwrap())
-            .unwrap()
-            .set_uniform("E", 4.0)
-            .unwrap();
+        f.get(0).unwrap().write().set_uniform("E", 3.0).unwrap();
+        g.get(0).unwrap().write().set_uniform("E", 4.0).unwrap();
 
         let s = (&f + &g).unwrap();
-        let z = read(&s.get(0).unwrap()).unwrap();
+        let z = s.get(0).unwrap().read();
         assert_eq!(z.value(0, 0, "E").unwrap(), 7.0);
 
         let scaled = (&f - 1.0).unwrap();
-        let zs = read(&scaled.get(0).unwrap()).unwrap();
+        let zs = scaled.get(0).unwrap().read();
         assert_eq!(zs.value(0, 0, "E").unwrap(), 2.0);
     }
 }

@@ -7,8 +7,7 @@
 //!
 //! - Every error goes through [`PyrucastError`] / [`Result`].
 //! - Every serializable object uses the [`persist::Persist`] trait
-//!   (shared backbone of disk swap and file save/load, portable between
-//!   Linux and Windows).
+//!   (the backbone of file save/load, portable between Linux and Windows).
 //! - Display comes in three layered levels, all wired to Python:
 //!   `Display`/`__str__` (one-line summary), `Debug`/`__repr__` (bounded
 //!   structure — never bulk content), and [`dump::Dump`]/`dump(…)` (full
@@ -62,23 +61,6 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[cfg(feature = "python-api")]
 use pyo3::prelude::*;
 
-/// Set the directory used to swap large objects to disk. If never set, a
-/// per-process subdirectory of the system temp dir is used.
-#[cfg(feature = "python-api")]
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-#[pyfunction]
-fn set_swap_dir(path: std::path::PathBuf) {
-    store::set_swap_dir(path);
-}
-
-/// Return the effective swap directory (creating it if necessary).
-#[cfg(feature = "python-api")]
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-#[pyfunction]
-fn swap_dir() -> PyResult<std::path::PathBuf> {
-    Ok(store::swap_dir()?)
-}
-
 // Stub-info gatherer used by the `stub_gen` binary to produce
 // `pyrucast.pyi`. Only present when the `stub-gen` feature is on.
 #[cfg(feature = "stub-gen")]
@@ -92,8 +74,6 @@ pyo3_stub_gen::define_stub_info_gatherer!(stub_info);
 #[pymodule]
 fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", VERSION)?;
-    m.add_function(wrap_pyfunction!(set_swap_dir, m)?)?;
-    m.add_function(wrap_pyfunction!(swap_dir, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::solver::solve, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::solver::solve_eliminate, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::solver::solve_unilateral, m)?)?;

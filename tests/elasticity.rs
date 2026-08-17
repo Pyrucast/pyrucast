@@ -23,7 +23,7 @@ use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::ops::mesh;
 use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::insert;
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 #[test]
@@ -35,7 +35,7 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
     let h = 1.0 / N as f64;
 
     // ── Maillage QUA4 sur [0,1]² ───────────────────────────────────────────
-    let coords = insert(Coords::new(2)?);
+    let coords = Handle::new(Coords::new(2)?);
     let idx = |i: usize, j: usize| j * (N + 1) + i;
     let mut grid: Vec<Node> = Vec::new();
     for j in 0..=N {
@@ -135,7 +135,7 @@ fn elasticity_unit_cube_uniaxial_tension() -> Result<()> {
     const NU: f64 = 0.3;
     const S: f64 = 2.0;
 
-    let coords = insert(Coords::new(3)?);
+    let coords = Handle::new(Coords::new(3)?);
     let points = [
         [0.0, 0.0, 0.0],
         [1.0, 0.0, 0.0],

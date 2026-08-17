@@ -199,7 +199,7 @@ mod tests {
     use crate::atoms::{Node, NodeId, Point2};
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     /// A closed SEG2 loop through `pts`, in the order given.
     fn loop_mesh(coords: crate::store::Handle<Coords>, pts: &[(f64, f64)]) -> Mesh {
@@ -307,7 +307,7 @@ mod tests {
         // else. The frontal paver cannot produce it — its rows meet in the
         // middle and leave four diagonal seams — and that is the whole
         // reason this operator exists.
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let corners = [(0.0, 0.0), (0.6, 0.0), (0.6, 0.3), (0.0, 0.3)];
         let contour = loop_mesh(coords, &on_grid(&corners, 0.02));
         let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.02), 0, false).unwrap();
@@ -334,7 +334,7 @@ mod tests {
         }
 
         let size = 2.0 * v / 4.0;
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let contour = loop_mesh(coords, &on_grid(&corners, size));
         let mesh = grid_surface(&contour, ElementType::QUA4, Some(size), 0, false).unwrap();
         let r = inspect(&mesh);
@@ -359,7 +359,7 @@ mod tests {
         // Both boundaries at once: an L, whose re-entrant corner the grid
         // meets exactly, and a circular hole, which it cannot meet at all and
         // hands to the front. The contour has to come back whole either way.
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let outer_pts = on_grid(
             &[
                 (0.0, 0.0),
@@ -432,7 +432,7 @@ mod tests {
         // orientation was detected it gave 454 cells, 20 of them triangles,
         // and a Jacobian down to 0.138.
         for deg in [5.0, 15.0, 30.0, 45.0, 88.0] {
-            let coords = insert(Coords::new(2).unwrap());
+            let coords = Handle::new(Coords::new(2).unwrap());
             let corners = spin(&[(0.0, 0.0), (0.6, 0.0), (0.6, 0.3), (0.0, 0.3)], deg);
             let contour = loop_mesh(coords, &on_grid(&corners, 0.02));
             let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.02), 0, false).unwrap();
@@ -461,7 +461,7 @@ mod tests {
         }
 
         let size = 2.0 * v / 4.0;
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let contour = loop_mesh(coords, &on_grid(&spin(&corners, 23.7), size));
         let mesh = grid_surface(&contour, ElementType::QUA4, Some(size), 0, false).unwrap();
         let r = inspect(&mesh);
@@ -478,7 +478,7 @@ mod tests {
         // The contract again, on a shape the grid now meets only because it
         // turned to it: every contour segment is a boundary edge of the mesh,
         // and the mesh has no other.
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let corners = spin(
             &[
                 (0.0, 0.0),
@@ -522,7 +522,7 @@ mod tests {
         // A hole is a clockwise loop and needs no special handling: the cells
         // it covers are simply not solid. The band round it is the part the
         // grid cannot do, and the front takes it.
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let outer = loop_mesh(
             coords.clone(),
             &on_grid(&[(0.0, 0.0), (3.0, 0.0), (3.0, 1.0), (0.0, 1.0)], 0.1),
@@ -551,7 +551,7 @@ mod tests {
         // Nothing to snap to: the grid falls back to the bounding box, the
         // core is the staircase of cells inside the disc, and the front paves
         // the ring between it and the circle. It must still close.
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let contour = loop_mesh(
             coords,
             &(0..64)
@@ -581,7 +581,7 @@ mod tests {
         // — the weld could not close those slithers at all, and each one
         // stayed as a hole in the mesh. A circle is where they abound: this
         // used to leave 88 boundary edges that were not the contour's.
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let pts: Vec<(f64, f64)> = (0..60)
             .map(|i| {
                 let t = i as f64 / 60.0 * std::f64::consts::TAU;
@@ -642,7 +642,7 @@ mod tests {
         // stayed convex, so nothing local complained — and the crossed ring it
         // left could not be filled: the operator gave up with "the advancing
         // front folded onto itself". Held to a simple loop, it paves.
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let corners: Vec<(f64, f64)> = (0..20)
             .map(|i| {
                 let t = i as f64 / 20.0 * std::f64::consts::TAU;
@@ -678,7 +678,7 @@ mod tests {
                     (t.cos(), t.sin())
                 })
                 .collect();
-            let coords = insert(Coords::new(2).unwrap());
+            let coords = Handle::new(Coords::new(2).unwrap());
             let contour = loop_mesh(coords, &on_grid(&corners, h));
             let mesh = grid_surface(&contour, ElementType::QUA4, Some(h), 0, false).unwrap();
             let r = inspect(&mesh);
@@ -690,7 +690,7 @@ mod tests {
 
     #[test]
     fn bad_input_is_rejected_with_a_named_error() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let contour = loop_mesh(
             coords,
             &on_grid(&[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0)], 0.25),

@@ -31,7 +31,7 @@ use crate::containers::matrix::{ComputedRecipe, Matrix, SubMatrix};
 use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
 use crate::models::{Contribution, MatrixKind};
-use crate::store::{insert, read, Handle};
+use crate::store::Handle;
 use nalgebra_sparse::{CooMatrix, CsrMatrix};
 
 /// Assemble the stiffness matrix `K` for `model`.
@@ -79,7 +79,7 @@ pub fn assemble_kind(
         // Build the contribution(s) under a read guard, then drop it before
         // `add_sub` (which takes the store write lock).
         let built = {
-            let sub = read(sub_h)?;
+            let sub = sub_h.read();
             // Generic over the physics: a sub-model needs material data iff it
             // declares a material FE subspace. No per-variant match.
             let material = match sub.material_fespace() {
@@ -117,7 +117,7 @@ pub fn assemble_kind(
             blocks
         };
         for block in built {
-            k.add_sub(insert(block))?;
+            k.add_sub(Handle::new(block))?;
         }
     }
 
@@ -153,7 +153,7 @@ impl Matrix {
     ///
     /// ```ignore
     /// let mut k = crate::ops::matrix::stiffness(&model, &materials)?;
-    /// k.add_sub(insert(some_block))?;   // invalidates the assembled state
+    /// k.add_sub(Handle::new(some_block))?;   // invalidates the assembled state
     /// k.assemble()?;                    // re-assembles, new block included
     /// ```
     ///
@@ -228,7 +228,7 @@ fn build_contribution(
     // Tag every emitted block with its sub-model's physics nature set — computed
     // and literal alike (so a Dirichlet C/Cᵀ pair is tagged too) — for
     // Matrix::filter.
-    let physics = read(sub_h)?.physics().to_vec();
+    let physics = sub_h.read().physics().to_vec();
     for b in &mut blocks {
         b.set_physics(physics.clone());
     }
@@ -375,7 +375,7 @@ mod tests {
         let mut k = Matrix::empty();
         for sub_h in model {
             let blocks = {
-                let sub = read(sub_h)?;
+                let sub = sub_h.read();
                 let material = match sub.material_fespace() {
                     Some(fespace) => Some(materials.sub_for_fespace(&fespace)?),
                     None => None,
@@ -403,7 +403,7 @@ mod tests {
                 blocks
             };
             for block in blocks {
-                k.add_sub(insert(block))?;
+                k.add_sub(Handle::new(block))?;
             }
         }
         k.finalize()?;
@@ -414,7 +414,7 @@ mod tests {
     /// so the assembly mixes **computed** blocks (the two zones) with **literal**
     /// ones (Dirichlet's C / Cᵀ), and a shared node forces accumulation.
     fn two_zone_heat_with_dirichlet() -> (Model, ElementField) {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let n1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let n2 = Node::create_in(coords.clone(), &[2.0]).unwrap();
@@ -422,12 +422,12 @@ mod tests {
         let sm_a = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
             sm.add_cell(&[n0.id(), n1.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sm_b = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
             sm.add_cell(&[n1.id(), n2.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         mesh.add_sub(sm_a).unwrap();
         mesh.add_sub(sm_b).unwrap();
@@ -435,7 +435,7 @@ mod tests {
 
         let mut model = Model::empty();
         model
-            .add_sub(insert(
+            .add_sub(Handle::new(
                 SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
             ))
             .unwrap();
@@ -443,7 +443,7 @@ mod tests {
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&n0)).unwrap());
         let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
         model
-            .add_sub(insert(
+            .add_sub(Handle::new(
                 SubModel::dirichlet(
                     "T".into(),
                     "q".into(),
@@ -457,7 +457,7 @@ mod tests {
             ))
             .unwrap();
         model
-            .add_sub(insert(
+            .add_sub(Handle::new(
                 SubModel::heat_conduction(fes.get(1).unwrap()).unwrap(),
             ))
             .unwrap();
@@ -473,7 +473,7 @@ mod tests {
     /// parallel scatter genuinely reorders per-slot summation, unlike a
     /// one-cell-per-block mesh.
     fn chain_heat_with_dirichlet(n_elems: usize) -> (Model, ElementField) {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let nodes: Vec<Node> = (0..=n_elems)
             .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
             .collect();
@@ -486,7 +486,7 @@ mod tests {
 
         let mut model = Model::empty();
         model
-            .add_sub(insert(
+            .add_sub(Handle::new(
                 SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
             ))
             .unwrap();
@@ -494,7 +494,7 @@ mod tests {
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[0])).unwrap());
         let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
         model
-            .add_sub(insert(
+            .add_sub(Handle::new(
                 SubModel::dirichlet(
                     "T".into(),
                     "q".into(),
@@ -522,7 +522,7 @@ mod tests {
     /// layout. The beam now assembles an exact closed form on a single space, so
     /// the shell is what still exercises this path.
     fn multi_fespace_shell(n: usize) -> (Model, ElementField) {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let mut row = Vec::new();
         for i in 0..=n {
             let x = i as f64;
@@ -542,7 +542,7 @@ mod tests {
 
         let mut model = Model::empty();
         model
-            .add_sub(insert(
+            .add_sub(Handle::new(
                 SubModel::shell(fes.get(0).unwrap(), crate::models::shell::ShellModel::Thick)
                     .unwrap(),
             ))
@@ -561,7 +561,7 @@ mod tests {
         let mut k = Matrix::empty();
         for sub_h in model {
             let built = {
-                let sub = read(sub_h).unwrap();
+                let sub = sub_h.read();
                 let material = sub
                     .material_fespace()
                     .map(|fespace| materials.sub_for_fespace(&fespace).unwrap());
@@ -579,7 +579,7 @@ mod tests {
                 blocks
             };
             for b in built {
-                k.add_sub(insert(b)).unwrap();
+                k.add_sub(Handle::new(b)).unwrap();
             }
         }
         k
@@ -763,7 +763,7 @@ mod tests {
     #[test]
     fn assemble_composes_extra_literal_block() {
         // One heat element on nodes a—b.
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
@@ -772,7 +772,7 @@ mod tests {
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let mut model = Model::empty();
         model
-            .add_sub(insert(
+            .add_sub(Handle::new(
                 SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
             ))
             .unwrap();
@@ -782,7 +782,7 @@ mod tests {
         let before = k.get(a.id(), "q", a.id(), "T").unwrap();
 
         // A hand-built literal block (no model behind it) adding +10 at (a,q)×(a,T).
-        let support = insert(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
+        let support = Handle::new(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
         let mut blk = SubMatrix::new(
             support.clone(),
             support,
@@ -793,7 +793,7 @@ mod tests {
         )
         .unwrap();
         blk.add_entry(a.id(), "q", a.id(), "T", 10.0).unwrap();
-        k.add_sub(insert(blk)).unwrap();
+        k.add_sub(Handle::new(blk)).unwrap();
 
         // `finalize` can't (computed block present); the self-contained path can.
         assert!(k.finalize().is_err());
@@ -817,7 +817,7 @@ mod tests {
         let mut k = Matrix::empty();
         for sub_h in &model {
             let built = {
-                let sub = read(sub_h).unwrap();
+                let sub = sub_h.read();
                 let material = sub
                     .material_fespace()
                     .map(|fespace| materials.sub_for_fespace(&fespace).unwrap());
@@ -842,7 +842,7 @@ mod tests {
                 })
             };
             if let Some(block) = built {
-                k.add_sub(insert(block)).unwrap();
+                k.add_sub(Handle::new(block)).unwrap();
             }
         }
         assert!(k.finalize().is_err());
@@ -858,7 +858,7 @@ mod tests {
         use crate::containers::node_field::{NodeField, SubNodeField};
         use crate::ops::node_field::restrict;
 
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let nodes: Vec<Node> = (0..=2)
             .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
             .collect();
@@ -870,7 +870,7 @@ mod tests {
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let mut model = Model::empty();
         model
-            .add_sub(insert(
+            .add_sub(Handle::new(
                 SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
             ))
             .unwrap();
@@ -882,17 +882,15 @@ mod tests {
         for nd in &nodes {
             psm.add_cell(&[nd.id()]).unwrap();
         }
-        let f =
-            NodeField::from_sub(SubNodeField::from_poi1(&insert(psm), vec!["T".into()]).unwrap());
+        let f = NodeField::from_sub(
+            SubNodeField::from_poi1(&Handle::new(psm), vec!["T".into()]).unwrap(),
+        );
         let r = restrict(&f, &mesh).unwrap();
 
-        let col = read(k.iter().next().unwrap())
-            .unwrap()
-            .col_support()
-            .clone();
-        let rsup = read(&r.get(0).unwrap()).unwrap().support();
+        let col = k.iter().next().unwrap().read().col_support().clone();
+        let rsup = r.get(0).unwrap().read().support();
         assert!(
-            col.same_slot(&rsup),
+            col.same_object(&rsup),
             "block support and restrict onto the same mesh share one slot"
         );
     }

@@ -3,7 +3,7 @@ use crate::containers::field::{Field, SubField};
 use crate::containers::mesh::Mesh;
 use crate::containers::node_field::{NodeField, NodeFieldView, SubNodeField};
 use crate::error::{PyrucastError, Result};
-use crate::store::{insert, read};
+use crate::store::Handle;
 
 /// Fill `sub` (already on its target support) with the values of `source`,
 /// component by component, node by node: a `(node, component)` pair that
@@ -51,9 +51,7 @@ fn fill_from(sub: &mut SubNodeField, source: &NodeFieldView) -> Result<()> {
 pub fn restrict(field: &NodeField, mesh: &Mesh) -> Result<NodeField> {
     let mesh_coords = mesh.coords()?;
     let field_coords = field.coords()?;
-    if mesh_coords.index() != field_coords.index()
-        || mesh_coords.generation() != field_coords.generation()
-    {
+    if !mesh_coords.same_object(&field_coords) {
         return Err(PyrucastError::Message(
             "restrict: mesh is not attached to the same Coords".into(),
         ));
@@ -65,7 +63,7 @@ pub fn restrict(field: &NodeField, mesh: &Mesh) -> Result<NodeField> {
     for sm in mesh {
         let mut sub = SubNodeField::from_support(sm, components.clone())?;
         fill_from(&mut sub, &view)?;
-        out.add_sub(insert(sub))?;
+        out.add_sub(Handle::new(sub))?;
     }
     Ok(out)
 }
@@ -75,7 +73,7 @@ pub fn restrict(field: &NodeField, mesh: &Mesh) -> Result<NodeField> {
 ///
 /// Unlike [`restrict`] (which lands on a *fresh* support materialised from a
 /// mesh, carrying the union of `field`'s components), this reuses each zone of
-/// `target` **as-is** — same store slot, same component list — so the result is
+/// `target` **as-is** — the same support object, the same component list — so the result is
 /// on the very same support as `target` and can be combined with it directly by
 /// the arithmetic operators (`&target + &field.restrict_like(target)`). Each
 /// `(node, component)` pair is filled from `field` when it covers it, `0.0`
@@ -90,9 +88,7 @@ pub fn restrict(field: &NodeField, mesh: &Mesh) -> Result<NodeField> {
 pub fn restrict_like(field: &NodeField, target: &NodeField) -> Result<NodeField> {
     let target_coords = target.coords()?;
     let field_coords = field.coords()?;
-    if target_coords.index() != field_coords.index()
-        || target_coords.generation() != field_coords.generation()
-    {
+    if !target_coords.same_object(&field_coords) {
         return Err(PyrucastError::Message(
             "restrict_like: target is not attached to the same Coords".into(),
         ));
@@ -101,13 +97,13 @@ pub fn restrict_like(field: &NodeField, target: &NodeField) -> Result<NodeField>
     let view = field.view()?;
     let mut out = NodeField::default();
     for h in target.iter() {
-        let zone = read(h)?;
+        let zone = h.read();
         // `from_support` on the zone's own support handle shares its slot (POI1
         // supports are shared as-is), so the output pairs with `target` under
         // `same_support` — the precondition of the field operators.
         let mut sub = SubNodeField::from_support(&zone.support(), zone.components().to_vec())?;
         fill_from(&mut sub, &view)?;
-        out.add_sub(insert(sub))?;
+        out.add_sub(Handle::new(sub))?;
     }
     Ok(out)
 }
@@ -119,7 +115,7 @@ mod tests {
     use crate::atoms::Node;
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
-    use crate::store::{insert, write};
+    use crate::store::Handle;
 
     /// Build a single-zone POI1 field on `n` fresh 1-D nodes;
     /// returns (coords, nodes, field).
@@ -127,7 +123,7 @@ mod tests {
         n: usize,
         components: Vec<String>,
     ) -> (crate::store::Handle<Coords>, Vec<Node>, NodeField) {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let nodes: Vec<Node> = (0..n)
             .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
             .collect();
@@ -135,7 +131,8 @@ mod tests {
         for nd in &nodes {
             sm.add_cell(&[nd.id()]).unwrap();
         }
-        let field = NodeField::from_sub(SubNodeField::from_poi1(&insert(sm), components).unwrap());
+        let field =
+            NodeField::from_sub(SubNodeField::from_poi1(&Handle::new(sm), components).unwrap());
         (coords, nodes, field)
     }
 
@@ -143,7 +140,7 @@ mod tests {
     fn restrict_subset() {
         let (coords, nodes, f) = poi1_field(3, vec!["T".into(), "P".into()]);
         {
-            let mut s = write(&f.get(0).unwrap()).unwrap();
+            let mut s = f.get(0).unwrap().write();
             s.set(0, 0, 1.0).unwrap();
             s.set(1, 0, 2.0).unwrap();
             s.set(2, 0, 3.0).unwrap();
@@ -167,7 +164,7 @@ mod tests {
     #[test]
     fn restrict_node_absent_from_field_gives_zero() {
         let (coords, nodes, f) = poi1_field(1, vec!["T".into()]);
-        write(&f.get(0).unwrap()).unwrap().set(0, 0, 7.0).unwrap();
+        f.get(0).unwrap().write().set(0, 0, 7.0).unwrap();
         let nb = Node::create_in(coords.clone(), &[1.0]).unwrap();
 
         // Mesh contains nb which is NOT in the field.
@@ -188,7 +185,7 @@ mod tests {
         for nd in &nodes {
             let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
             sm.add_cell(&[nd.id()]).unwrap();
-            mesh.add_sub(insert(sm)).unwrap();
+            mesh.add_sub(Handle::new(sm)).unwrap();
         }
         let r = restrict(&f, &mesh).unwrap();
         assert_eq!(r.len(), 2, "one zone per submesh of the target mesh");
@@ -196,7 +193,7 @@ mod tests {
 
     #[test]
     fn restrict_like_lands_on_target_support_and_components() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let n1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let n2 = Node::create_in(coords.clone(), &[2.0]).unwrap(); // only in source
@@ -206,7 +203,7 @@ mod tests {
         sm_t.add_cell(&[n0.id()]).unwrap();
         sm_t.add_cell(&[n1.id()]).unwrap();
         let target = NodeField::from_sub(
-            SubNodeField::from_poi1(&insert(sm_t), vec!["u_x".into(), "u_y".into()]).unwrap(),
+            SubNodeField::from_poi1(&Handle::new(sm_t), vec!["u_x".into(), "u_y".into()]).unwrap(),
         );
 
         // Source (`du`-like): superset nodes, extra `lambda` component.
@@ -215,7 +212,7 @@ mod tests {
             sm_s.add_cell(&[n.id()]).unwrap();
         }
         let mut ss = SubNodeField::from_poi1(
-            &insert(sm_s),
+            &Handle::new(sm_s),
             vec!["u_x".into(), "u_y".into(), "lambda".into()],
         )
         .unwrap();
@@ -249,7 +246,7 @@ mod tests {
     fn restrict_incompatible_cfg_errors() {
         let (_cfg1, _nodes1, f) = poi1_field(1, vec!["T".into()]);
         // A mesh attached to a *different* Coords.
-        let cfg2 = insert(Coords::new(1).unwrap());
+        let cfg2 = Handle::new(Coords::new(1).unwrap());
         let n2 = Node::create_in(cfg2.clone(), &[0.0]).unwrap();
         let mut m2 = Mesh::from_submesh(SubMesh::new(cfg2.clone(), ElementType::POI1));
         m2.add_cell(&[n2.id()]).unwrap();
@@ -261,7 +258,7 @@ mod tests {
     /// passing through as two disjoint zones.
     #[test]
     fn restrict_twice_to_element_mesh_shares_support_and_subtracts() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -277,7 +274,7 @@ mod tests {
             for nd in [&a, &b, &c] {
                 psm.add_cell(&[nd.id()]).unwrap();
             }
-            let mut f = SubNodeField::from_poi1(&insert(psm), vec!["v".into()]).unwrap();
+            let mut f = SubNodeField::from_poi1(&Handle::new(psm), vec!["v".into()]).unwrap();
             f.set_value(a.id(), "v", va).unwrap();
             f.set_value(b.id(), "v", vb).unwrap();
             f.set_value(c.id(), "v", vc).unwrap();
@@ -287,10 +284,10 @@ mod tests {
         let b2 = restrict(&mk(0.5, 0.5, 0.5), &mesh).unwrap();
 
         // Same canonical support slot ⇒ the operators pair the zones.
-        let sa = read(&a2.get(0).unwrap()).unwrap().support();
-        let sb = read(&b2.get(0).unwrap()).unwrap().support();
+        let sa = a2.get(0).unwrap().read().support();
+        let sb = b2.get(0).unwrap().read().support();
         assert!(
-            sa.same_slot(&sb),
+            sa.same_object(&sb),
             "both restricts share the cached POI1 support"
         );
 
@@ -308,7 +305,7 @@ mod tests {
     /// write-locking against the held reader. Before the fix this hung.
     #[test]
     fn restrict_onto_own_cached_companion_does_not_deadlock() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -320,7 +317,7 @@ mod tests {
         for nd in [&a, &b, &c] {
             psm.add_cell(&[nd.id()]).unwrap();
         }
-        let mut f = SubNodeField::from_poi1(&insert(psm), vec!["v".into()]).unwrap();
+        let mut f = SubNodeField::from_poi1(&Handle::new(psm), vec!["v".into()]).unwrap();
         f.set_value(a.id(), "v", 5.0).unwrap();
         let base = NodeField::from_sub(f);
 
@@ -330,10 +327,10 @@ mod tests {
         let again = restrict(&on_companion, &mesh).unwrap();
         assert_eq!(again.value(a.id(), "v").unwrap(), 5.0);
 
-        let s1 = read(&on_companion.get(0).unwrap()).unwrap().support();
-        let s2 = read(&again.get(0).unwrap()).unwrap().support();
+        let s1 = on_companion.get(0).unwrap().read().support();
+        let s2 = again.get(0).unwrap().read().support();
         assert!(
-            s1.same_slot(&s2),
+            s1.same_object(&s2),
             "both land on the shared cached companion"
         );
     }

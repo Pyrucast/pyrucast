@@ -4,7 +4,6 @@
 use crate::py::element_field::{PyElementField, PySubElementField};
 use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::py::node_field::{PyNodeField, PySubNodeField};
-use crate::store::read;
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 
@@ -80,10 +79,10 @@ pub fn xtx(x: &Bound<'_, PyAny>, components: Option<Vec<String>>) -> PyResult<f6
         return Ok(aggregate!(a.inner));
     }
     if let Ok(a) = x.extract::<PyRef<PySubNodeField>>() {
-        return Ok(sub!(read(&a.handle)?));
+        return Ok(sub!(a.handle.read()));
     }
     if let Ok(a) = x.extract::<PyRef<PySubElementField>>() {
-        return Ok(sub!(read(&a.handle)?));
+        return Ok(sub!(a.handle.read()));
     }
     Err(PyTypeError::new_err(
         "expected a NodeField, SubNodeField, ElementField or SubElementField",
@@ -119,13 +118,13 @@ pub fn xty(x: &Bound<'_, PyAny>, y: &Bound<'_, PyAny>) -> PyResult<f64> {
         let b = y
             .extract::<PyRef<PySubNodeField>>()
             .map_err(|_| PyTypeError::new_err("xty: both operands must be SubNodeFields"))?;
-        return Ok(read(&a.handle)?.dot(&*read(&b.handle)?)?);
+        return Ok(a.handle.read().dot(&*b.handle.read())?);
     }
     if let Ok(a) = x.extract::<PyRef<PySubElementField>>() {
         let b = y
             .extract::<PyRef<PySubElementField>>()
             .map_err(|_| PyTypeError::new_err("xty: both operands must be SubElementFields"))?;
-        return Ok(read(&a.handle)?.dot(&*read(&b.handle)?)?);
+        return Ok(a.handle.read().dot(&*b.handle.read())?);
     }
     Err(PyTypeError::new_err(
         "expected a NodeField, SubNodeField, ElementField or SubElementField",

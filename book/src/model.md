@@ -218,10 +218,10 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::model::Model;
 use pyrucast::ops::{assemble, build, mesher};
-use pyrucast::store::insert;
+use pyrucast::store::Handle;
 
 // 1-D : maillage [0, 1] à un seul SEG2.
-let coords = insert(Coords::new(1).unwrap());
+let coords = Handle::new(Coords::new(1).unwrap());
 let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
 let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
 let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));

@@ -19,8 +19,8 @@
 //!
 //! # Two-level refcount model
 //!
-//! - The **Coords slot** in the global store is protected by the
-//!   usual [`crate::store::Handle`] refcount.
+//! - The **Coords object** is kept alive by the usual
+//!   [`crate::store::Handle`] refcount.
 //! - **Each node** inside the Coords has its own refcount,
 //!   manipulated via [`Coords::incref`] / [`Coords::decref`]
 //!   (used by [`crate::atoms::Node`] and, later, by meshes and fields).
@@ -52,14 +52,14 @@
 //! ```
 //! use pyrucast::atoms::NodeId;
 //! use pyrucast::coords::Coords;
-//! use pyrucast::store::{insert, write};
+//! use pyrucast::store::Handle;
 //!
-//! let h = insert(Coords::new(2).unwrap());
-//! let a: NodeId = write(&h).unwrap().add_node(&[0.0, 0.0]).unwrap();
+//! let h = Handle::new(Coords::new(2).unwrap());
+//! let a: NodeId = h.write().add_node(&[0.0, 0.0]).unwrap();
 //! // add_node initializes refcount = 1: without decref, the node is protected.
-//! assert_eq!(write(&h).unwrap().gc(), 0);
+//! assert_eq!(h.write().gc(), 0);
 //! // After decref, refcount drops to 0 and gc collects it.
-//! let mut c = write(&h).unwrap();
+//! let mut c = h.write();
 //! c.decref(a).unwrap();
 //! assert_eq!(c.gc(), 1);
 //! ```

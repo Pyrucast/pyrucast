@@ -60,7 +60,7 @@ use crate::atoms::{ElementType, Node, NodeId};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
-use crate::store::{insert, read, Handle};
+use crate::store::Handle;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -796,7 +796,7 @@ fn parse_gmsh(buf: &[u8]) -> Result<Parsed> {
 /// Groups come out in order of first appearance; within a group, submeshes
 /// are ordered by the first cell of each element type.
 fn build_groups(parsed: &Parsed, coords: Handle<Coords>) -> Result<Vec<(String, Mesh)>> {
-    let dim = read(&coords)?.dim() as usize;
+    let dim = coords.read().dim() as usize;
 
     // Materialize each referenced node once, keeping the `Node` alive in the
     // map so its refcount survives until every submesh has taken its own.
@@ -854,7 +854,7 @@ fn build_groups(parsed: &Parsed, coords: Handle<Coords>) -> Result<Vec<(String, 
         let (types, mut by_type) = groups.remove(&name).unwrap();
         let mut mesh = Mesh::empty();
         for et in types {
-            mesh.add_sub(insert(by_type.remove(&et).unwrap()))?;
+            mesh.add_sub(Handle::new(by_type.remove(&et).unwrap()))?;
         }
         out.push((name, mesh));
     }
@@ -893,7 +893,7 @@ mod tests {
 
     /// Fresh `Coords` of the given dimension, to read into.
     fn coords(dim: u8) -> Handle<Coords> {
-        insert(Coords::new(dim).unwrap())
+        Handle::new(Coords::new(dim).unwrap())
     }
 
     // A unit square split into two TRI3, with a named surface "plate" and a
@@ -942,12 +942,11 @@ $EndElements
         let c = coords(2);
         let groups = read_gmsh_str(c.clone(), SQUARE_V2).unwrap();
         // Nodes landed in the caller's Coords (the square's 4 corners).
-        assert_eq!(read(&c).unwrap().node_count(), 4);
+        assert_eq!(c.read().node_count(), 4);
         // Every group hangs off that very same Coords slot.
         for (_, mesh) in &groups {
             let mc = mesh.coords().unwrap();
-            assert_eq!(mc.index(), c.index());
-            assert_eq!(mc.generation(), c.generation());
+            assert!(mc.same_object(&c));
         }
     }
 

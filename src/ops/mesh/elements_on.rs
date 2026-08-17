@@ -2,7 +2,7 @@ use crate::aggregate::Aggregate;
 use crate::atoms::NodeId;
 use crate::containers::mesh::Mesh;
 use crate::error::{PyrucastError, Result};
-use crate::store::{insert, read};
+use crate::store::Handle;
 use std::collections::HashSet;
 
 /// Keep the elements of `mesh` that **rest on** the nodes of `points` —
@@ -34,19 +34,19 @@ pub fn elements_on(mesh: &Mesh, points: &Mesh, strict: bool) -> Result<Mesh> {
     if !points.is_empty() && !mesh.is_empty() {
         let mc = mesh.coords()?;
         let pc = points.coords()?;
-        if mc.index() != pc.index() || mc.generation() != pc.generation() {
+        if !mc.same_object(&pc) {
             return Err(PyrucastError::Message(
                 "elements_on: mesh and points are not attached to the same Coords".into(),
             ));
         }
     }
     for sm in points {
-        allowed.extend(read(sm)?.connectivity().iter().copied());
+        allowed.extend(sm.read().connectivity().iter().copied());
     }
 
     let mut out = Mesh::empty();
     for sm in mesh {
-        let src = read(sm)?;
+        let src = sm.read();
         let et = src.element_type();
         let npc = et.nodes_per_cell();
         let conn = src.connectivity();
@@ -62,7 +62,7 @@ pub fn elements_on(mesh: &Mesh, points: &Mesh, strict: bool) -> Result<Mesh> {
                 kept.add_cell(cell)?;
             }
         }
-        out.add_sub(insert(kept))?;
+        out.add_sub(Handle::new(kept))?;
     }
     Ok(out)
 }
@@ -73,12 +73,12 @@ mod tests {
     use crate::atoms::{ElementType, Node};
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     /// Five nodes on a line and a TRI3 mesh of two triangles sharing edge
     /// (1, 2): cell0 = (0,1,2), cell1 = (1,3,4). Returns (coords, nodes, mesh).
     fn two_triangles() -> (crate::store::Handle<Coords>, Vec<Node>, Mesh) {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         #[rustfmt::skip]
         let n: Vec<Node> = [
             [0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [2.0, 0.0], [2.0, 1.0],
@@ -94,7 +94,7 @@ mod tests {
 
     /// Cell node ids of submesh `zone` of `mesh`, grouped per cell.
     fn cells(mesh: &Mesh, zone: usize) -> Vec<Vec<NodeId>> {
-        let s = read(&mesh.get(zone).unwrap()).unwrap();
+        let s = mesh.get(zone).unwrap().read();
         let npc = s.element_type().nodes_per_cell();
         s.connectivity()
             .chunks_exact(npc)
@@ -140,7 +140,7 @@ mod tests {
             Mesh::from_submesh(SubMesh::poi1_from_node_ids(coords.clone(), &[n[0].id()]).unwrap());
         let r = elements_on(&mesh, &pts, true).unwrap();
         assert_eq!(r.len(), 1);
-        assert_eq!(read(&r.get(0).unwrap()).unwrap().cell_count(), 0);
+        assert_eq!(r.get(0).unwrap().read().cell_count(), 0);
     }
 
     #[test]
@@ -148,7 +148,7 @@ mod tests {
         let (_coords, _n, mesh) = two_triangles();
         let r = elements_on(&mesh, &Mesh::empty(), false).unwrap();
         assert_eq!(r.len(), 1);
-        assert_eq!(read(&r.get(0).unwrap()).unwrap().cell_count(), 0);
+        assert_eq!(r.get(0).unwrap().read().cell_count(), 0);
     }
 
     #[test]
@@ -161,10 +161,10 @@ mod tests {
             let mut tri = SubMesh::new(coords.clone(), ElementType::TRI3);
             tri.set_face_color(tri_color);
             tri.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-            mesh.add_sub(insert(tri)).unwrap();
+            mesh.add_sub(Handle::new(tri)).unwrap();
             let mut seg = SubMesh::new(coords.clone(), ElementType::SEG2);
             seg.add_cell(&[n[3].id(), n[4].id()]).unwrap();
-            mesh.add_sub(insert(seg)).unwrap();
+            mesh.add_sub(Handle::new(seg)).unwrap();
         }
         // All nodes allowed → everything kept, both zones present.
         let pts = Mesh::from_submesh(
@@ -174,7 +174,7 @@ mod tests {
             )
             .unwrap(),
         );
-        let before = read(&coords).unwrap().refcount(n[0].id());
+        let before = coords.read().refcount(n[0].id());
         let r = elements_on(&mesh, &pts, true).unwrap();
         assert_eq!(
             r.element_types().unwrap(),
@@ -182,17 +182,17 @@ mod tests {
         );
         assert_eq!(r.cell_counts().unwrap(), vec![1, 1]);
         // Face colour of the TRI3 zone is carried over.
-        assert_eq!(read(&r.get(0).unwrap()).unwrap().face_color(), tri_color);
+        assert_eq!(r.get(0).unwrap().read().face_color(), tri_color);
         // n[0] is referenced once more by the kept TRI3 cell.
-        assert_eq!(read(&coords).unwrap().refcount(n[0].id()), before + 1);
+        assert_eq!(coords.read().refcount(n[0].id()), before + 1);
         drop(r);
-        assert_eq!(read(&coords).unwrap().refcount(n[0].id()), before);
+        assert_eq!(coords.read().refcount(n[0].id()), before);
     }
 
     #[test]
     fn mismatched_coords_errors() {
         let (_c1, _n1, mesh) = two_triangles();
-        let c2 = insert(Coords::new(2).unwrap());
+        let c2 = Handle::new(Coords::new(2).unwrap());
         let m2 = Node::create_in(c2.clone(), &[0.0, 0.0]).unwrap();
         let pts = Mesh::from_submesh(SubMesh::poi1_from_node_ids(c2.clone(), &[m2.id()]).unwrap());
         assert!(elements_on(&mesh, &pts, false).is_err());

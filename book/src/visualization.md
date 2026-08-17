@@ -85,11 +85,11 @@ use pyrucast::coords::Coords;
 use pyrucast::atoms::ElementType;
 use pyrucast::containers::mesh::SubMesh;
 use pyrucast::atoms::Node;
-use pyrucast::store::insert;
+use pyrucast::store::Handle;
 use pyrucast::viz::View;
 use std::path::Path;
 
-let coords = insert(Coords::new(3).unwrap());
+let coords = Handle::new(Coords::new(3).unwrap());
 let a = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0]).unwrap();
 let b = Node::create_in(coords.clone(), &[1.0, 0.0, 0.0]).unwrap();
 let c = Node::create_in(coords.clone(), &[0.0, 1.0, 0.0]).unwrap();

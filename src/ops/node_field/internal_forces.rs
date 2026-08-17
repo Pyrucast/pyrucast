@@ -28,7 +28,7 @@ use crate::containers::model::Model;
 use crate::containers::node_field::NodeField;
 use crate::error::Result;
 use crate::models::{continuum_internal_force_element, kernel};
-use crate::store::{insert, read};
+use crate::store::Handle;
 
 /// Axis suffixes for the displacement/force components of the model-free
 /// continuum operator (`f_x`, `f_y`, `f_z`).
@@ -45,13 +45,13 @@ const AXES: [&str; 3] = ["x", "y", "z"];
 pub fn internal_forces(stresses: &ElementField, model: &Model) -> Result<NodeField> {
     let mut out = NodeField::empty();
     for h in model {
-        let beh_fespace = read(h)?.behavior_fespace();
+        let beh_fespace = h.read().behavior_fespace();
         let Some(beh_fespace) = beh_fespace else {
             continue; // constraint sub-model — no behaviour, no internal force
         };
         let stress = stresses.sub_for_fespace(&beh_fespace)?;
-        let sub = read(h)?.build_internal_forces(&stress)?;
-        out.add_sub(insert(sub))?;
+        let sub = h.read().build_internal_forces(&stress)?;
+        out.add_sub(Handle::new(sub))?;
     }
     Ok(out)
 }
@@ -77,20 +77,20 @@ pub fn internal_forces_continuum(
     let mut out = NodeField::empty();
     for sub in fespace {
         let (submesh, space_dim) = {
-            let s = read(sub)?;
+            let s = sub.read();
             (s.submesh(), s.space_dim())
         };
-        let support = read(&submesh)?.to_poi1()?;
+        let support = submesh.read().to_poi1()?;
         let dual_vars: Vec<String> = (0..space_dim).map(|a| format!("f_{}", AXES[a])).collect();
         let stress = stresses.sub_for_fespace(sub)?;
-        let stress_guard = read(&stress)?;
+        let stress_guard = stress.read();
         let sub_nf = kernel::scatter_to_nodes(
             std::slice::from_ref(sub),
             &support,
             dual_vars,
             |geoms, fe| continuum_internal_force_element(geoms, &stress_guard, fe),
         )?;
-        out.add_sub(insert(sub_nf))?;
+        out.add_sub(Handle::new(sub_nf))?;
     }
     Ok(out)
 }
@@ -115,7 +115,7 @@ mod tests {
     /// `K·u` applied to the (linear) displacement solution.
     #[test]
     fn elasticity_internal_forces_match_k_times_u() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -125,14 +125,15 @@ mod tests {
 
         let mut model = Model::empty();
         model
-            .add_sub(insert(
+            .add_sub(Handle::new(
                 SubModel::elasticity(fes.get(0).unwrap(), ElasticityModel::PlaneStress).unwrap(),
             ))
             .unwrap();
         let materials = material_field(&model, &[("E", 210.0), ("nu", 0.3)]).unwrap();
 
         // Arbitrary linear displacement field.
-        let support = insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone(), c.clone()]).unwrap());
+        let support =
+            Handle::new(SubMesh::poi1_from_nodes(&[a.clone(), b.clone(), c.clone()]).unwrap());
         let mut u = SubNodeField::from_poi1(&support, vec!["u_x".into(), "u_y".into()]).unwrap();
         for (n, x, y) in [(&a, 0.0, 0.0), (&b, 1.0, 0.0), (&c, 0.0, 1.0)] {
             u.set_value(n.id(), "u_x", 0.02 * x - 0.01 * y).unwrap();
@@ -164,7 +165,7 @@ mod tests {
     /// solid (elasticity), node for node.
     #[test]
     fn continuum_variant_matches_model_based() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -174,13 +175,14 @@ mod tests {
 
         let mut model = Model::empty();
         model
-            .add_sub(insert(
+            .add_sub(Handle::new(
                 SubModel::elasticity(fes.get(0).unwrap(), ElasticityModel::PlaneStrain).unwrap(),
             ))
             .unwrap();
         let materials = material_field(&model, &[("E", 70.0), ("nu", 0.25)]).unwrap();
 
-        let support = insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone(), c.clone()]).unwrap());
+        let support =
+            Handle::new(SubMesh::poi1_from_nodes(&[a.clone(), b.clone(), c.clone()]).unwrap());
         let mut u = SubNodeField::from_poi1(&support, vec!["u_x".into(), "u_y".into()]).unwrap();
         for (n, x, y) in [(&a, 0.0, 0.0), (&b, 1.0, 0.0), (&c, 0.0, 1.0)] {
             u.set_value(n.id(), "u_x", 0.03 * x + 0.01 * y).unwrap();
@@ -209,7 +211,7 @@ mod tests {
     #[test]
     fn truss_internal_forces_are_equilibrating_end_forces() {
         let (e, area, dx, dy) = (100.0, 3.0, 3.0, 4.0);
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[dx, dy]).unwrap();
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
@@ -218,7 +220,7 @@ mod tests {
 
         let mut model = Model::empty();
         model
-            .add_sub(insert(SubModel::truss(fes.get(0).unwrap()).unwrap()))
+            .add_sub(Handle::new(SubModel::truss(fes.get(0).unwrap()).unwrap()))
             .unwrap();
         let materials = material_field(&model, &[("E", e), ("A", area)]).unwrap();
 
@@ -226,7 +228,7 @@ mod tests {
         let c = [dx / len, dy / len];
         // u = ε·L along the axis at B, zero at A ⇒ axial strain ε.
         let eps = 0.01;
-        let support = insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap());
+        let support = Handle::new(SubMesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap());
         let mut u = SubNodeField::from_poi1(&support, vec!["u_x".into(), "u_y".into()]).unwrap();
         u.set_value(a.id(), "u_x", 0.0).unwrap();
         u.set_value(a.id(), "u_y", 0.0).unwrap();

@@ -247,13 +247,6 @@ produit » ne désigne donc pas *un* module, et ils se rangent par domaine.
 | `write_vtk_node_field(mesh: &Mesh, field: &NodeField, path: &Path)` | `export_vtk(mesh, path, field=node_field) -> None` |
 | `write_vtk_element_field(mesh: &Mesh, field: &ElementField, path: &Path)` | `export_vtk(mesh, path, field=element_field) -> None` |
 
-### Utilitaires de `store` (swap disque)
-
-| Rust (`store::…`) | Python (`pyrucast.store.…`) |
-|---|---|
-| `set_swap_dir(path: PathBuf)` | `set_swap_dir(path) -> None` |
-| `swap_dir() -> PathBuf` | `swap_dir() -> Path` |
-
 > `ops::geom` héberge `locate_points` (mapping iso-paramétrique inverse, sous
 > le [baignage](contraintes/embedded.md)) et `project_points` (projection au
 > point le plus proche sur une surface, sous le [contact](contraintes/contact.md)) ;
@@ -346,8 +339,8 @@ sous-objets sont **partagés** (refcount), jamais copiés ; les contraintes de d
 
 Sémantique d'union (uniforme pour **tous** les agrégats) :
 
-1. **Déduplication par handle** : un sous-objet dont le `Handle` est déjà
-   présent (même slot, cf. `Handle::same_slot`) n'est pas ajouté deux fois.
+1. **Déduplication par handle** : un sous-objet dont le `Handle` désigne un
+   objet déjà présent (cf. `Handle::same_object`) n'est pas ajouté deux fois.
 2. **Finalisation** (`Aggregate::finalize`) : par défaut un no-op ; les
    **champs** la surchargent pour fusionner les zones partageant un même
    support (voir plus bas).

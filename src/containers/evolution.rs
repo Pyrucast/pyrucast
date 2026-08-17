@@ -31,7 +31,7 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::containers::evolution::{SubEvolution, SubValue, OutOfRange};
+//! use pyrucast::containers::evolution::{OutOfRange, SubEvolution, SubValue};
 //!
 //! // A scalar X→Y curve: 0→10, 1→20.
 //! let se = SubEvolution::new(
@@ -59,7 +59,7 @@ use crate::containers::mesh::SubMesh;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
 use crate::parallel::*;
-use crate::store::{insert, read, write, Handle};
+use crate::store::Handle;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -130,7 +130,7 @@ impl ValueKind {
 /// A single tabulated value: a scalar, a node sub-field, or an element
 /// sub-field. Stored **inline** (owned) inside a [`SubEvolution`], like the
 /// physics structs inside `SubModel`.
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Clone)]
 pub enum SubValue {
     /// A plain scalar.
     Scalar(f64),
@@ -182,7 +182,7 @@ fn lerp(lo: &SubValue, hi: &SubValue, t: f64) -> Result<SubValue> {
 /// One tabulated curve: abscissas (sorted, strictly increasing) and the
 /// matching values, all of the same [`ValueKind`] (and, for fields, on the
 /// same support).
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Clone)]
 pub struct SubEvolution {
     /// Strictly increasing abscissas of the samples.
     abscissas: Vec<f64>,
@@ -194,12 +194,10 @@ pub struct SubEvolution {
     /// to label plots and — when a field is mapped through a scalar curve — to
     /// select which field component to look up (see
     /// [`SubEvolution::interpolate_field`]).
-    #[serde(default)]
     abscissa_type: Option<String>,
     /// Physical **type** of the ordinate, for **scalar** curves only (e.g.
     /// `"young"`). Optional; labels plots and names the component produced when
     /// a field is mapped through the curve.
-    #[serde(default)]
     ordinate_type: Option<String>,
 }
 
@@ -371,7 +369,7 @@ impl SubEvolution {
         title: Option<&str>,
     ) -> Result<()> {
         let evo = Evolution {
-            subs: vec![insert(self.clone())],
+            subs: vec![Handle::new(self.clone())],
             out_of_range: self.out_of_range,
         };
         evo.plot(
@@ -601,7 +599,7 @@ impl crate::dump::Dump for SubEvolution {
 /// The aggregate carries its own [`OutOfRange`] policy, applied to every
 /// curve at interpolation time. Note that the structural union (`a | b`) and
 /// slicing reset the policy to the default [`OutOfRange::Error`].
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Default)]
 pub struct Evolution {
     subs: Vec<Handle<SubEvolution>>,
     out_of_range: OutOfRange,
@@ -618,8 +616,8 @@ crate::impl_aggregate!(
             if self.subs.is_empty() {
                 return Ok(());
             }
-            let k0 = read(&self.subs[0])?.kind();
-            let k = read(h)?.kind();
+            let k0 = self.subs[0].read().kind();
+            let k = h.read().kind();
             if k != k0 {
                 return Err(PyrucastError::Message(format!(
                     "Evolution: cannot mix {} and {} sub-evolutions",
@@ -662,11 +660,11 @@ impl Evolution {
             ));
         }
         let policy = Some(policy.unwrap_or(self.out_of_range));
-        match read(&self.subs[0])?.kind() {
+        match self.subs[0].read().kind() {
             ValueKind::Scalar => {
                 let mut out = Vec::with_capacity(self.subs.len());
                 for h in &self.subs {
-                    match read(h)?.interpolate(x, policy)? {
+                    match h.read().interpolate(x, policy)? {
                         SubValue::Scalar(v) => out.push(v),
                         _ => return Err(mixed_kind_err()),
                     }
@@ -676,8 +674,8 @@ impl Evolution {
             ValueKind::Node => {
                 let mut field = NodeField::default();
                 for h in &self.subs {
-                    match read(h)?.interpolate(x, policy)? {
-                        SubValue::Node(sf) => field.add_sub(insert(sf))?,
+                    match h.read().interpolate(x, policy)? {
+                        SubValue::Node(sf) => field.add_sub(Handle::new(sf))?,
                         _ => return Err(mixed_kind_err()),
                     }
                 }
@@ -686,8 +684,8 @@ impl Evolution {
             ValueKind::Element => {
                 let mut field = ElementField::default();
                 for h in &self.subs {
-                    match read(h)?.interpolate(x, policy)? {
-                        SubValue::Element(sf) => field.add_sub(insert(sf))?,
+                    match h.read().interpolate(x, policy)? {
+                        SubValue::Element(sf) => field.add_sub(Handle::new(sf))?,
                         _ => return Err(mixed_kind_err()),
                     }
                 }
@@ -700,7 +698,7 @@ impl Evolution {
     /// set. `None` for an empty evolution.
     pub fn abscissa_type(&self) -> Result<Option<String>> {
         match self.subs.first() {
-            Some(h) => Ok(read(h)?.abscissa_type().map(str::to_string)),
+            Some(h) => Ok(h.read().abscissa_type().map(str::to_string)),
             None => Ok(None),
         }
     }
@@ -709,7 +707,7 @@ impl Evolution {
     /// empty evolution.
     pub fn ordinate_type(&self) -> Result<Option<String>> {
         match self.subs.first() {
-            Some(h) => Ok(read(h)?.ordinate_type().map(str::to_string)),
+            Some(h) => Ok(h.read().ordinate_type().map(str::to_string)),
             None => Ok(None),
         }
     }
@@ -717,7 +715,7 @@ impl Evolution {
     /// Set (or clear) the abscissa type on **every** sub-evolution.
     pub fn set_abscissa_type(&mut self, t: Option<String>) -> Result<()> {
         for h in &self.subs {
-            write(h)?.set_abscissa_type(t.clone());
+            h.write().set_abscissa_type(t.clone());
         }
         Ok(())
     }
@@ -726,7 +724,7 @@ impl Evolution {
     /// field-valued evolution (only scalar curves have an ordinate to type).
     pub fn set_ordinate_type(&mut self, t: Option<String>) -> Result<()> {
         for h in &self.subs {
-            write(h)?.set_ordinate_type(t.clone())?;
+            h.write().set_ordinate_type(t.clone())?;
         }
         Ok(())
     }
@@ -742,7 +740,7 @@ impl Evolution {
                 self.subs.len()
             )));
         }
-        let sub = read(&self.subs[0])?;
+        let sub = self.subs[0].read();
         if sub.kind() != ValueKind::Scalar {
             return Err(PyrucastError::Message(
                 "evolution: a field can only be mapped through a scalar-valued evolution".into(),
@@ -783,7 +781,7 @@ impl Evolution {
         if self.subs.is_empty() {
             return Err(PyrucastError::Message("Evolution: empty evolution".into()));
         }
-        Ok(read(&self.subs[0])?.kind())
+        Ok(self.subs[0].read().kind())
     }
 
     /// The abscissa grid **shared** by every sub-evolution, validated to be
@@ -793,9 +791,9 @@ impl Evolution {
         if self.subs.is_empty() {
             return Err(PyrucastError::Message("Evolution: empty evolution".into()));
         }
-        let first = read(&self.subs[0])?.abscissas().to_vec();
+        let first = self.subs[0].read().abscissas().to_vec();
         for h in &self.subs[1..] {
-            if read(h)?.abscissas() != first.as_slice() {
+            if h.read().abscissas() != first.as_slice() {
                 return Err(PyrucastError::Message(
                     "Evolution: sub-evolutions have different abscissa grids — \
                      a frame index is ambiguous"
@@ -816,8 +814,8 @@ impl Evolution {
     pub fn node_frame(&self, k: usize) -> Result<NodeField> {
         let mut field = NodeField::default();
         for h in &self.subs {
-            match read(h)?.value_at(k)? {
-                SubValue::Node(sf) => field.add_sub(insert(sf))?,
+            match h.read().value_at(k)? {
+                SubValue::Node(sf) => field.add_sub(Handle::new(sf))?,
                 _ => return Err(not_node_err()),
             }
         }
@@ -829,8 +827,8 @@ impl Evolution {
     pub fn element_frame(&self, k: usize) -> Result<ElementField> {
         let mut field = ElementField::default();
         for h in &self.subs {
-            match read(h)?.value_at(k)? {
-                SubValue::Element(sf) => field.add_sub(insert(sf))?,
+            match h.read().value_at(k)? {
+                SubValue::Element(sf) => field.add_sub(Handle::new(sf))?,
                 _ => return Err(not_element_err()),
             }
         }
@@ -847,7 +845,7 @@ impl Evolution {
             } else {
                 format!("zone {i}")
             };
-            out.push((label, read(h)?.scalar_series()?));
+            out.push((label, h.read().scalar_series()?));
         }
         Ok(out)
     }
@@ -954,7 +952,7 @@ impl Evolution {
             .collect();
         let sub = SubEvolution::new(pairs, out_of_range)?;
         Ok(Evolution {
-            subs: vec![insert(sub)],
+            subs: vec![Handle::new(sub)],
             out_of_range,
         })
     }
@@ -983,14 +981,14 @@ impl Evolution {
             out_of_range,
         };
         for z in 0..first.len() {
-            let support = read(&first.get(z)?)?.support();
+            let support = first.get(z)?.read().support();
             let mut curve = Vec::with_capacity(samples.len());
             for (x, field) in samples {
                 curve.push((*x, SubValue::Node(node_sub_on(field, &support)?)));
             }
             evolution
                 .subs
-                .push(insert(SubEvolution::new(curve, out_of_range)?));
+                .push(Handle::new(SubEvolution::new(curve, out_of_range)?));
         }
         Ok(evolution)
     }
@@ -1018,14 +1016,14 @@ impl Evolution {
             out_of_range,
         };
         for z in 0..first.len() {
-            let support = read(&first.get(z)?)?.support();
+            let support = first.get(z)?.read().support();
             let mut curve = Vec::with_capacity(samples.len());
             for (x, field) in samples {
                 curve.push((*x, SubValue::Element(element_sub_on(field, &support)?)));
             }
             evolution
                 .subs
-                .push(insert(SubEvolution::new(curve, out_of_range)?));
+                .push(Handle::new(SubEvolution::new(curve, out_of_range)?));
         }
         Ok(evolution)
     }
@@ -1051,8 +1049,8 @@ fn element_support_mesh(field: &ElementField) -> Result<crate::containers::mesh:
     use crate::containers::field::SubField;
     let mut mesh = crate::containers::mesh::Mesh::empty();
     for h in field.iter() {
-        let sub = read(h)?;
-        let fes = read(&sub.support())?;
+        let sub = h.read();
+        let fes = sub.support().read();
         mesh.add_sub(fes.submesh())?;
     }
     Ok(mesh)
@@ -1062,8 +1060,8 @@ fn element_support_mesh(field: &ElementField) -> Result<crate::containers::mesh:
 /// store slot). Errors if no zone carries that support.
 fn node_sub_on(field: &NodeField, support: &Handle<SubMesh>) -> Result<SubNodeField> {
     for h in field.iter() {
-        let s = read(h)?;
-        if s.support().same_slot(support) {
+        let s = h.read();
+        if s.support().same_object(support) {
             return Ok((*s).clone());
         }
     }
@@ -1078,8 +1076,8 @@ fn element_sub_on(
     support: &Handle<SubFiniteElementSpace>,
 ) -> Result<SubElementField> {
     for h in field.iter() {
-        let s = read(h)?;
-        if s.support().same_slot(support) {
+        let s = h.read();
+        if s.support().same_object(support) {
             return Ok((*s).clone());
         }
     }
@@ -1096,7 +1094,7 @@ mod tests {
     use crate::atoms::{ElementType, Node};
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
-    use crate::store::{insert, Handle};
+    use crate::store::Handle;
 
     fn scalar_curve(samples: &[(f64, f64)], oor: OutOfRange) -> SubEvolution {
         SubEvolution::new(
@@ -1111,13 +1109,13 @@ mod tests {
 
     /// A POI1 support over `n` nodes on a fresh 1-D Coords.
     fn poi1(n: usize) -> Handle<SubMesh> {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
         for i in 0..n {
             let nd = Node::create_in(coords.clone(), &[i as f64]).unwrap();
             sm.add_cell(&[nd.id()]).unwrap();
         }
-        insert(sm)
+        Handle::new(sm)
     }
 
     fn node_field(sm: &Handle<SubMesh>, vals: &[f64]) -> SubNodeField {
@@ -1234,8 +1232,8 @@ mod tests {
 
     #[test]
     fn aggregate_rejects_mixed_kinds() {
-        let scalar = insert(scalar_curve(&[(0.0, 1.0)], OutOfRange::Error));
-        let node = insert(
+        let scalar = Handle::new(scalar_curve(&[(0.0, 1.0)], OutOfRange::Error));
+        let node = Handle::new(
             SubEvolution::new(
                 vec![(0.0, SubValue::Node(node_field(&poi1(1), &[1.0])))],
                 OutOfRange::Error,
@@ -1287,7 +1285,7 @@ mod tests {
         assert_eq!(e.frame_count().unwrap(), 2);
         // frame 1 = the second tabulated NodeField.
         let frame = e.node_frame(1).unwrap();
-        let sub = read(&frame.get(0).unwrap()).unwrap();
+        let sub = frame.get(0).unwrap().read();
         assert_eq!(sub.get(0, 0).unwrap(), 10.0);
         assert_eq!(sub.get(1, 0).unwrap(), 20.0);
     }
@@ -1301,7 +1299,7 @@ mod tests {
         assert_eq!(e.len(), 1);
         match e.interpolate(0.5, None).unwrap() {
             Interpolated::Node(field) => {
-                let sub = read(&field.get(0).unwrap()).unwrap();
+                let sub = field.get(0).unwrap().read();
                 assert_eq!(sub.get(0, 0).unwrap(), 5.0);
                 assert_eq!(sub.get(1, 0).unwrap(), 10.0);
             }
@@ -1388,7 +1386,7 @@ mod tests {
         let sm = poi1(2);
         let input = NodeField::from_sub(node_field(&sm, &[0.0, 10.0]));
         let out = e.interpolate_node_field(&input, None).unwrap();
-        let sub = read(&out.get(0).unwrap()).unwrap();
+        let sub = out.get(0).unwrap().read();
         assert_eq!(sub.components(), &["E".to_string()]);
         assert_eq!(sub.get(0, 0).unwrap(), 0.0);
         assert_eq!(sub.get(1, 0).unwrap(), 20.0);

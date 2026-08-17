@@ -1,11 +1,11 @@
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::Result;
-use crate::store::{read, Handle};
+use crate::store::Handle;
 
 /// Create a POI1 mesh containing all live nodes of `coords`.
 pub fn from_live_nodes(coords: Handle<Coords>) -> Result<Mesh> {
-    let node_ids: Vec<_> = read(&coords)?.iter_live().collect();
+    let node_ids: Vec<_> = coords.read().iter_live().collect();
     Ok(Mesh::from_submesh(SubMesh::poi1_from_node_ids(
         coords, &node_ids,
     )?))
@@ -17,11 +17,11 @@ mod tests {
     use crate::atoms::ElementType;
     use crate::atoms::Node;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     #[test]
     fn mesh_from_live_nodes() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let _a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let _b = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let _c = Node::create_in(coords.clone(), &[2.0]).unwrap();

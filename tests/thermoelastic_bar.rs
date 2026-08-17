@@ -28,7 +28,7 @@ use pyrucast::ops::element_field::{deformation, interp_to_gauss, thermal_strain}
 use pyrucast::ops::mesh;
 use pyrucast::ops::node_field::internal_forces;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::{insert, read};
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 #[test]
@@ -45,7 +45,7 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
     let (hx, hy) = (L / NX as f64, H / NY as f64);
 
     // ── Maillage QUA4 sur [0,L]×[0,H] ──────────────────────────────────────
-    let coords = insert(Coords::new(2)?);
+    let coords = Handle::new(Coords::new(2)?);
     let idx = |i: usize, j: usize| j * (NX + 1) + i;
     let mut grid: Vec<Node> = Vec::new();
     for j in 0..=NY {
@@ -98,7 +98,7 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
     )?;
 
     // ── Température imposée T = T_ref + ΔT partout, portée aux points de Gauss
-    let support = insert(SubMesh::poi1_from_nodes(&grid)?);
+    let support = Handle::new(SubMesh::poi1_from_nodes(&grid)?);
     let mut t_nodal = SubNodeField::from_poi1(&support, vec!["T".into()])?;
     for n in &grid {
         t_nodal.set_value(n.id(), "T", T_REF + DT)?;
@@ -118,7 +118,7 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
     )?;
 
     // ── Déplacement propre (u_x, u_y) puis σ = D:(ε(u) − ε_th) ─────────────
-    let disp_support = insert(SubMesh::poi1_from_nodes(&grid)?);
+    let disp_support = Handle::new(SubMesh::poi1_from_nodes(&grid)?);
     let mut disp = SubNodeField::from_poi1(&disp_support, vec!["u_x".into(), "u_y".into()])?;
     for n in &grid {
         disp.set_value(n.id(), "u_x", solution.value(n.id(), "u_x")?)?;
@@ -133,7 +133,7 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
     // ── Vérification : σ_xx = −E·α·ΔT, σ_yy = 0 ────────────────────────────
     let expected = -E * ALPHA * DT;
     let tol = 1e-6 * expected.abs();
-    let sub = read(&sigma.get(0)?)?;
+    let sub = sigma.get(0)?.read();
     for cell in 0..sub.cell_count() {
         for g in 0..sub.gauss_count() {
             assert!((sub.value(cell, g, "sigma_xx")? - expected).abs() < tol);
@@ -171,7 +171,7 @@ fn thermal_expansion_reaches_plasticity_and_damage() -> Result<()> {
     // σ = E·α·ΔT/(1−ν) = 300, so a yield of 600 keeps the step elastic.
     const SIGMA_Y: f64 = 600.0;
 
-    let coords = insert(Coords::new(2)?);
+    let coords = Handle::new(Coords::new(2)?);
     let corners: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
         .iter()
         .map(|p| Node::create_in(coords.clone(), p))
@@ -180,7 +180,7 @@ fn thermal_expansion_reaches_plasticity_and_damage() -> Result<()> {
     mesh.add_cell(&corners.iter().map(|n| n.id()).collect::<Vec<_>>())?;
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
 
-    let support = insert(SubMesh::poi1_from_nodes(&corners)?);
+    let support = Handle::new(SubMesh::poi1_from_nodes(&corners)?);
     let mut t_nodal = SubNodeField::from_poi1(&support, vec!["T".into()])?;
     for n in &corners {
         t_nodal.set_value(n.id(), "T", T_REF + DT)?;
@@ -216,7 +216,7 @@ fn thermal_expansion_reaches_plasticity_and_damage() -> Result<()> {
         let sigma = pyrucast::ops::element_field::behavior::integrate(
             &model, &eps_th, None, &materials, None,
         )?;
-        let sub = read(&sigma.get(0)?)?;
+        let sub = sigma.get(0)?.read();
         for g in 0..sub.gauss_count() {
             let sxx = sub.value(0, g, "sigma_xx")?;
             assert!(

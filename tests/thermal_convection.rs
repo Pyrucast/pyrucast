@@ -35,7 +35,7 @@ use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
 use pyrucast::models::Physics;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::insert;
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 #[test]
@@ -49,7 +49,7 @@ fn thermal_convection_recovers_analytical_solution() -> Result<()> {
     let step = 1.0 / N as f64;
 
     // ── Maillage : grille structurée (N+1)×(N+1) de QUA4 sur [0,1]² ─────────
-    let coords = insert(Coords::new(2)?);
+    let coords = Handle::new(Coords::new(2)?);
     let idx = |i: usize, j: usize| j * (N + 1) + i; // nœud colonne i, ligne j
     let mut grid: Vec<Node> = Vec::with_capacity((N + 1) * (N + 1));
     for j in 0..=N {

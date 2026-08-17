@@ -20,12 +20,12 @@ use pyrucast::atoms::{ElementType, Interpolation, Node};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::coords::Coords;
-use pyrucast::store::{insert, read};
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 /// One `SEG2` of length `l` on the x axis, as a `HERMITE3` space.
 fn segment(l: f64) -> Result<FiniteElementSpace> {
-    let coords = insert(Coords::new(1)?);
+    let coords = Handle::new(Coords::new(1)?);
     let a = Node::create_in(coords.clone(), &[0.0])?;
     let b = Node::create_in(coords.clone(), &[l])?;
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
@@ -49,7 +49,7 @@ fn closed_form(ei: f64, l: f64) -> [[f64; 4]; 4] {
 /// reference basis — the Jacobian applied here exactly as `CellGeom` does it.
 fn integrated(ei: f64, l: f64) -> Result<[[f64; 4]; 4]> {
     let fes = segment(l)?;
-    let s = read(&fes.get(0)?)?;
+    let s = fes.get(0)?.read();
     let j = l / 2.0; // a straight SEG2 has a constant Jacobian
     let mut k = [[0.0_f64; 4]; 4];
     for g in 0..s.gauss_count() {
@@ -99,7 +99,7 @@ fn the_basis_reproduces_the_euler_bernoulli_stiffness() -> Result<()> {
 #[test]
 fn the_field_basis_and_the_geometry_part_company() -> Result<()> {
     let fes = segment(2.0)?;
-    let s = read(&fes.get(0)?)?;
+    let s = fes.get(0)?.read();
     assert_eq!(s.shape_count()?, 4);
     assert_eq!(s.nodes_per_cell()?, 2);
     assert_eq!(s.field_n_at_g(0)?.len(), 4);
@@ -114,7 +114,7 @@ fn the_field_basis_and_the_geometry_part_company() -> Result<()> {
 /// producing a basis of the wrong length on a triangle.
 #[test]
 fn hermite_is_rejected_on_anything_but_a_segment() -> Result<()> {
-    let coords = insert(Coords::new(2)?);
+    let coords = Handle::new(Coords::new(2)?);
     let a = Node::create_in(coords.clone(), &[0.0, 0.0])?;
     let b = Node::create_in(coords.clone(), &[1.0, 0.0])?;
     let c = Node::create_in(coords.clone(), &[0.0, 1.0])?;
@@ -132,13 +132,13 @@ fn hermite_is_rejected_on_anything_but_a_segment() -> Result<()> {
 /// instead of "you asked the wrong space".
 #[test]
 fn a_lagrange_space_refuses_to_produce_a_curvature() -> Result<()> {
-    let coords = insert(Coords::new(1)?);
+    let coords = Handle::new(Coords::new(1)?);
     let a = Node::create_in(coords.clone(), &[0.0])?;
     let b = Node::create_in(coords.clone(), &[1.0])?;
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     mesh.add_cell(&[a.id(), b.id()])?;
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
-    let s = read(&fes.get(0)?)?;
+    let s = fes.get(0)?.read();
     // The field basis falls back to the geometric one — identical, as it must be.
     assert_eq!(s.field_n_at_g(0)?, s.n_at_g(0)?);
     let err = s.field_d2n_at_g(0).unwrap_err().to_string();
@@ -150,7 +150,7 @@ fn a_lagrange_space_refuses_to_produce_a_curvature() -> Result<()> {
 /// carried by the shared `theta` degree of freedom, not by anything per-cell.
 #[test]
 fn a_whole_beam_mesh_can_be_hermite() -> Result<()> {
-    let coords = insert(Coords::new(1)?);
+    let coords = Handle::new(Coords::new(1)?);
     let nodes: Vec<_> = (0..4)
         .map(|i| Node::create_in(coords.clone(), &[i as f64 * 0.5]))
         .collect::<Result<_>>()?;
@@ -159,7 +159,7 @@ fn a_whole_beam_mesh_can_be_hermite() -> Result<()> {
         mesh.add_cell(&[w[0].id(), w[1].id()])?;
     }
     let fes = FiniteElementSpace::new(&mesh, Interpolation::Hermite3)?;
-    let s = read(&fes.get(0)?)?;
+    let s = fes.get(0)?.read();
     assert_eq!(s.cell_count()?, 3);
     assert_eq!(s.shape_count()?, 4);
     Ok(())

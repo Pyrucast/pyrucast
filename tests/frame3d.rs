@@ -25,7 +25,7 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::ops::mesh;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::insert;
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 #[test]
@@ -45,7 +45,7 @@ fn frame3d_cantilever_bending_and_torsion() -> Result<()> {
     const N: usize = 2;
 
     // ── Maillage : N éléments SEG2 le long de l'axe X (config 3-D) ─────────
-    let coords = insert(Coords::new(3)?);
+    let coords = Handle::new(Coords::new(3)?);
     let h = L / N as f64;
     let nodes: Vec<Node> = (0..=N)
         .map(|i| Node::create_in(coords.clone(), &[i as f64 * h, 0.0, 0.0]))
@@ -99,7 +99,7 @@ fn frame3d_cantilever_bending_and_torsion() -> Result<()> {
     // ── Chargement : f_y, f_z et m_x au bout libre ─────────────────────────
     let mut load_sm = SubMesh::new(coords.clone(), ElementType::POI1);
     load_sm.add_cell(&[nodes[N].id()])?;
-    let load_sm = insert(load_sm);
+    let load_sm = Handle::new(load_sm);
     let mut rhs =
         SubNodeField::from_poi1(&load_sm, vec!["f_y".into(), "f_z".into(), "m_x".into()])?;
     rhs.set_value(nodes[N].id(), "f_y", PY)?;

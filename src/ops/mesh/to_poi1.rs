@@ -1,7 +1,6 @@
 use crate::aggregate::Aggregate;
 use crate::containers::mesh::Mesh;
 use crate::error::Result;
-use crate::store::read;
 
 /// Convert a mesh to POI1, **submesh by submesh**.
 ///
@@ -17,7 +16,7 @@ use crate::store::read;
 pub fn to_poi1(mesh: &Mesh) -> Result<Mesh> {
     let mut result = Mesh::empty();
     for sm_handle in mesh {
-        result.add_sub(read(sm_handle)?.to_poi1()?)?;
+        result.add_sub(sm_handle.read().to_poi1()?)?;
     }
     Ok(result)
 }
@@ -30,11 +29,11 @@ mod tests {
     use crate::atoms::Node;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     #[test]
     fn tri3_submesh_becomes_unique_node_list() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
@@ -57,7 +56,7 @@ mod tests {
 
     #[test]
     fn preserves_submesh_count_and_increfs_nodes() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
@@ -68,13 +67,13 @@ mod tests {
         let sm_tri = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         mesh.add_sub(sm_tri).unwrap();
 
         // refcounts before: a is in POI1 + TRI3 + Node = 3; b,c in TRI3 + Node = 2.
         {
-            let cf = read(&coords).unwrap();
+            let cf = coords.read();
             assert_eq!(cf.refcount(a.id()), 3);
             assert_eq!(cf.refcount(b.id()), 2);
         }
@@ -89,14 +88,14 @@ mod tests {
 
         // The new POI1 submeshes increfed every node they reference.
         {
-            let cf = read(&coords).unwrap();
+            let cf = coords.read();
             assert_eq!(cf.refcount(a.id()), 5); // +POI1(sub0) +POI1(sub1)
             assert_eq!(cf.refcount(b.id()), 3); // +POI1(sub1)
         }
 
         drop(poi);
         {
-            let cf = read(&coords).unwrap();
+            let cf = coords.read();
             assert_eq!(cf.refcount(a.id()), 3);
             assert_eq!(cf.refcount(b.id()), 2);
         }

@@ -3,7 +3,7 @@ use crate::atoms::ElementType;
 use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::Result;
-use crate::store::{insert, read};
+use crate::store::Handle;
 use std::collections::HashSet;
 
 /// Fuse submeshes of the same element type into one, dropping duplicate
@@ -21,7 +21,7 @@ pub fn consolidate(mesh: &Mesh) -> Result<Mesh> {
     // Collect types in first-seen order.
     let mut ordered_types: Vec<ElementType> = Vec::new();
     for sm_handle in mesh {
-        let et = read(sm_handle)?.element_type();
+        let et = sm_handle.read().element_type();
         if !ordered_types.contains(&et) {
             ordered_types.push(et);
         }
@@ -33,8 +33,8 @@ pub fn consolidate(mesh: &Mesh) -> Result<Mesh> {
         // Face colour from the first submesh of this type.
         let first_color = mesh
             .iter()
-            .find(|h| read(h).map(|s| s.element_type()).ok() == Some(et))
-            .map(|h| -> Result<_> { Ok(read(h)?.face_color()) })
+            .find(|h| h.read().element_type() == et)
+            .map(|h| -> Result<_> { Ok(h.read().face_color()) })
             .transpose()?
             .unwrap_or_default();
 
@@ -43,11 +43,11 @@ pub fn consolidate(mesh: &Mesh) -> Result<Mesh> {
 
         let mut seen: HashSet<Vec<NodeId>> = HashSet::new();
         for sm_handle in mesh {
-            let sm_et = read(sm_handle)?.element_type();
+            let sm_et = sm_handle.read().element_type();
             if sm_et != et {
                 continue;
             }
-            let conn = read(sm_handle)?.connectivity().to_vec();
+            let conn = sm_handle.read().connectivity().to_vec();
             for chunk in conn.chunks(npc) {
                 if seen.insert(chunk.to_vec()) {
                     new_sm.add_cell(chunk)?;
@@ -55,7 +55,7 @@ pub fn consolidate(mesh: &Mesh) -> Result<Mesh> {
             }
         }
 
-        result.add_sub(insert(new_sm))?;
+        result.add_sub(Handle::new(new_sm))?;
     }
 
     Ok(result)
@@ -66,11 +66,11 @@ mod tests {
     use super::*;
     use crate::atoms::Node;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     #[test]
     fn merges_same_type_submeshes() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
@@ -79,12 +79,12 @@ mod tests {
         let sm1 = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sm2 = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[b.id(), c.id(), a.id()]).unwrap(); // new cell
-            insert(sm)
+            Handle::new(sm)
         };
 
         let mut mesh = Mesh::empty();
@@ -104,7 +104,7 @@ mod tests {
 
     #[test]
     fn removes_duplicate_cells() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
@@ -112,12 +112,12 @@ mod tests {
         let sm1 = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sm2 = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap(); // exact duplicate
-            insert(sm)
+            Handle::new(sm)
         };
 
         let mut mesh = Mesh::empty();
@@ -131,7 +131,7 @@ mod tests {
 
     #[test]
     fn preserves_distinct_types() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
@@ -139,18 +139,18 @@ mod tests {
         let sm_tri = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sm_poi = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
             sm.add_cell(&[a.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         // Second TRI3 with a duplicate.
         let sm_tri2 = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
 
         let mut mesh = Mesh::empty();

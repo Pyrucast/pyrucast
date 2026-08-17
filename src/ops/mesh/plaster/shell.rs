@@ -12,7 +12,6 @@
 use crate::atoms::{ElementType, NodeId, Point3};
 use crate::containers::mesh::Mesh;
 use crate::error::{PyrucastError, Result};
-use crate::store::read;
 use std::collections::HashMap;
 
 /// One facet of the shell, as indices into [`Shell::nodes`].
@@ -45,12 +44,12 @@ impl Shell {
     /// consistently oriented surface of triangles and quadrangles.
     pub fn extract(mesh: &Mesh, op: &str) -> Result<Shell> {
         let coords = mesh.coords()?;
-        if read(&coords)?.dim() != 3 {
+        if coords.read().dim() != 3 {
             return Err(PyrucastError::Message(format!(
                 "{op}: the envelope must live in a 3-D Coords"
             )));
         }
-        let c = read(&coords)?;
+        let c = coords.read();
         let mut index: HashMap<NodeId, u32> = HashMap::new();
         let mut nodes = Vec::new();
         let mut points = Vec::new();
@@ -72,7 +71,7 @@ impl Shell {
         };
 
         for sm in mesh {
-            let s = read(sm)?;
+            let s = sm.read();
             let et = s.element_type();
             if !matches!(et, ElementType::TRI3 | ElementType::QUA4) {
                 return Err(PyrucastError::Message(format!(
@@ -156,11 +155,11 @@ mod tests {
     use crate::atoms::Node;
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     /// The six faces of an axis-aligned box, as QUA4 with outward normals.
     fn box_shell(lo: [f64; 3], hi: [f64; 3]) -> Mesh {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let corner = |i: usize| {
             let p = [
                 if i & 1 == 0 { lo[0] } else { hi[0] },
@@ -199,7 +198,7 @@ mod tests {
         let m = box_shell([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
         let coords = m.coords().unwrap();
         let mut sm = SubMesh::new(coords, ElementType::QUA4);
-        let s = read(&m[0]).unwrap();
+        let s = m[0].read();
         for cell in s.connectivity().chunks(4).take(5) {
             sm.add_cell(cell).unwrap();
         }

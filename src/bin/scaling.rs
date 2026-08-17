@@ -29,12 +29,12 @@ use pyrucast::coords::Coords;
 use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::ops::element_field::material_field;
 use pyrucast::ops::{element_field, matrix};
-use pyrucast::store::insert;
+use pyrucast::store::Handle;
 
 /// Plane-stress elasticity on an `n × n` QUA4 grid: model, material field, and a
 /// strain field ready for `element_field::behavior::integrate`.
 fn build(n: usize) -> (Model, ElementField, ElementField) {
-    let coords = insert(Coords::new(2).unwrap());
+    let coords = Handle::new(Coords::new(2).unwrap());
     let mut ids: Vec<NodeId> = Vec::with_capacity((n + 1) * (n + 1));
     for j in 0..=n {
         for i in 0..=n {
@@ -58,7 +58,7 @@ fn build(n: usize) -> (Model, ElementField, ElementField) {
     let model = Model::elasticity(&fes, ElasticityModel::PlaneStress).unwrap();
     let materials = material_field(&model, &[("E", 210e9), ("nu", 0.3)]).unwrap();
 
-    let support = insert(SubMesh::poi1_from_node_ids(coords.clone(), &ids).unwrap());
+    let support = Handle::new(SubMesh::poi1_from_node_ids(coords.clone(), &ids).unwrap());
     let mut u = SubNodeField::from_poi1(&support, vec!["u_x".into(), "u_y".into()]).unwrap();
     for j in 0..=n {
         for i in 0..=n {

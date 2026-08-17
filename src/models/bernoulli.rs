@@ -50,8 +50,7 @@ use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::owned_components;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
-use crate::store::{read, Handle};
-use serde::{Deserialize, Serialize};
+use crate::store::Handle;
 
 pub use crate::models::beam::BeamModel;
 
@@ -77,7 +76,7 @@ fn behavior_of(model: BeamModel) -> &'static [&'static str] {
 }
 
 /// Euler-Bernoulli beam physics on a `SEG2` FE subspace.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct Bernoulli {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
     /// POI1 support over the unique nodes (row/col support).
@@ -90,11 +89,11 @@ impl Bernoulli {
     /// is `SEG2` in a configuration matching `model`.
     pub fn new(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
         let (submesh, space_dim, element, axisymmetric, interpolation) = {
-            let s = read(&fespace)?;
+            let s = fespace.read();
             (
                 s.submesh(),
                 s.space_dim(),
-                read(&s.submesh())?.element_type(),
+                s.submesh().read().element_type(),
                 s.is_axisymmetric(),
                 s.interpolation(),
             )
@@ -120,7 +119,7 @@ impl Bernoulli {
                     .into(),
             ));
         }
-        let support = read(&submesh)?.to_poi1()?;
+        let support = submesh.read().to_poi1()?;
         Ok(Self {
             fespace,
             support,
@@ -271,7 +270,7 @@ impl SubModelKind for Bernoulli {
     fn render(&self, _opts: &DumpOptions) -> String {
         let primal = self.primal_vars().join(", ");
         let dual = self.dual_vars().join(", ");
-        let n = read(&self.support).map(|s| s.cell_count()).unwrap_or(0);
+        let n = self.support.read().cell_count();
         format!(
             "SubModel<Bernoulli({})>\n  primal var(s): {primal}\n  dual var(s):   {dual}\n  \
              support: {n} node(s)",

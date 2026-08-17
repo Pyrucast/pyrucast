@@ -197,10 +197,10 @@ Rust :
 
 ```rust,ignore
 use pyrucast::coords::Coords;
-use pyrucast::store::{insert, read};
+use pyrucast::store::Handle;
 
-let coords = insert(Coords::new(2).unwrap());
-let c = read(&coords).unwrap();
+let coords = Handle::new(Coords::new(2).unwrap());
+let c = coords.read();
 println!("{:?}", &*c);  // vue structurelle (Debug)
 println!("{}", &*c);    // vue résumée (Display)
 ```
@@ -220,10 +220,7 @@ print(c)  # même chose que str(c)
 
 ## Sérialisation : un seul mécanisme
 
-Le trait `Persist` (implémenté automatiquement pour tout type `serde::Serialize + DeserializeOwned`) produit un format binaire **portable Linux ↔ Windows**. Ce socle unique sert à la fois :
-
-- au **swap disque** (slot par slot, géré par le Store) ;
-- à la **sauvegarde fichier** (graphe d'objets d'une `Session`, dans un conteneur versionné).
+Le trait `Persist` (implémenté automatiquement pour tout type `serde::Serialize + DeserializeOwned`) produit un format binaire **portable Linux ↔ Windows**. C'est le socle de la **sauvegarde fichier** : un graphe d'objets écrit dans un conteneur versionné, relu en préservant le partage.
 
 Rust — sérialisation manuelle d'un type quelconque :
 
@@ -239,9 +236,7 @@ let restored = Pt::from_bytes(&bytes).unwrap();
 assert_eq!(original, restored);
 ```
 
-Le swap disque des objets pyrucast (Coords, SubMesh, NodeField…) passe par ce même mécanisme sans intervention de l'utilisateur.
-
-> **Python** : `Persist` n'est pas exposé côté Python — c'est une brique interne du store. La sérialisation des objets depuis Python passera par une API de sauvegarde / relecture de la session, encore à écrire.
+> **Python** : `Persist` n'est pas exposé côté Python — c'est une brique interne. La sérialisation des objets depuis Python passera par une API de sauvegarde / relecture, encore à écrire.
 
 ## Definition of Done par objet
 

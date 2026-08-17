@@ -20,7 +20,7 @@ use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::ops::mesh;
 use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::unilateral;
-use pyrucast::store::{insert, Handle};
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 const E: f64 = 100.0;
@@ -84,11 +84,11 @@ struct TwoBlocks {
 }
 
 fn two_blocks() -> Result<TwoBlocks> {
-    let coords = insert(Coords::new(2)?);
+    let coords = Handle::new(Coords::new(2)?);
     let (bottom, bottom_sm) = block(&coords, 0.0)?;
     let (top, top_sm) = block(&coords, 1.0 + G0)?;
     let mut mesh = Mesh::from_submesh(bottom_sm);
-    mesh.add_sub(insert(top_sm))?;
+    mesh.add_sub(Handle::new(top_sm))?;
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
 
     let idx = |i: usize, j: usize| j * (N + 1) + i;
@@ -179,10 +179,9 @@ fn patch_test_uniform_pressure_through_contact() -> Result<()> {
     // Contact reactions: −λᵢ are the consistent nodal forces of the pressure
     // (S·h/2 at the corners, S·h inside), so Σ(−λᵢ) = S.
     let mults: Vec<NodeId> = {
-        use pyrucast::store::read;
         let mut v = Vec::new();
         for h in &tb.contact {
-            v.extend(read(h)?.multiplier_nodes()?);
+            v.extend(h.read().multiplier_nodes()?);
         }
         v
     };
@@ -239,10 +238,9 @@ fn separation_releases_every_pair() -> Result<()> {
     }
     // Every contact multiplier is exactly zero (released).
     let mults: Vec<NodeId> = {
-        use pyrucast::store::read;
         let mut v = Vec::new();
         for h in &tb.contact {
-            v.extend(read(h)?.multiplier_nodes()?);
+            v.extend(h.read().multiplier_nodes()?);
         }
         v
     };
@@ -261,7 +259,7 @@ fn separation_releases_every_pair() -> Result<()> {
 /// `σ_zz = −S` transmitted, `u_z = −(S/E)·z` continuous across the interface.
 #[test]
 fn contact_3d_two_cubes() -> Result<()> {
-    let coords = insert(Coords::new(3)?);
+    let coords = Handle::new(Coords::new(3)?);
     let cube = |z0: f64| -> Result<(Vec<Node>, SubMesh)> {
         let pts = [
             [0.0, 0.0, z0],
@@ -284,7 +282,7 @@ fn contact_3d_two_cubes() -> Result<()> {
     let (bottom, bottom_sm) = cube(0.0)?;
     let (top, top_sm) = cube(1.0)?;
     let mut mesh = Mesh::from_submesh(bottom_sm);
-    mesh.add_sub(insert(top_sm))?;
+    mesh.add_sub(Handle::new(top_sm))?;
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
 
     // Master: top face of the bottom cube ([4,5,6,7] is CCW seen from +z, so
@@ -346,10 +344,9 @@ fn contact_3d_two_cubes() -> Result<()> {
     }
     // Total contact reaction = S · area = S.
     let mults: Vec<NodeId> = {
-        use pyrucast::store::read;
         let mut v = Vec::new();
         for h in &contact {
-            v.extend(read(h)?.multiplier_nodes()?);
+            v.extend(h.read().multiplier_nodes()?);
         }
         v
     };

@@ -32,7 +32,7 @@ use pyrucast::models::radiation::STEFAN_BOLTZMANN;
 use pyrucast::models::Physics;
 use pyrucast::ops::element_field;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::insert;
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 const EMIS: f64 = 0.8; // emissivity
@@ -142,7 +142,7 @@ fn no_flux_at_equilibrium() -> Result<()> {
     let at_gauss = element_field::interp_to_gauss(&temperature, &fixture.boundary_fes)?;
     let state =
         element_field::behavior::integrate(&fixture.radiation, &at_gauss, None, &materials, None)?;
-    let sub = pyrucast::store::read(&state.get(0)?)?;
+    let sub = state.get(0)?.read();
     for g in 0..sub.gauss_count() {
         assert!(sub.value(0, g, "flux")?.abs() < 1e-20);
         // …but the tangent is not zero: the law is still stiff there.
@@ -175,14 +175,14 @@ fn a_slab_settles_at_the_imposed_temperature() -> Result<()> {
     let mut rhs_sm = SubMesh::new(fixture.coords.clone(), ElementType::POI1);
     let mut mults = Vec::new();
     for i in 0..multiplier.len() {
-        let cells = pyrucast::store::read(&multiplier.get(i)?)?.cell_count();
+        let cells = multiplier.get(i)?.read().cell_count();
         for cell in 0..cells {
             let id = multiplier.node(i, cell, 0)?.id();
             rhs_sm.add_cell(&[id])?;
             mults.push(id);
         }
     }
-    let rhs_sm = insert(rhs_sm);
+    let rhs_sm = Handle::new(rhs_sm);
     let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["imposed_T".into()])?;
     for id in &mults {
         rhs.set_value(*id, "imposed_T", T_WALL)?;
@@ -211,7 +211,7 @@ struct Fixture {
 /// A unit QUA4 whose `x = 0` edge radiates, plus the conduction model of the
 /// square itself (used only to check the nature filters).
 fn radiating_square() -> Result<(Fixture, ElementField)> {
-    let coords = insert(Coords::new(2)?);
+    let coords = Handle::new(Coords::new(2)?);
     let node = |x: f64, y: f64| Node::create_in(coords.clone(), &[x, y]);
     let corners = [
         node(0.0, 0.0)?,
@@ -246,7 +246,7 @@ fn radiating_square() -> Result<(Fixture, ElementField)> {
 
 /// A uniform temperature field over the radiating edge.
 fn uniform_temperature(fixture: &Fixture, value: f64) -> Result<NodeField> {
-    let sm = insert(SubMesh::poi1_from_nodes(&fixture.edge)?);
+    let sm = Handle::new(SubMesh::poi1_from_nodes(&fixture.edge)?);
     let mut field = SubNodeField::from_poi1(&sm, vec!["T".to_string()])?;
     for n in &fixture.edge {
         field.set_value(n.id(), "T", value)?;

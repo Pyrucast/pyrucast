@@ -15,7 +15,7 @@ use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
 use crate::models::kernel;
 use crate::ops::element_field::gradient::AXES;
-use crate::store::{insert, read};
+use crate::store::Handle;
 
 /// Linearized (small-strain) deformation `ε = ½(∇u + ∇uᵀ)` of a displacement
 /// field `u` at the Gauss points of every subspace of `fespace`.
@@ -38,7 +38,7 @@ pub fn deformation(u: &NodeField, fespace: &FiniteElementSpace) -> Result<Elemen
     let mut out = ElementField::empty();
     for sub in fespace {
         let (space_dim, axisymmetric) = {
-            let s = read(sub)?;
+            let s = sub.read();
             (s.space_dim(), s.is_axisymmetric())
         };
         if components.len() != space_dim {
@@ -93,7 +93,7 @@ pub fn deformation(u: &NodeField, fespace: &FiniteElementSpace) -> Result<Elemen
             }
             Ok(())
         })?;
-        out.add_sub(insert(sf))?;
+        out.add_sub(Handle::new(sf))?;
     }
     Ok(out)
 }
@@ -108,13 +108,13 @@ mod tests {
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::node_field::SubNodeField;
     use crate::coords::Coords;
-    use crate::store::{insert, read};
+    use crate::store::Handle;
 
     /// Linear displacement `u_x = 2x + 0.5y`, `u_y = 0.1x + 3y` on a TRI3.
     /// ⇒ ε_xx = 2, ε_yy = 3, ε_xy = ½(0.5 + 0.1) = 0.3.
     #[test]
     fn linear_displacement_gives_constant_strain() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -122,7 +122,8 @@ mod tests {
         mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 
-        let support = insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone(), c.clone()]).unwrap());
+        let support =
+            Handle::new(SubMesh::poi1_from_nodes(&[a.clone(), b.clone(), c.clone()]).unwrap());
         let mut u = SubNodeField::from_poi1(&support, vec!["u_x".into(), "u_y".into()]).unwrap();
         // u_x = 2x + 0.5y, u_y = 0.1x + 3y at the three nodes.
         for (n, x, y) in [(&a, 0.0, 0.0), (&b, 1.0, 0.0), (&c, 0.0, 1.0)] {
@@ -133,7 +134,7 @@ mod tests {
 
         let strain = deformation(&u, &fes).unwrap();
         {
-            let s = read(&strain.get(0).unwrap()).unwrap();
+            let s = strain.get(0).unwrap().read();
             assert_eq!(
                 s.components(),
                 &[
@@ -152,7 +153,7 @@ mod tests {
 
     #[test]
     fn rejects_displacement_with_wrong_component_count() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -161,7 +162,8 @@ mod tests {
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 
         // 2-D space but a single displacement component.
-        let support = insert(SubMesh::poi1_from_nodes(&[a.clone(), b.clone(), c.clone()]).unwrap());
+        let support =
+            Handle::new(SubMesh::poi1_from_nodes(&[a.clone(), b.clone(), c.clone()]).unwrap());
         let u = NodeField::from_sub(SubNodeField::from_poi1(&support, vec!["u_x".into()]).unwrap());
         let err = deformation(&u, &fes).unwrap_err();
         assert!(format!("{err}").contains("one displacement component per axis"));

@@ -5,7 +5,7 @@ use crate::py::element_field::{PyElementField, PySubElementField};
 use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::py::model::{PyModel, PySubModel};
 use crate::py::node_field::PyNodeField;
-use crate::store::{insert, read};
+use crate::store::Handle;
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 
@@ -148,9 +148,9 @@ pub fn sub_material_field(
         .iter()
         .map(|(c, v)| (c.as_str(), *v))
         .collect();
-    let sub = crate::ops::element_field::sub_material_field(&*read(&sub_model.handle)?, &pairs)?;
+    let sub = crate::ops::element_field::sub_material_field(&*sub_model.handle.read(), &pairs)?;
     Ok(PySubElementField {
-        handle: insert(sub),
+        handle: Handle::new(sub),
     })
 }
 
@@ -258,11 +258,11 @@ pub fn mask(
         let out = crate::ops::element_field::mask(&f.inner, &band, components)?;
         Ok(Py::new(py, PyElementField { inner: out })?.into_any())
     } else if let Ok(f) = field.extract::<PyRef<PySubElementField>>() {
-        let out = crate::ops::element_field::mask_sub(&*read(&f.handle)?, &band, components);
+        let out = crate::ops::element_field::mask_sub(&*f.handle.read(), &band, components);
         Ok(Py::new(
             py,
             PySubElementField {
-                handle: insert(out),
+                handle: Handle::new(out),
             },
         )?
         .into_any())

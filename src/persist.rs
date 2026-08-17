@@ -1,5 +1,4 @@
-//! Portable serialization — shared backbone for disk swap and file
-//! save/load.
+//! Portable serialization — the backbone of file save/load.
 //!
 //! A single mechanism (`serde` + `bincode`) produces a binary format that
 //! is **identical on Linux and Windows**:

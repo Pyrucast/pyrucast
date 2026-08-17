@@ -21,7 +21,7 @@ use crate::aggregate::Aggregate;
 use crate::atoms::{ElementType, NodeId};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
-use crate::store::{insert, read};
+use crate::store::Handle;
 
 /// The six tetrahedra of the Freudenthal/Kuhn subdivision of a HEX8, each as
 /// four local corner indices. All six share the main diagonal `(0, 6)`; the
@@ -56,7 +56,7 @@ pub fn convert(mesh: &Mesh, target: ElementType) -> Result<Mesh> {
     let mut result = Mesh::empty();
     for sm_h in mesh {
         let (src, color, conn) = {
-            let s = read(sm_h)?;
+            let s = sm_h.read();
             (s.element_type(), s.face_color(), s.connectivity().to_vec())
         };
         let mut new_sm = SubMesh::new(coords.clone(), target);
@@ -78,7 +78,7 @@ pub fn convert(mesh: &Mesh, target: ElementType) -> Result<Mesh> {
                 }
             }
         }
-        result.add_sub(insert(new_sm))?;
+        result.add_sub(Handle::new(new_sm))?;
     }
     Ok(result)
 }
@@ -88,11 +88,11 @@ mod tests {
     use super::*;
     use crate::atoms::Node;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     #[test]
     fn qua4_to_tri3_splits_each_quad_in_two() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let n: Vec<NodeId> = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
             .iter()
             .map(|p| Node::create_in(coords.clone(), p).unwrap().id())
@@ -114,7 +114,7 @@ mod tests {
 
     #[test]
     fn hex8_to_tet4_gives_six_tets_no_new_node() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let n: Vec<NodeId> = [
             [0.0, 0.0, 0.0],
             [1.0, 0.0, 0.0],
@@ -137,14 +137,14 @@ mod tests {
 
         // No node created: the coords still hold exactly the 8 corners.
         let live: usize = {
-            let c = read(&coords).unwrap();
+            let c = coords.read();
             n.iter().filter(|&&id| c.refcount(id) > 0).count()
         };
         assert_eq!(live, 8);
 
         // The six tets tile the unit cube: their volumes sum to 1.
         let vol = |ids: [NodeId; 4]| -> f64 {
-            let c = read(&coords).unwrap();
+            let c = coords.read();
             let p: Vec<Vec<f64>> = ids
                 .iter()
                 .map(|&i| c.position(i).unwrap().to_vec())
@@ -172,7 +172,7 @@ mod tests {
 
     #[test]
     fn identity_copies_verbatim() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -189,7 +189,7 @@ mod tests {
 
     #[test]
     fn preserves_face_color() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let n: Vec<NodeId> = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
             .iter()
             .map(|p| Node::create_in(coords.clone(), p).unwrap().id())
@@ -201,13 +201,13 @@ mod tests {
         m.add_cell(&n).unwrap();
 
         let tri = convert(&m, ElementType::TRI3).unwrap();
-        let out_color = read(&tri.get(0).unwrap()).unwrap().face_color();
+        let out_color = tri.get(0).unwrap().read().face_color();
         assert_eq!(out_color, color);
     }
 
     #[test]
     fn rejects_unsupported_conversion() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();

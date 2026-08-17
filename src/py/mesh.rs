@@ -6,7 +6,7 @@ use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::py::coords::PyCoords;
 use crate::py::node::PyNode;
-use crate::store::{insert, read, write, Handle};
+use crate::store::Handle;
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 
@@ -92,48 +92,50 @@ impl PySubMesh {
     /// Element type name of this submesh (e.g. `"TRI3"`).
     #[getter]
     fn element_type(&self) -> PyResult<String> {
-        Ok(read(&self.handle)?.element_type().name().to_string())
+        Ok(self.handle.read().element_type().name().to_string())
     }
 
     /// Append a cell from its list of nodes; returns the new cell's index.
     fn add_cell(&self, nodes: Vec<PyRef<'_, PyNode>>) -> PyResult<usize> {
         let nodes_typed: Vec<NodeId> = nodes.iter().map(|n| n.as_node().id()).collect();
-        let idx = write(&self.handle)?.add_cell(&nodes_typed)?;
+        let idx = self.handle.write().add_cell(&nodes_typed)?;
         Ok(idx)
     }
 
     /// Number of cells in this submesh.
     fn cell_count(&self) -> PyResult<usize> {
-        Ok(read(&self.handle)?.cell_count())
+        Ok(self.handle.read().cell_count())
     }
 
     /// Whether this submesh is sealed: `True` once it is used by a
     /// finite-element space, field or matrix, after which `add_cell` fails.
     #[getter]
     fn is_sealed(&self) -> PyResult<bool> {
-        Ok(read(&self.handle)?.is_sealed())
+        Ok(self.handle.read().is_sealed())
     }
 
     /// Deep-copy into a fresh, **unsealed** SubMesh with the same
     /// connectivity — the way to keep editing after this one has been sealed.
     fn duplicate(&self) -> PyResult<PySubMesh> {
-        let copy = read(&self.handle)?.duplicate()?;
+        let copy = self.handle.read().duplicate()?;
         Ok(PySubMesh {
-            handle: insert(copy),
+            handle: Handle::new(copy),
         })
     }
 
     /// Face colour as an `(r, g, b)` tuple of bytes.
     #[getter]
     fn face_color(&self) -> PyResult<(u8, u8, u8)> {
-        let c = read(&self.handle)?.face_color();
+        let c = self.handle.read().face_color();
         Ok((c.r, c.g, c.b))
     }
 
     /// Set the face colour from an `(r, g, b)` tuple of bytes.
     #[setter]
     fn set_face_color(&self, rgb: (u8, u8, u8)) -> PyResult<()> {
-        write(&self.handle)?.set_face_color(crate::atoms::RgbColor::new(rgb.0, rgb.1, rgb.2));
+        self.handle
+            .write()
+            .set_face_color(crate::atoms::RgbColor::new(rgb.0, rgb.1, rgb.2));
         Ok(())
     }
 
@@ -226,7 +228,9 @@ impl PySubMesh {
                 })?;
             }
             None => {
-                read(&self.handle)?.plot_styled(Some(view), save_ref, style, title_ref)?;
+                self.handle
+                    .read()
+                    .plot_styled(Some(view), save_ref, style, title_ref)?;
             }
         }
         Ok(())
@@ -234,14 +238,14 @@ impl PySubMesh {
 
     /// `len(submesh)` → number of cells.
     fn __len__(&self) -> PyResult<usize> {
-        Ok(read(&self.handle)?.cell_count())
+        Ok(self.handle.read().cell_count())
     }
 
     /// `submesh[i]` → `Cell` view on cell i. Supports negative
     /// indices and raises `IndexError` out of range so
     /// `for cell in submesh:` works.
     fn __getitem__(&self, idx: isize) -> PyResult<crate::py::cell::PyCell> {
-        let n = read(&self.handle)?.cell_count() as isize;
+        let n = self.handle.read().cell_count() as isize;
         let normalized = if idx < 0 { n + idx } else { idx };
         if normalized < 0 || normalized >= n {
             return Err(PyIndexError::new_err(format!(
@@ -253,11 +257,11 @@ impl PySubMesh {
     }
 
     fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", &*read(&self.handle)?))
+        Ok(format!("{:?}", &*self.handle.read()))
     }
 
     fn __str__(&self) -> PyResult<String> {
-        Ok(format!("{}", &*read(&self.handle)?))
+        Ok(format!("{}", &*self.handle.read()))
     }
 }
 
@@ -445,7 +449,7 @@ class PyMesh:
         cells with this one (no deep copy)."""
     def __or__(self, other: pyo3_stub_gen.RustType["PyMesh"] | pyo3_stub_gen.RustType["PySubMesh"]) -> pyo3_stub_gen.RustType["PyMesh"]:
         """`mesh | other` → a fresh `Mesh` holding the zones of both, in
-        first-seen order. A zone already present (same store slot) is not added
+        first-seen order. A zone already present (the same object) is not added
         twice; the others are shared, not copied. All zones must hang off the
         same `Coords`."""
     def __ror__(self, other: pyo3_stub_gen.RustType["PySubMesh"]) -> pyo3_stub_gen.RustType["PyMesh"]:

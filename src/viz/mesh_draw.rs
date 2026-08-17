@@ -20,7 +20,7 @@ use crate::atoms::RgbColor;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::Result;
-use crate::store::{read, Handle};
+use crate::store::Handle;
 use crate::viz::camera::{Bbox3, Projector};
 use crate::viz::drawable::{pl_err, Drawable};
 use crate::viz::View;
@@ -41,7 +41,7 @@ pub(crate) fn pad3(coords: &[f64]) -> Point3 {
 
 /// Read every node referenced by `connectivity` from `coords`, padded to 3-D.
 fn read_points(coords: &Handle<Coords>, connectivity: &[NodeId]) -> Result<Vec<Point3>> {
-    let c = read(coords)?;
+    let c = coords.read();
     connectivity
         .iter()
         .map(|&nid| c.position(nid).map(pad3))
@@ -762,9 +762,7 @@ impl Drawable for SubMesh {
     }
 
     fn is_axisymmetric(&self) -> bool {
-        read(&self.coords())
-            .map(|c| c.is_axisymmetric())
-            .unwrap_or(false)
+        self.coords().read().is_axisymmetric()
     }
 }
 
@@ -775,7 +773,7 @@ impl Drawable for Mesh {
         let mut b = Bbox3::empty();
         for i in 0..self.len() {
             let sm = self.get(i)?;
-            let smb = read(&sm)?.bbox()?;
+            let smb = sm.read().bbox()?;
             if !smb.is_empty() {
                 b.extend(smb.min);
                 b.extend(smb.max);
@@ -791,7 +789,7 @@ impl Drawable for Mesh {
         let mut all = Vec::new();
         for i in 0..self.len() {
             let sm = self.get(i)?;
-            let mut prims = submesh_primitives(&*read(&sm)?)?;
+            let mut prims = submesh_primitives(&sm.read())?;
             all.append(&mut prims);
         }
         render_primitives(area, view, &all)
@@ -799,7 +797,7 @@ impl Drawable for Mesh {
 
     fn is_axisymmetric(&self) -> bool {
         self.coords()
-            .and_then(|c| Ok(read(&c)?.is_axisymmetric()))
+            .map(|c| c.read().is_axisymmetric())
             .unwrap_or(false)
     }
 }
@@ -887,7 +885,7 @@ impl Drawable for MeshWire<'_> {
         let mut all = Vec::new();
         for i in 0..self.0.len() {
             let sm = self.0.get(i)?;
-            all.extend(submesh_wireframe_primitives(&*read(&sm)?)?);
+            all.extend(submesh_wireframe_primitives(&sm.read())?);
         }
         render_primitives(area, view, &all)
     }
@@ -904,7 +902,7 @@ mod tests {
     use super::*;
     use crate::atoms::Node;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     fn unit_viewport() -> Viewport {
         Viewport {
@@ -1032,7 +1030,7 @@ mod tests {
 
     #[test]
     fn bbox_covers_all_nodes_2d() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[1.0, 3.0]).unwrap();
@@ -1047,7 +1045,7 @@ mod tests {
 
     #[test]
     fn primitives_poi1_emits_points() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 2.0]).unwrap();
         let mut sm = SubMesh::new(coords, ElementType::POI1);
@@ -1061,7 +1059,7 @@ mod tests {
 
     #[test]
     fn primitives_seg2_emits_segments() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let mut sm = SubMesh::new(coords, ElementType::SEG2);
@@ -1073,7 +1071,7 @@ mod tests {
 
     #[test]
     fn primitives_qua4_emits_one_face_per_cell() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
@@ -1090,7 +1088,7 @@ mod tests {
 
     #[test]
     fn primitives_tet4_emits_four_triangular_faces() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0, 0.0]).unwrap();
@@ -1111,7 +1109,7 @@ mod tests {
     /// containing that diagonal are each shared by two tets (interior),
     /// the other twelve are the cube's skin (boundary).
     fn cube_six_tets() -> SubMesh {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         #[rustfmt::skip]
         let corners = [
             [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0],
@@ -1152,7 +1150,7 @@ mod tests {
     fn boundary_faces_culls_shared_hex_face() {
         // Two unit hexes stacked along Z share their common quad: that
         // face is interior, the other ten are boundary.
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         #[rustfmt::skip]
         let pts = [
             [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0],
@@ -1176,7 +1174,7 @@ mod tests {
     #[test]
     fn boundary_faces_is_none_for_surface_types() {
         // Surface / line / point types never hide faces behind a cell.
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -1198,7 +1196,7 @@ mod tests {
 
     #[test]
     fn primitives_hex8_emits_six_quadrangular_faces() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let n: Vec<_> = [
             [0.0, 0.0, 0.0],
             [1.0, 0.0, 0.0],
@@ -1227,7 +1225,7 @@ mod tests {
 
     #[test]
     fn submesh_primitives_carries_face_color() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -1291,7 +1289,7 @@ mod tests {
 
     #[test]
     fn wireframe_of_one_triangle_is_three_edges() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -1303,7 +1301,7 @@ mod tests {
 
     #[test]
     fn wireframe_of_poi1_is_points() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let mut sm = SubMesh::new(coords, ElementType::POI1);
         sm.add_cell(&[a.id()]).unwrap();
@@ -1315,7 +1313,7 @@ mod tests {
     #[test]
     fn wireframe_shares_edges_between_adjacent_cells() {
         // Two triangles sharing edge (b, c): 3 + 3 − 1 shared = 5 edges.
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();

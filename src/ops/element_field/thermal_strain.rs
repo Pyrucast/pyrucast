@@ -22,7 +22,7 @@ use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::error::{PyrucastError, Result};
 use crate::models::kernel;
 use crate::ops::element_field::gradient::AXES;
-use crate::store::{insert, read};
+use crate::store::Handle;
 
 /// Temperature component read from the per-element temperature field.
 const TEMPERATURE: &str = "T";
@@ -63,13 +63,14 @@ pub fn thermal_strain(
         // explicit consolidate.
         let mat_sub = material.sub_for_fespace_with(sub, &[ALPHA.to_string()])?;
         let (space_dim, axisymmetric) = {
-            let s = read(sub)?;
+            let s = sub.read();
             (s.space_dim(), s.is_axisymmetric())
         };
 
         // Fail fast with an actionable message if the temperature lacks its
         // component (the material zone was already selected on `alpha`).
-        if !read(&temp_sub)?
+        if !temp_sub
+            .read()
             .components()
             .iter()
             .any(|c| c == TEMPERATURE)
@@ -116,7 +117,7 @@ pub fn thermal_strain(
                 Ok(())
             },
         )?;
-        out.add_sub(insert(sf))?;
+        out.add_sub(Handle::new(sf))?;
     }
     Ok(out)
 }
@@ -130,10 +131,10 @@ mod tests {
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
-    use crate::store::{insert, read, write};
+    use crate::store::Handle;
 
     fn tri3_fes_2d() -> FiniteElementSpace {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -147,18 +148,16 @@ mod tests {
     fn uniform_heating_gives_isotropic_normal_strain() {
         let fes = tri3_fes_2d();
         let temp = ElementField::new(&fes, vec!["T".into()]).unwrap();
-        write(&temp.get(0).unwrap())
-            .unwrap()
-            .set_uniform("T", 70.0)
-            .unwrap();
+        temp.get(0).unwrap().write().set_uniform("T", 70.0).unwrap();
         let mat = ElementField::new(&fes, vec!["alpha".into()]).unwrap();
-        write(&mat.get(0).unwrap())
+        mat.get(0)
             .unwrap()
+            .write()
             .set_uniform("alpha", 1e-5)
             .unwrap();
 
         let eps = thermal_strain(&temp, &mat, &fes, 20.0).unwrap();
-        let s = read(&eps.get(0).unwrap()).unwrap();
+        let s = eps.get(0).unwrap().read();
         assert_eq!(
             s.components(),
             &[
@@ -179,18 +178,16 @@ mod tests {
     fn no_temperature_change_gives_zero_strain() {
         let fes = tri3_fes_2d();
         let temp = ElementField::new(&fes, vec!["T".into()]).unwrap();
-        write(&temp.get(0).unwrap())
-            .unwrap()
-            .set_uniform("T", 20.0)
-            .unwrap();
+        temp.get(0).unwrap().write().set_uniform("T", 20.0).unwrap();
         let mat = ElementField::new(&fes, vec!["alpha".into()]).unwrap();
-        write(&mat.get(0).unwrap())
+        mat.get(0)
             .unwrap()
+            .write()
             .set_uniform("alpha", 1e-5)
             .unwrap();
 
         let eps = thermal_strain(&temp, &mat, &fes, 20.0).unwrap();
-        let s = read(&eps.get(0).unwrap()).unwrap();
+        let s = eps.get(0).unwrap().read();
         for g in 0..s.gauss_count() {
             for comp in ["eps_xx", "eps_xy", "eps_yy"] {
                 assert!(s.value(0, g, comp).unwrap().abs() < 1e-18);
@@ -203,10 +200,7 @@ mod tests {
     fn missing_alpha_errors() {
         let fes = tri3_fes_2d();
         let temp = ElementField::new(&fes, vec!["T".into()]).unwrap();
-        write(&temp.get(0).unwrap())
-            .unwrap()
-            .set_uniform("T", 50.0)
-            .unwrap();
+        temp.get(0).unwrap().write().set_uniform("T", 50.0).unwrap();
         // Material without alpha.
         let mat = ElementField::new(&fes, vec!["E".into()]).unwrap();
 

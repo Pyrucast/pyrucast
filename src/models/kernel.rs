@@ -62,7 +62,7 @@ use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
 use crate::ops::coloring;
 use crate::parallel::*;
-use crate::store::{read, Handle};
+use crate::store::Handle;
 use nalgebra_sparse::CooMatrix;
 use std::collections::HashMap;
 
@@ -531,13 +531,13 @@ pub fn element_pointwise(
 
     // Guards held for the whole parallel region — slices borrowed, not copied.
     // Reference data snapshotted once (no per-cell store reads inside the loop).
-    let fe = read(fespace)?;
+    let fe = fespace.read();
     let submesh = fe.submesh();
-    let sm = read(&submesh)?;
+    let sm = submesh.read();
     let coords_h = sm.coords();
-    let coords = read(&coords_h)?;
-    let fin = read(input)?;
-    let mat_guard = material.map(read).transpose()?;
+    let coords = coords_h.read();
+    let fin = input.read();
+    let mat_guard = material.map(|h| h.read());
 
     let rd = RefData::snapshot(&fe)?;
     let n_gauss = rd.n_gauss;
@@ -589,11 +589,11 @@ pub(crate) fn nodal_pointwise(
     let mut out = SubElementField::new(fespace.clone(), out_components)?;
 
     // Guards held for the whole parallel region — slices borrowed, not copied.
-    let fe = read(fespace)?;
+    let fe = fespace.read();
     let submesh = fe.submesh();
-    let sm = read(&submesh)?;
+    let sm = submesh.read();
     let coords_h = sm.coords();
-    let coords = read(&coords_h)?;
+    let coords = coords_h.read();
 
     let rd = RefData::snapshot(&fe)?;
     let n_gauss = rd.n_gauss;
@@ -767,21 +767,21 @@ pub fn element_block_triplets_per_cell(
     let primary = fespaces.first().ok_or_else(|| {
         PyrucastError::Message("element_block_triplets_per_cell: no FE subspace".into())
     })?;
-    let fe = read(primary)?;
+    let fe = primary.read();
     let submesh = fe.submesh();
-    let sm = read(&submesh)?;
+    let sm = submesh.read();
     let coords_h = sm.coords();
-    let coords = read(&coords_h)?;
-    let mat_guard = material.map(read).transpose()?;
-    let state_guard = state.map(read).transpose()?;
+    let coords = coords_h.read();
+    let mat_guard = material.map(|h| h.read());
+    let state_guard = state.map(|h| h.read());
 
     // Reference data of every subspace, snapshotted once (they share the submesh
     // ⇒ one connectivity + coords drive every CellGeom; only quadrature differs).
     let mut rds = Vec::with_capacity(fespaces.len());
     rds.push(RefData::snapshot(&fe)?);
     for h in &fespaces[1..] {
-        let f = read(h)?;
-        if !f.submesh().same_slot(&submesh) {
+        let f = h.read();
+        if !f.submesh().same_object(&submesh) {
             return Err(PyrucastError::Message(
                 "element_block_triplets_per_cell: all FE subspaces of a block must share one submesh"
                     .into(),
@@ -804,8 +804,8 @@ pub fn element_block_triplets_per_cell(
     // Support → local position maps (first occurrence wins), and the block's
     // local row/col dimensions — all known up front, so the whole loop runs in
     // parallel (no shared mutation).
-    let row_nodes: Vec<NodeId> = read(row_support)?.connectivity().to_vec();
-    let col_nodes: Vec<NodeId> = read(col_support)?.connectivity().to_vec();
+    let row_nodes: Vec<NodeId> = row_support.read().connectivity().to_vec();
+    let col_nodes: Vec<NodeId> = col_support.read().connectivity().to_vec();
     let n_row_nodes = row_nodes.len();
     let n_col_nodes = col_nodes.len();
     let nrows = n_row_nodes * n_dual;
@@ -891,15 +891,15 @@ pub fn element_block_pattern(
     n_primal: usize,
     ordering: DofOrdering,
 ) -> Result<BlockPattern> {
-    let fe = read(fespace)?;
+    let fe = fespace.read();
     let submesh = fe.submesh();
-    let sm = read(&submesh)?;
+    let sm = submesh.read();
     let conn: &[NodeId] = sm.connectivity();
     let n_cells = fe.cell_count()?;
     let n_nodes = conn.len().checked_div(n_cells).unwrap_or(0);
 
-    let row_nodes: Vec<NodeId> = read(row_support)?.connectivity().to_vec();
-    let col_nodes: Vec<NodeId> = read(col_support)?.connectivity().to_vec();
+    let row_nodes: Vec<NodeId> = row_support.read().connectivity().to_vec();
+    let col_nodes: Vec<NodeId> = col_support.read().connectivity().to_vec();
     let n_row_nodes = row_nodes.len();
     let n_col_nodes = col_nodes.len();
     let nrows = n_row_nodes * n_dual;
@@ -1005,12 +1005,12 @@ pub fn coupling_block_triplets_per_cell(
     let col_primary = col_fespaces.first().ok_or_else(|| {
         PyrucastError::Message("coupling_block_triplets_per_cell: no column FE subspace".into())
     })?;
-    let (row_fe, col_fe) = (read(row_primary)?, read(col_primary)?);
+    let (row_fe, col_fe) = (row_primary.read(), col_primary.read());
     let (row_sm_h, col_sm_h) = (row_fe.submesh(), col_fe.submesh());
-    let (row_sm, col_sm) = (read(&row_sm_h)?, read(&col_sm_h)?);
+    let (row_sm, col_sm) = (row_sm_h.read(), col_sm_h.read());
     let (row_coords_h, col_coords_h) = (row_sm.coords(), col_sm.coords());
-    let (row_coords, col_coords) = (read(&row_coords_h)?, read(&col_coords_h)?);
-    let mat_guard = material.map(read).transpose()?;
+    let (row_coords, col_coords) = (row_coords_h.read(), col_coords_h.read());
+    let mat_guard = material.map(|h| h.read());
 
     let row_conn: &[NodeId] = row_sm.connectivity();
     let col_conn: &[NodeId] = col_sm.connectivity();
@@ -1019,17 +1019,17 @@ pub fn coupling_block_triplets_per_cell(
 
     let mut row_rds = vec![RefData::snapshot(&row_fe)?];
     for h in &row_fespaces[1..] {
-        let f = read(h)?;
+        let f = h.read();
         row_rds.push(RefData::snapshot(&f)?);
     }
     let mut col_rds = vec![RefData::snapshot(&col_fe)?];
     for h in &col_fespaces[1..] {
-        let f = read(h)?;
+        let f = h.read();
         col_rds.push(RefData::snapshot(&f)?);
     }
 
-    let row_nodes: Vec<NodeId> = read(row_support)?.connectivity().to_vec();
-    let col_nodes: Vec<NodeId> = read(col_support)?.connectivity().to_vec();
+    let row_nodes: Vec<NodeId> = row_support.read().connectivity().to_vec();
+    let col_nodes: Vec<NodeId> = col_support.read().connectivity().to_vec();
     let (n_row_support, n_col_support) = (row_nodes.len(), col_nodes.len());
     let (nrows, ncols) = (n_row_support * n_dual, n_col_support * n_primal);
     let row_pos = position_map(&row_nodes);
@@ -1099,16 +1099,16 @@ pub fn coupling_block_pattern(
     n_primal: usize,
     ordering: DofOrdering,
 ) -> Result<BlockPattern> {
-    let (row_fe, col_fe) = (read(row_fespace)?, read(col_fespace)?);
+    let (row_fe, col_fe) = (row_fespace.read(), col_fespace.read());
     let (row_sm_h, col_sm_h) = (row_fe.submesh(), col_fe.submesh());
-    let (row_sm, col_sm) = (read(&row_sm_h)?, read(&col_sm_h)?);
+    let (row_sm, col_sm) = (row_sm_h.read(), col_sm_h.read());
     let row_conn: &[NodeId] = row_sm.connectivity();
     let col_conn: &[NodeId] = col_sm.connectivity();
     let (n_cells, n_row_nodes_cell, n_col_nodes_cell) =
         check_conforming(&row_fe, &col_fe, row_conn, col_conn)?;
 
-    let row_nodes: Vec<NodeId> = read(row_support)?.connectivity().to_vec();
-    let col_nodes: Vec<NodeId> = read(col_support)?.connectivity().to_vec();
+    let row_nodes: Vec<NodeId> = row_support.read().connectivity().to_vec();
+    let col_nodes: Vec<NodeId> = col_support.read().connectivity().to_vec();
     let (n_row_support, n_col_support) = (row_nodes.len(), col_nodes.len());
     let (nrows, ncols) = (n_row_support * n_dual, n_col_support * n_primal);
     let row_pos = position_map(&row_nodes);
@@ -1203,19 +1203,19 @@ pub fn scatter_to_nodes(
     let primary = fespaces
         .first()
         .ok_or_else(|| PyrucastError::Message("scatter_to_nodes: no FE subspace".into()))?;
-    let fe = read(primary)?;
+    let fe = primary.read();
     let submesh = fe.submesh();
-    let sm = read(&submesh)?;
+    let sm = submesh.read();
     let coords_h = sm.coords();
-    let coords = read(&coords_h)?;
+    let coords = coords_h.read();
 
     // Reference data of every subspace, snapshotted once (they share the submesh
     // ⇒ one connectivity + coords drive every CellGeom; only quadrature differs).
     let mut rds = Vec::with_capacity(fespaces.len());
     rds.push(RefData::snapshot(&fe)?);
     for h in &fespaces[1..] {
-        let f = read(h)?;
-        if !f.submesh().same_slot(&submesh) {
+        let f = h.read();
+        if !f.submesh().same_object(&submesh) {
             return Err(PyrucastError::Message(
                 "scatter_to_nodes: all FE subspaces must share one submesh".into(),
             ));
@@ -1233,7 +1233,7 @@ pub fn scatter_to_nodes(
     // Support slots: the unique nodes of `support` and each node's flat base.
     // `support` is the POI1 of the submesh, so it covers every connectivity node
     // and the map is total.
-    let unique: Vec<NodeId> = read(support)?.connectivity().to_vec();
+    let unique: Vec<NodeId> = support.read().connectivity().to_vec();
     let slot_of: HashMap<NodeId, usize> = unique.iter().enumerate().map(|(k, &n)| (n, k)).collect();
 
     // Cell colouring (cached on the primary FE subspace): two cells sharing a
@@ -1302,11 +1302,11 @@ pub fn reduce_cells(
     fespace: &Handle<SubFiniteElementSpace>,
     cell: impl Fn(&CellGeom) -> Result<f64> + Sync,
 ) -> Result<f64> {
-    let fe = read(fespace)?;
+    let fe = fespace.read();
     let submesh = fe.submesh();
-    let sm = read(&submesh)?;
+    let sm = submesh.read();
     let coords_h = sm.coords();
-    let coords = read(&coords_h)?;
+    let coords = coords_h.read();
     let rd = RefData::snapshot(&fe)?;
 
     let n_cells = fe.cell_count()?;
@@ -1334,11 +1334,11 @@ mod tests {
     use crate::atoms::{ElementType, Node};
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::Mesh;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     /// One QUA4 spanning `r ∈ [r0, r1]`, `z ∈ [0, 1]`, in the requested frame.
     fn one_quad(r0: f64, r1: f64, axisymmetric: bool) -> Handle<SubFiniteElementSpace> {
-        let coords = insert(if axisymmetric {
+        let coords = Handle::new(if axisymmetric {
             Coords::axisymmetric().unwrap()
         } else {
             Coords::new(2).unwrap()

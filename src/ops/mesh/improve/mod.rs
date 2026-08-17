@@ -45,7 +45,7 @@ use crate::atoms::{ElementType, Node, NodeId, Point2};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
-use crate::store::{insert, read, Handle};
+use crate::store::Handle;
 use std::collections::HashMap;
 
 /// A surface mesh flattened into the arrays the improvement passes work on.
@@ -71,7 +71,7 @@ impl Surface {
     /// and only ever appears in error messages.
     pub fn read(mesh: &Mesh, op: &str) -> Result<Surface> {
         let coords = mesh.coords()?;
-        let dim = read(&coords)?.dim();
+        let dim = coords.read().dim();
         if dim != 2 {
             return Err(PyrucastError::Message(format!(
                 "{op}: only 2-D surface meshes are supported, got dim={dim}"
@@ -87,11 +87,11 @@ impl Surface {
             ids: Vec::new(),
             coords: coords.clone(),
         };
-        let guard = read(&coords)?;
+        let guard = coords.read();
         let mut cells = 0usize;
         for sm in mesh {
             let (et, conn) = {
-                let s = read(sm)?;
+                let s = sm.read();
                 (s.element_type(), s.connectivity().to_vec())
             };
             match et {
@@ -216,14 +216,14 @@ impl Surface {
             for q in &self.quads {
                 sub.add_cell(&q.map(|v| ids[v as usize]))?;
             }
-            mesh.add_sub(insert(sub))?;
+            mesh.add_sub(Handle::new(sub))?;
         }
         if !self.tris.is_empty() {
             let mut sub = SubMesh::new(self.coords.clone(), ElementType::TRI3);
             for t in &self.tris {
                 sub.add_cell(&t.map(|v| ids[v as usize]))?;
             }
-            mesh.add_sub(insert(sub))?;
+            mesh.add_sub(Handle::new(sub))?;
         }
         if mesh.is_empty() {
             return Err(PyrucastError::Message(format!("{op}: produced no cell")));
@@ -241,13 +241,13 @@ mod tests {
     use super::regularize::regularize;
     use super::*;
     use crate::ops::mesh::grid_surface;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     /// The circle `grid_surface` finds hardest: no axis-aligned edge, so the
     /// whole boundary falls to the frontal band, which is where every poor cell
     /// and every triangle ends up.
     fn paved_circle() -> Mesh {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let pts: Vec<(f64, f64)> = (0..60)
             .map(|i| {
                 let t = i as f64 / 60.0 * std::f64::consts::TAU;

@@ -20,7 +20,7 @@ use pyrucast::ops::matrix::stiffness;
 use pyrucast::ops::mesh::barycenter;
 use pyrucast::ops::solver::eliminate::{self, Condensation};
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::{insert, Handle};
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 const N_ELEMS: usize = 4;
@@ -30,7 +30,7 @@ const TOL: f64 = 1e-10;
 /// Build the `[0, 1]` SEG2 bar with a `k = 1` heat-conduction sub-model already
 /// added; returns the nodes, the base model and the material field.
 fn heat_bar() -> Result<(Vec<Node>, Handle<Coords>, Model, ElementField)> {
-    let coords = insert(Coords::new(1)?);
+    let coords = Handle::new(Coords::new(1)?);
     let nodes: Vec<Node> = (0..=N_ELEMS)
         .map(|i| Node::create_in(coords.clone(), &[i as f64 * H]))
         .collect::<Result<_>>()?;
@@ -45,10 +45,10 @@ fn heat_bar() -> Result<(Vec<Node>, Handle<Coords>, Model, ElementField)> {
     let mut mat = SubElementField::new(sub.clone(), vec!["k".into()])?;
     mat.set_uniform("k", 1.0)?;
     let mut materials = ElementField::empty();
-    materials.add_sub(insert(mat))?;
+    materials.add_sub(Handle::new(mat))?;
 
     let mut model = Model::empty();
-    model.add_sub(insert(SubModel::heat_conduction(sub)?))?;
+    model.add_sub(Handle::new(SubModel::heat_conduction(sub)?))?;
 
     Ok((nodes, coords, model, materials))
 }
@@ -80,7 +80,7 @@ fn mpc_difference_relation_recovers_linear_solution() -> Result<()> {
         Default::default(),
     )?;
     let dir_mult = dir.multiplier_nodes()?[0];
-    model.add_sub(insert(dir))?;
+    model.add_sub(Handle::new(dir))?;
 
     // MPC: T(node4) − T(node0) = 1. `dual_of` finds "q" for us.
     let dual = model.dual_of("T")?.expect("heat conduction declares T");
@@ -94,13 +94,13 @@ fn mpc_difference_relation_recovers_linear_solution() -> Result<()> {
     ];
     let mpc = SubModel::mpc(terms, &mult_mpc_mesh, None, None, Default::default())?;
     let mpc_mult = mpc.multiplier_nodes()?[0];
-    model.add_sub(insert(mpc))?;
+    model.add_sub(Handle::new(mpc))?;
 
     // RHS: imposed_T = 0 at the Dirichlet multiplier, mpc_rhs = 1 (g) at the MPC one.
     let mut rhs_sm = SubMesh::new(coords, ElementType::POI1);
     rhs_sm.add_cell(&[dir_mult])?;
     rhs_sm.add_cell(&[mpc_mult])?;
-    let rhs_sm = insert(rhs_sm);
+    let rhs_sm = Handle::new(rhs_sm);
     let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["imposed_T".into(), "mpc_rhs".into()])?;
     rhs.set_value(dir_mult, "imposed_T", 0.0)?;
     rhs.set_value(mpc_mult, "mpc_rhs", 1.0)?;
@@ -154,12 +154,12 @@ fn single_term_mpc_matches_dirichlet() -> Result<()> {
             Default::default(),
         )?;
         let (nl, nr) = (dl.multiplier_nodes()?[0], dr.multiplier_nodes()?[0]);
-        model.add_sub(insert(dl))?;
-        model.add_sub(insert(dr))?;
+        model.add_sub(Handle::new(dl))?;
+        model.add_sub(Handle::new(dr))?;
         let mut sm = SubMesh::new(coords, ElementType::POI1);
         sm.add_cell(&[nl])?;
         sm.add_cell(&[nr])?;
-        let sm = insert(sm);
+        let sm = Handle::new(sm);
         let mut rhs = SubNodeField::from_poi1(&sm, vec!["imposed_T".into()])?;
         rhs.set_value(nl, "imposed_T", 0.0)?;
         rhs.set_value(nr, "imposed_T", 1.0)?;
@@ -182,19 +182,19 @@ fn single_term_mpc_matches_dirichlet() -> Result<()> {
             Default::default(),
         )?;
         let nl = dl.multiplier_nodes()?[0];
-        model.add_sub(insert(dl))?;
+        model.add_sub(Handle::new(dl))?;
 
         let right = poi1(&nodes[N_ELEMS])?;
         let mult_mpc = barycenter(&right)?;
         let terms = vec![MpcTerm::new(&right, "T".into(), "q".into(), 1.0)?];
         let mpc = SubModel::mpc(terms, &mult_mpc, None, None, Default::default())?;
         let nm = mpc.multiplier_nodes()?[0];
-        model.add_sub(insert(mpc))?;
+        model.add_sub(Handle::new(mpc))?;
 
         let mut sm = SubMesh::new(coords, ElementType::POI1);
         sm.add_cell(&[nl])?;
         sm.add_cell(&[nm])?;
-        let sm = insert(sm);
+        let sm = Handle::new(sm);
         let mut rhs = SubNodeField::from_poi1(&sm, vec!["imposed_T".into(), "mpc_rhs".into()])?;
         rhs.set_value(nl, "imposed_T", 0.0)?;
         rhs.set_value(nm, "mpc_rhs", 1.0)?;
@@ -241,7 +241,7 @@ fn mpc_elimination_matches_lagrange() -> Result<()> {
         Default::default(),
     )?;
     let dir_mult = dir.multiplier_nodes()?[0];
-    model.add_sub(insert(dir))?;
+    model.add_sub(Handle::new(dir))?;
 
     // MPC: 2·T(node4) − 1·T(node2) = 1.5 (slave = node4, master = node2).
     let dual = model.dual_of("T")?.expect("heat conduction declares T");
@@ -254,13 +254,13 @@ fn mpc_elimination_matches_lagrange() -> Result<()> {
     ];
     let mpc = SubModel::mpc(terms, &mult_mpc_mesh, None, None, Default::default())?;
     let mpc_mult = mpc.multiplier_nodes()?[0];
-    model.add_sub(insert(mpc))?;
+    model.add_sub(Handle::new(mpc))?;
 
     // RHS: imposed_T = 0, mpc_rhs = 1.5 (= 2·1 − 1·0.5).
     let mut rhs_sm = SubMesh::new(coords, ElementType::POI1);
     rhs_sm.add_cell(&[dir_mult])?;
     rhs_sm.add_cell(&[mpc_mult])?;
-    let rhs_sm = insert(rhs_sm);
+    let rhs_sm = Handle::new(rhs_sm);
     let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["imposed_T".into(), "mpc_rhs".into()])?;
     rhs.set_value(dir_mult, "imposed_T", 0.0)?;
     rhs.set_value(mpc_mult, "mpc_rhs", 1.5)?;
@@ -322,12 +322,12 @@ fn single_term_mpc_elimination_equals_dirichlet() -> Result<()> {
             Default::default(),
         )?;
         let (nl, nr) = (dl.multiplier_nodes()?[0], dr.multiplier_nodes()?[0]);
-        model.add_sub(insert(dl))?;
-        model.add_sub(insert(dr))?;
+        model.add_sub(Handle::new(dl))?;
+        model.add_sub(Handle::new(dr))?;
         let mut sm = SubMesh::new(coords, ElementType::POI1);
         sm.add_cell(&[nl])?;
         sm.add_cell(&[nr])?;
-        let sm = insert(sm);
+        let sm = Handle::new(sm);
         let mut rhs = SubNodeField::from_poi1(&sm, vec!["imposed_T".into()])?;
         rhs.set_value(nl, "imposed_T", 0.0)?;
         rhs.set_value(nr, "imposed_T", 1.0)?;
@@ -350,19 +350,19 @@ fn single_term_mpc_elimination_equals_dirichlet() -> Result<()> {
             Default::default(),
         )?;
         let nl = dl.multiplier_nodes()?[0];
-        model.add_sub(insert(dl))?;
+        model.add_sub(Handle::new(dl))?;
 
         let right = poi1(&nodes[N_ELEMS])?;
         let mult_mpc = barycenter(&right)?;
         let terms = vec![MpcTerm::new(&right, "T".into(), "q".into(), 1.0)?];
         let mpc = SubModel::mpc(terms, &mult_mpc, None, None, Default::default())?;
         let nm = mpc.multiplier_nodes()?[0];
-        model.add_sub(insert(mpc))?;
+        model.add_sub(Handle::new(mpc))?;
 
         let mut sm = SubMesh::new(coords, ElementType::POI1);
         sm.add_cell(&[nl])?;
         sm.add_cell(&[nm])?;
-        let sm = insert(sm);
+        let sm = Handle::new(sm);
         let mut rhs = SubNodeField::from_poi1(&sm, vec!["imposed_T".into(), "mpc_rhs".into()])?;
         rhs.set_value(nl, "imposed_T", 0.0)?;
         rhs.set_value(nm, "mpc_rhs", 1.0)?;
@@ -415,13 +415,13 @@ fn elimination_recovers_reaction_equals_multiplier() -> Result<()> {
         Default::default(),
     )?;
     let (nl, nr) = (dl.multiplier_nodes()?[0], dr.multiplier_nodes()?[0]);
-    model.add_sub(insert(dl))?;
-    model.add_sub(insert(dr))?;
+    model.add_sub(Handle::new(dl))?;
+    model.add_sub(Handle::new(dr))?;
 
     let mut sm = SubMesh::new(coords, ElementType::POI1);
     sm.add_cell(&[nl])?;
     sm.add_cell(&[nr])?;
-    let sm = insert(sm);
+    let sm = Handle::new(sm);
     let mut rhs = SubNodeField::from_poi1(&sm, vec!["imposed_T".into()])?;
     rhs.set_value(nl, "imposed_T", 0.0)?;
     rhs.set_value(nr, "imposed_T", 1.0)?;
@@ -472,7 +472,7 @@ fn elimination_periodicity_constant_field() -> Result<()> {
         Default::default(),
     )?;
     let dir_mult = dir.multiplier_nodes()?[0];
-    model.add_sub(insert(dir))?;
+    model.add_sub(Handle::new(dir))?;
 
     // Periodicity T(node4) − T(node0) = 0.
     let dual = model.dual_of("T")?.expect("heat conduction declares T");
@@ -485,13 +485,13 @@ fn elimination_periodicity_constant_field() -> Result<()> {
     ];
     let mpc = SubModel::mpc(terms, &mult_mpc_mesh, None, None, Default::default())?;
     let mpc_mult = mpc.multiplier_nodes()?[0];
-    model.add_sub(insert(mpc))?;
+    model.add_sub(Handle::new(mpc))?;
 
     // RHS: imposed_T = 0.5 at the anchor, mpc_rhs = 0.
     let mut rhs_sm = SubMesh::new(coords, ElementType::POI1);
     rhs_sm.add_cell(&[dir_mult])?;
     rhs_sm.add_cell(&[mpc_mult])?;
-    let rhs_sm = insert(rhs_sm);
+    let rhs_sm = Handle::new(rhs_sm);
     let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["imposed_T".into(), "mpc_rhs".into()])?;
     rhs.set_value(dir_mult, "imposed_T", 0.5)?;
     rhs.set_value(mpc_mult, "mpc_rhs", 0.0)?;
@@ -529,7 +529,7 @@ fn elimination_rejects_chaining() -> Result<()> {
         Default::default(),
     )?;
     let dir_mult = dir.multiplier_nodes()?[0];
-    model.add_sub(insert(dir))?;
+    model.add_sub(Handle::new(dir))?;
 
     // A single-term MPC on the *same* node0 — its only DOF is already a slave.
     let mesh0 = poi1(&nodes[0])?;
@@ -537,12 +537,12 @@ fn elimination_rejects_chaining() -> Result<()> {
     let terms = vec![MpcTerm::new(&mesh0, "T".into(), "q".into(), 1.0)?];
     let mpc = SubModel::mpc(terms, &mult_mpc_mesh, None, None, Default::default())?;
     let mpc_mult = mpc.multiplier_nodes()?[0];
-    model.add_sub(insert(mpc))?;
+    model.add_sub(Handle::new(mpc))?;
 
     let mut rhs_sm = SubMesh::new(coords, ElementType::POI1);
     rhs_sm.add_cell(&[dir_mult])?;
     rhs_sm.add_cell(&[mpc_mult])?;
-    let rhs_sm = insert(rhs_sm);
+    let rhs_sm = Handle::new(rhs_sm);
     let rhs = NodeField::from_sub(SubNodeField::from_poi1(
         &rhs_sm,
         vec!["imposed_T".into(), "mpc_rhs".into()],
@@ -564,11 +564,11 @@ fn elimination_rejects_zero_coefficient() -> Result<()> {
     let terms = vec![MpcTerm::new(&mesh4, "T".into(), "q".into(), 0.0)?];
     let mpc = SubModel::mpc(terms, &mult_mpc_mesh, None, None, Default::default())?;
     let mpc_mult = mpc.multiplier_nodes()?[0];
-    model.add_sub(insert(mpc))?;
+    model.add_sub(Handle::new(mpc))?;
 
     let mut rhs_sm = SubMesh::new(coords, ElementType::POI1);
     rhs_sm.add_cell(&[mpc_mult])?;
-    let rhs_sm = insert(rhs_sm);
+    let rhs_sm = Handle::new(rhs_sm);
     let rhs = NodeField::from_sub(SubNodeField::from_poi1(&rhs_sm, vec!["mpc_rhs".into()])?);
 
     let k = stiffness(&model, &materials)?;
@@ -595,19 +595,19 @@ fn elimination_condensation_cached_then_invalidated() -> Result<()> {
         Default::default(),
     )?;
     let nl = dl.multiplier_nodes()?[0];
-    model.add_sub(insert(dl))?;
+    model.add_sub(Handle::new(dl))?;
 
     let right = poi1(&nodes[N_ELEMS])?;
     let mult_mpc = barycenter(&right)?;
     let terms = vec![MpcTerm::new(&right, "T".into(), "q".into(), 1.0)?];
     let mpc = SubModel::mpc(terms, &mult_mpc, None, None, Default::default())?;
     let nm = mpc.multiplier_nodes()?[0];
-    model.add_sub(insert(mpc))?;
+    model.add_sub(Handle::new(mpc))?;
 
     let mut sm = SubMesh::new(coords, ElementType::POI1);
     sm.add_cell(&[nl])?;
     sm.add_cell(&[nm])?;
-    let sm = insert(sm);
+    let sm = Handle::new(sm);
     let mut rhs = SubNodeField::from_poi1(&sm, vec!["imposed_T".into(), "mpc_rhs".into()])?;
     rhs.set_value(nl, "imposed_T", 0.0)?;
     rhs.set_value(nm, "mpc_rhs", 1.0)?;
@@ -624,12 +624,12 @@ fn elimination_condensation_cached_then_invalidated() -> Result<()> {
     }
 
     // Mutating the matrix invalidates the cached condensation.
-    let other = insert(Coords::new(1)?);
+    let other = Handle::new(Coords::new(1)?);
     let b = Node::create_in(other.clone(), &[0.0])?;
     let bsm = {
         let mut bsm = SubMesh::new(other, ElementType::POI1);
         bsm.add_cell(&[b.id()])?;
-        insert(bsm)
+        Handle::new(bsm)
     };
     let mut block = SubMatrix::new(
         bsm.clone(),
@@ -640,7 +640,7 @@ fn elimination_condensation_cached_then_invalidated() -> Result<()> {
         false,
     )?;
     block.add_entry(b.id(), "q", b.id(), "T", 4.0)?;
-    k.add_sub(insert(block))?;
+    k.add_sub(Handle::new(block))?;
     assert!(k.cached_factorization::<Condensation>().is_none());
     Ok(())
 }

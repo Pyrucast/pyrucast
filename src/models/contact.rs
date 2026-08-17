@@ -57,7 +57,7 @@ use crate::models::{
 };
 use crate::ops::geom::project_points;
 use crate::ops::mesh::barycenter;
-use crate::store::{read, Handle};
+use crate::store::Handle;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -93,7 +93,6 @@ struct Component {
 /// See the module documentation. Built by pairing each slave node with its
 /// closest master facet once, at construction; the pairing, the normal and the
 /// weights are then **fixed** (linearised contact).
-#[derive(Serialize, Deserialize)]
 pub struct Contact {
     /// POI1 mesh of the slave nodes, one cell per relation (its cell `r` is
     /// the slave node of relation `r`).
@@ -139,14 +138,12 @@ impl Contact {
         // Slave and master must live in the same Coords (node ids are relative).
         let coords = slave.coords()?;
         let master_coords = master.coords()?;
-        if coords.index() != master_coords.index()
-            || coords.generation() != master_coords.generation()
-        {
+        if !coords.same_object(&master_coords) {
             return Err(PyrucastError::Message(
                 "Contact: slave and master meshes must share a Coords".into(),
             ));
         }
-        let sdim = read(&coords)?.dim() as usize;
+        let sdim = coords.read().dim() as usize;
         if components.len() != sdim {
             return Err(PyrucastError::Message(format!(
                 "Contact: {} component(s) for a {sdim}-D space — the normal couples \
@@ -168,7 +165,7 @@ impl Contact {
 
         // Physical coordinates of the slave nodes, then project them.
         let points: Vec<Vec<f64>> = {
-            let c = read(&coords)?;
+            let c = coords.read();
             slave_ids
                 .iter()
                 .map(|&n| Ok(c.position(n)?.to_vec()))
@@ -239,12 +236,12 @@ impl Contact {
 
     /// Slave node of relation `r`.
     fn slave_node(&self, r: usize) -> Result<NodeId> {
-        Ok(read(&self.slave_mesh.get(0)?)?.connectivity()[r])
+        Ok(self.slave_mesh.get(0)?.read().connectivity()[r])
     }
 
     /// Multiplier node of relation `r`.
     fn multiplier_node(&self, r: usize) -> Result<NodeId> {
-        Ok(read(&self.multiplier_mesh.get(0)?)?.connectivity()[r])
+        Ok(self.multiplier_mesh.get(0)?.read().connectivity()[r])
     }
 }
 
@@ -397,7 +394,7 @@ fn unique_nodes(mesh: &Mesh) -> Result<Vec<NodeId>> {
     let mut seen: HashSet<NodeId> = HashSet::new();
     let mut out: Vec<NodeId> = Vec::new();
     for sm in mesh {
-        for &nid in read(sm)?.connectivity() {
+        for &nid in sm.read().connectivity() {
             if seen.insert(nid) {
                 out.push(nid);
             }
@@ -411,12 +408,12 @@ mod tests {
     use super::*;
     use crate::atoms::{ElementType, Node};
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     /// A slave node above a single SEG2 master (2-D): pairing, relation
     /// structure, sense and gap.
     fn seg_and_node(height: f64) -> (Mesh, Mesh) {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         // Master from (0,0) to (2,0), normal (0,−1) (tangent +x).
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();

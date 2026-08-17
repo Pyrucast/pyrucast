@@ -495,7 +495,7 @@ def test_union_subfield_plus_aggregate_still_fuses_same_support():
 
 def test_union_field_to_itself_dedups_by_handle():
     # Same handle on both sides: the union deduplicates by handle, so a single
-    # zone remains (and the store mutex is never re-locked).
+    # zone remains (and the object is never re-locked).
     c, nodes, sm = _poi1_with(1)
     a = pyrucast.NodeField(sm, ["T"])
     f = a | a

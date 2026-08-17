@@ -29,7 +29,7 @@ use crate::error::{PyrucastError, Result};
 use crate::models::owned_components;
 use crate::models::symmetry::{self, MaterialSymmetry};
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
-use crate::store::{read, Handle};
+use crate::store::Handle;
 use serde::{Deserialize, Serialize};
 
 /// Axis suffixes for the vector components, indexed by spatial direction.
@@ -181,7 +181,7 @@ pub(crate) fn check_continuum_dimensions(
 /// plane strain, axisymmetric, solid) and `symmetry` is the **material** one.
 /// They combine freely — an orthotropic axisymmetric body is as ordinary as an
 /// isotropic plane one.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct Elasticity {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
     /// POI1 support over the subspace's unique nodes (row/col support).
@@ -206,7 +206,7 @@ impl Elasticity {
         symmetry: MaterialSymmetry,
     ) -> Result<Self> {
         let (submesh, space_dim, ref_dim, axisymmetric) = {
-            let s = read(&fespace)?;
+            let s = fespace.read();
             (
                 s.submesh(),
                 s.space_dim(),
@@ -245,7 +245,7 @@ impl Elasticity {
                     .into()
             }));
         }
-        let support = read(&submesh)?.to_poi1()?;
+        let support = submesh.read().to_poi1()?;
         Ok(Self {
             fespace,
             support,
@@ -353,7 +353,7 @@ impl SubModelKind for Elasticity {
     fn render(&self, _opts: &DumpOptions) -> String {
         let primal = self.primal_vars().join(", ");
         let dual = self.dual_vars().join(", ");
-        let n = read(&self.support).map(|s| s.cell_count()).unwrap_or(0);
+        let n = self.support.read().cell_count();
         format!(
             "SubModel<Elasticity({:?}, {})>\n  primal var(s): {primal}\n  dual var(s):   {dual}\n  \
              support: {n} node(s)",
@@ -777,10 +777,10 @@ mod tests {
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::Mesh;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     fn unit_quad(model: ElasticityModel) -> Elasticity {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
@@ -797,7 +797,7 @@ mod tests {
         assert_eq!(el.primal_vars(), vec!["u_x", "u_y"]);
         assert_eq!(el.dual_vars(), vec!["f_x", "f_y"]);
         // 2-D space cannot be Solid.
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -828,7 +828,7 @@ mod tests {
             SubElementField::new(el.fespace.clone(), vec!["E".into(), "nu".into()]).unwrap();
         mat.set_uniform("E", e).unwrap();
         mat.set_uniform("nu", nu).unwrap();
-        let mat = insert(mat);
+        let mat = Handle::new(mat);
 
         let mut strain = SubElementField::new(
             el.fespace.clone(),
@@ -836,7 +836,7 @@ mod tests {
         )
         .unwrap();
         strain.set_uniform("eps_xx", eps0).unwrap();
-        let strain = insert(strain);
+        let strain = Handle::new(strain);
 
         let out = el
             .integrate_behavior(&strain, None, Some(&mat), None)
@@ -858,10 +858,10 @@ mod tests {
             SubElementField::new(el.fespace.clone(), vec!["E".into(), "nu".into()]).unwrap();
         mat.set_uniform("E", 200.0).unwrap();
         mat.set_uniform("nu", 0.3).unwrap();
-        let mat = insert(mat);
+        let mat = Handle::new(mat);
         let blocks = el.build_stiffness_blocks(Some(&mat)).unwrap();
         let k = &blocks[0];
-        let nodes: Vec<NodeId> = read(&el.support).unwrap().connectivity().to_vec();
+        let nodes: Vec<NodeId> = el.support.read().connectivity().to_vec();
         let tol = 1e-9;
         // Symmetry K[(i,f_a),(j,u_b)] == K[(j,f_b),(i,u_a)].
         for &ni in &nodes {

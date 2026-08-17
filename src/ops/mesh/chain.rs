@@ -42,7 +42,7 @@ use crate::aggregate::Aggregate;
 use crate::atoms::{ElementType, NodeId};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
-use crate::store::{insert, read};
+use crate::store::Handle;
 use std::collections::HashMap;
 
 /// Re-order the cells of a line mesh into a continuous chain.
@@ -63,7 +63,7 @@ pub fn chain(mesh: &Mesh) -> Result<Mesh> {
     let mut result = Mesh::empty();
     for sm_handle in mesh {
         let (et, color, conn) = {
-            let s = read(sm_handle)?;
+            let s = sm_handle.read();
             (s.element_type(), s.face_color(), s.connectivity().to_vec())
         };
         if !matches!(et, ElementType::SEG2 | ElementType::SEG3) {
@@ -86,7 +86,7 @@ pub fn chain(mesh: &Mesh) -> Result<Mesh> {
             };
             new_sm.add_cell(&nodes)?;
         }
-        result.add_sub(insert(new_sm))?;
+        result.add_sub(Handle::new(new_sm))?;
     }
     Ok(result)
 }
@@ -196,7 +196,7 @@ mod tests {
     /// A `Coords` holding `n` nodes on the x axis, node id `i` at `x = i`, so
     /// tests can name nodes by their index.
     fn line_nodes(n: usize) -> (Handle<Coords>, Vec<NodeId>) {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let ids = (0..n)
             .map(|i| {
                 Node::create_in(coords.clone(), &[i as f64, 0.0])
@@ -317,12 +317,12 @@ mod tests {
         let mut b = SubMesh::new(coords.clone(), ElementType::SEG2);
         b.add_cell(&[n[2], n[3]]).unwrap();
         let mut mesh = Mesh::from_submesh(a);
-        mesh.add_sub(insert(b)).unwrap();
+        mesh.add_sub(Handle::new(b)).unwrap();
 
         // Each submesh is chained on its own: two submeshes in, two out.
         let out = chain(&mesh).unwrap();
         assert_eq!(out.len(), 2);
-        assert!(out.coords().unwrap().same_slot(&coords));
+        assert!(out.coords().unwrap().same_object(&coords));
         assert_eq!(
             conn_of(&out, 0),
             vec![vec![n[0].0, n[1].0], vec![n[1].0, n[2].0]]

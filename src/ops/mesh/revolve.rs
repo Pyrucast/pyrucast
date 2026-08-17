@@ -46,17 +46,17 @@ mod tests {
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
     use crate::ops::mesh::line::line;
-    use crate::store::{insert, read};
+    use crate::store::Handle;
     use std::f64::consts::{PI, TAU};
 
     /// Number of distinct nodes used by the first submesh of `mesh`.
     fn distinct_nodes(mesh: &Mesh) -> usize {
-        read(&mesh.get(0).unwrap()).unwrap().node_index().len()
+        mesh.get(0).unwrap().read().node_index().len()
     }
 
     /// A radial SEG2 line, from (1, 0) to (2, 0), in `n` segments.
     fn radial_seg2_2d(n: usize) -> Mesh {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let b = Node::create_in(coords, &[2.0, 0.0]).unwrap();
         line(&a, &b, n, ElementType::SEG2).unwrap()
@@ -64,7 +64,7 @@ mod tests {
 
     /// A TRI3 face in the plane y = 0, offset from the z axis.
     fn tri3_off_axis() -> Mesh {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let n0 = Node::create_in(coords.clone(), &[1.0, 0.0, 0.0]).unwrap();
         let n1 = Node::create_in(coords.clone(), &[2.0, 0.0, 0.0]).unwrap();
         let n2 = Node::create_in(coords.clone(), &[1.0, 0.0, 1.0]).unwrap();
@@ -139,7 +139,7 @@ mod tests {
 
     #[test]
     fn revolve_qua4_to_hex8_3d() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let n0 = Node::create_in(coords.clone(), &[1.0, 0.0, 0.0]).unwrap();
         let n1 = Node::create_in(coords.clone(), &[2.0, 0.0, 0.0]).unwrap();
         let n2 = Node::create_in(coords.clone(), &[2.0, 0.0, 1.0]).unwrap();
@@ -171,7 +171,7 @@ mod tests {
                 QuadratureRule::Gauss,
             )
             .unwrap();
-            for c in 0..read(sub).unwrap().cell_count() {
+            for c in 0..sub.read().cell_count() {
                 for g in 0..space.gauss_count() {
                     let det = space.det_jacobian(c, g).unwrap();
                     assert!(det > 0.0, "cell {c} has |J| = {det}");
@@ -182,7 +182,7 @@ mod tests {
 
     #[test]
     fn revolve_rejects_nodes_on_the_axis() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords, &[1.0, 0.0]).unwrap();
         let seg = line(&a, &b, 1, ElementType::SEG2).unwrap();
@@ -208,7 +208,7 @@ mod tests {
     #[test]
     fn revolve_rejects_a_surface_in_2d() {
         // A TRI3 would sweep a PENTA6, which 2-D coordinates cannot hold.
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let n0 = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let n1 = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
         let n2 = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
@@ -219,7 +219,7 @@ mod tests {
 
     #[test]
     fn revolve_rejects_unsupported_element_type() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let mut pts = Mesh::from_submesh(SubMesh::new(coords, ElementType::POI1));
         pts.add_cell(&[a.id()]).unwrap();

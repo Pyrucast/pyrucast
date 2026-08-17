@@ -24,7 +24,7 @@ use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::node_field::SubNodeField;
 use crate::error::{PyrucastError, Result};
 use crate::models::kernel;
-use crate::store::{read, Handle};
+use crate::store::Handle;
 
 /// Per-Gauss flux density consumed by [`flux`].
 pub enum FluxDensity<'a> {
@@ -45,7 +45,7 @@ pub fn flux(
     component: &str,
 ) -> Result<SubNodeField> {
     let (submesh, n_cells, n_g) = {
-        let s = read(fespace)?;
+        let s = fespace.read();
         (s.submesh(), s.cell_count()?, s.gauss_count())
     };
 
@@ -54,7 +54,7 @@ pub fn flux(
     let (uniform, densities): (f64, Option<Vec<Vec<f64>>>) = match density {
         FluxDensity::Uniform(v) => (v, None),
         FluxDensity::Field(field) => {
-            let f = read(field)?;
+            let f = field.read();
             let comps = f.components();
             if comps.len() != 1 {
                 return Err(PyrucastError::Message(format!(
@@ -78,7 +78,7 @@ pub fn flux(
     // by the element closure (a plain snapshot, borrowed in place) and the shared
     // driver owns the colour-parallel scatter — this is a mass-like `N`-weighted
     // instance of the same nodal integrate-and-scatter as the `Bᵀ` operators.
-    let support = read(&submesh)?.to_poi1()?;
+    let support = submesh.read().to_poi1()?;
     kernel::scatter_to_nodes(
         std::slice::from_ref(fespace),
         &support,
@@ -109,12 +109,12 @@ mod tests {
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     /// Lagrange-1 FE subspace over a fresh SEG2 line of `n` equal elements from
     /// `a` to `b` (built on the given coordinates).
     fn seg2_line(points: &[Vec<f64>]) -> Handle<SubFiniteElementSpace> {
-        let coords = insert(Coords::new(points[0].len() as u8).unwrap());
+        let coords = Handle::new(Coords::new(points[0].len() as u8).unwrap());
         let nodes: Vec<Node> = points
             .iter()
             .map(|c| Node::create_in(coords.clone(), c).unwrap())
@@ -135,10 +135,7 @@ mod tests {
     fn uniform_flux_consistent_loads_on_seg2_line() {
         // Two elements of length h = 0.5 on [0, 1].
         let fes = seg2_line(&[vec![0.0], vec![0.5], vec![1.0]]);
-        let nodes: Vec<NodeId> = read(&read(&fes).unwrap().submesh())
-            .unwrap()
-            .connectivity()
-            .to_vec();
+        let nodes: Vec<NodeId> = fes.read().submesh().read().connectivity().to_vec();
         // connectivity = [n0, n1, n1, n2] → unique [n0, n1, n2].
         let (n0, n1, n2) = (nodes[0], nodes[1], nodes[3]);
 
@@ -162,10 +159,7 @@ mod tests {
     fn uniform_flux_on_2d_edge_uses_line_measure() {
         // Single vertical edge from (0,0) to (0,1), length 1.
         let fes = seg2_line(&[vec![0.0, 0.0], vec![0.0, 1.0]]);
-        let nodes: Vec<NodeId> = read(&read(&fes).unwrap().submesh())
-            .unwrap()
-            .connectivity()
-            .to_vec();
+        let nodes: Vec<NodeId> = fes.read().submesh().read().connectivity().to_vec();
         let (a, b) = (nodes[0], nodes[1]);
 
         let phi = 10.0;
@@ -186,12 +180,9 @@ mod tests {
         let phi = 7.5;
         let mut field = SubElementField::new(fes.clone(), vec!["phi".into()]).unwrap();
         field.set_uniform("phi", phi).unwrap();
-        let field = insert(field);
+        let field = Handle::new(field);
 
-        let nodes: Vec<NodeId> = read(&read(&fes).unwrap().submesh())
-            .unwrap()
-            .connectivity()
-            .to_vec();
+        let nodes: Vec<NodeId> = fes.read().submesh().read().connectivity().to_vec();
         let n1 = nodes[1];
         let from_field = flux(&fes, FluxDensity::Field(&field), "q").unwrap();
         let from_uniform = flux(&fes, FluxDensity::Uniform(phi), "q").unwrap();
@@ -206,7 +197,7 @@ mod tests {
     fn multi_component_field_rejected() {
         let fes = seg2_line(&[vec![0.0], vec![1.0]]);
         let field =
-            insert(SubElementField::new(fes.clone(), vec!["a".into(), "b".into()]).unwrap());
+            Handle::new(SubElementField::new(fes.clone(), vec!["a".into(), "b".into()]).unwrap());
         assert!(flux(&fes, FluxDensity::Field(&field), "q").is_err());
     }
 }

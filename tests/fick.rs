@@ -33,7 +33,7 @@ use pyrucast::models::fick::{dual_var, primal_var};
 use pyrucast::models::Physics;
 use pyrucast::ops::mesh;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::insert;
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 /// The diffusing species — every name of this physics carries it.
@@ -48,7 +48,7 @@ fn fick_line_recovers_the_linear_profile() -> Result<()> {
     let h = 1.0 / N_ELEMS as f64;
 
     // ── Maillage : une ligne de SEG2 sur [0, 1] ────────────────────────────
-    let coords = insert(Coords::new(1)?);
+    let coords = Handle::new(Coords::new(1)?);
     let nodes: Vec<Node> = (0..=N_ELEMS)
         .map(|i| Node::create_in(coords.clone(), &[i as f64 * h]))
         .collect::<Result<_>>()?;
@@ -86,7 +86,7 @@ fn fick_line_recovers_the_linear_profile() -> Result<()> {
     let mut load_sm = SubMesh::new(coords.clone(), ElementType::POI1);
     load_sm.add_cell(&[node0])?;
     load_sm.add_cell(&[mult])?;
-    let load_sm = insert(load_sm);
+    let load_sm = Handle::new(load_sm);
     let mut rhs = SubNodeField::from_poi1(
         &load_sm,
         vec![
@@ -132,7 +132,7 @@ fn diffusion_and_conduction_coexist_and_filter_apart() -> Result<()> {
     const N_ELEMS: usize = 3;
     let h = 1.0 / N_ELEMS as f64;
 
-    let coords = insert(Coords::new(1)?);
+    let coords = Handle::new(Coords::new(1)?);
     let nodes: Vec<Node> = (0..=N_ELEMS)
         .map(|i| Node::create_in(coords.clone(), &[i as f64 * h]))
         .collect::<Result<_>>()?;

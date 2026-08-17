@@ -53,8 +53,7 @@ use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::models::symmetry::{self, MaterialSymmetry};
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
-use crate::store::{read, Handle};
-use serde::{Deserialize, Serialize};
+use crate::store::Handle;
 
 /// Column DOF name of a species — `c_H2`.
 pub fn primal_var(species: &str) -> String {
@@ -141,7 +140,7 @@ fn flux_components(space_dim: usize, species: &str) -> Vec<String> {
 /// - primal variable: `c_<species>` (concentration, columns).
 /// - dual variable:   `j_<species>` (mass flux, row labels).
 /// - Material data is supplied at assembly time, not stored here.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct Fick {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
     /// POI1 support over the subspace's unique nodes (row/col support).
@@ -178,10 +177,10 @@ impl Fick {
             ));
         }
         let (submesh, space_dim) = {
-            let s = read(&fespace)?;
+            let s = fespace.read();
             (s.submesh(), s.space_dim())
         };
-        let support = read(&submesh)?.to_poi1()?;
+        let support = submesh.read().to_poi1()?;
         Ok(Self {
             fespace,
             support,
@@ -286,7 +285,7 @@ impl SubModelKind for Fick {
     fn render(&self, _opts: &DumpOptions) -> String {
         let primal = self.primal_vars().join(", ");
         let dual = self.dual_vars().join(", ");
-        let n = read(&self.support).map(|s| s.cell_count()).unwrap_or(0);
+        let n = self.support.read().cell_count();
         format!(
             "SubModel<Fick({})>\n  primal var(s): {primal}\n  \
              dual var(s):   {dual}\n  support: {n} node(s)",

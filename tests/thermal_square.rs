@@ -28,7 +28,7 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::ops::mesh;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::insert;
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 #[test]
@@ -41,7 +41,7 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
     let h = 1.0 / N as f64;
 
     // ── Maillage : grille structurée (N+1)×(N+1) de QUA4 sur [0,1]² ─────────
-    let coords = insert(Coords::new(2)?);
+    let coords = Handle::new(Coords::new(2)?);
     let idx = |i: usize, j: usize| j * (N + 1) + i; // nœud colonne i, ligne j
     let mut grid: Vec<Node> = Vec::with_capacity((N + 1) * (N + 1));
     for j in 0..=N {
@@ -107,7 +107,7 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
     for m in &mults {
         imposed_sm.add_cell(&[m.id()])?;
     }
-    let imposed_sm = insert(imposed_sm);
+    let imposed_sm = Handle::new(imposed_sm);
     let mut imposed_load = SubNodeField::from_poi1(&imposed_sm, vec!["imposed_T".into()])?;
     for m in &mults {
         imposed_load.set_value(m.id(), "imposed_T", T_IMPOSED)?;

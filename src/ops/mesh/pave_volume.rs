@@ -43,7 +43,7 @@ use crate::interrupt::{Cancel, NoCancel};
 use crate::ops::mesh::plaster::front::Front;
 use crate::ops::mesh::plaster::shell::{Facet, Shell};
 use crate::ops::mesh::plaster::{self, smooth};
-use crate::store::{insert, read, Handle};
+use crate::store::Handle;
 use std::collections::HashMap;
 
 /// How deep a capping pyramid's apex sits below its base, as a fraction of the
@@ -155,7 +155,7 @@ pub fn pave_volume_cancellable(
         smooth::smooth(&mut pts, &patch, &inc, SMOOTH_SWEEPS);
         front.fab.pts = pts;
     }
-    // Before anything reads the mesh back out of the store — the core mesher
+    // Before anything reads the mesh back out — the core mesher
     // does, from the node coordinates — the smoothed positions have to be
     // there. Cap the front from one set of positions and tetrahedralise
     // against another and the two surfaces simply do not match.
@@ -264,7 +264,7 @@ pub fn pave_volume_cancellable(
 
 /// Push the fabric's smoothed positions back into the `Coords`.
 fn write_positions(coords: &Handle<Coords>, fab: &plaster::front::Fabric) -> Result<()> {
-    let mut c = crate::store::write(coords)?;
+    let mut c = coords.write();
     for (i, p) in fab.pts.iter().enumerate() {
         if fab.movable[i] {
             c.set_position(fab.ids[i], &[p.x, p.y, p.z])?;
@@ -307,7 +307,7 @@ fn materialize(
         for c in cells {
             sm.add_cell(c)?;
         }
-        mesh.add_sub(insert(sm))
+        mesh.add_sub(Handle::new(sm))
     };
     let h: Vec<&[NodeId]> = hexes.iter().map(|c| c.as_slice()).collect();
     let p: Vec<&[NodeId]> = prisms.iter().map(|c| c.as_slice()).collect();
@@ -323,7 +323,7 @@ fn materialize(
             "pave_volume: produced no cell".into(),
         ));
     }
-    let _ = read(coords)?;
+    let _ = coords.read();
     Ok(mesh)
 }
 
@@ -338,7 +338,7 @@ mod tests {
     /// The skin of a `nx × ny × nz` box of hexahedra: a closed QUA4 shell with
     /// outward normals, built with the operators rather than by hand.
     fn box_skin_sized(nx: usize, ny: usize, nz: usize, height: f64) -> Mesh {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let corner = |x: f64, z: f64| Node::create_in(coords.clone(), &[x, 0.0, z]).unwrap();
         let (a, b) = (corner(0.0, 0.0), corner(1.0, 0.0));
         let (c, d) = (corner(1.0, 1.0), corner(0.0, 1.0));
@@ -364,7 +364,7 @@ mod tests {
     /// The skin of an L-shaped solid: a re-entrant corner, which is where a
     /// front has to hold some facets back while others carry on.
     fn ell_skin(n: usize, height: f64, layers: usize) -> Mesh {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let pt = |x: f64, z: f64| Node::create_in(coords.clone(), &[x, 0.0, z]).unwrap();
         // Walk the L so the face's normal is +y.
         let corners = [
@@ -410,7 +410,7 @@ mod tests {
     fn facet_use(mesh: &Mesh) -> HashMap<Vec<NodeId>, usize> {
         let mut count = HashMap::new();
         for sm in mesh {
-            let s = read(sm).unwrap();
+            let s = sm.read();
             let et = s.element_type();
             let npc = et.nodes_per_cell();
             for cell in s.connectivity().chunks(npc) {
@@ -465,7 +465,7 @@ mod tests {
                 crate::atoms::QuadratureRule::Gauss,
             )
             .unwrap();
-            for c in 0..read(sub).unwrap().cell_count() {
+            for c in 0..sub.read().cell_count() {
                 for g in 0..space.gauss_count() {
                     let det = space.det_jacobian(c, g).unwrap();
                     assert!(
@@ -509,9 +509,9 @@ mod tests {
         assert_eq!(k.get(&ElementType::HEX8), Some(&54), "{k:?}");
         // And the layer stayed inside the box, so no cell is inside out.
         let coords = mesh.coords().unwrap();
-        let c = read(&coords).unwrap();
+        let c = coords.read();
         for sub in &mesh {
-            let s = read(sub).unwrap();
+            let s = sub.read();
             for &n in s.connectivity() {
                 for x in c.position(n).unwrap() {
                     assert!(
@@ -556,14 +556,14 @@ mod tests {
     /// Scaled Jacobian of every cell of a mesh, by element type.
     fn qualities(mesh: &Mesh) -> HashMap<ElementType, Vec<f64>> {
         let coords = mesh.coords().unwrap();
-        let c = read(&coords).unwrap();
+        let c = coords.read();
         let at = |n: NodeId| {
             let v = c.position(n).unwrap();
             Point3::new(v[0], v[1], v[2])
         };
         let mut out: HashMap<ElementType, Vec<f64>> = HashMap::new();
         for sm in mesh {
-            let s = read(sm).unwrap();
+            let s = sm.read();
             let et = s.element_type();
             let table = corner_table(et);
             let npc = et.nodes_per_cell();

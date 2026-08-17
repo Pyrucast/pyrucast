@@ -46,8 +46,6 @@ use crate::models::{
     constraint_block_pair, Constraint, ConstraintTerm, Contribution, MatrixKind, Physics, Relation,
     RelationSense, SubModelKind,
 };
-use crate::store::read;
-use serde::{Deserialize, Serialize};
 
 /// Default multiplier (primal) name for a constrained variable: `lambda_<v>`.
 pub fn default_multiplier(imposed_variable: &str) -> String {
@@ -65,7 +63,6 @@ pub fn default_imposed_value(imposed_variable: &str) -> String {
 /// the two meshes. The imposed value `u_d` is **not** stored here: the user
 /// supplies it through the load `SubNodeField` at the multiplier node's
 /// `imposed_value` component.
-#[derive(Serialize, Deserialize)]
 pub struct Dirichlet {
     /// Constrained primal of the target physics (e.g. `"T"`).
     pub(crate) imposed_variable: String,
@@ -83,7 +80,6 @@ pub struct Dirichlet {
     pub(crate) multiplier_mesh: Mesh,
     /// Equality (default) or unilateral inequality (`u ≥ u_d` / `u ≤ u_d`),
     /// solved by the active-set operator.
-    #[serde(default)]
     pub(crate) sense: RelationSense,
 }
 
@@ -127,7 +123,7 @@ impl Dirichlet {
         // NodeIds are Coords-relative: both meshes must share it.
         let coords_i = imposed_mesh.coords()?;
         let coords_m = multiplier_mesh.coords()?;
-        if coords_i.index() != coords_m.index() || coords_i.generation() != coords_m.generation() {
+        if !coords_i.same_object(&coords_m) {
             return Err(PyrucastError::Message(
                 "Dirichlet: imposed_mesh and multiplier_mesh must share a Coords".into(),
             ));
@@ -137,11 +133,11 @@ impl Dirichlet {
             let imp = imposed_mesh.get(i)?;
             let mult = multiplier_mesh.get(i)?;
             let (iet, icount) = {
-                let s = read(&imp)?;
+                let s = imp.read();
                 (s.element_type(), s.cell_count())
             };
             let (met, mcount) = {
-                let s = read(&mult)?;
+                let s = mult.read();
                 (s.element_type(), s.cell_count())
             };
             if iet != ElementType::POI1 {
@@ -274,9 +270,9 @@ impl Constraint for Dirichlet {
         let mut relations = Vec::with_capacity(self.imposed_mesh.cell_count()?);
         for i in 0..self.imposed_mesh.len() {
             let imposed_nodes: Vec<NodeId> =
-                read(&self.imposed_mesh.get(i)?)?.connectivity().to_vec();
+                self.imposed_mesh.get(i)?.read().connectivity().to_vec();
             let multiplier_nodes: Vec<NodeId> =
-                read(&self.multiplier_mesh.get(i)?)?.connectivity().to_vec();
+                self.multiplier_mesh.get(i)?.read().connectivity().to_vec();
             for (imp, mult) in imposed_nodes.iter().zip(multiplier_nodes.iter()) {
                 relations.push(Relation {
                     multiplier_node: *mult,

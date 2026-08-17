@@ -21,7 +21,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use pyrucast::atoms::{ElementType, Node, NodeId};
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::coords::Coords;
-use pyrucast::store::insert;
+use pyrucast::store::Handle;
 
 /// Host block side, in cells: `HOST_N³` hexahedra.
 const HOST_N: usize = 12;
@@ -37,7 +37,7 @@ const N_PROJECTED: usize = 2_000;
 
 /// An `n × n × n` block of HEX8 cells spanning the unit cube.
 fn hex_block(n: usize) -> Mesh {
-    let coords = insert(Coords::new(3).unwrap());
+    let coords = Handle::new(Coords::new(3).unwrap());
     let side = n + 1;
     let mut ids: Vec<NodeId> = Vec::with_capacity(side * side * side);
     for k in 0..side {
@@ -77,7 +77,7 @@ fn hex_block(n: usize) -> Mesh {
 /// An `n × n` QUA4 surface in 3-D, gently curved so the projection is a real
 /// Newton solve rather than an exactly-linear one.
 fn curved_surface(n: usize) -> Mesh {
-    let coords = insert(Coords::new(3).unwrap());
+    let coords = Handle::new(Coords::new(3).unwrap());
     let side = n + 1;
     let mut ids: Vec<NodeId> = Vec::with_capacity(side * side);
     for j in 0..side {

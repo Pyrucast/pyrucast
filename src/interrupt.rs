@@ -3,7 +3,7 @@
 //! Long operators (meshers, solvers, refinement loops) can run for a while.
 //! To let a caller stop them early, they take a [`Cancel`] token and poll it
 //! periodically; returning [`PyrucastError::Interrupted`] aborts the
-//! computation cleanly (no partial result is committed to the store).
+//! computation cleanly (no partial result is committed).
 //!
 //! The key design point is the **Rust/Python boundary**: [`Cancel`] is a
 //! plain Rust trait with **no dependency on PyO3**. The *operator* never

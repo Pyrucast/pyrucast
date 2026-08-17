@@ -17,14 +17,14 @@ use pyrucast::ops::element_field::deformation;
 use pyrucast::ops::element_field::material_field;
 use pyrucast::ops::matrix::tangent;
 use pyrucast::ops::node_field::internal_forces;
-use pyrucast::store::insert;
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 const AXES: [&str; 3] = ["x", "y", "z"];
 
 /// Build a displacement `NodeField` from a flat per-node displacement table.
 fn build_u(nodes: &[Node], dim: usize, disp: &[f64]) -> Result<NodeField> {
-    let support = insert(SubMesh::poi1_from_nodes(nodes)?);
+    let support = Handle::new(SubMesh::poi1_from_nodes(nodes)?);
     let comps: Vec<String> = (0..dim).map(|a| format!("u_{}", AXES[a])).collect();
     let mut u = SubNodeField::from_poi1(&support, comps)?;
     for (i, n) in nodes.iter().enumerate() {
@@ -103,7 +103,7 @@ fn check_tangent_fd(
 }
 
 fn unit_quad() -> Result<(FiniteElementSpace, [Node; 4])> {
-    let coords = insert(Coords::new(2)?);
+    let coords = Handle::new(Coords::new(2)?);
     let n0 = Node::create_in(coords.clone(), &[0.0, 0.0])?;
     let n1 = Node::create_in(coords.clone(), &[1.0, 0.0])?;
     let n2 = Node::create_in(coords.clone(), &[1.0, 1.0])?;
@@ -147,7 +147,7 @@ fn tangent_matches_fd_plane_stress() -> Result<()> {
 /// `2πr` measure (which multiplies both sides, so it must be consistent).
 #[test]
 fn tangent_matches_fd_axisymmetric() -> Result<()> {
-    let coords = insert(Coords::axisymmetric()?);
+    let coords = Handle::new(Coords::axisymmetric()?);
     // Away from the axis, so the element is well away from r = 0.
     let corners = [(1.0, 0.0), (2.0, 0.0), (2.0, 1.0), (1.0, 1.0)];
     let nodes: Vec<Node> = corners
@@ -171,7 +171,7 @@ fn tangent_matches_fd_axisymmetric() -> Result<()> {
 
 #[test]
 fn tangent_matches_fd_solid_hex() -> Result<()> {
-    let coords = insert(Coords::new(3)?);
+    let coords = Handle::new(Coords::new(3)?);
     let p = |x: f64, y: f64, z: f64| Node::create_in(coords.clone(), &[x, y, z]);
     let corners = [
         (0.0, 0.0, 0.0),
@@ -204,7 +204,10 @@ fn tangent_matches_fd_solid_hex() -> Result<()> {
 
 fn plasticity_model(fes: &FiniteElementSpace, model: ElasticityModel) -> Result<Model> {
     let mut m = Model::empty();
-    m.add_sub(insert(SubModel::plasticity_perfect(fes.get(0)?, model)?))?;
+    m.add_sub(Handle::new(SubModel::plasticity_perfect(
+        fes.get(0)?,
+        model,
+    )?))?;
     Ok(m)
 }
 

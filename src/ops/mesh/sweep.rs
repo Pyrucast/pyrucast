@@ -4,7 +4,7 @@ use crate::atoms::Node;
 use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
-use crate::store::{insert, read};
+use crate::store::Handle;
 
 /// Sweep two SEG2 meshes into a mesh of `element_type`, building `n_layers`
 /// layers. `element_type` is one of `QUA4` (default), `TRI3`, `QUA8`,
@@ -63,7 +63,7 @@ pub(super) fn qua4_to_tri3(mesh: &Mesh) -> Result<Mesh> {
     let mut result = Mesh::empty();
     for sm_h in mesh {
         let (color, conn) = {
-            let s = read(sm_h)?;
+            let s = sm_h.read();
             (s.face_color(), s.connectivity().to_vec())
         };
         let mut new_sm = SubMesh::new(coords.clone(), ElementType::TRI3);
@@ -72,7 +72,7 @@ pub(super) fn qua4_to_tri3(mesh: &Mesh) -> Result<Mesh> {
             new_sm.add_cell(&[cell[0], cell[1], cell[2]])?;
             new_sm.add_cell(&[cell[0], cell[2], cell[3]])?;
         }
-        result.add_sub(insert(new_sm))?;
+        result.add_sub(Handle::new(new_sm))?;
     }
     Ok(result)
 }
@@ -87,14 +87,14 @@ pub(super) fn qua8_to_qua9(mesh: &Mesh) -> Result<Mesh> {
     let mut result = Mesh::empty();
     for sm_h in mesh {
         let (color, conn) = {
-            let s = read(sm_h)?;
+            let s = sm_h.read();
             (s.face_color(), s.connectivity().to_vec())
         };
         let mut new_sm = SubMesh::new(coords.clone(), ElementType::QUA9);
         new_sm.set_face_color(color);
         for cell in conn.chunks(8) {
             let center: Vec<f64> = {
-                let c = read(&coords)?;
+                let c = coords.read();
                 let corners: Vec<Vec<f64>> = cell[..4]
                     .iter()
                     .map(|&id| -> Result<Vec<f64>> { Ok(c.position(id)?.to_vec()) })
@@ -109,7 +109,7 @@ pub(super) fn qua8_to_qua9(mesh: &Mesh) -> Result<Mesh> {
             nodes.push(center_node.id());
             new_sm.add_cell(&nodes)?;
         }
-        result.add_sub(insert(new_sm))?;
+        result.add_sub(Handle::new(new_sm))?;
     }
     Ok(result)
 }
@@ -122,11 +122,11 @@ mod tests {
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
     use crate::ops::mesh::line::line;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     #[test]
     fn sweep_basic() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a0 = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let a2 = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
         let mesh_a = line(&a0, &a2, 2, ElementType::SEG2).unwrap();
@@ -151,7 +151,7 @@ mod tests {
 
     #[test]
     fn sweep_one_layer_reuses_endpoints() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a0 = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let a1 = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let mesh_a = line(&a0, &a1, 1, ElementType::SEG2).unwrap();
@@ -171,7 +171,7 @@ mod tests {
 
     #[test]
     fn sweep_rejects_zero_layers() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let m = line(&a, &b, 1, ElementType::SEG2).unwrap();
@@ -180,7 +180,7 @@ mod tests {
 
     #[test]
     fn sweep_rejects_mismatched_elem_counts() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
@@ -191,7 +191,7 @@ mod tests {
 
     #[test]
     fn sweep_rejects_non_seg2() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let seg = line(&a, &b, 1, ElementType::SEG2).unwrap();
@@ -206,7 +206,7 @@ mod tests {
 
     #[test]
     fn sweep_rejects_unsupported_element_type() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let seg = line(&a, &b, 1, ElementType::SEG2).unwrap();
@@ -215,7 +215,7 @@ mod tests {
 
     #[test]
     fn sweep_tri3_splits_each_quad_in_two() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a0 = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let a2 = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
         let mesh_a = line(&a0, &a2, 2, ElementType::SEG2).unwrap();
@@ -232,7 +232,7 @@ mod tests {
 
     #[test]
     fn sweep_qua8_promotes_to_quadratic() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a0 = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let a1 = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let mesh_a = line(&a0, &a1, 1, ElementType::SEG2).unwrap();
@@ -248,7 +248,7 @@ mod tests {
 
     #[test]
     fn sweep_qua9_has_center_node() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a0 = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let a1 = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
         let mesh_a = line(&a0, &a1, 1, ElementType::SEG2).unwrap();
@@ -267,7 +267,7 @@ mod tests {
 
     #[test]
     fn sweep_tri6_splits_then_promotes() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a0 = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let a1 = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let mesh_a = line(&a0, &a1, 1, ElementType::SEG2).unwrap();

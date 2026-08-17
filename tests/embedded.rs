@@ -21,7 +21,7 @@ use pyrucast::ops::matrix::stiffness;
 use pyrucast::ops::mesh::barycenter;
 use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::{insert, Handle};
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 const TOL: f64 = 1e-9;
@@ -33,7 +33,7 @@ fn field(c: &[f64]) -> f64 {
 
 #[test]
 fn immersed_node_follows_host_interpolation() -> Result<()> {
-    let coords = insert(Coords::new(3)?);
+    let coords = Handle::new(Coords::new(3)?);
     let corner_coords = [
         [0.0, 0.0, 0.0],
         [1.0, 0.0, 0.0],
@@ -57,10 +57,10 @@ fn immersed_node_follows_host_interpolation() -> Result<()> {
     let mut mat = SubElementField::new(sub.clone(), vec!["k".into()])?;
     mat.set_uniform("k", 1.0)?;
     let mut materials = ElementField::empty();
-    materials.add_sub(insert(mat))?;
+    materials.add_sub(Handle::new(mat))?;
 
     let mut model = Model::empty();
-    model.add_sub(insert(SubModel::heat_conduction(sub)?))?;
+    model.add_sub(Handle::new(SubModel::heat_conduction(sub)?))?;
 
     // Dirichlet pinning all eight corners to the linear field.
     let mut corner_sm = SubMesh::new(coords.clone(), ElementType::POI1);
@@ -79,7 +79,7 @@ fn immersed_node_follows_host_interpolation() -> Result<()> {
         Default::default(),
     )?;
     let dir_mult_nodes = dir.multiplier_nodes()?; // paired corner-for-corner
-    model.add_sub(insert(dir))?;
+    model.add_sub(Handle::new(dir))?;
 
     // Immersed node inside the cube, tied to the host by an Embedded constraint.
     let p = Node::create_in(coords.clone(), &[0.3, 0.6, 0.2])?;
@@ -95,7 +95,7 @@ fn immersed_node_follows_host_interpolation() -> Result<()> {
         None,
     )?;
     let emb_mult = emb.multiplier_nodes()?[0];
-    model.add_sub(insert(emb))?;
+    model.add_sub(Handle::new(emb))?;
 
     // RHS: imposed_T = field(corner) at each Dirichlet multiplier, 0 (tie) at the
     // embedded multiplier — all under the shared component name "imposed_T".
@@ -104,7 +104,7 @@ fn immersed_node_follows_host_interpolation() -> Result<()> {
         rhs_sm.add_cell(&[m])?;
     }
     rhs_sm.add_cell(&[emb_mult])?;
-    let rhs_sm = insert(rhs_sm);
+    let rhs_sm = Handle::new(rhs_sm);
     let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["imposed_T".into()])?;
     for (m, c) in dir_mult_nodes.iter().zip(corner_coords.iter()) {
         rhs.set_value(*m, "imposed_T", field(c))?;
@@ -144,7 +144,7 @@ fn immersed_node_follows_host_displacement_field() -> Result<()> {
     const NU: f64 = 0.3;
     const S: f64 = 2.0;
 
-    let coords = insert(Coords::new(3)?);
+    let coords = Handle::new(Coords::new(3)?);
     let points = [
         [0.0, 0.0, 0.0],
         [1.0, 0.0, 0.0],
@@ -236,7 +236,7 @@ fn embedded_per_component_offset() -> Result<()> {
     const S: f64 = 2.0;
     let g = [0.01, -0.02, 0.03]; // offsets on u_x, u_y, u_z
 
-    let coords = insert(Coords::new(3)?);
+    let coords = Handle::new(Coords::new(3)?);
     let points = [
         [0.0, 0.0, 0.0],
         [1.0, 0.0, 0.0],
@@ -292,7 +292,7 @@ fn embedded_per_component_offset() -> Result<()> {
     // Per-component g via relation index (1 immersed node ⇒ index = component).
     let emb_rhs = embedded.constraint_rhs_by_index(&[(0, g[0]), (1, g[1]), (2, g[2])])?;
     let mut emb_model = Model::empty();
-    emb_model.add_sub(insert(embedded))?;
+    emb_model.add_sub(Handle::new(embedded))?;
     model = model.union(&emb_model)?;
 
     let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("nu", NU)])?;

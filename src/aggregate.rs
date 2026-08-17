@@ -1,4 +1,4 @@
-//! Common trait for the store's "parent" containers (Mesh, FiniteElementSpace,
+//! Common trait for the "parent" containers (Mesh, FiniteElementSpace,
 //! Model). Each is essentially a `Vec<Handle<Sub>>` and exposes the same
 //! access grammar (`len`, `get`, indexing, iteration).
 //!
@@ -12,7 +12,7 @@
 //!
 //! ```
 //! use pyrucast::aggregate::Aggregate;
-//! use pyrucast::store::{insert, read, Handle};
+//! use pyrucast::store::Handle;
 //!
 //! #[derive(serde::Serialize, serde::Deserialize)]
 //! struct Item(u32);
@@ -29,14 +29,13 @@
 //!
 //! let mut b = Bag::default();
 //! assert!(b.is_empty());
-//! b.push(insert(Item(42)));
+//! b.push(Handle::new(Item(42)));
 //! assert_eq!(b.len(), 1);
 //! let h = b.get(0).unwrap();
-//! assert_eq!(read(&h).unwrap().0, 42);
+//! assert_eq!(h.read().0, 42);
 //! ```
 
 use crate::error::{PyrucastError, Result};
-use crate::persist::Persist;
 use crate::store::Handle;
 use std::any::Any;
 
@@ -45,8 +44,8 @@ use std::any::Any;
 /// All access mechanics (length, indexing, iteration) are derived from the
 /// two required methods [`Aggregate::items`] and [`Aggregate::items_mut`].
 pub trait Aggregate: Default {
-    /// Type of the sub-object held in the store (referenced via `Handle<Sub>`).
-    type Sub: Persist + Any + Send + Sync;
+    /// Type of the sub-object held (referenced via `Handle<Sub>`).
+    type Sub: Any + Send + Sync;
 
     /// Reference to the internal list of handles.
     fn items(&self) -> &[Handle<Self::Sub>];
@@ -82,7 +81,7 @@ pub trait Aggregate: Default {
     ///
     /// Exposed to Rust as [`Aggregate::union`] and to Python as `a | b`.
     /// Sub-objects are deduplicated **by handle identity**
-    /// ([`Handle::same_slot`]): a sub already present (same store slot) is
+    /// ([`Handle::same_object`]): a sub already present (the same object) is
     /// not added twice. Order is first-seen. Domain constraints (e.g.
     /// `Coords` compatibility for `Mesh`) are enforced via
     /// [`Aggregate::try_extend_from`]. After the union, [`Aggregate::finalize`]
@@ -229,10 +228,10 @@ pub trait Aggregate: Default {
         }
     }
 
-    /// Whether a sub with the same store slot as `h` is already held
-    /// ([`Handle::same_slot`]). Basis of the union's deduplication.
+    /// Whether a sub naming the same object as `h` is already held
+    /// ([`Handle::same_object`]). Basis of the union's deduplication.
     fn contains_handle(&self, h: &Handle<Self::Sub>) -> bool {
-        self.items().iter().any(|existing| existing.same_slot(h))
+        self.items().iter().any(|existing| existing.same_object(h))
     }
 
     /// Hook called before inserting a single handle. Override to enforce
@@ -257,7 +256,7 @@ pub trait Aggregate: Default {
 
     /// Check compatibility (via [`Aggregate::check_push`] on the first item of `other`)
     /// then append handles from `other` into `self`, **deduplicating by
-    /// handle identity** ([`Handle::same_slot`]): a sub already present is
+    /// handle identity** ([`Handle::same_object`]): a sub already present is
     /// skipped. This is the union semantics of `|`.
     fn try_extend_from(&mut self, other: &Self) -> crate::error::Result<()> {
         if let Some(h) = other.items().first() {
@@ -278,18 +277,17 @@ pub trait Aggregate: Default {
 
 /// Wraps an aggregate's handle slice so its `Debug` **dereferences** each
 /// handle and prints the full `Debug` of the pointed-to sub-object, instead
-/// of only the handle's `idx`/`gen`. A handle that can no longer be resolved
-/// (stale / collected slot) falls back to printing the handle itself.
+/// of the handle's short tag.
 ///
 /// Honours the alternate (`{:#?}`) flag, so the sub-objects are
 /// pretty-printed and indented when the aggregate is.
 ///
-/// Safe against the per-type, non-reentrant store mutex: the only lock taken
-/// is the sub-object store's, and every sub-object `Debug` is itself
-/// lock-free, so no nesting of `with::<Sub>` inside `with::<Sub>` occurs.
-pub struct DebugItems<'a, S: Persist + Any + Send + Sync>(pub &'a [Handle<S>]);
+/// Safe against the non-reentrant per-object lock: one read guard is held at
+/// a time, on a different sub-object each turn, and every sub-object `Debug`
+/// is itself lock-free.
+pub struct DebugItems<'a, S: Any + Send + Sync>(pub &'a [Handle<S>]);
 
-impl<S: Persist + Any + Send + Sync + std::fmt::Debug> std::fmt::Debug for DebugItems<'_, S> {
+impl<S: Any + Send + Sync + std::fmt::Debug> std::fmt::Debug for DebugItems<'_, S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut list = f.debug_list();
         for h in self.0 {
@@ -300,20 +298,16 @@ impl<S: Persist + Any + Send + Sync + std::fmt::Debug> std::fmt::Debug for Debug
 }
 
 /// A single dereferenced handle (see [`DebugItems`]).
-struct DebugItem<'a, S: Persist + Any + Send + Sync>(&'a Handle<S>);
+struct DebugItem<'a, S: Any + Send + Sync>(&'a Handle<S>);
 
-impl<S: Persist + Any + Send + Sync + std::fmt::Debug> std::fmt::Debug for DebugItem<'_, S> {
+impl<S: Any + Send + Sync + std::fmt::Debug> std::fmt::Debug for DebugItem<'_, S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match crate::store::read(self.0) {
-            Ok(s) => {
-                if f.alternate() {
-                    write!(f, "{:#?}", &*s)
-                } else {
-                    write!(f, "{:?}", &*s)
-                }
-            }
-            // Unresolvable handle: fall back to its idx/gen identity.
-            Err(_) => std::fmt::Debug::fmt(self.0, f),
+        // No fallback: holding the handle guarantees the object is there.
+        let s = self.0.read();
+        if f.alternate() {
+            write!(f, "{:#?}", &*s)
+        } else {
+            write!(f, "{:?}", &*s)
         }
     }
 }
@@ -548,7 +542,7 @@ macro_rules! impl_aggregate_pymethods {
             impl $T {
                 /// `a | b` — **union** of this aggregate with `other`. `other`
                 /// may be another aggregate of the same type or a single
-                /// sub-object. Sub-objects already present (same store slot)
+                /// sub-object. Sub-objects already present (the same object)
                 /// are not added twice; remaining handles are **shared**
                 /// (refcount bump), not deep-copied. Same-support zones are
                 /// handled **asymmetrically** by the two field types:
@@ -641,7 +635,7 @@ macro_rules! impl_aggregate_pymethods {
 /// `pyclass` wrapper whose payload implements [`crate::dump::Dump`].
 ///
 /// Two forms depending on how the wrapper holds its payload:
-/// * `handle $PyT, $field` — `$field: Handle<Sub>`, resolved through the store;
+/// * `handle $PyT, $field` — `$field: Handle<Sub>`, read through its guard;
 /// * `value  $PyT, $field` — `$field` is an owned value (e.g. a view).
 ///
 /// Aggregate wrappers get `dump` from [`impl_aggregate_pymethods`] instead.
@@ -667,7 +661,7 @@ macro_rules! impl_dump_pymethod {
                     max_rows,
                     max_cols,
                 };
-                let text = $crate::dump::Dump::render(&*$crate::store::read(&self.$field)?, &opts);
+                let text = $crate::dump::Dump::render(&*self.$field.read(), &opts);
                 $crate::dump::py_print(py, &text)
             }
         }
@@ -828,7 +822,7 @@ macro_rules! impl_aggregate_std_traits {
                 use $crate::aggregate::Aggregate;
                 let mut out = <$T as ::std::default::Default>::default();
                 out.add_sub(a.clone())?;
-                if !a.same_slot(b) {
+                if !a.same_object(b) {
                     out.add_sub(b.clone())?;
                 }
                 out.finalize()?;
@@ -859,9 +853,7 @@ macro_rules! impl_aggregate_dump {
             fn render(&self, opts: &$crate::dump::DumpOptions) -> String {
                 let mut out = format!("{self}\n");
                 for (i, h) in $crate::aggregate::Aggregate::items(self).iter().enumerate() {
-                    let body = $crate::store::read(h)
-                        .map(|s| $crate::dump::Dump::render(&*s, opts))
-                        .unwrap_or_else(|e| format!("<{e}>"));
+                    let body = $crate::dump::Dump::render(&*h.read(), opts);
                     out.push_str(&format!("── [{i}] ──\n"));
                     for line in body.lines() {
                         out.push_str("  ");
@@ -880,7 +872,7 @@ macro_rules! impl_aggregate_dump {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::{insert, read, Handle};
+    use crate::store::Handle;
     use serde::{Deserialize, Serialize};
 
     #[derive(Serialize, Deserialize)]
@@ -914,20 +906,20 @@ mod tests {
     #[test]
     fn push_then_get() {
         let mut b = Bag::default();
-        b.push(insert(Item(1)));
-        b.push(insert(Item(2)));
-        b.push(insert(Item(3)));
+        b.push(Handle::new(Item(1)));
+        b.push(Handle::new(Item(2)));
+        b.push(Handle::new(Item(3)));
         assert_eq!(b.len(), 3);
         let h = b.get(1).unwrap();
-        assert_eq!(read(&h).unwrap().0, 2);
+        assert_eq!(h.read().0, 2);
     }
 
     #[test]
     fn iter_walks_in_order() {
         let mut b = Bag::default();
-        b.push(insert(Item(10)));
-        b.push(insert(Item(20)));
-        let collected: Vec<u32> = b.iter().map(|h| read(h).unwrap().0).collect();
+        b.push(Handle::new(Item(10)));
+        b.push(Handle::new(Item(20)));
+        let collected: Vec<u32> = b.iter().map(|h| h.read().0).collect();
         assert_eq!(collected, vec![10, 20]);
     }
 
@@ -944,23 +936,23 @@ mod tests {
     fn unit_returns_sole_handle_or_errors() {
         let mut b = Bag::default();
         assert!(b.unit().is_err()); // empty → error
-        b.push(insert(Item(7)));
+        b.push(Handle::new(Item(7)));
         let h = b.unit().unwrap();
-        assert_eq!(read(&h).unwrap().0, 7);
-        b.push(insert(Item(8)));
+        assert_eq!(h.read().0, 7);
+        b.push(Handle::new(Item(8)));
         assert!(b.unit().is_err()); // two → error
     }
 
     #[test]
     fn union_sub_first_mirrors_union_sub() {
         let mut b = Bag::default();
-        b.push(insert(Item(1)));
-        b.push(insert(Item(2)));
-        let h = insert(Item(3));
+        b.push(Handle::new(Item(1)));
+        b.push(Handle::new(Item(2)));
+        let h = Handle::new(Item(3));
 
         let appended = b.union_sub(&h).unwrap();
         let prepended = b.union_sub_first(&h).unwrap();
-        let values = |bag: &Bag| -> Vec<u32> { bag.iter().map(|h| read(h).unwrap().0).collect() };
+        let values = |bag: &Bag| -> Vec<u32> { bag.iter().map(|h| h.read().0).collect() };
         assert_eq!(values(&appended), vec![1, 2, 3]);
         assert_eq!(values(&prepended), vec![3, 1, 2]);
 

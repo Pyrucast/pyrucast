@@ -33,7 +33,7 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::ops::element_field;
-use pyrucast::store::insert;
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 const P: f64 = 3.0; // pressure
@@ -93,7 +93,7 @@ fn stretching_the_surface_grows_the_load() -> Result<()> {
 /// modelling error — there is no normal to follow — and is reported as one.
 #[test]
 fn a_volumetric_subspace_is_rejected() -> Result<()> {
-    let coords = insert(Coords::new(2)?);
+    let coords = Handle::new(Coords::new(2)?);
     let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
         .iter()
         .map(|c| Node::create_in(coords.clone(), c))
@@ -140,7 +140,7 @@ impl Edge {
     }
 
     fn build(reversed: bool) -> Result<Self> {
-        let coords = insert(Coords::new(2)?);
+        let coords = Handle::new(Coords::new(2)?);
         let bottom = Node::create_in(coords.clone(), &[1.0, 0.0])?;
         let top = Node::create_in(coords.clone(), &[1.0, 1.0])?;
         let nodes = if reversed {
@@ -168,7 +168,7 @@ impl Edge {
     /// and the internal forces integrate it. Calling it again with another
     /// displacement is what « the load follows » means.
     fn load(&self, u: impl Fn(f64, f64) -> (f64, f64)) -> Result<(f64, f64)> {
-        let sm = insert(SubMesh::poi1_from_nodes(&self.nodes)?);
+        let sm = Handle::new(SubMesh::poi1_from_nodes(&self.nodes)?);
         let mut field = SubNodeField::from_poi1(&sm, vec!["u_x".to_string(), "u_y".to_string()])?;
         for n in &self.nodes {
             let p = n.position()?;

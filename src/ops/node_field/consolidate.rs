@@ -1,7 +1,7 @@
 //! Consolidate a [`NodeField`]: fuse zones sharing the **same support**.
 //!
 //! Sub-fields defined on the *same* support `SubMesh` (matched by handle
-//! identity, [`crate::store::Handle::same_slot`]) are fused into a single
+//! identity, [`crate::store::Handle::same_object`]) are fused into a single
 //! [`SubNodeField`] carrying the **union of their components**. A component
 //! defined by several of those sub-fields must hold the **same** value at
 //! every shared node (exact comparison) — anything else is an error. Zones
@@ -24,7 +24,7 @@ use crate::atoms::NodeId;
 use crate::containers::field::SubField;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::Result;
-use crate::store::{insert, read, Handle};
+use crate::store::Handle;
 
 /// Fuse the zones of `field` that share the same support `SubMesh`.
 ///
@@ -44,7 +44,7 @@ pub fn consolidate(field: &NodeField) -> Result<NodeField> {
     let mut snaps: Vec<Snap> = Vec::with_capacity(field.len());
     for h in field {
         let (support, nodes, components, values) = {
-            let s = read(h)?;
+            let s = h.read();
             (
                 s.support(),
                 s.nodes().to_vec(),
@@ -66,7 +66,7 @@ pub fn consolidate(field: &NodeField) -> Result<NodeField> {
     for (i, snap) in snaps.iter().enumerate() {
         match groups
             .iter_mut()
-            .find(|idxs| snaps[idxs[0]].support.same_slot(&snap.support))
+            .find(|idxs| snaps[idxs[0]].support.same_object(&snap.support))
         {
             Some(idxs) => idxs.push(i),
             None => groups.push(vec![i]),
@@ -122,7 +122,7 @@ pub fn consolidate(field: &NodeField) -> Result<NodeField> {
                 }
             }
         }
-        out.add_sub(insert(fused))?;
+        out.add_sub(Handle::new(fused))?;
     }
 
     // Cross-support coherence: a node shared by zones on *different* supports
@@ -140,7 +140,7 @@ mod tests {
     use crate::containers::field::Field;
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
-    use crate::store::{insert, write, Handle};
+    use crate::store::Handle;
 
     /// Single-zone POI1 field over `nodes`, sharing the support handle `sm`.
     fn field_on(sm: &Handle<SubMesh>, components: Vec<String>) -> NodeField {
@@ -161,25 +161,27 @@ mod tests {
         for nd in nodes {
             sm.add_cell(&[nd.id()]).unwrap();
         }
-        insert(sm)
+        Handle::new(sm)
     }
 
     #[test]
     fn same_support_distinct_components_fuse() {
         // Two zones on the *same* POI1 support, components ["T"] and ["P"].
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let n1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let sm = poi1(&coords, &[&n0, &n1]);
 
         let a = field_on(&sm, vec!["T".into()]);
         let b = field_on(&sm, vec!["P".into()]);
-        write(&a.get(0).unwrap())
+        a.get(0)
             .unwrap()
+            .write()
             .set_value(n0.id(), "T", 5.0)
             .unwrap();
-        write(&b.get(0).unwrap())
+        b.get(0)
             .unwrap()
+            .write()
             .set_value(n1.id(), "P", 9.0)
             .unwrap();
 
@@ -192,17 +194,19 @@ mod tests {
 
     #[test]
     fn same_support_shared_component_must_agree() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let sm = poi1(&coords, &[&n0]);
         let a = field_on(&sm, vec!["T".into()]);
         let b = field_on(&sm, vec!["T".into()]);
-        write(&a.get(0).unwrap())
+        a.get(0)
             .unwrap()
+            .write()
             .set_value(n0.id(), "T", 1.0)
             .unwrap();
-        write(&b.get(0).unwrap())
+        b.get(0)
             .unwrap()
+            .write()
             .set_value(n0.id(), "T", 2.0)
             .unwrap();
         // Distinct handles, same support: the union's finalize fuses them
@@ -212,17 +216,19 @@ mod tests {
 
     #[test]
     fn same_support_shared_component_agreeing_is_ok() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let sm = poi1(&coords, &[&n0]);
         let a = field_on(&sm, vec!["T".into(), "P".into()]);
         let b = field_on(&sm, vec!["T".into()]);
-        write(&a.get(0).unwrap())
+        a.get(0)
             .unwrap()
+            .write()
             .set_value(n0.id(), "T", 7.0)
             .unwrap();
-        write(&b.get(0).unwrap())
+        b.get(0)
             .unwrap()
+            .write()
             .set_value(n0.id(), "T", 7.0)
             .unwrap();
         // Agreeing shared component → `|` succeeds and fuses.
@@ -233,7 +239,7 @@ mod tests {
 
     #[test]
     fn distinct_supports_stay_separate_and_share_handles() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let n1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let sm_a = poi1(&coords, &[&n0]);
@@ -244,27 +250,29 @@ mod tests {
         let c = consolidate(&f).unwrap();
         assert_eq!(c.len(), 2);
         // Singleton groups: handles shared, not copied.
-        assert_eq!(c.get(0).unwrap().index(), f.get(0).unwrap().index());
-        assert_eq!(c.get(1).unwrap().index(), f.get(1).unwrap().index());
+        assert!(c.get(0).unwrap().same_object(&f.get(0).unwrap()));
+        assert!(c.get(1).unwrap().same_object(&f.get(1).unwrap()));
     }
 
     #[test]
     fn cross_support_shared_node_checked() {
         // Two distinct POI1 supports that both include node n (different
         // submeshes, n shared); a diverging T at n is still an error.
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let n = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let m = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let sm_a = poi1(&coords, &[&n, &m]);
         let sm_b = poi1(&coords, &[&n]);
         let a = field_on(&sm_a, vec!["T".into()]);
         let b = field_on(&sm_b, vec!["T".into()]);
-        write(&a.get(0).unwrap())
+        a.get(0)
             .unwrap()
+            .write()
             .set_value(n.id(), "T", 1.0)
             .unwrap();
-        write(&b.get(0).unwrap())
+        b.get(0)
             .unwrap()
+            .write()
             .set_value(n.id(), "T", 2.0)
             .unwrap();
         // Different supports → no fusion, but the cross-support check in the

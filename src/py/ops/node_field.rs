@@ -10,7 +10,7 @@ use crate::py::mesh::PyMesh;
 use crate::py::model::PyModel;
 use crate::py::node_field::PyNodeField;
 use crate::py::node_field::PySubNodeField;
-use crate::store::{insert, read};
+use crate::store::Handle;
 use pyo3::exceptions::PyTypeError;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -221,11 +221,11 @@ pub fn mask(
         let out = crate::ops::node_field::mask(&f.inner, &band, components)?;
         Ok(Py::new(py, PyNodeField { inner: out })?.into_any())
     } else if let Ok(f) = field.extract::<PyRef<PySubNodeField>>() {
-        let out = crate::ops::node_field::mask_sub(&*read(&f.handle)?, &band, components);
+        let out = crate::ops::node_field::mask_sub(&*f.handle.read(), &band, components);
         Ok(Py::new(
             py,
             PySubNodeField {
-                handle: insert(out),
+                handle: Handle::new(out),
             },
         )?
         .into_any())

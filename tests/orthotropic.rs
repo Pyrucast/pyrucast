@@ -34,7 +34,7 @@ use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::ops::mesh;
 use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::insert;
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 /// Traction on the right edge.
@@ -238,7 +238,7 @@ fn unit_square() -> Result<(
     pyrucast::store::Handle<Coords>,
 )> {
     let h = 1.0 / N as f64;
-    let coords = insert(Coords::new(2)?);
+    let coords = Handle::new(Coords::new(2)?);
     let mut grid: Vec<Node> = Vec::new();
     for j in 0..=N {
         for i in 0..=N {

@@ -21,7 +21,6 @@ use crate::atoms::{ElementType, NodeId};
 use crate::containers::mesh::Mesh;
 use crate::error::Result;
 use crate::parallel::*;
-use crate::store::read;
 
 /// Where one physical point sits inside a host mesh.
 #[derive(Clone, Debug)]
@@ -65,14 +64,14 @@ pub fn locate_points(host: &Mesh, points: &[Vec<f64>], tol: f64) -> Result<Vec<O
     let mut cells: Vec<Cell> = Vec::new();
     for (s_idx, sm_handle) in host.into_iter().enumerate() {
         let (element_type, conn, coords_handle) = {
-            let sm = read(sm_handle)?;
+            let sm = sm_handle.read();
             (sm.element_type(), sm.connectivity().to_vec(), sm.coords())
         };
         if element_type == ElementType::POI1 {
             continue; // A node has no interior to contain anything.
         }
         let npc = element_type.nodes_per_cell();
-        let c = read(&coords_handle)?;
+        let c = coords_handle.read();
         for cell in 0..conn.len() / npc {
             let ids = &conn[cell * npc..(cell + 1) * npc];
             let coords: Vec<Vec<f64>> = ids
@@ -463,12 +462,12 @@ mod tests {
     use crate::atoms::Node;
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     /// A unit HEX8 at the origin; locate its centre and a corner.
     #[test]
     fn locate_in_hex8() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let corners = [
             [0.0, 0.0, 0.0],
             [1.0, 0.0, 0.0],
@@ -507,7 +506,7 @@ mod tests {
     /// barycentric coordinates.
     #[test]
     fn locate_in_tet4_weights_are_barycentric() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let v = [
             [0.0, 0.0, 0.0],
             [1.0, 0.0, 0.0],
@@ -538,7 +537,7 @@ mod tests {
     #[test]
     fn locate_in_hex8_block() {
         let n = 3usize;
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let node =
             |i: usize, j: usize, k: usize| -> Vec<f64> { vec![i as f64, j as f64, k as f64] };
         // Grid of (n+1)³ nodes.
@@ -602,7 +601,7 @@ mod tests {
     /// A point just outside a QUA4 (2D) is rejected; one inside is accepted.
     #[test]
     fn locate_in_qua4_2d() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let v = [[0.0, 0.0], [2.0, 0.0], [2.0, 1.0], [0.0, 1.0]];
         let ids: Vec<_> = v
             .iter()

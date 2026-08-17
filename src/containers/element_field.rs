@@ -59,9 +59,9 @@
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
 //! use pyrucast::containers::mesh::{Mesh, SubMesh};
 //! use pyrucast::atoms::Node;
-//! use pyrucast::store::{insert, read, write};
+//! use pyrucast::store::Handle;
 //!
-//! let coords = insert(Coords::new(2).unwrap());
+//! let coords = Handle::new(Coords::new(2).unwrap());
 //! let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
 //! let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
 //! let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -76,12 +76,12 @@
 //!
 //! let sub0 = mat.get(0).unwrap();
 //! {
-//!     let mut s = write(&sub0).unwrap();
+//!     let mut s = sub0.write();
 //!     s.set_uniform("E", 210e9).unwrap();
 //!     s.set_uniform("nu", 0.3).unwrap();
 //! }
 //!
-//! let s = read(&sub0).unwrap();
+//! let s = sub0.read();
 //! assert_eq!(s.cell_count(), 1);
 //! assert_eq!(s.gauss_count(), 3);   // TRI3 Hammer
 //! assert_eq!(s.component_count(), 2);
@@ -92,8 +92,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::field::SubField;
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
 use crate::error::{PyrucastError, Result};
-use crate::store::{insert, read, Handle};
-use serde::{Deserialize, Serialize};
+use crate::store::Handle;
 use std::fmt;
 
 // ─── SubElementField ───────────────────────────────────────────────────────
@@ -103,7 +102,6 @@ use std::fmt;
 ///
 /// Layout: flat row-major in the order *cell → gauss → component*
 /// (see the module-level documentation).
-#[derive(Serialize, Deserialize)]
 pub struct SubElementField {
     support: Handle<SubFiniteElementSpace>,
     components: Vec<String>,
@@ -125,7 +123,7 @@ impl SubElementField {
     pub fn new(fespace: Handle<SubFiniteElementSpace>, components: Vec<String>) -> Result<Self> {
         crate::containers::field::check_components("SubElementField", &components)?;
         let (n_cells, n_gauss) = {
-            let s = read(&fespace)?;
+            let s = fespace.read();
             (s.cell_count()?, s.gauss_count())
         };
         let n_comp = components.len();
@@ -389,7 +387,7 @@ crate::impl_subfield_field_ops!(SubElementField);
 /// `ElementField` is to `FiniteElementSpace` what a `SubElementField` is
 /// to `SubFiniteElementSpace`. The component lists captured by the underlying
 /// sub-fields may differ from one subspace to the next.
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Default)]
 pub struct ElementField {
     subs: Vec<Handle<SubElementField>>,
 }
@@ -433,7 +431,7 @@ impl ElementField {
         for i in 0..n_sub {
             let sub = fespace.get(i)?;
             let sf = SubElementField::new(sub, components.clone())?;
-            subs.push(insert(sf));
+            subs.push(Handle::new(sf));
         }
         Ok(Self { subs })
     }
@@ -452,8 +450,8 @@ impl ElementField {
         let mut out = Vec::new();
         for h in self {
             let matches = {
-                let f = read(h)?.support();
-                f.index() == fespace.index() && f.generation() == fespace.generation()
+                let f = h.read().support();
+                f.same_object(fespace)
             };
             if matches {
                 out.push(h.clone());
@@ -481,17 +479,13 @@ impl ElementField {
         match zones.len() {
             1 => Ok(zones.pop().expect("length checked to be 1")),
             0 => Err(PyrucastError::Message(format!(
-                "no SubElementField in this ElementField matches the \
-                 SubFiniteElementSpace at slot {} (generation {})",
-                fespace.index(),
-                fespace.generation()
+                "no SubElementField in this ElementField matches the FE space \
+                 {fespace}"
             ))),
             n => Err(PyrucastError::Message(format!(
-                "{n} SubElementFields live on the SubFiniteElementSpace at slot {} \
-                 (generation {}); sub_for_fespace needs a unique zone. Use \
-                 subs_for_fespace, or element_field::consolidate to fuse the zones.",
-                fespace.index(),
-                fespace.generation()
+                "{n} SubElementFields live on the FE space {fespace}; \
+                 sub_for_fespace needs a unique zone. Use subs_for_fespace, or \
+                 element_field::consolidate to fuse the zones."
             ))),
         }
     }
@@ -518,7 +512,7 @@ impl ElementField {
         let mut matching: Vec<Handle<SubElementField>> = Vec::new();
         for h in self.subs_for_fespace(fespace)? {
             let carries_all = {
-                let comps = read(&h)?.components().to_vec();
+                let comps = h.read().components().to_vec();
                 required.iter().all(|r| comps.contains(r))
             };
             if carries_all {
@@ -528,19 +522,13 @@ impl ElementField {
         match matching.len() {
             1 => Ok(matching.pop().expect("length checked to be 1")),
             0 => Err(PyrucastError::Message(format!(
-                "no SubElementField on the SubFiniteElementSpace at slot {} \
-                 (generation {}) carries all of {:?} — supply it via material_field",
-                fespace.index(),
-                fespace.generation(),
-                required
+                "no SubElementField on the FE space {fespace} carries \
+                 all of {required:?} — supply it via material_field"
             ))),
             n => Err(PyrucastError::Message(format!(
-                "{n} SubElementFields on the SubFiniteElementSpace at slot {} \
-                 (generation {}) each carry all of {:?}; the zone is ambiguous — \
-                 fuse them with element_field::consolidate or narrow the components",
-                fespace.index(),
-                fespace.generation(),
-                required
+                "{n} SubElementFields on the FE space {fespace} each \
+                 carry all of {required:?}; the zone is ambiguous — fuse them with \
+                 element_field::consolidate or narrow the components"
             ))),
         }
     }
@@ -569,7 +557,7 @@ impl ElementField {
         for (i, comps) in components_per_subspace.iter().enumerate() {
             let sub = fespace.get(i)?;
             let sf = SubElementField::new(sub, comps.clone())?;
-            subs.push(insert(sf));
+            subs.push(Handle::new(sf));
         }
         Ok(Self { subs })
     }
@@ -591,8 +579,8 @@ impl ElementField {
     ) -> Result<()> {
         let mut mesh = crate::containers::mesh::Mesh::empty();
         for h in self {
-            let fespace = read(h)?.support();
-            let sm = read(&fespace)?.submesh();
+            let fespace = h.read().support();
+            let sm = fespace.read().submesh();
             mesh.add_sub(sm)?;
         }
         crate::viz::render_mesh_with_field(
@@ -625,8 +613,8 @@ impl ElementFieldView {
         submesh: &Handle<crate::containers::mesh::SubMesh>,
     ) -> Result<Option<&SubElementField>> {
         for z in &self.zones {
-            let sm = read(&z.support())?.submesh();
-            if sm.index() == submesh.index() && sm.generation() == submesh.generation() {
+            let sm = z.support().read().submesh();
+            if sm.same_object(submesh) {
                 return Ok(Some(z));
             }
         }
@@ -647,19 +635,19 @@ mod tests {
     use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
-    use crate::store::{insert, read, write};
+    use crate::store::Handle;
 
     fn make_tri3_subfespace() -> Handle<SubFiniteElementSpace> {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
         let sm = {
             let mut sm = SubMesh::new(coords, ElementType::TRI3);
             sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
-        insert(
+        Handle::new(
             SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
                 .unwrap(),
         )
@@ -667,7 +655,7 @@ mod tests {
 
     fn make_multi_cell_tri3_subfespace(n_cells: usize) -> Handle<SubFiniteElementSpace> {
         // n_cells triangles sharing a common apex, like a fan from origin.
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let apex = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let mut perimeter = Vec::with_capacity(n_cells + 1);
         for i in 0..=n_cells {
@@ -680,16 +668,16 @@ mod tests {
                 sm.add_cell(&[apex.id(), perimeter[i].id(), perimeter[i + 1].id()])
                     .unwrap();
             }
-            insert(sm)
+            Handle::new(sm)
         };
-        insert(
+        Handle::new(
             SubFiniteElementSpace::new(sm, Interpolation::Lagrange1, QuadratureRule::Gauss)
                 .unwrap(),
         )
     }
 
     fn make_mesh_with_tri_and_qua() -> Mesh {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let n0 = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let n1 = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let n2 = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -698,12 +686,12 @@ mod tests {
         let sm_tri = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
             sm.add_cell(&[n0.id(), n1.id(), n2.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         let sm_qua = {
             let mut sm = SubMesh::new(coords.clone(), ElementType::QUA4);
             sm.add_cell(&[n0.id(), n1.id(), n3.id(), n2.id()]).unwrap();
-            insert(sm)
+            Handle::new(sm)
         };
         mesh.add_sub(sm_tri).unwrap();
         mesh.add_sub(sm_qua).unwrap();
@@ -923,7 +911,7 @@ mod tests {
 
         // TRI3: 1 cell × 3 gauss × 2 components
         {
-            let s = read(&ef.get(0).unwrap()).unwrap();
+            let s = ef.get(0).unwrap().read();
             assert_eq!(s.cell_count(), 1);
             assert_eq!(s.gauss_count(), 3);
             assert_eq!(s.component_count(), 2);
@@ -932,7 +920,7 @@ mod tests {
 
         // QUA4: 1 cell × 4 gauss × 2 components
         {
-            let s = read(&ef.get(1).unwrap()).unwrap();
+            let s = ef.get(1).unwrap().read();
             assert_eq!(s.cell_count(), 1);
             assert_eq!(s.gauss_count(), 4);
             assert_eq!(s.component_count(), 2);
@@ -946,11 +934,8 @@ mod tests {
         let comps = vec![vec!["k".into()], vec!["E".into(), "nu".into()]];
         let ef = ElementField::with(&fes, &comps).unwrap();
         assert_eq!(ef.len(), 2);
-        assert_eq!(read(&ef.get(0).unwrap()).unwrap().components(), &["k"]);
-        assert_eq!(
-            read(&ef.get(1).unwrap()).unwrap().components(),
-            &["E", "nu"]
-        );
+        assert_eq!(ef.get(0).unwrap().read().components(), &["k"]);
+        assert_eq!(ef.get(1).unwrap().read().components(), &["E", "nu"]);
     }
 
     #[test]
@@ -965,7 +950,7 @@ mod tests {
 
     #[test]
     fn ef_subfield_out_of_bounds_errors() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -982,10 +967,7 @@ mod tests {
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let ef = ElementField::new(&fes, vec!["k".into()]).unwrap();
         // Iteration walks all subfields in order.
-        let counts: Vec<usize> = ef
-            .into_iter()
-            .map(|h| read(h).unwrap().gauss_count())
-            .collect();
+        let counts: Vec<usize> = ef.into_iter().map(|h| h.read().gauss_count()).collect();
         assert_eq!(counts, vec![3, 4]);
         // Indexing matches subfield().
         let _h = &ef[0];
@@ -996,22 +978,10 @@ mod tests {
         let mesh = make_mesh_with_tri_and_qua();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let ef = ElementField::new(&fes, vec!["k".into()]).unwrap();
-        write(&ef.get(0).unwrap())
-            .unwrap()
-            .set_uniform("k", 1.5)
-            .unwrap();
-        write(&ef.get(1).unwrap())
-            .unwrap()
-            .set_uniform("k", 2.5)
-            .unwrap();
-        assert_eq!(
-            read(&ef.get(0).unwrap()).unwrap().value(0, 0, "k").unwrap(),
-            1.5
-        );
-        assert_eq!(
-            read(&ef.get(1).unwrap()).unwrap().value(0, 0, "k").unwrap(),
-            2.5
-        );
+        ef.get(0).unwrap().write().set_uniform("k", 1.5).unwrap();
+        ef.get(1).unwrap().write().set_uniform("k", 2.5).unwrap();
+        assert_eq!(ef.get(0).unwrap().read().value(0, 0, "k").unwrap(), 1.5);
+        assert_eq!(ef.get(1).unwrap().read().value(0, 0, "k").unwrap(), 2.5);
     }
 
     #[test]

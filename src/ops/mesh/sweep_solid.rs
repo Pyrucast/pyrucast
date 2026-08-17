@@ -21,7 +21,7 @@ mod tests {
     use crate::atoms::Node;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     /// Build a single-TRI3 mesh on `coords` from three coordinates, returning
     /// the mesh and its three corner nodes.
@@ -36,7 +36,7 @@ mod tests {
 
     #[test]
     fn sweep_tri3_to_penta6() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let (a, na) = tri(&coords, [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]);
         let (b, nb) = tri(&coords, [[0.0, 0.0, 2.0], [1.0, 0.0, 2.0], [0.0, 1.0, 2.0]]);
 
@@ -60,7 +60,7 @@ mod tests {
     #[test]
     fn sweep_shared_edge_stays_shared() {
         // Two triangles sharing an edge → two prisms sharing a quad face.
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let a0 = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0]).unwrap();
         let a1 = Node::create_in(coords.clone(), &[1.0, 0.0, 0.0]).unwrap();
         let a2 = Node::create_in(coords.clone(), &[0.0, 1.0, 0.0]).unwrap();
@@ -89,14 +89,14 @@ mod tests {
 
     #[test]
     fn sweep_rejects_zero_layers() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let (a, _) = tri(&coords, [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]);
         assert!(sweep_solid(&a, &a, 0).is_err());
     }
 
     #[test]
     fn sweep_rejects_mismatched_types() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let (a, _) = tri(&coords, [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]);
         let q0 = Node::create_in(coords.clone(), &[0.0, 0.0, 1.0]).unwrap();
         let q1 = Node::create_in(coords.clone(), &[1.0, 0.0, 1.0]).unwrap();

@@ -8,7 +8,7 @@ use crate::containers::field::SubField;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::py::mesh::{PyMesh, PySubMesh};
 use crate::py::node::PyNode;
-use crate::store::{insert, read, write, Handle};
+use crate::store::Handle;
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::pyclass::CompareOp;
@@ -19,12 +19,12 @@ use pyo3::pyclass::CompareOp;
 /// a POI1 mesh). Order is preserved; duplicates are kept.
 fn extract_node_ids(obj: &Bound<'_, PyAny>) -> PyResult<Vec<NodeId>> {
     if let Ok(sm) = obj.extract::<PyRef<PySubMesh>>() {
-        return Ok(read(&sm.handle)?.connectivity().to_vec());
+        return Ok(sm.handle.read().connectivity().to_vec());
     }
     if let Ok(mesh) = obj.extract::<PyRef<PyMesh>>() {
         let mut ids: Vec<NodeId> = Vec::new();
         for h in &mesh.inner {
-            ids.extend_from_slice(read(h)?.connectivity());
+            ids.extend_from_slice(h.read().connectivity());
         }
         return Ok(ids);
     }
@@ -52,88 +52,90 @@ pub struct PySubNodeField {
 impl PySubNodeField {
     /// Number of nodes in the support.
     fn node_count(&self) -> PyResult<usize> {
-        Ok(read(&self.handle)?.node_count())
+        Ok(self.handle.read().node_count())
     }
 
     /// Number of components stored per node.
     fn component_count(&self) -> PyResult<usize> {
-        Ok(read(&self.handle)?.component_count())
+        Ok(self.handle.read().component_count())
     }
 
     /// Component names, in order.
     fn components(&self) -> PyResult<Vec<String>> {
-        Ok(read(&self.handle)?.components().to_vec())
+        Ok(self.handle.read().components().to_vec())
     }
 
     /// Value at node index `node_idx`, component index `comp_idx`.
     fn get(&self, node_idx: usize, comp_idx: usize) -> PyResult<f64> {
-        Ok(read(&self.handle)?.get(node_idx, comp_idx)?)
+        Ok(self.handle.read().get(node_idx, comp_idx)?)
     }
 
     /// Set the value at node index `node_idx`, component index `comp_idx`.
     fn set(&self, node_idx: usize, comp_idx: usize, value: f64) -> PyResult<()> {
-        write(&self.handle)?.set(node_idx, comp_idx, value)?;
+        self.handle.write().set(node_idx, comp_idx, value)?;
         Ok(())
     }
 
     /// Value at `node`, component index `comp_idx`.
     fn get_by_node(&self, node: PyRef<'_, PyNode>, comp_idx: usize) -> PyResult<f64> {
         let nid = node.as_node().id();
-        Ok(read(&self.handle)?.get_by_node(nid, comp_idx)?)
+        Ok(self.handle.read().get_by_node(nid, comp_idx)?)
     }
 
     /// Set the value at `node`, component index `comp_idx`.
     fn set_by_node(&self, node: PyRef<'_, PyNode>, comp_idx: usize, value: f64) -> PyResult<()> {
         let nid = node.as_node().id();
-        write(&self.handle)?.set_by_node(nid, comp_idx, value)?;
+        self.handle.write().set_by_node(nid, comp_idx, value)?;
         Ok(())
     }
 
     /// Index of component `name`, or `None` if unknown.
     fn component_index(&self, name: &str) -> PyResult<Option<usize>> {
-        Ok(read(&self.handle)?.component_index(name))
+        Ok(self.handle.read().component_index(name))
     }
 
     /// All component values at node index `node_idx`, in order.
     fn node_values(&self, node_idx: usize) -> PyResult<Vec<f64>> {
-        Ok(read(&self.handle)?.node_values(node_idx)?.to_vec())
+        Ok(self.handle.read().node_values(node_idx)?.to_vec())
     }
 
     /// The POI1 `SubMesh` this sub-field is supported on.
     fn support_submesh(&self) -> PyResult<PySubMesh> {
-        let sm = read(&self.handle)?.support_submesh()?;
-        Ok(PySubMesh { handle: insert(sm) })
+        let sm = self.handle.read().support_submesh()?;
+        Ok(PySubMesh {
+            handle: Handle::new(sm),
+        })
     }
 
     /// The POI1 `Mesh` this sub-field is supported on.
     fn support_mesh(&self) -> PyResult<PyMesh> {
-        let mesh = read(&self.handle)?.support_mesh()?;
+        let mesh = self.handle.read().support_mesh()?;
         Ok(PyMesh { inner: mesh })
     }
 
     /// Value at `node` for the named `component`.
     fn value(&self, node: PyRef<'_, PyNode>, component: &str) -> PyResult<f64> {
         let nid = node.as_node().id();
-        Ok(read(&self.handle)?.value(nid, component)?)
+        Ok(self.handle.read().value(nid, component)?)
     }
 
     /// Set the value at `node` for the named `component`.
     fn set_value(&self, node: PyRef<'_, PyNode>, component: &str, value: f64) -> PyResult<()> {
         let nid = node.as_node().id();
-        write(&self.handle)?.set_value(nid, component, value)?;
+        self.handle.write().set_value(nid, component, value)?;
         Ok(())
     }
 
     /// Smallest value of the named `component`.
     fn min(&self, component: &str) -> PyResult<f64> {
         use crate::containers::field::SubField;
-        Ok(SubField::min(&*read(&self.handle)?, component)?)
+        Ok(SubField::min(&*self.handle.read(), component)?)
     }
 
     /// Largest value of the named `component`.
     fn max(&self, component: &str) -> PyResult<f64> {
         use crate::containers::field::SubField;
-        Ok(SubField::max(&*read(&self.handle)?, component)?)
+        Ok(SubField::max(&*self.handle.read(), component)?)
     }
 
     /// Sum of the named `component` over the support (Σ over nodes) — the
@@ -141,30 +143,30 @@ impl PySubNodeField {
     /// to `0.0`.
     fn sum(&self, component: &str) -> PyResult<f64> {
         use crate::containers::field::SubField;
-        Ok(SubField::sum(&*read(&self.handle)?, component)?)
+        Ok(SubField::sum(&*self.handle.read(), component)?)
     }
 
     /// Add `scalar` to every value of `component` (in place).
     fn add_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
-        write(&self.handle)?.add_to_component(component, scalar)?;
+        self.handle.write().add_to_component(component, scalar)?;
         Ok(())
     }
 
     /// Subtract `scalar` from every value of `component` (in place).
     fn sub_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
-        write(&self.handle)?.sub_to_component(component, scalar)?;
+        self.handle.write().sub_to_component(component, scalar)?;
         Ok(())
     }
 
     /// Multiply every value of `component` by `scalar` (in place).
     fn mul_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
-        write(&self.handle)?.mul_to_component(component, scalar)?;
+        self.handle.write().mul_to_component(component, scalar)?;
         Ok(())
     }
 
     /// Divide every value of `component` by `scalar` (in place).
     fn div_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
-        write(&self.handle)?.div_to_component(component, scalar)?;
+        self.handle.write().div_to_component(component, scalar)?;
         Ok(())
     }
 
@@ -211,16 +213,16 @@ impl PySubNodeField {
     fn __setitem__(&self, key: (PyRef<'_, PyNode>, String), value: f64) -> PyResult<()> {
         let (node, comp) = key;
         let nid = node.as_node().id();
-        write(&self.handle)?.set_value(nid, &comp, value)?;
+        self.handle.write().set_value(nid, &comp, value)?;
         Ok(())
     }
 
     fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", &*read(&self.handle)?))
+        Ok(format!("{:?}", &*self.handle.read()))
     }
 
     fn __str__(&self) -> PyResult<String> {
-        Ok(format!("{}", &*read(&self.handle)?))
+        Ok(format!("{}", &*self.handle.read()))
     }
 }
 
@@ -233,15 +235,15 @@ impl PySubNodeField {
         op: fn(f64, f64) -> f64,
     ) -> PyResult<PySubNodeField> {
         if let Ok(s) = rhs.extract::<f64>() {
-            let out = read(&self.handle)?.map_all(|v| op(v, s));
+            let out = self.handle.read().map_all(|v| op(v, s));
             Ok(PySubNodeField {
-                handle: insert(out),
+                handle: Handle::new(out),
             })
         } else if let Ok(other) = rhs.extract::<PyRef<PySubNodeField>>() {
-            let a = (*read(&self.handle)?).clone();
-            let b = (*read(&other.handle)?).clone();
+            let a = (*self.handle.read()).clone();
+            let b = (*other.handle.read()).clone();
             Ok(PySubNodeField {
-                handle: insert(a.merge_components(&b, op)?),
+                handle: Handle::new(a.merge_components(&b, op)?),
             })
         } else {
             Err(PyTypeError::new_err(
@@ -399,7 +401,7 @@ impl PyNodeField {
     fn support_mesh(&self) -> PyResult<PyMesh> {
         let mut mesh = crate::containers::mesh::Mesh::empty();
         for h in &self.inner {
-            let sm = read(h)?.support();
+            let sm = h.read().support();
             mesh.add_sub(sm)?;
         }
         Ok(PyMesh { inner: mesh })
@@ -489,7 +491,7 @@ impl PyNodeField {
                 inner: self.inner.merge_field(&other.inner, op)?,
             })
         } else if let Ok(sub) = rhs.extract::<PyRef<PySubNodeField>>() {
-            let s = (*read(&sub.handle)?).clone();
+            let s = (*sub.handle.read()).clone();
             Ok(PyNodeField {
                 inner: self.inner.merge_subfield(&s, op)?,
             })
@@ -515,17 +517,17 @@ impl PySubNodeField {
         // (node, component) → scalar value.
         if let Ok((node, comp)) = key.extract::<(PyRef<'_, PyNode>, String)>() {
             let nid = node.as_node().id();
-            let v = read(&self.handle)?.value(nid, &comp)?;
+            let v = self.handle.read().value(nid, &comp)?;
             return Ok(v.into_pyobject(py)?.into_any().unbind());
         }
         // "comp" or ["comp", …] → component selection (a new sub-field).
         let names = crate::py::ops::field::extract_names(key)?;
         let out =
-            crate::containers::field::SubField::select_components(&*read(&self.handle)?, names)?;
+            crate::containers::field::SubField::select_components(&*self.handle.read(), names)?;
         Ok(Py::new(
             py,
             PySubNodeField {
-                handle: insert(out),
+                handle: Handle::new(out),
             },
         )?
         .into_any())
@@ -550,11 +552,11 @@ impl PySubNodeField {
             CompareOp::Lt => Band::new(None, None, None, Some(x)),
             CompareOp::Eq | CompareOp::Ne => return Ok(py.NotImplemented()),
         }?;
-        let out = crate::ops::node_field::mask_sub(&*read(&self.handle)?, &band, None);
+        let out = crate::ops::node_field::mask_sub(&*self.handle.read(), &band, None);
         Ok(Py::new(
             py,
             PySubNodeField {
-                handle: insert(out),
+                handle: Handle::new(out),
             },
         )?
         .into_any())

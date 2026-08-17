@@ -16,25 +16,27 @@ première partie est un état des lieux daté ; la seconde est une liste de pist
 
 | Sujet | Décision |
 |---|---|
-| Mémoire | Store central à handles : slab + indices générationnels + comptage de références + swap disque. **Global au processus**, adressé par fonctions de module (`insert` / `read` / `write`) — pas d'objet `Session` à passer. |
+| Mémoire | Les objets vivent derrière un `Handle<T>` — une enveloppe d'un champ sur `Arc<RwLock<T>>` : comptage de références par l'`Arc`, un verrou par objet, guards possédés. Pas de registre global, pas d'objet `Session` à passer ; le handle *est* l'adresse de l'objet. |
 | Séparation des couches | `containers/` (structures) ⊥ `ops/` (opérateurs) ⊥ `py/` (binding). Un module d'`ops/` porte le nom du **conteneur qu'il produit**. Les règles complètes sont dans `CONVENTIONS.md`. |
 | Primitives géométriques | `nalgebra` (vecteurs et matrices de petite taille — géométrie, maillage, visualisation), `nalgebra-sparse` pour le stockage creux. |
 | Algèbre linéaire (solveur) | **LU creuse directe `faer`**, multithreadée, avec cache de factorisation sur la `Matrix` (*factoriser une fois, résoudre souvent*). `SolveMethod` est le point d'extension pour un autre back-end. |
-| Sérialisation | `serde` + `bincode` via un trait `Persist` **unique**, partagé entre swap disque et sauvegarde/relecture fichier. |
-| Parallélisme | `rayon`, **toujours actif**, porté *au-dessus* des noyaux de physique : un noyau ne voit ni rayon, ni le store, ni un verrou. |
+| Sérialisation | `serde` + `bincode` via un trait `Persist` **unique**, au service de la sauvegarde/relecture fichier. |
+| Parallélisme | `rayon`, **toujours actif**, porté *au-dessus* des noyaux de physique : un noyau ne voit ni rayon, ni un handle, ni un verrou. |
 | Binding Python | `pyo3` + `maturin`, *mixed layout* : extension plate privée `_pyrucast` + couche Python pure qui la range en sous-modules. |
 | Documentation | `mdbook` (théorie + doctests) + rustdoc, publiés sur GitHub Pages. |
 | Algorithmes non-linéaires / transitoires | **Orchestrés en Python**, pas en Rust (voir plus bas). |
 | Méthode | Largeur d'abord : toutes les structures + bindings + doc/tests avant le numérique lourd. |
 
-Deux décisions ont été **révisées en cours de route**, et le sont ici
+Trois décisions ont été **révisées en cours de route**, et le sont ici
 définitivement : le solveur n'est pas une implémentation maison derrière un
-trait `LinearSolver` (c'est `faer`), et le store n'est pas exposé via une
-`Session` (il est global).
+trait `LinearSolver` (c'est `faer`) ; il n'y a pas d'objet `Session` à passer ;
+et le store central lui-même a été retiré — slab, générations, compteur maison
+et swap disque doublaient tous ce que l'`Arc` fait déjà, et le swap ne libérait
+rien. Voir [book/src/memory-model.md](book/src/memory-model.md).
 
 ### Dépendances approuvées (socle figé)
 
-Toujours liées : `serde`, `bincode`, `nalgebra`, `nalgebra-sparse`, `faer` (LU creux du solveur), `rayon` (parallélisme), `parking_lot` (verrous du store), `paste` (macros d'agrégat). Optionnelles, derrière une feature : `pyo3`, `pyo3-stub-gen`, et la visualisation `plotters`, `winit`, `softbuffer`. Outillage : `maturin`, `mdbook`, `ruff`, `criterion`. Tout autre ajout = nouvelle demande explicite.
+Toujours liées : `serde`, `bincode`, `nalgebra`, `nalgebra-sparse`, `faer` (LU creux du solveur), `rayon` (parallélisme), `parking_lot` (verrous des objets), `paste` (macros d'agrégat). Optionnelles, derrière une feature : `pyo3`, `pyo3-stub-gen`, et la visualisation `plotters`, `winit`, `softbuffer`. Outillage : `maturin`, `mdbook`, `ruff`, `criterion`. Tout autre ajout = nouvelle demande explicite.
 
 ### Definition of Done par objet
 
@@ -293,9 +295,8 @@ gros, et profiteraient du même recyclage. C'est aussi portable macOS et Windows
 là où le réglage `mallopt` équivalent ne vaudrait que pour glibc.
 
 **Ce qu'il en coûte.** Une dépendance de plus au socle, et une empreinte
-résidente plus haute puisque les arènes sont conservées — à surveiller vis-à-vis
-du swap, qui existe précisément pour tenir la mémoire. À mesurer avant/après sur
-`benches/` **et** sur la RSS, pas seulement sur le temps.
+résidente plus haute puisque les arènes sont conservées. À mesurer avant/après
+sur `benches/` **et** sur la RSS, pas seulement sur le temps.
 
 **L'alternative, plus profonde.** Une forme `integrate_into(&mut champ, …)` qui
 réutilise le champ du tour précédent supprimerait l'allocation elle-même, pas
@@ -305,29 +306,26 @@ alors que le contrat veut qu'un auteur de physique n'écrive que
 
 ## Sauvegarde et reprise
 
-La persistance n'est faite qu'à moitié : le trait `Persist` sert au swap, mais
-la **sauvegarde du graphe d'objets** n'existe pas. Il manque le remappage des
-handles, le conteneur fichier versionné (en-tête magique + numéro de format) et
-l'API Python `save` / `load`. Le format binaire visé est portable Linux ↔
-Windows : entiers little-endian normalisés, `usize` sur 64 bits, `f64`
-IEEE-754, aucun chemin ni séparateur dépendant de l'OS dans le *payload*.
+Le trait `Persist` sérialise un objet isolé ; la **sauvegarde du graphe
+d'objets** n'existe pas. Elle est décidée dans sa forme :
 
-## Swap : du manuel à l'automatique
+- des **racines nommées** — on donne un ou plusieurs objets à sauver, on relit
+  un conteneur façon dictionnaire, les objets se retrouvent par leur clef ;
+- des **enregistrements explicites par type**, munis d'identifiants **locaux au
+  fichier** : l'adresse d'un objet dans un processus n'a aucun sens dans un
+  autre ;
+- le partage **préservé** : deux champs portés par le même support restent,
+  après relecture, deux champs portés par un seul support ;
+- les compteurs de références **jamais sauvegardés**, mais recomptés depuis zéro
+  à la relecture ;
+- la relecture **ajoute** les objets à ceux déjà présents, elle ne remplace rien ;
+- un **en-tête versionné** refusant toute autre version. Avant la 1.0.0 on
+  s'autorise à casser le format.
 
-Le swap fonctionne, mais **rien ne le déclenche tout seul** : `swap_out(&h)` est
-manuel, objet par objet, et réservé au Rust. C'est à l'appelant de décider quoi
-évincer et quand — autant dire que personne ne le fait. Deux marches :
-
-1. **exposer le swap côté Python**, pour qu'un script puisse déclencher une
-   éviction ;
-2. **évincer quand c'est nécessaire** — un budget RAM, une priorité par slot et
-   une date de dernier usage, et le store se déleste seul de ce qui est
-   transitoire. C'est l'évolution **B** ci-dessous, et c'est la marche qui rend
-   le swap réellement utile : tant qu'il faut le demander à la main, il ne sert
-   qu'aux cas qu'on a vus venir.
-
-Le swap étant déjà transparent vis-à-vis de `Drop` et adossé au même `Persist`
-que la sauvegarde, la brique manquante est **la politique**, pas le mécanisme.
+Le format binaire visé est portable Linux ↔ Windows : entiers little-endian
+normalisés, `usize` sur 64 bits, `f64` IEEE-754, aucun chemin ni séparateur
+dépendant de l'OS dans le *payload*. Reste à écrire : le conteneur fichier et
+l'API Python `save` / `load`.
 
 ## Qualité de maillage
 
@@ -339,21 +337,19 @@ suivi dans le temps.
 
 ## Évolutions mémoire (conditionnelles)
 
-Le store actuel est la fondation : on **ne le remplace pas**. Trois évolutions
-sont identifiées, chacune **déclenchée par une mesure**, pas par anticipation —
-aucune mesure ne les a encore justifiées. Détails et arbitrages dans
-[book/src/memory-model.md](book/src/memory-model.md).
+Le modèle est volontairement minimal : un `Arc<RwLock<T>>` par objet, un
+compteur par nœud dans `Coords`. Deux extensions sont identifiées, chacune
+**déclenchée par une mesure**, pas par anticipation.
 
-1. **A. Indirection + compactage déplaçant** — table `id → slot_idx`, les slots
-   vivants se déplacent pour combler les trous, les handles restent valides.
-   ~100 lignes, API publique inchangée. *Déclencheur* : hauts plateaux mémoire
-   sur cycles intensifs de création/destruction.
-2. **B. Swap annoté + éviction LRU** — priorité par slot (`Pinned` / `Working` /
-   `Scratch`) et `last_used`, éviction automatique sous budget RAM. C'est la
-   seconde marche de la piste *Swap* ci-dessus.
-   *Déclencheur* : le swap manuel devient insuffisant.
-3. **C. Arènes par génération** — jeune génération collectée souvent, vieille
-   rarement. À reconsidérer seulement quand A et B auront montré leurs limites.
+1. **Énumérer les objets vivants** — un listing façon cast3m, ou une sauvegarde
+   de session entière. Coûte un `Vec<Weak<_>>` par type inscrit dans
+   `Handle::new`, l'entonnoir de création unique qui existe pour cela.
+   *Déclencheur* : une commande utilisateur qui en a besoin.
+2. **Simplifier le contrat de `Node`** — mode cast3m pur, où seul un maillage
+   maintient un nœud vivant. Supprime d'un coup le compteur par nœud *et* la
+   logique d'annulation d'`add_cell`. *Déclencheur* : constater que les `Node`
+   isolés servent peu en pratique. Détails dans
+   [book/src/memory-model.md](book/src/memory-model.md).
 
 ---
 

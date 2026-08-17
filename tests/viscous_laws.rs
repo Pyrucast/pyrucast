@@ -27,7 +27,7 @@ use pyrucast::coords::Coords;
 use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::models::plastic::PlasticLaw;
 use pyrucast::ops::element_field::{behavior::integrate, deformation, material_field};
-use pyrucast::store::{insert, read};
+use pyrucast::store::Handle;
 use pyrucast::Result;
 
 const AXES: [&str; 3] = ["x", "y", "z"];
@@ -249,7 +249,7 @@ struct Step {
 impl Step {
     /// An internal variable of the first Gauss point, by name.
     fn var(&self, name: &str) -> Result<f64> {
-        let sub = read(&self.field.get(0)?)?;
+        let sub = self.field.get(0)?.read();
         sub.value(0, 0, name)
     }
 }
@@ -289,7 +289,7 @@ struct Cube {
 
 impl Cube {
     fn new(law: PlasticLaw, material: &[(&str, f64)]) -> Result<Self> {
-        let coords = insert(Coords::new(3)?);
+        let coords = Handle::new(Coords::new(3)?);
         let nodes: Vec<Node> = CORNERS
             .iter()
             .map(|c| Node::create_in(coords.clone(), c))
@@ -308,7 +308,7 @@ impl Cube {
     }
 
     fn displacement(&self, disp: &[f64]) -> Result<NodeField> {
-        let support = insert(SubMesh::poi1_from_nodes(&self.nodes)?);
+        let support = Handle::new(SubMesh::poi1_from_nodes(&self.nodes)?);
         let comps: Vec<String> = (0..3).map(|a| format!("u_{}", AXES[a])).collect();
         let mut u = SubNodeField::from_poi1(&support, comps)?;
         for (i, n) in self.nodes.iter().enumerate() {
@@ -324,7 +324,7 @@ impl Cube {
     fn step(&self, disp: &[f64], prev: Option<&ElementField>, dt: f64) -> Result<Step> {
         let strain = deformation(&self.displacement(disp)?, &self.fes)?;
         let field = integrate(&self.model, &strain, prev, &self.materials, Some(dt))?;
-        let sub = read(&field.get(0)?)?;
+        let sub = field.get(0)?.read();
         let names = ["xx", "yy", "zz", "yz", "xz", "xy"];
         let mut sigma = [0.0; 6];
         for (i, n) in names.iter().enumerate() {

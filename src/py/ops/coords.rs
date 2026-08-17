@@ -1,5 +1,5 @@
 //! Python wrappers for [`crate::ops::coords`] — the two operators that
-//! write back into the coordinate store.
+//! write back into the coordinates.
 
 use crate::py::node_field::PyNodeField;
 use pyo3::prelude::*;

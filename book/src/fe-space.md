@@ -450,9 +450,9 @@ use pyrucast::atoms::ElementType;
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::atoms::Node;
-use pyrucast::store::{insert, read};
+use pyrucast::store::Handle;
 
-let coords = insert(Coords::new(2).unwrap());
+let coords = Handle::new(Coords::new(2).unwrap());
 let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
 let b = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
 let c = Node::create_in(coords.clone(), &[0.0, 2.0]).unwrap();
@@ -462,7 +462,7 @@ mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 
 let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 let sub = fes.get(0).unwrap();
-let s = read(&sub).unwrap();
+let s = sub.read();
 assert_eq!(s.gauss_count(), 3);
 // Le triangle (0,0), (2,0), (0,2) a |J| = 4 partout :
 // mapping affine, det(J) = 4 = 2 × aire physique du triangle (1/2 × 2 × 2).
@@ -490,7 +490,7 @@ let fes = FiniteElementSpace::with(
 Évaluation des grandeurs sur une cellule :
 
 ```rust,ignore
-let s = read(&sub).unwrap();
+let s = sub.read();
 for cell_idx in 0..s.cell_count().unwrap() {
     for g in 0..s.gauss_count() {
         let n  = s.n_at_g(g).unwrap();          // N_i(ξ_g)
@@ -508,15 +508,15 @@ for cell_idx in 0..s.cell_count().unwrap() {
 Après modification des coordonnées dans la `Coords`, les évaluations à la volée reflètent automatiquement le nouvel état :
 
 ```rust,ignore
-use pyrucast::store::{read, write};
+use pyrucast::store::Handle;
 
 // SEG2 initial : nœuds en x=0 et x=1 → |J| = 0.5 (longueur 1 sur [-1,+1]).
-let dj_before = read(&sub).unwrap().det_jacobian(0, 0).unwrap();
+let dj_before = sub.read().det_jacobian(0, 0).unwrap();
 assert!((dj_before - 0.5).abs() < 1e-12);
 
 // Étirement : on déplace le second nœud en x=4 → |J| = 2.0 (longueur 4 sur [-1,+1]).
-write(&coords).unwrap().set_position(b.id(), &[4.0, 0.0]).unwrap();
-let dj_after = read(&sub).unwrap().det_jacobian(0, 0).unwrap();
+coords.write().set_position(b.id(), &[4.0, 0.0]).unwrap();
+let dj_after = sub.read().det_jacobian(0, 0).unwrap();
 assert!((dj_after - 2.0).abs() < 1e-12);
 ```
 

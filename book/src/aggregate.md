@@ -74,8 +74,8 @@ directement côté Python. On construit toujours au **niveau parent**
 Composer deux agrégats, c'est l'**union** : `a | b` côté Python, `a.union(&b)`
 côté Rust. La sémantique est **uniforme pour les sept agrégats** :
 
-1. **Déduplication par handle.** Une zone dont le `Handle` est déjà présent
-   (même slot du store, `Handle::same_slot`) n'est pas ajoutée deux fois.
+1. **Déduplication par handle.** Une zone dont le `Handle` désigne un objet
+   déjà présent (`Handle::same_object`) n'est pas ajoutée deux fois.
    L'ordre est celui de première apparition.
 2. **Partage, pas copie.** Les zones retenues sont partagées (refcount), jamais
    dupliquées en mémoire.

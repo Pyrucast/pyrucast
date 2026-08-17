@@ -22,7 +22,7 @@ use crate::atoms::{ElementType, NodeId};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
-use crate::store::{insert, read, Handle};
+use crate::store::Handle;
 use std::collections::HashMap;
 
 /// Undirected edge key: the two node ids sorted, so an edge and its reverse
@@ -77,7 +77,7 @@ pub fn border(mesh: &Mesh, angle_deg: Option<f64>) -> Result<Mesh> {
     let mut any_surface = false;
     for sm in mesh {
         let (et, conn) = {
-            let s = read(sm)?;
+            let s = sm.read();
             (s.element_type(), s.connectivity().to_vec())
         };
         match et {
@@ -113,7 +113,7 @@ pub fn border(mesh: &Mesh, angle_deg: Option<f64>) -> Result<Mesh> {
     let mut order: Vec<NodeId> = Vec::new();
     for sm in mesh {
         let (et, conn) = {
-            let s = read(sm)?;
+            let s = sm.read();
             (s.element_type(), s.connectivity().to_vec())
         };
         if et == ElementType::POI1 {
@@ -176,7 +176,7 @@ pub fn border(mesh: &Mesh, angle_deg: Option<f64>) -> Result<Mesh> {
             // `Coords` and must not run while the read guard is held.
             let mut pieces: Vec<(Vec<NodeId>, bool)> = Vec::new(); // (nodes, closed)
             {
-                let c = read(&coords)?;
+                let c = coords.read();
                 for chain in &loops {
                     let corners = corner_indices(&c, chain, cos_tol)?;
                     if corners.is_empty() {
@@ -208,7 +208,7 @@ fn emit_closed(result: &mut Mesh, coords: &Handle<Coords>, chain: &[NodeId]) -> 
     for i in 0..n {
         sub.add_cell(&[chain[i], chain[(i + 1) % n]])?;
     }
-    result.add_sub(insert(sub))
+    result.add_sub(Handle::new(sub))
 }
 
 /// Append an **open** SEG2 polyline (an arête: no wrap-around) as one submesh.
@@ -217,7 +217,7 @@ fn emit_open(result: &mut Mesh, coords: &Handle<Coords>, arc: &[NodeId]) -> Resu
     for pair in arc.windows(2) {
         sub.add_cell(pair)?;
     }
-    result.add_sub(insert(sub))
+    result.add_sub(Handle::new(sub))
 }
 
 /// Indices, into the cyclic `chain`, of the **corner** nodes: those where the
@@ -285,11 +285,11 @@ mod tests {
     use super::*;
     use crate::atoms::Node;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     /// signed area of a node-id loop, read from `coords` (2-D).
     fn signed_area(coords: &crate::store::Handle<Coords>, loop_ids: &[NodeId]) -> f64 {
-        let c = read(coords).unwrap();
+        let c = coords.read();
         let n = loop_ids.len();
         let mut a = 0.0;
         for i in 0..n {
@@ -303,7 +303,7 @@ mod tests {
     /// Ordered node-id loop of submesh `s` (chains its SEG2 connectivity).
     fn loop_of(mesh: &Mesh, s: usize) -> Vec<NodeId> {
         let sm = mesh.get(s).unwrap();
-        let conn = read(&sm).unwrap().connectivity().to_vec();
+        let conn = sm.read().connectivity().to_vec();
         // The submesh is stored as consecutive segments (a,b)(b,c)…; the
         // first node of each segment, in order, is the loop.
         conn.chunks(2).map(|seg| seg[0]).collect()
@@ -311,7 +311,7 @@ mod tests {
 
     #[test]
     fn single_triangle_gives_one_triloop() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -330,7 +330,7 @@ mod tests {
     fn two_triangles_sharing_diagonal_give_one_quadloop() {
         // Unit square split into two triangles along the (b,d) diagonal; the
         // shared diagonal is interior and must not appear in the contour.
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
@@ -346,7 +346,7 @@ mod tests {
 
     #[test]
     fn square_split_by_angle_gives_four_open_aretes() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
@@ -365,7 +365,7 @@ mod tests {
     fn collinear_boundary_segments_stay_in_one_arete() {
         // Two unit squares side by side (2×1): the mid nodes on the top and
         // bottom edges are collinear, so those edges are not split at them.
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let bl = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let bm = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let br = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
@@ -387,7 +387,7 @@ mod tests {
 
     #[test]
     fn large_angle_keeps_a_triangle_boundary_closed() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -410,7 +410,7 @@ mod tests {
     fn grid_with_hole_gives_two_loops() {
         // 3×3 grid of QUA4 with the centre cell removed: outer loop (12
         // segments) + inner hole loop (4 segments).
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let mut ids = Vec::new();
         for j in 0..4 {
             for i in 0..4 {
@@ -450,7 +450,7 @@ mod tests {
 
     #[test]
     fn reuses_nodes_and_increfs() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -458,17 +458,17 @@ mod tests {
         m.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 
         // a: TRI3 + Node = 2 before contour.
-        assert_eq!(read(&coords).unwrap().refcount(a.id()), 2);
+        assert_eq!(coords.read().refcount(a.id()), 2);
         let ct = border(&m, None).unwrap();
         // Boundary SEG2 references a in two segments (incoming + outgoing).
-        assert_eq!(read(&coords).unwrap().refcount(a.id()), 4);
+        assert_eq!(coords.read().refcount(a.id()), 4);
         drop(ct);
-        assert_eq!(read(&coords).unwrap().refcount(a.id()), 2);
+        assert_eq!(coords.read().refcount(a.id()), 2);
     }
 
     #[test]
     fn no_surface_cells_is_error() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         m.add_cell(&[a.id()]).unwrap();
@@ -477,7 +477,7 @@ mod tests {
 
     #[test]
     fn volume_cells_are_rejected() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let ns: Vec<NodeId> = (0..4)
             .map(|k| {
                 Node::create_in(coords.clone(), &[k as f64, 0.0, 0.0])

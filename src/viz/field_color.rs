@@ -26,7 +26,7 @@ use crate::containers::field::SubField;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::containers::node_field::NodeFieldView;
 use crate::error::{PyrucastError, Result};
-use crate::store::{read, Handle};
+use crate::store::Handle;
 use crate::viz::camera::Bbox3;
 use crate::viz::drawable::Drawable;
 use crate::viz::mesh_draw::{render_primitives, submesh_primitives_with_colors, Primitive};
@@ -174,9 +174,8 @@ impl FieldData {
             FieldData::Element(v) => {
                 let zone = v.zone_for_submesh(sm)?.ok_or_else(|| {
                     PyrucastError::Message(format!(
-                        "no ElementField zone lives on submesh #{} — the field's \
-                         FE space does not cover this (sub)mesh",
-                        sm.index()
+                        "no ElementField zone lives on {sm} — the field's \
+                         FE space does not cover this (sub)mesh"
                     ))
                 })?;
                 let fit = FitOperator::for_zone(zone)?;
@@ -262,7 +261,7 @@ pub(crate) struct FitOperator {
 impl FitOperator {
     fn for_zone(zone: &SubElementField) -> Result<Self> {
         let fespace = zone.support();
-        let s = read(&fespace)?;
+        let s = fespace.read();
         let npc = s.nodes_per_cell()?;
         let n_g = s.gauss_count();
         if n_g < npc {
@@ -389,7 +388,7 @@ pub(crate) fn submesh_primitives_smooth(
     // All node coordinates of the submesh, padded to 3-D.
     let coords = sm.coords();
     let coords: Vec<Point3> = {
-        let c = read(&coords)?;
+        let c = coords.read();
         conn.iter()
             .map(|&nid| c.position(nid).map(pad3))
             .collect::<Result<_>>()?
@@ -491,7 +490,7 @@ fn mesh_cell_values(
     for i in 0..n_sub {
         let sm = mesh.get(i)?;
         let ctx = field.for_submesh(&sm)?;
-        let vals = submesh_cell_values(&ctx, &*read(&sm)?, component)?;
+        let vals = submesh_cell_values(&ctx, &sm.read(), component)?;
         per_sub.push(vals);
     }
     let slices: Vec<&[f64]> = per_sub.iter().map(|v| v.as_slice()).collect();
@@ -560,7 +559,7 @@ impl<'a> Drawable for MeshFieldView<'a> {
             for (i, values) in per_sub.iter().enumerate() {
                 let sm = self.mesh.get(i)?;
                 let colors = colors_from_values(values, cmap, vmin, vmax);
-                let prims = submesh_primitives_with_colors(&*read(&sm)?, &colors)?;
+                let prims = submesh_primitives_with_colors(&sm.read(), &colors)?;
                 all_prims.extend(prims);
             }
         } else {
@@ -569,7 +568,7 @@ impl<'a> Drawable for MeshFieldView<'a> {
             for i in 0..self.mesh.len() {
                 let sm = self.mesh.get(i)?;
                 let ctx = self.field.for_submesh(&sm)?;
-                per_sub.push(submesh_nodal_values(&ctx, &*read(&sm)?, self.component)?);
+                per_sub.push(submesh_nodal_values(&ctx, &sm.read(), self.component)?);
             }
             let flat: Vec<f64> = per_sub
                 .iter()
@@ -580,7 +579,7 @@ impl<'a> Drawable for MeshFieldView<'a> {
             for (i, nodal) in per_sub.iter().enumerate() {
                 let sm = self.mesh.get(i)?;
                 all_prims.extend(submesh_primitives_smooth(
-                    &*read(&sm)?,
+                    &sm.read(),
                     nodal,
                     cmap,
                     vmin,
@@ -616,7 +615,7 @@ pub(crate) struct SubMeshFieldView<'a> {
 
 impl<'a> Drawable for SubMeshFieldView<'a> {
     fn bbox(&self) -> Result<Bbox3> {
-        read(self.submesh)?.bbox()
+        self.submesh.read().bbox()
     }
 
     fn draw_on<DB: DrawingBackend>(&self, area: &DrawingArea<DB, Shift>, view: &View) -> Result<()>
@@ -624,7 +623,7 @@ impl<'a> Drawable for SubMeshFieldView<'a> {
         DB::ErrorType: 'static,
     {
         let ctx = self.field.for_submesh(self.submesh)?;
-        let sm = read(self.submesh)?;
+        let sm = self.submesh.read();
         let cmap = self.scale.cmap;
         let (prims, vmin, vmax);
         if self.smooth == 0 {
@@ -647,9 +646,7 @@ impl<'a> Drawable for SubMeshFieldView<'a> {
     }
 
     fn is_axisymmetric(&self) -> bool {
-        read(self.submesh)
-            .map(|sm| sm.is_axisymmetric())
-            .unwrap_or(false)
+        self.submesh.read().is_axisymmetric()
     }
 }
 
@@ -712,7 +709,7 @@ mod tests {
     use crate::containers::mesh::SubMesh as RawSubMesh;
     use crate::containers::node_field::{NodeField, SubNodeField};
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     #[test]
     fn colormap_endpoints() {
@@ -768,20 +765,20 @@ mod tests {
 
     #[test]
     fn submesh_cell_values_averages_node_values_per_cell() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
         let mut sm = RawSubMesh::new(coords.clone(), ElementType::TRI3);
         sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-        let sm_h = insert(sm);
+        let sm_h = Handle::new(sm);
 
         // Build a POI1 SubNodeField with T values [1, 2, 3] on a, b, c.
         let mut poi1 = RawSubMesh::new(coords.clone(), ElementType::POI1);
         for n in [&a, &b, &c] {
             poi1.add_cell(&[n.id()]).unwrap();
         }
-        let poi1_h = insert(poi1);
+        let poi1_h = Handle::new(poi1);
         let mut nf = SubNodeField::from_poi1(&poi1_h, vec!["T".into()]).unwrap();
         nf.set_value(a.id(), "T", 1.0).unwrap();
         nf.set_value(b.id(), "T", 2.0).unwrap();
@@ -790,20 +787,20 @@ mod tests {
 
         let data = FieldData::Node(view);
         let ctx = data.for_submesh(&sm_h).unwrap();
-        let values = submesh_cell_values(&ctx, &read(&sm_h).unwrap(), "T").unwrap();
+        let values = submesh_cell_values(&ctx, &sm_h.read(), "T").unwrap();
         assert_eq!(values.len(), 1);
         assert!((values[0] - 2.0).abs() < 1e-12); // (1 + 2 + 3) / 3
     }
 
     #[test]
     fn cell_values_ignore_nodes_outside_field_support() {
-        let coords = insert(Coords::new(1).unwrap());
+        let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
         // Field defined only on `a`.
         let mut poi1 = RawSubMesh::new(coords.clone(), ElementType::POI1);
         poi1.add_cell(&[a.id()]).unwrap();
-        let poi1_h = insert(poi1);
+        let poi1_h = Handle::new(poi1);
         let mut nf = SubNodeField::from_poi1(&poi1_h, vec!["T".into()]).unwrap();
         nf.set_value(a.id(), "T", 4.0).unwrap();
         let view = NodeField::from_sub(nf).view().unwrap();
@@ -811,10 +808,10 @@ mod tests {
         // the mean of the present ones → flat value 4.0.
         let mut seg = RawSubMesh::new(coords.clone(), ElementType::SEG2);
         seg.add_cell(&[a.id(), b.id()]).unwrap();
-        let seg_h = insert(seg);
+        let seg_h = Handle::new(seg);
         let data = FieldData::Node(view);
         let ctx = data.for_submesh(&seg_h).unwrap();
-        let values = submesh_cell_values(&ctx, &read(&seg_h).unwrap(), "T").unwrap();
+        let values = submesh_cell_values(&ctx, &seg_h.read(), "T").unwrap();
         assert!((values[0] - 4.0).abs() < 1e-12);
     }
 
@@ -833,7 +830,7 @@ mod tests {
 
     /// Two TRI3 sharing the edge (b, c).
     fn two_tri_mesh_and_fespace() -> (Mesh, FiniteElementSpace) {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -856,8 +853,8 @@ mod tests {
         let target = [1.0, 2.0, 4.0]; // nodal values of cell 0
         {
             let fespace = fes.get(0).unwrap();
-            let s = read(&fespace).unwrap();
-            let mut zone = crate::store::write(&ef.get(0).unwrap()).unwrap();
+            let s = fespace.read();
+            let mut zone = ef.get(0).unwrap().write();
             for g in 0..s.gauss_count() {
                 let n = s.n_at_g(g).unwrap(); // geometric: colouring what is drawn
                 let f: f64 = (0..3).map(|i| n[i] * target[i]).sum();
@@ -867,7 +864,7 @@ mod tests {
         let data = FieldData::Element(ef.view().unwrap());
         let sm = mesh.get(0).unwrap();
         let ctx = data.for_submesh(&sm).unwrap();
-        let nodal = ctx.cell_node_values(&read(&sm).unwrap(), 0, "q").unwrap();
+        let nodal = ctx.cell_node_values(&sm.read(), 0, "q").unwrap();
         for (v, t) in nodal.iter().zip(target) {
             assert!((v - t).abs() < 1e-10, "fit {nodal:?} ≠ target {target:?}");
         }
@@ -890,14 +887,14 @@ mod tests {
         let (mesh, fes) = two_tri_mesh_and_fespace();
         let ef = ElementField::new(&fes, vec!["q".into()]).unwrap();
         {
-            let mut zone = crate::store::write(&ef.get(0).unwrap()).unwrap();
+            let mut zone = ef.get(0).unwrap().write();
             zone.set_cell_uniform(0, "q", 1.0).unwrap();
             zone.set_cell_uniform(1, "q", 5.0).unwrap();
         }
         let data = FieldData::Element(ef.view().unwrap());
         let sm = mesh.get(0).unwrap();
         let ctx = data.for_submesh(&sm).unwrap();
-        let guard = read(&sm).unwrap();
+        let guard = sm.read();
         let n0 = ctx.cell_node_values(&guard, 0, "q").unwrap();
         let n1 = ctx.cell_node_values(&guard, 1, "q").unwrap();
         // Constant Gauss values fit to the same constant nodal values;
@@ -918,11 +915,11 @@ mod tests {
         let (mesh, fes) = two_tri_mesh_and_fespace();
         let ef = ElementField::new(&fes, vec!["q".into()]).unwrap();
         // A second, unrelated submesh.
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let mut poi1 = RawSubMesh::new(coords, ElementType::POI1);
         poi1.add_cell(&[a.id()]).unwrap();
-        let other = insert(poi1);
+        let other = Handle::new(poi1);
         let data = FieldData::Element(ef.view().unwrap());
         assert!(data.for_submesh(&mesh.get(0).unwrap()).is_ok());
         assert!(data.for_submesh(&other).is_err());

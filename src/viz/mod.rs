@@ -25,10 +25,10 @@
 //! use pyrucast::atoms::ElementType;
 //! use pyrucast::containers::mesh::SubMesh;
 //! use pyrucast::atoms::Node;
-//! use pyrucast::store::insert;
+//! use pyrucast::store::Handle;
 //! use pyrucast::viz::View;
 //!
-//! let coords = insert(Coords::new(3).unwrap());
+//! let coords = Handle::new(Coords::new(3).unwrap());
 //! let a = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0]).unwrap();
 //! let b = Node::create_in(coords.clone(), &[1.0, 0.0, 0.0]).unwrap();
 //! let c = Node::create_in(coords.clone(), &[0.0, 1.0, 0.0]).unwrap();
@@ -396,7 +396,7 @@ pub fn render_submesh_with_field(
     title: Option<&str>,
 ) -> Result<()> {
     let view = view.unwrap_or_default();
-    check_revolve(&*crate::store::read(submesh)?, &view)?;
+    check_revolve(&*submesh.read(), &view)?;
     let data = field.data()?;
     let resolved = field_color::resolve_component(&data, component)?;
     match save {
@@ -439,7 +439,7 @@ pub(crate) fn node_field_points(
     use crate::viz::mesh_draw::pad3;
     let view = field.view()?;
     let coords = field.coords()?;
-    let c = crate::store::read(&coords)?;
+    let c = coords.read();
     let mut points = Vec::new();
     for nid in field.node_ids()? {
         if let Some(val) = view.value_opt(nid, component) {
@@ -454,7 +454,7 @@ pub(crate) fn node_field_points(
 pub(crate) fn node_field_is_axisymmetric(field: &crate::containers::node_field::NodeField) -> bool {
     field
         .coords()
-        .and_then(|c| Ok(crate::store::read(&c)?.is_axisymmetric()))
+        .map(|c| c.read().is_axisymmetric())
         .unwrap_or(false)
 }
 
@@ -466,7 +466,7 @@ pub(crate) fn node_field_bbox(
 ) -> Result<crate::viz::camera::Bbox3> {
     use crate::viz::mesh_draw::pad3;
     let coords = field.coords()?;
-    let c = crate::store::read(&coords)?;
+    let c = coords.read();
     let mut bb = crate::viz::camera::Bbox3::empty();
     for nid in field.node_ids()? {
         bb.extend(pad3(c.position(nid)?));

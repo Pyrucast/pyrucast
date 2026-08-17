@@ -9,7 +9,7 @@ use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteEleme
 use crate::error::{PyrucastError, Result};
 use crate::py::element::PyElement;
 use crate::py::mesh::PyMesh;
-use crate::store::{read, Handle};
+use crate::store::Handle;
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
 
@@ -40,76 +40,76 @@ impl PySubFiniteElementSpace {
     /// Element type name (e.g. `"TRI3"`).
     #[getter]
     fn element_type(&self) -> PyResult<String> {
-        Ok(read(&self.handle)?.element_type()?.name().to_string())
+        Ok(self.handle.read().element_type()?.name().to_string())
     }
 
     /// Interpolation name (e.g. `"LAGRANGE1"`).
     #[getter]
     fn interpolation(&self) -> PyResult<String> {
-        Ok(read(&self.handle)?.interpolation().name().to_string())
+        Ok(self.handle.read().interpolation().name().to_string())
     }
 
     /// Quadrature-rule name (e.g. `"GAUSS"`).
     #[getter]
     fn quadrature(&self) -> PyResult<String> {
-        Ok(read(&self.handle)?.quadrature().name().to_string())
+        Ok(self.handle.read().quadrature().name().to_string())
     }
 
     /// Reference (parametric) dimension of the elements.
     #[getter]
     fn ref_dim(&self) -> PyResult<usize> {
-        Ok(read(&self.handle)?.ref_dim()?)
+        Ok(self.handle.read().ref_dim()?)
     }
 
     /// Spatial dimension the elements live in.
     #[getter]
     fn space_dim(&self) -> PyResult<usize> {
-        Ok(read(&self.handle)?.space_dim())
+        Ok(self.handle.read().space_dim())
     }
 
     /// Whether the underlying geometry is a body of revolution — inherited from
     /// the `Coords`, so a body and its boundary can never disagree.
     #[getter]
     fn is_axisymmetric(&self) -> PyResult<bool> {
-        Ok(read(&self.handle)?.is_axisymmetric())
+        Ok(self.handle.read().is_axisymmetric())
     }
 
     /// Number of nodes per element.
     #[getter]
     fn nodes_per_cell(&self) -> PyResult<usize> {
-        Ok(read(&self.handle)?.nodes_per_cell()?)
+        Ok(self.handle.read().nodes_per_cell()?)
     }
 
     /// Number of elements (cells) in this subspace.
     fn cell_count(&self) -> PyResult<usize> {
-        Ok(read(&self.handle)?.cell_count()?)
+        Ok(self.handle.read().cell_count()?)
     }
 
     /// Number of Gauss (quadrature) points per element.
     fn gauss_count(&self) -> PyResult<usize> {
-        Ok(read(&self.handle)?.gauss_count())
+        Ok(self.handle.read().gauss_count())
     }
 
     /// Reference coordinates of the `g`-th Gauss point.
     fn gauss_xi(&self, g: usize) -> PyResult<Vec<f64>> {
-        Ok(read(&self.handle)?.gauss_xi(g)?.to_vec())
+        Ok(self.handle.read().gauss_xi(g)?.to_vec())
     }
 
     /// Weight of the `g`-th Gauss point.
     fn gauss_weight(&self, g: usize) -> PyResult<f64> {
-        Ok(read(&self.handle)?.gauss_weight(g)?)
+        Ok(self.handle.read().gauss_weight(g)?)
     }
 
     /// `N_i(ξ_g)` at the `g`-th Gauss point (flat, length `nodes_per_cell`).
     fn n_at_g(&self, g: usize) -> PyResult<Vec<f64>> {
-        Ok(read(&self.handle)?.n_at_g(g)?.to_vec())
+        Ok(self.handle.read().n_at_g(g)?.to_vec())
     }
 
     /// `∂N_i/∂ξ_j(ξ_g)` at the `g`-th Gauss point.
     ///
     /// Flat row-major: index `[i * ref_dim + j]`.
     fn dn_at_g(&self, g: usize) -> PyResult<Vec<f64>> {
-        Ok(read(&self.handle)?.dn_at_g(g)?.to_vec())
+        Ok(self.handle.read().dn_at_g(g)?.to_vec())
     }
 
     /// Jacobian `J = ∂x/∂ξ` of cell `cell_idx` at Gauss point `g`.
@@ -117,20 +117,20 @@ impl PySubFiniteElementSpace {
     /// Flat row-major buffer of length `space_dim × ref_dim`,
     /// indexed `[a * ref_dim + k]`.
     fn jacobian(&self, cell_idx: usize, g: usize) -> PyResult<Vec<f64>> {
-        Ok(read(&self.handle)?.jacobian(cell_idx, g)?)
+        Ok(self.handle.read().jacobian(cell_idx, g)?)
     }
 
     /// `|J|` — `|det(J)|` if `space_dim == ref_dim`, else
     /// `sqrt(det(JᵀJ))`. Always non-negative.
     fn det_jacobian(&self, cell_idx: usize, g: usize) -> PyResult<f64> {
-        Ok(read(&self.handle)?.det_jacobian(cell_idx, g)?)
+        Ok(self.handle.read().det_jacobian(cell_idx, g)?)
     }
 
     /// Physical derivatives `∂N_i/∂x_a` of cell `cell_idx` at Gauss
     /// point `g`. Flat row-major buffer of length
     /// `nodes_per_cell × space_dim`, indexed `[i * space_dim + a]`.
     fn dn_dx(&self, cell_idx: usize, g: usize) -> PyResult<Vec<f64>> {
-        Ok(read(&self.handle)?.dn_dx(cell_idx, g)?)
+        Ok(self.handle.read().dn_dx(cell_idx, g)?)
     }
 
     /// Element view on the `i`-th cell of this subspace.
@@ -141,7 +141,7 @@ impl PySubFiniteElementSpace {
 
     /// All elements as a Python list.
     fn elements(&self) -> PyResult<Vec<PyElement>> {
-        let n = read(&self.handle)?.cell_count()?;
+        let n = self.handle.read().cell_count()?;
         let mut out = Vec::with_capacity(n);
         for i in 0..n {
             out.push(PyElement {
@@ -153,14 +153,14 @@ impl PySubFiniteElementSpace {
 
     /// `len(subspace)` → number of elements (= number of cells).
     fn __len__(&self) -> PyResult<usize> {
-        Ok(read(&self.handle)?.cell_count()?)
+        Ok(self.handle.read().cell_count()?)
     }
 
     /// `subspace[i]` → `Element` view on element `i`. Supports negative
     /// indices and raises `IndexError` out of range so
     /// `for el in subspace:` works.
     fn __getitem__(&self, idx: isize) -> PyResult<PyElement> {
-        let n = read(&self.handle)?.cell_count()? as isize;
+        let n = self.handle.read().cell_count()? as isize;
         let normalized = if idx < 0 { n + idx } else { idx };
         if normalized < 0 || normalized >= n {
             return Err(PyIndexError::new_err(format!(
@@ -172,11 +172,11 @@ impl PySubFiniteElementSpace {
     }
 
     fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", &*read(&self.handle)?))
+        Ok(format!("{:?}", &*self.handle.read()))
     }
 
     fn __str__(&self) -> PyResult<String> {
-        Ok(format!("{}", &*read(&self.handle)?))
+        Ok(format!("{}", &*self.handle.read()))
     }
 }
 
@@ -288,7 +288,7 @@ class PyFiniteElementSpace:
         subspaces, shared with this one (no deep copy)."""
     def __or__(self, other: pyo3_stub_gen.RustType["PyFiniteElementSpace"] | pyo3_stub_gen.RustType["PySubFiniteElementSpace"]) -> pyo3_stub_gen.RustType["PyFiniteElementSpace"]:
         """`fes | other` → a fresh `FiniteElementSpace` spanning the subspaces
-        of both, in first-seen order and deduplicated by store slot."""
+        of both, in first-seen order and deduplicated by object identity."""
     def __ror__(self, other: pyo3_stub_gen.RustType["PySubFiniteElementSpace"]) -> pyo3_stub_gen.RustType["PyFiniteElementSpace"]:
         """`subspace | fes` — the mirror of `fes | subspace`, differing only in
         that the lone subspace comes first."""

@@ -94,7 +94,6 @@ __all__ = [
     "rotate",
     "select",
     "set_positions",
-    "set_swap_dir",
     "sin",
     "sinh",
     "skin",
@@ -104,7 +103,6 @@ __all__ = [
     "sqrt",
     "stiffness",
     "sub_material_field",
-    "swap_dir",
     "sweep",
     "sweep_solid",
     "symmetry_line",
@@ -3938,12 +3936,6 @@ def set_positions(field: NodeField, components: typing.Optional[typing.Sequence[
     `Coords` in place.
     """
 
-def set_swap_dir(path: builtins.str | os.PathLike | pathlib.Path) -> None:
-    r"""
-    Set the directory used to swap large objects to disk. If never set, a
-    per-process subdirectory of the system temp dir is used.
-    """
-
 def sin(field: typing.Any) -> typing.Any:
     r"""
     Element-wise sine of a field (radians).
@@ -4067,11 +4059,6 @@ def sub_material_field(sub_model: SubModel, components_and_values: typing.Sequen
     SubElementField on the sub-model's FE subspace, pre-filled with the
     given uniform value per declared component. Errors for physics that
     need no material (e.g. Dirichlet).
-    """
-
-def swap_dir() -> pathlib.Path:
-    r"""
-    Return the effective swap directory (creating it if necessary).
     """
 
 def sweep(mesh_a: Mesh, mesh_b: Mesh, n_layers: builtins.int, element_type: builtins.str = 'QUA4') -> Mesh:

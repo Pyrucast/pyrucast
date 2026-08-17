@@ -3,7 +3,7 @@ use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
-use crate::store::{insert, read, write};
+use crate::store::Handle;
 use std::collections::HashMap;
 
 /// Weld together nodes closer than `tol` (Euclidean distance), rewriting the
@@ -111,7 +111,7 @@ fn weld_into_copy(
     let mut dropped = 0;
     for sm_handle in mesh {
         let (et, color, conn) = {
-            let s = read(sm_handle)?;
+            let s = sm_handle.read();
             (s.element_type(), s.face_color(), s.connectivity().to_vec())
         };
         let npc = et.nodes_per_cell();
@@ -131,7 +131,7 @@ fn weld_into_copy(
             new_sm.add_cell(&mapped)?;
         }
 
-        result.add_sub(insert(new_sm))?;
+        result.add_sub(Handle::new(new_sm))?;
     }
 
     Ok((result, dropped))
@@ -143,7 +143,7 @@ fn weld_into_copy(
 fn weld_in_place(mesh: &Mesh, representative: &HashMap<NodeId, NodeId>) -> Result<Mesh> {
     // Pre-flight over the whole mesh: an in-place run is all-or-nothing.
     for (si, sm_handle) in mesh.into_iter().enumerate() {
-        let s = read(sm_handle)?;
+        let s = sm_handle.read();
         if s.is_sealed() {
             return Err(PyrucastError::Message(format!(
                 "merge_nodes(in_place): submesh {si} is sealed — a finite-element \
@@ -173,7 +173,7 @@ fn weld_in_place(mesh: &Mesh, representative: &HashMap<NodeId, NodeId>) -> Resul
     }
 
     for sm_handle in mesh {
-        write(sm_handle)?.remap_nodes(representative)?;
+        sm_handle.write().remap_nodes(representative)?;
     }
 
     // The same mesh back: an aggregate over the very same submesh slots (the
@@ -196,7 +196,7 @@ fn build_representatives(
     {
         let mut seen = std::collections::HashSet::new();
         for sm_handle in mesh {
-            for &n in read(sm_handle)?.connectivity() {
+            for &n in sm_handle.read().connectivity() {
                 if seen.insert(n) {
                     ids.push(n);
                 }
@@ -205,7 +205,7 @@ fn build_representatives(
     }
     ids.sort_by_key(|n| n.0);
 
-    let coords = read(coords_handle)?;
+    let coords = coords_handle.read();
     let dim = coords.dim() as usize;
     // A positive cell size even when tol == 0 (then only exactly coincident
     // points share a cell, and the tol² test keeps only true duplicates).
@@ -286,7 +286,7 @@ mod tests {
     use crate::atoms::Node;
 
     fn coords2() -> crate::store::Handle<Coords> {
-        insert(Coords::new(2).unwrap())
+        Handle::new(Coords::new(2).unwrap())
     }
 
     #[test]
@@ -349,10 +349,7 @@ mod tests {
         let merged = merge_nodes(&mesh, 1e-6, false).unwrap();
         let welded = merged.node(0, 1, 1).unwrap();
         assert_eq!(welded.id(), b.id());
-        assert_eq!(
-            read(&coords).unwrap().position(b.id()).unwrap(),
-            &[5.0, 5.0]
-        );
+        assert_eq!(coords.read().position(b.id()).unwrap(), &[5.0, 5.0]);
     }
 
     #[test]
@@ -395,7 +392,7 @@ mod tests {
         let welded = merge_nodes(&both, 1e-6, true).unwrap();
         // The same mesh back: same submesh slots, welded insides.
         assert_eq!(welded.len(), both.len());
-        assert_eq!(welded.get(0).unwrap().index(), both.get(0).unwrap().index());
+        assert!(welded.get(0).unwrap().same_object(&both.get(0).unwrap()));
 
         // b2 → b in `right` itself — the two pieces now share their node.
         assert_eq!(right.node(0, 0, 0).unwrap().id(), b.id());
@@ -415,17 +412,14 @@ mod tests {
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         mesh.add_cell(&[a.id(), b2.id()]).unwrap();
 
-        assert_eq!(read(&coords).unwrap().refcount(b.id()), 2);
+        assert_eq!(coords.read().refcount(b.id()), 2);
         merge_nodes(&mesh, 1e-6, true).unwrap();
 
         // b2's connectivity unit moved to b; b2 survives through its Node only.
-        assert_eq!(read(&coords).unwrap().refcount(b.id()), 3);
-        assert_eq!(read(&coords).unwrap().refcount(b2.id()), 1);
+        assert_eq!(coords.read().refcount(b.id()), 3);
+        assert_eq!(coords.read().refcount(b2.id()), 1);
         // The representative keeps its own coordinates — no averaging.
-        assert_eq!(
-            read(&coords).unwrap().position(b.id()).unwrap(),
-            &[5.0, 5.0]
-        );
+        assert_eq!(coords.read().position(b.id()).unwrap(), &[5.0, 5.0]);
     }
 
     #[test]
@@ -511,11 +505,11 @@ mod tests {
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
 
         // before: a in SEG2 + Node = 2.
-        assert_eq!(read(&coords).unwrap().refcount(a.id()), 2);
+        assert_eq!(coords.read().refcount(a.id()), 2);
         let merged = merge_nodes(&mesh, 1e-6, false).unwrap();
         // +1 from the result submesh.
-        assert_eq!(read(&coords).unwrap().refcount(a.id()), 3);
+        assert_eq!(coords.read().refcount(a.id()), 3);
         drop(merged);
-        assert_eq!(read(&coords).unwrap().refcount(a.id()), 2);
+        assert_eq!(coords.read().refcount(a.id()), 2);
     }
 }

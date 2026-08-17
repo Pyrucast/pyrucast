@@ -94,11 +94,11 @@ mod tests {
     use crate::atoms::ElementType;
     use crate::atoms::Node;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     #[test]
     fn circle_basic_2d() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let center = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let mesh = circle(&center, &[0.0, 0.0, 1.0], 1.0, 4, ElementType::SEG2).unwrap();
 
@@ -115,7 +115,7 @@ mod tests {
 
     #[test]
     fn circle_closed_loop() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let center = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let mesh = circle(&center, &[0.0, 0.0, 1.0], 1.0, 6, ElementType::SEG2).unwrap();
 
@@ -126,7 +126,7 @@ mod tests {
 
     #[test]
     fn circle_radius_and_center_offset() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let center = Node::create_in(coords.clone(), &[1.0, 2.0]).unwrap();
         let mesh = circle(&center, &[0.0, 0.0, 1.0], 3.0, 8, ElementType::SEG2).unwrap();
 
@@ -139,7 +139,7 @@ mod tests {
 
     #[test]
     fn circle_3d_xz_plane() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let center = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0]).unwrap();
         let mesh = circle(&center, &[0.0, 1.0, 0.0], 2.0, 8, ElementType::SEG2).unwrap();
         assert_eq!(mesh.cell_count().unwrap(), 8);
@@ -154,7 +154,7 @@ mod tests {
 
     #[test]
     fn circle_seg3_promotes_to_quadratic() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let center = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let mesh = circle(&center, &[0.0, 0.0, 1.0], 1.0, 6, ElementType::SEG3).unwrap();
         assert_eq!(mesh.element_types().unwrap(), vec![ElementType::SEG3]);
@@ -163,14 +163,14 @@ mod tests {
 
     #[test]
     fn circle_rejects_too_few_elements() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let center = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         assert!(circle(&center, &[0.0, 0.0, 1.0], 1.0, 2, ElementType::SEG2).is_err());
     }
 
     #[test]
     fn circle_rejects_nonpositive_radius() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let center = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         assert!(circle(&center, &[0.0, 0.0, 1.0], 0.0, 4, ElementType::SEG2).is_err());
         assert!(circle(&center, &[0.0, 0.0, 1.0], -1.0, 4, ElementType::SEG2).is_err());
@@ -178,14 +178,14 @@ mod tests {
 
     #[test]
     fn circle_rejects_zero_normal() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let center = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         assert!(circle(&center, &[0.0, 0.0, 0.0], 1.0, 4, ElementType::SEG2).is_err());
     }
 
     #[test]
     fn circle_rejects_unsupported_element_type() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let center = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         assert!(circle(&center, &[0.0, 0.0, 1.0], 1.0, 4, ElementType::TRI3).is_err());
     }

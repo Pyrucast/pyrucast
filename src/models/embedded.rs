@@ -56,7 +56,7 @@ use crate::models::{
 };
 use crate::ops::geom::locate_points;
 use crate::ops::mesh::barycenter;
-use crate::store::{read, Handle};
+use crate::store::Handle;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -96,7 +96,6 @@ struct Component {
 /// See the module documentation. The right-hand side `g` defaults to `0` (a
 /// rigid tie); a non-zero `g` is supplied through the load `SubNodeField` at the
 /// multiplier node's `imposed_value` component, as for `Dirichlet` / `Mpc`.
-#[derive(Serialize, Deserialize)]
 pub struct Embedded {
     /// POI1 mesh of the immersed nodes, one cell per relation-group (its cell
     /// `r` is the immersed node of relation-group `r`).
@@ -160,8 +159,7 @@ impl Embedded {
         // Immersed and host must live in the same Coords (node ids are relative).
         let coords = immersed.coords()?;
         let host_coords = host.coords()?;
-        if coords.index() != host_coords.index() || coords.generation() != host_coords.generation()
-        {
+        if !coords.same_object(&host_coords) {
             return Err(PyrucastError::Message(
                 "Embedded: immersed and host meshes must share a Coords".into(),
             ));
@@ -179,7 +177,7 @@ impl Embedded {
 
         // Physical coordinates of the immersed nodes, then locate them.
         let points: Vec<Vec<f64>> = {
-            let c = read(&coords)?;
+            let c = coords.read();
             immersed_ids
                 .iter()
                 .map(|&n| Ok(c.position(n)?.to_vec()))
@@ -273,12 +271,12 @@ impl Embedded {
 
     /// Immersed node of relation-group `r`.
     fn immersed_node(&self, r: usize) -> Result<NodeId> {
-        Ok(read(&self.immersed_mesh.get(0)?)?.connectivity()[r])
+        Ok(self.immersed_mesh.get(0)?.read().connectivity()[r])
     }
 
     /// Multiplier node of relation-group `r`.
     fn multiplier_node(&self, r: usize) -> Result<NodeId> {
-        Ok(read(&self.multiplier_mesh.get(0)?)?.connectivity()[r])
+        Ok(self.multiplier_mesh.get(0)?.read().connectivity()[r])
     }
 }
 
@@ -437,7 +435,7 @@ fn unique_nodes(mesh: &Mesh) -> Result<Vec<NodeId>> {
     let mut seen: HashSet<NodeId> = HashSet::new();
     let mut out: Vec<NodeId> = Vec::new();
     for sm in mesh {
-        for &nid in read(sm)?.connectivity() {
+        for &nid in sm.read().connectivity() {
             if seen.insert(nid) {
                 out.push(nid);
             }
@@ -451,12 +449,12 @@ mod tests {
     use super::*;
     use crate::atoms::{ElementType, Node};
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
 
     /// Build a unit HEX8 host and a two-node bar through its interior; check the
     /// weights and the relation structure.
     fn hex_and_bar() -> (Mesh, Mesh, Handle<Coords>) {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let corners = [
             [0.0, 0.0, 0.0],
             [1.0, 0.0, 0.0],
@@ -492,7 +490,7 @@ mod tests {
 
     #[test]
     fn node_outside_host_rejected() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         // A degenerate 1-node "host" made of a bar cell far from the immersed pt.
         let h0 = Node::create_in(coords.clone(), &[10.0, 10.0, 10.0]).unwrap();
         let h1 = Node::create_in(coords.clone(), &[11.0, 10.0, 10.0]).unwrap();

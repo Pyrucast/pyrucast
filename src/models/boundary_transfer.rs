@@ -51,15 +51,14 @@ use crate::models::transfer::{
     material_contract, physics_slice,
 };
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
-use crate::store::{read, Handle};
-use serde::{Deserialize, Serialize};
+use crate::store::Handle;
 
 /// Surface exchange with an imposed ambient, on a boundary FE subspace.
 ///
 /// Material data (the coefficients `h_<primal>`) is **not** stored here; it is
 /// supplied at assembly time via [`crate::ops::matrix::stiffness`], read from
 /// the boundary cells of the material field.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct BoundaryTransfer {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
     /// POI1 SubMesh covering the unique nodes of `fespace`'s submesh, built
@@ -85,8 +84,8 @@ impl BoundaryTransfer {
         physics: Physics,
     ) -> Result<Self> {
         material_contract("BoundaryTransfer", &components)?;
-        let submesh = read(&fespace)?.submesh();
-        let support = read(&submesh)?.to_poi1()?;
+        let submesh = fespace.read().submesh();
+        let support = submesh.read().to_poi1()?;
         Ok(Self {
             fespace,
             support,
@@ -157,7 +156,7 @@ impl SubModelKind for BoundaryTransfer {
     fn render(&self, _opts: &DumpOptions) -> String {
         let primal = self.primal_vars().join(", ");
         let dual = self.dual_vars().join(", ");
-        let n = read(&self.support).map(|s| s.cell_count()).unwrap_or(0);
+        let n = self.support.read().cell_count();
         format!(
             "SubModel<BoundaryTransfer>\n  primal var(s): {primal}\n  \
              dual var(s):   {dual}\n  support: {n} node(s)"

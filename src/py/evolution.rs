@@ -11,7 +11,7 @@ use crate::py::element_field::{PyElementField, PySubElementField};
 #[cfg(any(feature = "viz", feature = "stub-gen"))]
 use crate::py::mesh::PyMesh;
 use crate::py::node_field::{PyNodeField, PySubNodeField};
-use crate::store::{insert, read, Handle};
+use crate::store::Handle;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyFloat, PyList};
@@ -33,10 +33,10 @@ fn extract_sub_value(value: &Bound<'_, PyAny>) -> PyResult<SubValue> {
         return Ok(SubValue::Scalar(f));
     }
     if let Ok(s) = value.extract::<PyRef<PySubNodeField>>() {
-        return Ok(SubValue::Node((*read(&s.handle)?).clone()));
+        return Ok(SubValue::Node((*s.handle.read()).clone()));
     }
     if let Ok(s) = value.extract::<PyRef<PySubElementField>>() {
-        return Ok(SubValue::Element((*read(&s.handle)?).clone()));
+        return Ok(SubValue::Element((*s.handle.read()).clone()));
     }
     Err(PyTypeError::new_err(
         "evolution value must be a float, a SubNodeField or a SubElementField",
@@ -47,10 +47,20 @@ fn extract_sub_value(value: &Bound<'_, PyAny>) -> PyResult<SubValue> {
 fn sub_value_to_py(py: Python<'_>, value: SubValue) -> PyResult<Py<PyAny>> {
     match value {
         SubValue::Scalar(s) => Ok(PyFloat::new(py, s).into_any().unbind()),
-        SubValue::Node(f) => Ok(Py::new(py, PySubNodeField { handle: insert(f) })?.into_any()),
-        SubValue::Element(f) => {
-            Ok(Py::new(py, PySubElementField { handle: insert(f) })?.into_any())
-        }
+        SubValue::Node(f) => Ok(Py::new(
+            py,
+            PySubNodeField {
+                handle: Handle::new(f),
+            },
+        )?
+        .into_any()),
+        SubValue::Element(f) => Ok(Py::new(
+            py,
+            PySubElementField {
+                handle: Handle::new(f),
+            },
+        )?
+        .into_any()),
     }
 }
 
@@ -96,33 +106,33 @@ impl PySubEvolution {
         sub.set_abscissa_type(abscissa_type);
         sub.set_ordinate_type(ordinate_type)?;
         Ok(Self {
-            handle: insert(sub),
+            handle: Handle::new(sub),
         })
     }
 
     /// The abscissa's physical type, or `None`.
     fn abscissa_type(&self) -> PyResult<Option<String>> {
-        Ok(read(&self.handle)?.abscissa_type().map(str::to_string))
+        Ok(self.handle.read().abscissa_type().map(str::to_string))
     }
 
     /// The ordinate's physical type (scalar curves), or `None`.
     fn ordinate_type(&self) -> PyResult<Option<String>> {
-        Ok(read(&self.handle)?.ordinate_type().map(str::to_string))
+        Ok(self.handle.read().ordinate_type().map(str::to_string))
     }
 
     /// Number of samples.
     fn __len__(&self) -> PyResult<usize> {
-        Ok(read(&self.handle)?.len())
+        Ok(self.handle.read().len())
     }
 
     /// The sorted abscissas.
     fn abscissas(&self) -> PyResult<Vec<f64>> {
-        Ok(read(&self.handle)?.abscissas().to_vec())
+        Ok(self.handle.read().abscissas().to_vec())
     }
 
     /// The stored out-of-range policy name.
     fn out_of_range(&self) -> PyResult<String> {
-        Ok(read(&self.handle)?.out_of_range().name().to_string())
+        Ok(self.handle.read().out_of_range().name().to_string())
     }
 
     /// Interpolate at `x`.
@@ -145,28 +155,28 @@ impl PySubEvolution {
     ) -> PyResult<Py<PyAny>> {
         let policy = parse_policy(out_of_range)?;
         let x = x.bind(py);
-        let sub = read(&self.handle)?;
+        let sub = self.handle.read();
         if let Ok(v) = x.extract::<f64>() {
             return sub_value_to_py(py, sub.interpolate(v, policy)?);
         }
         if let Ok(f) = x.extract::<PyRef<PySubNodeField>>() {
-            let field = (*read(&f.handle)?).clone();
+            let field = (*f.handle.read()).clone();
             let out = sub.interpolate_field(&field, policy)?;
             return Ok(Py::new(
                 py,
                 PySubNodeField {
-                    handle: insert(out),
+                    handle: Handle::new(out),
                 },
             )?
             .into_any());
         }
         if let Ok(f) = x.extract::<PyRef<PySubElementField>>() {
-            let field = (*read(&f.handle)?).clone();
+            let field = (*f.handle.read()).clone();
             let out = sub.interpolate_field(&field, policy)?;
             return Ok(Py::new(
                 py,
                 PySubElementField {
-                    handle: insert(out),
+                    handle: Handle::new(out),
                 },
             )?
             .into_any());
@@ -207,8 +217,8 @@ impl PySubEvolution {
             vmin,
             vmax,
         };
-        // Clone out of the store so no read lock is held during rendering.
-        let sub = (*read(&self.handle)?).clone();
+        // Clone out so no read lock is held during rendering.
+        let sub = (*self.handle.read()).clone();
         sub.plot(
             Some(view),
             save.as_deref(),
@@ -225,11 +235,11 @@ impl PySubEvolution {
     }
 
     fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", &*read(&self.handle)?))
+        Ok(format!("{:?}", &*self.handle.read()))
     }
 
     fn __str__(&self) -> PyResult<String> {
-        Ok(format!("{}", &*read(&self.handle)?))
+        Ok(format!("{}", &*self.handle.read()))
     }
 }
 
@@ -441,7 +451,7 @@ class PyEvolution:
         shared with this one (no deep copy)."""
     def __or__(self, other: pyo3_stub_gen.RustType["PyEvolution"] | pyo3_stub_gen.RustType["PySubEvolution"]) -> pyo3_stub_gen.RustType["PyEvolution"]:
         """`evolution | other` → a fresh `Evolution` holding the curves of both,
-        in first-seen order and deduplicated by store slot."""
+        in first-seen order and deduplicated by object identity."""
     def __ror__(self, other: pyo3_stub_gen.RustType["PySubEvolution"]) -> pyo3_stub_gen.RustType["PyEvolution"]:
         """`sub_evolution | evolution` — the mirror of
         `evolution | sub_evolution`, differing only in that the lone curve

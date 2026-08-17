@@ -35,11 +35,7 @@ pub fn arc(
     let coords = center.coords();
     let coords_a = node_a.coords();
     let coords_b = node_b.coords();
-    if coords.index() != coords_a.index()
-        || coords.generation() != coords_a.generation()
-        || coords.index() != coords_b.index()
-        || coords.generation() != coords_b.generation()
-    {
+    if !coords.same_object(&coords_a) || !coords.same_object(&coords_b) {
         return Err(PyrucastError::Message(
             "arc: nodeA, center and nodeB belong to different Coords".into(),
         ));
@@ -125,12 +121,12 @@ mod tests {
     use crate::atoms::ElementType;
     use crate::atoms::Node;
     use crate::coords::Coords;
-    use crate::store::insert;
+    use crate::store::Handle;
     use std::f64::consts::PI;
 
     #[test]
     fn arc_quarter_circle_2d() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let center = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let a = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -159,7 +155,7 @@ mod tests {
 
     #[test]
     fn arc_reuses_endpoint_nodes() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let center = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let a = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[-2.0 * 0.5, 2.0 * 0.8660254037844387]).unwrap();
@@ -172,7 +168,7 @@ mod tests {
 
     #[test]
     fn arc_seg3_promotes_to_quadratic() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let center = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let a = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -184,7 +180,7 @@ mod tests {
 
     #[test]
     fn arc_rejects_unequal_radii() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let center = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let a = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[0.0, 2.0]).unwrap();
@@ -193,7 +189,7 @@ mod tests {
 
     #[test]
     fn arc_rejects_colinear_points() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let center = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let a = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[-1.0, 0.0]).unwrap();
@@ -202,7 +198,7 @@ mod tests {
 
     #[test]
     fn arc_rejects_coincident_with_center() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let center = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -211,7 +207,7 @@ mod tests {
 
     #[test]
     fn arc_rejects_zero_elems() {
-        let coords = insert(Coords::new(2).unwrap());
+        let coords = Handle::new(Coords::new(2).unwrap());
         let center = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let a = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
@@ -220,7 +216,7 @@ mod tests {
 
     #[test]
     fn arc_3d_plane() {
-        let coords = insert(Coords::new(3).unwrap());
+        let coords = Handle::new(Coords::new(3).unwrap());
         let center = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0]).unwrap();
         let a = Node::create_in(coords.clone(), &[2.0, 0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[0.0, 0.0, 2.0]).unwrap();

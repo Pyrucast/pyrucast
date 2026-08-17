@@ -35,5 +35,5 @@ lues tôt :
   `NodeField` et `ElementField` : composantes nommées, `min`/`max`,
   arithmétique scalaire et par composante.
 
-Pour le contexte informatique (store, handles, refcount, motif zone/agrégat),
+Pour le contexte informatique (handles, refcount, motif zone/agrégat),
 voir [Aspect informatique](aspect-informatique.md).
