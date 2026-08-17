@@ -17,8 +17,8 @@ use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::mesh::Mesh;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::Result;
+use crate::handle::Handle;
 use crate::ops::node_field::FluxDensity;
-use crate::store::Handle;
 
 impl NodeField {
     /// Voir [`node_field::consolidate`](fn@crate::ops::node_field::consolidate).

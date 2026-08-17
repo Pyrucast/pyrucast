@@ -21,7 +21,7 @@ use super::shell::{Facet, Shell};
 use crate::atoms::{Node, NodeId, Point3, Vector3};
 use crate::coords::Coords;
 use crate::error::Result;
-use crate::store::Handle;
+use crate::handle::Handle;
 use std::collections::HashMap;
 
 /// Every node and cell the mesher has produced, on flat arrays.
@@ -787,7 +787,7 @@ mod tests {
     use crate::atoms::ElementType;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// A closed box of six QUA4 facets, normals outward.
     fn box_front(hi: [f64; 3]) -> Front {

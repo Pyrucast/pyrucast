@@ -3,9 +3,9 @@
 use crate::atoms::Node;
 use crate::atoms::NodeId;
 use crate::coords::Coords;
+use crate::handle::Handle;
 use crate::py::coords::PyCoords;
 use crate::py::mesh::PyMesh;
-use crate::store::Handle;
 use pyo3::prelude::*;
 
 /// A node of a `Coords`: a stable identifier that carries the

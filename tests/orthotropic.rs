@@ -29,12 +29,12 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
+use pyrucast::handle::Handle;
 use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::ops::mesh;
 use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::Handle;
 use pyrucast::Result;
 
 /// Traction on the right edge.
@@ -235,7 +235,7 @@ fn a_degenerate_material_frame_is_rejected() -> Result<()> {
 fn unit_square() -> Result<(
     Vec<Node>,
     FiniteElementSpace,
-    pyrucast::store::Handle<Coords>,
+    pyrucast::handle::Handle<Coords>,
 )> {
     let h = 1.0 / N as f64;
     let coords = Handle::new(Coords::new(2)?);
@@ -297,7 +297,7 @@ fn solve_traction(
     model: &Model,
     materials: &pyrucast::containers::element_field::ElementField,
     grid: &[Node],
-    coords: &pyrucast::store::Handle<Coords>,
+    coords: &pyrucast::handle::Handle<Coords>,
 ) -> Result<NodeField> {
     let idx = |i: usize, j: usize| j * (N + 1) + i;
     let mut right_edge = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));

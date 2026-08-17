@@ -46,12 +46,12 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::Result;
+use crate::handle::Handle;
 use crate::models::transfer::{
     coefficient_indices, coefficient_name, exchange_matrix, flux_name, internal_force,
     material_contract, physics_slice,
 };
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
-use crate::store::Handle;
 
 /// Surface exchange with an imposed ambient, on a boundary FE subspace.
 ///

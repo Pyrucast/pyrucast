@@ -14,7 +14,7 @@ use crate::atoms::Node;
 use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::handle::Handle;
 use std::collections::HashMap;
 
 /// The quadratic element type of a linear one, together with its edges as
@@ -98,7 +98,7 @@ pub fn to_quadratic(mesh: &Mesh) -> Result<Mesh> {
 mod tests {
     use super::*;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     #[test]
     fn tri3_to_tri6_shares_edge_midpoints() {

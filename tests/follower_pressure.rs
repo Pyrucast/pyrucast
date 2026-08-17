@@ -32,8 +32,8 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
+use pyrucast::handle::Handle;
 use pyrucast::ops::element_field;
-use pyrucast::store::Handle;
 use pyrucast::Result;
 
 const P: f64 = 3.0; // pressure

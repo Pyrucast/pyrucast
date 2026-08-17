@@ -14,8 +14,8 @@ use crate::containers::field::Field;
 use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::containers::node_field::NodeField;
 use crate::error::Result;
+use crate::handle::Handle;
 use crate::models::kernel;
-use crate::store::Handle;
 
 /// Interpolate a nodal `field` to the Gauss points of every subspace of
 /// `fespace`: `f(ξ_g) = Σ_i f_i N_i(ξ_g)`.
@@ -56,7 +56,7 @@ mod tests {
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::node_field::SubNodeField;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// Constant nodal field ⇒ same value at every Gauss point, same component
     /// names as the input.

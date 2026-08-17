@@ -26,11 +26,11 @@ mod tests {
     use crate::containers::mesh::SubMesh;
     use crate::containers::node_field::SubNodeField;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// Single-zone POI1 field over the given nodes (attached to `coords`).
     fn poi1_field(
-        coords: &crate::store::Handle<Coords>,
+        coords: &crate::handle::Handle<Coords>,
         nodes: &[&Node],
         components: Vec<String>,
     ) -> NodeField {

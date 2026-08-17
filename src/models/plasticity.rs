@@ -52,11 +52,11 @@ use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
+use crate::handle::Handle;
 use crate::models::elasticity::{self, ElasticityModel};
 use crate::models::owned_components;
 use crate::models::plastic::{self, MatParams, PlasticLaw, PrevState};
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
-use crate::store::Handle;
 
 /// Axis suffixes for the vector components, indexed by spatial direction.
 const AXES: [&str; 3] = ["x", "y", "z"];
@@ -597,7 +597,7 @@ mod tests {
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::Mesh;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     fn unit_quad(model: ElasticityModel) -> Plasticity {
         let coords = Handle::new(Coords::new(2).unwrap());

@@ -1,4 +1,4 @@
-//! Operators that **write into the coordinate store** — the only two that
+//! Operators that **write into the coordinates** — the only two that
 //! do.
 //!
 //! They are the write side of
@@ -110,8 +110,8 @@ mod tests {
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::node_field::SubNodeField;
     use crate::coords::Coords;
+    use crate::handle::Handle;
     use crate::ops::node_field::positions;
-    use crate::store::Handle;
 
     #[test]
     fn set_writes_active_config() {

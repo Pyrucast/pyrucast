@@ -3,7 +3,7 @@ use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::handle::Handle;
 use std::collections::HashMap;
 
 /// Weld together nodes closer than `tol` (Euclidean distance), rewriting the
@@ -104,7 +104,7 @@ fn summary(welded: usize, dropped: usize, tol: f64, in_place: bool) -> String {
 /// many cells were dropped.
 fn weld_into_copy(
     mesh: &Mesh,
-    coords_handle: &crate::store::Handle<Coords>,
+    coords_handle: &crate::handle::Handle<Coords>,
     representative: &HashMap<NodeId, NodeId>,
 ) -> Result<(Mesh, usize)> {
     let mut result = Mesh::empty();
@@ -188,7 +188,7 @@ fn weld_in_place(mesh: &Mesh, representative: &HashMap<NodeId, NodeId>) -> Resul
 /// representative of a cluster is always its smallest id.
 fn build_representatives(
     mesh: &Mesh,
-    coords_handle: &crate::store::Handle<Coords>,
+    coords_handle: &crate::handle::Handle<Coords>,
     tol: f64,
 ) -> Result<HashMap<NodeId, NodeId>> {
     // Unique referenced ids, ascending.
@@ -285,7 +285,7 @@ mod tests {
     use crate::atoms::ElementType;
     use crate::atoms::Node;
 
-    fn coords2() -> crate::store::Handle<Coords> {
+    fn coords2() -> crate::handle::Handle<Coords> {
         Handle::new(Coords::new(2).unwrap())
     }
 

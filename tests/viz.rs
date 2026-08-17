@@ -11,7 +11,7 @@ use pyrucast::atoms::element_type::ElementType;
 use pyrucast::atoms::node::Node;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::coords::Coords;
-use pyrucast::store::Handle;
+use pyrucast::handle::Handle;
 use pyrucast::viz::{ColorScale, MeshStyle, View};
 
 fn tmpdir() -> std::path::PathBuf {

@@ -22,7 +22,7 @@ use crate::atoms::{ElementType, NodeId};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::handle::Handle;
 use std::collections::HashMap;
 
 /// Undirected edge key: the two node ids sorted, so an edge and its reverse
@@ -285,10 +285,10 @@ mod tests {
     use super::*;
     use crate::atoms::Node;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// signed area of a node-id loop, read from `coords` (2-D).
-    fn signed_area(coords: &crate::store::Handle<Coords>, loop_ids: &[NodeId]) -> f64 {
+    fn signed_area(coords: &crate::handle::Handle<Coords>, loop_ids: &[NodeId]) -> f64 {
         let c = coords.read();
         let n = loop_ids.len();
         let mut a = 0.0;

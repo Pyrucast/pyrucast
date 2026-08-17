@@ -51,9 +51,9 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
+use crate::handle::Handle;
 use crate::models::symmetry::{self, MaterialSymmetry};
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
-use crate::store::Handle;
 
 /// Column DOF name of a species — `c_H2`.
 pub fn primal_var(species: &str) -> String {

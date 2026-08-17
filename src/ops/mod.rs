@@ -13,7 +13,7 @@
 //! - [`node_field`] — nodal derivations and nodal assembly.
 //! - [`element_field`] — kinematics, material data, constitutive law.
 //! - [`matrix`] — the assemblers proper (`stiffness`, `mass`, `tangent`, …).
-//! - [`coords`] — the two operators that write back into the coordinate store.
+//! - [`coords`] — the two operators that write back into the coordinates.
 //!
 //! A third case: the **generic** operator, whose product is a container —
 //! always — but not a *determined* one. `abs` yields a `NodeField` or an

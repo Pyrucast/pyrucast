@@ -16,7 +16,7 @@ use crate::atoms::Node;
 use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::handle::Handle;
 
 /// Sweep between two SEG2 contour meshes to produce a QUA4 strip.
 ///

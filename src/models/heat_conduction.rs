@@ -11,10 +11,10 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::Result;
+use crate::handle::Handle;
 use crate::models::owned_components;
 use crate::models::symmetry::{self, MaterialSymmetry};
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
-use crate::store::Handle;
 
 /// Column DOF name (temperature).
 pub const PRIMAL_VAR: &str = "T";
@@ -395,7 +395,7 @@ mod tests {
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::Mesh;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// HeatConduction on a single SEG2 of length `L`.
     fn seg2_hc(length: f64) -> HeatConduction {

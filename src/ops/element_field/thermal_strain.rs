@@ -20,9 +20,9 @@ use crate::containers::element_field::ElementField;
 use crate::containers::field::SubField;
 use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::error::{PyrucastError, Result};
+use crate::handle::Handle;
 use crate::models::kernel;
 use crate::ops::element_field::gradient::AXES;
-use crate::store::Handle;
 
 /// Temperature component read from the per-element temperature field.
 const TEMPERATURE: &str = "T";
@@ -131,7 +131,7 @@ mod tests {
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     fn tri3_fes_2d() -> FiniteElementSpace {
         let coords = Handle::new(Coords::new(2).unwrap());

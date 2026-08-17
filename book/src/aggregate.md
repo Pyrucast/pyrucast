@@ -13,7 +13,7 @@ toutes ; chaque chapitre d'objet n'en redonne que les spécificités.
 ## Principe : une liste de handles
 
 Un agrégat est, au fond, **un `Vec<Handle<Sub>>`** : une liste de handles vers
-des sous-objets vivant dans le store. Il ne copie jamais ses zones — il en
+des sous-objets adressés par handle. Il ne copie jamais ses zones — il en
 **partage** les handles (refcount). Le trait `Aggregate` dérive toute la
 mécanique d'accès de deux accesseurs seulement (`items()` / `items_mut()`), si
 bien qu'ajouter un nouvel agrégat ne duplique aucun code d'indexation.

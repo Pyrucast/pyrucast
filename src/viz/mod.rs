@@ -25,7 +25,7 @@
 //! use pyrucast::atoms::ElementType;
 //! use pyrucast::containers::mesh::SubMesh;
 //! use pyrucast::atoms::Node;
-//! use pyrucast::store::Handle;
+//! use pyrucast::handle::Handle;
 //! use pyrucast::viz::View;
 //!
 //! let coords = Handle::new(Coords::new(3).unwrap());
@@ -386,7 +386,7 @@ pub(crate) fn render_mesh_with_field(
 /// component. Same semantics as `render_mesh_with_field`.
 #[allow(clippy::too_many_arguments)] // see `Mesh::plot_with_field`
 pub fn render_submesh_with_field(
-    submesh: &crate::store::Handle<crate::containers::mesh::SubMesh>,
+    submesh: &crate::handle::Handle<crate::containers::mesh::SubMesh>,
     field: FieldArg<'_>,
     component: Option<&str>,
     scale: ColorScale,

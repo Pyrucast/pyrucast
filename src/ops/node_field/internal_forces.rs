@@ -27,8 +27,8 @@ use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::containers::model::Model;
 use crate::containers::node_field::NodeField;
 use crate::error::Result;
+use crate::handle::Handle;
 use crate::models::{continuum_internal_force_element, kernel};
-use crate::store::Handle;
 
 /// Axis suffixes for the displacement/force components of the model-free
 /// continuum operator (`f_x`, `f_y`, `f_z`).

@@ -2,7 +2,7 @@ use crate::aggregate::Aggregate;
 use crate::atoms::NodeId;
 use crate::containers::mesh::Mesh;
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::handle::Handle;
 use std::collections::HashSet;
 
 /// Keep the elements of `mesh` that **rest on** the nodes of `points` —
@@ -73,11 +73,11 @@ mod tests {
     use crate::atoms::{ElementType, Node};
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// Five nodes on a line and a TRI3 mesh of two triangles sharing edge
     /// (1, 2): cell0 = (0,1,2), cell1 = (1,3,4). Returns (coords, nodes, mesh).
-    fn two_triangles() -> (crate::store::Handle<Coords>, Vec<Node>, Mesh) {
+    fn two_triangles() -> (crate::handle::Handle<Coords>, Vec<Node>, Mesh) {
         let coords = Handle::new(Coords::new(2).unwrap());
         #[rustfmt::skip]
         let n: Vec<Node> = [

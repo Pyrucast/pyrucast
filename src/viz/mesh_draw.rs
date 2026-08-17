@@ -20,7 +20,7 @@ use crate::atoms::RgbColor;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::Result;
-use crate::store::Handle;
+use crate::handle::Handle;
 use crate::viz::camera::{Bbox3, Projector};
 use crate::viz::drawable::{pl_err, Drawable};
 use crate::viz::View;
@@ -902,7 +902,7 @@ mod tests {
     use super::*;
     use crate::atoms::Node;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     fn unit_viewport() -> Viewport {
         Viewport {

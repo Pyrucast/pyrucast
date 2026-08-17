@@ -86,9 +86,9 @@ internes destinées au remappage global, chaque consommateur y applique le facte
 lui-même.
 
 `&Matrix * s` / `&Matrix / s` mettent à l'échelle une matrice entière : chaque bloc est
-**cloné** dans un nouveau slot de store avec son facteur ajusté — jamais muté en place.
+**cloné** dans un nouvel objet avec son facteur ajusté — jamais muté en place.
 C'est nécessaire car `add_sub`/`union`/`filter`/`subset` **partagent** les
-`Handle<SubMatrix>` (refcount, même slot) plutôt que de les copier ; muter le facteur
+`Handle<SubMatrix>` (même objet, compté) plutôt que de les copier ; muter le facteur
 en place risquerait de rescaler silencieusement toute autre `Matrix` référençant le
 même bloc. Comme pour `filter`, le résultat n'est **pas assemblé** — `finalize()` ou
 `m.assemble()` avant de résoudre.

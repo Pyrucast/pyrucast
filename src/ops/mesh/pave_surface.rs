@@ -134,12 +134,12 @@ mod tests {
     use crate::atoms::{Node, NodeId, Point2};
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
     use std::collections::HashMap;
     use std::sync::atomic::AtomicBool;
 
     /// A closed SEG2 loop through `pts`, in the order given.
-    fn loop_mesh(coords: crate::store::Handle<Coords>, pts: &[(f64, f64)]) -> Mesh {
+    fn loop_mesh(coords: crate::handle::Handle<Coords>, pts: &[(f64, f64)]) -> Mesh {
         let ids: Vec<NodeId> = pts
             .iter()
             .map(|&(x, y)| Node::create_in(coords.clone(), &[x, y]).unwrap().id())

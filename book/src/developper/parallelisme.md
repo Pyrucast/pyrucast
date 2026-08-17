@@ -8,7 +8,7 @@ parallélisme est **toujours actif** ; le nombre de threads suit
 
 ## Le parallélisme est porté *au-dessus* des noyaux
 
-Principe central : **un noyau de physique ne voit jamais rayon, le store, ni un
+Principe central : **un noyau de physique ne voit jamais rayon, un handle, ni un
 verrou.** La parallélisation vit dans une couche au-dessus, de sorte qu'ajouter
 une physique ou un opérateur revient à écrire des mathématiques **séquentielles
 pures**.
@@ -24,7 +24,7 @@ pures**.
 ## Zéro-copie
 
 Les régions parallèles **n'effectuent pas de copies intermédiaires**. Plutôt que
-de recopier les données du store dans des `Vec` avant de calculer, on **tient les
+de recopier les données dans des `Vec` avant de calculer, on **tient les
 read-guards** pendant toute la région parallèle et on **emprunte les tranches
 `&[f64]`** en place (`SubField::values()`, `SubMesh::connectivity()`,
 `dn_dx` calculé à la volée). Les verrous de lecture sont concurrents : seuls les

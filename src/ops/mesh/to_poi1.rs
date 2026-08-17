@@ -29,7 +29,7 @@ mod tests {
     use crate::atoms::Node;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     #[test]
     fn tri3_submesh_becomes_unique_node_list() {

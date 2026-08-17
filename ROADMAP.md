@@ -40,7 +40,7 @@ Toujours liées : `serde`, `bincode`, `nalgebra`, `nalgebra-sparse`, `faer` (LU 
 
 ### Definition of Done par objet
 
-1. Struct Rust vivant dans le Store (adressable par `Handle<T>`)
+1. Struct Rust adressable par `Handle<T>`
 2. `Debug` (structurel) + `Display` (résumé façon listing cast3m)
 3. Tests unitaires Rust + doctests sur tout l'API public
 4. Binding PyO3 : `__repr__` → `Debug`, `__str__` → `Display`
@@ -59,11 +59,10 @@ book, 26 exemples, 6 scripts de formation, **100 fonctions exposées en Python**
 
 ## Socle mémoire
 
-Store à handles générationnels : slab par type, free-list, recyclage, détection
-des handles périmés (`StaleHandle`). Refcount **à deux niveaux** — les slots
-d'un côté, les nœuds d'une `Coords` de l'autre, avec `gc()`. Verrou par objet
-(`RwLock` de cellule), guards possédés permettant la lecture **en place**.
-Swap disque `Resident / OnDisk / Free`, transparent vis-à-vis de `Drop`.
+`Handle<T>` = `Arc<RwLock<T>>` : comptage par l'`Arc`, `read`/`write`
+infaillibles, identité par `same_object`. Refcount **à deux niveaux** — les
+objets d'un côté, les nœuds d'une `Coords` de l'autre, avec `gc()`. Verrou par
+objet, guards possédés permettant la lecture **en place**.
 `compact()` rend la mémoire de queue.
 
 ## Conteneurs et atomes

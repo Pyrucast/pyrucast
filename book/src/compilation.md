@@ -142,7 +142,7 @@ use pyrucast::ops::mesh;
 let mesh = mesh::triangulate_surface(&contour, ElementType::TRI3, Some(1.0))?;
 ```
 
-Tout le cœur (`containers`, `ops`, `interrupt`, `store`, …) est disponible et
+Tout le cœur (`containers`, `ops`, `interrupt`, `handle`, …) est disponible et
 PyO3-free. Seule la couche `py` (les `#[pyclass]`) demande `python-api`. Pour
 interrompre un calcul long depuis du Rust pur, voir
 [Interrompre une fonction](developper/interrompre-une-fonction.md).

@@ -16,11 +16,11 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
+use pyrucast::handle::Handle;
 use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::ops::mesh;
 use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::unilateral;
-use pyrucast::store::Handle;
 use pyrucast::Result;
 
 const E: f64 = 100.0;

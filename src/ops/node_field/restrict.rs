@@ -3,7 +3,7 @@ use crate::containers::field::{Field, SubField};
 use crate::containers::mesh::Mesh;
 use crate::containers::node_field::{NodeField, NodeFieldView, SubNodeField};
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::handle::Handle;
 
 /// Fill `sub` (already on its target support) with the values of `source`,
 /// component by component, node by node: a `(node, component)` pair that
@@ -115,14 +115,14 @@ mod tests {
     use crate::atoms::Node;
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// Build a single-zone POI1 field on `n` fresh 1-D nodes;
     /// returns (coords, nodes, field).
     fn poi1_field(
         n: usize,
         components: Vec<String>,
-    ) -> (crate::store::Handle<Coords>, Vec<Node>, NodeField) {
+    ) -> (crate::handle::Handle<Coords>, Vec<Node>, NodeField) {
         let coords = Handle::new(Coords::new(1).unwrap());
         let nodes: Vec<Node> = (0..n)
             .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())

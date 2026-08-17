@@ -248,7 +248,7 @@ linéaire, le résultat vaut `K·u`.
 Les noyaux qu'une physique écrit — `integrate_point` (un point de Gauss),
 `element_matrix` & consorts (la matrice élémentaire d'une cellule),
 `internal_force_element` — sont **séquentiels et purs** : ils ne voient ni rayon,
-ni le store, ni un verrou. Les *drivers* de `models::kernel` portent la
+ni un handle, ni un verrou. Les *drivers* de `models::kernel` portent la
 parallélisation et le zéro-copie au-dessus d'eux. Voir
 [Parallélisme](developper/parallelisme.md).
 

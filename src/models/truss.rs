@@ -19,9 +19,9 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
+use crate::handle::Handle;
 use crate::models::owned_components;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
-use crate::store::Handle;
 
 /// Axis suffixes for the vector components, indexed by spatial direction.
 pub(crate) const AXES: [&str; 3] = ["x", "y", "z"];
@@ -370,7 +370,7 @@ mod tests {
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::Mesh;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// Truss on a single inclined SEG2 in 2-D, returns `(model, a_id, b_id)`.
     fn inclined_bar(e: f64, area: f64, dx: f64, dy: f64) -> (Truss, NodeId, NodeId, f64, [f64; 2]) {

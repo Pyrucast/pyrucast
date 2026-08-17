@@ -68,7 +68,7 @@ mod tests {
     use crate::atoms::ElementType;
     use crate::atoms::Node;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     #[test]
     fn line_basic() {

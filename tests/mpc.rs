@@ -15,12 +15,12 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::{Model, SubModel};
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
+use pyrucast::handle::Handle;
 use pyrucast::models::mpc::MpcTerm;
 use pyrucast::ops::matrix::stiffness;
 use pyrucast::ops::mesh::barycenter;
 use pyrucast::ops::solver::eliminate::{self, Condensation};
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::Handle;
 use pyrucast::Result;
 
 const N_ELEMS: usize = 4;

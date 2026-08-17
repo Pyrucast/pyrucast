@@ -7,8 +7,8 @@ use pyrucast::atoms::node::Node;
 use pyrucast::atoms::NodeId;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::coords::Coords;
+use pyrucast::handle::Handle;
 use pyrucast::persist::Persist;
-use pyrucast::store::Handle;
 use pyrucast::{PyrucastError, Result};
 
 #[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
@@ -72,7 +72,7 @@ fn full_handle_cycle_via_public_api() {
 // ─── Coords + Node integration tests (Phase 2) ───────────────────────
 
 #[test]
-fn coords_cycle_via_store() -> Result<()> {
+fn coords_cycle_via_handle() -> Result<()> {
     let h = Handle::new(Coords::new(2)?);
     let a: NodeId = h.write().add_node(&[0.0, 0.0])?;
     let b: NodeId = h.write().add_node(&[1.0, 0.0])?;

@@ -28,11 +28,11 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
+use pyrucast::handle::Handle;
 use pyrucast::models::radiation::STEFAN_BOLTZMANN;
 use pyrucast::models::Physics;
 use pyrucast::ops::element_field;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::Handle;
 use pyrucast::Result;
 
 const EMIS: f64 = 0.8; // emissivity
@@ -200,7 +200,7 @@ fn a_slab_settles_at_the_imposed_temperature() -> Result<()> {
 // ─── Fixtures ───────────────────────────────────────────────────────────────
 
 struct Fixture {
-    coords: pyrucast::store::Handle<Coords>,
+    coords: pyrucast::handle::Handle<Coords>,
     /// The two nodes of the radiating edge.
     edge: Vec<Node>,
     boundary_fes: FiniteElementSpace,

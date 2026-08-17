@@ -55,7 +55,7 @@ use crate::containers::field::SubField;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::Result;
-use crate::store::Handle;
+use crate::handle::Handle;
 
 use crate::atoms::Band;
 
@@ -221,7 +221,7 @@ mod tests {
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::node_field::{NodeField, SubNodeField};
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// Single-zone POI1 NodeField over `n` 1-D nodes; returns (nodes, field).
     fn poi1_field(n: usize, components: Vec<String>) -> (Vec<Node>, NodeField) {

@@ -14,7 +14,7 @@ du **conteneur qu'il produit**.
 src/
 ├── lib.rs              # racine de la crate + #[pymodule] (enregistrement Python)
 │
-├── store.rs            # Handle<T> : Arc<RwLock<T>>, guards possédés, identité
+├── handle.rs           # Handle<T> : Arc<RwLock<T>>, guards possédés, identité
 ├── persist.rs          # trait Persist (serde + bincode), format portable
 ├── error.rs            # PyrucastError + Result (l'unique type d'erreur)
 ├── dump.rs             # trait Dump (3ᵉ niveau d'affichage : contenu intégral)
@@ -156,7 +156,7 @@ flowchart LR
         nsparse["nalgebra-sparse<br/><small>creux CSR/CSC — matrix, assemble</small>"]
         faer["faer<br/><small>LU creux — ops::solver</small>"]
         rayon["rayon<br/><small>parallel/, models::kernel</small>"]
-        parking["parking_lot<br/><small>guards owned — store/</small>"]
+        parking["parking_lot<br/><small>guards owned — handle/</small>"]
         serde["serde<br/><small>Persist — persist/ (+ derive)</small>"]
         bincode["bincode<br/><small>format binaire — persist/</small>"]
         paste["paste<br/><small>macros — aggregate/</small>"]

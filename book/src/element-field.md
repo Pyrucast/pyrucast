@@ -109,7 +109,7 @@ use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::atoms::{ElementType, Node};
 use pyrucast::coords::Coords;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
-use pyrucast::store::Handle;
+use pyrucast::handle::Handle;
 
 let coords = Handle::new(Coords::new(2).unwrap());
 let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();

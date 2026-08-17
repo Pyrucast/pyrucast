@@ -16,7 +16,7 @@
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
 //! use pyrucast::containers::mesh::{Mesh, SubMesh};
 //! use pyrucast::atoms::Node;
-//! use pyrucast::store::Handle;
+//! use pyrucast::handle::Handle;
 //!
 //! let coords = Handle::new(Coords::new(1).unwrap());
 //! let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
@@ -39,7 +39,7 @@ use crate::atoms::Cell;
 use crate::atoms::NodeId;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::handle::Handle;
 
 /// Lightweight view on a single element of a [`SubFiniteElementSpace`].
 #[derive(Clone)]
@@ -230,7 +230,7 @@ mod tests {
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     fn seg2_fes() -> (Handle<Coords>, Vec<Node>, FiniteElementSpace) {
         let coords = Handle::new(Coords::new(1).unwrap());

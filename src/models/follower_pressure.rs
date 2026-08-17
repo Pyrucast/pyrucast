@@ -80,11 +80,11 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
+use crate::handle::Handle;
 use crate::models::owned_components;
 use crate::models::{
     CellGeom, Contribution, Domain, MatrixKind, MatrixLayout, Physics, SubModelKind,
 };
-use crate::store::Handle;
 
 /// Axis suffixes for the vector components, indexed by spatial direction.
 const AXES: [&str; 3] = ["x", "y", "z"];

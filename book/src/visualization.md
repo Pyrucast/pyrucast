@@ -85,7 +85,7 @@ use pyrucast::coords::Coords;
 use pyrucast::atoms::ElementType;
 use pyrucast::containers::mesh::SubMesh;
 use pyrucast::atoms::Node;
-use pyrucast::store::Handle;
+use pyrucast::handle::Handle;
 use pyrucast::viz::View;
 use std::path::Path;
 

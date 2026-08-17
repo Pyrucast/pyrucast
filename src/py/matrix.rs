@@ -3,11 +3,11 @@
 
 use crate::aggregate::Aggregate;
 use crate::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+use crate::handle::Handle;
 use crate::models::Physics;
 use crate::py::mesh::submesh_handle;
 use crate::py::node::PyNode;
 use crate::py::node_field::PyNodeField;
-use crate::store::Handle;
 use pyo3::prelude::*;
 
 /// Flattened COO entries as exposed to Python: one

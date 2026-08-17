@@ -26,10 +26,10 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
+use pyrucast::handle::Handle;
 use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::ops::element_field::material_field;
 use pyrucast::ops::{element_field, matrix};
-use pyrucast::store::Handle;
 
 /// Plane-stress elasticity on an `n × n` QUA4 grid: model, material field, and a
 /// strain field ready for `element_field::behavior::integrate`.

@@ -40,12 +40,12 @@ pub mod containers;
 pub mod coords;
 pub mod dump;
 pub mod error;
+pub mod handle;
 pub mod interrupt;
 pub mod models;
 pub mod ops;
 pub mod parallel;
 pub mod persist;
-pub mod store;
 
 #[cfg(feature = "python-api")]
 pub mod py;

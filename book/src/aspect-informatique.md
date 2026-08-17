@@ -35,7 +35,7 @@ fonction libre* est dans [Conventions](conventions.md).
 
 Les objets ne se relient pas entre eux par des références Rust directes, mais
 par un **`Handle<T>`** : une référence comptée munie de son propre verrou
-(`Arc<RwLock<T>>`). Pas de store à interroger, pas de session à passer — le
+(`Arc<RwLock<T>>`). Pas de registre à interroger, pas de session à passer — le
 handle *est* l'adresse de l'objet.
 
 Trois propriétés en découlent, et elles structurent tout le reste de la

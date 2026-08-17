@@ -30,8 +30,8 @@ use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::matrix::{ComputedRecipe, Matrix, SubMatrix};
 use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
+use crate::handle::Handle;
 use crate::models::{Contribution, MatrixKind};
-use crate::store::Handle;
 use nalgebra_sparse::{CooMatrix, CsrMatrix};
 
 /// Assemble the stiffness matrix `K` for `model`.
@@ -77,7 +77,7 @@ pub fn assemble_kind(
     // multi-block physics — stiffness only) carries its values.
     for sub_h in model {
         // Build the contribution(s) under a read guard, then drop it before
-        // `add_sub` (which takes the store write lock).
+        // `add_sub` (which takes the aggregate's write lock).
         let built = {
             let sub = sub_h.read();
             // Generic over the physics: a sub-model needs material data iff it

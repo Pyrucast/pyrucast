@@ -2,7 +2,7 @@
 //!
 //! The element-field twin of [`crate::ops::node_field::consolidate`](fn@crate::ops::node_field::consolidate). Sub-fields
 //! defined on the *same* `SubFiniteElementSpace` (matched by handle identity,
-//! [`crate::store::Handle::same_object`]) are fused into a single
+//! [`crate::handle::Handle::same_object`]) are fused into a single
 //! [`SubElementField`] carrying the **union of their components**. A
 //! component defined by several of those sub-fields must hold the **same**
 //! value at every `(cell, Gauss point)` (exact comparison) — anything else
@@ -19,7 +19,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::field::SubField;
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::handle::Handle;
 
 /// Fuse the zones of `field` that share the same support
 /// `SubFiniteElementSpace`. See the module documentation. Errors if two
@@ -162,7 +162,7 @@ mod tests {
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// Single-subspace Lagrange-1 FE space over one TRI3 cell.
     fn one_tri3_fes() -> FiniteElementSpace {

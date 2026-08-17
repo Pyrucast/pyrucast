@@ -31,7 +31,7 @@ use crate::containers::mesh::{Mesh, SubMesh};
 use crate::containers::node_field::SubNodeField;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::handle::Handle;
 use serde::{Deserialize, Serialize};
 
 pub mod beam;

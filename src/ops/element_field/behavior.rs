@@ -27,7 +27,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::element_field::ElementField;
 use crate::containers::model::Model;
 use crate::error::Result;
-use crate::store::Handle;
+use crate::handle::Handle;
 
 /// Integrate the constitutive law of `model` (Cast3m `COMP`), stepping A → B.
 ///

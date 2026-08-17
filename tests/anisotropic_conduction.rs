@@ -31,10 +31,10 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
+use pyrucast::handle::Handle;
 use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::ops::mesh;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::Handle;
 use pyrucast::Result;
 
 /// `N×N` QUA4 grid on the unit square.
@@ -153,7 +153,7 @@ fn orthotropy_with_equal_conductivities_ignores_its_frame() -> Result<()> {
 fn unit_square() -> Result<(
     Vec<Node>,
     FiniteElementSpace,
-    pyrucast::store::Handle<Coords>,
+    pyrucast::handle::Handle<Coords>,
 )> {
     let h = 1.0 / N as f64;
     let coords = Handle::new(Coords::new(2)?);

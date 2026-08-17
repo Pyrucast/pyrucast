@@ -36,7 +36,7 @@
 //! use pyrucast::ops::matrix;
 //! use pyrucast::ops::mesh;
 //! use pyrucast::ops::solver::lu::solve;
-//! use pyrucast::store::Handle;
+//! use pyrucast::handle::Handle;
 //!
 //! // 1-D Poisson on [0, 1] with one SEG2 element, k = 1.
 //! let coords = Handle::new(Coords::new(1).unwrap());
@@ -328,7 +328,7 @@ mod tests {
     use crate::containers::model::{Model, SubModel};
     use crate::containers::node_field::SubNodeField;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// 1-D Poisson `-u'' = 0` on `[0, 1]` with `u(0) = 0` and `u(1) = 1`,
     /// discretized with `n` SEG2 elements. The analytical solution is

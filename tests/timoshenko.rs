@@ -18,9 +18,9 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
+use pyrucast::handle::Handle;
 use pyrucast::ops::mesh;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::Handle;
 use pyrucast::Result;
 
 #[test]
@@ -98,7 +98,7 @@ fn timoshenko_cantilever_converges_without_locking() -> Result<()> {
 #[test]
 fn timoshenko_section_forces_cantilever() -> Result<()> {
     use pyrucast::aggregate::Aggregate;
-    use pyrucast::store::Handle;
+    use pyrucast::handle::Handle;
 
     const E: f64 = 1.0;
     const I: f64 = 1.0;

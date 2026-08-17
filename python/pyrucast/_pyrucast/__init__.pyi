@@ -647,7 +647,7 @@ class Evolution:
     def __or__(self, other: Evolution  |  SubEvolution) -> Evolution:
         r"""
         `evolution | other` → a fresh `Evolution` holding the curves of both,
-        in first-seen order and deduplicated by store slot.
+        in first-seen order and deduplicated by object identity.
         """
     def __ror__(self, other: SubEvolution) -> Evolution:
         r"""
@@ -761,7 +761,7 @@ class FiniteElementSpace:
     def __or__(self, other: FiniteElementSpace  |  SubFiniteElementSpace) -> FiniteElementSpace:
         r"""
         `fes | other` → a fresh `FiniteElementSpace` spanning the subspaces
-        of both, in first-seen order and deduplicated by store slot.
+        of both, in first-seen order and deduplicated by object identity.
         """
     def __ror__(self, other: SubFiniteElementSpace) -> FiniteElementSpace:
         r"""
@@ -927,7 +927,7 @@ class Matrix:
     def __or__(self, other: Matrix  |  SubMatrix) -> Matrix:
         r"""
         `matrix | other` → a fresh `Matrix` holding the blocks of both, in
-        first-seen order and deduplicated by store slot. Assemble the global
+        first-seen order and deduplicated by object identity. Assemble the global
         operator this way, then call `finalize()` before solving.
         """
     def __ror__(self, other: SubMatrix) -> Matrix:
@@ -1042,7 +1042,7 @@ class Mesh:
     def __or__(self, other: Mesh  |  SubMesh) -> Mesh:
         r"""
         `mesh | other` → a fresh `Mesh` holding the zones of both, in
-        first-seen order. A zone already present (same store slot) is not added
+        first-seen order. A zone already present (the same object) is not added
         twice; the others are shared, not copied. All zones must hang off the
         same `Coords`.
         """
@@ -1843,7 +1843,7 @@ class Model:
     def __or__(self, other: Model  |  SubModel) -> Model:
         r"""
         `model | other` → a fresh `Model` holding the terms of both, in
-        first-seen order and deduplicated by store slot. This is how a problem
+        first-seen order and deduplicated by object identity. This is how a problem
         is composed: physics | boundary conditions | constraints.
         """
     def __ror__(self, other: SubModel) -> Model:

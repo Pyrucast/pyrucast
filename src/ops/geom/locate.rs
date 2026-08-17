@@ -462,7 +462,7 @@ mod tests {
     use crate::atoms::Node;
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// A unit HEX8 at the origin; locate its centre and a corner.
     #[test]

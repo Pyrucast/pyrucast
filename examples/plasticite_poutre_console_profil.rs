@@ -71,6 +71,7 @@ use pyrucast::containers::mesh::Mesh;
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
+use pyrucast::handle::Handle;
 use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::ops::element_field::behavior::integrate;
 use pyrucast::ops::element_field::deformation;
@@ -83,7 +84,6 @@ use pyrucast::ops::node_field::internal_forces;
 use pyrucast::ops::node_field::{flux, FluxDensity};
 use pyrucast::ops::node_field::{positions, restrict, restrict_like};
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::Handle;
 use pyrucast::Result;
 
 /// Profondeur de l'historique d'Anderson (nombre de couples `(u, g)` gardés).

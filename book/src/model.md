@@ -218,7 +218,7 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::model::Model;
 use pyrucast::ops::{assemble, build, mesher};
-use pyrucast::store::Handle;
+use pyrucast::handle::Handle;
 
 // 1-D : maillage [0, 1] à un seul SEG2.
 let coords = Handle::new(Coords::new(1).unwrap());

@@ -20,7 +20,7 @@
 //! # Two-level refcount model
 //!
 //! - The **Coords object** is kept alive by the usual
-//!   [`crate::store::Handle`] refcount.
+//!   [`crate::handle::Handle`] refcount.
 //! - **Each node** inside the Coords has its own refcount,
 //!   manipulated via [`Coords::incref`] / [`Coords::decref`]
 //!   (used by [`crate::atoms::Node`] and, later, by meshes and fields).
@@ -52,7 +52,7 @@
 //! ```
 //! use pyrucast::atoms::NodeId;
 //! use pyrucast::coords::Coords;
-//! use pyrucast::store::Handle;
+//! use pyrucast::handle::Handle;
 //!
 //! let h = Handle::new(Coords::new(2).unwrap());
 //! let a: NodeId = h.write().add_node(&[0.0, 0.0]).unwrap();

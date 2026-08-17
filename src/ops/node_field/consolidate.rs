@@ -1,7 +1,7 @@
 //! Consolidate a [`NodeField`]: fuse zones sharing the **same support**.
 //!
 //! Sub-fields defined on the *same* support `SubMesh` (matched by handle
-//! identity, [`crate::store::Handle::same_object`]) are fused into a single
+//! identity, [`crate::handle::Handle::same_object`]) are fused into a single
 //! [`SubNodeField`] carrying the **union of their components**. A component
 //! defined by several of those sub-fields must hold the **same** value at
 //! every shared node (exact comparison) — anything else is an error. Zones
@@ -24,7 +24,7 @@ use crate::atoms::NodeId;
 use crate::containers::field::SubField;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::Result;
-use crate::store::Handle;
+use crate::handle::Handle;
 
 /// Fuse the zones of `field` that share the same support `SubMesh`.
 ///
@@ -140,7 +140,7 @@ mod tests {
     use crate::containers::field::Field;
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// Single-zone POI1 field over `nodes`, sharing the support handle `sm`.
     fn field_on(sm: &Handle<SubMesh>, components: Vec<String>) -> NodeField {

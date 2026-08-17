@@ -27,7 +27,7 @@ use crate::atoms::{ElementType, NodeId, Point2, Point3, Vector3};
 use crate::containers::mesh::Mesh;
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::handle::Handle;
 use std::collections::{HashMap, HashSet};
 
 /// One closed boundary loop, still in world coordinates.

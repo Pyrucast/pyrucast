@@ -14,8 +14,8 @@ use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::coords::Coords;
+use pyrucast::handle::Handle;
 use pyrucast::models::elasticity::ElasticityModel;
-use pyrucast::store::Handle;
 use pyrucast::Result;
 
 fn unit_quad() -> Result<(FiniteElementSpace, [Node; 4])> {

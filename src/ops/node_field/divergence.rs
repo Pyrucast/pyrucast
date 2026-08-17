@@ -22,8 +22,8 @@ use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::field::SubField;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
+use crate::handle::Handle;
 use crate::models::kernel::{self, CellGeom};
-use crate::store::Handle;
 
 /// Weak divergence `div F` of a per-element vector `field` (see the module
 /// docs), as a [`NodeField`] — one zone per input subspace, component `"div"`.

@@ -1,10 +1,10 @@
 //! Python wrappers for [`crate::ops::field`] — the operators polymorphic
 //! over the field flavour, which give back a field of the caller's own kind.
 
+use crate::handle::Handle;
 use crate::py::element_field::{PyElementField, PySubElementField};
 use crate::py::mesh::PyMesh;
 use crate::py::node_field::{PyNodeField, PySubNodeField};
-use crate::store::Handle;
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 

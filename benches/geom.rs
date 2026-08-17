@@ -21,7 +21,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use pyrucast::atoms::{ElementType, Node, NodeId};
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::coords::Coords;
-use pyrucast::store::Handle;
+use pyrucast::handle::Handle;
 
 /// Host block side, in cells: `HOST_N³` hexahedra.
 const HOST_N: usize = 12;

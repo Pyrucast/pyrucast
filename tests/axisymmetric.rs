@@ -26,10 +26,10 @@ use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
 use pyrucast::models::elasticity::ElasticityModel;
 
+use pyrucast::handle::Handle;
 use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::ops::{element_field, measure, mesh, node_field};
-use pyrucast::store::Handle;
 use pyrucast::Result;
 
 use std::f64::consts::PI;

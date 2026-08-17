@@ -17,7 +17,7 @@
 //! use pyrucast::containers::mesh::SubMesh;
 //! use pyrucast::coords::Coords;
 //! use pyrucast::containers::node_field::SubNodeField;
-//! use pyrucast::store::Handle;
+//! use pyrucast::handle::Handle;
 //!
 //! let coords = Handle::new(Coords::new(1).unwrap());
 //! let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
@@ -39,8 +39,8 @@ use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
+use crate::handle::{Handle, ReadGuard};
 use crate::parallel::*;
-use crate::store::{Handle, ReadGuard};
 use std::any::Any;
 
 /// Validate a component-name list: non-empty, no duplicate names.
@@ -1267,7 +1267,7 @@ mod tests {
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::node_field::SubNodeField;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     fn make_node_field(values: &[f64]) -> SubNodeField {
         let coords = Handle::new(Coords::new(1).unwrap());

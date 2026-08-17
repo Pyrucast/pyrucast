@@ -4,8 +4,8 @@
 use crate::atoms::Band;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::field::SubField;
+use crate::handle::Handle;
 use crate::py::finite_element_space::PyFiniteElementSpace;
-use crate::store::Handle;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::pyclass::CompareOp;

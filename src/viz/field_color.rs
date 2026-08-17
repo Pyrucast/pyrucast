@@ -26,7 +26,7 @@ use crate::containers::field::SubField;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::containers::node_field::NodeFieldView;
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::handle::Handle;
 use crate::viz::camera::Bbox3;
 use crate::viz::drawable::Drawable;
 use crate::viz::mesh_draw::{render_primitives, submesh_primitives_with_colors, Primitive};
@@ -709,7 +709,7 @@ mod tests {
     use crate::containers::mesh::SubMesh as RawSubMesh;
     use crate::containers::node_field::{NodeField, SubNodeField};
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     #[test]
     fn colormap_endpoints() {

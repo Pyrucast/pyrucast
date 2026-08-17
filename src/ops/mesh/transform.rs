@@ -31,7 +31,7 @@ use crate::atoms::Node;
 use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::handle::Handle;
 use std::collections::HashMap;
 
 /// Copy `mesh` into a fresh mesh, applying `f` to every node's coordinates.
@@ -326,10 +326,10 @@ mod tests {
     use super::*;
     use crate::atoms::ElementType;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
     use std::f64::consts::PI;
 
-    fn tri2d(coords: &crate::store::Handle<Coords>, pts: [[f64; 2]; 3]) -> (Mesh, [Node; 3]) {
+    fn tri2d(coords: &crate::handle::Handle<Coords>, pts: [[f64; 2]; 3]) -> (Mesh, [Node; 3]) {
         let n0 = Node::create_in(coords.clone(), &pts[0]).unwrap();
         let n1 = Node::create_in(coords.clone(), &pts[1]).unwrap();
         let n2 = Node::create_in(coords.clone(), &pts[2]).unwrap();
@@ -438,7 +438,7 @@ mod tests {
             / 6.0
     }
 
-    fn tet(coords: &crate::store::Handle<Coords>, pts: [[f64; 3]; 4]) -> Mesh {
+    fn tet(coords: &crate::handle::Handle<Coords>, pts: [[f64; 3]; 4]) -> Mesh {
         let ids: Vec<_> = pts
             .iter()
             .map(|p| Node::create_in(coords.clone(), p).unwrap().id())

@@ -39,11 +39,11 @@ use crate::atoms::{ElementType, Node, NodeId, Point3};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
+use crate::handle::Handle;
 use crate::interrupt::{Cancel, NoCancel};
 use crate::ops::mesh::plaster::front::Front;
 use crate::ops::mesh::plaster::shell::{Facet, Shell};
 use crate::ops::mesh::plaster::{self, smooth};
-use crate::store::Handle;
 use std::collections::HashMap;
 
 /// How deep a capping pyramid's apex sits below its base, as a fraction of the

@@ -197,7 +197,7 @@ Rust :
 
 ```rust,ignore
 use pyrucast::coords::Coords;
-use pyrucast::store::Handle;
+use pyrucast::handle::Handle;
 
 let coords = Handle::new(Coords::new(2).unwrap());
 let c = coords.read();
@@ -242,7 +242,7 @@ assert_eq!(original, restored);
 
 Un objet n'est considéré comme terminé que lorsque les six points suivants sont verts :
 
-1. Struct Rust vivant dans le Store (`Handle<T>` typé).
+1. Struct Rust adressable par un `Handle<T>` typé.
 2. `Debug` (structure) + `Display` (résumé).
 3. Tests unitaires Rust + doctests sur tout l'API public.
 4. Binding PyO3 (`__repr__` / `__str__`).
@@ -255,7 +255,7 @@ Le socle figé est :
 
 - **toujours lié** — `serde` + `bincode` (persistance), `nalgebra` +
   `nalgebra-sparse` (primitives et stockage creux), `faer` (LU creux du
-  solveur), `rayon` (parallélisme), `parking_lot` (verrous du store), `paste`
+  solveur), `rayon` (parallélisme), `parking_lot` (verrous des objets), `paste`
   (macros d'agrégat) ;
 - **optionnel, derrière une feature** — `pyo3` et `pyo3-stub-gen` (binding et
   stub), `plotters` / `winit` / `softbuffer` (visualisation) ;

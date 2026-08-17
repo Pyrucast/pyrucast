@@ -45,7 +45,7 @@
 //! use pyrucast::containers::mesh::SubMesh;
 //! use pyrucast::atoms::Node;
 //! use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
-//! use pyrucast::store::Handle;
+//! use pyrucast::handle::Handle;
 //!
 //! let coords = Handle::new(Coords::new(1).unwrap());
 //! let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
@@ -81,9 +81,9 @@ use crate::containers::model::SubModel;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
+use crate::handle::Handle;
 use crate::models::{MatrixKind, Physics};
 use crate::parallel::*;
-use crate::store::Handle;
 use nalgebra::{DMatrix, DVector};
 use nalgebra_sparse::{CooMatrix, CscMatrix, CsrMatrix};
 use serde::{Deserialize, Serialize};
@@ -1681,7 +1681,7 @@ mod tests {
     use crate::atoms::ElementType;
     use crate::atoms::Node;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// Build a POI1 SubMesh with `n` fresh nodes in a new 1-D Coords.
     /// Returns `(coords, nodes, support_handle)`.

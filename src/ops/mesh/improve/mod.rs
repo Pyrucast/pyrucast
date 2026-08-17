@@ -45,7 +45,7 @@ use crate::atoms::{ElementType, Node, NodeId, Point2};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::handle::Handle;
 use std::collections::HashMap;
 
 /// A surface mesh flattened into the arrays the improvement passes work on.
@@ -240,8 +240,8 @@ mod tests {
     use super::merge_triangles::merge_triangles;
     use super::regularize::regularize;
     use super::*;
+    use crate::handle::Handle;
     use crate::ops::mesh::grid_surface;
-    use crate::store::Handle;
 
     /// The circle `grid_surface` finds hardest: no axis-aligned edge, so the
     /// whole boundary falls to the frontal band, which is where every poor cell

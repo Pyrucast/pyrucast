@@ -16,12 +16,12 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::{Model, SubModel};
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
+use pyrucast::handle::Handle;
 use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::ops::matrix::stiffness;
 use pyrucast::ops::mesh::barycenter;
 use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::Handle;
 use pyrucast::Result;
 
 const TOL: f64 = 1e-9;

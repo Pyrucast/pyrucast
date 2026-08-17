@@ -42,7 +42,7 @@ use crate::atoms::ElementType;
 use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::Result;
-use crate::store::Handle;
+use crate::handle::Handle;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 
@@ -241,7 +241,7 @@ mod tests {
     use super::*;
     use crate::atoms::Node;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// The orientation-reversing reflection defining the permutation: swap the
     /// first two axes (2-D/3-D), or negate the single axis (`SEG*`, 1-D).

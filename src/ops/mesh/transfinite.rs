@@ -5,7 +5,7 @@ use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::handle::Handle;
 
 /// Build a structured surface bounded by four `SEG2` sides, by (discrete)
 /// transfinite interpolation — the Coons-patch generalization of
@@ -190,8 +190,8 @@ mod tests {
     use crate::atoms::ElementType;
     use crate::atoms::Node;
     use crate::coords::Coords;
+    use crate::handle::Handle;
     use crate::ops::mesh::line::line;
-    use crate::store::Handle;
 
     /// Builds the unit-square contour, corners shared between adjacent
     /// sides, `n1` elements on side1/side3 and `n2` on side2/side4.

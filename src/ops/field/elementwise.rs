@@ -85,7 +85,7 @@ mod tests {
     use crate::containers::mesh::SubMesh;
     use crate::containers::node_field::{NodeField, SubNodeField};
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// Build a single-zone `SubNodeField` named "T" carrying `values`,
     /// returning it together with the node ids (to read values back).

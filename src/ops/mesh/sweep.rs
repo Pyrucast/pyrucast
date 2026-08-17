@@ -4,7 +4,7 @@ use crate::atoms::Node;
 use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::handle::Handle;
 
 /// Sweep two SEG2 meshes into a mesh of `element_type`, building `n_layers`
 /// layers. `element_type` is one of `QUA4` (default), `TRI3`, `QUA8`,
@@ -121,8 +121,8 @@ mod tests {
     use crate::atoms::Node;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
+    use crate::handle::Handle;
     use crate::ops::mesh::line::line;
-    use crate::store::Handle;
 
     #[test]
     fn sweep_basic() {

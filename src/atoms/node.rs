@@ -17,7 +17,7 @@
 //! ```
 //! use pyrucast::coords::Coords;
 //! use pyrucast::atoms::Node;
-//! use pyrucast::store::Handle;
+//! use pyrucast::handle::Handle;
 //!
 //! let coords = Handle::new(Coords::new(2).unwrap());
 //! let n = Node::create_in(coords.clone(), &[1.0, 2.0]).unwrap();
@@ -35,7 +35,7 @@
 
 use crate::coords::Coords;
 use crate::error::Result;
-use crate::store::Handle;
+use crate::handle::Handle;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -170,7 +170,7 @@ impl crate::dump::Dump for Node {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     #[test]
     fn node_protects_from_gc() {

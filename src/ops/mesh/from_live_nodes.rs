@@ -1,7 +1,7 @@
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::Result;
-use crate::store::Handle;
+use crate::handle::Handle;
 
 /// Create a POI1 mesh containing all live nodes of `coords`.
 pub fn from_live_nodes(coords: Handle<Coords>) -> Result<Mesh> {
@@ -17,7 +17,7 @@ mod tests {
     use crate::atoms::ElementType;
     use crate::atoms::Node;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     #[test]
     fn mesh_from_live_nodes() {

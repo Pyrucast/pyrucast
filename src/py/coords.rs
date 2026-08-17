@@ -2,8 +2,8 @@
 
 use crate::atoms::NodeId;
 use crate::coords::Coords;
+use crate::handle::Handle;
 use crate::py::node::PyNode;
-use crate::store::Handle;
 use pyo3::prelude::*;
 
 /// The registry of live nodes and their coordinates, in a fixed spatial

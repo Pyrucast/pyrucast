@@ -75,7 +75,7 @@ Seul le ramasse-miettes `Coords::gc()` retire les nœuds dont le refcount
 
 ```rust,ignore
 use pyrucast::coords::Coords;
-use pyrucast::store::Handle;
+use pyrucast::handle::Handle;
 
 let coords = Handle::new(Coords::new(2).unwrap());
 // add_node initialise refcount = 1 ; sans décrément, le nœud est protégé.
@@ -183,7 +183,7 @@ Rust :
 
 ```rust,ignore
 use pyrucast::coords::Coords;
-use pyrucast::store::Handle;
+use pyrucast::handle::Handle;
 
 let coords = Handle::new(Coords::new(2).unwrap());
 // Trois nœuds créés ; ids = 0, 1, 2.

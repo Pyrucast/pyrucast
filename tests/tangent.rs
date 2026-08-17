@@ -11,13 +11,13 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::{Model, SubModel};
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
+use pyrucast::handle::Handle;
 use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::ops::element_field::behavior::integrate;
 use pyrucast::ops::element_field::deformation;
 use pyrucast::ops::element_field::material_field;
 use pyrucast::ops::matrix::tangent;
 use pyrucast::ops::node_field::internal_forces;
-use pyrucast::store::Handle;
 use pyrucast::Result;
 
 const AXES: [&str; 3] = ["x", "y", "z"];

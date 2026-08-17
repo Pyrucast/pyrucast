@@ -34,11 +34,11 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
+use pyrucast::handle::Handle;
 use pyrucast::models::shell::ShellModel;
 use pyrucast::ops::mesh;
 use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::Handle;
 use pyrucast::Result;
 
 const E: f64 = 210_000.0;
@@ -395,7 +395,7 @@ fn plate(
 ) -> Result<(
     Vec<Node>,
     FiniteElementSpace,
-    pyrucast::store::Handle<Coords>,
+    pyrucast::handle::Handle<Coords>,
     usize,
 )> {
     let coords = Handle::new(Coords::new(3)?);
@@ -512,7 +512,7 @@ fn central_deflection(
 fn read_fespace(
     fes: &FiniteElementSpace,
 ) -> Result<
-    pyrucast::store::Handle<pyrucast::containers::finite_element_space::SubFiniteElementSpace>,
+    pyrucast::handle::Handle<pyrucast::containers::finite_element_space::SubFiniteElementSpace>,
 > {
     fes.get(0)
 }

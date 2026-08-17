@@ -68,6 +68,7 @@ use crate::containers::mesh::SubMesh;
 use crate::coords::Coords;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
+use crate::handle::Handle;
 use crate::models::transfer::{
     coefficient_indices, coefficient_name, exchange_matrix, flux_name, internal_force, jump_name,
     material_contract, physics_slice,
@@ -75,7 +76,6 @@ use crate::models::transfer::{
 use crate::models::{
     CellGeom, Contribution, CouplingLayout, Domain, MatrixKind, MatrixLayout, Physics, SubModelKind,
 };
-use crate::store::Handle;
 
 /// Exchange law between two conforming boundary FE subspaces.
 #[derive(Clone)]

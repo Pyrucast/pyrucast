@@ -35,9 +35,9 @@ use crate::atoms::{ElementType, Node, NodeId, Point2, Vector2};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
+use crate::handle::Handle;
 use crate::interrupt::{Cancel, NoCancel};
 use crate::parallel::*;
-use crate::store::Handle;
 use std::collections::{HashMap, VecDeque};
 
 // Ruppert refinement provably terminates for a minimum-angle threshold up
@@ -1795,7 +1795,7 @@ fn materialize(
 mod tests {
     use super::*;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
     use std::collections::HashSet;
 
     fn loop_mesh(coords: Handle<Coords>, pts: &[(f64, f64)]) -> Mesh {

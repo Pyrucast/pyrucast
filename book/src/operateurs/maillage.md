@@ -524,8 +524,8 @@ jeton d'interruption (timeout, drapeau partagé…) — voir
   de croisements).
 
 Côté Rust, `ops::mesh::triangulate_surface(&contour, ElementType::TRI3, Some(0.5))`.
-Le cœur (CDT + raffinement) opère sur de simples `Vec<Point2>` sans toucher au
-store ; lissage et recombinaison QUA4 sont parallélisés (`rayon`). Le module
+Le cœur (CDT + raffinement) opère sur de simples `Vec<Point2>` sans toucher à
+la `Coords` ; lissage et recombinaison QUA4 sont parallélisés (`rayon`). Le module
 `pyrucast::ops::mesh::triangulation` regroupe par ailleurs les briques
 géométriques réutilisables indépendamment du système `Mesh`
 (voir [Triangulation](../triangulation.md)).

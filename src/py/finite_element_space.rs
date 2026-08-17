@@ -7,9 +7,9 @@ use crate::atoms::Interpolation;
 use crate::atoms::QuadratureRule;
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
 use crate::error::{PyrucastError, Result};
+use crate::handle::Handle;
 use crate::py::element::PyElement;
 use crate::py::mesh::PyMesh;
-use crate::store::Handle;
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
 

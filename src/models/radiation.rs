@@ -52,9 +52,9 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::Result;
+use crate::handle::Handle;
 use crate::models::owned_components;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
-use crate::store::Handle;
 
 /// Column DOF name (temperature) — shared with heat conduction.
 pub const PRIMAL_VAR: &str = "T";

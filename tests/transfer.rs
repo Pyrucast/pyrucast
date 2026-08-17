@@ -30,12 +30,12 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
+use pyrucast::handle::Handle;
 use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::models::Physics;
 use pyrucast::ops::mesh;
 use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::Handle;
 use pyrucast::Result;
 
 const E: f64 = 210_000.0;
@@ -140,7 +140,7 @@ fn square(
 ) -> Result<(
     Vec<Node>,
     FiniteElementSpace,
-    pyrucast::store::Handle<Coords>,
+    pyrucast::handle::Handle<Coords>,
     usize,
 )> {
     let coords = Handle::new(Coords::new(2)?);
@@ -174,7 +174,7 @@ fn square(
 /// the traction both live on.
 fn edge_fespace(
     grid: &[Node],
-    coords: &pyrucast::store::Handle<Coords>,
+    coords: &pyrucast::handle::Handle<Coords>,
     n: usize,
     idx: impl Fn(usize, usize) -> usize,
 ) -> Result<FiniteElementSpace> {

@@ -1,11 +1,11 @@
 //! Python wrappers for [`crate::ops::element_field`] — the operators that
 //! produce an `ElementField`.
 
+use crate::handle::Handle;
 use crate::py::element_field::{PyElementField, PySubElementField};
 use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::py::model::{PyModel, PySubModel};
 use crate::py::node_field::PyNodeField;
-use crate::store::Handle;
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 

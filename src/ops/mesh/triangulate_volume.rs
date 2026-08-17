@@ -559,7 +559,7 @@ fn materialize(
 mod tests {
     use super::*;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// The eight corners of an axis-aligned box, ordered
     /// `000, 100, 110, 010, 001, 101, 111, 011`.

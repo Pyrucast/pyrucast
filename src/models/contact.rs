@@ -51,13 +51,13 @@ use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
+use crate::handle::Handle;
 use crate::models::{
     Constraint, ConstraintTerm, Contribution, MatrixKind, Physics, Relation, RelationSense,
     SubModelKind,
 };
 use crate::ops::geom::project_points;
 use crate::ops::mesh::barycenter;
-use crate::store::Handle;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -408,7 +408,7 @@ mod tests {
     use super::*;
     use crate::atoms::{ElementType, Node};
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// A slave node above a single SEG2 master (2-D): pairing, relation
     /// structure, sense and gap.

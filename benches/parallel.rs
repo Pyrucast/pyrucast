@@ -30,11 +30,11 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
+use pyrucast::handle::Handle;
 use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::ops::element_field;
 use pyrucast::ops::element_field::material_field;
 use pyrucast::ops::solver::lu::{solve, solve_with_options, SolveMethod, SolveOptions};
-use pyrucast::store::Handle;
 
 /// Grid side for the assembly / integration groups.
 ///

@@ -13,9 +13,9 @@ use crate::containers::field::Field;
 use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
+use crate::handle::Handle;
 use crate::models::kernel;
 use crate::ops::element_field::gradient::AXES;
-use crate::store::Handle;
 
 /// Linearized (small-strain) deformation `ε = ½(∇u + ∇uᵀ)` of a displacement
 /// field `u` at the Gauss points of every subspace of `fespace`.
@@ -108,7 +108,7 @@ mod tests {
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::node_field::SubNodeField;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// Linear displacement `u_x = 2x + 0.5y`, `u_y = 0.1x + 3y` on a TRI3.
     /// ⇒ ε_xx = 2, ε_yy = 3, ε_xy = ½(0.5 + 0.1) = 0.3.

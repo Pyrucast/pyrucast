@@ -42,7 +42,7 @@ use crate::aggregate::Aggregate;
 use crate::atoms::{ElementType, NodeId};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::handle::Handle;
 use std::collections::HashMap;
 
 /// Re-order the cells of a line mesh into a continuous chain.
@@ -191,7 +191,7 @@ mod tests {
     use super::*;
     use crate::atoms::Node;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// A `Coords` holding `n` nodes on the x axis, node id `i` at `x = i`, so
     /// tests can name nodes by their index.

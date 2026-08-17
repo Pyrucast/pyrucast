@@ -29,9 +29,9 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
+use pyrucast::handle::Handle;
 use pyrucast::ops::mesh;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::Handle;
 use pyrucast::Result;
 
 const E: f64 = 210_000.0;
@@ -311,7 +311,7 @@ fn beam_1d() -> Result<(
     Node,
     Node,
     FiniteElementSpace,
-    pyrucast::store::Handle<Coords>,
+    pyrucast::handle::Handle<Coords>,
 )> {
     let coords = Handle::new(Coords::new(1)?);
     let a = Node::create_in(coords.clone(), &[0.0])?;

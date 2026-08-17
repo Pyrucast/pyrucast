@@ -12,7 +12,7 @@
 //!
 //! ```
 //! use pyrucast::aggregate::Aggregate;
-//! use pyrucast::store::Handle;
+//! use pyrucast::handle::Handle;
 //!
 //! #[derive(serde::Serialize, serde::Deserialize)]
 //! struct Item(u32);
@@ -36,7 +36,7 @@
 //! ```
 
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::handle::Handle;
 use std::any::Any;
 
 /// Typed container of objects held in the global store.
@@ -732,8 +732,8 @@ macro_rules! impl_aggregate {
         paste::paste! {
             impl $crate::aggregate::Aggregate for $T {
                 type Sub = $Sub;
-                fn items(&self) -> &[$crate::store::Handle<$Sub>] { &self.subs }
-                fn items_mut(&mut self) -> &mut Vec<$crate::store::Handle<$Sub>> {
+                fn items(&self) -> &[$crate::handle::Handle<$Sub>] { &self.subs }
+                fn items_mut(&mut self) -> &mut Vec<$crate::handle::Handle<$Sub>> {
                     &mut self.subs
                 }
                 fn type_name() -> &'static str { stringify!($T) }
@@ -761,17 +761,17 @@ macro_rules! impl_aggregate {
 macro_rules! impl_aggregate_std_traits {
     ($T:ty) => {
         impl std::ops::Index<usize> for $T {
-            type Output = $crate::store::Handle<<$T as $crate::aggregate::Aggregate>::Sub>;
+            type Output = $crate::handle::Handle<<$T as $crate::aggregate::Aggregate>::Sub>;
             fn index(&self, idx: usize) -> &Self::Output {
                 &$crate::aggregate::Aggregate::items(self)[idx]
             }
         }
 
         impl<'a> IntoIterator for &'a $T {
-            type Item = &'a $crate::store::Handle<<$T as $crate::aggregate::Aggregate>::Sub>;
+            type Item = &'a $crate::handle::Handle<<$T as $crate::aggregate::Aggregate>::Sub>;
             type IntoIter = std::slice::Iter<
                 'a,
-                $crate::store::Handle<<$T as $crate::aggregate::Aggregate>::Sub>,
+                $crate::handle::Handle<<$T as $crate::aggregate::Aggregate>::Sub>,
             >;
             fn into_iter(self) -> Self::IntoIter {
                 $crate::aggregate::Aggregate::iter(self)
@@ -816,8 +816,8 @@ macro_rules! impl_aggregate_std_traits {
             /// (first-seen order, deduplicated by handle, then finalized).
             /// Backs Python's `sub | sub`.
             pub fn union_subs(
-                a: &$crate::store::Handle<<$T as $crate::aggregate::Aggregate>::Sub>,
-                b: &$crate::store::Handle<<$T as $crate::aggregate::Aggregate>::Sub>,
+                a: &$crate::handle::Handle<<$T as $crate::aggregate::Aggregate>::Sub>,
+                b: &$crate::handle::Handle<<$T as $crate::aggregate::Aggregate>::Sub>,
             ) -> $crate::error::Result<$T> {
                 use $crate::aggregate::Aggregate;
                 let mut out = <$T as ::std::default::Default>::default();
@@ -872,7 +872,7 @@ macro_rules! impl_aggregate_dump {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::Handle;
+    use crate::handle::Handle;
     use serde::{Deserialize, Serialize};
 
     #[derive(Serialize, Deserialize)]

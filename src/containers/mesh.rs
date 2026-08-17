@@ -20,7 +20,7 @@
 //! use pyrucast::atoms::ElementType;
 //! use pyrucast::containers::mesh::SubMesh;
 //! use pyrucast::atoms::Node;
-//! use pyrucast::store::Handle;
+//! use pyrucast::handle::Handle;
 //!
 //! let coords = Handle::new(Coords::new(2).unwrap());
 //! let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
@@ -41,7 +41,7 @@ use crate::aggregate::Aggregate;
 use crate::atoms::{Cell, CellIter, ElementType, Node, NodeId, RgbColor};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::handle::Handle;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::OnceLock;
@@ -482,7 +482,7 @@ impl SubMesh {
 /// sealed we skip the write entirely — a read lock coexists with that reader,
 /// whereas a write lock would deadlock against it. Taking a write lock while a
 /// **write** guard on the same slot is held is still a deadlock (the slot lock is
-/// not reentrant — see [`crate::store`]); only the sealed-read case is relaxed.
+/// not reentrant — see [`crate::handle`]); only the sealed-read case is relaxed.
 pub fn seal(handle: &Handle<SubMesh>) -> Result<Handle<SubMesh>> {
     if handle.read().is_sealed() {
         return Ok(handle.clone());
@@ -855,7 +855,7 @@ impl Mesh {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     #[test]
     fn submesh_poi1_is_node_list() {
@@ -1347,7 +1347,7 @@ mod nearest_node_tests {
     use crate::atoms::Node;
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     #[test]
     fn nearest_on_grid() {

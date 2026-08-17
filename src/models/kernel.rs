@@ -60,9 +60,9 @@ use crate::containers::mesh::SubMesh;
 use crate::containers::node_field::{NodeFieldView, SubNodeField};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
+use crate::handle::Handle;
 use crate::ops::coloring;
 use crate::parallel::*;
-use crate::store::Handle;
 use nalgebra_sparse::CooMatrix;
 use std::collections::HashMap;
 
@@ -1334,7 +1334,7 @@ mod tests {
     use crate::atoms::{ElementType, Node};
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::Mesh;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// One QUA4 spanning `r ∈ [r0, r1]`, `z ∈ [0, 1]`, in the requested frame.
     fn one_quad(r0: f64, r1: f64, axisymmetric: bool) -> Handle<SubFiniteElementSpace> {

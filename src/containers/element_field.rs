@@ -59,7 +59,7 @@
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
 //! use pyrucast::containers::mesh::{Mesh, SubMesh};
 //! use pyrucast::atoms::Node;
-//! use pyrucast::store::Handle;
+//! use pyrucast::handle::Handle;
 //!
 //! let coords = Handle::new(Coords::new(2).unwrap());
 //! let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
@@ -92,7 +92,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::field::SubField;
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::handle::Handle;
 use std::fmt;
 
 // ─── SubElementField ───────────────────────────────────────────────────────
@@ -635,7 +635,7 @@ mod tests {
     use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     fn make_tri3_subfespace() -> Handle<SubFiniteElementSpace> {
         let coords = Handle::new(Coords::new(2).unwrap());

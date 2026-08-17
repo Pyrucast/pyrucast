@@ -23,7 +23,7 @@ dans [Coordonnées](coords.md).
 ```rust,ignore
 use pyrucast::atoms::Node;
 use pyrucast::coords::Coords;
-use pyrucast::store::Handle;
+use pyrucast::handle::Handle;
 
 let coords = Handle::new(Coords::new(2).unwrap());
 let n = Node::create_in(coords.clone(), &[1.0, 2.0]).unwrap();

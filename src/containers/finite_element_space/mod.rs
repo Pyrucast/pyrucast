@@ -32,7 +32,7 @@
 //! use pyrucast::containers::finite_element_space::FiniteElementSpace;
 //! use pyrucast::containers::mesh::{Mesh, SubMesh};
 //! use pyrucast::atoms::Node;
-//! use pyrucast::store::Handle;
+//! use pyrucast::handle::Handle;
 //!
 //! let coords = Handle::new(Coords::new(2).unwrap());
 //! let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
@@ -67,7 +67,7 @@ use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::handle::Handle;
 use std::fmt;
 use std::sync::OnceLock;
 
@@ -89,7 +89,7 @@ pub struct SubFiniteElementSpace {
     /// Whether the owning `Coords` describes a body of revolution, read at
     /// construction like `space_dim` (the frame is fixed for the lifetime of a
     /// `Coords`). Carried here so the parallel drivers snapshot it once instead
-    /// of re-reading the store per cell. `#[serde(default)]` for subspaces
+    /// of re-reading the handle per cell. `#[serde(default)]` for subspaces
     /// serialised before the frame existed.
     axisymmetric: bool,
 
@@ -637,7 +637,7 @@ impl FiniteElementSpace {
     }
 
     /// Rebuild the [`Mesh`] this space spans: one submesh per subspace, in
-    /// order, deduplicated by store slot. Submesh handles are **shared** (no
+    /// order, deduplicated by object identity. Submesh handles are **shared** (no
     /// copy); they are sealed (frozen) as long as this space captures them.
     pub fn mesh(&self) -> Result<Mesh> {
         let mut mesh = Mesh::empty();
@@ -794,7 +794,7 @@ mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
     use crate::atoms::Node;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     fn cfg2d() -> Handle<Coords> {
         Handle::new(Coords::new(2).unwrap())

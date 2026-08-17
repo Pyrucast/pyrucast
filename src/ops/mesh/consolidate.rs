@@ -3,7 +3,7 @@ use crate::atoms::ElementType;
 use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::Result;
-use crate::store::Handle;
+use crate::handle::Handle;
 use std::collections::HashSet;
 
 /// Fuse submeshes of the same element type into one, dropping duplicate
@@ -66,7 +66,7 @@ mod tests {
     use super::*;
     use crate::atoms::Node;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     #[test]
     fn merges_same_type_submeshes() {

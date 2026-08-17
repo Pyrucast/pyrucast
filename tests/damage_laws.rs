@@ -22,11 +22,11 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
+use pyrucast::handle::Handle;
 use pyrucast::models::damage::DamageLaw;
 use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::models::plastic::PlasticLaw;
 use pyrucast::ops::element_field::{behavior::integrate, deformation, material_field};
-use pyrucast::store::Handle;
 use pyrucast::Result;
 
 const AXES: [&str; 3] = ["x", "y", "z"];

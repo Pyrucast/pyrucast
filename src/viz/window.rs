@@ -524,7 +524,7 @@ struct FieldDrawable<'a> {
 
 enum GeomSource<'a> {
     Mesh(&'a crate::containers::mesh::Mesh),
-    SubMesh(&'a crate::store::Handle<crate::containers::mesh::SubMesh>),
+    SubMesh(&'a crate::handle::Handle<crate::containers::mesh::SubMesh>),
 }
 
 impl<'a> FieldDrawable<'a> {
@@ -656,7 +656,7 @@ pub(crate) fn run_interactive_mesh_field(
 /// Run the interactive viewer on a `SubMesh` coloured by a node-field
 /// component (same UX as [`run_interactive_mesh_field`]).
 pub(crate) fn run_interactive_submesh_field(
-    submesh: &crate::store::Handle<crate::containers::mesh::SubMesh>,
+    submesh: &crate::handle::Handle<crate::containers::mesh::SubMesh>,
     field: &crate::viz::field_color::FieldData,
     initial_component: &str,
     scale: crate::viz::ColorScale,

@@ -2,6 +2,7 @@
 //! produce a `NodeField`.
 
 use crate::containers::node_field::NodeField;
+use crate::handle::Handle;
 use crate::ops::node_field::FluxDensity;
 use crate::py::element_field::{PyElementField, PySubElementField};
 use crate::py::finite_element_space::PyFiniteElementSpace;
@@ -10,7 +11,6 @@ use crate::py::mesh::PyMesh;
 use crate::py::model::PyModel;
 use crate::py::node_field::PyNodeField;
 use crate::py::node_field::PySubNodeField;
-use crate::store::Handle;
 use pyo3::exceptions::PyTypeError;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;

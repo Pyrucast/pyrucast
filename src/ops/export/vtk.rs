@@ -43,8 +43,8 @@ use crate::containers::field::{Field, SubField};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
+use crate::handle::Handle;
 use crate::parallel::*;
-use crate::store::Handle;
 use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::path::Path;
@@ -129,8 +129,8 @@ fn write_geometry(out: &mut String, geo: &Geometry, title: &str) {
     out.push('\n');
     out.push_str("ASCII\nDATASET UNSTRUCTURED_GRID\n");
 
-    // POINTS / CELLS / CELL_TYPES are pure formatting of `geo` (no store
-    // access): format each line in parallel, then append in order — byte-for-byte
+    // POINTS / CELLS / CELL_TYPES are pure formatting of `geo` (no locking):
+    // format each line in parallel, then append in order — byte-for-byte
     // identical to the sequential output.
     let _ = writeln!(out, "POINTS {} double", geo.points.len());
     let pts: Vec<String> = geo
@@ -323,7 +323,7 @@ mod tests {
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// Unit square as two TRI3 on a 2-D Coords, plus the four nodes.
     fn square() -> (Mesh, Vec<Node>) {

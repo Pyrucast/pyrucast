@@ -155,7 +155,7 @@ mod tests {
     use crate::atoms::Node;
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// The six faces of an axis-aligned box, as QUA4 with outward normals.
     fn box_shell(lo: [f64; 3], hi: [f64; 3]) -> Mesh {

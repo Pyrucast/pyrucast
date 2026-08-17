@@ -45,7 +45,7 @@ use crate::aggregate::Aggregate;
 use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::handle::Handle;
 use std::collections::HashSet;
 
 // ---------------------------------------------------------------------------
@@ -695,7 +695,7 @@ mod tests {
     use super::*;
     use crate::atoms::{ElementType, Node};
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// A 3×3 grid of POI1 nodes over [0, 2]², one node per integer pair, as a
     /// single-submesh mesh. Returns the mesh and the node ids row by row

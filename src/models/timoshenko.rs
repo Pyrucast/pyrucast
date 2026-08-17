@@ -52,10 +52,10 @@ use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
+use crate::handle::Handle;
 use crate::models::beam::{bending_4x4, mass_4x4, BeamModel};
 use crate::models::owned_components;
 use crate::models::{frame, frame3d, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
-use crate::store::Handle;
 
 /// The material a configuration needs. `G` and `A_s` are what the theory adds
 /// over [Bernoulli](crate::models::bernoulli): the shear compliance.
@@ -381,7 +381,7 @@ mod tests {
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::Mesh;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// One `SEG2` from `a` to `b`, in whatever dimension the coordinates have.
     fn one_beam(a: &[f64], b: &[f64]) -> (Timoshenko, NodeId, NodeId) {

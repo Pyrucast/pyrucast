@@ -21,11 +21,11 @@ mod tests {
     use crate::atoms::Node;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// Build a single-TRI3 mesh on `coords` from three coordinates, returning
     /// the mesh and its three corner nodes.
-    fn tri(coords: &crate::store::Handle<Coords>, pts: [[f64; 3]; 3]) -> (Mesh, [Node; 3]) {
+    fn tri(coords: &crate::handle::Handle<Coords>, pts: [[f64; 3]; 3]) -> (Mesh, [Node; 3]) {
         let n0 = Node::create_in(coords.clone(), &pts[0]).unwrap();
         let n1 = Node::create_in(coords.clone(), &pts[1]).unwrap();
         let n2 = Node::create_in(coords.clone(), &pts[2]).unwrap();

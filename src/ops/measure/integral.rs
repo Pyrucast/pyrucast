@@ -111,7 +111,7 @@ mod tests {
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::node_field::SubNodeField;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// Nodal integral on SEG2 `[0, 1]` of the linear field `f(x) = x`
     /// (`f_0 = 0`, `f_1 = 1`): `∫₀¹ x dx = 1/2`. Exercises the `N_i` lift.

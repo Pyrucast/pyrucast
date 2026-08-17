@@ -58,8 +58,8 @@ use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::mesh::SubMesh;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
+use crate::handle::Handle;
 use crate::parallel::*;
-use crate::store::Handle;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -1094,7 +1094,7 @@ mod tests {
     use crate::atoms::{ElementType, Node};
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     fn scalar_curve(samples: &[(f64, f64)], oor: OutOfRange) -> SubEvolution {
         SubEvolution::new(

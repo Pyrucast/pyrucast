@@ -2,7 +2,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::model::{Model, SubModel};
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::handle::Handle;
 
 /// Build the material [`SubElementField`] of a single material-hungry
 /// sub-model from uniform `(component, value)` pairs.
@@ -122,7 +122,7 @@ mod tests {
     use crate::containers::matrix::Matrix;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// HC on a single SEG2 (+ optional Dirichlet on the left node).
     /// Returns (coords, a_id, b_id, model).

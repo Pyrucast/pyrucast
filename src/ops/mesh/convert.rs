@@ -21,7 +21,7 @@ use crate::aggregate::Aggregate;
 use crate::atoms::{ElementType, NodeId};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::handle::Handle;
 
 /// The six tetrahedra of the Freudenthal/Kuhn subdivision of a HEX8, each as
 /// four local corner indices. All six share the main diagonal `(0, 6)`; the
@@ -88,7 +88,7 @@ mod tests {
     use super::*;
     use crate::atoms::Node;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     #[test]
     fn qua4_to_tri3_splits_each_quad_in_two() {

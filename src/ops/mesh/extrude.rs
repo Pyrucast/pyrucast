@@ -26,8 +26,8 @@ mod tests {
     use crate::atoms::Node;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
+    use crate::handle::Handle;
     use crate::ops::mesh::line::line;
-    use crate::store::Handle;
 
     #[test]
     fn extrude_seg2_to_qua4() {

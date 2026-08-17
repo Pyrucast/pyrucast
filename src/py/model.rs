@@ -3,6 +3,7 @@
 use crate::aggregate::Aggregate;
 use crate::atoms::NodeId;
 use crate::containers::model::{Model, SubModel};
+use crate::handle::Handle;
 use crate::models::damage::DamageLaw;
 use crate::models::elasticity::ElasticityModel;
 use crate::models::plastic::PlasticLaw;
@@ -13,7 +14,6 @@ use crate::py::finite_element_space::{PyFiniteElementSpace, PySubFiniteElementSp
 use crate::py::mesh::PyMesh;
 use crate::py::node::PyNode;
 use crate::py::node_field::PyNodeField;
-use crate::store::Handle;
 use pyo3::prelude::*;
 
 /// Parse a physics-nature tag — the one thing a free component list cannot

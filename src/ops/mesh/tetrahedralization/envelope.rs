@@ -608,8 +608,8 @@ mod tests {
     use crate::atoms::Node;
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
+    use crate::handle::Handle;
     use crate::interrupt::NoCancel;
-    use crate::store::Handle;
 
     /// The eight corners of an axis-aligned box, in the order
     /// `(x, y, z) = 000, 100, 110, 010, 001, 101, 111, 011`.

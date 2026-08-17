@@ -23,8 +23,8 @@ use crate::containers::field::SubField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::node_field::SubNodeField;
 use crate::error::{PyrucastError, Result};
+use crate::handle::Handle;
 use crate::models::kernel;
-use crate::store::Handle;
 
 /// Per-Gauss flux density consumed by [`flux`].
 pub enum FluxDensity<'a> {
@@ -109,7 +109,7 @@ mod tests {
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// Lagrange-1 FE subspace over a fresh SEG2 line of `n` equal elements from
     /// `a` to `b` (built on the given coordinates).

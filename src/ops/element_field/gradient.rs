@@ -11,8 +11,8 @@ use crate::containers::field::Field;
 use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::containers::node_field::NodeField;
 use crate::error::Result;
+use crate::handle::Handle;
 use crate::models::kernel;
-use crate::store::Handle;
 
 /// Axis suffixes for spatial directions (`x`, `y`, `z`).
 pub(crate) const AXES: [&str; 3] = ["x", "y", "z"];
@@ -75,7 +75,7 @@ mod tests {
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::node_field::SubNodeField;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// 1-D linear field `T(x) = x` on a single SEG2 ⇒ `∇T = 1`.
     #[test]

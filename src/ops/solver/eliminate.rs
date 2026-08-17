@@ -463,7 +463,7 @@ mod tests {
     use crate::containers::mesh::SubMesh;
     use crate::containers::node_field::SubNodeField;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// A constraint-free model must route through the plain LU solver: a
     /// standalone `2·T = 6` system (no constraints) solves to `T = 3`.

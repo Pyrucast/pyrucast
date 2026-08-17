@@ -29,11 +29,11 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
+use pyrucast::handle::Handle;
 use pyrucast::models::fick::{dual_var, primal_var};
 use pyrucast::models::Physics;
 use pyrucast::ops::mesh;
 use pyrucast::ops::solver::lu::solve;
-use pyrucast::store::Handle;
 use pyrucast::Result;
 
 /// The diffusing species — every name of this physics carries it.

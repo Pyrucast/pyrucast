@@ -33,7 +33,7 @@
 //! use pyrucast::containers::mesh::SubMesh;
 //! use pyrucast::atoms::Node;
 //! use pyrucast::containers::node_field::SubNodeField;
-//! use pyrucast::store::Handle;
+//! use pyrucast::handle::Handle;
 //!
 //! let coords = Handle::new(Coords::new(2).unwrap());
 //! let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
@@ -65,7 +65,7 @@ use crate::containers::field::SubField;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::handle::Handle;
 use std::fmt;
 use std::ops::{Index, IndexMut};
 
@@ -233,7 +233,7 @@ impl SubNodeField {
     /// use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// use pyrucast::atoms::Node;
     /// use pyrucast::containers::node_field::SubNodeField;
-    /// use pyrucast::store::Handle;
+    /// use pyrucast::handle::Handle;
     ///
     /// let coords = Handle::new(Coords::new(2).unwrap());
     /// let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
@@ -804,7 +804,7 @@ pub(crate) struct NodeFieldView {
     inner: crate::containers::field::FieldView<SubNodeField>,
     /// One shared read guard per zone, aligned with `inner.zones`, over the
     /// zone's support `SubMesh`. Held for the view's lifetime.
-    supports: Vec<crate::store::ReadGuard<SubMesh>>,
+    supports: Vec<crate::handle::ReadGuard<SubMesh>>,
 }
 
 impl NodeFieldView {
@@ -855,7 +855,7 @@ impl NodeFieldView {
 mod tests {
     use super::*;
     use crate::atoms::Node;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     fn make_poi1_with(n_nodes: usize) -> (Handle<Coords>, Vec<Node>, Handle<SubMesh>) {
         let coords = Handle::new(Coords::new(2).unwrap());

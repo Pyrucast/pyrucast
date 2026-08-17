@@ -60,7 +60,7 @@ use crate::atoms::{ElementType, Node, NodeId};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::handle::Handle;
 use std::collections::HashMap;
 use std::path::Path;
 

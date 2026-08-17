@@ -17,7 +17,7 @@ use crate::atoms::{ElementType, NodeId};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::handle::Handle;
 use std::collections::HashMap;
 
 /// Default coplanarity threshold: two boundary facets whose outward normals
@@ -292,7 +292,7 @@ fn emit_submesh(
 mod tests {
     use super::*;
     use crate::atoms::Node;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// Eight corner nodes of the unit cube, indexed as HEX8 expects:
     /// bottom CCW (z=0) then top CCW (z=1).

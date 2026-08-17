@@ -196,7 +196,7 @@ impl SubModelKind for Dirichlet {
     fn contributions(
         &self,
         kind: MatrixKind,
-        _material: Option<&crate::store::Handle<SubElementField>>,
+        _material: Option<&crate::handle::Handle<SubElementField>>,
     ) -> Result<Vec<Contribution>> {
         // A constraint only enters the global (stiffness) matrix — no
         // mass/geometric/tangent term.

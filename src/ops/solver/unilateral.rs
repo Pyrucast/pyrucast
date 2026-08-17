@@ -751,9 +751,9 @@ mod tests {
     use crate::containers::model::{Model, SubModel};
     use crate::containers::node_field::SubNodeField;
     use crate::coords::Coords;
+    use crate::handle::Handle;
     use crate::ops::matrix::stiffness;
     use crate::ops::mesh::barycenter;
-    use crate::store::Handle;
     use std::sync::atomic::Ordering;
 
     /// A 2-element heat bar on `[0, 1]` (`k = 1`) with `T(0) = 0` (equality) and

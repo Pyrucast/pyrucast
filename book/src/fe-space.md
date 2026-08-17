@@ -450,7 +450,7 @@ use pyrucast::atoms::ElementType;
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::atoms::Node;
-use pyrucast::store::Handle;
+use pyrucast::handle::Handle;
 
 let coords = Handle::new(Coords::new(2).unwrap());
 let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
@@ -508,7 +508,7 @@ for cell_idx in 0..s.cell_count().unwrap() {
 Après modification des coordonnées dans la `Coords`, les évaluations à la volée reflètent automatiquement le nouvel état :
 
 ```rust,ignore
-use pyrucast::store::Handle;
+use pyrucast::handle::Handle;
 
 // SEG2 initial : nœuds en x=0 et x=1 → |J| = 0.5 (longueur 1 sur [-1,+1]).
 let dj_before = sub.read().det_jacobian(0, 0).unwrap();

@@ -11,7 +11,7 @@ use crate::aggregate::Aggregate;
 use crate::atoms::{ElementType, NodeId};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::Result;
-use crate::store::Handle;
+use crate::handle::Handle;
 
 /// Build a POI1 mesh of per-element centroids, preserving submesh structure.
 ///
@@ -83,7 +83,7 @@ mod tests {
     use crate::atoms::Node;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// A POI1 input yields one colocated (same coordinates) fresh node per
     /// point, with distinct ids.

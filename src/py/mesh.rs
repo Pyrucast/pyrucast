@@ -4,9 +4,9 @@ use crate::aggregate::Aggregate;
 use crate::atoms::ElementType;
 use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
+use crate::handle::Handle;
 use crate::py::coords::PyCoords;
 use crate::py::node::PyNode;
-use crate::store::Handle;
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 

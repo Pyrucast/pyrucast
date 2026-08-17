@@ -307,7 +307,7 @@ mod tests {
     use crate::atoms::Node;
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     fn mesh_2d_segment() -> Mesh {
         // One SEG2 from (0,0) to (2,0): tangent +x ⇒ normal (0,−1)… wait,

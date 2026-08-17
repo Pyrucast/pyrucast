@@ -45,8 +45,8 @@ mod tests {
     use crate::atoms::Node;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
+    use crate::handle::Handle;
     use crate::ops::mesh::line::line;
-    use crate::store::Handle;
     use std::f64::consts::{PI, TAU};
 
     /// Number of distinct nodes used by the first submesh of `mesh`.

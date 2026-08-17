@@ -50,7 +50,7 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::store::Handle;
+//! use pyrucast::handle::Handle;
 //!
 //! #[derive(Debug, PartialEq)]
 //! struct Points(Vec<f64>);

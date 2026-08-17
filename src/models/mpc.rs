@@ -230,7 +230,7 @@ impl SubModelKind for Mpc {
     fn contributions(
         &self,
         kind: MatrixKind,
-        _material: Option<&crate::store::Handle<SubElementField>>,
+        _material: Option<&crate::handle::Handle<SubElementField>>,
     ) -> Result<Vec<Contribution>> {
         // A constraint only enters the global (stiffness) matrix — no
         // mass/geometric/tangent term.
@@ -353,8 +353,8 @@ mod tests {
     use crate::atoms::Node;
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
+    use crate::handle::Handle;
     use crate::ops::mesh::barycenter;
-    use crate::store::Handle;
 
     fn poi1(node: &Node) -> Mesh {
         Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node)).unwrap())

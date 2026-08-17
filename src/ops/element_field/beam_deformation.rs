@@ -50,7 +50,7 @@ use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteEleme
 use crate::containers::node_field::{NodeField, NodeFieldView};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::handle::Handle;
 
 /// Output component names of the 1-D beam section strains.
 const COMPONENTS_1D: &[&str] = &["kappa", "gamma"];
@@ -354,7 +354,7 @@ mod tests {
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::containers::node_field::SubNodeField;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// Build a one-cell frame FE space between two nodes plus a `(w,θ)`/DOF
     /// node field, returning `(fespace, node_a, node_b, field)`. `space_dim`

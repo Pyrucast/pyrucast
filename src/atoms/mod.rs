@@ -15,7 +15,7 @@
 //! Two kinds of atom live here, and they are not quite alike:
 //!
 //! - **designators** — [`Node`], [`Cell`], [`Element`]: they carry an
-//!   identity (a [`Handle`](crate::store::Handle), or an index into a
+//!   identity (a [`Handle`](crate::handle::Handle), or an index into a
 //!   container) and name one piece of something bigger;
 //! - **values** — [`ElementType`], [`Point2`]/[`Point3`],
 //!   [`Vector2`]/[`Vector3`], [`RgbColor`], [`Band`]: `Copy`, identity-free,

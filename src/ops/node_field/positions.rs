@@ -3,7 +3,7 @@ use crate::atoms::NodeId;
 use crate::containers::mesh::Mesh;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
-use crate::store::Handle;
+use crate::handle::Handle;
 
 /// Map a coordinate-component name (`"X"`, `"Y"`, `"Z"`) to its axis index.
 fn axis_index(name: &str) -> Option<usize> {
@@ -92,7 +92,7 @@ mod tests {
     use crate::containers::field::Field;
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     #[test]
     fn poi1_mesh_positions_xyz() {

@@ -74,7 +74,7 @@
 //! use pyrucast::atoms::Node;
 //! use pyrucast::ops::matrix;
 //! use pyrucast::ops::mesh;
-//! use pyrucast::store::Handle;
+//! use pyrucast::handle::Handle;
 //!
 //! // 1-D Coords with two nodes spanning [0, 1].
 //! let coords = Handle::new(Coords::new(1).unwrap());
@@ -121,6 +121,7 @@ use crate::containers::matrix::AssemblyPattern;
 use crate::containers::mesh::Mesh;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
+use crate::handle::Handle;
 use crate::models::elasticity::ElasticityModel;
 use crate::models::symmetry::MaterialSymmetry;
 use crate::models::{
@@ -128,7 +129,6 @@ use crate::models::{
     follower_pressure, heat_conduction, interface_transfer, mpc, plastic, plasticity, radiation,
     shell, timoshenko, truss, Constraint, MatrixKind, Physics, RelationSense, SubModelKind,
 };
-use crate::store::Handle;
 use std::fmt;
 use std::sync::{Arc, OnceLock};
 
@@ -1490,8 +1490,8 @@ mod tests {
     use crate::containers::mesh::Mesh;
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
+    use crate::handle::Handle;
     use crate::models::owned_components;
-    use crate::store::Handle;
 
     /// Returns `(coords, a_id, b_id, model, materials)`.
     fn build_seg2_heat_model(

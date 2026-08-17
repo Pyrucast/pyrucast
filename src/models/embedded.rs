@@ -50,13 +50,13 @@ use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
+use crate::handle::Handle;
 use crate::models::{
     Constraint, ConstraintTerm, Contribution, MatrixKind, Physics, Relation, RelationSense,
     SubModelKind,
 };
 use crate::ops::geom::locate_points;
 use crate::ops::mesh::barycenter;
-use crate::store::Handle;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -449,7 +449,7 @@ mod tests {
     use super::*;
     use crate::atoms::{ElementType, Node};
     use crate::coords::Coords;
-    use crate::store::Handle;
+    use crate::handle::Handle;
 
     /// Build a unit HEX8 host and a two-node bar through its interior; check the
     /// weights and the relation structure.

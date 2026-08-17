@@ -20,7 +20,7 @@ use pyrucast::atoms::{ElementType, Interpolation, Node};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::coords::Coords;
-use pyrucast::store::Handle;
+use pyrucast::handle::Handle;
 use pyrucast::Result;
 
 /// One `SEG2` of length `l` on the x axis, as a `HERMITE3` space.
