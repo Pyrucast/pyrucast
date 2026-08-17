@@ -462,14 +462,9 @@ impl Cube {
 const DP_ELASTIC: [(&str, f64); 2] = [("E", 20_000.0), ("nu", 0.2)];
 
 /// Un jeu Drucker-Prager, élasticité comprise.
-fn dp(extra: &[(&str, f64)]) -> Vec<(&'static str, f64)> {
+fn dp(extra: &[(&'static str, f64)]) -> Vec<(&'static str, f64)> {
     let mut v: Vec<(&'static str, f64)> = DP_ELASTIC.to_vec();
-    v.extend(extra.iter().map(|(n, x)| {
-        (
-            Box::leak(n.to_string().into_boxed_str()) as &'static str,
-            *x,
-        )
-    }));
+    v.extend_from_slice(extra);
     v
 }
 
