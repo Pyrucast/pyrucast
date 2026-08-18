@@ -220,12 +220,12 @@ print(c)  # même chose que str(c)
 
 ## Sérialisation : un seul mécanisme
 
-Le trait `Persist` (implémenté automatiquement pour tout type `serde::Serialize + DeserializeOwned`) produit un format binaire **portable Linux ↔ Windows**. C'est le socle de la **sauvegarde fichier** : un graphe d'objets écrit dans un conteneur versionné, relu en préservant le partage.
+Le trait `Portable` (implémenté automatiquement pour tout type `serde::Serialize + DeserializeOwned`) produit un format binaire **portable Linux ↔ Windows**. C'est le socle de la **sauvegarde fichier** : un graphe d'objets écrit dans un conteneur versionné, relu en préservant le partage.
 
 Rust — sérialisation manuelle d'un type quelconque :
 
 ```rust,ignore
-use pyrucast::persist::Persist;
+use pyrucast::archive::Portable;
 
 #[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
 struct Pt { x: f64, y: f64 }
@@ -236,7 +236,7 @@ let restored = Pt::from_bytes(&bytes).unwrap();
 assert_eq!(original, restored);
 ```
 
-> **Python** : `Persist` n'est pas exposé côté Python — c'est une brique interne. La sérialisation des objets depuis Python passera par une API de sauvegarde / relecture, encore à écrire.
+> **Python** : `Portable` n'est pas exposé côté Python — c'est une brique interne. La sérialisation des objets depuis Python passera par une API de sauvegarde / relecture, encore à écrire.
 
 ## Definition of Done par objet
 

@@ -54,6 +54,7 @@ use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::symmetry::{self, MaterialSymmetry};
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use serde::{Deserialize, Serialize};
 
 /// Column DOF name of a species — `c_H2`.
 pub fn primal_var(species: &str) -> String {
@@ -140,7 +141,7 @@ fn flux_components(space_dim: usize, species: &str) -> Vec<String> {
 /// - primal variable: `c_<species>` (concentration, columns).
 /// - dual variable:   `j_<species>` (mass flux, row labels).
 /// - Material data is supplied at assembly time, not stored here.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Fick {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
     /// POI1 support over the subspace's unique nodes (row/col support).

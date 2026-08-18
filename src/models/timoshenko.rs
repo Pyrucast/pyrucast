@@ -56,6 +56,7 @@ use crate::handle::Handle;
 use crate::models::beam::{bending_4x4, mass_4x4, BeamModel};
 use crate::models::owned_components;
 use crate::models::{frame, frame3d, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use serde::{Deserialize, Serialize};
 
 /// The material a configuration needs. `G` and `A_s` are what the theory adds
 /// over [Bernoulli](crate::models::bernoulli): the shear compliance.
@@ -78,7 +79,7 @@ fn behavior_of(model: BeamModel) -> &'static [&'static str] {
 }
 
 /// Timoshenko beam physics on a `SEG2` FE subspace.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Timoshenko {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
     /// POI1 support over the unique nodes (row/col support of the block).

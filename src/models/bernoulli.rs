@@ -51,6 +51,7 @@ use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::owned_components;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use serde::{Deserialize, Serialize};
 
 pub use crate::models::beam::BeamModel;
 
@@ -76,7 +77,7 @@ fn behavior_of(model: BeamModel) -> &'static [&'static str] {
 }
 
 /// Euler-Bernoulli beam physics on a `SEG2` FE subspace.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Bernoulli {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
     /// POI1 support over the unique nodes (row/col support).

@@ -196,7 +196,7 @@ ev.plot(save="frame.png", frame=2)  # champ tabulé (un pas)
 `SubValue` est un enum de stockage **inline** (scalaire / `SubNodeField` /
 `SubElementField`), comme `SubModel` l'est pour les physiques. `SubEvolution`
 s'adresse par un `Handle<SubEvolution>` et sérialise ses valeurs en ligne
-via le [trait `Persist`](memory-model.md) ; les courbes sont donc portables
+via le [trait `Portable`](memory-model.md) ; les courbes sont donc portables
 comme tout autre objet. L'homogénéité du type de valeur est garantie
 à la construction (au sein d'une courbe) et par `check_push` (entre zones d'un
 même agrégat).

@@ -2,13 +2,13 @@
 //! an external crate (Phase 0 + Phase 1 + Phase 2).
 
 use pyrucast::aggregate::Aggregate;
+use pyrucast::archive::Portable;
 use pyrucast::atoms::element_type::ElementType;
 use pyrucast::atoms::node::Node;
 use pyrucast::atoms::NodeId;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
-use pyrucast::persist::Persist;
 use pyrucast::{PyrucastError, Result};
 
 #[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]

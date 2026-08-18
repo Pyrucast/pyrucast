@@ -55,6 +55,7 @@ use crate::error::Result;
 use crate::handle::Handle;
 use crate::models::owned_components;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use serde::{Deserialize, Serialize};
 
 /// Column DOF name (temperature) — shared with heat conduction.
 pub const PRIMAL_VAR: &str = "T";
@@ -80,7 +81,7 @@ const OUTPUT_FLUX: &str = "flux";
 const OUTPUT_TANGENT: &str = "ktan";
 
 /// Radiation to infinity on a boundary FE subspace.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Radiation {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
     /// POI1 support over the boundary's unique nodes (row/col support).

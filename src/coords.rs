@@ -120,6 +120,12 @@ pub struct Coords {
     /// `alive[id] == false` ⇒ collected by the GC. Once `false`, stays so forever.
     alive: Vec<bool>,
     /// Per-node refcount. The GC collects `alive` nodes whose refcount is 0.
+    ///
+    /// **Never archived.** A file holds some of the objects that reference these
+    /// nodes, not all of them, so a saved count would be a count of a world that
+    /// no longer exists. It is recounted from zero at reload: `on_load` zeroes
+    /// it, then each reloaded `SubMesh` re-increments what it uses.
+    #[serde(skip)]
     refcount: Vec<u32>,
     /// Solver permutation (length == capacity) or `None` for identity.
     permutation: Option<Vec<u32>>,
@@ -481,6 +487,20 @@ impl crate::dump::Dump for Coords {
 }
 
 // ─── Unit tests ─────────────────────────────────────────────────────────────
+
+// ─── Archive ────────────────────────────────────────────────────────────────
+
+impl crate::archive::Archivable for Coords {
+    const TAG: &'static str = "Coords";
+
+    /// The per-node refcount is not in the file (see the field's own note).
+    /// Size it to the node capacity, at zero: each reloaded `SubMesh` will
+    /// re-increment what it references, and the post-order guarantees they come
+    /// after this.
+    fn on_load(&mut self) {
+        self.refcount = vec![0; self.alive.len()];
+    }
+}
 
 #[cfg(test)]
 mod tests {

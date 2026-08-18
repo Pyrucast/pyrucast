@@ -15,6 +15,7 @@ use crate::handle::Handle;
 use crate::models::owned_components;
 use crate::models::symmetry::{self, MaterialSymmetry};
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use serde::{Deserialize, Serialize};
 
 /// Column DOF name (temperature).
 pub const PRIMAL_VAR: &str = "T";
@@ -87,7 +88,7 @@ fn flux_components(space_dim: usize) -> Vec<String> {
 /// - dual variable:   `"q"` (heat flux row labels).
 /// - Material data (conductivity `"k"`, …) is **not** stored here; it is
 ///   supplied at assembly time via [`crate::ops::matrix::stiffness`].
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct HeatConduction {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
     /// POI1 SubMesh covering the unique nodes of `fespace`'s submesh,

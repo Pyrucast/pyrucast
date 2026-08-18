@@ -42,6 +42,7 @@ use crate::atoms::{Cell, CellIter, ElementType, Node, NodeId, RgbColor};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::OnceLock;
@@ -56,6 +57,7 @@ use std::sync::OnceLock;
 /// A [`RgbColor`] is attached as the **face colour** used by the
 /// visualization layer (`viz` feature); it has no effect on numerics and
 /// defaults to a light blue.
+#[derive(Serialize, Deserialize)]
 pub struct SubMesh {
     element_type: ElementType,
     coords: Handle<Coords>,
@@ -63,6 +65,7 @@ pub struct SubMesh {
     connectivity: Vec<NodeId>,
     /// Face colour used by the viz layer. `serde(default)` keeps older
     /// snapshots (without the field) readable.
+    #[serde(default)]
     face_color: RgbColor,
     /// Once **sealed**, the connectivity is frozen: [`SubMesh::add_cell`] and
     /// [`SubMesh::add_cell_taking`] refuse to run. A submesh is sealed the
@@ -70,6 +73,7 @@ pub struct SubMesh {
     /// captures its handle, so those consumers can never be left referencing
     /// stale cells. The seal is permanent for the object's lifetime.
     /// `serde(default)` keeps older snapshots (without the field) readable.
+    #[serde(default)]
     sealed: bool,
     /// Lazily-built `NodeId → index` map over the **distinct** nodes of the
     /// connectivity, in first-appearance order. Consumers that need a node
@@ -79,6 +83,7 @@ pub struct SubMesh {
     /// derived from `connectivity` and rebuilt on demand after a reload. Only
     /// ever populated once the submesh is sealed (its connectivity frozen),
     /// so it can never go stale.
+    #[serde(skip)]
     node_index: OnceLock<HashMap<NodeId, usize>>,
     /// Lazily-built **canonical POI1 companion**: the node cloud of this
     /// submesh's distinct nodes, materialised once and shared. Every consumer
@@ -90,6 +95,7 @@ pub struct SubMesh {
     /// directly. Not serialized (derived from `connectivity`, rebuilt on
     /// demand). Only ever populated once the submesh is sealed, so it can never
     /// go stale.
+    #[serde(skip)]
     poi1_companion: OnceLock<Handle<SubMesh>>,
 }
 
@@ -553,7 +559,7 @@ impl crate::dump::Dump for SubMesh {
 /// Mesh: aggregate of submeshes. Each submesh carries its own
 /// `Handle<Coords>`; the mesh itself imposes no constraint on
 /// `Coords` homogeneity.
-#[derive(Default)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct Mesh {
     subs: Vec<Handle<SubMesh>>,
 }
@@ -851,6 +857,28 @@ impl Mesh {
 }
 
 // ─── Unit tests ─────────────────────────────────────────────────────────────
+
+// ─── Archive ────────────────────────────────────────────────────────────────
+
+impl crate::archive::Archivable for SubMesh {
+    const TAG: &'static str = "SubMesh";
+
+    /// Re-increment the nodes this submesh uses.
+    ///
+    /// `Drop` decrements them, so without this the counts would go negative the
+    /// day the reloaded mesh dies. The owning `Coords` has already been decoded
+    /// and zeroed — that is what the post-order is for.
+    fn on_load(&mut self) {
+        let mut coords = self.coords.write();
+        for &n in &self.connectivity {
+            let _ = coords.incref(n);
+        }
+    }
+}
+
+impl crate::archive::Archivable for Mesh {
+    const TAG: &'static str = "Mesh";
+}
 
 #[cfg(test)]
 mod tests {

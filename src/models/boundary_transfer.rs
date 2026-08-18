@@ -52,13 +52,14 @@ use crate::models::transfer::{
     material_contract, physics_slice,
 };
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use serde::{Deserialize, Serialize};
 
 /// Surface exchange with an imposed ambient, on a boundary FE subspace.
 ///
 /// Material data (the coefficients `h_<primal>`) is **not** stored here; it is
 /// supplied at assembly time via [`crate::ops::matrix::stiffness`], read from
 /// the boundary cells of the material field.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct BoundaryTransfer {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
     /// POI1 SubMesh covering the unique nodes of `fespace`'s submesh, built

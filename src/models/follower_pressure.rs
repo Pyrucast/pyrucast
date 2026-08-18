@@ -85,6 +85,7 @@ use crate::models::owned_components;
 use crate::models::{
     CellGeom, Contribution, Domain, MatrixKind, MatrixLayout, Physics, SubModelKind,
 };
+use serde::{Deserialize, Serialize};
 
 /// Axis suffixes for the vector components, indexed by spatial direction.
 const AXES: [&str; 3] = ["x", "y", "z"];
@@ -105,7 +106,7 @@ fn traction_names(space_dim: usize) -> Vec<String> {
 }
 
 /// Follower pressure on a boundary FE subspace.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct FollowerPressure {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
     /// POI1 support over the boundary's unique nodes.

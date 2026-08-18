@@ -115,7 +115,7 @@ seul type d'erreur dans la librairie — voir [Conventions](conventions.md).
 
 ## Persistance portable
 
-Un trait unique, `Persist` (`serde` + `bincode`), produit un format binaire
+Un trait unique, `Portable` (`serde` + `bincode`), produit un format binaire
 **portable Linux ↔ Windows**. C'est le socle de la future
 **sauvegarde / reprise** d'une session (graphe complet d'objets). Voir
 [Conventions](conventions.md) et [Modèle mémoire](memory-model.md).

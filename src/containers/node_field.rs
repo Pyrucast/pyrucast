@@ -66,6 +66,7 @@ use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::ops::{Index, IndexMut};
 
@@ -75,6 +76,7 @@ use std::ops::{Index, IndexMut};
 ///
 /// Values are stored row-major: component `c` of node `i` is at index
 /// `i * component_count + c` in the internal flat buffer.
+#[derive(Serialize, Deserialize)]
 pub struct SubNodeField {
     /// POI1 SubMesh owning the per-node refcounts. The field keeps a
     /// clone of this handle for its whole lifetime; that is the only
@@ -82,6 +84,12 @@ pub struct SubNodeField {
     support: Handle<SubMesh>,
     /// Cached connectivity of `support` (POI1 ⇒ one node per cell).
     /// Frozen at construction by [[project-submesh-immutable-size]].
+    ///
+    /// **Never archived**: it is a copy of the support's connectivity, and the
+    /// support is sealed the moment a field captures it, so the copy cannot
+    /// drift. `on_load` takes it again — which is 4 MiB per field of a million
+    /// nodes that the file does not carry.
+    #[serde(skip)]
     nodes: Vec<NodeId>,
     components: Vec<String>,
     /// Row-major: `values[i * components.len() + c]`.
@@ -486,7 +494,7 @@ crate::impl_subfield_field_ops!(SubNodeField);
 /// sub defining `(node, component)`; whether the duplicates agree is
 /// verified on demand by [`NodeField::check`]. Writes go through the subs
 /// (`with_mut` on `field.get(i)`), exactly like `ElementField`.
-#[derive(Default)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct NodeField {
     subs: Vec<Handle<SubNodeField>>,
 }
@@ -850,6 +858,23 @@ impl NodeFieldView {
 }
 
 // ─── Unit tests ─────────────────────────────────────────────────────────────
+
+// ─── Archive ────────────────────────────────────────────────────────────────
+
+impl crate::archive::Archivable for SubNodeField {
+    const TAG: &'static str = "SubNodeField";
+
+    /// Take the node list from the support again rather than carrying a copy of
+    /// it in the file. The support is a sealed POI1 mesh, so its connectivity
+    /// *is* the node list, in the order this field indexes its values by.
+    fn on_load(&mut self) {
+        self.nodes = self.support.read().connectivity().to_vec();
+    }
+}
+
+impl crate::archive::Archivable for NodeField {
+    const TAG: &'static str = "NodeField";
+}
 
 #[cfg(test)]
 mod tests {

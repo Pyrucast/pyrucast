@@ -118,6 +118,6 @@ Où est le coût réel du compteur ?
 
 ## Sauvegarde sur disque
 
-Le trait `Persist` (`serde` + `bincode`) est l'unique mécanisme de sérialisation, au format binaire identique Linux ↔ Windows (voir [Conventions](conventions.md)).
+Le trait `Portable` (`serde` + `bincode`) est l'unique mécanisme de sérialisation, au format binaire identique Linux ↔ Windows (voir [Conventions](conventions.md)).
 
 La sauvegarde d'un **graphe d'objets** — écrire plusieurs objets dans un fichier et les relire en préservant leur partage, de sorte que deux champs portés par le même support restent, après relecture, deux champs portés par un seul support — est **décidée mais pas encore écrite**. Elle reposera sur des racines nommées, des enregistrements explicites par type munis d'identifiants locaux au fichier, et des compteurs jamais sauvegardés mais recomptés à la relecture. Voir la [feuille de route](https://github.com/Pyrucast/pyrucast/blob/master/ROADMAP.md).

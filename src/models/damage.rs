@@ -246,7 +246,7 @@ fn stress_names(space_dim: usize, model: ElasticityModel) -> Vec<String> {
 /// Damage on an FE subspace. Same supports as
 /// [`crate::models::elasticity::Elasticity`]; material is supplied at
 /// assembly / integration time.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Damage {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
     /// POI1 support over the subspace's unique nodes (row/col support).

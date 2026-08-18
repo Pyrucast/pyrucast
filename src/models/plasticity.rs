@@ -57,6 +57,7 @@ use crate::models::elasticity::{self, ElasticityModel};
 use crate::models::owned_components;
 use crate::models::plastic::{self, MatParams, PlasticLaw, PrevState};
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use serde::{Deserialize, Serialize};
 
 /// Axis suffixes for the vector components, indexed by spatial direction.
 const AXES: [&str; 3] = ["x", "y", "z"];
@@ -140,7 +141,7 @@ fn echoes_sigma_zz(space_dim: usize, model: ElasticityModel) -> bool {
 ///
 /// Holds the same supports as [`crate::models::elasticity::Elasticity`];
 /// material (`E`, `nu`, `sigma_y`) is supplied at assembly / integration time.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Plasticity {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
     /// POI1 support over the subspace's unique nodes (row/col support).

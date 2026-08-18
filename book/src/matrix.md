@@ -266,7 +266,7 @@ sys.finalize()  # (ou `sys.assemble()` si des blocs sont calculés)
 
 ## Sérialisation
 
-`Matrix` implémente `Persist` via `serde` (comme tous les objets pyrucast). Les triplets COO, la table de noms et les DOFs voyagent dans le format binaire portable Linux ↔ Windows.
+`Matrix` implémente `Portable` via `serde` (comme tous les objets pyrucast). Les triplets COO, la table de noms et les DOFs voyagent dans le format binaire portable Linux ↔ Windows.
 
 ## Limitations actuelles
 

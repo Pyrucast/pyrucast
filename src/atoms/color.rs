@@ -88,7 +88,7 @@ mod tests {
 
     #[test]
     fn serde_roundtrip() {
-        use crate::persist::Persist;
+        use crate::archive::Portable;
         let c = RgbColor::new(10, 20, 30);
         let bytes = c.to_bytes().unwrap();
         let back = RgbColor::from_bytes(&bytes).unwrap();

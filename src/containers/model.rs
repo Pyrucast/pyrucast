@@ -129,6 +129,7 @@ use crate::models::{
     follower_pressure, heat_conduction, interface_transfer, mpc, plastic, plasticity, radiation,
     shell, timoshenko, truss, Constraint, MatrixKind, Physics, RelationSense, SubModelKind,
 };
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::{Arc, OnceLock};
 
@@ -166,6 +167,7 @@ fn insert_relation_value(
 ///
 /// Adding a physics means adding **one variant here** and **one arm to
 /// [`SubModel::as_kind`]** — no other site in this file changes.
+#[derive(Serialize, Deserialize)]
 pub enum SubModel {
     /// Linear heat conduction — see [`heat_conduction::HeatConduction`].
     HeatConduction(heat_conduction::HeatConduction),
@@ -884,7 +886,7 @@ impl crate::dump::Dump for SubModel {
 /// `PySubModel`) references it; dropping the last reference triggers the
 /// sub-model's `Drop` (which releases the Lagrange-multiplier nodes for
 /// Dirichlet sub-models).
-#[derive(Default)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct Model {
     subs: Vec<Handle<SubModel>>,
     /// Memoised global CSR sparsity, **one slot per [`MatrixKind`]** (see
@@ -892,6 +894,7 @@ pub struct Model {
     /// stiffness may span different sub-models), hence its own sparsity. Derived
     /// state: never serialized, and cleared whenever the model changes
     /// (`add_sub` → `post_push`), since a new sub-model changes the DOF layout.
+    #[serde(skip)]
     matrix_patterns: [OnceLock<Arc<AssemblyPattern>>; MatrixKind::COUNT],
 }
 
@@ -1477,6 +1480,16 @@ fn union_names<I: IntoIterator<Item = String>>(iter: I) -> Vec<String> {
 }
 
 // ─── Unit tests ────────────────────────────────────────────────────────────
+
+// ─── Archive ────────────────────────────────────────────────────────────────
+
+impl crate::archive::Archivable for SubModel {
+    const TAG: &'static str = "SubModel";
+}
+
+impl crate::archive::Archivable for Model {
+    const TAG: &'static str = "Model";
+}
 
 #[cfg(test)]
 mod tests {

@@ -130,7 +130,7 @@ impl ValueKind {
 /// A single tabulated value: a scalar, a node sub-field, or an element
 /// sub-field. Stored **inline** (owned) inside a [`SubEvolution`], like the
 /// physics structs inside `SubModel`.
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub enum SubValue {
     /// A plain scalar.
     Scalar(f64),
@@ -182,7 +182,7 @@ fn lerp(lo: &SubValue, hi: &SubValue, t: f64) -> Result<SubValue> {
 /// One tabulated curve: abscissas (sorted, strictly increasing) and the
 /// matching values, all of the same [`ValueKind`] (and, for fields, on the
 /// same support).
-#[derive(Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct SubEvolution {
     /// Strictly increasing abscissas of the samples.
     abscissas: Vec<f64>,
@@ -194,10 +194,12 @@ pub struct SubEvolution {
     /// to label plots and — when a field is mapped through a scalar curve — to
     /// select which field component to look up (see
     /// [`SubEvolution::interpolate_field`]).
+    #[serde(default)]
     abscissa_type: Option<String>,
     /// Physical **type** of the ordinate, for **scalar** curves only (e.g.
     /// `"young"`). Optional; labels plots and names the component produced when
     /// a field is mapped through the curve.
+    #[serde(default)]
     ordinate_type: Option<String>,
 }
 
@@ -599,7 +601,7 @@ impl crate::dump::Dump for SubEvolution {
 /// The aggregate carries its own [`OutOfRange`] policy, applied to every
 /// curve at interpolation time. Note that the structural union (`a | b`) and
 /// slicing reset the policy to the default [`OutOfRange::Error`].
-#[derive(Default)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct Evolution {
     subs: Vec<Handle<SubEvolution>>,
     out_of_range: OutOfRange,
@@ -1087,6 +1089,16 @@ fn element_sub_on(
 }
 
 // ─── Unit tests ─────────────────────────────────────────────────────────────
+
+// ─── Archive ────────────────────────────────────────────────────────────────
+
+impl crate::archive::Archivable for SubEvolution {
+    const TAG: &'static str = "SubEvolution";
+}
+
+impl crate::archive::Archivable for Evolution {
+    const TAG: &'static str = "Evolution";
+}
 
 #[cfg(test)]
 mod tests {

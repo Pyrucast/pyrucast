@@ -155,7 +155,7 @@ impl crate::dump::Dump for DofOrdering {
 /// over `fespace`'s cells and scatters the result straight into the global
 /// matrix — a computed block never materialises a COO (its own `coo` stays an
 /// empty, correctly-sized placeholder, so structural queries still work).
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ComputedRecipe {
     /// Sub-model whose element kernel produces the contribution.
     pub submodel: Handle<SubModel>,
@@ -169,26 +169,39 @@ pub struct ComputedRecipe {
     /// dispatches on to pick the sub-model's kernel
     /// ([`SubModelKind::matrix_element`](crate::models::SubModelKind::matrix_element)).
     /// Defaults to [`MatrixKind::Stiffness`] for backward-compatible deserialization.
+    #[serde(default)]
     pub kind: MatrixKind,
     /// Current stress / algorithmic-tangent field the kernel reads — `Some` only
     /// for the state-dependent kinds (geometric stiffness, consistent tangent).
+    #[serde(default)]
     pub state: Option<Handle<SubElementField>>,
     /// FE subspaces carrying the **columns** when this block couples two meshes
     /// (an interface exchange law). **Empty** — the overwhelming case — means
     /// rows and columns live on the same mesh and `fespaces` drives both; the
     /// scatter routes on exactly that emptiness.
+    #[serde(default)]
     pub col_fespaces: Vec<Handle<SubFiniteElementSpace>>,
 }
 
-#[derive(Clone)]
+/// Default value of [`SubMatrix::factor`] for pre-existing serialized data
+/// that predates the field.
+fn default_factor() -> f64 {
+    1.0
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct SubMatrix {
     /// POI1 mesh: cell `k` holds the k-th row-support node.
     row_support: Handle<SubMesh>,
     /// POI1 mesh: cell `k` holds the k-th col-support node.
     col_support: Handle<SubMesh>,
     /// Snapshot of `row_support` connectivity (one NodeId per cell).
+    /// **Never archived**: taken again from the (sealed) support by `on_load`.
+    #[serde(skip)]
     row_nodes: Vec<NodeId>,
     /// Snapshot of `col_support` connectivity (one NodeId per cell).
+    /// **Never archived**: same as `row_nodes`.
+    #[serde(skip)]
     col_nodes: Vec<NodeId>,
     /// Row variable names (dual variables).
     dual_vars: Vec<String>,
@@ -197,12 +210,14 @@ pub struct SubMatrix {
     /// `(node_local, var_idx)` ↔ matrix index mapping.
     ordering: DofOrdering,
     /// COO data, sized `(n_row_nodes × n_dual_vars) × (n_col_nodes × n_primal_vars)`.
+    #[serde(with = "coo_serde")]
     coo: CooMatrix<f64>,
     symmetric: bool,
     /// `Some` ⇒ this is a **computed** block: `coo` is an empty placeholder and
     /// the contribution is produced on the fly by the global assembler from this
     /// recipe. `None` ⇒ **literal** block, `coo` holds the values (the historical
     /// behaviour, unchanged).
+    #[serde(default)]
     recipe: Option<ComputedRecipe>,
     /// The set of [`Physics`] natures of the sub-model that produced this block,
     /// set by the assembler ([`crate::ops::matrix`]) for **both** the computed
@@ -210,6 +225,7 @@ pub struct SubMatrix {
     /// for a block built directly, outside assembly (the « rien » case), or
     /// carrying several natures for a coupled physics. Consumed by
     /// [`Matrix::filter`](Matrix::filter).
+    #[serde(default)]
     physics: Vec<Physics>,
     /// Lazy scalar scale applied to every value this block emits — at direct
     /// accessors (`get`, `dense`, …) and at global assembly (`build_global_triplets`,
@@ -219,11 +235,14 @@ pub struct SubMatrix {
     /// values don't exist until assembly evaluates the recipe). Never touches
     /// `local_coo_arrays`/`local_triplets`, which stay raw — every consumer of
     /// those applies the factor itself.
+    #[serde(default = "default_factor")]
     factor: f64,
     /// `NodeId → local position` for O(1) `add_entry`, derived from
     /// `row_nodes` / `col_nodes`. Not serialized; built lazily on first use
     /// (the support is fixed at construction).
+    #[serde(skip)]
     row_index: HashMap<NodeId, u32>,
+    #[serde(skip)]
     col_index: HashMap<NodeId, u32>,
 }
 
@@ -830,6 +849,52 @@ impl crate::dump::Dump for SubMatrix {
     }
 }
 
+// ─── CooMatrix serde ───────────────────────────────────────────────────────
+
+mod coo_serde {
+    use nalgebra_sparse::CooMatrix;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    #[derive(Serialize, Deserialize)]
+    struct CooData {
+        nrows: usize,
+        ncols: usize,
+        row_indices: Vec<usize>,
+        col_indices: Vec<usize>,
+        values: Vec<f64>,
+    }
+
+    pub fn serialize<S: Serializer>(
+        coo: &CooMatrix<f64>,
+        s: S,
+    ) -> std::result::Result<S::Ok, S::Error> {
+        CooData {
+            nrows: coo.nrows(),
+            ncols: coo.ncols(),
+            row_indices: coo.row_indices().to_vec(),
+            col_indices: coo.col_indices().to_vec(),
+            values: coo.values().to_vec(),
+        }
+        .serialize(s)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        d: D,
+    ) -> std::result::Result<CooMatrix<f64>, D::Error> {
+        let data = CooData::deserialize(d)?;
+        let mut coo = CooMatrix::new(data.nrows, data.ncols);
+        for ((r, c), v) in data
+            .row_indices
+            .into_iter()
+            .zip(data.col_indices)
+            .zip(data.values)
+        {
+            coo.push(r, c, v);
+        }
+        Ok(coo)
+    }
+}
+
 // ─── Matrix (aggregate) ────────────────────────────────────────────────────
 
 /// Snapshot produced by [`Matrix::finalize`]: DOF tables + assembled CSR.
@@ -845,15 +910,17 @@ struct AssembledData {
 /// (`to_csr`, `to_dmatrix`, `mul_dense`, `dense`, `to_coo`, `to_csc`) return
 /// an error if the matrix has not been finalized. `add_sub` invalidates the
 /// assembled state.
-#[derive(Default)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct Matrix {
     subs: Vec<Handle<SubMatrix>>,
+    #[serde(skip)]
     assembled: Option<AssembledData>,
     /// Transparently cached factorization (e.g. the solver's sparse LU), reused
     /// across solves on the same matrix. Derived state: never serialized,
     /// type-erased so `containers` stays decoupled from the solver, and cleared
     /// whenever the matrix changes (`add_sub` → `post_push`). Interior mutability
     /// so `solve(&Matrix)` can fill it under a shared store read lock.
+    #[serde(skip)]
     factorization: parking_lot::Mutex<Option<std::sync::Arc<dyn std::any::Any + Send + Sync>>>,
 }
 
@@ -1673,6 +1740,23 @@ impl crate::dump::Dump for Matrix {
 }
 
 // ─── Unit tests ────────────────────────────────────────────────────────────
+
+// ─── Archive ────────────────────────────────────────────────────────────────
+
+impl crate::archive::Archivable for SubMatrix {
+    const TAG: &'static str = "SubMatrix";
+
+    /// Take both node lists from the (sealed) supports again. The lazy
+    /// `NodeId → position` maps rebuild themselves on first use.
+    fn on_load(&mut self) {
+        self.row_nodes = self.row_support.read().connectivity().to_vec();
+        self.col_nodes = self.col_support.read().connectivity().to_vec();
+    }
+}
+
+impl crate::archive::Archivable for Matrix {
+    const TAG: &'static str = "Matrix";
+}
 
 #[cfg(test)]
 mod tests {

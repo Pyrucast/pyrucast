@@ -22,7 +22,7 @@ use serde::Serialize;
 /// # Example
 ///
 /// ```
-/// use pyrucast::persist::Persist;
+/// use pyrucast::archive::Portable;
 ///
 /// #[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
 /// struct Pt {
@@ -35,14 +35,14 @@ use serde::Serialize;
 /// let b = Pt::from_bytes(&bytes).unwrap();
 /// assert_eq!(a, b);
 /// ```
-pub trait Persist: Sized {
+pub trait Portable: Sized {
     /// Serialize into a portable binary buffer.
     fn to_bytes(&self) -> Result<Vec<u8>>;
     /// Rebuild from a portable binary buffer.
     fn from_bytes(bytes: &[u8]) -> Result<Self>;
 }
 
-impl<T> Persist for T
+impl<T> Portable for T
 where
     T: Serialize + DeserializeOwned,
 {

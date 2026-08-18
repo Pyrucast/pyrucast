@@ -93,6 +93,7 @@ struct Component {
 /// See the module documentation. Built by pairing each slave node with its
 /// closest master facet once, at construction; the pairing, the normal and the
 /// weights are then **fixed** (linearised contact).
+#[derive(Serialize, Deserialize)]
 pub struct Contact {
     /// POI1 mesh of the slave nodes, one cell per relation (its cell `r` is
     /// the slave node of relation `r`).

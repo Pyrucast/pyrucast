@@ -181,7 +181,7 @@ pub(crate) fn check_continuum_dimensions(
 /// plane strain, axisymmetric, solid) and `symmetry` is the **material** one.
 /// They combine freely — an orthotropic axisymmetric body is as ordinary as an
 /// isotropic plane one.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Elasticity {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
     /// POI1 support over the subspace's unique nodes (row/col support).

@@ -130,7 +130,7 @@ impl std::fmt::Display for ShellModel {
 }
 
 /// Shell physics on a **surface** FE subspace in 3-D.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Shell {
     /// Full-quadrature subspace — membrane and bending.
     pub(crate) fespace: Handle<SubFiniteElementSpace>,

@@ -96,6 +96,7 @@ struct Component {
 /// See the module documentation. The right-hand side `g` defaults to `0` (a
 /// rigid tie); a non-zero `g` is supplied through the load `SubNodeField` at the
 /// multiplier node's `imposed_value` component, as for `Dirichlet` / `Mpc`.
+#[derive(Serialize, Deserialize)]
 pub struct Embedded {
     /// POI1 mesh of the immersed nodes, one cell per relation-group (its cell
     /// `r` is the immersed node of relation-group `r`).

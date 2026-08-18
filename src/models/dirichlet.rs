@@ -46,6 +46,7 @@ use crate::models::{
     constraint_block_pair, Constraint, ConstraintTerm, Contribution, MatrixKind, Physics, Relation,
     RelationSense, SubModelKind,
 };
+use serde::{Deserialize, Serialize};
 
 /// Default multiplier (primal) name for a constrained variable: `lambda_<v>`.
 pub fn default_multiplier(imposed_variable: &str) -> String {
@@ -63,6 +64,7 @@ pub fn default_imposed_value(imposed_variable: &str) -> String {
 /// the two meshes. The imposed value `u_d` is **not** stored here: the user
 /// supplies it through the load `SubNodeField` at the multiplier node's
 /// `imposed_value` component.
+#[derive(Serialize, Deserialize)]
 pub struct Dirichlet {
     /// Constrained primal of the target physics (e.g. `"T"`).
     pub(crate) imposed_variable: String,
@@ -80,6 +82,7 @@ pub struct Dirichlet {
     pub(crate) multiplier_mesh: Mesh,
     /// Equality (default) or unilateral inequality (`u ≥ u_d` / `u ≤ u_d`),
     /// solved by the active-set operator.
+    #[serde(default)]
     pub(crate) sense: RelationSense,
 }
 

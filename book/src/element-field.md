@@ -195,7 +195,7 @@ de sorte que les **discontinuités (flux, contraintes) restent visibles**. Voir
 
 ## Sérialisation
 
-`SubElementField` (et donc `ElementField`) implémente `Persist` via `serde`
+`SubElementField` (et donc `ElementField`) implémente `Portable` via `serde`
 comme tous les objets pyrucast : le buffer de valeurs et la liste de noms
 voyagent dans le format binaire portable Linux ↔ Windows. Le lien vers l'espace
 EF, lui, est un `Handle` — il relèvera de la sauvegarde de graphe, encore à

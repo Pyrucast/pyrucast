@@ -15,7 +15,7 @@ src/
 ├── lib.rs              # racine de la crate + #[pymodule] (enregistrement Python)
 │
 ├── handle.rs           # Handle<T> : Arc<RwLock<T>>, guards possédés, identité
-├── persist.rs          # trait Persist (serde + bincode), format portable
+├── persist.rs          # trait Portable (serde + bincode), format portable
 ├── error.rs            # PyrucastError + Result (l'unique type d'erreur)
 ├── dump.rs             # trait Dump (3ᵉ niveau d'affichage : contenu intégral)
 ├── aggregate.rs        # trait Aggregate + macros (len/[i]/union, pyméthodes)
@@ -157,7 +157,7 @@ flowchart LR
         faer["faer<br/><small>LU creux — ops::solver</small>"]
         rayon["rayon<br/><small>parallel/, models::kernel</small>"]
         parking["parking_lot<br/><small>guards owned — handle/</small>"]
-        serde["serde<br/><small>Persist — persist/ (+ derive)</small>"]
+        serde["serde<br/><small>Portable — persist/ (+ derive)</small>"]
         bincode["bincode<br/><small>format binaire — persist/</small>"]
         paste["paste<br/><small>macros — aggregate/</small>"]
     end

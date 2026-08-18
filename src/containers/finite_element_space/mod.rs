@@ -68,6 +68,7 @@ use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::OnceLock;
 
@@ -77,6 +78,7 @@ use std::sync::OnceLock;
 ///
 /// Stores only the **reference-space** tables (independent of the node
 /// coordinates); physical quantities are computed on the fly.
+#[derive(Serialize, Deserialize)]
 pub struct SubFiniteElementSpace {
     submesh: Handle<SubMesh>,
     interpolation: Interpolation,
@@ -91,6 +93,7 @@ pub struct SubFiniteElementSpace {
     /// `Coords`). Carried here so the parallel drivers snapshot it once instead
     /// of re-reading the handle per cell. `#[serde(default)]` for subspaces
     /// serialised before the frame existed.
+    #[serde(default)]
     axisymmetric: bool,
 
     // Reference-space tables (invariant under mesh deformation):
@@ -107,17 +110,21 @@ pub struct SubFiniteElementSpace {
     /// Flat `n_g × shape_count` values of the **field** basis. Empty when it
     /// coincides with the geometric one (every Lagrange space), so the common
     /// case costs no memory and the accessor falls back.
+    #[serde(default)]
     field_n_at_g: Vec<f64>,
     /// Flat `n_g × shape_count × ref_dim` field `∂N_i/∂ξ_j(ξ_g)`. Same fallback.
+    #[serde(default)]
     field_dn_at_g: Vec<f64>,
     /// Flat `n_g × shape_count × ref_dim` field `∂²N_i/∂ξ_j²(ξ_g)`. Only the C¹
     /// families fill it; empty otherwise.
+    #[serde(default)]
     field_d2n_at_g: Vec<f64>,
 
     /// Cell colouring for conflict-free parallel assembly, computed once and
     /// memoised. Topological (depends only on the frozen connectivity), so it is
     /// invariant for the subspace's lifetime. Not serialised — recomputed after
     /// a load, like the lazy index maps on `SubMatrix`.
+    #[serde(skip)]
     coloring: OnceLock<Vec<Vec<usize>>>,
 }
 
@@ -564,7 +571,7 @@ impl crate::dump::Dump for SubFiniteElementSpace {
 /// each `SubFiniteElementSpace` captures its `SubMesh` handle. The node coordinates
 /// in the underlying `Coords` may evolve later; the on-the-fly
 /// Jacobian computation always reflects the current coordinates.
-#[derive(Default)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct FiniteElementSpace {
     subs: Vec<Handle<SubFiniteElementSpace>>,
 }
@@ -788,6 +795,16 @@ pub(crate) fn build_dn_dx(
 }
 
 // ─── Unit tests ────────────────────────────────────────────────────────────
+
+// ─── Archive ────────────────────────────────────────────────────────────────
+
+impl crate::archive::Archivable for SubFiniteElementSpace {
+    const TAG: &'static str = "SubFiniteElementSpace";
+}
+
+impl crate::archive::Archivable for FiniteElementSpace {
+    const TAG: &'static str = "FiniteElementSpace";
+}
 
 #[cfg(test)]
 mod tests {

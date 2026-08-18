@@ -48,6 +48,7 @@ use crate::models::{
     constraint_block_pair, Constraint, ConstraintTerm, Contribution, MatrixKind, Physics, Relation,
     RelationSense, SubModelKind,
 };
+use serde::{Deserialize, Serialize};
 
 /// Default multiplier (primal) name shared by every relation of an MPC.
 pub fn default_multiplier() -> String {
@@ -61,6 +62,7 @@ pub fn default_imposed_value() -> String {
 
 /// One term `coefficient · u(node, variable)` shared by every relation of an
 /// [`Mpc`]. Its mesh is POI1: cell `r` holds the node of relation `r`.
+#[derive(Serialize, Deserialize)]
 pub struct MpcTerm {
     /// POI1 mesh, paired element-for-element with the other terms and the
     /// multiplier mesh (cell `r` = the node of relation `r` for this term).
@@ -99,6 +101,7 @@ impl MpcTerm {
 /// `g` is **not** stored here: the user supplies it through the load
 /// `SubNodeField` at the multiplier node's `imposed_value` component (default
 /// `g = 0`).
+#[derive(Serialize, Deserialize)]
 pub struct Mpc {
     /// The terms summed on the left-hand side of every relation (at least one).
     pub(crate) terms: Vec<MpcTerm>,
@@ -110,6 +113,7 @@ pub struct Mpc {
     pub(crate) imposed_value: String,
     /// Equality (default) or unilateral inequality (`Σ aₖ·uₖ ≥ g` / `≤ g`),
     /// solved by the active-set operator.
+    #[serde(default)]
     pub(crate) sense: RelationSense,
 }
 

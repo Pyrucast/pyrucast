@@ -93,6 +93,7 @@ use crate::containers::field::SubField;
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 
 // ─── SubElementField ───────────────────────────────────────────────────────
@@ -102,6 +103,7 @@ use std::fmt;
 ///
 /// Layout: flat row-major in the order *cell → gauss → component*
 /// (see the module-level documentation).
+#[derive(Serialize, Deserialize)]
 pub struct SubElementField {
     support: Handle<SubFiniteElementSpace>,
     components: Vec<String>,
@@ -387,7 +389,7 @@ crate::impl_subfield_field_ops!(SubElementField);
 /// `ElementField` is to `FiniteElementSpace` what a `SubElementField` is
 /// to `SubFiniteElementSpace`. The component lists captured by the underlying
 /// sub-fields may differ from one subspace to the next.
-#[derive(Default)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct ElementField {
     subs: Vec<Handle<SubElementField>>,
 }
@@ -623,6 +625,16 @@ impl ElementFieldView {
 }
 
 // ─── Unit tests ────────────────────────────────────────────────────────────
+
+// ─── Archive ────────────────────────────────────────────────────────────────
+
+impl crate::archive::Archivable for SubElementField {
+    const TAG: &'static str = "SubElementField";
+}
+
+impl crate::archive::Archivable for ElementField {
+    const TAG: &'static str = "ElementField";
+}
 
 #[cfg(test)]
 mod tests {

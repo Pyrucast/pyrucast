@@ -22,6 +22,7 @@ use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::owned_components;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use serde::{Deserialize, Serialize};
 
 /// Axis suffixes for the vector components, indexed by spatial direction.
 pub(crate) const AXES: [&str; 3] = ["x", "y", "z"];
@@ -52,7 +53,7 @@ fn strain_names(space_dim: usize) -> Vec<String> {
 ///
 /// Material data (`E`, `A`) is supplied at assembly time via
 /// [`crate::ops::matrix::stiffness`], not stored here.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Truss {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
     /// POI1 support covering the subspace's unique nodes (row/col support of

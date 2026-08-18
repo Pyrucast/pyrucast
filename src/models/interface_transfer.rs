@@ -76,9 +76,10 @@ use crate::models::transfer::{
 use crate::models::{
     CellGeom, Contribution, CouplingLayout, Domain, MatrixKind, MatrixLayout, Physics, SubModelKind,
 };
+use serde::{Deserialize, Serialize};
 
 /// Exchange law between two conforming boundary FE subspaces.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct InterfaceTransfer {
     pub(crate) side_a: Handle<SubFiniteElementSpace>,
     pub(crate) side_b: Handle<SubFiniteElementSpace>,

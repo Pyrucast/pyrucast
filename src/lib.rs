@@ -6,8 +6,8 @@
 //! # Conventions
 //!
 //! - Every error goes through [`PyrucastError`] / [`Result`].
-//! - Every serializable object uses the [`persist::Persist`] trait
-//!   (the backbone of file save/load, portable between Linux and Windows).
+//! - Every serializable object uses the [`archive::portable::Portable`] trait
+//!   (the byte contract of file save/load, identical on Linux and Windows).
 //! - Display comes in three layered levels, all wired to Python:
 //!   `Display`/`__str__` (one-line summary), `Debug`/`__repr__` (bounded
 //!   structure — never bulk content), and [`dump::Dump`]/`dump(…)` (full
@@ -16,7 +16,7 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::persist::Persist;
+//! use pyrucast::archive::Portable;
 //!
 //! #[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
 //! struct Demo {
@@ -35,6 +35,7 @@
 #![allow(clippy::needless_range_loop)]
 
 pub mod aggregate;
+pub mod archive;
 pub mod atoms;
 pub mod containers;
 pub mod coords;
@@ -45,7 +46,6 @@ pub mod interrupt;
 pub mod models;
 pub mod ops;
 pub mod parallel;
-pub mod persist;
 
 #[cfg(feature = "python-api")]
 pub mod py;
