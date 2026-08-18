@@ -499,8 +499,13 @@ Ci-dessous, les règles seules.
    | une chaîne Rust complète | `tests/<sujet>.rs`, ancré | `{{#include ../../tests/<sujet>.rs:ancre}}` |
    | une chaîne Python complète | `examples/<sujet>.py` | `{{#include}}`, entier ou ancré |
    | un parcours pédagogique | `formation/<sujet>.py`, ancré | `{{#include …:ancre}}` |
-   | l'usage d'un opérateur en Python | `tests/python/doc_<famille>.py`, ancré | `{{#include …:ancre}}` |
+   | l'usage d'un opérateur en Python | `tests/python/test_doc_<famille>.py`, ancré | `{{#include …:ancre}}` |
    | une signature de conception | la page elle-même | ` ```rust,ignore `, page déclarée |
+
+   Le préfixe `test_` n'est pas décoratif : `pytest` ne collecte que
+   `test_*.py`. Un fichier de sources d'exemples nommé autrement est inclus
+   dans le book et **exécuté par personne** — exactement ce que la règle
+   cherche à empêcher.
 
    Corollaire : **doctest et bloc du book ne se confondent pas.** Le doctest
    sert le lecteur de la rustdoc — référence d'API, item par item ; le bloc du

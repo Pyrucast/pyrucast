@@ -23,9 +23,7 @@ sous-modèle qui en a besoin, l'assembleur sélectionne la zone dont le
 sous-modèles sans matériau (Dirichlet…) ignorent ce champ.
 
 ```python
-materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
-K = pyrucast.matrix.stiffness(model, materials)
-print(K)  # Matrix: n row(s) × n col(s), …
+{{#include ../../../tests/python/test_doc_ops_assemblage.py:stiffness}}
 ```
 
 ## `mass(model, materials)` → `Matrix`
@@ -42,10 +40,7 @@ densité `rho` est une composante **facultative** des physiques mécaniques (com
 n'en a pas besoin, mais la masse / capacité les exige (erreur claire sinon).
 
 ```python
-materials = pyrucast.element_field.material_field(
-    model, [("E", 210.0), ("nu", 0.3), ("rho", 7800.0)]
-)
-M = pyrucast.matrix.mass(model, materials)
+{{#include ../../../tests/python/test_doc_ops_assemblage.py:mass}}
 ```
 
 ## `lump(matrix)` → `Matrix`
@@ -58,8 +53,7 @@ masse totale (`Σ_i M_lump[i,i] = Σ_ij M[i,j]`) — la forme découplée bon ma
 schémas explicites. La matrice d'entrée doit être assemblée et carrée.
 
 ```python
-M = pyrucast.matrix.mass(model, materials)
-M_lumped = pyrucast.matrix.lump(M)  # diagonale
+{{#include ../../../tests/python/test_doc_ops_assemblage.py:lump}}
 ```
 
 ## `geometric(model, materials, stress)` → `Matrix`
@@ -74,7 +68,7 @@ pour le flambement et les analyses précontraintes. Le noyau
 `materials`. `materials` sert encore à résoudre chaque zone mécanique (`E`, `nu`).
 
 ```python
-Kg = pyrucast.matrix.geometric(model, materials, stress)
+{{#include ../../../tests/python/test_doc_ops_assemblage.py:geometric}}
 ```
 
 ## `tangent(model, materials, state)` → `Matrix`
@@ -91,9 +85,7 @@ physique **linéaire** (élasticité) la tangente vaut la rigidité élastique e
 consomme. `materials` résout chaque zone comme `stiffness`.
 
 ```python
-strain = pyrucast.element_field.deformation(u, fes)
-state = pyrucast.element_field.integrate_behavior(model, strain, materials)
-Kt = pyrucast.matrix.tangent(model, materials, state)
+{{#include ../../../tests/python/test_doc_ops_assemblage.py:tangent}}
 ```
 
 ## Composition : `assemble(&mut Matrix)`
@@ -114,9 +106,7 @@ k.assemble()?;                             // réassemble, nouveau bloc inclus
 ```
 
 ```python
-k = pyrucast.matrix.stiffness(model, materials)
-k.add_sub(bloc_supplementaire)
-k.assemble()
+{{#include ../../../tests/python/test_doc_ops_assemblage.py:assemble}}
 ```
 
 Contrairement à `stiffness`, ce chemin ne consulte pas le motif mémoïsé sur le
@@ -131,9 +121,7 @@ et l'assembleur somme déjà les contributions d'un même DOF, donc `M/dt + K`
 s'obtient sans opérateur dédié :
 
 ```python
-sys = (m / dt) | k
-sys.assemble()
-u = pyrucast.solver.solve(sys, rhs)
+{{#include ../../../tests/python/test_doc_ops_assemblage.py:somme}}
 ```
 
 ## Chargement réparti : `flux(fespace, density, component)` → `NodeField`
@@ -156,9 +144,7 @@ une arête `SEG2` plongée dans un `Coords` 2-D s'intègre comme une **ligne**
 avec le reste du chargement par l'union `|`.
 
 ```python
-# Flux uniforme Q sur le bord gauche (maillage SEG2), composante duale "q".
-load = pyrucast.node_field.flux(edge_fes.unit(), Q, "q")
-rhs = load | other_loads
+{{#include ../../../tests/python/test_doc_ops_assemblage.py:flux}}
 ```
 
 Exemples complets de bout en bout : [Conduction thermique](../thermique.md)

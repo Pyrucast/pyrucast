@@ -76,8 +76,14 @@ jamais de la page où on veut l'afficher.
 | une chaîne Rust complète (une physique) | `tests/<sujet>.rs`, entre ancres | un `include` ancré | `cargo test` |
 | une chaîne Python complète | `examples/<sujet>.py` | un `include`, entier ou ancré | `run_examples` |
 | un parcours pédagogique | `formation/<sujet>.py`, entre ancres | un `include` ancré | `run_examples` |
-| l'usage d'un opérateur en Python | `tests/python/doc_<famille>.py`, entre ancres | un `include` ancré | `pytest` |
+| l'usage d'un opérateur en Python | `tests/python/test_doc_<famille>.py`, entre ancres | un `include` ancré | `pytest` |
 | une **signature de conception** | la page elle-même | ` ```rust,ignore ` — page **déclarée** | rien, et c'est assumé |
+
+Un piège vérifié à la première migration : **le préfixe `test_` n'est pas
+décoratif.** `pytest` ne collecte que `test_*.py` ; un fichier de sources
+d'exemples nommé `doc_ops_assemblage.py` est inclus dans le book et exécuté par
+personne. Le garde-fou `includes` ne peut pas le voir — l'ancre résout très
+bien —, et on retombe sur une page qui montre du code que rien ne vérifie.
 
 ### Doctest et bloc du book ne se confondent pas
 
