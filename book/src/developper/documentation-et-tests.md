@@ -77,7 +77,7 @@ jamais de la page où on veut l'afficher.
 | une chaîne Python complète | `examples/<sujet>.py` | un `include`, entier ou ancré | `run_examples` |
 | un parcours pédagogique | `formation/<sujet>.py`, entre ancres | un `include` ancré | `run_examples` |
 | l'usage d'un opérateur en Python | `tests/python/test_doc_<famille>.py`, entre ancres | un `include` ancré | `pytest` |
-| une **signature de conception** | la page elle-même | ` ```rust,ignore ` — page **déclarée** | rien, et c'est assumé |
+| ce qui n'est **pas du code** (signature annotée, pseudo-code) | la page elle-même | ` ```text ` — pas de coloration, donc pas de promesse | rien, et c'est assumé |
 
 Un piège vérifié à la première migration : **le préfixe `test_` n'est pas
 décoratif.** `pytest` ne collecte que `test_*.py` ; un fichier de sources
@@ -147,8 +147,8 @@ d'être un test.
 > **Aucune page du book ne possède de code.**
 
 Toute clôture ` ```rust ` ou ` ```python ` d'une page contient une directive
-d'inclusion pointant une source que la CI exécute — ou la page figure dans la
-liste déclarée des **pages d'esquisses**, chacune avec sa raison écrite.
+d'inclusion pointant une source que la CI exécute. Sans exception : ce qui ne
+peut pas s'exécuter n'est pas du code, et se balise ` ```text `.
 
 Le corollaire pratique : quand on veut ajouter un exemple à un chapitre, on
 n'écrit pas dans le chapitre. On écrit un test, on l'encadre d'ancres, et on
@@ -242,13 +242,19 @@ c'est côté Python qu'il est sur le magasin.
 Deux zones sont hors d'atteinte, et il vaut mieux les nommer que laisser croire
 à une couverture totale.
 
-**Les esquisses de conception.** Les pages [Ajouter une
-physique](../ajouter-une-physique.md), [Modèle mémoire](../memory-model.md) et
-[Interrompre une fonction](interrompre-une-fonction.md) montrent des signatures
-de traits et d'énumérations avec des `/* … */`. Ce ne sont pas des exemples : ce
-sont des schémas. Ils restent `rust,ignore`, ils figurent dans la liste déclarée
-avec leur raison, et ils doivent **ressembler** à des esquisses — pas à du code
-qu'on pourrait copier.
+**Ce qui n'est pas du code.** Une signature annotée de `/* … */`, une
+énumération abrégée par `// … une ligne par physique`, un pseudo-code `f(...)` :
+ces blocs se balisent ` ```text `. La coloration syntaxique mentirait, et le
+lecteur voit ainsi tout de suite qu'il ne peut pas les copier. Ce n'est pas une
+dérogation à la règle d'or — c'est reconnaître que ces blocs ne relèvent pas
+d'elle.
+
+La nuance se juge **bloc par bloc, jamais page par page**. Une première version
+de ces conventions déclarait trois « pages d'esquisses » entières ; à les
+regarder de près, elles contenaient aussi la déclaration de `Handle<T>`, celle
+du trait `Cancel` et l'implémentation `PySignals` — du code réel, recopié d'un
+source qui existe, et qui pourrissait comme le reste. Ces blocs sont désormais
+inclus depuis `src/`, et la notion de page d'esquisses a disparu.
 
 **La prose.** Un paragraphe qui cite `ops::matrix::stiffness` en texte courant
 n'est couvert par aucun include. C'est là qu'étaient trois des erreurs trouvées
@@ -278,8 +284,9 @@ Deux pièges mesurés dans ce dépôt, qui donnent la mesure du risque :
 Autrement dit, le mécanisme sur lequel repose toute la stratégie n'est, à ce
 jour, gardé par rien.
 
-Et une règle de forme : **toute dérogation porte une raison**. Page d'esquisses,
-item sans exemple, exclusion d'un garde-fou — chacune vit dans un dictionnaire
+Et une règle de forme : **toute dérogation porte une raison**. Dette de
+migration, item sans exemple, exclusion d'un garde-fou — chacune vit dans un
+dictionnaire
 nom → raison, accompagné d'un test d'hygiène qui échoue si l'entrée devient
 périmée. C'est le motif déjà en place dans `test_method_exposure.py` et
 `test_mirror_completeness.py` ; il n'en est pas créé d'autre.

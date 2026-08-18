@@ -12,7 +12,7 @@ partie « Documentation et tests », et racontées dans
                   ancre inexistante rend un bloc **vide**, code de retour 0,
                   sans un mot.
 2. `fences`     — aucune page ne possède de code : tout bloc `rust`/`python`
-                  contient un include, sauf sur une page déclarée.
+                  contient un include, sans exception.
 3. `symboles`   — la prose ne cite pas de symbole disparu. Rien d'autre ne
                   couvre un paragraphe, et c'est là qu'étaient trois des neuf
                   erreurs trouvées en août 2026.
@@ -41,13 +41,6 @@ LEDGER = ROOT / "script" / "doc_coverage.txt"
 
 # ── Registres ───────────────────────────────────────────────────────────────
 
-# Pages dont les blocs sont des **esquisses de conception** — signatures de
-# traits et d'énumérations avec des `/* … */`, pas des exemples. Définitif.
-PAGES_ESQUISSES = {
-    "ajouter-une-physique.md": "signatures de SubModel / SubModelKind, pas du code appelable",
-    "developper/interrompre-une-fonction.md": "signatures du trait Cancel et de ses points d'insertion",
-    "memory-model.md": "schémas de Handle<T> et des guards, pas un exemple exécutable",
-}
 
 # Dette de migration : pages qui possèdent encore du code recopié. **Ce
 # registre ne peut que décroître** — l'hygiène refuse qu'une page dépasse son
@@ -59,7 +52,6 @@ DETTE_MIGRATION = {
     "element-field.md": 1,
     "evolution.md": 1,
     "fe-space.md": 4,  # les 4 blocs Rust, phase B4
-    "formation/langage-python.md": 1,  # pseudo-code `f(...)`
     "introduction.md": 1,
     "matrix.md": 6,
     "mesh.md": 1,
@@ -68,7 +60,6 @@ DETTE_MIGRATION = {
     "node.md": 1,
     "operateurs/assemblage.md": 1,  # reste le bloc Rust, phase B4
     "sauvegarde.md": 1,
-    "thermomecanique-pas-a-pas.md": 1,  # pseudo-code `f(...)`
     "triangulation.md": 6,
     "visualization.md": 6,  # les 6 blocs Rust, phase B4
 }
@@ -221,7 +212,7 @@ def check_fences():
         nom = rel(p)
         n = blocs_ecrits_a_la_main(p.read_text())
         vus[nom] = n
-        if not n or nom in PAGES_ESQUISSES:
+        if not n:
             continue
         budget = DETTE_MIGRATION.get(nom)
         if budget is None:
@@ -235,14 +226,7 @@ def check_fences():
                 f"{nom} : {n} blocs écrits à la main, la dette n'en autorise que "
                 f"{budget}. Ce registre ne peut que décroître."
             )
-    # Hygiène : pas d'entrée périmée dans les deux registres.
-    for nom, raison in PAGES_ESQUISSES.items():
-        if nom not in vus:
-            erreurs.append(f"PAGES_ESQUISSES : « {nom} » n'existe plus")
-        elif not raison.strip():
-            erreurs.append(f"PAGES_ESQUISSES : « {nom} » sans raison écrite")
-        elif vus[nom] == 0:
-            erreurs.append(f"PAGES_ESQUISSES : « {nom} » n'a plus de bloc, la retirer")
+    # Hygiène : pas d'entrée périmée dans le registre.
     for nom, budget in DETTE_MIGRATION.items():
         if nom not in vus:
             erreurs.append(f"DETTE_MIGRATION : « {nom} » n'existe plus, la retirer")

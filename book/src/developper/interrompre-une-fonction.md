@@ -39,10 +39,7 @@ l'usage en Rust pur (cf. [Compilation et tests](../compilation.md), build sans
 Le trait est du **Rust pur, sans PyO3** :
 
 ```rust,ignore
-pub trait Cancel {
-    /// `Ok(())` pour continuer, `Err(Interrupted)` pour s'arrêter proprement.
-    fn check(&self) -> Result<()>;
-}
+{{#include ../../../src/interrupt.rs:trait}}
 ```
 
 L'erreur renvoyée est `PyrucastError::Interrupted`. Sa conversion vers Python
@@ -59,7 +56,7 @@ Trois gestes.
 *grossier* — un élément, une couche, une itération de solveur — pour que le
 coût d'un `check` soit négligeable) :
 
-```rust,ignore
+```text
 pub fn pave(/* … */, cancel: &dyn Cancel) -> Result<…> {
     loop {
         cancel.check()?;          // ← point d'interruption
@@ -74,7 +71,7 @@ pub fn pave(/* … */, cancel: &dyn Cancel) -> Result<…> {
 **2. Exposer deux formes côté Rust** — une simple et une interruptible — pour
 ne pas imposer un jeton aux appelants qui n'en veulent pas :
 
-```rust,ignore
+```text
 pub fn triangulate_surface(contour: &Mesh, et: ElementType, size: Option<f64>) -> Result<Mesh> {
     triangulate_surface_cancellable(contour, et, size, &NoCancel)
 }
@@ -87,16 +84,7 @@ pub fn triangulate_surface_cancellable(
 Un programme Rust câble alors ce qu'il veut, sans toucher à Python :
 
 ```rust,ignore
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-
-let stop = Arc::new(AtomicBool::new(false));
-// un handler Ctrl+C (crate `ctrlc`), un thread de supervision, un timeout…
-let s = stop.clone();
-ctrlc::set_handler(move || s.store(true, Ordering::Relaxed)).ok();
-
-let mesh = triangulate_surface_cancellable(&contour, ElementType::TRI3, Some(0.5), &*stop)?;
-// `Deadline::after(Duration::from_secs(10))` marcherait tout aussi bien.
+{{#include ../../../tests/doc_memoire.rs:annulation}}
 ```
 
 **3. Brancher le jeton Python dans la couche FFI** (`src/py`, gatée
@@ -104,19 +92,7 @@ let mesh = triangulate_surface_cancellable(&contour, ElementType::TRI3, Some(0.5
 cœur :
 
 ```rust,ignore
-struct PySignals<'py>(Python<'py>);
-
-impl Cancel for PySignals<'_> {
-    fn check(&self) -> Result<()> {
-        self.0.check_signals().map_err(|_| PyrucastError::Interrupted)
-    }
-}
-
-#[pyfunction]
-pub fn triangulate_surface(py: Python<'_>, contour: PyRef<PyMesh>, /* … */) -> PyResult<PyMesh> {
-    let mesh = ops::mesh::triangulate_surface_cancellable(&contour.inner, et, size, &PySignals(py))?;
-    Ok(PyMesh { inner: mesh })
-}
+{{#include ../../../src/py/signals.rs:pysignals}}
 ```
 
 Le paramètre `py: Python<'_>` est injecté par PyO3 et **n'apparaît pas** dans la

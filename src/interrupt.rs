@@ -27,10 +27,12 @@ use crate::error::{PyrucastError, Result};
 /// `check` returns `Ok(())` to continue, or `Err(PyrucastError::Interrupted)`
 /// to request a clean stop. Implementations decide *how* cancellation is
 /// signalled, keeping operators free of any frontend concern.
+// ANCHOR: trait
 pub trait Cancel {
     /// Poll the cancellation state. Called frequently, so keep it cheap.
     fn check(&self) -> Result<()>;
 }
+// ANCHOR_END: trait
 
 /// Forward through shared references, so `&token` is itself a [`Cancel`].
 impl<C: Cancel + ?Sized> Cancel for &C {

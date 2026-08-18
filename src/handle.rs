@@ -88,9 +88,11 @@ pub type WriteGuard<T> = ArcRwLockWriteGuard<RawRwLock, T>;
 /// `SubMesh` or a `Coords` is large and shared by construction. Two handles
 /// name the same object exactly when [`same_object`](Self::same_object) says
 /// so.
+// ANCHOR: declaration
 pub struct Handle<T> {
     cell: Arc<RwLock<T>>,
 }
+// ANCHOR_END: declaration
 
 impl<T> Handle<T> {
     /// Take ownership of `value` and hand back the first reference to it.

@@ -20,7 +20,7 @@ compilée (tout le calcul) vit dans le sous-module privé `pyrucast._pyrucast`
 de plus haut niveau (`pyrucast.thermomechanics`). À l'usage, aucune
 distinction n'est visible :
 
-```python
+```text
 pc.matrix.stiffness(...)  # opérateur Rust (extension compilée)
 pc.thermomechanics.step_by_step(...)  # fonction Python pure
 ```

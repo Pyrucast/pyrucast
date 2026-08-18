@@ -12,6 +12,7 @@ use pyo3::prelude::*;
 /// A [`Cancel`] token that polls Python's pending signals: a `Ctrl+C`
 /// (`SIGINT`) raised during a long operator turns into
 /// [`PyrucastError::Interrupted`] → `KeyboardInterrupt`.
+// ANCHOR: pysignals
 pub struct PySignals<'py>(pub Python<'py>);
 
 impl Cancel for PySignals<'_> {
@@ -21,3 +22,4 @@ impl Cancel for PySignals<'_> {
             .map_err(|_| PyrucastError::Interrupted)
     }
 }
+// ANCHOR_END: pysignals

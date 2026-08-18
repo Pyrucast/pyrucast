@@ -22,7 +22,7 @@ python/pyrucast/
 `import pyrucast` donne donc accès **à la fois** à toute l'API Rust et aux
 fonctions Python de plus haut niveau, sans distinction à l'usage :
 
-```python
+```text
 import pyrucast as pc
 
 pc.matrix.stiffness(...)  # opérateur Rust (extension)

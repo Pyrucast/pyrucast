@@ -164,6 +164,7 @@ pub enum Contribution {
 /// cell `i` of one facing cell `i` of the other. That is checked when the block
 /// is built, and reported rather than approximated: a non-matching interface is
 /// a meshing problem, not something an assembler should paper over.
+// ANCHOR: coupling_layout
 pub struct CouplingLayout {
     /// FE subspaces carrying the **rows** (the primary drives the cell loop).
     pub fespaces: Vec<Handle<SubFiniteElementSpace>>,
@@ -180,6 +181,7 @@ pub struct CouplingLayout {
     /// `(node_local, var)` ↔ matrix-index ordering.
     pub ordering: DofOrdering,
 }
+// ANCHOR_END: coupling_layout
 
 /// The **nature** of a physics — its coarse classification, orthogonal to the
 /// `Domain` / `Constraint` capability axis. It answers « quel champ de physique »

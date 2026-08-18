@@ -476,11 +476,21 @@ Ci-dessous, les règles seules.
 
 ## Les quatre règles
 
-1. **Aucune page du book ne possède de code.** Toute clôture ` ```rust ` ou
-   ` ```python ` d'une page contient un `{{#include}}` pointant une source que
-   la CI exécute — ou la page figure dans la **liste déclarée des pages
-   d'esquisses**, chacune avec sa raison écrite. Un exemple recopié à la main
-   dans une page est du code que rien ne vérifie ; il pourrit sans bruit.
+1. **Aucune page du book ne possède de code, sans exception.** Toute clôture
+   ` ```rust ` ou ` ```python ` d'une page contient un `{{#include}}` pointant
+   une source que la CI exécute. Un exemple recopié à la main dans une page est
+   du code que rien ne vérifie ; il pourrit sans bruit.
+
+   **Ce qui n'est pas du code se balise ` ```text `** : une signature annotée
+   de `/* … */`, une énumération abrégée par `// … une ligne par physique`, un
+   pseudo-code `f(...)`. Ce n'est pas une dérogation, c'est un constat — la
+   coloration syntaxique mentirait, et le lecteur doit voir tout de suite qu'il
+   ne peut pas copier ce bloc. Il n'y a donc plus de « page d'esquisses » : la
+   nature se juge **bloc par bloc**, jamais page par page.
+
+   Corollaire souvent oublié : une déclaration Rust recopiée dans une page
+   (`pub struct Handle<T>`, `pub trait Cancel`) **est du code**. Elle existe
+   dans `src/`, elle s'ancre et elle s'inclut.
 
 2. **Tout item de l'API publique porte un exemple exécutable** dans sa
    documentation (`///`). C'est le point 3 de la *Definition of Done*.
@@ -500,7 +510,7 @@ Ci-dessous, les règles seules.
    | une chaîne Python complète | `examples/<sujet>.py` | `{{#include}}`, entier ou ancré |
    | un parcours pédagogique | `formation/<sujet>.py`, ancré | `{{#include …:ancre}}` |
    | l'usage d'un opérateur en Python | `tests/python/test_doc_<famille>.py`, ancré | `{{#include …:ancre}}` |
-   | une signature de conception | la page elle-même | ` ```rust,ignore `, page déclarée |
+   | ce qui n'est **pas du code** | la page elle-même | ` ```text `, sans coloration |
 
    Le préfixe `test_` n'est pas décoratif : `pytest` ne collecte que
    `test_*.py`. Un fichier de sources d'exemples nommé autrement est inclus

@@ -88,7 +88,7 @@ Seules trois méthodes sont **sans défaut** : `primal_vars`, `dual_vars` et
 `physics` (plus `label` / `render` pour l'affichage). Tout le reste se redéfinit
 à la carte.
 
-```rust,ignore
+```text
 pub trait SubModelKind: Sync {
     fn primal_vars(&self) -> Vec<String>;
     fn dual_vars(&self) -> Vec<String>;
@@ -281,15 +281,7 @@ unique `MatrixLayout.support` — d'où un layout séparé plutôt qu'un champ d
 qui aurait touché les treize physiques existantes pour un besoin qu'aucune n'a :
 
 ```rust,ignore
-pub struct CouplingLayout {
-    pub fespaces: Vec<Handle<SubFiniteElementSpace>>,      // côté ligne
-    pub col_fespaces: Vec<Handle<SubFiniteElementSpace>>,  // côté colonne
-    pub row_support: Handle<SubMesh>,
-    pub col_support: Handle<SubMesh>,
-    pub dual_vars: Vec<String>,
-    pub primal_vars: Vec<String>,
-    pub ordering: DofOrdering,
-}
+{{#include ../../src/models/mod.rs:coupling_layout}}
 ```
 
 Pas de champ `symmetric` : un bloc de couplage n'est jamais symétrique seul —
@@ -380,7 +372,7 @@ opérateur.
 
 ## Le dispatch — `src/containers/model.rs`
 
-```rust,ignore
+```text
 #[derive(Serialize, Deserialize)]
 pub enum SubModel {
     HeatConduction(heat_conduction::HeatConduction),

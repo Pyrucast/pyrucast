@@ -12,9 +12,7 @@ Ce chapitre décrit les deux, et explique pourquoi le second ne se ramène pas a
 ### Ce que c'est
 
 ```rust,ignore
-pub struct Handle<T> {
-    cell: Arc<RwLock<T>>,
-}
+{{#include ../../src/handle.rs:declaration}}
 ```
 
 Une enveloppe d'un champ, et rien d'autre. `Arc` (*Atomically Reference Counted*) est la boîte partagée à tickets de propriété de la bibliothèque standard : la cloner ne copie pas le contenu, elle crée un second ticket sur la même boîte, libérée au dernier ticket rendu. `RwLock` est le verrou lecture/écriture qui arbitre les accès.
@@ -26,11 +24,7 @@ Trois propriétés en découlent, et ce sont les seules à retenir :
 - **L'identité, c'est le pointeur.** `same_object` répond à « ces deux références désignent-elles le même objet ? » — c'est ce qui permet à l'union des agrégats d'ignorer une zone qu'elle possède déjà, et à un champ de reconnaître que son support est bien le maillage qu'on lui a passé.
 
 ```rust,ignore
-let h1 = Handle::new(MaStruct(42));   // premier ticket
-let h2 = h1.clone();                  // même objet
-assert!(h1.same_object(&h2));
-drop(h1);                             // h2 tient encore l'objet
-drop(h2);                             // dernier ticket → l'objet est détruit
+{{#include ../../tests/doc_memoire.rs:partage}}
 ```
 
 Aucun `remove()` à appeler, aucune fonction de libération : la portée Rust suffit.
@@ -40,11 +34,7 @@ Aucun `remove()` à appeler, aucune fonction de libération : la portée Rust su
 Avec un handle, on n'écrit pas `handle.dim` directement. On passe par un **guard** :
 
 ```rust,ignore
-let coords = handle.read();             // verrou lecture sur CET objet seul
-println!("dim = {}", coords.dim());     // coords se comporte comme un &Coords
-drop(coords);                           // (ou fin de portée) → verrou relâché
-
-handle.write().add_node(&[0.0, 0.0])?;  // verrou écriture, le temps de l'appel
+{{#include ../../tests/doc_memoire.rs:guards}}
 ```
 
 Le guard prouve qu'on détient le verrou. Il se comporte comme une référence vers la donnée (par `Deref`), et **le verrou est relâché à sa destruction** — c'est du RAII : impossible d'oublier de déverrouiller. Les règles du borrow-checker s'appliquent à travers lui, arbitrées à l'exécution par le `RwLock` : N lecteurs simultanés, ou 1 écrivain exclusif.
