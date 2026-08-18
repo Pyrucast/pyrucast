@@ -86,22 +86,7 @@ cohérentes de la pression (`Σ(−λᵢ) = S`). En soulevant le bloc du haut, t
 les paires se relâchent (`λ = 0` exactement).
 
 ```python
-# Maître : bord supérieur du bloc bas, parcouru en −x (normale +y, vers l'esclave).
-master = pyrucast.Mesh(c, "SEG2")
-for i in reversed(range(N)):
-    master.unit().add_cell([bottom[idx(i + 1, N)], bottom[idx(i, N)]])
-# Esclave : nœuds du bord inférieur du bloc haut.
-slave = pyrucast.mesh.poi1_from_nodes([top[idx(i, 0)] for i in range(N + 1)])
-
-contact = pyrucast.Model.contact(slave, master, [("u_x", "f_x"), ("u_y", "f_y")])
-model = elasticite | appuis | contact
-
-rhs = pyrucast.node_field.flux(edge_fes[0], -S, "f_y") | model.contact_gaps()
-solution = pyrucast.solver.solve_unilateral(
-    pyrucast.matrix.stiffness(model, materials), model, rhs
-)
-
-reaction = solution.value(mult_node, "lambda_contact")  # ≤ 0 collé, 0 décollé
+{{#include ../../../tests/python/test_doc_contraintes.py:contact}}
 ```
 
 Le déroulé complet (2D et 3D) est dans `tests/contact.rs` et

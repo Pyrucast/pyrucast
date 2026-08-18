@@ -71,7 +71,7 @@ Toute relation d'égalité peut devenir **unilatérale** : `Σₖ aₖ·uₖ ≥
 unilatéral, une liaison à jeu est une MPC unilatérale :
 
 ```python
-butee = pyrucast.Model.dirichlet("u_y", "f_y", imposed, mult, sense=">=")
+{{#include ../../tests/python/test_doc_contraintes.py:butee}}
 ```
 
 Une relation unilatérale obéit aux conditions de **complémentarité** (KKT) : ou
@@ -97,9 +97,7 @@ la **méthode du statut** (*active-set*), portée par l'opérateur
    de la méthode du statut classique, bornée par `max_iter`).
 
 ```python
-solution = pyrucast.solver.solve_unilateral(
-    k, model, rhs
-)  # method, cache, max_iter, tol
+{{#include ../../tests/python/test_doc_contraintes.py:solve_unilateral}}
 ```
 
 Les relations inactives sortent avec `λ = 0` exact ; la solution a la même
@@ -122,8 +120,7 @@ propre de la contrainte (`imposed_<v>` pour Dirichlet, `mpc_rhs` pour la MPC),
 à la main est fastidieux ; le helper le fait :
 
 ```python
-rhs = dirichlet.constraint_rhs([(noeud_contraint, u_d), …])
-rhs = mpc.constraint_rhs([(noeud_terme, g), …])
+{{#include ../../tests/python/test_doc_contraintes.py:constraint_rhs}}
 ```
 
 - on **désigne chaque relation par un nœud** : le nœud contraint pour Dirichlet
@@ -145,7 +142,7 @@ ambigu), on désigne la relation par son **index** (0-based, dans l'ordre de
 `relations()`) :
 
 ```python
-rhs = mpc.constraint_rhs_by_index([(index_relation, g), …])
+{{#include ../../tests/python/test_doc_contraintes.py:constraint_rhs_by_index}}
 ```
 
 Le champ renvoyé et la fusion par `|` sont identiques ; une erreur est levée si
