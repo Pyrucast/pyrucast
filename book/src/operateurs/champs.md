@@ -89,11 +89,7 @@ n'est moyenné ni fusionné).
   composante testée est dans la bande.
 
 ```python
-# Nœuds dont la température est entre 20 et 80 °C (bornes inclusives).
-chauds = pyrucast.mesh.select(temperature, ge=20.0, le=80.0)
-
-# Cellules dont la contrainte de von Mises dépasse un seuil (borne basse seule).
-critiques = pyrucast.mesh.select(sigma, ge=250e6, components=["vm"])
+{{#include ../../../tests/python/test_doc_ops_champs.py:select}}
 ```
 
 ## Masque par valeur
@@ -117,12 +113,7 @@ Gauss.
   reste tout à `1.0`.
 
 ```python
-# Remet à zéro les valeurs négatives d'un champ, composante par composante.
-positif = champ * champ.mask(ge=0.0)
-
-# Sucre : les comparaisons construisent directement un masque.
-positif = champ * (champ >= 0.0)  # même chose
-chauds = temperature > 80.0  # NodeField 0/1
+{{#include ../../../tests/python/test_doc_ops_champs.py:mask}}
 ```
 
 Les opérateurs `>=`, `>`, `<=`, `<` sur un champ (`NodeField`, `SubNodeField`,
@@ -162,11 +153,7 @@ pas `old`. Erreur si aucune zone ne porte `old`, ou si une zone concernée a dé
 une composante nommée `new`.
 
 ```python
-# Retire les multiplicateurs de Lagrange d'un résultat de solve.
-u = solution.filter_components(model.primal_vars())
-
-# Renomme une composante avant export.
-export = u.rename_component("u_x", "DX")
+{{#include ../../../tests/python/test_doc_ops_champs.py:filter_rename}}
 ```
 
 **Sucre d'indexation** (façon pandas/numpy) : sur **les quatre saveurs**
@@ -177,10 +164,7 @@ zones sur un agrégat ; le tuple d'accès à une valeur sur un sous-champ
 (`sub[node, "UX"]`, `sub[cell, gauss, "E"]`) est inchangé.
 
 ```python
-ux = champ["u_x"]  # == filter_components(champ, "u_x")
-depl = champ[["u_x", "u_y"]]  # == filter_components(champ, ["u_x", "u_y"])
-zone = champ[0]  # inchangé : la zone (SubNodeField)
-val = champ[0][node, "u_x"]  # inchangé : la valeur au nœud
+{{#include ../../../tests/python/test_doc_ops_champs.py:indexation}}
 ```
 
 L'accesseur `champ.components()` (présent sur les quatre saveurs) donne la
@@ -188,7 +172,7 @@ liste des composantes, d'où l'idiome **« reprojeter `u1` sur les composantes
 de `u2` »** :
 
 ```python
-u = u1[u2.components()]  # u1 réduit au jeu de composantes de u2
+{{#include ../../../tests/python/test_doc_ops_champs.py:alignement}}
 ```
 
 Côté Rust, `filter_components` / `select_components` acceptent indifféremment
@@ -317,13 +301,7 @@ fonctions se combinent à l'arithmétique scalaire des champs (`f + s`, `f * s`,
 cf. [Champ](../field.md)) pour bâtir des expressions par composante.
 
 ```python
-import pyrucast
-
-# Atténuation exponentielle d'un champ de température.
-attenue = pyrucast.field.exp(temperature * -0.1)
-
-# Magnitude d'un champ (combiné à l'arithmétique scalaire de champ).
-amplitude = pyrucast.field.abs(signal)
+{{#include ../../../tests/python/test_doc_ops_champs.py:maths}}
 ```
 
 ## Réduction
@@ -362,11 +340,7 @@ threads jusqu'au dernier ULP — comme le solveur, ce n'est pas reproductible
 bit à bit.
 
 ```python
-import pyrucast
-
-# Énergie de déformation externe : travail des efforts nodaux dans le champ
-# de déplacement (mêmes composantes, même maillage).
-energie = pyrucast.measure.xty(forces, deplacements)
+{{#include ../../../tests/python/test_doc_ops_champs.py:xty}}
 ```
 
 ### `psca(x, y)` → champ (même saveur que les entrées)
@@ -383,10 +357,7 @@ seule composante `"psca"` : la valeur du produit scalaire à chaque nœud. Chaqu
 sortie est écrite une fois (par nœud) ⇒ indépendant du nombre de threads.
 
 ```python
-import pyrucast
-
-# Norme au carré d'un champ vectoriel, nœud par nœud.
-norme2 = pyrucast.field.psca(vitesse, vitesse)  # champ à une composante "psca"
+{{#include ../../../tests/python/test_doc_ops_champs.py:psca}}
 ```
 
 ### `integral(field, component, fespace=None)` → `float`
@@ -409,12 +380,7 @@ En interne, la réduction parallèle sur les cellules passe par le driver
 `kernel::reduce_cells`.
 
 ```python
-import pyrucast
-
-# Résultante d'une densité de force surfacique f_y sur une plaque (via N_i).
-r_y = pyrucast.measure.integral(densite, "f_y", fespace=fes)
-# Mesure du domaine : ∫ 1 dΩ.
-aire = pyrucast.measure.integral(champ_unite, "u", fespace=fes)
+{{#include ../../../tests/python/test_doc_ops_champs.py:integral}}
 ```
 
 ### Somme et `xtx`
@@ -441,15 +407,7 @@ absente d'une zone y est simplement ignorée ; l'appel n'échoue que si **aucune
 zone ne porte l'une des composantes demandées.
 
 ```python
-import pyrucast
-
-# Résultante d'un champ de forces nodales, composante par composante.
-rx = forces.sum("f_x")
-ry = forces.sum("f_y")
-# Norme du résidu au carré, pour un test de convergence.
-r2 = pyrucast.measure.xtx(residu)
-# Même norme, restreinte aux seules composantes de translation.
-r2_uy = pyrucast.measure.xtx(residu, components=["f_y"])
+{{#include ../../../tests/python/test_doc_ops_champs.py:sommes}}
 ```
 
 ## À venir
