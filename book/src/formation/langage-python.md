@@ -54,7 +54,7 @@ l'arborescence Rust (`src/ops/<thème>/`) :
 | pyrucast (Python) | thème | Cast3M (le plus proche) |
 |---|---|---|
 | `pc.mesh.line`, `pc.mesh.triangulate_surface`, `pc.mesh.sweep`… | maillage | `DROITE`, `SURF`, `VOLU`, `TRAN` |
-| `pc.element_field.gradient`, `pc.mesh.select`, `pc.field.mask`… | champs | `GRAD`, `MASQUE` |
+| `pc.element_field.gradient`, `pc.mesh.select`, `pc.node_field.mask`… | champs | `GRAD`, `MASQUE` |
 | `pc.matrix.stiffness`, `pc.matrix.mass`, `pc.node_field.flux`… | assemblage | `RIGI`, `MASS`, `FLUX`/`PRES` |
 | `pc.element_field.integrate_behavior` | comportement | `COMP` |
 | `pc.solver.solve`, `pc.solver.solve_unilateral` | solveur | `RESO` |

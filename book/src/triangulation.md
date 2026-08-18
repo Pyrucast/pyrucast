@@ -247,8 +247,15 @@ let opts = RefinementOptions {
     max_edge_length: Some(1.0),
     min_angle_deg: Some(20.0),
 };
-let triangles = triangulate_polygon_with_holes_refined(&outer, &[], Some(opts)).unwrap();
-println!("{} triangles après raffinement", triangles.len());
+// Le raffinement insère des points de Steiner : la fonction renvoie donc
+// **les points** (entrée + Steiner) *et* les triangles qui les indexent.
+let (points, triangles) =
+    triangulate_polygon_with_holes_refined(&outer, &[], opts).unwrap();
+println!(
+    "{} triangles après raffinement, {} points",
+    triangles.len(),
+    points.len()
+);
 ```
 
 > Ces fonctions renvoient des indices dans le tableau de points fourni en entrée (plus les Steiner éventuels). Elles ne touchent pas à la `Coords` — `triangulate_surface` se charge de la conversion vers les `NodeId`.

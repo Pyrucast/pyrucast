@@ -208,13 +208,14 @@ Par défaut l'échelle couvre le min/max des valeurs **par cellule**. On peut fi
 Côté Rust, l'argument `scale` (`ColorScale`) regroupe colormap et bornes :
 
 ```rust,ignore
-use pyrucast::containers::node_field::SubNodeField;
+use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::viz::{Colormap, ColorScale};
 
-// Champ déplacement à 2 composantes "UX" / "UY" sur un POI1 (la couche
-// viz Rust consomme la zone ; côté Python, plot prend le NodeField).
-let mut u = SubNodeField::from_poi1(&poi1_h, vec!["UX".into(), "UY".into()]).unwrap();
+// Champ déplacement à 2 composantes "UX" / "UY" sur un POI1. `FieldArg`
+// prend l'**agrégat** : une zone seule se remonte par `NodeField::from_sub`.
+let mut sub = SubNodeField::from_poi1(&poi1_h, vec!["UX".into(), "UY".into()]).unwrap();
 // ... remplissage ...
+let u = NodeField::from_sub(sub);
 
 // Échelle auto, viridis, première composante, rendu interpolé niveau 4.
 use pyrucast::viz::FieldArg;

@@ -46,7 +46,8 @@ opérateur Rust sans binding Python, et aucune fonction Python sans opérateur
 Rust. Les dérogations y vivent avec leur raison.
 
 > Source de vérité : le `#[pymodule]` de `src/lib.rs` (enregistrement des
-> classes et fonctions) et le stub `pyrucast.pyi` (signatures typées).
+> classes et fonctions) et le stub `python/pyrucast/_pyrucast/__init__.pyi`
+> (signatures typées).
 > Cette page en est un instantané, à régénérer à la main si l'API bouge.
 
 ## Structures ↔ classes

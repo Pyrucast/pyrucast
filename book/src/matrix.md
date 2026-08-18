@@ -1,6 +1,6 @@
 # Matrice creuse (`Matrix`)
 
-`Matrix` est le **conteneur de sortie** d'un assemblage : c'est ce que produisent les opérateurs `assemble::stiffness(model, materials)` / `assemble::mass(model)` à partir d'un [`Model`](model.md). Elle représente une matrice creuse dont les lignes et les colonnes sont identifiées par des **DOFs nommés**.
+`Matrix` est le **conteneur de sortie** d'un assemblage : c'est ce que produisent les opérateurs `matrix::stiffness(model, materials)` / `matrix::mass(model, materials)` à partir d'un [`Model`](model.md). Elle représente une matrice creuse dont les lignes et les colonnes sont identifiées par des **DOFs nommés**.
 
 ## Identification des DOFs : `(NodeId, nom_de_champ)`
 
@@ -127,23 +127,49 @@ côtés, et les blocs de `M` ne contribuent rien aux DOFs qu'ils ne portent pas.
 ## Cas d'usage typique : matrice de raideur du laplacien
 
 ```rust,ignore
-use pyrucast::atoms::NodeId;
-use pyrucast::containers::matrix::Matrix;
+use pyrucast::aggregate::Aggregate;
+use pyrucast::atoms::{ElementType, Node};
+use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+use pyrucast::containers::mesh::SubMesh;
+use pyrucast::coords::Coords;
+use pyrucast::handle::Handle;
 
-let mut k = Matrix::new(true);  // matrice de raideur, symétrique
+// Les entrées vivent dans un **bloc**, jamais dans l'agrégat : un bloc
+// connaît ses supports POI1 (lignes et colonnes) et ses noms de variables.
+let coords = Handle::new(Coords::new(1).unwrap());
+let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+let support = {
+    let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+    sm.add_cell(&[a.id()]).unwrap();
+    sm.add_cell(&[b.id()]).unwrap();
+    Handle::new(sm)
+};
+
+let mut block = SubMatrix::new(
+    support.clone(),          // support des lignes
+    support.clone(),          // support des colonnes (carré ici)
+    vec!["q".into()],         // variables duales   → lignes
+    vec!["T".into()],         // variables primales → colonnes
+    DofOrdering::NodesThenVars,
+    true,                     // symétrique
+)
+.unwrap();
+
 // Modèle simple à 2 nœuds (segment) :
 //   K = [[ 2, -1], [-1,  2]]
-// Lignes étiquetées par la duale du modèle ("q" pour la thermique),
-// colonnes par la primale ("T").
-k.add_entry(NodeId(0), "q", NodeId(0), "T",  2.0);
-k.add_entry(NodeId(0), "q", NodeId(1), "T", -1.0);
-k.add_entry(NodeId(1), "q", NodeId(0), "T", -1.0);
-k.add_entry(NodeId(1), "q", NodeId(1), "T",  2.0);
+block.add_entry(a.id(), "q", a.id(), "T",  2.0).unwrap();
+block.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
+block.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
+block.add_entry(b.id(), "q", b.id(), "T",  2.0).unwrap();
 
-assert_eq!(k.n_rows(), 2);
-assert_eq!(k.n_cols(), 2);
-assert!(k.symmetric());
-assert_eq!(k.dense(), vec![2.0, -1.0, -1.0, 2.0]);
+let mut k = Matrix::empty();
+k.add_sub(Handle::new(block)).unwrap();
+k.finalize().unwrap();        // requis avant tout usage solveur
+
+assert_eq!(k.n_rows().unwrap(), 2);
+assert_eq!(k.n_cols().unwrap(), 2);
+assert!(k.symmetric().unwrap());
 ```
 
 ## Matrice rectangulaire : bloc Lagrange
@@ -151,16 +177,38 @@ assert_eq!(k.dense(), vec![2.0, -1.0, -1.0, 2.0]);
 Une contrainte de Dirichlet introduit, par sa nature, un bloc **rectangulaire** : lignes indexées par les nœuds-multiplicateurs (un par contrainte), colonnes par les nœuds primaires contraints.
 
 ```rust,ignore
-let mut c = Matrix::new(false);
-// 2 contraintes : multiplicateur 100 lie le nœud 3, multiplicateur 101 lie le nœud 7.
-c.add_entry(NodeId(100), "T", NodeId(3), "T", 1.0);
-c.add_entry(NodeId(101), "T", NodeId(7), "T", 1.0);
-assert_eq!(c.n_rows(), 2);
-assert_eq!(c.n_cols(), 2);
-// "T" est interné une seule fois dans la table de noms même s'il
-// apparaît côté ligne ET côté colonne (la collision est résolue par
-// les NodeIds distincts : 100 vs 3, 101 vs 7).
-assert_eq!(c.field_names().len(), 1);
+// 2 contraintes : les multiplicateurs m0/m1 lient les nœuds primaires a/b.
+// Le bloc est rectangulaire dès que les deux supports diffèrent — ici ils ont
+// la même taille, mais ce sont deux nuages de nœuds distincts.
+let m0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
+let m1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
+let mult_support = {
+    let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+    sm.add_cell(&[m0.id()]).unwrap();
+    sm.add_cell(&[m1.id()]).unwrap();
+    Handle::new(sm)
+};
+let mut block = SubMatrix::new(
+    mult_support,
+    support.clone(),
+    vec!["T".into()],
+    vec!["T".into()],
+    DofOrdering::NodesThenVars,
+    false,
+)
+.unwrap();
+block.add_entry(m0.id(), "T", a.id(), "T", 1.0).unwrap();
+block.add_entry(m1.id(), "T", b.id(), "T", 1.0).unwrap();
+
+let mut c = Matrix::empty();
+c.add_sub(Handle::new(block)).unwrap();
+c.finalize().unwrap();
+assert_eq!(c.n_rows().unwrap(), 2);
+assert_eq!(c.n_cols().unwrap(), 2);
+// "T" est interné une seule fois dans la table de noms même s'il apparaît
+// côté ligne ET côté colonne (la collision est résolue par les `NodeId`
+// distincts : les multiplicateurs sont des nœuds à part entière).
+assert_eq!(c.field_names().unwrap().len(), 1);
 ```
 
 ## API Rust — accès en lecture
@@ -196,7 +244,7 @@ let y = k.mul_dense(&[1.0, 1.0]).unwrap();
 // support **ligne** des blocs, sur le handle du bloc lui-même (`same_support`
 // garanti avec tout champ posé sur ces supports). L'opérateur `*` (`&k * &x`)
 // est le sucre syntaxique de `mul_field`. C'est le miroir exact de
-// `solver::solve`, qui lit un champ dual aux lignes et rend un champ primal aux colonnes.
+// `solver::lu::solve`, qui lit un champ dual aux lignes et rend un champ primal aux colonnes.
 let y: NodeField = k.mul_field(&x).unwrap();
 let y: NodeField = (&k * &x).unwrap();
 

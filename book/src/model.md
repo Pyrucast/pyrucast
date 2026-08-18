@@ -188,7 +188,7 @@ profonde) :
 - `model.filter(Physics::Mechanical)` → un `Model` ne gardant que les
   sous-modèles au moins mécaniques ;
 - `k.filter(Physics::Mechanical)` → une `Matrix` ne gardant que les blocs au moins
-  mécaniques (non assemblée — relancer `assemble::assemble` avant de résoudre).
+  mécaniques (non assemblée — relancer `Matrix::assemble` avant de résoudre).
 
 `k.physics()` renvoie l'ensemble des natures **présentes** dans la matrice
 (dédupliqué) : une matrice agrégeant plusieurs physiques y expose plusieurs tags
@@ -204,7 +204,7 @@ let natures = k.physics()?;                        // ex. [Thermal, Constraint]
 
 ## Règle invariante : un Model = une Matrice
 
-`assemble::stiffness(model, materials)` et `assemble::mass(model)` produisent chacune **une seule** `Matrix` couvrant l'ensemble des DOFs du Model (primaux ⊕ multiplicateurs). Les conditions limites n'ont pas de statut spécial — ce sont des sub-models comme les autres qui contribuent leurs entrées dans la même matrice globale.
+`matrix::stiffness(model, materials)` et `matrix::mass(model, materials)` produisent chacune **une seule** `Matrix` couvrant l'ensemble des DOFs du Model (primaux ⊕ multiplicateurs). Les conditions limites n'ont pas de statut spécial — ce sont des sub-models comme les autres qui contribuent leurs entrées dans la même matrice globale.
 
 Cette uniformité simplifie tout : le solveur reçoit une seule `Matrix` + un seul `NodeField` ; pas besoin de jongler avec un système saddle-point composé.
 
@@ -217,7 +217,9 @@ use pyrucast::atoms::node::Node;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::model::Model;
-use pyrucast::ops::{assemble, build, mesher};
+use pyrucast::models::RelationSense;
+use pyrucast::ops::{element_field, matrix, mesh};
+use pyrucast::aggregate::Aggregate;   // apporte `union`
 use pyrucast::handle::Handle;
 
 // 1-D : maillage [0, 1] à un seul SEG2.
@@ -235,15 +237,18 @@ let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 let hc = Model::heat_conduction(&fes).unwrap();
 // Maillage des nœuds imposés + support des multiplicateurs (barycenter
 // colocalise des nœuds neufs). Le modèle ne crée aucun nœud lui-même.
-let imposed = mesher::poi1_from_nodes(std::slice::from_ref(&a)).unwrap();
-let multiplier = mesher::barycenter(&imposed).unwrap();
-let dir = Model::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None).unwrap();
+let imposed = mesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap();
+let multiplier = mesh::barycenter(&imposed).unwrap();
+let dir = Model::dirichlet(
+    "T".into(), "q".into(), &imposed, &multiplier, None, None,
+    RelationSense::Equality,
+).unwrap();
 let model = hc.union(&dir).unwrap();
 
 // Matériau k = 1, appliqué aux sous-modèles qui en ont besoin (Dirichlet
 // est automatiquement ignoré), puis assemblage.
-let materials = build::material_field(&model, &[("k", 1.0)]).unwrap();
-let k = assemble::stiffness(&model, &materials).unwrap();
+let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+let k = matrix::stiffness(&model, &materials).unwrap();
 assert_eq!(k.n_rows().unwrap(), 3);  // 2 nœuds physiques + 1 multiplicateur
 ```
 

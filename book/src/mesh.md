@@ -115,6 +115,7 @@ copie.unit().add_cell([b, n3, n4])  # OK
 ## API Rust
 
 ```rust,ignore
+use pyrucast::aggregate::Aggregate;   // apporte `add_sub`, `get`, `union`
 use pyrucast::coords::Coords;
 use pyrucast::atoms::ElementType;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
@@ -130,7 +131,7 @@ let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
 sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 
 let sm_handle = Handle::new(sm);
-let mut mesh = Mesh::new(coords.clone());
+let mut mesh = Mesh::empty();          // l'agrégat ne porte pas la `Coords`
 mesh.add_sub(sm_handle).unwrap();
 assert_eq!(mesh.cell_count().unwrap(), 1);
 ```

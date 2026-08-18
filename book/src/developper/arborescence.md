@@ -166,7 +166,7 @@ flowchart LR
         pyo3["pyo3<br/><small>binding — py/</small>"]
     end
     subgraph stubfeat["feature stub-gen"]
-        stubgen["pyo3-stub-gen<br/><small>pyrucast.pyi — bin/, py/</small>"]
+        stubgen["pyo3-stub-gen<br/><small>_pyrucast/__init__.pyi — bin/, py/</small>"]
     end
     subgraph vizfeat["feature viz / viz-interactive"]
         plotters["plotters<br/><small>rendu PNG/SVG — viz/</small>"]

@@ -78,7 +78,7 @@ Le pipeline est toujours le même :
 2. **`Mesh`** — les éléments (ici des `SEG2` alignés sur \\([0,1]\\)).
 3. **`FiniteElementSpace`** — l'interpolation (`lagrange1`).
 4. **Matériau** — un `ElementField` portant la composante `"k"`, fabriqué
-   commodément par `build::material_field(&model, &[("k", …)])` (les
+   commodément par `element_field::material_field(&model, &[("k", …)])` (les
    sous-modèles sans matériau, comme `Dirichlet`, sont ignorés).
 5. **`Model`** — `Model::heat_conduction(&fes)`, composé par `|` (union) avec
    les conditions limites.
@@ -95,8 +95,8 @@ Le pipeline est toujours le même :
      **flux réparti** sur un bord (ou un volume) se transforme en charges
      nodales cohérentes par l'opérateur [`flux`](#exemple--un-carré) (analogue
      de `FLUX`/`PRES` de Cast3M).
-7. **Assemblage + résolution** — `assemble::stiffness` puis le solveur dense
-   `solve` (voir [Modèle physique](model.md)).
+7. **Assemblage + résolution** — `matrix::stiffness` puis le solveur
+   `solver::lu::solve` (LU creuse directe, voir [Modèle physique](model.md)).
 
 ### Exemple : ligne chauffée
 

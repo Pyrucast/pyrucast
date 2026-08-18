@@ -445,6 +445,7 @@ Le déterminant du Jacobien n'est **pas** vérifié à la construction : un él�
 Constructeur principal — Lagrange-1 partout, quadrature de Gauss par défaut :
 
 ```rust,ignore
+use pyrucast::aggregate::Aggregate;   // apporte `get`
 use pyrucast::coords::Coords;
 use pyrucast::atoms::ElementType;
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -479,7 +480,7 @@ use pyrucast::atoms::Interpolation;
 use pyrucast::atoms::QuadratureRule;
 
 let fes = FiniteElementSpace::with(
-    mesh_h,
+    &mesh,
     &[
         (Interpolation::Lagrange1, QuadratureRule::Gauss),
         (Interpolation::Lagrange1, QuadratureRule::Gauss),

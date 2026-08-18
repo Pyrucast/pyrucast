@@ -59,6 +59,7 @@ Résumé des rôles :
 Exemple minimal en Rust :
 
 ```rust,ignore
+use pyrucast::aggregate::Aggregate;   // apporte `add_sub`, `get`, `union`
 use pyrucast::coords::Coords;
 use pyrucast::atoms::ElementType;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
@@ -72,9 +73,10 @@ let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
 let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
 sm.add_cell(&[a.id(), b.id()]).unwrap();
 
-let sm_h = Handle::new(sm);
-let mut mesh = Mesh::new(coords);
-mesh.add_sub(sm_h).unwrap();
+// L'agrégat ne porte pas la `Coords` : ce sont les sous-maillages qui la
+// tiennent. `Mesh::from_submesh(sm)` est le raccourci pour le cas à un seul.
+let mut mesh = Mesh::empty();
+mesh.add_sub(Handle::new(sm)).unwrap();
 println!("{}", mesh); // Mesh: 1 submesh(es), 1 cell(s) total
 ```
 
