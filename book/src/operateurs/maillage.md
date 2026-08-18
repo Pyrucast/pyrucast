@@ -64,23 +64,7 @@ contraintes : POI1 → nœuds **neufs** colocalisés au centre de chaque cellule
 (cf. [Dirichlet](../contraintes/dirichlet.md)).
 
 ```python
-import pyrucast
-
-c = pyrucast.Coords(dim=2)
-a = c.add_node([0.0, 0.0])
-b = c.add_node([4.0, 0.0])
-
-# Ligne de 4 SEG2 entre a et b (3 nœuds intermédiaires créés).
-line = pyrucast.mesh.line(a, b, 4)
-print(line)  # Mesh: 1 submesh(es), 4 cell(s) total
-
-# Extrusion en QUA4 sur 2 couches selon +y.
-surf = pyrucast.mesh.extrude(line, [0.0, 1.0], 2)
-print(surf.element_types())  # ['QUA4']
-
-# Ligne quadratique : SEG3 (nœud de milieu d'arête par élément).
-line3 = pyrucast.mesh.line(a, b, 4, "SEG3")
-print(line3.element_types())  # ['SEG3']
+{{#include ../../../tests/python/test_doc_ops_maillage.py:line}}
 ```
 
 ## `sweep` : QUA4 par défaut, ou toute variante dérivée
@@ -101,10 +85,7 @@ autre chose, il est ensuite **converti** :
   composées).
 
 ```python
-tri = pyrucast.mesh.sweep(mesh_a, mesh_b, 2, "TRI3")  # 2× plus de cellules que QUA4
-qua8 = pyrucast.mesh.sweep(mesh_a, mesh_b, 2, "QUA8")
-qua9 = pyrucast.mesh.sweep(mesh_a, mesh_b, 2, "QUA9")
-tri6 = pyrucast.mesh.sweep(mesh_a, mesh_b, 2, "TRI6")
+{{#include ../../../tests/python/test_doc_ops_maillage.py:sweep}}
 ```
 
 ## Surface entre 4 côtés : `transfinite`
@@ -133,19 +114,7 @@ sur le bord, quelle que soit leur forme (pas seulement des droites). Comme
 `"TRI3"`/`"QUA8"`/`"QUA9"`/`"TRI6"`.
 
 ```python
-c = pyrucast.Coords(dim=2)
-p0 = c.add_node([0.0, 0.0])
-p1 = c.add_node([2.0, 0.0])
-p2 = c.add_node([2.0, 1.0])
-p3 = c.add_node([0.0, 1.0])
-
-side1 = pyrucast.mesh.line(p0, p1, 4)  # bas,   4 éléments
-side2 = pyrucast.mesh.line(p1, p2, 2)  # droite, 2 éléments
-side3 = pyrucast.mesh.line(p2, p3, 4)  # haut,  4 éléments (= side1)
-side4 = pyrucast.mesh.line(p3, p0, 2)  # gauche, 2 éléments (= side2)
-
-surf = pyrucast.mesh.transfinite(side1, side2, side3, side4)
-print(surf.element_types(), surf.cell_count())  # ['QUA4'] 8
+{{#include ../../../tests/python/test_doc_ops_maillage.py:transfinite}}
 ```
 
 > **Différence avec Cast3M.** `DALL` accepte des côtés opposés avec un
@@ -204,32 +173,7 @@ dimension :
 Appliquer `invert` au résultat redonne la connectivité miroir brute.
 
 ```python
-import math
-import pyrucast
-
-# Une face TRI3 (un seul triangle) dans le plan z = 0.
-c = pyrucast.Coords(dim=3)
-face = pyrucast.Mesh(c, "TRI3")
-face.unit().add_cell(
-    [
-        c.add_node([1.0, 0.0, 0.0]),
-        c.add_node([2.0, 0.0, 0.0]),
-        c.add_node([1.0, 0.0, 1.0]),
-    ]
-)
-
-# Copie translatée de 5 selon +z (nœuds neufs ; `face` reste intacte).
-haut = pyrucast.mesh.translate(face, [0.0, 0.0, 5.0])
-
-# Copie tournée de 30° autour de l'axe z passant par l'origine.
-tournee = pyrucast.mesh.rotate(face, math.pi / 6, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
-
-# Copie symétrique dans le plan y = 0, donné par trois de ses points : la
-# moitié manquante d'une pièce maillée sur son demi-modèle (cellules remises
-# à l'endroit).
-autre_moitie = pyrucast.mesh.symmetry_plane(
-    face, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]
-)
+{{#include ../../../tests/python/test_doc_ops_maillage.py:transformations}}
 ```
 
 ## Tissage d'un solide entre deux surfaces : `sweep_solid`
@@ -250,9 +194,7 @@ Associé à `translate` / `rotate`, il construit une tranche de solide entre une
 surface et sa copie déplacée :
 
 ```python
-# `face` et `tournee` : la face TRI3 ci-dessus et sa copie tournée de 30°.
-solide = pyrucast.mesh.sweep_solid(face, tournee, 1)
-print(solide.element_types())  # ['PENTA6']
+{{#include ../../../tests/python/test_doc_ops_maillage.py:sweep_solid}}
 ```
 
 ## Révolution : `revolve`
@@ -291,32 +233,7 @@ exactement comme un `extrude` à contre-normale : passez par `orient` sur le
 résultat, ou révolutionnez d'un angle positif depuis la source symétrisée.
 
 ```python
-import math
-import pyrucast
-
-c = pyrucast.Coords(dim=2)
-a = c.add_node([1.0, 0.0])
-b = c.add_node([2.0, 0.0])
-
-# Une couronne complète : le segment radial [1, 2] tourné d'un tour en
-# 32 secteurs de QUA4 — refermée, sans couture.
-rayon = pyrucast.mesh.line(a, b, 4)
-couronne = pyrucast.mesh.revolve(rayon, 2 * math.pi, 32, [0.0, 0.0])
-print(couronne.element_types(), couronne.cell_count())  # ['QUA4'] 128
-
-# En 3D : un quart de tube, la section QUA4 balayée autour de l'axe z.
-c3 = pyrucast.Coords(dim=3)
-section = pyrucast.Mesh(c3, "QUA4")
-section.unit().add_cell(
-    [
-        c3.add_node([1.0, 0.0, 0.0]),
-        c3.add_node([2.0, 0.0, 0.0]),
-        c3.add_node([2.0, 0.0, 1.0]),
-        c3.add_node([1.0, 0.0, 1.0]),
-    ]
-)
-quart = pyrucast.mesh.revolve(section, math.pi / 2, 8, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
-print(quart.element_types())  # ['HEX8']
+{{#include ../../../tests/python/test_doc_ops_maillage.py:revolve}}
 ```
 
 `revolve` fait d'un coup ce que `rotate` + `sweep_solid` font tranche par
@@ -341,11 +258,7 @@ Le maillage obtenu se calcule avec l'interpolation `LAGRANGE2` (cf.
 [Espace éléments finis](../fe-space.md)) :
 
 ```python
-lin = pyrucast.mesh.triangulate_surface(contour, "TRI3", 1.0)  # maillage TRI3
-quad = pyrucast.mesh.to_quadratic(lin)  # copie TRI6
-print(quad.element_types())  # ['TRI6']
-
-fes = pyrucast.FiniteElementSpace(quad, interpolation="LAGRANGE2")
+{{#include ../../../tests/python/test_doc_ops_maillage.py:to_quadratic}}
 ```
 
 ## Changement de type d'élément : `convert`
@@ -371,9 +284,7 @@ modifié. Tout autre couple `(source, cible)` lève une erreur : passer à un ty
 relève de [`to_quadratic`](#passage-à-lordre-quadratique--to_quadratic).
 
 ```python
-faces = pyrucast.mesh.skin(volume)  # peau en QUA4
-faces = pyrucast.mesh.convert(faces, "TRI3")  # QUA4 → TRI3
-print(faces.element_types())  # ['TRI3']
+{{#include ../../../tests/python/test_doc_ops_maillage.py:convert}}
 ```
 
 ## Maillage d'un contour fermé : `triangulate_surface`
@@ -463,36 +374,7 @@ l'angle visé : affiner alors le contour d'entrée plutôt que la taille cible.
 ### Exemple Python
 
 ```python
-import pyrucast
-
-c = pyrucast.Coords(dim=2)
-
-# Contour extérieur : carré 4×4 (CCW).
-outer = pyrucast.Mesh(c, "SEG2")
-outer_nodes = [
-    c.add_node(list(p)) for p in [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)]
-]
-for i in range(4):
-    outer.unit().add_cell([outer_nodes[i], outer_nodes[(i + 1) % 4]])
-
-# Trou : carré 2×2 centré, orienté CW.
-hole = pyrucast.Mesh(c, "SEG2")
-hole_nodes = [
-    c.add_node(list(p)) for p in [(1.0, 1.0), (1.0, 3.0), (3.0, 3.0), (3.0, 1.0)]
-]
-for i in range(4):
-    hole.unit().add_cell([hole_nodes[i], hole_nodes[(i + 1) % 4]])
-
-# Composer les deux contours par l'union | (jamais +).
-combined = outer | hole
-
-# Maillage TRI3 de taille ~0.5 (aire = 16 - 4 = 12).
-tri = pyrucast.mesh.triangulate_surface(combined, "TRI3", size=0.5)
-print(tri.element_types(), tri.cell_count())
-
-# Variante quad-dominante.
-quad = pyrucast.mesh.triangulate_surface(combined, "QUA4", size=0.5)
-print(quad.element_types())  # ['QUA4', 'TRI3'] en général
+{{#include ../../../tests/python/test_doc_ops_maillage.py:triangulate_surface}}
 ```
 
 ### Refus final
@@ -957,27 +839,7 @@ plus de bande et moins de grille.
 ### Exemple Python
 
 ```python
-import pyrucast as pc
-
-H = 0.02  # taille visée
-coords = pc.Coords(2)
-
-# Un L. Chaque côté est coupé en un nombre entier de mailles de H, donc
-# tous ses nœuds tombent sur les lignes que la grille tirera des angles.
-angles = [(0.0, 0.0), (0.6, 0.0), (0.6, 0.2), (0.3, 0.2), (0.3, 0.4), (0.0, 0.4)]
-noeuds = [coords.add_node(list(p)) for p in angles]
-
-contour = None
-for i, a in enumerate(angles):
-    b = angles[(i + 1) % len(angles)]
-    n = round(((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5 / H)
-    seg = pc.mesh.line(noeuds[i], noeuds[(i + 1) % len(angles)], n)
-    contour = seg if contour is None else contour | seg
-contour = pc.mesh.consolidate(contour)
-
-maillage = pc.mesh.grid_surface(contour, "QUA4", size=H)
-print(maillage.element_types())  # ['QUA4'] — aucun triangle
-print(maillage.cell_count())  # 450 : la grille exacte du L
+{{#include ../../../tests/python/test_doc_ops_maillage.py:grid_surface}}
 ```
 
 ### Qualité
@@ -1154,9 +1016,7 @@ le hasard de l'endroit où ses sommets sont tombés.
 ### Exemple Python
 
 ```python
-maillage = pc.mesh.grid_surface2(contour, "QUA4", size=H)
-# ou, en méthode :
-maillage = contour.grid_surface2("QUA4", size=H)
+{{#include ../../../tests/python/test_doc_ops_maillage.py:grid_surface2}}
 ```
 
 ## Améliorer un maillage existant : `regularize`, `cleanup`, `merge_triangles`
@@ -1839,18 +1699,7 @@ donc **réalimenter directement** `triangulate_surface`. Les nœuds d'origine
 sont réutilisés (et re-référencés).
 
 ```python
-import pyrucast
-
-c = pyrucast.Coords(dim=2)
-center = c.add_node([0.0, 0.0])
-disc = pyrucast.mesh.triangulate_surface(
-    pyrucast.mesh.circle(center, [0.0, 0.0, 1.0], 2.0, 16), "TRI3"
-)
-
-bord = pyrucast.mesh.border(disc)
-print(len(bord))  # 1  (domaine simplement connexe)
-print(bord.element_types())  # ['SEG2']
-print(bord.cell_counts())  # [16]
+{{#include ../../../tests/python/test_doc_ops_maillage.py:border}}
 ```
 
 ### Découpe par angle (`angle_deg`)
@@ -1866,9 +1715,7 @@ dont tous les virages restent sous le seuil) est conservée comme une boucle
 fermée. `angle_deg=None` (défaut) garde chaque bord en une boucle fermée.
 
 ```python
-carre = pyrucast.mesh.triangulate_surface(contour_carre, "TRI3", 0.5)
-aretes = pyrucast.mesh.border(carre, angle_deg=45.0)
-print(len(aretes))  # 4  (les quatre côtés, arêtes ouvertes)
+{{#include ../../../tests/python/test_doc_ops_maillage.py:border_angle}}
 ```
 
 Les sous-maillages POI1 (un point n'a pas d'arête) sont ignorés. La fonction
@@ -1913,20 +1760,7 @@ base carrée et quatre triangles). Les facettes conservent leur orientation
 sortante ; les nœuds d'origine sont réutilisés (et re-référencés).
 
 ```python
-import pyrucast
-
-# Un pavé PENTA6 : carré triangulé, extrudé selon +z.
-c = pyrucast.Coords(dim=3)
-coins = [c.add_node(p) for p in [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]]]
-contour = pyrucast.Mesh(c, "SEG2")
-for i in range(4):
-    contour[0].add_cell([coins[i], coins[(i + 1) % 4]])
-surf = pyrucast.mesh.triangulate_surface(contour, "TRI3", 0.34)
-solide = pyrucast.mesh.extrude(surf, [0.0, 0.0, 1.0], 3)  # TRI3 -> PENTA6
-
-peau = pyrucast.mesh.skin(solide)
-print(len(peau))  # 6  (deux chapeaux + quatre flancs)
-print(peau.element_types())  # ['TRI3', 'TRI3', 'QUA4', 'QUA4', 'QUA4', 'QUA4']
+{{#include ../../../tests/python/test_doc_ops_maillage.py:skin}}
 ```
 
 Un `angle_deg` plus grand regroupe des faces plus courbées (un cylindre facetté
@@ -1985,13 +1819,7 @@ orientation) sont inchangés. Appliqué deux fois, `invert` redonne le maillage 
 départ.
 
 ```python
-import pyrucast
-
-# Une plaque trouée : contour extérieur + bord du trou, orientations quelconques.
-surf = pyrucast.mesh.triangulate_surface(contour, "TRI3")
-
-propre = pyrucast.mesh.orient(surf)  # toutes les mailles cohérentes
-trou_dedans = pyrucast.mesh.invert(propre)  # sens inversé (intérieur/extérieur)
+{{#include ../../../tests/python/test_doc_ops_maillage.py:orient}}
 ```
 
 Côté Rust, `ops::mesh::orient(&mesh)` et `ops::mesh::invert(&mesh)`.
@@ -2035,15 +1863,7 @@ de son plus petit numéro de nœud, dans le sens du segment qui l'a déjà pour
 queue.
 
 ```python
-import pyrucast
-
-# Un contour tiré d'une surface : les segments sont là, mais en vrac.
-bord = pyrucast.mesh.border(surf)
-suite = pyrucast.mesh.chain(bord)  # ou bord.chain()
-
-# La connectivité se lit maintenant nœud à nœud le long de la courbe.
-for maille in suite[0]:
-    print([n.id for n in maille])
+{{#include ../../../tests/python/test_doc_ops_maillage.py:chain}}
 ```
 
 Côté Rust, `ops::mesh::chain(&mesh)` — ou la méthode `mesh.chain()`.
@@ -2076,23 +1896,7 @@ nœud n'a de sens qu'au sein d'une `Coords`), sinon une erreur est levée. Un
 `points` vide ne retient rien.
 
 ```python
-import pyrucast
-
-c = pyrucast.Coords(dim=2)
-nodes = [c.add_node(p) for p in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (2.0, 0.0)]]
-
-mesh = pyrucast.Mesh(c, "TRI3")
-mesh.unit().add_cell([nodes[0], nodes[1], nodes[2]])  # cellule 0
-mesh.unit().add_cell([nodes[1], nodes[3], nodes[2]])  # cellule 1
-
-# Points = {0, 1, 2} : seule la cellule 0 a tous ses nœuds dedans.
-pts = pyrucast.mesh.poi1_from_nodes([nodes[0], nodes[1], nodes[2]])
-
-strict = pyrucast.mesh.elements_on(mesh, pts, strict=True)
-print(strict.cell_count())  # 1  (cellule 0)
-
-loose = pyrucast.mesh.elements_on(mesh, pts, strict=False)
-print(loose.cell_count())  # 2  (les deux touchent un nœud de pts)
+{{#include ../../../tests/python/test_doc_ops_maillage.py:elements_on}}
 ```
 
 Côté Rust, `ops::mesh::elements_on(&mesh, &points, strict)`.
@@ -2169,24 +1973,7 @@ solide de révolution : une « sphère » y est un cercle du méridien. Le tore,
 qui a besoin d'un axe hors du plan pour être un tore, est **3D seulement**.
 
 ```python
-import pyrucast
-
-# Une plaque carrée maillée en TRI3.
-plaque = pyrucast.mesh.triangulate_surface(contour, "TRI3", size=0.1)
-
-# Le bord gauche (x = 0) : le plan de normale +x passant par l'origine.
-gauche = pyrucast.mesh.points_on_plane(plaque, [0.0, 0.0], [1.0, 0.0])
-
-# Les nœuds du congé : dans le disque de rayon 0.2 autour du coin rentrant.
-conge = pyrucast.mesh.points_in_sphere(plaque, [1.0, 1.0], 0.2)
-
-# La sélection sert directement de support imposé à un Dirichlet — le nuage
-# POI1 est ce que `Model.dirichlet` attend (cf. Contraintes / Dirichlet).
-blocage = pyrucast.Model.dirichlet("UX", "RX", gauche, pyrucast.mesh.barycenter(gauche))
-
-# La sortie POI1 est un maillage ordinaire : elle se rebranche sur les autres
-# opérateurs, ici pour remonter aux éléments portés par la sélection.
-bande = pyrucast.mesh.elements_on(plaque, conge, strict=True)
+{{#include ../../../tests/python/test_doc_ops_maillage.py:selections}}
 ```
 
 En 3D, les formes de révolution sélectionnent alésages, arbres et gorges :
@@ -2233,21 +2020,7 @@ connectivité du résultat et deviennent récupérables par le GC de la `Coords`
 une fois plus rien ne les référence.
 
 ```python
-import pyrucast
-
-# Un maillage dont l'interface porte des nœuds colocalisés mais distincts
-# (deux SEG2 qui se touchent par un bout dupliqué).
-c = pyrucast.Coords(dim=2)
-a = c.add_node([0.0, 0.0])
-b = c.add_node([1.0, 0.0])
-b2 = c.add_node([1.0, 0.0])  # superposé à b, mais nœud distinct
-d = c.add_node([2.0, 0.0])
-
-mesh = pyrucast.Mesh(c, "SEG2")
-mesh.unit().add_cell([a, b])
-mesh.unit().add_cell([b2, d])
-
-joined = pyrucast.mesh.merge_nodes(mesh, 1e-6)  # b2 est soudé sur b
+{{#include ../../../tests/python/test_doc_ops_maillage.py:merge_nodes}}
 ```
 
 **Bilan à l'écran.** Chaque appel imprime une ligne sur la sortie standard —
@@ -2282,13 +2055,7 @@ sous-maillages (elle ne les copie pas), souder l'union soude du même coup
 `mesh_a` et `mesh_b` :
 
 ```python
-gauche = pyrucast.mesh.line(a, b, 4)
-droite = pyrucast.mesh.line(b2, d, 4)  # b2 colocalisé avec b, mais distinct
-
-pyrucast.mesh.merge_nodes(gauche | droite, 1e-6, in_place=True)
-
-# Les deux morceaux partagent maintenant réellement le nœud d'interface.
-assert droite.node(0, 0, 0).id == b.id
+{{#include ../../../tests/python/test_doc_ops_maillage.py:merge_in_place}}
 ```
 
 Ce que la mutation ne touche pas : **la structure du maillage**. Mêmes
