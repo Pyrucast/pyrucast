@@ -110,3 +110,84 @@ print(c)  # même chose que str(c)
     "converged",
 }
 # ANCHOR_END: cles_resultat
+
+
+# ── Thermo-mécanique pas-à-pas : la mise en donnée complète ─────────────────
+
+
+def _modele_thermomecanique():
+    """Une plaque 2×2 QUA4 : conduction + élasticité + appuis, et son histoire
+    de température. Le montage complet est dans `examples/thermomechanique_pas_a_pas.py`."""
+    import pyrucast as pc
+
+    nx = ny = 2
+    c = pc.Coords(2)
+    grid = [c.add_node([i / nx, j / ny]) for j in range(ny + 1) for i in range(nx + 1)]
+
+    def idx(i, j):
+        return i + j * (nx + 1)
+
+    mesh = pc.Mesh(c, "QUA4")
+    for j in range(ny):
+        for i in range(nx):
+            mesh.unit().add_cell(
+                [
+                    grid[idx(i, j)],
+                    grid[idx(i + 1, j)],
+                    grid[idx(i + 1, j + 1)],
+                    grid[idx(i, j + 1)],
+                ]
+            )
+    fes = pc.FiniteElementSpace(mesh)
+
+    gauche = [grid[idx(0, j)] for j in range(ny + 1)]
+    droite = [grid[idx(nx, j)] for j in range(ny + 1)]
+    bas = [grid[idx(i, 0)] for i in range(nx + 1)]
+
+    def bloquer(noeuds, var, dual):
+        imposed = pc.mesh.poi1_from_nodes(noeuds)
+        return pc.Model.dirichlet(var, dual, imposed, pc.mesh.barycenter(imposed))
+
+    th_imposed = pc.mesh.poi1_from_nodes(gauche + droite)
+    th_mult = pc.mesh.translate(th_imposed, [0.0, 0.0])
+    model = (
+        pc.Model.heat_conduction(fes)
+        | pc.Model.elasticity(fes, "plane_stress")
+        | pc.Model.dirichlet("T", "q", th_imposed, th_mult)
+        | bloquer(gauche, "u_x", "f_x")
+        | bloquer(bas, "u_y", "f_y")
+    )
+    materials = pc.element_field.material_field(
+        model, [("k", 1.0), ("E", 210_000.0), ("nu", 0.3), ("alpha", 1.2e-5)]
+    )
+    froid = pc.NodeField(th_mult, ["imposed_T"])
+    froid[0].add_to_component("imposed_T", 20.0)
+    chaud = pc.NodeField(th_mult, ["imposed_T"])
+    chaud[0].add_to_component("imposed_T", 120.0)
+    loads = pc.Evolution([(0.0, froid), (1.0, chaud)], out_of_range="clamp")
+    return model, materials, loads
+
+
+model, materials, loads = _modele_thermomecanique()
+
+# ANCHOR: step_by_step
+import pyrucast as pc
+
+# … maillage `mesh`, `fes`, modèle thermo-mécanique `model`, `materials`, `loads` …
+
+data = {
+    "times": [0.0, 0.25, 0.5, 0.75, 1.0],
+    "model": model,  # fespace + maillage déduits du modèle
+    "loads": loads,  # NodeField unioné ou Evolution de champ
+    "materials": materials,  # ElementField unioné ou Evolution de champ
+    "t_ref": 20.0,
+}
+
+pc.thermomechanics.step_by_step(data)
+
+for r in data["results"]:
+    print(r["time"], r["mech_iters"], r["converged"])
+# ANCHOR_END: step_by_step
+
+assert len(data["results"]) == 5
+assert all(r["converged"] for r in data["results"])

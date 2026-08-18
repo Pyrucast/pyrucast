@@ -101,22 +101,7 @@ En sortie, `data["results"]` est une liste (un élément par instant) :
 ## Exemple
 
 ```python
-import pyrucast as pc
-
-# … maillage `mesh`, `fes`, modèle thermo-mécanique `model`, `materials`, `loads` …
-
-data = {
-    "times": [0.0, 0.25, 0.5, 0.75, 1.0],
-    "model": model,  # fespace + maillage déduits du modèle
-    "loads": loads,  # NodeField unioné ou Evolution de champ
-    "materials": materials,  # ElementField unioné ou Evolution de champ
-    "t_ref": 20.0,
-}
-
-pc.thermomechanics.step_by_step(data)
-
-for r in data["results"]:
-    print(r["time"], r["mech_iters"], r["converged"])
+{{#include ../../tests/python/test_doc_conventions.py:step_by_step}}
 ```
 
 Démonstration complète (plaque chauffée, dilatation libre, contrôle analytique
