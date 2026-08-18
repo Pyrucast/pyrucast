@@ -104,6 +104,7 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::mesh::regularize, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::pave_surface, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::pave_volume, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesh::poi1_from_nodes, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::to_poi1, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::barycenter, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::border, m)?)?;

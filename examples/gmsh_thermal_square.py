@@ -131,7 +131,7 @@ def main() -> None:
     fes = pyrucast.FiniteElementSpace(plate)
 
     right_nodes = unique_nodes(right)
-    imposed = pyrucast.Mesh.poi1_from_nodes(right_nodes)
+    imposed = pyrucast.mesh.poi1_from_nodes(right_nodes)
     multiplier = pyrucast.mesh.barycenter(imposed)
     mults = [multiplier.node(0, j, 0) for j in range(len(right_nodes))]
 

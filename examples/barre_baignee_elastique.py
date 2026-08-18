@@ -41,7 +41,7 @@ def main():
     # Appuis de symétrie sur les trois faces passant par l'origine.
     def clamp(ids, var, dual):
         picked = [nodes[i] for i in ids]
-        imposed = pyrucast.Mesh.poi1_from_nodes(picked)
+        imposed = pyrucast.mesh.poi1_from_nodes(picked)
         mult = pyrucast.mesh.barycenter(imposed)
         return pyrucast.Model.dirichlet(var, dual, imposed, mult)
 
@@ -52,7 +52,7 @@ def main():
     # Nœud immergé au cœur du cube, lié en u_x/u_y/u_z (liaison rigide, g = 0).
     pc = [0.4, 0.7, 0.2]
     p = c.add_node(pc)
-    bar = pyrucast.Mesh.poi1_from_nodes([p])
+    bar = pyrucast.mesh.poi1_from_nodes([p])
     embedded = pyrucast.Model.embedded(
         bar,
         host,

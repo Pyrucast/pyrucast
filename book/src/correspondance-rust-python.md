@@ -38,8 +38,7 @@ nommées, elles n'auraient pas de sens sur un champ quelconque. Même raison pou
 `filter_components` et `rename_component` n'ont **que** la forme méthode
 (`f.filter_components(["u_x"])`, `f.rename_component("U", "DX")`) : un seul
 conteneur, de petits arguments, une vue dérivée — R1 en fait du vocabulaire du
-champ, pas un opérateur. Même chose pour `Mesh.poi1_from_nodes`, constructeur
-nommé donc `classmethod`.
+champ, pas un opérateur.
 
 La **complétude du miroir** est elle aussi vérifiée par un test
 (`tests/python/test_mirror_completeness.py`), **dans les deux sens** : aucun
@@ -108,7 +107,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | Rust (`ops::mesh::…`) | Python (`pyrucast.mesh.…`) |
 |---|---|
 | `from_live_nodes(coords: Handle<Coords>) -> Mesh` | `from_live_nodes(coords) -> Mesh` |
-| `SubMesh::poi1_from_nodes(nodes: &[Node]) -> SubMesh` | `poi1_from_nodes(nodes) -> Mesh` |
+| `poi1_from_nodes(nodes: &[Node]) -> Mesh` | `poi1_from_nodes(nodes) -> Mesh` |
 | `line(a: &Node, b: &Node, n_elems: usize, element_type: ElementType) -> Mesh` | `line(a, b, n_elems, element_type="SEG2") -> Mesh` |
 | `circle(center: &Node, normal: &[f64], radius: f64, n_elems: usize, element_type: ElementType) -> Mesh` | `circle(center, normal, radius, n_elems, element_type="SEG2") -> Mesh` |
 | `arc(node_a: &Node, center: &Node, node_b: &Node, n_elems: usize, element_type: ElementType) -> Mesh` | `arc(a, center, b, n_elems, element_type="SEG2") -> Mesh` |

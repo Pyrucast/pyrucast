@@ -21,7 +21,7 @@ def _seg2_heat_model(length=1.0, k=1.0, dirichlet_left=False):
 
     model = pyrucast.Model.heat_conduction(fes)
     if dirichlet_left:
-        imposed = pyrucast.Mesh.poi1_from_nodes([a])
+        imposed = pyrucast.mesh.poi1_from_nodes([a])
         multiplier = pyrucast.mesh.barycenter(imposed)
         model = model | pyrucast.Model.dirichlet("T", "q", imposed, multiplier)
     return c, mesh, fes, sub, materials, model, a, b
@@ -227,7 +227,7 @@ def test_fespace_errors_without_domain_submodel():
     """A model with only constraints has nothing to integrate on."""
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
-    imposed = pyrucast.Mesh.poi1_from_nodes([a])
+    imposed = pyrucast.mesh.poi1_from_nodes([a])
     only_constraint = pyrucast.Model.dirichlet(
         "T", "q", imposed, pyrucast.mesh.barycenter(imposed)
     )

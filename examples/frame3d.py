@@ -32,7 +32,7 @@ L, PY, PZ, MX, N = 1.0, 1.0, 1.0, 1.0, 2
 
 
 def _clamp(node, var, dual):
-    imposed = pyrucast.Mesh.poi1_from_nodes([node])
+    imposed = pyrucast.mesh.poi1_from_nodes([node])
     multiplier = pyrucast.mesh.barycenter(imposed)
     return pyrucast.Model.dirichlet(var, dual, imposed, multiplier)
 
@@ -68,7 +68,7 @@ def main() -> None:
         ],
     )
 
-    load = pyrucast.Mesh.poi1_from_nodes([tip])
+    load = pyrucast.mesh.poi1_from_nodes([tip])
     rhs = pyrucast.NodeField(load, ["f_y", "f_z", "m_x"])
     rhs[0].set_value(tip, "f_y", PY)
     rhs[0].set_value(tip, "f_z", PZ)

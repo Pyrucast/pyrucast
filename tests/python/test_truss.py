@@ -5,7 +5,7 @@ import pyrucast
 
 def _clamp(c, node, var, dual):
     """Homogeneous Dirichlet (u = 0) on `var` at `node` (imposed value 0)."""
-    imposed = pyrucast.Mesh.poi1_from_nodes([node])
+    imposed = pyrucast.mesh.poi1_from_nodes([node])
     multiplier = pyrucast.mesh.barycenter(imposed)
     return pyrucast.Model.dirichlet(var, dual, imposed, multiplier)
 

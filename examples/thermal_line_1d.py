@@ -51,7 +51,7 @@ def main() -> None:
     # ── Modèle : conduction + Dirichlet T = 20 en x = 1 ──────────────────────
     # Le support des multiplicateurs est fabriqué depuis le nœud imposé par le
     # mesher `barycenter` (un nœud neuf colocalisé). Le modèle ne crée rien.
-    imposed = pyrucast.Mesh.poi1_from_nodes([nodes[-1]])
+    imposed = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
     multiplier = pyrucast.mesh.barycenter(imposed)
     mult = multiplier.node(0, 0, 0)
     model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.dirichlet(
@@ -63,7 +63,7 @@ def main() -> None:
 
     # ── Chargement : source Q en x = 0 (composante duale "q"), valeur imposée
     #    T = 20 au nœud-multiplicateur (slot "imposed_T") ─────────────────────
-    load_mesh = pyrucast.Mesh.poi1_from_nodes([nodes[0], mult])
+    load_mesh = pyrucast.mesh.poi1_from_nodes([nodes[0], mult])
     rhs = pyrucast.NodeField(load_mesh, ["imposed_T", "q"])
     rhs[0].set_value(nodes[0], "q", Q)
     rhs[0].set_value(mult, "imposed_T", T_IMPOSED)

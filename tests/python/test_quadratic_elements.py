@@ -156,7 +156,7 @@ def test_to_quadratic_promotes_linear_mesh():
 def test_to_quadratic_rejects_points():
     c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
-    pts = pyrucast.Mesh.poi1_from_nodes([a])
+    pts = pyrucast.mesh.poi1_from_nodes([a])
     with pytest.raises(Exception):
         pyrucast.mesh.to_quadratic(pts)
 

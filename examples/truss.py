@@ -27,7 +27,7 @@ E, A, L, F = 210.0e9, 1.0e-4, 2.0, 1000.0
 
 def _clamp(node, var, dual):
     """Dirichlet homogène (u = 0) sur `var` au nœud `node`."""
-    imposed = pyrucast.Mesh.poi1_from_nodes([node])
+    imposed = pyrucast.mesh.poi1_from_nodes([node])
     multiplier = pyrucast.mesh.barycenter(imposed)
     return pyrucast.Model.dirichlet(var, dual, imposed, multiplier)
 
@@ -46,7 +46,7 @@ def main() -> None:
 
     materials = pyrucast.element_field.material_field(model, [("E", E), ("A", A)])
 
-    load = pyrucast.Mesh.poi1_from_nodes([n1])
+    load = pyrucast.mesh.poi1_from_nodes([n1])
     rhs = pyrucast.NodeField(load, ["f_x"])
     rhs[0].set_value(n1, "f_x", F)
 

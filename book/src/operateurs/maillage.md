@@ -2086,7 +2086,7 @@ mesh.unit().add_cell([nodes[0], nodes[1], nodes[2]])  # cellule 0
 mesh.unit().add_cell([nodes[1], nodes[3], nodes[2]])  # cellule 1
 
 # Points = {0, 1, 2} : seule la cellule 0 a tous ses nœuds dedans.
-pts = pyrucast.Mesh.poi1_from_nodes([nodes[0], nodes[1], nodes[2]])
+pts = pyrucast.mesh.poi1_from_nodes([nodes[0], nodes[1], nodes[2]])
 
 strict = pyrucast.mesh.elements_on(mesh, pts, strict=True)
 print(strict.cell_count())  # 1  (cellule 0)

@@ -235,7 +235,7 @@ let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 let hc = Model::heat_conduction(&fes).unwrap();
 // Maillage des nœuds imposés + support des multiplicateurs (barycenter
 // colocalise des nœuds neufs). Le modèle ne crée aucun nœud lui-même.
-let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
+let imposed = mesher::poi1_from_nodes(std::slice::from_ref(&a)).unwrap();
 let multiplier = mesher::barycenter(&imposed).unwrap();
 let dir = Model::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None).unwrap();
 let model = hc.union(&dir).unwrap();
@@ -262,7 +262,7 @@ fes = pyrucast.FiniteElementSpace(mesh)
 # Modèle : conduction (matériau fourni à l'assemblage) + Dirichlet à gauche.
 # Constructeurs au niveau parent, composés par `|` — pas de SubModel à la main.
 # Le maillage des multiplicateurs est fabriqué depuis les nœuds imposés.
-imposed = pyrucast.Mesh.poi1_from_nodes([a])
+imposed = pyrucast.mesh.poi1_from_nodes([a])
 multiplier = pyrucast.mesh.barycenter(imposed)
 model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.dirichlet(
     "T", "q", imposed, multiplier

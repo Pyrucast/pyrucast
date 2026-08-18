@@ -25,6 +25,18 @@ pub fn from_live_nodes(coords: PyRef<PyCoords>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: mesh })
 }
 
+/// Build a points (POI1) mesh with one point per node in `nodes`.
+///
+/// The `Coords` comes from the nodes themselves — every `Node` carries its
+/// own — so no `Coords` argument is needed. Errors if `nodes` is empty.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn poi1_from_nodes(nodes: Vec<PyRef<PyNode>>) -> PyResult<PyMesh> {
+    let ns: Vec<crate::atoms::Node> = nodes.iter().map(|n| n.as_node().clone()).collect();
+    let mesh = crate::ops::mesh::poi1_from_nodes(&ns)?;
+    Ok(PyMesh { inner: mesh })
+}
+
 /// Convert a mesh to POI1, submesh by submesh.
 ///
 /// Returns a new mesh with the same number of submeshes; each output

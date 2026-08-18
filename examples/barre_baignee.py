@@ -38,13 +38,13 @@ def main():
     base = pyrucast.Model.heat_conduction(fes)
 
     # Coins fixés au champ linéaire (Dirichlet).
-    corner_mesh = pyrucast.Mesh.poi1_from_nodes(corner_nodes)
+    corner_mesh = pyrucast.mesh.poi1_from_nodes(corner_nodes)
     corner_mult = pyrucast.mesh.barycenter(corner_mesh)
     dirichlet = pyrucast.Model.dirichlet("T", "q", corner_mesh, corner_mult)
 
     # Nœud immergé au cœur du cube, lié à l'hôte.
     p = c.add_node([0.3, 0.6, 0.2])
-    bar = pyrucast.Mesh.poi1_from_nodes([p])
+    bar = pyrucast.mesh.poi1_from_nodes([p])
     embedded = pyrucast.Model.embedded(bar, host, [("T", "q")])
 
     model = base | dirichlet | embedded

@@ -40,15 +40,15 @@ def test_mpc_difference_relation_recovers_linear_solution():
     """`1·T(node4) − 1·T(node0) = 1` with Dirichlet `T(node0) = 0` gives u(x)=x."""
     c, nodes, fes, materials = _heat_bar()
 
-    imposed0 = pyrucast.Mesh.poi1_from_nodes([nodes[0]])
+    imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mult0 = pyrucast.mesh.barycenter(imposed0)
     dirichlet = pyrucast.Model.dirichlet("T", "q", imposed0, mult0)
     dir_mult = mult0.node(0, 0, 0)
 
     base = pyrucast.Model.heat_conduction(fes)
     dual = base.dual_of("T")  # "q"
-    mesh_last = pyrucast.Mesh.poi1_from_nodes([nodes[-1]])
-    mesh_first = pyrucast.Mesh.poi1_from_nodes([nodes[0]])
+    mesh_last = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
+    mesh_first = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mult_mpc = pyrucast.mesh.barycenter(mesh_last)
     mpc = pyrucast.Model.mpc(
         [(mesh_last, "T", dual, 1.0), (mesh_first, "T", dual, -1.0)],
@@ -79,8 +79,8 @@ def test_single_term_mpc_matches_dirichlet():
 
     def solve_dirichlet():
         c, nodes, fes, materials = _heat_bar()
-        left = pyrucast.Mesh.poi1_from_nodes([nodes[0]])
-        right = pyrucast.Mesh.poi1_from_nodes([nodes[-1]])
+        left = pyrucast.mesh.poi1_from_nodes([nodes[0]])
+        right = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
         ml, mr = pyrucast.mesh.barycenter(left), pyrucast.mesh.barycenter(right)
         model = (
             pyrucast.Model.heat_conduction(fes)
@@ -99,9 +99,9 @@ def test_single_term_mpc_matches_dirichlet():
 
     def solve_mpc():
         c, nodes, fes, materials = _heat_bar()
-        left = pyrucast.Mesh.poi1_from_nodes([nodes[0]])
+        left = pyrucast.mesh.poi1_from_nodes([nodes[0]])
         ml = pyrucast.mesh.barycenter(left)
-        right = pyrucast.Mesh.poi1_from_nodes([nodes[-1]])
+        right = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
         mm = pyrucast.mesh.barycenter(right)
         model = (
             pyrucast.Model.heat_conduction(fes)
@@ -130,14 +130,14 @@ def test_constraint_rhs_helper_builds_second_member():
     solve recovers u(x)=x."""
     _, nodes, fes, materials = _heat_bar()
 
-    imposed0 = pyrucast.Mesh.poi1_from_nodes([nodes[0]])
+    imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mult0 = pyrucast.mesh.barycenter(imposed0)
     dirichlet = pyrucast.Model.dirichlet("T", "q", imposed0, mult0)
 
     base = pyrucast.Model.heat_conduction(fes)
     dual = base.dual_of("T")
-    mesh_last = pyrucast.Mesh.poi1_from_nodes([nodes[-1]])
-    mesh_first = pyrucast.Mesh.poi1_from_nodes([nodes[0]])
+    mesh_last = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
+    mesh_first = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mult_mpc = pyrucast.mesh.barycenter(mesh_last)
     mpc = pyrucast.Model.mpc(
         [(mesh_last, "T", dual, 1.0), (mesh_first, "T", dual, -1.0)],
@@ -165,8 +165,8 @@ def test_constraint_rhs_by_index_matches_node_keying():
     _, nodes, fes, _ = _heat_bar()
     base = pyrucast.Model.heat_conduction(fes)
     dual = base.dual_of("T")
-    mesh_last = pyrucast.Mesh.poi1_from_nodes([nodes[-1]])
-    mesh_first = pyrucast.Mesh.poi1_from_nodes([nodes[0]])
+    mesh_last = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
+    mesh_first = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mult_mpc = pyrucast.mesh.barycenter(mesh_last)
     mpc = pyrucast.Model.mpc(
         [(mesh_last, "T", dual, 1.0), (mesh_first, "T", dual, -1.0)],
@@ -190,7 +190,7 @@ def test_constraint_rhs_rejects_bad_input():
     with pytest.raises(Exception):
         base.constraint_rhs([(nodes[0], 0.0)])
 
-    imposed0 = pyrucast.Mesh.poi1_from_nodes([nodes[0]])
+    imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mult0 = pyrucast.mesh.barycenter(imposed0)
     dirichlet = pyrucast.Model.dirichlet("T", "q", imposed0, mult0)
     with pytest.raises(Exception):
@@ -203,13 +203,13 @@ def test_mpc_elimination_matches_lagrange():
     (disjoint slaves). Both fields coincide and the relation holds exactly."""
     c, nodes, fes, materials = _heat_bar()
 
-    imposed0 = pyrucast.Mesh.poi1_from_nodes([nodes[0]])
+    imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mult0 = pyrucast.mesh.barycenter(imposed0)
     dirichlet = pyrucast.Model.dirichlet("T", "q", imposed0, mult0)
     dir_mult = mult0.node(0, 0, 0)
 
-    mesh4 = pyrucast.Mesh.poi1_from_nodes([nodes[4]])
-    mesh2 = pyrucast.Mesh.poi1_from_nodes([nodes[2]])
+    mesh4 = pyrucast.mesh.poi1_from_nodes([nodes[4]])
+    mesh2 = pyrucast.mesh.poi1_from_nodes([nodes[2]])
     mult_mpc = pyrucast.mesh.barycenter(mesh4)
     mpc = pyrucast.Model.mpc(
         [(mesh4, "T", "q", 2.0), (mesh2, "T", "q", -1.0)],

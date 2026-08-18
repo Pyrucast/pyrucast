@@ -36,12 +36,12 @@ def _bounded_bar(q, bound, sense):
     """
     c, nodes, fes, materials = _heat_bar()
 
-    imposed0 = pyrucast.Mesh.poi1_from_nodes([nodes[0]])
+    imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mult0 = pyrucast.mesh.barycenter(imposed0)
     dirichlet = pyrucast.Model.dirichlet("T", "q", imposed0, mult0)
     dir_mult = mult0.node(0, 0, 0)
 
-    imposed1 = pyrucast.Mesh.poi1_from_nodes([nodes[-1]])
+    imposed1 = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
     mult1 = pyrucast.mesh.barycenter(imposed1)
     unilateral = pyrucast.Model.dirichlet("T", "q", imposed1, mult1, sense=sense)
     uni_mult = mult1.node(0, 0, 0)
@@ -104,15 +104,15 @@ def test_unilateral_mpc_difference_relation():
     for g, slope in [(1.0, 1.0), (-1.0, 0.0)]:
         c, nodes, fes, materials = _heat_bar()
 
-        imposed0 = pyrucast.Mesh.poi1_from_nodes([nodes[0]])
+        imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
         mult0 = pyrucast.mesh.barycenter(imposed0)
         dirichlet = pyrucast.Model.dirichlet("T", "q", imposed0, mult0)
         dir_mult = mult0.node(0, 0, 0)
 
         base = pyrucast.Model.heat_conduction(fes)
         dual = base.dual_of("T")
-        mesh_last = pyrucast.Mesh.poi1_from_nodes([nodes[-1]])
-        mesh_first = pyrucast.Mesh.poi1_from_nodes([nodes[0]])
+        mesh_last = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
+        mesh_first = pyrucast.mesh.poi1_from_nodes([nodes[0]])
         mult_mpc = pyrucast.mesh.barycenter(mesh_last)
         mpc = pyrucast.Model.mpc(
             [(mesh_last, "T", dual, 1.0), (mesh_first, "T", dual, -1.0)],
@@ -162,7 +162,7 @@ def test_eliminate_rejects_unilateral_relations():
 def test_unknown_sense_rejected():
     """An unknown `sense` string raises a clear error at model build."""
     _, nodes, _, _ = _heat_bar()
-    imposed = pyrucast.Mesh.poi1_from_nodes([nodes[0]])
+    imposed = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mult = pyrucast.mesh.barycenter(imposed)
     with pytest.raises(Exception, match="sense"):
         pyrucast.Model.dirichlet("T", "q", imposed, mult, sense="~")

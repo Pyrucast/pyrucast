@@ -34,6 +34,7 @@ pub mod pave_surface;
 pub mod pave_volume;
 pub mod paving;
 pub mod plaster;
+pub mod poi1_from_nodes;
 pub mod points;
 pub mod predicates;
 pub mod quadratic;
@@ -70,6 +71,7 @@ pub use merge_nodes::merge_nodes;
 pub use orient::{invert, orient};
 pub use pave_surface::{pave_surface, pave_surface_cancellable};
 pub use pave_volume::{pave_volume, pave_volume_cancellable};
+pub use poi1_from_nodes::poi1_from_nodes;
 pub use points::{
     points_below_plane, points_in_cone, points_in_cylinder, points_in_sphere, points_in_torus,
     points_on_cone, points_on_cylinder, points_on_line, points_on_plane, points_on_sphere,

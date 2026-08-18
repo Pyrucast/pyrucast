@@ -26,7 +26,7 @@ E, NU, S, N = 210.0, 0.3, 2.0, 2
 
 
 def _clamp(nodes, var, dual):
-    imposed = pyrucast.Mesh.poi1_from_nodes(nodes)
+    imposed = pyrucast.mesh.poi1_from_nodes(nodes)
     multiplier = pyrucast.mesh.barycenter(imposed)
     return pyrucast.Model.dirichlet(var, dual, imposed, multiplier)
 

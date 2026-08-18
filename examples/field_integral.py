@@ -36,7 +36,7 @@ def _line(n_elems):
 
 def main() -> None:
     nodes, seg, fes = _line(N)
-    pts = pyrucast.Mesh.poi1_from_nodes(nodes)  # support nodal (POI1) des mêmes nœuds
+    pts = pyrucast.mesh.poi1_from_nodes(nodes)  # support nodal (POI1) des mêmes nœuds
 
     # ── 1. Intégrale d'un champ *nodal* (via les fonctions de forme N_i) ─────
     # f ≡ 1  ⇒  ∫₀¹ 1 dx = longueur = 1.

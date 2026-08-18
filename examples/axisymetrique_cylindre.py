@@ -51,7 +51,7 @@ def main():
     # ── Modèle : élasticité axisymétrique + déformations planes ────────────
     # u_z = 0 sur les deux faces z : c'est ce qui réalise l'hypothèse plane.
     ends = [grid[idx(i, j)] for i in range(NR + 1) for j in (0, NZ)]
-    imposed = pyrucast.Mesh.poi1_from_nodes(ends)
+    imposed = pyrucast.mesh.poi1_from_nodes(ends)
     model = pyrucast.Model.elasticity(fes, "axisymmetric")
     model = model | pyrucast.Model.dirichlet(
         "u_y", "f_y", imposed, pyrucast.mesh.barycenter(imposed)

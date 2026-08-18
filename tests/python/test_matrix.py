@@ -345,7 +345,7 @@ def test_assemble_reassembles_scaled_mass_union_stiffness():
     mesh.unit().add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh)
 
-    imposed = pyrucast.Mesh.poi1_from_nodes([a])
+    imposed = pyrucast.mesh.poi1_from_nodes([a])
     mult_mesh = pyrucast.mesh.barycenter(imposed)
     mult = mult_mesh.node(0, 0, 0)
     dirichlet = pyrucast.Model.dirichlet("T", "q", imposed, mult_mesh)
