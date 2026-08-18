@@ -11,7 +11,7 @@ Détail complet : [Correspondance Rust ↔ Python](../correspondance-rust-python
 ## Empaquetage
 
 ```python
-import pyrucast as pc
+{{#include ../../../tests/python/test_doc_formation_fespace.py:import}}
 ```
 
 `pyrucast` est un paquet **mixed Rust/Python** (maturin) : l'extension
@@ -32,9 +32,7 @@ Chaque **conteneur** — l'équivalent des « objets » Gibiane (`MAILLAGE`,
 **même nom que la structure Rust** :
 
 ```python
-c = pc.Coords(2)  # Cast3M : OPTI 'DIME' 2
-n = c.add_node([0.0, 0.0])  # Cast3M : POIN 0. 0. ;
-mesh = pc.Mesh(c, "TRI3")  # Cast3M : MAILLAGE (implicite via un opérateur)
+{{#include ../../../tests/python/test_doc_formation_fespace.py:objets}}
 ```
 
 Onze conteneurs couvrent tout : `Coords`, `Node`, `Mesh`, `FiniteElementSpace`,
@@ -71,10 +69,7 @@ Sept conteneurs partagent un même protocole d'**agrégat** — la notion la
 plus proche de Gibiane `ET` :
 
 ```python
-modele = pc.Model.heat_conduction(fes) | pc.Model.boundary_transfer(
-    bord_fes, [("T", "q")], "thermal"
-)
-modele = modele | pc.Model.dirichlet("T", "q", impose, multiplicateur)
+{{#include ../../../tests/python/test_doc_formation_fespace.py:composer}}
 ```
 
 `|` unit deux agrégats du même type (`Mesh | Mesh`, `Model | Model`,
@@ -102,8 +97,7 @@ degré de liberté — `u_x`/`f_x` (déplacement/force), `T`/`q`
 Un blocage Dirichlet cible toujours la **variable duale** :
 
 ```python
-pc.Model.dirichlet("T", "q", impose, multiplicateur)  # Cast3M : BLOQ 'T' ...
-pc.Model.dirichlet("u_x", "f_x", impose, multiplicateur)  # Cast3M : BLOQ 'UX' ...
+{{#include ../../../tests/python/test_doc_formation_fespace.py:bloquer}}
 ```
 
 `model.dual_of("u_x")` renvoie `"f_x"` sans avoir à la mémoriser — utile

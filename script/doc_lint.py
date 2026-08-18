@@ -61,9 +61,9 @@ DETTE_MIGRATION = {
     "conventions.md": 7,
     "coords.md": 4,  # les 4 blocs Rust, phase B4
     "element-field.md": 1,
-    "evolution.md": 5,
-    "fe-space.md": 7,
-    "formation/langage-python.md": 5,
+    "evolution.md": 1,
+    "fe-space.md": 4,  # les 4 blocs Rust, phase B4
+    "formation/langage-python.md": 1,  # pseudo-code `f(...)`
     "formation/maillage.md": 1,
     "installation.md": 1,
     "introduction.md": 1,
@@ -74,7 +74,7 @@ DETTE_MIGRATION = {
     "node.md": 1,
     "operateurs/assemblage.md": 1,  # reste le bloc Rust, phase B4
     "operateurs/maillage.md": 8,
-    "sauvegarde.md": 6,
+    "sauvegarde.md": 1,
     "thermomecanique-pas-a-pas.md": 3,
     "triangulation.md": 6,
     "visualization.md": 6,  # les 6 blocs Rust, phase B4

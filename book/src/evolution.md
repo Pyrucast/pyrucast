@@ -53,9 +53,7 @@ Une évolution peut porter le **type physique** de ses axes :
   de champs est une erreur (un champ a déjà ses propres composantes).
 
 ```python
-se = pc.SubEvolution(
-    [(0.0, 0.0), (100.0, 210e9)], abscissa_type="T", ordinate_type="young"
-)
+{{#include ../../tests/python/test_doc_sauvegarde_evolution.py:subevolution}}
 ```
 
 ## Interpoler un champ (courbe de transfert)
@@ -73,12 +71,7 @@ l'interpolation de la valeur d'entrée sur la courbe.
 - La politique hors-plage s'applique valeur par valeur, comme pour un scalaire.
 
 ```python
-# Loi matériau E(T) : module d'Young fonction de la température.
-loi = pc.Evolution(
-    [(0.0, 0.0), (100.0, 210e9)], abscissa_type="T", ordinate_type="young"
-)
-young = loi.interpolate(temperature)  # temperature : NodeField de composante "T"
-# young : NodeField de composante "young"
+{{#include ../../tests/python/test_doc_sauvegarde_evolution.py:loi_materiau}}
 ```
 
 Côté `Evolution` (agrégat), l'appel exige **une seule courbe scalaire** (sans
@@ -148,32 +141,7 @@ let young = loi.interpolate_node_field(&temperature, None).unwrap();
 ## API Python
 
 ```python
-import pyrucast as pc
-
-# Courbe scalaire (une SubEvolution).
-se = pc.SubEvolution([(0.0, 10.0), (1.0, 20.0)])
-print(se.interpolate(0.5))  # 15.0
-print(se.interpolate(2.0, out_of_range="clamp"))  # 20.0 (sinon : erreur)
-
-# Agrégat scalaire → liste de flottants.
-e = pc.Evolution([(0.0, 10.0), (1.0, 20.0)])
-print(e.interpolate(0.5))  # [15.0]
-
-# Bas niveau : composition de courbes par zone avec `|`.
-agg = pc.SubEvolution([(0.0, 1.0), (1.0, 2.0)]) | pc.SubEvolution(
-    [(0.0, 3.0), (1.0, 4.0)]
-)
-print(agg.interpolate(0.5))  # [1.5, 3.5]
-
-# Haut niveau temps-major : un NodeField complet par pas → NodeField interpolé.
-ev = pc.Evolution([(0.0, champ_t0), (2.0, champ_t1)])
-champ = ev.interpolate(1.0)  # NodeField à mi-chemin
-
-# Courbe de transfert : passer un champ → champ (loi matériau E(T)).
-loi = pc.Evolution(
-    [(0.0, 0.0), (100.0, 210e9)], abscissa_type="T", ordinate_type="young"
-)
-young = loi.interpolate(temperature)  # composante "T" lue → composante "young"
+{{#include ../../tests/python/test_doc_sauvegarde_evolution.py:interpolate}}
 ```
 
 ## Tracé
@@ -186,9 +154,7 @@ l'`abscissa_type` (axe X d'une courbe, **slider** d'un champ) et l'`ordinate_typ
 (axe Y d'une courbe).
 
 ```python
-e = pc.Evolution([(0.0, 10.0), (1.0, 20.0), (2.0, 5.0)])
-e.plot(save="courbe.svg", x_label="temps", y_label="T")  # courbe scalaire
-ev.plot(save="frame.png", frame=2)  # champ tabulé (un pas)
+{{#include ../../tests/python/test_doc_sauvegarde_evolution.py:plot}}
 ```
 
 ## Place dans le modèle

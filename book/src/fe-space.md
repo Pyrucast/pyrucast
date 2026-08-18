@@ -529,62 +529,20 @@ règles de quadrature sont passées en chaînes de caractères
 (`"LAGRANGE1"`, `"GAUSS"`).
 
 ```python
-import pyrucast
-
-c = pyrucast.Coords(dim=2)
-n0 = c.add_node([0.0, 0.0])
-n1 = c.add_node([2.0, 0.0])
-n2 = c.add_node([0.0, 2.0])
-
-mesh = pyrucast.Mesh(c, "TRI3")
-mesh.unit().add_cell([n0, n1, n2])
-
-# Constructeur par défaut : Lagrange1 + Gauss partout.
-fes = pyrucast.FiniteElementSpace(mesh)
-assert len(fes) == 1  # 1 sous-espace = 1 sous-maillage
-sub = fes[0]  # vue typée du sous-espace 0
-assert sub.element_type == "TRI3"
-assert sub.interpolation == "LAGRANGE1"
-assert sub.quadrature == "GAUSS"
-assert sub.gauss_count() == 3
-assert sub.space_dim == 2
-assert sub.ref_dim == 2
-
-# Évaluations à un point de Gauss donné.
-for g in range(sub.gauss_count()):
-    print(sub.gauss_xi(g), sub.gauss_weight(g))
-    print(sub.n_at_g(g))  # N_i(ξ_g), flat
-    print(sub.dn_at_g(g))  # ∂N_i/∂ξ_j(ξ_g), flat
-
-# Grandeurs physiques (à la volée) sur la cellule 0.
-print(sub.jacobian(0, 0))  # J, flat row-major
-print(sub.det_jacobian(0, 0))  # |J|, scalaire
-print(sub.dn_dx(0, 0))  # ∂N_i/∂x_a, flat row-major
+{{#include ../../tests/python/test_doc_formation_fespace.py:fespace}}
 ```
 
 Variantes de construction :
 
 ```python
-# Même Lagrange1 + même Gauss pour tous les sous-maillages, explicite.
-fes = pyrucast.FiniteElementSpace(mesh, interpolation="LAGRANGE1", quadrature="GAUSS")
-
-# Forme « class method » équivalente au constructeur par défaut.
-fes = pyrucast.FiniteElementSpace.lagrange1(mesh)
-
-# (Interpolation, quadrature) explicites par sous-maillage.
-fes = pyrucast.FiniteElementSpace.with_choices(mesh, [("LAGRANGE1", "GAUSS")])
+{{#include ../../tests/python/test_doc_formation_fespace.py:fespace_variantes}}
 ```
 
 Déplacement du maillage : le Jacobien reflète automatiquement les
 coordonnées courantes du `Coords` — pas de cache à invalider.
 
 ```python
-print(sub.det_jacobian(0, 0))  # |J| initial
-
-# Déplacement d'un nœud → toutes les évaluations à venir voient les
-# nouvelles coordonnées.
-n1.set_position([4.0, 0.0])
-print(sub.det_jacobian(0, 0))  # |J| recalculé
+{{#include ../../tests/python/test_doc_formation_fespace.py:deplacement}}
 ```
 
 ## Limitations actuelles
