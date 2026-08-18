@@ -83,13 +83,5 @@ println!("{}", mesh); // Mesh: 1 submesh(es), 1 cell(s) total
 Exemple équivalent en Python :
 
 ```python
-import pyrucast
-
-c = pyrucast.Coords(dim=2)
-a = c.add_node([0.0, 0.0])
-b = c.add_node([1.0, 0.0])
-
-mesh = pyrucast.Mesh(c, "SEG2")
-mesh.unit().add_cell([a, b])
-print(mesh)  # Mesh: 1 submesh(es), 1 cell(s) total
+{{#include ../../tests/python/test_doc_conteneurs.py:premiers_pas}}
 ```

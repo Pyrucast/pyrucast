@@ -255,31 +255,7 @@ assert_eq!(k.n_rows().unwrap(), 3);  // 2 nœuds physiques + 1 multiplicateur
 ## API Python
 
 ```python
-import pyrucast
-
-c = pyrucast.Coords(dim=1)
-a = c.add_node([0.0])
-b = c.add_node([1.0])
-mesh = pyrucast.Mesh(c, "SEG2")
-mesh.unit().add_cell([a, b])
-fes = pyrucast.FiniteElementSpace(mesh)
-
-# Modèle : conduction (matériau fourni à l'assemblage) + Dirichlet à gauche.
-# Constructeurs au niveau parent, composés par `|` — pas de SubModel à la main.
-# Le maillage des multiplicateurs est fabriqué depuis les nœuds imposés.
-imposed = pyrucast.mesh.poi1_from_nodes([a])
-multiplier = pyrucast.mesh.barycenter(imposed)
-model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.dirichlet(
-    "T", "q", imposed, multiplier
-)
-
-# Matériau k = 1 (les sous-modèles Dirichlet sont ignorés automatiquement).
-materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
-
-K = pyrucast.matrix.stiffness(model, materials)
-print("primal_vars =", model.primal_vars())  # ['T', 'lambda_T']
-print("dual_vars =", model.dual_vars())  # ['q', 'imposed_T']
-print(K)  # Matrix: 3 row(s) × 3 col(s), …
+{{#include ../../tests/python/test_doc_conteneurs.py:model_api}}
 ```
 
 ## Assemblage et résolution

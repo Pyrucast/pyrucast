@@ -65,19 +65,7 @@ Côté **Python**, le `Node` expose :
 - les vues `repr` / `str` et `dump()`.
 
 ```python
-import pyrucast
-
-c = pyrucast.Coords(dim=2)
-a = c.add_node([0.0, 0.0])
-b = c.add_node([1.0, 0.0])
-
-print(a.id)  # 0
-print(a.position())  # [0.0, 0.0]
-a.set_position([0.5, 0.5])
-
-# Union de nœuds → maillage POI1 (deux points).
-poi = a | b
-print(poi)  # Mesh: 1 submesh(es), 2 cell(s) total
+{{#include ../../tests/python/test_doc_conteneurs.py:node_api}}
 ```
 
 Côté **Rust**, `Node` expose `id()`, `position()`, `set_position(&[…])`,

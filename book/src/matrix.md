@@ -266,53 +266,7 @@ let r = (&restrict_like(&f_ext, &y).unwrap() - &y).unwrap();
 ## API Python
 
 ```python
-import pyrucast
-
-k = pyrucast.Matrix(symmetric=True)
-k.add_entry(0, "q", 0, "T", 2.0)
-k.add_entry(0, "q", 1, "T", -1.0)
-k.add_entry(1, "q", 0, "T", -1.0)
-k.add_entry(1, "q", 1, "T", 2.0)
-
-assert k.n_rows() == 2
-assert k.n_cols() == 2
-assert k.symmetric is True
-
-# Valeur ponctuelle.
-assert k.get(0, "q", 0, "T") == 2.0
-
-# Vue dense.
-assert k.dense() == [2.0, -1.0, -1.0, 2.0]
-
-# Tables de DOFs : (node_id, nom_du_champ).
-assert k.row_dofs() == [(0, "q"), (1, "q")]
-assert k.col_dofs() == [(0, "T"), (1, "T")]
-
-# Matrice-vecteur.
-y = k.mul_dense([1.0, 1.0])
-assert y == [1.0, 1.0]
-
-# Matrice · champ : `k * x` lit `x` aux DOFs colonnes et rend un NodeField
-# neuf sur les nœuds des DOFs lignes.
-y_field = k * x  # x: pyrucast.NodeField
-
-# Itération brute sur les triplets (ordre d'insertion).
-for row_node, row_field, col_node, col_field, value in k.entries():
-    pass
-
-# Facteur scalaire — chaque bloc a un `.factor` en lecture seule (1.0 par défaut).
-assert k[0].factor == 1.0
-
-# `matrix * scalaire` / `matrix / scalaire` : une Matrix neuve, blocs clonés avec
-# leur facteur ajusté (aucune valeur réécrite) ; k reste inchangée.
-m_dt = m / dt
-assert m[0].factor == 1.0  # m inchangée
-assert m_dt[0].factor == 1.0 / dt
-
-# `matrix * NodeField` (produit matrice-vecteur) coexiste avec `matrix * scalaire` :
-# le type de l'opérande de droite détermine laquelle des deux opérations s'exécute.
-sys = m_dt | k
-sys.finalize()  # (ou `sys.assemble()` si des blocs sont calculés)
+{{#include ../../tests/python/test_doc_conteneurs.py:matrix_api}}
 ```
 
 ## Sérialisation

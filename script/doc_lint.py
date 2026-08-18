@@ -53,7 +53,6 @@ PAGES_ESQUISSES = {
 # registre ne peut que décroître** — l'hygiène refuse qu'une page dépasse son
 # compte, et exige qu'une page tombée à zéro soit retirée. Rien ne s'y ajoute.
 DETTE_MIGRATION = {
-    "aggregate.md": 1,
     "compilation.md": 1,
     "contraintes.md": 4,
     "contraintes/contact.md": 2,
@@ -64,19 +63,18 @@ DETTE_MIGRATION = {
     "coords.md": 4,  # les 4 blocs Rust, phase B4
     "diffusion.md": 2,
     "echanges.md": 1,
-    "element-field.md": 2,
+    "element-field.md": 1,
     "evolution.md": 5,
     "fe-space.md": 7,
-    "field.md": 3,
     "formation/langage-python.md": 5,
     "formation/maillage.md": 1,
     "installation.md": 1,
-    "introduction.md": 2,
-    "matrix.md": 7,
-    "mesh.md": 3,
-    "model.md": 3,
-    "node-field.md": 2,
-    "node.md": 2,
+    "introduction.md": 1,
+    "matrix.md": 6,
+    "mesh.md": 1,
+    "model.md": 2,
+    "node-field.md": 1,
+    "node.md": 1,
     "operateurs/assemblage.md": 1,  # reste le bloc Rust, phase B4
     "operateurs/comportement.md": 3,
     "operateurs/construction.md": 1,

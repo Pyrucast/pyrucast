@@ -123,36 +123,7 @@ field.check().unwrap();   // zones cohérentes aux interfaces
 ## API Python
 
 ```python
-import pyrucast
-
-c = pyrucast.Coords(dim=2)
-a = c.add_node([0.0, 0.0])
-b = c.add_node([1.0, 0.0])
-
-mesh = pyrucast.Mesh(c, "POI1")
-mesh.unit().add_cell([a])
-mesh.unit().add_cell([b])
-
-# Un SubNodeField par submesh du support (Mesh ou SubMesh).
-u = pyrucast.NodeField(mesh, ["UX", "UY"])
-print(u)  # NodeField: 1 subfield(s)
-print(u.unit())  # SubNodeField: 2 node(s), 2 component(s) [UX, UY]
-
-# Écriture via la zone, lecture via l'agrégat.
-u[0][a, "UX"] = 1.5
-print(u.value(a, "UX"))  # 1.5
-
-# Lecture par lot : liste de nœuds (ou Mesh/SubMesh POI1) → liste ordonnée.
-print(u.values([a, b], "UX"))  # [1.5, 0.0]
-print(u.values(mesh, "UX"))  # [1.5, 0.0]  — points du maillage POI1
-print(u.min("UX"), u.max("UX"))  # 0.0 1.5
-print(u.sum("UX"))  # 1.5  — Σ sur les nœuds (résultante d'un champ de forces)
-
-# Composantes par zone (multiphysique) :
-f = pyrucast.NodeField.with_components_per_submesh(two_zone_mesh, [["T"], ["UX", "UY"]])
-print(f.components())  # ['T', 'UX', 'UY']
-f.check()  # cohérence des interfaces (lève sinon)
-g = pyrucast.node_field.consolidate(f)  # fusion au plus juste
+{{#include ../../tests/python/test_doc_conteneurs.py:node_field_api}}
 ```
 
 ## Refcount et durée de vie

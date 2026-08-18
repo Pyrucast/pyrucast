@@ -101,15 +101,7 @@ scellé**, avec la même connectivité (les nœuds sont partagés — même `Coo
 seuls leurs refcounts augmentent).
 
 ```python
-mesh = pyrucast.Mesh(c, "TRI3")
-mesh.unit().add_cell([a, b, n3])
-
-pyrucast.FiniteElementSpace(mesh)  # scelle mesh[0]
-assert mesh[0].is_sealed
-# mesh[0].add_cell([...])           # → RuntimeError (MeshSealed)
-
-copie = mesh.duplicate()  # neuf, modifiable
-copie.unit().add_cell([b, n3, n4])  # OK
+{{#include ../../tests/python/test_doc_conteneurs.py:scellement}}
 ```
 
 ## API Rust
@@ -139,24 +131,7 @@ assert_eq!(mesh.cell_count().unwrap(), 1);
 ## API Python
 
 ```python
-import pyrucast
-
-c = pyrucast.Coords(dim=2)
-a = c.add_node([0.0, 0.0])
-b = c.add_node([1.0, 0.0])
-n3 = c.add_node([0.5, 1.0])
-
-# Mesh(coords, type) crée un maillage à un seul sous-maillage ; unit() en
-# donne la vue, add_cell ajoute une cellule.
-mesh = pyrucast.Mesh(c, "TRI3")
-mesh.unit().add_cell([a, b, n3])
-print(mesh)  # Mesh: 1 submesh(es), 1 cell(s) total
-print(mesh.element_types())  # ['TRI3']
-print(mesh.cell_counts())  # [1]
-
-# Composer plusieurs zones : l'union | (jamais +).
-quad = pyrucast.Mesh(c, "QUA4")
-# … add_cell … ;  combined = mesh | quad
+{{#include ../../tests/python/test_doc_conteneurs.py:mesh_api}}
 ```
 
 ## Durée de vie et refcount

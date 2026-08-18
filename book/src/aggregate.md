@@ -118,21 +118,7 @@ Plus, pour les nœuds (cf. [Nœud](node.md)) :
 ### Exemple
 
 ```python
-import pyrucast
-
-c = pyrucast.Coords(dim=2)
-ns = [c.add_node(p) for p in [(0, 0), (1, 0), (1, 1), (0, 1)]]
-
-tri = pyrucast.Mesh(c, "TRI3")
-tri.unit().add_cell([ns[0], ns[1], ns[2]])
-
-qua = pyrucast.Mesh(c, "QUA4")
-qua.unit().add_cell([ns[0], ns[1], ns[2], ns[3]])
-
-# Union de deux maillages (zones partagées par handle).
-mesh = tri | qua
-print(len(mesh))  # 2 sous-maillages
-print(mesh)  # Mesh: 2 submesh(es), 2 cell(s) total
+{{#include ../../tests/python/test_doc_conteneurs.py:aggregat}}
 ```
 
 ## Pourquoi un trait commun ?
