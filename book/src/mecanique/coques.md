@@ -262,11 +262,7 @@ La même plaque en Kirchhoff discret, triangles et quadrangles :
 ## Exemple Python
 
 ```python
-model = pyrucast.Model.shell(fes, "thick")  # ou "kirchhoff"
-materials = pyrucast.element_field.material_field(
-    model, [("E", 210_000.0), ("nu", 0.3), ("h", 0.01)]
-)
-k = pyrucast.matrix.stiffness(model, materials)
+{{#include ../../../tests/python/test_doc_mecanique.py:coques}}
 ```
 
 ## Compléments

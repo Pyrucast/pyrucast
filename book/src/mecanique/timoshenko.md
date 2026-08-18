@@ -78,8 +78,7 @@ maille. L'espace déclare en conséquence
 formulation possède son interpolation, et le dit.
 
 ```python
-fes = pyrucast.FiniteElementSpace(maillage, interpolation="MODEL_EMBEDDED")
-poutre = pyrucast.Model.timoshenko(fes)
+{{#include ../../../tests/python/test_doc_mecanique.py:timoshenko}}
 ```
 
 > **Ce que remplace cet élément.** La version précédente était **linéaire**, à

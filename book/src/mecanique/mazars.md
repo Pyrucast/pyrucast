@@ -90,28 +90,7 @@ déduit, et l'axisymétrie lit l'orthoradiale `ε_θθ = u_r/r` mesurée.
 ## Exemple Python
 
 ```python
-import pyrucast
-
-model = pyrucast.Model.mazars(fes, "plane_stress")
-materials = pyrucast.element_field.material_field(
-    model,
-    [
-        ("E", 30_000.0),
-        ("nu", 0.2),
-        ("eps_d0", 1e-4),
-        ("A_t", 0.8),
-        ("B_t", 20_000.0),
-        ("A_c", 1.4),
-        ("B_c", 1_900.0),
-    ],
-)
-
-strain = pyrucast.element_field.deformation(u, fes)
-state = pyrucast.element_field.integrate_behavior(
-    model, strain, materials, prev=prev_state
-)
-d = state[0].value(0, 0, "damage")  # endommagement scalaire D
-kappa = state[0].value(0, 0, "kappa")  # variable d'historique
+{{#include ../../../tests/python/test_doc_mecanique.py:mazars}}
 ```
 
 L'historique `kappa` se réinjecte au pas suivant en **passant `state` comme

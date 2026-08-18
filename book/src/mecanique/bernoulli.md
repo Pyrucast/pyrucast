@@ -87,8 +87,7 @@ Ce n'est donc pas une interpolation de Lagrange, et le modèle **exige** un
 espace `HERMITE3` :
 
 ```python
-fes = pyrucast.FiniteElementSpace(maillage, interpolation="HERMITE3")
-poutre = pyrucast.Model.bernoulli(fes)  # 1-D ⇒ flexion pure
+{{#include ../../../tests/python/test_doc_mecanique.py:bernoulli_1d}}
 ```
 
 Un espace de Lagrange porterait une flèche linéaire, de courbure identiquement
@@ -142,11 +141,7 @@ structural.
 ## Exemple Python
 
 ```python
-model = pyrucast.Model.bernoulli(fes)  # Coords 2-D ⇒ portique plan
-materials = pyrucast.element_field.material_field(
-    model, [("E", 210_000.0), ("A", 1e-2), ("I", 1e-4)]
-)
-k = pyrucast.matrix.stiffness(model, materials)
+{{#include ../../../tests/python/test_doc_mecanique.py:bernoulli_portique}}
 ```
 
 ## Compléments

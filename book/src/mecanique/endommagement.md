@@ -248,21 +248,7 @@ seule la croissance depuis une porosité initiale \\( f_0 \\).
 ## Exemple Python
 
 ```python
-model = pyrucast.Model.damage_tc(fes, "solid")
-materials = pyrucast.element_field.material_field(
-    model,
-    [
-        ("E", 30_000.0),
-        ("nu", 0.2),
-        ("f_t", 3.0),
-        ("f_c", 30.0),
-        ("A_t", 0.9),
-        ("A_c", 0.5),
-    ],
-)
-strain = pyrucast.element_field.deformation(u, fes)
-state = pyrucast.element_field.integrate_behavior(model, strain, materials)
-# `state` porte d_plus, d_minus, r_plus, r_minus — et redevient le `prev` du pas suivant.
+{{#include ../../../tests/python/test_doc_mecanique.py:damage_tc}}
 ```
 
 ## Compléments

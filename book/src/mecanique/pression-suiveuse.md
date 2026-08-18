@@ -134,14 +134,7 @@ boucle de Newton converge sans elle, plus lentement.
 ## Exemple Python
 
 ```python
-bord = pyrucast.FiniteElementSpace(maillage_de_bord)
-charge = pyrucast.Model.follower_pressure(bord)
-materials = pyrucast.element_field.material_field(charge, [("p", 1.0e5)])
-
-# À chaque itération : la direction se recalcule depuis le déplacement courant.
-gradient = pyrucast.element_field.gradient(u, bord)
-traction = pyrucast.element_field.integrate_behavior(charge, gradient, materials)
-f = pyrucast.node_field.internal_forces(traction, charge)
+{{#include ../../../tests/python/test_doc_mecanique.py:pression_suiveuse}}
 ```
 
 ## Compléments

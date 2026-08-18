@@ -138,21 +138,7 @@ La boucle de Newton (assemblage du résidu, résolution, mise à jour de l'état
 s'écrit en Python ; voici l'usage **d'un pas** de la brique d'intégration :
 
 ```python
-import pyrucast
-
-model = pyrucast.Model.plasticity_perfect(fes, "plane_stress")
-materials = pyrucast.element_field.material_field(
-    model, [("E", 210_000.0), ("nu", 0.3), ("sigma_y", 250.0)]
-)
-
-# Déformation ε(B) issue du champ de déplacement courant (op géométrique).
-strain = pyrucast.element_field.deformation(u, fes)
-# Intégration A→B : `prev` = sortie du pas précédent (None au premier pas).
-state = pyrucast.element_field.integrate_behavior(
-    model, strain, materials, prev=prev_state
-)
-sigma_xx = state[0].value(0, 0, "sigma_xx")
-p = state[0].value(0, 0, "p")  # déformation plastique cumulée
+{{#include ../../../tests/python/test_doc_mecanique.py:plasticite_parfaite}}
 ```
 
 Pour réinjecter l'état au pas suivant, il suffit de **passer `state` comme

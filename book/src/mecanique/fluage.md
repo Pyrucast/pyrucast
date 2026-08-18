@@ -213,19 +213,7 @@ second ordre en le pas.
 ## Exemple Python
 
 ```python
-model = pyrucast.Model.creep_norton(fes, "solid")
-materials = pyrucast.element_field.material_field(
-    model, [("E", 150_000.0), ("nu", 0.3), ("K", 400.0), ("n", 5.0)]
-)
-
-# Le pas de temps est obligatoire : sans lui la loi refuse d'intégrer.
-strain = pyrucast.element_field.deformation(u, fes)
-state = pyrucast.element_field.integrate_behavior(model, strain, materials, dt=1e-3)
-
-# La sortie devient le `prev` du pas suivant.
-state = pyrucast.element_field.integrate_behavior(
-    model, strain, materials, prev=state, dt=1e-3
-)
+{{#include ../../../tests/python/test_doc_mecanique.py:creep_norton}}
 ```
 
 ## Compléments

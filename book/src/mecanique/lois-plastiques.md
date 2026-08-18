@@ -407,14 +407,7 @@ annonce le chiffre plutôt que de le cacher derrière une tolérance lâche part
 ## Exemple Python
 
 ```python
-model = pyrucast.Model.drucker_prager(fes, "solid")
-materials = pyrucast.element_field.material_field(
-    model,
-    [("E", 20_000.0), ("nu", 0.2), ("friction", 0.3), ("k", 30.0), ("psi", 0.1)],
-)
-strain = pyrucast.element_field.deformation(u, fes)
-state = pyrucast.element_field.integrate_behavior(model, strain, materials)
-k_t = pyrucast.matrix.tangent(model, materials, state)
+{{#include ../../../tests/python/test_doc_mecanique.py:drucker_prager}}
 ```
 
 La boucle de Newton reste orchestrée en Python, comme pour toute non-linéarité :
