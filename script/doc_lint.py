@@ -60,8 +60,6 @@ DETTE_MIGRATION = {
     "evolution.md": 1,
     "fe-space.md": 4,  # les 4 blocs Rust, phase B4
     "formation/langage-python.md": 1,  # pseudo-code `f(...)`
-    "formation/maillage.md": 1,
-    "installation.md": 1,
     "introduction.md": 1,
     "matrix.md": 6,
     "mesh.md": 1,

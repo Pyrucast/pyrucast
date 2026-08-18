@@ -69,18 +69,7 @@ Coords: dim=2, configs=1 (active="default"), nodes=1 (0 collected), permutation:
 Un exemple minimal — une `Coords` 2D, deux nœuds, un maillage POI1 :
 
 ```python
-import pyrucast
-
-c = pyrucast.Coords(dim=2)
-a = c.add_node([0.0, 0.0])
-b = c.add_node([1.0, 0.0])
-
-mesh = pyrucast.Mesh(c, "SEG2")  # un sous-maillage
-mesh.unit().add_cell([a, b])
-mesh.plot()
-print(c)
-print(mesh)  # Mesh: 1 submesh(es), 2 cell(s) total
-mesh.dump()
+{{#include ../../tests/python/test_doc_demarrage.py:installation}}
 ```
 
 À partir d'ici, le chapitre [Introduction](introduction.md) présente le

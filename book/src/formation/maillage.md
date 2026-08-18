@@ -343,8 +343,7 @@ Une seule méthode, `plot(...)`, sur `Mesh`/`SubMesh` — l'équivalent de
 `TRAC` :
 
 ```python
-plaque.plot(save="plaque.svg")  # export sans fenêtre
-plaque.plot(save=None)  # fenêtre interactive (souris)
+{{#include ../../../tests/python/test_doc_demarrage.py:plot_interactif}}
 ```
 
 `save=None` ouvre une fenêtre interactive (nécessite la feature Cargo
