@@ -98,6 +98,7 @@
 - [Vue d'ensemble](developper.md)
   - [Arborescence](developper/arborescence.md)
   - [Conventions & philosophie](conventions.md)
+  - [Documentation et tests](developper/documentation-et-tests.md)
   - [Modèle mémoire](memory-model.md)
   - [Parallélisme](developper/parallelisme.md)
   - [Compilation et tests](compilation.md)

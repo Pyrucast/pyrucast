@@ -2,13 +2,16 @@
 
 Cette partie s'adresse aux **contributeurs** de pyrucast. Elle décrit
 l'organisation du code, les conventions à respecter, le modèle mémoire
-sous-jacent, comment compiler et tester, et les deux extensions les plus
-courantes (ajouter une physique, ajouter un élément fini).
+sous-jacent, comment documenter, compiler et tester, et les deux extensions les
+plus courantes (ajouter une physique, ajouter un élément fini).
 
 - [Arborescence](developper/arborescence.md) — la carte des sources : où vit
   chaque morceau (`containers/`, `ops/`, `models/`, `py/`, `viz/`…).
 - [Conventions & philosophie](conventions.md) — méthode vs fonction libre,
   erreurs, `Display`/`Debug`/`dump`, sérialisation, *Definition of Done*.
+- [Documentation et tests](developper/documentation-et-tests.md) — les types de
+  test et ce que chacun prouve, où vit un exemple, la règle « aucune page ne
+  possède de code », et ce qui n'est pas vérifié.
 - [Modèle mémoire](memory-model.md) — les objets derrière un `Handle`, les
   guards, le compteur par nœud de `Coords`, et la mécanique de l'archive.
 - [Parallélisme](developper/parallelisme.md) — rayon porté *au-dessus* des

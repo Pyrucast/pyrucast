@@ -135,7 +135,7 @@ script/check_all.sh # enchaîne toutes les vérifications (check_*.sh isolément
 tests/              # tests d'intégration Rust (*.rs) + tests Python (python/)
 examples/           # scripts Python complets (thermique, treillis, poutres…)
 formation/          # scripts de la formation débutant
-benches/            # bancs criterion (parallel.rs)
+benches/            # bancs criterion (parallel.rs, geom.rs)
 book/               # cette documentation (mdbook)
 ```
 

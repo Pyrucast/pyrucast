@@ -1,12 +1,19 @@
-# Conventions d'API — méthodes vs fonctions libres
+# Conventions — API, documentation et tests
 
-Ce document fige **une seule règle** pour décider si une opération est une
-méthode inhérente d'un conteneur ou une fonction libre des modules `ops/`,
-et **une seule règle** pour projeter cette décision vers l'API Python.
+Ce document fige les règles qu'on ne veut plus trancher au cas par cas.
 
-L'objectif : ne plus jamais trancher « méthode ou fonction ? » au cas par
-cas. La réponse doit tomber de l'arbre de décision ci-dessous, et la forme
-Python doit se déduire mécaniquement de la forme Rust.
+**Première partie, l'API.** Une seule règle pour décider si une opération est
+une méthode inhérente d'un conteneur ou une fonction libre des modules `ops/`,
+et une seule règle pour projeter cette décision vers l'API Python. L'objectif :
+ne plus jamais trancher « méthode ou fonction ? » à la main. La réponse doit
+tomber de l'arbre de décision ci-dessous, et la forme Python doit se déduire
+mécaniquement de la forme Rust.
+
+**Seconde partie, la documentation et les tests** (« Documentation et tests »,
+en fin de document). Quel type d'exemple vit où, ce que chaque type de test
+prouve, et **qui le vérifie**. La narration et les tables de décision sont dans
+le book, page [Documentation et tests](book/src/developper/documentation-et-tests.md) ;
+ici ne figurent que les règles.
 
 ## Vocabulaire
 
@@ -16,8 +23,10 @@ Python doit se déduire mécaniquement de la forme Rust.
   `NodeId`, slices `&[f64]`, etc.
 - **Opérateur** : une fonction qui consomme un ou plusieurs conteneurs et
   produit un nouveau conteneur (ou une donnée dérivée). Les opérateurs
-  vivent dans `ops/`, rangés **par thème** (`build`, `geom`, `field`,
-  `assemble`, `mesher`, `solver`) et non par conteneur — voir `ops/mod.rs`.
+  vivent dans `ops/`, rangés **par conteneur produit** — `coords`,
+  `element_field`, `export`, `field`, `geom`, `matrix`, `measure`, `mesh`,
+  `node_field`, `solver` ; voir « Où vit une fonction libre » plus bas et
+  `ops/mod.rs`.
 
 ## Règle Rust : méthode vs fonction libre
 
@@ -456,3 +465,85 @@ de module entier, enregistrée dans `tests/python/test_mirror_completeness.py`.
   `coordinates` pour l'opérateur — plaçaient sur un même objet deux méthodes
   sans argument que rien ne départageait (`mesh.coords()` face à
   `mesh.coordinates()`), l'une rendant le conteneur, l'autre les valeurs.
+
+---
+
+# Documentation et tests
+
+La narration, les tables de décision et le pourquoi sont dans le book, page
+**[Documentation et tests](book/src/developper/documentation-et-tests.md)**.
+Ci-dessous, les règles seules.
+
+## Les quatre règles
+
+1. **Aucune page du book ne possède de code.** Toute clôture ` ```rust ` ou
+   ` ```python ` d'une page contient un `{{#include}}` pointant une source que
+   la CI exécute — ou la page figure dans la **liste déclarée des pages
+   d'esquisses**, chacune avec sa raison écrite. Un exemple recopié à la main
+   dans une page est du code que rien ne vérifie ; il pourrit sans bruit.
+
+2. **Tout item de l'API publique porte un exemple exécutable** dans sa
+   documentation (`///`). C'est le point 3 de la *Definition of Done*.
+   `ignore` est **proscrit** dans un doctest : c'est le marqueur qui ne vérifie
+   rien, et c'est exactement ce qui a désarmé le book 73 fois. Quand l'exemple
+   ne peut pas tourner, `no_run` (il compile, il ne s'exécute pas) ou
+   `compile_fail` (on documente ce que le typage interdit). Les lignes de
+   montage se cachent avec `# `, elles restent compilées.
+
+3. **Un exemple vit là où il est exécuté**, jamais recopié. Où, en fonction de
+   ce qu'il illustre :
+
+   | l'exemple illustre… | il vit… | le book le montre par… |
+   |---|---|---|
+   | un item de l'API Rust | un doctest sur l'item | rien — il est dans la rustdoc |
+   | une chaîne Rust complète | `tests/<sujet>.rs`, ancré | `{{#include ../../tests/<sujet>.rs:ancre}}` |
+   | une chaîne Python complète | `examples/<sujet>.py` | `{{#include}}`, entier ou ancré |
+   | un parcours pédagogique | `formation/<sujet>.py`, ancré | `{{#include …:ancre}}` |
+   | l'usage d'un opérateur en Python | `tests/python/doc_<famille>.py`, ancré | `{{#include …:ancre}}` |
+   | une signature de conception | la page elle-même | ` ```rust,ignore `, page déclarée |
+
+   Corollaire : **doctest et bloc du book ne se confondent pas.** Le doctest
+   sert le lecteur de la rustdoc — référence d'API, item par item ; le bloc du
+   book sert le lecteur du chapitre — récit, chaîne complète. Deux publics,
+   deux sources, et on ne cherche pas à les unifier.
+
+4. **Un garde-fou n'est installé qu'une fois cassé volontairement**, au moins
+   une fois, **code de retour vérifié** — pas seulement l'affichage. Un pas de
+   vérification qui passe au vert sans rien regarder coûte plus cher que son
+   absence : il se lit comme de la couverture. Trois cas mesurés dans ce dépôt
+   au 2026-08-18 : `mdbook test` teste zéro bloc ; une ancre `{{#include}}`
+   inexistante rend un bloc **vide** avec un code de retour **0** et aucun
+   message ; un fichier inclus absent ne fait qu'un `[ERROR]` dans le log, code
+   de retour **0** lui aussi.
+
+## Ce que chaque test prouve
+
+| type | où | ce qu'il prouve |
+|---|---|---|
+| test unitaire | `#[cfg(test)] mod tests` dans `src/**.rs` | le comportement d'une unité, publique ou privée |
+| doctest | `///` et `//!` dans `src/**.rs` | que l'exemple documentant un item compile et tourne |
+| test d'intégration | `tests/*.rs` | une chaîne complète vue de l'extérieur du crate |
+| test Python | `tests/python/*.py` | la surface pyo3 et le comportement côté Python |
+| garde-fou | `tests/python/test_method_exposure.py`, `test_mirror_completeness.py` | une **invariante d'API**, pas un comportement |
+| exemple | `examples/*.py` | une chaîne utilisateur de bout en bout |
+| script de formation | `formation/*.py` | un parcours pédagogique complet |
+| banc | `benches/*.rs` | une **performance**, jamais une correction |
+
+Un banc ne remplace jamais un test : il mesure, il n'affirme rien. Il ne tourne
+pas en CI.
+
+## Choix du mécanisme d'inclusion
+
+`{{#include}}` si cargo (ou pytest, ou `run_examples`) compile déjà le fichier —
+la vérification a lieu à la source, mdbook ne fait que l'afficher.
+`{{#rustdoc_include}}` n'a d'intérêt que pour un fichier que *rien d'autre* ne
+compile : il passe le fichier entier à rustdoc en n'affichant que l'ancre. Il
+n'y en a aucun dans ce dépôt aujourd'hui, et il n'y a pas de raison d'en créer.
+
+## Une dérogation porte une raison
+
+Toute page d'esquisses, tout item sans exemple, toute exclusion d'un garde-fou
+vit dans un **dictionnaire nom → raison**, accompagné d'un test d'hygiène qui
+échoue si l'entrée devient périmée. C'est le motif déjà en place dans
+`tests/python/test_method_exposure.py` et `test_mirror_completeness.py` ; il
+n'en est pas créé d'autre.

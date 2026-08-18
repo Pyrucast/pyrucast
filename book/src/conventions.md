@@ -244,10 +244,17 @@ Un objet n'est considéré comme terminé que lorsque les six points suivants so
 
 1. Struct Rust adressable par un `Handle<T>` typé.
 2. `Debug` (structure) + `Display` (résumé).
-3. Tests unitaires Rust + doctests sur tout l'API public.
+3. Tests unitaires Rust, **et un doctest portant un exemple exécutable sur
+   chaque item public** — `ignore` proscrit, `no_run` si l'exemple ne peut pas
+   tourner.
 4. Binding PyO3 (`__repr__` / `__str__`).
-5. Tests Python (pytest).
-6. Chapitre de cette documentation.
+5. Tests Python (`tests/python/`), la surface pyo3 comprise.
+6. Chapitre de cette documentation, dont **le code est inclus depuis un test ou
+   un exemple**, jamais recopié dans la page.
+
+Les points 3, 5 et 6 sont détaillés page
+[Documentation et tests](developper/documentation-et-tests.md) : quel type
+d'exemple vit où, et qui le vérifie.
 
 ## Dépendances approuvées
 
