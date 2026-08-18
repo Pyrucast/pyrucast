@@ -48,6 +48,10 @@ Step "cargo doc --no-deps --lib (sans warning)" {
     cargo doc --no-deps --lib
     Remove-Item Env:\RUSTDOCFLAGS
 }
+# Quatre garde-fous de texte : includes qui resolvent, aucune page qui possede
+# de code, prose sans symbole disparu, cliquet de couverture des doctests.
+# Apres cargo doc, dont le dernier lit la sortie.
+Step "garde-fous de la documentation" { python script\doc_lint.py }
 Step "extraits Rust du book (compiles)" { Check-BookBlocks }
 Step "mdbook build"                     { mdbook build book }
 Step "mdbook test"                      { mdbook test book }

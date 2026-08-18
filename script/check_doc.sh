@@ -40,6 +40,10 @@ check_book_blocks() {
 
 step "cargo doc --no-deps --lib (sans warning)" \
     env RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --lib
+# Quatre garde-fous de texte : includes qui résolvent, aucune page qui possède
+# de code, prose sans symbole disparu, cliquet de couverture des doctests.
+# Après `cargo doc`, dont le dernier lit la sortie.
+step "garde-fous de la documentation"           python script/doc_lint.py
 step "extraits Rust du book (compilés)"         check_book_blocks
 step "mdbook build"                             mdbook build book
 step "mdbook test"                              mdbook test book

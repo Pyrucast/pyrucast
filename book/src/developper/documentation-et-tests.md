@@ -131,7 +131,9 @@ l'inclut. L'exemple devient de la couverture au lieu d'être une dette.
 | blocs Rust du book | 22 | 51 |
 | blocs Python du book | 61 | 129 |
 
-La [mise en conformité](#ce-qui-reste-à-faire) est en cours, page par page.
+La [mise en conformité](#ce-qui-reste-à-faire) est en cours, page par page. Le
+garde-fou `fences` empêche d'en ajouter : la dette est gelée à ce qu'elle était,
+elle ne peut plus que fondre.
 
 ## Les doctests
 
@@ -173,14 +175,33 @@ Deux points utiles :
 | les exemples et la formation tournent | `run_examples` | `check_examples` |
 | les doctests compilent et tournent | `cargo test --doc` | `check_rust` |
 | la rustdoc n'a aucun lien cassé | `cargo doc` avec `RUSTDOCFLAGS="-D warnings"` | `check_doc` |
-| **les includes du book résolvent** | *à écrire* | `check_doc` |
-| **aucune page ne possède de code** | *à écrire* | `check_doc` |
-| **tout item public a un exemple** | *à écrire* | `check_rust` |
-| **la prose ne cite pas de symbole disparu** | *à écrire* | `check_doc` |
+| les includes du book résolvent | `doc_lint.py includes` | `check_doc` |
+| aucune page ne possède de code | `doc_lint.py fences` | `check_doc` |
+| la prose ne cite pas de symbole disparu | `doc_lint.py symboles` | `check_doc` |
+| tout item public a un exemple | `doc_lint.py doctests` | `check_doc` |
 
-Les quatre dernières lignes sont volontairement affichées comme manquantes.
-Énoncer une règle sans dire qui la vérifie, c'est reproduire exactement le
-régime qui a produit les trois pannes du début.
+Les quatre derniers vivent dans `script/doc_lint.py` et se lancent aussi un par
+un : `python script/doc_lint.py includes`. Chacun porte son registre de
+dérogations — nom → raison — et son test d'hygiène, qui échoue sur une entrée
+périmée.
+
+Deux d'entre eux méritent une précision.
+
+**Le cliquet de couverture.** La règle « tout item public porte un exemple » ne
+peut pas être vérifiée frontalement : la dette de départ est de **1531 items sur
+1542**, et un garde-fou rouge dès le premier jour finit désactivé. Le registre
+`script/doc_coverage.txt` liste donc les items qui n'en ont pas, et le garde-fou
+échoue dans deux cas : un item public **absent du registre** qui n'a pas
+d'exemple — donc tout item nouveau —, et un item **du registre** qui en a
+désormais un sans avoir été retiré. La liste ne peut que fondre, et sa fonte est
+le seul indicateur d'avancement lisible. On la régénère avec
+`python script/doc_lint.py --ratchet`.
+
+**L'audit de la prose** ne lit que les passages en `code inline`, hors blocs :
+c'est ce qui écarte les noms de fichiers et les domaines, qui ressemblent à des
+chemins. Il vérifie chaque segment d'un chemin, y compris le dernier — le
+découper en paires laisserait `ops::matrix::stiffness` sans contrôle sur le nom
+qui bouge le plus souvent.
 
 ## Ce qui n'est pas vérifié, et pourquoi
 
@@ -231,10 +252,11 @@ périmée. C'est le motif déjà en place dans `test_method_exposure.py` et
 
 ## Ce qui reste à faire
 
-1. Écrire les quatre garde-fous marqués *à écrire* ci-dessus.
-2. Mesurer la surface publique réelle au sens de rustdoc, pour dimensionner le
-   chantier des doctests.
-3. Migrer les 180 blocs écrits à la main, Python d'abord — les pages
-   d'opérateurs en concentrent la moitié.
-4. Retirer le filet provisoire (`cargo run --bin book_blocks`) et le pas
+1. Migrer les 169 blocs encore écrits à la main, Python d'abord — trois pages
+   d'opérateurs (`maillage.md`, `champs.md`, `assemblage.md`) en concentrent 47.
+   Le registre `DETTE_MIGRATION` de `script/doc_lint.py` les tient page par
+   page ; il ne peut que décroître.
+2. Écrire les 1531 doctests manquants, au fil des fonctions qu'on touche. Le
+   cliquet garantit que le nombre ne remonte pas.
+3. Retirer le filet provisoire (`cargo run --bin book_blocks`) et le pas
    `mdbook test`, qui ne teste rien, une fois la migration faite.

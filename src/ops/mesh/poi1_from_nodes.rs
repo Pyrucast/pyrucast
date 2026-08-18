@@ -13,6 +13,20 @@ use crate::error::Result;
 /// The companion of [`from_live_nodes`](super::from_live_nodes()), which takes
 /// the whole store instead of a chosen list, and of
 /// [`to_poi1`](super::to_poi1()), which takes an existing mesh.
+///
+/// ```
+/// use pyrucast::atoms::Node;
+/// use pyrucast::coords::Coords;
+/// use pyrucast::handle::Handle;
+/// use pyrucast::ops::mesh::poi1_from_nodes;
+///
+/// let coords = Handle::new(Coords::new(2).unwrap());
+/// let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+/// let b = Node::create_in(coords, &[1.0, 0.0]).unwrap();
+///
+/// let cloud = poi1_from_nodes(&[a, b]).unwrap();
+/// assert_eq!(cloud.cell_counts().unwrap(), vec![2]);
+/// ```
 pub fn poi1_from_nodes(nodes: &[Node]) -> Result<Mesh> {
     Ok(Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?))
 }
