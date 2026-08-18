@@ -44,7 +44,8 @@ Un `Node` ne se construit jamais « dans le vide » : il naît d'un `Coords`.
 
 - **Rust** : `Node::create_in(coords_handle, &[x, y, …])` crée le nœud et rend
   le `Node` (refcount = 1). Pour obtenir un `Node` supplémentaire sur un id
-  déjà existant, `Coords::acquire(id)`.
+  déjà existant, `Node::acquire(coords_handle, id)` — côté Rust le verbe est
+  porté par l'atome, côté Python par le magasin.
 - **Python** : `coords.add_node([x, y, …])` renvoie directement un
   `pyrucast.Node`. `coords.acquire(id)` rend un accesseur de plus.
 

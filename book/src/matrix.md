@@ -117,7 +117,7 @@ côtés, et les blocs de `M` ne contribuent rien aux DOFs qu'ils ne portent pas.
 
 ## Drapeau `symmetric`
 
-`Matrix::new(symmetric: bool)` accepte un drapeau qui déclare l'intention de l'assembleur :
+Le dernier argument de `SubMatrix::new` est un drapeau qui déclare l'intention de l'assembleur :
 
 - `true` : la matrice est numériquement symétrique (`A[i, j] = A[j, i]` pour les paires `(i, j)` correspondantes). C'est le cas de toute matrice de raideur d'une formulation variationnelle Galerkine standard.
 - `false` : la symétrie n'est pas garantie (cas Lagrange seul, formulations non-Galerkine, problèmes de transport non self-adjoint, …).

@@ -103,6 +103,9 @@ DETTE_MIGRATION = {
 SYMBOLES_TOLERES = {
     "T::union_subs": "T est un paramètre de type, pas un type concret",
     "ops::mesher": "nom historique, cité pour raconter le renommage du 2026-08-03",
+    "SubMesh::connectivity": "pub(crate) : la page Parallélisme décrit la machinerie interne",
+    "Type::membre": "métavariable de la page Documentation et tests",
+    "Coords::acquire": "nom fautif, cité pour raconter ce que le garde-fou a trouvé",
 }
 
 # Racines qui ne viennent pas du crate : la partie droite ne s'y vérifie pas.
@@ -287,10 +290,9 @@ def check_fences():
 def variantes_denum(source: str):
     """Les variantes de chaque `enum` du fichier, par comptage d'accolades.
 
-    Rien de plus fin n'est nécessaire : on veut savoir si un nom cité existe
-    encore, pas à quel type il appartient. Un `Physics::Gauss` inventé de
-    toutes pièces passerait donc — mais un nom *disparu*, jamais, et c'est
-    celui-là qui casse la documentation.
+    Sert de **repli** pour les types que la rustdoc ne documente pas
+    (`pub(crate)`) : l'appartenance exacte, elle, vient de
+    [`membres_par_type`], qui lit la rustdoc.
     """
     noms = set()
     for m in re.finditer(r"\benum\s+[A-Z][A-Za-z0-9_]*[^{]*\{", source):
@@ -303,6 +305,30 @@ def variantes_denum(source: str):
             if v:
                 noms.add(v.group(1))
     return noms
+
+
+def membres_par_type():
+    """Pour chaque type public, l'ensemble exact de ses membres.
+
+    Lu dans la rustdoc (`id="method.*"`, `variant.*`, `associatedconstant.*`),
+    qui est la seule source qui connaisse vraiment l'appartenance — un parseur
+    maison dirait qu'un nom existe *quelque part*, ce qui laisserait passer un
+    `Physics::Gauss`. Les méthodes de traits comptent : `mesh.clone()` est une
+    citation légitime.
+    """
+    carte = {}
+    for p in DOC.rglob("*.html"):
+        m = re.match(r"(?:struct|enum|trait)\.([A-Za-z0-9_]+)\.html$", p.name)
+        if not m:
+            continue
+        h = p.read_text(errors="ignore")
+        carte.setdefault(m.group(1), set()).update(
+            re.findall(
+                r'id="(?:method|tymethod|variant|associatedconstant)\.([A-Za-z0-9_]+)"',
+                h,
+            )
+        )
+    return carte
 
 
 def symboles_du_crate():
@@ -322,8 +348,11 @@ def symboles_du_crate():
 
 def check_symboles():
     erreurs = []
+    if not (DOC / "all.html").exists():
+        return ["target/doc absent — lancer `cargo doc --no-deps --lib` d'abord"]
     modules, fonctions, types, membres = symboles_du_crate()
     modules.add("pyrucast")  # la racine du crate, telle qu'on l'écrit en Rust
+    par_type = membres_par_type()
     try:
         import pyrucast
     except ImportError:
@@ -351,6 +380,14 @@ def check_symboles():
                 for i, s in enumerate(segments):
                     dernier = i == len(segments) - 1
                     if s in TYPES_EXTERNES or s in CRATES_EXTERNES:
+                        break
+                    if s in par_type and not dernier:
+                        # Type public : rustdoc donne la liste exacte de ses
+                        # membres, on n'a plus à se contenter d'un « ce nom
+                        # existe quelque part ».
+                        suivant = segments[i + 1]
+                        if suivant not in par_type[s]:
+                            faute = f"{s} n'a pas de membre « {suivant} »"
                         break
                     if s[0].isupper():
                         connu = s in types or (i > 0 and s in membres)

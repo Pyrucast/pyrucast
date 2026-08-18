@@ -205,9 +205,13 @@ le seul indicateur d'avancement lisible. On la régénère avec
 
 **L'audit de la prose** ne lit que les passages en `code inline`, hors blocs :
 c'est ce qui écarte les noms de fichiers et les domaines, qui ressemblent à des
-chemins. Il vérifie chaque segment d'un chemin, y compris le dernier — le
-découper en paires laisserait `ops::matrix::stiffness` sans contrôle sur le nom
-qui bouge le plus souvent.
+chemins. Il vérifie chaque segment, y compris le dernier — le découper en paires
+laisserait `ops::matrix::stiffness` sans contrôle sur le nom qui bouge le plus
+souvent. Et pour un `Type::membre`, il lit **la rustdoc**, qui seule connaît
+l'appartenance réelle : un nom qui existe ailleurs dans le crate ne suffit pas à
+valider la citation. C'est ce qui a fait tomber quatre erreurs d'un coup, dont
+un `Coords::acquire` qui n'a jamais existé — en Rust le verbe est sur `Node`,
+c'est côté Python qu'il est sur le magasin.
 
 ## Ce qui n'est pas vérifié, et pourquoi
 

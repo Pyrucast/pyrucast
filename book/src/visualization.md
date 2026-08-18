@@ -160,7 +160,7 @@ sm.face_color = (220, 60, 60)
 assert sm.face_color == (220, 60, 60)
 ```
 
-Quand on appelle `Mesh::plot`, chaque sous-maillage est rendu avec **sa propre** `face_color`, ce qui permet de distinguer visuellement des composants regroupés dans un même maillage (par exemple : peau / cœur / interfaces).
+Quand on appelle `Mesh.plot`, chaque sous-maillage est rendu avec **sa propre** `face_color`, ce qui permet de distinguer visuellement des composants regroupés dans un même maillage (par exemple : peau / cœur / interfaces).
 
 ## Coloration par un champ — `NodeField` ou `ElementField`
 
@@ -311,7 +311,7 @@ Le **bouton de composante** (clic / `Tab`) et la caméra (rotation, molette, axe
 | `TET4` | faces triangulaires | la **peau** du volume (facettes de bord) |
 | `HEX8` | faces quadrangulaires | la **peau** du volume (facettes de bord) |
 
-`Mesh::plot` parcourt tous ses sous-maillages et dessine chacun selon son type. L'ajout d'un éventuel nouveau type d'élément se fera sans changement d'API, en étendant le `match` de `submesh_primitives` dans `src/viz/mesh_draw.rs`.
+`Mesh.plot` parcourt tous ses sous-maillages et dessine chacun selon son type. L'ajout d'un éventuel nouveau type d'élément se fera sans changement d'API, en étendant le `match` de `submesh_primitives` dans `src/viz/mesh_draw.rs`.
 
 ### Maillages volumiques pleins
 
