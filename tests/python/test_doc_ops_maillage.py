@@ -532,3 +532,71 @@ pyrucast.mesh.merge_nodes(gauche | droite, 1e-6, in_place=True)
 # Les deux morceaux partagent maintenant réellement le nœud d'interface.
 assert droite.node(0, 0, 0).id == b.id
 # ANCHOR_END: merge_in_place
+
+
+# ── Sélections sur des surfaces courbes ─────────────────────────────────────
+
+
+def _tube_3d():
+    """Un tube : section QUA4 tournée d'un tour autour de l'axe z."""
+    c = pyrucast.Coords(3)
+    section = pyrucast.Mesh(c, "QUA4")
+    section.unit().add_cell(
+        [
+            c.add_node([5.0, 0.0, 0.0]),
+            c.add_node([8.0, 0.0, 0.0]),
+            c.add_node([8.0, 0.0, 10.0]),
+            c.add_node([5.0, 0.0, 10.0]),
+        ]
+    )
+    return pyrucast.mesh.revolve(
+        section, 2 * math.pi, 12, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0]
+    )
+
+
+tube = _tube_3d()
+piece = tube
+
+# ANCHOR: selections_courbes
+# L'alésage d'un tube : la surface latérale du cylindre de rayon intérieur.
+alesage = pyrucast.mesh.points_on_cylinder(tube, [0.0, 0.0, 0.0], [0.0, 0.0, 10.0], 5.0)
+
+# Un chanfrein conique (rayon 8 en z = 0, sommet fictif en z = 8).
+chanfrein = pyrucast.mesh.points_on_cone(piece, [0.0, 0.0, 0.0], [0.0, 0.0, 8.0], 8.0)
+
+# La matière autour d'une gorge torique de rayon 1 sur un cercle de rayon 5.
+gorge = pyrucast.mesh.points_in_torus(piece, [0.0, 0.0, 3.0], [0.0, 0.0, 1.0], 5.0, 1.0)
+# ANCHOR_END: selections_courbes
+
+assert alesage.cell_count() > 0
+
+
+# ── Tétraédrisation d'un volume ─────────────────────────────────────────────
+
+solide_penta6 = _solide_penta6()
+# `skin` rend déjà des normales **sortantes** : pas d'`invert` ici, il les
+# ferait rentrer et le mailleur refuserait l'enveloppe.
+enveloppe = pyrucast.mesh.convert(pyrucast.mesh.skin(solide_penta6), "TRI3")
+
+# ANCHOR: triangulate_volume
+solide = pyrucast.mesh.triangulate_volume(
+    enveloppe, size=None, allow_surface_nodes=False
+)
+# ANCHOR_END: triangulate_volume
+
+assert solide.element_types()[0] == "TET4"
+
+peau = enveloppe
+
+# ANCHOR: surface_nodes
+solide = pyrucast.mesh.triangulate_volume(peau, allow_surface_nodes=True)
+# ANCHOR_END: surface_nodes
+
+# ANCHOR: surface_nodes_compte
+solide = pyrucast.mesh.triangulate_volume(peau, allow_surface_nodes=True)
+if solide.element_types() == ["TET4", "POI1"]:
+    ajoutes = solide.cell_counts()[1]
+    print(f"{ajoutes} nœud(s) posé(s) sur la peau")
+# ANCHOR_END: surface_nodes_compte
+
+assert solide.cell_count() > 0

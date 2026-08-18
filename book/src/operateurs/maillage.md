@@ -1357,9 +1357,7 @@ et la principale source d'échec.
 ## Mailleur volumique : `triangulate_volume`
 
 ```python
-solide = pyrucast.mesh.triangulate_volume(
-    enveloppe, size=None, allow_surface_nodes=False
-)
+{{#include ../../../tests/python/test_doc_ops_maillage.py:triangulate_volume}}
 ```
 
 Le **compagnon 3D** de `triangulate_surface` : il remplit l'intérieur d'une
@@ -1607,7 +1605,7 @@ endroit — ou de laisser le mailleur le faire.
 ### `allow_surface_nodes` : ce qu'on échange
 
 ```python
-solide = pyrucast.mesh.triangulate_volume(peau, allow_surface_nodes=True)
+{{#include ../../../tests/python/test_doc_ops_maillage.py:surface_nodes}}
 ```
 
 Autorise le mailleur à **couper l'enveloppe plus fin** là où il ne peut ni la
@@ -1629,10 +1627,7 @@ posés sur l'enveloppe, le maillage rendu porte un **second sous-maillage de
 sans rien ajouter n'a qu'un sous-maillage `TET4` :
 
 ```python
-solide = pyrucast.mesh.triangulate_volume(peau, allow_surface_nodes=True)
-if solide.element_types() == ["TET4", "POI1"]:
-    ajoutes = solide.cell_counts()[1]
-    print(f"{ajoutes} nœud(s) posé(s) sur la peau")
+{{#include ../../../tests/python/test_doc_ops_maillage.py:surface_nodes_compte}}
 ```
 
 Ce sous-maillage se visualise, se soustrait, sert de support de champ comme
@@ -1979,14 +1974,7 @@ qui a besoin d'un axe hors du plan pour être un tore, est **3D seulement**.
 En 3D, les formes de révolution sélectionnent alésages, arbres et gorges :
 
 ```python
-# L'alésage d'un tube : la surface latérale du cylindre de rayon intérieur.
-alesage = pyrucast.mesh.points_on_cylinder(tube, [0.0, 0.0, 0.0], [0.0, 0.0, 10.0], 5.0)
-
-# Un chanfrein conique (rayon 8 en z = 0, sommet fictif en z = 8).
-chanfrein = pyrucast.mesh.points_on_cone(piece, [0.0, 0.0, 0.0], [0.0, 0.0, 8.0], 8.0)
-
-# La matière autour d'une gorge torique de rayon 1 sur un cercle de rayon 5.
-gorge = pyrucast.mesh.points_in_torus(piece, [0.0, 0.0, 3.0], [0.0, 0.0, 1.0], 5.0, 1.0)
+{{#include ../../../tests/python/test_doc_ops_maillage.py:selections_courbes}}
 ```
 
 Côté Rust, `ops::mesh::points_on_plane(&mesh, &origin, &normal, tol)` et

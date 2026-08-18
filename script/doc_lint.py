@@ -69,7 +69,7 @@ DETTE_MIGRATION = {
     "node-field.md": 1,
     "node.md": 1,
     "operateurs/assemblage.md": 1,  # reste le bloc Rust, phase B4
-    "operateurs/maillage.md": 8,
+    "operateurs/maillage.md": 4,
     "sauvegarde.md": 1,
     "thermomecanique-pas-a-pas.md": 2,
     "triangulation.md": 6,
