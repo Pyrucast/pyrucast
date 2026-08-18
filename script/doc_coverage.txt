@@ -969,11 +969,6 @@ ops::geom::Projection
 ops::geom::locate_points
 ops::geom::project_points
 ops::matrix::assemble_kind
-ops::matrix::geometric
-ops::matrix::lump
-ops::matrix::mass
-ops::matrix::stiffness
-ops::matrix::tangent
 ops::measure::integral::integral
 ops::measure::integral::integral_element
 ops::mesh::arc::arc

@@ -44,6 +44,29 @@ use nalgebra_sparse::{CooMatrix, CsrMatrix};
 /// [`crate::containers::matrix::SubMatrix`] blocks
 /// (`HeatConduction` → 1 block, `Dirichlet` → C + Cᵀ).
 /// The aggregate is finalized before being returned.
+///
+/// ```
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::{element_field, matrix};
+/// # let coords = Handle::new(Coords::new(1).unwrap());
+/// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+/// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+/// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+/// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+/// # let model = Model::heat_conduction(&fes).unwrap();
+/// let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+/// let k = matrix::stiffness(&model, &materials).unwrap();
+///
+/// // Un SEG2 de longueur 1, k = 1 : K = [[1, -1], [-1, 1]].
+/// assert_eq!(k.n_rows().unwrap(), 2);
+/// assert_eq!(k.get(a.id(), "q", a.id(), "T").unwrap(), 1.0);
+/// ```
 pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
     assemble_kind(model, materials, MatrixKind::Stiffness, None)
 }
@@ -243,6 +266,32 @@ fn build_contribution(
 /// term (a boundary Robin/convection term, or a Lagrange constraint) contributes
 /// nothing. `materials` supplies the density/heat coefficients zone-wise, exactly
 /// like [`stiffness`].
+///
+/// ```
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::{element_field, matrix};
+/// # let coords = Handle::new(Coords::new(1).unwrap());
+/// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+/// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+/// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+/// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+/// # let model = Model::heat_conduction(&fes).unwrap();
+/// // La matrice de capacité d'une conduction lit `rho` **et** `cp` : c'est
+/// // ρ·c_p qui multiplie ∫ Nᵀ N, pas la seule densité.
+/// let materials =
+///     element_field::material_field(&model, &[("k", 1.0), ("rho", 2.0), ("cp", 1.0)]).unwrap();
+/// let m = matrix::mass(&model, &materials).unwrap();
+///
+/// // Capacité totale d'un SEG2 de longueur 1, ρ = 2, c_p = 1 : 2.
+/// let total: f64 = m.dense().unwrap().iter().sum();
+/// assert!((total - 2.0).abs() < 1e-12);
+/// ```
 pub fn mass(model: &Model, materials: &ElementField) -> Result<Matrix> {
     assemble_kind(model, materials, MatrixKind::Mass, None)
 }
@@ -255,6 +304,37 @@ pub fn mass(model: &Model, materials: &ElementField) -> Result<Matrix> {
 /// `sigma_*`, e.g. the output of [`crate::ops::element_field::behavior::integrate`]), resolved
 /// zone-wise like `materials`; the kernel is law-independent given it. `materials`
 /// is still used to resolve each mechanical zone (its `E`/`nu`).
+///
+/// ```
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::ops::{element_field, matrix};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
+/// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id(), n[3].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+/// # let model = Model::elasticity(&fes, ElasticityModel::PlaneStress).unwrap();
+/// # let materials =
+/// #     element_field::material_field(&model, &[("E", 210.0), ("nu", 0.3)]).unwrap();
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::containers::field::SubField;
+/// // Une contrainte uniaxiale σ_xx = 3, portée aux points de Gauss.
+/// let mut stress =
+///     ElementField::new(&fes, vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_xy".into()])
+///         .unwrap();
+/// stress.get(0).unwrap().write().set_uniform("sigma_xx", 3.0).unwrap();
+///
+/// let kg = matrix::geometric(&model, &materials, &stress).unwrap();
+/// assert_eq!(kg.n_rows().unwrap(), kg.n_cols().unwrap());
+/// ```
 pub fn geometric(model: &Model, materials: &ElementField, stress: &ElementField) -> Result<Matrix> {
     assemble_kind(model, materials, MatrixKind::Geometric, Some(stress))
 }
@@ -269,6 +349,34 @@ pub fn geometric(model: &Model, materials: &ElementField, stress: &ElementField)
 /// reads back. For a **linear** physics (elasticity) the tangent is the elastic
 /// stiffness and `state` is ignored. `materials` resolves each zone like
 /// [`stiffness`].
+///
+/// ```
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::ops::{element_field, matrix};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
+/// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id(), n[3].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+/// # let model = Model::elasticity(&fes, ElasticityModel::PlaneStress).unwrap();
+/// # let materials =
+/// #     element_field::material_field(&model, &[("E", 210.0), ("nu", 0.3)]).unwrap();
+/// # use pyrucast::aggregate::Aggregate;
+/// // Élasticité : la tangente **est** la raideur, l'état est ignoré.
+/// let state = ElementField::new(&fes, vec!["sigma_xx".into()]).unwrap();
+/// let kt = matrix::tangent(&model, &materials, &state).unwrap();
+/// let k = matrix::stiffness(&model, &materials).unwrap();
+///
+/// assert_eq!(kt.dense().unwrap(), k.dense().unwrap());
+/// ```
 pub fn tangent(model: &Model, materials: &ElementField, state: &ElementField) -> Result<Matrix> {
     assemble_kind(model, materials, MatrixKind::Tangent, Some(state))
 }
@@ -283,6 +391,34 @@ pub fn tangent(model: &Model, materials: &ElementField, state: &ElementField) ->
 /// The input must be assembled and square (row and column DOFs coincide
 /// position-for-position, as they do for a mass/capacity matrix). The result is
 /// a new assembled [`Matrix`] with the same DOF layout; the input is untouched.
+///
+/// ```
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::{element_field, matrix};
+/// # let coords = Handle::new(Coords::new(1).unwrap());
+/// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+/// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+/// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+/// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+/// # let model = Model::heat_conduction(&fes).unwrap();
+/// # let materials = element_field::material_field(
+/// #     &model, &[("k", 1.0), ("rho", 2.0), ("cp", 1.0)]).unwrap();
+/// let m = matrix::mass(&model, &materials).unwrap();
+/// let diagonale = matrix::lump(&m).unwrap();
+///
+/// // La somme est conservée ; les termes hors diagonale sont repliés dessus.
+/// let somme = |x: &pyrucast::containers::matrix::Matrix| -> f64 {
+///     x.dense().unwrap().iter().sum()
+/// };
+/// assert!((somme(&m) - somme(&diagonale)).abs() < 1e-12);
+/// assert_eq!(diagonale.get(a.id(), "q", b.id(), "T").unwrap(), 0.0);
+/// ```
 pub fn lump(m: &Matrix) -> Result<Matrix> {
     let csr = m.to_csr()?;
     let row_dofs = m.row_dofs()?;
