@@ -103,6 +103,7 @@ src/
 │
 └── bin/
     ├── stub_gen.rs     # génère le stub .pyi (feature `stub-gen`)
+    ├── book_blocks.rs  # extrait les blocs Rust du book en test compilable
     └── scaling.rs      # mesure de montée en charge (parallélisme)
 ```
 
@@ -130,7 +131,7 @@ python/pyrucast/
 Cargo.toml          # crate (cdylib + rlib), features, dépendances approuvées
 pyproject.toml      # côté maturin (python-source = python, module-name)
 CONVENTIONS.md      # règles de code (source de la page Conventions)
-script/check.sh     # enchaîne toutes les vérifications
+script/check_all.sh # enchaîne toutes les vérifications (check_*.sh isolément)
 tests/              # tests d'intégration Rust (*.rs) + tests Python (python/)
 examples/           # scripts Python complets (thermique, treillis, poutres…)
 formation/          # scripts de la formation débutant

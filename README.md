@@ -74,12 +74,13 @@ cargo build                 # cœur Rust pur (sans pyo3 ; pas besoin du venv)
 cargo test                  # tests unitaires + intégration + doctests (Rust pur)
 maturin develop && python -m pytest   # tests Python
 cargo fmt && ruff format .  # formatage standard (Rust + Python)
-bash script/check.sh        # enchaîne toutes les vérifications (formatage inclus)
+bash script/check_all.sh    # enchaîne toutes les vérifications (formatage inclus)
+bash script/check_doc.sh    # ou un seul bloc : format / rust / python / examples / doc
 ```
 
 Le chapitre [Compilation et tests](book/src/compilation.md) du book détaille les
 features Cargo (`viz`, `viz-interactive`, `stub-gen`…), la génération du stub
-`pyrucast.pyi` et le dépannage courant.
+`python/pyrucast/_pyrucast/__init__.pyi` et le dépannage courant.
 
 ## Licence
 

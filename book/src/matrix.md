@@ -214,29 +214,32 @@ assert_eq!(c.field_names().unwrap().len(), 1);
 ## API Rust — accès en lecture
 
 ```rust,ignore
+// Toutes ces lectures traversent l'état assemblé : elles rendent un `Result`
+// et échouent tant que `finalize()` (ou `assemble()`) n'a pas été appelé.
+
 // Valeur à une coordonnée (somme de toutes les entrées COO à ce point).
-let v: f64 = k.get(NodeId(0), "q", NodeId(0), "T");
+let v: f64 = k.get(a.id(), "q", a.id(), "T")?;
 
 // Vue dense ligne-major (flat Vec, pratique pour Python).
-let d: Vec<f64> = k.dense();
-assert_eq!(d.len(), k.n_rows() * k.n_cols());
+let d: Vec<f64> = k.dense()?;
+assert_eq!(d.len(), k.n_rows()? * k.n_cols()?);
 
 // Vue dense typée nalgebra (column-major DMatrix), prête pour LU/Cholesky.
-let m: nalgebra::DMatrix<f64> = k.to_dmatrix();
+let m: nalgebra::DMatrix<f64> = k.to_dmatrix()?;
 
 // Vues creuses nalgebra-sparse, prêtes pour les solveurs creux.
-let csr: nalgebra_sparse::CsrMatrix<f64> = k.to_csr();
-let csc: nalgebra_sparse::CscMatrix<f64> = k.to_csc();
+let csr: &nalgebra_sparse::CsrMatrix<f64> = k.to_csr()?;
+let csc: nalgebra_sparse::CscMatrix<f64> = k.to_csc()?;
 
-// Itération sur les triplets bruts (ordre d'insertion préservé).
-for (row_dof, col_dof, value) in k.iter_entries() {
-    let row_field = k.field_name(row_dof.field_idx);
-    let col_field = k.field_name(col_dof.field_idx);
+// Itération sur les triplets bruts (ordre d'insertion préservé). Une entrée
+// est un 5-uplet `(nœud ligne, var duale, nœud colonne, var primale, valeur)`
+// — les noms de variables y sont déjà résolus.
+for (row_node, row_var, col_node, col_var, value) in k.iter_entries()? {
     // …
 }
 
 // Produit matrice-vecteur dense : y = A · x (passe par CSR sous le capot).
-let y = k.mul_dense(&[1.0, 1.0]).unwrap();
+let y = k.mul_dense(&[1.0, 1.0])?;
 
 // Produit matrice · champ : `x` est lu aux DOFs *colonnes* (vars **primales** ;
 // une entrée qu'aucune zone ne définit vaut 0), le résultat est un `NodeField`
@@ -245,14 +248,14 @@ let y = k.mul_dense(&[1.0, 1.0]).unwrap();
 // garanti avec tout champ posé sur ces supports). L'opérateur `*` (`&k * &x`)
 // est le sucre syntaxique de `mul_field`. C'est le miroir exact de
 // `solver::lu::solve`, qui lit un champ dual aux lignes et rend un champ primal aux colonnes.
-let y: NodeField = k.mul_field(&x).unwrap();
-let y: NodeField = (&k * &x).unwrap();
+let y: NodeField = k.mul_field(&x)?;
+let y: NodeField = (&k * &x)?;
 
 // Maillages des supports des blocs (handles partagés, dédupliqués ; disponibles
 // avant `finalize`) : `row_mesh` côté dual (lignes), `col_mesh` côté primal
 // (colonnes). Cible de projection pour poser un champ sur les supports mêmes
 // des sorties de `mul_field` / `solve` et le combiner zone à zone :
-let f_ext_r = restrict(&f_ext, &k.row_mesh().unwrap()).unwrap();
+let f_ext_r = restrict(&f_ext, &k.row_mesh()?)?;
 let r = (&f_ext_r - &y).unwrap();     // s'aligne par support, pas de passthrough de zone
 // ⚠ une composante absente d'un côté passe brute (union) ; pour un résidu
 // strict (toute composante soustraite, absente lue à 0), reprojeter sur le

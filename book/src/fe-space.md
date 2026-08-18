@@ -458,7 +458,7 @@ let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
 let b = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
 let c = Node::create_in(coords.clone(), &[0.0, 2.0]).unwrap();
 
-let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
+let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
 mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 
 let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();

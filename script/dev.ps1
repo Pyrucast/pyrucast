@@ -1,6 +1,6 @@
 # pyrucast - build minimal (Windows / PowerShell).
 # Compile le module Python en release AVEC la visu interactive, puis
-# regenere le stub type (pyrucast.pyi). Rien d'autre.
+# regenere le stub type (python/pyrucast/_pyrucast/__init__.pyi). Rien d'autre.
 # Pour le build complet (tests + doc), voir script\build.ps1.
 #
 # Lancer :   .\script\dev.ps1
@@ -14,7 +14,7 @@ if (-not (Test-Path .venv)) { python -m venv .venv }
 & .\.venv\Scripts\Activate.ps1
 python -m pip install --quiet --upgrade maturin
 
-# Compile + installe l'extension, puis regenere pyrucast.pyi.
+# Compile + installe l'extension, puis regenere le stub .pyi.
 maturin develop --release --features extension-module,viz-interactive
 cargo run --quiet --bin stub_gen --features stub-gen
 

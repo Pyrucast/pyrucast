@@ -11,7 +11,7 @@ documentation. Pour le **simple usage en Python** (quatre commandes), voir
 |---|---|---|
 | Rust (via `rustup`) | stable récent, édition 2021 | Compilation du cœur |
 | Python | ≥ 3.9 (3.13 testé) | API Python et `maturin` |
-| `ruff` | récent | Format du Python (`ruff format`), vérifié par `check.sh` |
+| `ruff` | récent | Format du Python (`ruff format`), vérifié par `check_format` |
 | `mdbook` | ≥ 0.4 | Génération de cette documentation |
 | `mdbook-mermaid` | ≥ 0.14 | Rendu des graphes (ex. [graphe des dépendances](developper/arborescence.md#graphe-des-dépendances-externes)) |
 
@@ -202,38 +202,86 @@ créent) le venv automatiquement et s'arrêtent à la première erreur.
 
 Autour d'eux gravitent quelques utilitaires : `dev.sh` / `dev.ps1` (build
 minimal — module Python en release avec la visu interactive + stub, rien
-d'autre), `run_examples.sh` (exemples et formation de bout en bout, appelé par
-`check.sh`), `set_new_version.sh` (passe de version : tout vérifier sans
-warning, reporter le numéro dans `Cargo.toml` / `pyproject.toml`, commit + tag —
-il ne pousse rien), `scaling.sh` (mesure de montée en charge du parallélisme) et
-`generate-formation-figures.sh` (régénère les SVG de la formation, qui sont des
-artefacts commités).
+d'autre), `run_examples.sh` / `run_examples.ps1` (exemples et formation de bout
+en bout, appelés par `check_examples`), `set_new_version.sh` (passe de version :
+tout vérifier sans warning, reporter le numéro dans `Cargo.toml` /
+`pyproject.toml`, commit + tag — il ne pousse rien), `scaling.sh` (mesure de
+montée en charge du parallélisme) et `generate-formation-figures.sh` (régénère
+les SVG de la formation, qui sont des artefacts commités).
 
-### `script/check.sh` — vérification rapide (CI)
+### `script/check_*.sh` — vérifications, en bloc ou à la carte
 
-Enchaîne les vérifications de non-régression :
+La vérification est découpée en **cinq blocs indépendants**, chacun lançable
+seul. Chaque bloc existe en bash (`.sh`, Linux/macOS) et en PowerShell
+(`.ps1`, Windows), au comportement identique :
+
+| bloc | ce qu'il vérifie | durée indicative |
+|---|---|---|
+| `check_format` | `cargo fmt --check`, `ruff format --check .` | secondes |
+| `check_rust` | `cargo test`, `cargo test --doc`, `cargo test --features viz`, `cargo build --features viz-interactive` | minutes |
+| `check_python` | `maturin develop --features extension-module,viz`, `pytest` | minutes |
+| `check_examples` | `run_examples` — exemples et formation de bout en bout | ~1 min |
+| `check_doc` | `cargo doc` sans warning, **extraits Rust du book compilés**, `mdbook build`, `mdbook test` | ~1 min |
 
 ```bash
-bash script/check.sh
+bash script/check_doc.sh     # je viens de toucher à la doc
+bash script/check_all.sh     # la passe complète, à brancher en CI
 ```
 
-Successivement : `cargo fmt --check`, `ruff format --check .`, `cargo test`,
-`cargo test --doc`, `cargo test --features viz`,
-`cargo build --features viz-interactive`,
-`maturin develop --features extension-module,viz`, `pytest`,
-`script/run_examples.sh`, `cargo doc --no-deps --lib` (avec
-`RUSTDOCFLAGS="-D warnings"`), `mdbook build`, `mdbook test`. C'est le script à
-brancher en intégration continue.
+```powershell
+.\script\check_doc.ps1        # Windows
+.\script\check_all.ps1
+```
 
-Deux points valent d'être notés :
+`check_all` enchaîne les cinq **dans cet ordre**, qui n'est pas indifférent : le
+formatage d'abord (il échoue en une seconde), le cœur Rust ensuite, puis Python
+— qui *(ré)installe* l'extension dont les exemples ont besoin —, les exemples,
+et la documentation en dernier, la plus lente. Un bloc lancé seul qui a besoin
+du module compilé le dit plutôt que d'échouer obscurément.
+
+`script/check.sh` reste comme alias de `check_all.sh`.
+
+Trois points valent d'être notés :
 
 - les **deux vérifications de format viennent en tête** — le script *vérifie*,
   il ne formate pas. Passer `cargo fmt` et `ruff format .` **avant** de le
   lancer, sinon il s'arrête au premier pas ;
-- `run_examples.sh` rejoue les **exemples et les scripts de formation** de bout
+- `run_examples` rejoue les **exemples et les scripts de formation** de bout
   en bout. Ce sont des chaînes de calcul complètes : elles attrapent ce que les
   tests unitaires laissent passer, typiquement une méthode renommée dont plus
-  personne ne se sert.
+  personne ne se sert ;
+- **ne jamais piper `check_all`** (`| tail`, `| grep`) : le code de retour
+  devient celui du dernier maillon du tube, et un échec passe pour un succès.
+
+### Les extraits Rust du book, compilés
+
+`mdbook test` ne compile **rien** : tous les blocs Rust du book sont marqués
+`rust,ignore`, faute de quoi il faudrait que chacun soit un programme complet.
+Un module renommé ou une signature changée pouvait donc y pourrir
+indéfiniment — c'est ainsi que trois pages sont restées sur des noms de modules
+disparus pendant tout un redécoupage d'API.
+
+`cargo run --bin book_blocks` lit `book/src/**.md`, retient les blocs qui sont
+de vrais programmes et les écrit dans `tests/book_blocks.rs` (généré, ignoré par
+git), **un bloc `fn` par page** : les extraits d'une même page sont concaténés
+dans l'ordre de lecture, donc un bloc qui continue le précédent voit ses
+variables. `check_doc` type-vérifie ensuite le tout :
+
+```bash
+cargo run --bin book_blocks
+cargo check --test book_blocks --features viz
+```
+
+Les extraits restent des extraits : beaucoup nomment une variable que la page ne
+définit jamais. `check_doc` **ignore** donc les codes qui signalent un fragment
+(`E0425` valeur inconnue, `E0412` type inconnu, `E0433` module non résolu,
+`E0252` import en double, `E0277` `?` hors d'une fonction `-> Result`…) et
+**échoue sur tout le reste** : import non résolu (`E0432`), méthode inconnue
+(`E0599`), mauvaise arité (`E0061`), type incompatible (`E0308`) — et les
+erreurs de syntaxe, qui rendraient le garde-fou aveugle si elles passaient.
+
+Chaque ligne d'erreur pointe `tests/book_blocks.rs` ; le commentaire
+`// --- page:ligne` qui la précède donne la page du book et la ligne d'origine.
 
 ### `script/build.sh` / `script/build.ps1` — build complet + documentation
 

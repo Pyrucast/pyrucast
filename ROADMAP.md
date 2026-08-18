@@ -219,9 +219,10 @@ rendu interpolé par subdivision, courbes, axes, gizmo.
 
 ## Outillage
 
-`script/check.sh` (la passe complète, à brancher en CI), `build.sh` / `dev.sh`
-et leurs équivalents PowerShell, `run_examples.sh`, `set_new_version.sh`,
-`scaling.sh`. CI GitHub Actions : publication du book et de la rustdoc sur
+`script/check_all.sh` (la passe complète, à brancher en CI) et les cinq blocs
+qu'il enchaîne (`check_format`, `check_rust`, `check_python`, `check_examples`,
+`check_doc`), lançables isolément ; `build.sh` / `dev.sh`, `run_examples.sh`,
+`set_new_version.sh`, `scaling.sh`. Chacun a son équivalent PowerShell. CI GitHub Actions : publication du book et de la rustdoc sur
 Pages, release multi-OS (Linux, Windows, macOS).
 
 ---

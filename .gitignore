@@ -288,3 +288,6 @@ todo.md
 
 # Cast3M : fichiers de trace generes a l'execution
 *.trace
+
+# Genere par 'cargo run --bin book_blocks' pour verifier les extraits du book
+tests/book_blocks.rs

@@ -418,7 +418,8 @@ l'assembleur appellent tous `self.as_kind().<méthode>()` — ils sont
 
 Régénérer le stub `python/pyrucast/_pyrucast/__init__.pyi` (`cargo run --bin
 stub_gen --features stub-gen`, venv activé), puis **builder + tester avant de
-commiter** — `script/check.sh` pour la passe complète.
+commiter** — `script/check_all.sh` pour la passe complète, ou le seul bloc
+concerné (`check_rust.sh`, `check_doc.sh`…).
 
 ---
 

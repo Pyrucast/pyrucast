@@ -7,7 +7,7 @@
 # 4. builds the documentation (mdbook + rustdoc + Python pydoc + .pyi stub),
 # 5. prints a summary: where the docs are and how to use the library.
 #
-# The lighter CI-style check is `script/check.sh`; this one is the
+# The lighter CI-style check is `script/check_all.sh`; this one is the
 # "everything, end to end" build.
 
 set -euo pipefail
