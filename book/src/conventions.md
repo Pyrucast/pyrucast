@@ -97,14 +97,7 @@ sonne juste, mais c'est le nom de la variable qui fait le travail —
 `field.internal_forces()` révèle que le type ne promet rien.
 
 ```python
-# chaînage, quand les trois conditions tiennent :
-peau = maillage.skin().consolidate()
-libre = champ.select(ge=0.0)
-eps = u.gradient(fes)
-
-# forme canonique seule, sinon :
-eps = pyrucast.element_field.deformation(u, fes)  # exige un déplacement
-f = pyrucast.node_field.merge(a, b)  # symétrique : `a | b` suffit
+{{#include ../../tests/python/test_doc_conventions.py:chainage}}
 ```
 
 Deux conséquences à retenir. **Un ordre d'arguments qui ne met pas le sujet en
@@ -130,14 +123,7 @@ sous-module** : une fonction libre `ops::<module>::f` est exposée comme
 top-level (`pyrucast.Coords`, `pyrucast.Mesh`, `pyrucast.Node`, …) :
 
 ```python
-import pyrucast
-
-# fonctions (opérateurs), rangées par conteneur produit — pas des méthodes :
-poi = pyrucast.mesh.to_poi1(mesh)
-coords = pyrucast.node_field.positions(mesh)
-eps = pyrucast.element_field.deformation(u, fes)
-K = pyrucast.matrix.stiffness(model, materials)
-sol = pyrucast.solver.solve(K, rhs)
+{{#include ../../tests/python/test_doc_conventions.py:miroir}}
 ```
 
 Le miroir est **sans exception** : aucune fonction libre ne vit au top-level
@@ -176,12 +162,7 @@ match Coords::new(0) {
 Python :
 
 ```python
-import pyrucast
-
-try:
-    c = pyrucast.Coords(0)  # dimension nulle
-except RuntimeError as e:
-    print(f"erreur : {e}")  # erreur : dim must be ≥ 1
+{{#include ../../tests/python/test_doc_conventions.py:erreurs}}
 ```
 
 ## Affichage : `Debug` vs `Display`
@@ -208,14 +189,7 @@ println!("{}", &*c);    // vue résumée (Display)
 Python :
 
 ```python
-import pyrucast
-
-c = pyrucast.Coords(dim=2)
-c.add_node([0.0, 0.0])
-
-print(repr(c))  # vue structurelle — __repr__
-print(str(c))  # vue résumée cast3m — __str__
-print(c)  # même chose que str(c)
+{{#include ../../tests/python/test_doc_conventions.py:affichage}}
 ```
 
 ## Sérialisation : un seul mécanisme

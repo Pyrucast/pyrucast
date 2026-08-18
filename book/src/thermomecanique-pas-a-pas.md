@@ -95,15 +95,7 @@ support, [`element_field.consolidate`](operateurs/champs.md) reste disponible.
 En sortie, `data["results"]` est une liste (un élément par instant) :
 
 ```python
-{
-    "time",
-    "temperature",
-    "displacement",
-    "state",
-    "mech_iters",
-    "mech_anderson",
-    "converged",
-}
+{{#include ../../tests/python/test_doc_conventions.py:cles_resultat}}
 ```
 
 ## Exemple
