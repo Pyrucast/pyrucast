@@ -64,6 +64,13 @@ use std::fmt;
 ///
 /// See the module-level documentation for the reference frame `ξ` and the
 /// local node numbering attached to each variant.
+///
+/// ```
+/// # use pyrucast::atoms::ElementType;
+/// // Chaque variante connaît sa topologie et son nom d'échange.
+/// let t = ElementType::from_name("PENTA6").unwrap();
+/// assert_eq!((t.nodes_per_cell(), t.topological_dim()), (6, 3));
+/// ```
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub enum ElementType {
     /// 1 node. A POI1 submesh is effectively a list of nodes; no reference
@@ -153,6 +160,12 @@ impl ElementType {
     /// It includes `POI1`, which has no reference frame; a consumer that wants
     /// only the types carrying one filters on
     /// [`topological_dim`](Self::topological_dim) `> 0`.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::ElementType;
+    /// // Tous les types, sans doublon — la liste que balaient les tests d'exhaustivité.
+    /// assert!(ElementType::ALL.contains(&ElementType::TRI3));
+    /// ```
     pub const ALL: &'static [ElementType] = &[
         Self::POI1,
         Self::SEG2,
@@ -173,6 +186,12 @@ impl ElementType {
     ];
 
     /// Number of nodes per cell for this element type.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::ElementType;
+    /// assert_eq!(ElementType::TRI3.nodes_per_cell(), 3);
+    /// assert_eq!(ElementType::HEX20.nodes_per_cell(), 20);
+    /// ```
     pub fn nodes_per_cell(self) -> usize {
         match self {
             Self::POI1 => 1,
@@ -194,6 +213,14 @@ impl ElementType {
     }
 
     /// Topological dimension (0 = point, 1 = segment, 2 = surface, 3 = volume).
+    ///
+    /// ```
+    /// # use pyrucast::atoms::ElementType;
+    /// assert_eq!(ElementType::POI1.topological_dim(), 0);
+    /// assert_eq!(ElementType::SEG2.topological_dim(), 1);
+    /// assert_eq!(ElementType::TRI3.topological_dim(), 2);
+    /// assert_eq!(ElementType::TET4.topological_dim(), 3);
+    /// ```
     pub fn topological_dim(self) -> usize {
         match self {
             Self::POI1 => 0,
@@ -209,6 +236,11 @@ impl ElementType {
     }
 
     /// Short name (cast3m-style).
+    ///
+    /// ```
+    /// # use pyrucast::atoms::ElementType;
+    /// assert_eq!(ElementType::QUA4.name(), "QUA4");
+    /// ```
     pub fn name(self) -> &'static str {
         match self {
             Self::POI1 => "POI1",
@@ -248,6 +280,12 @@ impl ElementType {
     /// Shared building block of [`crate::ops::mesh::invert()`] (applied to
     /// every cell) and [`crate::ops::mesh::orient()`] (applied to the cells a
     /// consistency pass decides to flip).
+    ///
+    /// ```
+    /// # use pyrucast::atoms::ElementType;
+    /// // Retourner un TRI3 : on échange deux sommets, la normale bascule.
+    /// assert_eq!(ElementType::TRI3.reversal_permutation(), &[0, 2, 1]);
+    /// ```
     pub fn reversal_permutation(self) -> &'static [usize] {
         match self {
             Self::POI1 => &[0],
@@ -279,6 +317,12 @@ impl ElementType {
     /// Derived from [`ALL`](Self::ALL) and [`name`](Self::name), so a new
     /// variant is parsable as soon as it is declared — there is no separate
     /// string table to keep in step.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::ElementType;
+    /// assert_eq!(ElementType::from_name("TRI3"), Some(ElementType::TRI3));
+    /// assert_eq!(ElementType::from_name("TRIANGLE"), None);
+    /// ```
     pub fn from_name(s: &str) -> Option<Self> {
         let upper = s.to_ascii_uppercase();
         Self::ALL.iter().copied().find(|et| et.name() == upper)

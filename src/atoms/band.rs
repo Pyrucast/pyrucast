@@ -14,6 +14,15 @@
 use crate::error::{PyrucastError, Result};
 
 /// A value band, each side open / inclusive / strict. At least one bound set.
+///
+/// ```
+/// # use pyrucast::atoms::Band;
+/// // Les quatre bornes sont optionnelles et s'excluent deux à deux :
+/// // `ge`/`gt` d'un côté, `le`/`lt` de l'autre.
+/// let bande = Band::new(Some(0.0), None, None, Some(1.0)).unwrap(); // 0 ≤ v < 1
+/// assert!(bande.contains(0.0));
+/// assert!(!bande.contains(1.0));
+/// ```
 #[derive(Clone, Copy)]
 pub struct Band {
     min: Option<f64>,
@@ -30,6 +39,15 @@ impl Band {
     /// - `le` ⇒ `v <= le`, `lt` ⇒ `v < lt` (give at most one upper bound).
     ///
     /// At least one bound overall, and the lower must not exceed the upper.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::Band;
+    /// // 20 ≤ v ≤ 80, bornes inclusives.
+    /// let bande = Band::new(Some(20.0), None, Some(80.0), None).unwrap();
+    /// assert!(bande.contains(20.0) && bande.contains(80.0));
+    /// // Bornes contradictoires : refusé.
+    /// assert!(Band::new(Some(1.0), Some(2.0), None, None).is_err());
+    /// ```
     pub fn new(ge: Option<f64>, gt: Option<f64>, le: Option<f64>, lt: Option<f64>) -> Result<Self> {
         let (min, strict_min) = match (ge, gt) {
             (Some(_), Some(_)) => {
@@ -72,6 +90,13 @@ impl Band {
     }
 
     /// Whether `v` lies in the band (a missing bound leaves that side open).
+    ///
+    /// ```
+    /// # use pyrucast::atoms::Band;
+    /// let stricte = Band::new(None, Some(0.0), None, Some(1.0)).unwrap(); // 0 < v < 1
+    /// assert!(stricte.contains(0.5));
+    /// assert!(!stricte.contains(0.0)); // borne exclue
+    /// ```
     pub fn contains(&self, v: f64) -> bool {
         let lo_ok = self
             .min

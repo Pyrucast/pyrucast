@@ -17,6 +17,12 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// 8-bit RGB colour (no alpha).
+///
+/// ```
+/// # use pyrucast::atoms::RgbColor;
+/// let c = RgbColor::new(220, 60, 60);
+/// assert_eq!((c.r, c.g, c.b), (220, 60, 60));
+/// ```
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct RgbColor {
     pub r: u8,
@@ -26,11 +32,22 @@ pub struct RgbColor {
 
 impl RgbColor {
     /// Build a colour from explicit RGB components.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::RgbColor;
+    /// let rouge = RgbColor::new(220, 60, 60);
+    /// assert_eq!(format!("{rouge}"), "#DC3C3C");
+    /// ```
     pub const fn new(r: u8, g: u8, b: u8) -> Self {
         Self { r, g, b }
     }
 
     /// Default face colour (a light blue).
+    ///
+    /// ```
+    /// # use pyrucast::atoms::RgbColor;
+    /// assert_eq!(RgbColor::default_face(), RgbColor::new(180, 200, 230));
+    /// ```
     pub const fn default_face() -> Self {
         Self {
             r: 180,

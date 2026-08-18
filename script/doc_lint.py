@@ -397,8 +397,16 @@ def api_publique():
         i = h.find('id="implementations"')
         if i < 0:
             continue
-        j = h.find('id="trait-implementations"')
-        segment = h[i:j] if j > i else h[i:]
+        # S'arrêter au premier bloc qui n'est plus le nôtre : les impls de
+        # traits, mais aussi les **méthodes héritées par `Deref`** (`Objects`
+        # déréférence vers `BTreeMap`). Exiger un exemple sur `BTreeMap::range`
+        # serait réclamer de documenter la bibliothèque standard.
+        bornes = [
+            x
+            for x in (h.find('id="trait-implementations"'), h.find('id="deref-methods'))
+            if x > i
+        ]
+        segment = h[i : min(bornes)] if bornes else h[i:]
         for nom in set(
             re.findall(r'id="(?:method|associatedconstant)\.([A-Za-z0-9_]+)"', segment)
         ):

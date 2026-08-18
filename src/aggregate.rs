@@ -319,6 +319,14 @@ impl<S: Any + Send + Sync + std::fmt::Debug> std::fmt::Debug for DebugItem<'_, S
 /// Returns `Some(positive_idx)` if valid, `None` otherwise. The call site
 /// turns `None` into the appropriate error (`PyIndexError` on the Python
 /// side, `PyrucastError::Message` on the Rust side).
+///
+/// ```
+/// # use pyrucast::aggregate::normalize_index;
+/// // L'indexation négative de Python, portée telle quelle en Rust.
+/// assert_eq!(normalize_index(-1, 3), Some(2));
+/// assert_eq!(normalize_index(0, 3), Some(0));
+/// assert_eq!(normalize_index(3, 3), None); // hors bornes
+/// ```
 pub fn normalize_index(idx: isize, len: usize) -> Option<usize> {
     let n = len as isize;
     let i = if idx < 0 { n + idx } else { idx };

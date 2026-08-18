@@ -89,6 +89,12 @@ pub enum CoordinateFrame {
 
 impl CoordinateFrame {
     /// Whether this frame is [`Axisymmetric`](Self::Axisymmetric).
+    ///
+    /// ```
+    /// # use pyrucast::coords::CoordinateFrame;
+    /// assert!(CoordinateFrame::Axisymmetric.is_axisymmetric());
+    /// assert!(!CoordinateFrame::Cartesian.is_axisymmetric());
+    /// ```
     pub fn is_axisymmetric(self) -> bool {
         self == Self::Axisymmetric
     }
@@ -135,6 +141,13 @@ impl Coords {
     /// Create an empty **Cartesian** `Coords` in dimension `dim` (≥ 1). A first
     /// configuration named `"default"` is created automatically. For a body of
     /// revolution, see [`Coords::axisymmetric`].
+    ///
+    /// ```
+    /// # use pyrucast::coords::Coords;
+    /// let plan = Coords::new(2).unwrap();
+    /// assert_eq!(plan.dim(), 2);
+    /// assert!(Coords::new(0).is_err()); // la dimension doit être ≥ 1
+    /// ```
     pub fn new(dim: u8) -> Result<Self> {
         if dim == 0 {
             return Err(PyrucastError::Message("dim must be ≥ 1".into()));
@@ -175,17 +188,35 @@ impl Coords {
     }
 
     /// Geometric dimension.
+    ///
+    /// ```
+    /// # use pyrucast::coords::Coords;
+    /// assert_eq!(Coords::new(3).unwrap().dim(), 3);
+    /// ```
     pub fn dim(&self) -> u8 {
         self.dim
     }
 
     /// Geometric hypothesis these coordinates obey.
+    ///
+    /// ```
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::coords::CoordinateFrame;
+    /// assert_eq!(Coords::new(2).unwrap().frame(), CoordinateFrame::Cartesian);
+    /// assert_eq!(Coords::axisymmetric().unwrap().frame(), CoordinateFrame::Axisymmetric);
+    /// ```
     pub fn frame(&self) -> CoordinateFrame {
         self.frame
     }
 
     /// Whether these coordinates describe a body of revolution — the shorthand
     /// for `frame().is_axisymmetric()`.
+    ///
+    /// ```
+    /// # use pyrucast::coords::Coords;
+    /// assert!(!Coords::new(2).unwrap().is_axisymmetric());
+    /// assert!(Coords::axisymmetric().unwrap().is_axisymmetric());
+    /// ```
     pub fn is_axisymmetric(&self) -> bool {
         self.frame.is_axisymmetric()
     }
@@ -204,16 +235,43 @@ impl Coords {
     }
 
     /// Number of live (not collected) nodes.
+    ///
+    /// ```
+    /// # use pyrucast::coords::Coords;
+    /// let mut c = Coords::new(2).unwrap();
+    /// c.add_node(&[0.0, 0.0]).unwrap();
+    /// assert_eq!(c.node_count(), 1); // nœuds **vivants**, pas la capacité
+    /// ```
     pub fn node_count(&self) -> usize {
         self.alive.iter().filter(|&&a| a).count()
     }
 
     /// Capacity (total slots, live + collected). Never decreases.
+    ///
+    /// ```
+    /// # use pyrucast::coords::Coords;
+    /// let mut c = Coords::new(2).unwrap();
+    /// let id = c.add_node(&[0.0, 0.0]).unwrap();
+    /// c.decref(id).unwrap();
+    /// c.gc();
+    /// // Le nœud est mort mais la place reste réservée : capacité ≠ node_count.
+    /// assert_eq!((c.node_count(), c.capacity()), (0, 1));
+    /// ```
     pub fn capacity(&self) -> usize {
         self.alive.len()
     }
 
     /// Whether a node is still alive.
+    ///
+    /// ```
+    /// # use pyrucast::coords::Coords;
+    /// let mut c = Coords::new(2).unwrap();
+    /// let id = c.add_node(&[0.0, 0.0]).unwrap();
+    /// assert!(c.is_alive(id));
+    /// c.decref(id).unwrap();
+    /// c.gc();
+    /// assert!(!c.is_alive(id));
+    /// ```
     pub fn is_alive(&self, id: NodeId) -> bool {
         self.alive.get(id.0 as usize).copied().unwrap_or(false)
     }
@@ -221,6 +279,16 @@ impl Coords {
     /// Add a node with these coordinates in **all** configurations. Initializes its
     /// refcount to 1 — the caller is responsible for at least one decrement
     /// (typically through the end-of-life of a [`crate::atoms::Node`]).
+    ///
+    /// ```
+    /// # use pyrucast::coords::Coords;
+    /// let mut c = Coords::new(2).unwrap();
+    /// let id = c.add_node(&[1.0, 2.0]).unwrap();
+    /// assert_eq!(c.position(id).unwrap(), &[1.0, 2.0]);
+    /// assert_eq!(c.refcount(id), 1); // créé avec un ticket
+    /// // La longueur doit valoir la dimension.
+    /// assert!(c.add_node(&[0.0]).is_err());
+    /// ```
     pub fn add_node(&mut self, coords: &[f64]) -> Result<NodeId> {
         if coords.len() != self.dim as usize {
             return Err(PyrucastError::Message(format!(
@@ -243,6 +311,14 @@ impl Coords {
     }
 
     /// Increment the refcount of a live node.
+    ///
+    /// ```
+    /// # use pyrucast::coords::Coords;
+    /// let mut c = Coords::new(2).unwrap();
+    /// let id = c.add_node(&[0.0, 0.0]).unwrap();
+    /// c.incref(id).unwrap();
+    /// assert_eq!(c.refcount(id), 2);
+    /// ```
     pub fn incref(&mut self, id: NodeId) -> Result<()> {
         self.ensure_alive(id)?;
         let r = &mut self.refcount[id.0 as usize];
@@ -253,6 +329,14 @@ impl Coords {
     /// Decrement the refcount of a live node. The node is not immediately
     /// collected even if the refcount reaches 0: call
     /// [`Coords::gc`] for that.
+    ///
+    /// ```
+    /// # use pyrucast::coords::Coords;
+    /// let mut c = Coords::new(2).unwrap();
+    /// let id = c.add_node(&[0.0, 0.0]).unwrap();
+    /// c.decref(id).unwrap();
+    /// assert_eq!(c.refcount(id), 0); // plus personne ne le tient : gc peut le prendre
+    /// ```
     pub fn decref(&mut self, id: NodeId) -> Result<()> {
         self.ensure_alive(id)?;
         let r = &mut self.refcount[id.0 as usize];
@@ -267,6 +351,13 @@ impl Coords {
     }
 
     /// Current refcount of a node (0 for a collected or unknown node).
+    ///
+    /// ```
+    /// # use pyrucast::coords::Coords;
+    /// let mut c = Coords::new(2).unwrap();
+    /// let id = c.add_node(&[0.0, 0.0]).unwrap();
+    /// assert_eq!(c.refcount(id), 1);
+    /// ```
     pub fn refcount(&self, id: NodeId) -> u32 {
         if self.is_alive(id) {
             self.refcount[id.0 as usize]
@@ -277,6 +368,15 @@ impl Coords {
 
     /// Garbage collector: mark as collected every live node whose refcount
     /// is 0. Returns the number of collected nodes. Ids are never reused.
+    ///
+    /// ```
+    /// # use pyrucast::coords::Coords;
+    /// let mut c = Coords::new(2).unwrap();
+    /// let id = c.add_node(&[0.0, 0.0]).unwrap();
+    /// assert_eq!(c.gc(), 0); // un ticket subsiste : rien n'est ramassé
+    /// c.decref(id).unwrap();
+    /// assert_eq!(c.gc(), 1); // ramassé
+    /// ```
     pub fn gc(&mut self) -> usize {
         let mut collected = 0;
         for i in 0..self.alive.len() {
@@ -290,6 +390,13 @@ impl Coords {
 
     /// Coordinates of a node in the active configuration. Error if the node was
     /// collected or never existed.
+    ///
+    /// ```
+    /// # use pyrucast::coords::Coords;
+    /// let mut c = Coords::new(2).unwrap();
+    /// let id = c.add_node(&[1.5, -2.0]).unwrap();
+    /// assert_eq!(c.position(id).unwrap(), &[1.5, -2.0]);
+    /// ```
     pub fn position(&self, id: NodeId) -> Result<&[f64]> {
         self.ensure_alive(id)?;
         let d = self.dim as usize;
@@ -298,6 +405,14 @@ impl Coords {
     }
 
     /// Set the coordinates of a node in the active configuration.
+    ///
+    /// ```
+    /// # use pyrucast::coords::Coords;
+    /// let mut c = Coords::new(2).unwrap();
+    /// let id = c.add_node(&[0.0, 0.0]).unwrap();
+    /// c.set_position(id, &[3.0, 4.0]).unwrap();
+    /// assert_eq!(c.position(id).unwrap(), &[3.0, 4.0]);
+    /// ```
     pub fn set_position(&mut self, id: NodeId, coords: &[f64]) -> Result<()> {
         self.ensure_alive(id)?;
         if coords.len() != self.dim as usize {
@@ -325,6 +440,16 @@ impl Coords {
     }
 
     /// Iterate over live NodeIds in ascending id order.
+    ///
+    /// ```
+    /// # use pyrucast::coords::Coords;
+    /// let mut c = Coords::new(2).unwrap();
+    /// let a = c.add_node(&[0.0, 0.0]).unwrap();
+    /// let b = c.add_node(&[1.0, 0.0]).unwrap();
+    /// c.decref(a).unwrap();
+    /// c.gc();
+    /// assert_eq!(c.iter_live().collect::<Vec<_>>(), vec![b]); // le mort est sauté
+    /// ```
     pub fn iter_live(&self) -> impl Iterator<Item = NodeId> + '_ {
         self.alive
             .iter()
@@ -335,6 +460,14 @@ impl Coords {
     // ─── Configurations ───
 
     /// Add a new configuration by cloning the active one. Returns its index.
+    ///
+    /// ```
+    /// # use pyrucast::coords::Coords;
+    /// let mut c = Coords::new(2).unwrap();
+    /// let deformee = c.add_config("deformed"); // clone de la configuration active
+    /// assert_eq!(c.names(), &["default".to_string(), "deformed".to_string()]);
+    /// assert_eq!(deformee, 1);
+    /// ```
     pub fn add_config(&mut self, name: impl Into<String>) -> usize {
         let copy = self.configs[self.active].clone();
         self.configs.push(copy);
@@ -343,6 +476,17 @@ impl Coords {
     }
 
     /// Select the active configuration by index.
+    ///
+    /// ```
+    /// # use pyrucast::coords::Coords;
+    /// let mut c = Coords::new(2).unwrap();
+    /// let id = c.add_node(&[0.0, 0.0]).unwrap();
+    /// let deformee = c.add_config("deformed");
+    /// c.select(deformee).unwrap();
+    /// c.set_position(id, &[0.1, 0.0]).unwrap(); // n'écrit que dans "deformed"
+    /// c.select(0).unwrap();
+    /// assert_eq!(c.position(id).unwrap(), &[0.0, 0.0]);
+    /// ```
     pub fn select(&mut self, config: usize) -> Result<()> {
         if config >= self.configs.len() {
             return Err(PyrucastError::Message(format!(
@@ -356,11 +500,26 @@ impl Coords {
     }
 
     /// Index of the active configuration.
+    ///
+    /// ```
+    /// # use pyrucast::coords::Coords;
+    /// let mut c = Coords::new(2).unwrap();
+    /// assert_eq!(c.active(), 0);
+    /// let i = c.add_config("deformed");
+    /// c.select(i).unwrap();
+    /// assert_eq!(c.active(), i);
+    /// ```
     pub fn active(&self) -> usize {
         self.active
     }
 
     /// Names of the configurations, in order.
+    ///
+    /// ```
+    /// # use pyrucast::coords::Coords;
+    /// let c = Coords::new(2).unwrap();
+    /// assert_eq!(c.names(), &["default".to_string()]);
+    /// ```
     pub fn names(&self) -> &[String] {
         &self.config_names
     }
@@ -368,12 +527,31 @@ impl Coords {
     // ─── Solver permutation ───
 
     /// Current permutation (length = capacity), or `None` for identity.
+    ///
+    /// ```
+    /// # use pyrucast::coords::Coords;
+    /// let mut c = Coords::new(2).unwrap();
+    /// assert!(c.permutation().is_none()); // None = identité
+    /// for _ in 0..3 { c.add_node(&[0.0, 0.0]).unwrap(); }
+    /// c.set_permutation(vec![2, 0, 1]).unwrap();
+    /// assert_eq!(c.permutation(), Some(&[2, 0, 1][..]));
+    /// ```
     pub fn permutation(&self) -> Option<&[u32]> {
         self.permutation.as_deref()
     }
 
     /// Set the solver permutation. Its length must equal `capacity`; each
     /// value must be unique and within `[0, capacity)`.
+    ///
+    /// ```
+    /// # use pyrucast::coords::Coords;
+    /// let mut c = Coords::new(2).unwrap();
+    /// for _ in 0..3 { c.add_node(&[0.0, 0.0]).unwrap(); }
+    /// // permutation[0] = 2 : le nœud d'id 0 est en position solveur 2.
+    /// c.set_permutation(vec![2, 0, 1]).unwrap();
+    /// // Ce doit être une vraie permutation des positions.
+    /// assert!(c.set_permutation(vec![0, 0, 1]).is_err());
+    /// ```
     pub fn set_permutation(&mut self, perm: Vec<u32>) -> Result<()> {
         let cap = self.capacity();
         if perm.len() != cap {
@@ -406,6 +584,15 @@ impl Coords {
     }
 
     /// Clear the permutation (back to identity).
+    ///
+    /// ```
+    /// # use pyrucast::coords::Coords;
+    /// let mut c = Coords::new(2).unwrap();
+    /// for _ in 0..3 { c.add_node(&[0.0, 0.0]).unwrap(); }
+    /// c.set_permutation(vec![2, 0, 1]).unwrap();
+    /// c.clear_permutation();
+    /// assert!(c.permutation().is_none());
+    /// ```
     pub fn clear_permutation(&mut self) {
         self.permutation = None;
     }

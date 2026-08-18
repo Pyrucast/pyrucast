@@ -89,6 +89,16 @@ pub type WriteGuard<T> = ArcRwLockWriteGuard<RawRwLock, T>;
 /// name the same object exactly when [`same_object`](Self::same_object) says
 /// so.
 // ANCHOR: declaration
+///
+/// ```
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::coords::Coords;
+/// let h1 = Handle::new(Coords::new(2).unwrap()); // premier ticket
+/// let h2 = h1.clone(); // même objet
+/// assert!(h1.same_object(&h2));
+/// drop(h1); // h2 tient encore l'objet
+/// assert_eq!(h2.read().dim(), 2);
+/// ```
 pub struct Handle<T> {
     cell: Arc<RwLock<T>>,
 }
@@ -101,6 +111,13 @@ impl<T> Handle<T> {
     /// way is what would make a future registry — for enumeration, or a
     /// whole-session save — a change to one function rather than a hunt through
     /// every construction site.
+    ///
+    /// ```
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::coords::Coords;
+    /// let h = Handle::new(Coords::new(2).unwrap());
+    /// assert_eq!(h.read().dim(), 2);
+    /// ```
     pub fn new(value: T) -> Self {
         Self {
             cell: Arc::new(RwLock::new(value)),
@@ -110,6 +127,16 @@ impl<T> Handle<T> {
     /// Shared access. Blocks while a writer holds the object.
     ///
     /// Infallible: holding `self` guarantees the object is there.
+    ///
+    /// ```
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::coords::Coords;
+    /// let h = Handle::new(Coords::new(2).unwrap());
+    /// let g = h.read(); // verrou lecture, relâché à la fin de portée
+    /// assert_eq!(g.dim(), 2);
+    /// // Plusieurs lecteurs coexistent.
+    /// assert_eq!(h.read().dim(), 2);
+    /// ```
     pub fn read(&self) -> ReadGuard<T> {
         self.cell.read_arc()
     }
@@ -117,6 +144,15 @@ impl<T> Handle<T> {
     /// Exclusive access. Blocks while any other guard holds the object.
     ///
     /// Infallible, for the same reason as [`read`](Self::read).
+    ///
+    /// ```
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::coords::Coords;
+    /// let h = Handle::new(Coords::new(2).unwrap());
+    /// let id = h.write().add_node(&[0.0, 0.0]).unwrap(); // verrou le temps de l'appel
+    /// assert_eq!(h.read().node_count(), 1);
+    /// # let _ = id;
+    /// ```
     pub fn write(&self) -> WriteGuard<T> {
         self.cell.write_arc()
     }
@@ -126,6 +162,16 @@ impl<T> Handle<T> {
     /// Identity, not equality: this is what lets an aggregate's union skip a
     /// sub it already holds, and what tells a field that its support is the
     /// mesh it was handed.
+    ///
+    /// ```
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::coords::Coords;
+    /// let a = Handle::new(Coords::new(2).unwrap());
+    /// let b = a.clone(); // même objet, ticket de plus
+    /// let c = Handle::new(Coords::new(2).unwrap()); // objet distinct, contenu égal
+    /// assert!(a.same_object(&b));
+    /// assert!(!a.same_object(&c));
+    /// ```
     pub fn same_object(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.cell, &other.cell)
     }
@@ -138,6 +184,13 @@ impl<T> Handle<T> {
     /// among objects alive at the same instant, and reused once an object is
     /// gone. Safe to key a table built and consumed within one operation; not a
     /// durable identity to store or write to a file.
+    ///
+    /// ```
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::coords::Coords;
+    /// let a = Handle::new(Coords::new(2).unwrap());
+    /// assert_eq!(a.id(), a.clone().id()); // stable pour un même objet
+    /// ```
     pub fn id(&self) -> usize {
         Arc::as_ptr(&self.cell) as *const () as usize
     }

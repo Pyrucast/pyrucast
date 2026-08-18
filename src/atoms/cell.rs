@@ -49,6 +49,22 @@ pub struct Cell {
 impl Cell {
     /// Build a cell view. Errors if `idx` is past the submesh's
     /// `cell_count`.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::Cell;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords, ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let sm = Handle::new(sm);
+    /// let cellule = Cell::new(sm, 0).unwrap();
+    /// assert_eq!(cellule.index(), 0);
+    /// ```
     pub fn new(sm: Handle<SubMesh>, idx: usize) -> Result<Self> {
         let n = sm.read().cell_count();
         if idx >= n {
@@ -60,21 +76,82 @@ impl Cell {
     }
 
     /// Index of this cell inside its parent submesh.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::Cell;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords, ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let sm = Handle::new(sm);
+    /// assert_eq!(Cell::new(sm, 0).unwrap().index(), 0);
+    /// ```
     pub fn index(&self) -> usize {
         self.idx
     }
 
     /// Element type of this cell (same as the parent submesh).
+    ///
+    /// ```
+    /// # use pyrucast::atoms::Cell;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords, ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let sm = Handle::new(sm);
+    /// assert_eq!(Cell::new(sm, 0).unwrap().element_type().unwrap(), ElementType::TRI3);
+    /// ```
     pub fn element_type(&self) -> Result<ElementType> {
         Ok(self.sm.read().element_type())
     }
 
     /// Number of nodes that make up this cell (= `element_type().nodes_per_cell()`).
+    ///
+    /// ```
+    /// # use pyrucast::atoms::Cell;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords, ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let sm = Handle::new(sm);
+    /// assert_eq!(Cell::new(sm, 0).unwrap().nodes_per_cell().unwrap(), 3); // TRI3
+    /// ```
     pub fn nodes_per_cell(&self) -> Result<usize> {
         Ok(self.sm.read().element_type().nodes_per_cell())
     }
 
     /// Raw connectivity (node ids) of this cell, in submesh order.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::Cell;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords, ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let sm = Handle::new(sm);
+    /// let ids = Cell::new(sm, 0).unwrap().node_ids().unwrap();
+    /// assert_eq!(ids, vec![n[0].id(), n[1].id(), n[2].id()]); // dans l'ordre d'ajout
+    /// ```
     pub fn node_ids(&self) -> Result<Vec<NodeId>> {
         let s = self.sm.read();
         let npc = s.element_type().nodes_per_cell();
@@ -84,6 +161,24 @@ impl Cell {
     /// Materialise the cell's nodes as a `Vec<Node>`. Each `Node`
     /// increments the node's refcount in the owning `Coords`,
     /// matching the behaviour of `Coords::add_node`.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::Cell;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords, ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let sm = Handle::new(sm);
+    /// // Chaque `Node` rendu porte un ticket de plus sur le magasin.
+    /// let noeuds = Cell::new(sm, 0).unwrap().nodes().unwrap();
+    /// assert_eq!(noeuds.len(), 3);
+    /// assert_eq!(noeuds[0].position().unwrap(), vec![0.0, 0.0]);
+    /// ```
     pub fn nodes(&self) -> Result<Vec<Node>> {
         let coords = self.sm.read().coords();
         let ids = self.node_ids()?;

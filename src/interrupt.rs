@@ -42,6 +42,12 @@ impl<C: Cancel + ?Sized> Cancel for &C {
 }
 
 /// Never cancels. The default for Rust callers that don't need it.
+///
+/// ```
+/// # use pyrucast::interrupt::{Cancel, NoCancel};
+/// // Le jeton qui ne s'arme jamais : ce que passent les fonctions publiques.
+/// assert!(NoCancel.check().is_ok());
+/// ```
 pub struct NoCancel;
 
 impl Cancel for NoCancel {
@@ -77,6 +83,15 @@ pub struct Deadline(pub std::time::Instant);
 
 impl Deadline {
     /// A deadline `dur` from now.
+    ///
+    /// ```
+    /// # use pyrucast::interrupt::{Cancel, Deadline};
+    /// # use std::time::Duration;
+    /// // Échéance déjà passée : le premier point de contrôle s'arrête.
+    /// let echu = Deadline::after(Duration::from_millis(0));
+    /// std::thread::sleep(Duration::from_millis(1));
+    /// assert!(echu.check().is_err());
+    /// ```
     pub fn after(dur: std::time::Duration) -> Self {
         Deadline(std::time::Instant::now() + dur)
     }

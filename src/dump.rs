@@ -94,6 +94,14 @@ pub fn py_print(py: pyo3::Python<'_>, text: &str) -> pyo3::PyResult<()> {
 // ─── Shared formatting helpers ──────────────────────────────────────────────
 
 /// Format a float with `precision` digits after the point.
+///
+/// ```
+/// # use pyrucast::dump::fmt_float;
+/// // Précision fixe : les zéros de queue sont **conservés**, pour que les
+/// // colonnes d'un tableau s'alignent.
+/// assert_eq!(fmt_float(1.5, 3), "1.500");
+/// assert_eq!(fmt_float(-0.25, 1), "-0.2");
+/// ```
 pub fn fmt_float(v: f64, precision: usize) -> String {
     format!("{:.*}", precision, v)
 }

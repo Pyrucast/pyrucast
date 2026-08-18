@@ -40,6 +40,13 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// Stable internal identifier of a node inside a `Coords`.
+///
+/// ```
+/// # use pyrucast::atoms::NodeId;
+/// // Un identifiant nu : il circule partout, sans porter le magasin.
+/// let id = NodeId(3);
+/// assert_eq!(id.0, 3);
+/// ```
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct NodeId(pub u32);
 
@@ -62,6 +69,19 @@ impl crate::dump::Dump for NodeId {
 }
 
 /// RAII accessor to a node of a `Coords`.
+///
+/// ```
+/// # use pyrucast::atoms::Node;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// let coords = Handle::new(Coords::new(2).unwrap());
+/// let n = Node::create_in(coords.clone(), &[1.0, 2.0]).unwrap();
+///
+/// // Un `Node` est un **ticket** : tant qu'il vit, le nœud survit au gc.
+/// assert_eq!(coords.write().gc(), 0);
+/// drop(n);
+/// assert_eq!(coords.write().gc(), 1);
+/// ```
 pub struct Node {
     handle: Handle<Coords>,
     id: NodeId,
@@ -70,6 +90,15 @@ pub struct Node {
 impl Node {
     /// Add a new node to the pointed `Coords` and return a `Node`
     /// referencing it (refcount = 1).
+    ///
+    /// ```
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// let n = Node::create_in(coords.clone(), &[1.0, 2.0]).unwrap();
+    /// assert_eq!(n.position().unwrap(), vec![1.0, 2.0]);
+    /// ```
     pub fn create_in(coords: Handle<Coords>, coord: &[f64]) -> Result<Self> {
         // `add_node` initializes refcount = 1; this Node takes that unit.
         let id = coords.write().add_node(coord)?;
@@ -77,6 +106,17 @@ impl Node {
     }
 
     /// Build an additional `Node` for an existing id (refcount += 1).
+    ///
+    /// ```
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// let n = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    /// // Un second accesseur sur le même id : le nœud a maintenant deux tickets.
+    /// let m = Node::acquire(coords.clone(), n.id()).unwrap();
+    /// assert_eq!(m.id(), n.id());
+    /// ```
     pub fn acquire(coords: Handle<Coords>, id: NodeId) -> Result<Self> {
         coords.write().incref(id)?;
         Ok(Self { handle: coords, id })
@@ -91,21 +131,61 @@ impl Node {
     }
 
     /// Internal identifier of the node.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// let n = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    /// let m = Node::create_in(coords, &[1.0, 0.0]).unwrap();
+    /// assert_ne!(n.id(), m.id()); // ids distincts, attribués à la création
+    /// ```
     pub fn id(&self) -> NodeId {
         self.id
     }
 
     /// Handle to the owning `Coords` (internal clone).
+    ///
+    /// ```
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # use pyrucast::handle::Handle as H;
+    /// let n = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    /// // Le nœud porte son magasin : aucun argument `Coords` ailleurs.
+    /// assert!(H::same_object(&n.coords(), &coords));
+    /// ```
     pub fn coords(&self) -> Handle<Coords> {
         self.handle.clone()
     }
 
     /// Coordinates (copied) in the `Coords`'s active set.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// let n = Node::create_in(coords, &[1.5, -2.0]).unwrap();
+    /// assert_eq!(n.position().unwrap(), vec![1.5, -2.0]);
+    /// ```
     pub fn position(&self) -> Result<Vec<f64>> {
         Ok(self.handle.read().position(self.id)?.to_vec())
     }
 
     /// Set the coordinates of the node in the active set.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// let n = Node::create_in(coords, &[0.0, 0.0]).unwrap();
+    /// n.set_position(&[3.0, 4.0]).unwrap();
+    /// assert_eq!(n.position().unwrap(), vec![3.0, 4.0]);
+    /// ```
     pub fn set_position(&self, coords: &[f64]) -> Result<()> {
         self.handle.write().set_position(self.id, coords)?;
         Ok(())
