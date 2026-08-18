@@ -193,11 +193,7 @@ V2X…V2Z` en 3-D — comme `MATE 'DIRECTION' V1 V2` de Cast3M. Ils sont
 orthonormalisés en interne.
 
 ```python
-model = pyrucast.Model.heat_conduction(fes, symmetry="orthotropic")
-materials = pyrucast.element_field.material_field(
-    model,
-    [("k_1", 12.0), ("k_2", 3.0), ("k_3", 12.0), ("V1X", cos_a), ("V1Y", sin_a)],
-)
+{{#include ../../tests/python/test_doc_ops_physiques.py:orthotrope}}
 ```
 
 La conductivité isotrope reste lue **au point de Gauss**, donc variable à
@@ -269,10 +265,7 @@ de translater une origine. Dans un autre système d'unités, fournir `sigma` com
 composante matériau.
 
 ```python
-model = pyrucast.Model.heat_conduction(volume) | pyrucast.Model.radiation(bord)
-materials = pyrucast.element_field.material_field(
-    model, [("k", 20.0), ("emis", 0.8), ("T_inf", 300.0)]
-)
+{{#include ../../tests/python/test_doc_ops_physiques.py:radiation}}
 ```
 
 #### Ce que ça vaut comme vérification
@@ -311,7 +304,7 @@ la conduction, ce qui fait que le terme **se couple directement** dans la raideu
 d'un `HeatConduction` :
 
 ```python
-pyrucast.Model.boundary_transfer(bord_fes, [("T", "q")], "thermal")
+{{#include ../../tests/python/test_doc_ops_physiques.py:boundary_transfer}}
 ```
 
 | | nom | rôle |

@@ -50,22 +50,13 @@ tout l'intérêt d'intégrer le comportement exactement.
 ### Boucle multi-pas (fil d'état)
 
 ```python
-state = None  # VAR0 = prev ; None au premier pas
-for step in range(1, nsteps + 1):
-    ...  # charge du pas → boucle de Newton sur u
-    eps = pyrucast.element_field.deformation(u, fes)  # ε(B)
-    out = pyrucast.element_field.integrate_behavior(model, eps, materials, prev=state)
-    ...  # F_int (BSIG), résidu, correction de u
-    state = out  # commit : prev ← VAR1 pour le pas suivant
+{{#include ../../../tests/python/test_doc_ops_physiques.py:pas_a_pas}}
 ```
 
 ## Exemple : efforts de section d'une poutre
 
 ```python
-# Solution (w, theta) déjà obtenue par le solveur.
-eps = pyrucast.element_field.beam_deformation(solution, fes)  # (κ, γ) par élément
-forces = pyrucast.element_field.integrate_behavior(model, eps, materials)
-# forces porte le moment M = E·I·κ et l'effort tranchant V = G·A_s·γ.
+{{#include ../../../tests/python/test_doc_ops_physiques.py:beam_deformation}}
 ```
 
 Les pages [Barre](../mecanique/truss.md), [Élasticité](../mecanique/elasticite.md)
@@ -97,11 +88,7 @@ Pour une loi **linéaire**, le résultat égale la rigidité appliquée à la so
 sorte que `r = f_ext − f_int` est le **résidu** d'équilibre.
 
 ```python
-# Solution déjà obtenue par le solveur.
-eps = pyrucast.element_field.deformation(solution, fes)  # ε = B·u
-sig = pyrucast.element_field.integrate_behavior(model, eps, materials)  # COMP : σ
-f_int = pyrucast.node_field.internal_forces(sig, model)  # BSIG : ∫ Bᵀ σ
-residu = f_ext - f_int  # équilibre
+{{#include ../../../tests/python/test_doc_ops_physiques.py:forces_internes}}
 ```
 
 ### `internal_forces_continuum(stresses, fespace)` → `NodeField`

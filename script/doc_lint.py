@@ -61,8 +61,6 @@ DETTE_MIGRATION = {
     "contraintes/mpc.md": 1,
     "conventions.md": 7,
     "coords.md": 4,  # les 4 blocs Rust, phase B4
-    "diffusion.md": 2,
-    "echanges.md": 1,
     "element-field.md": 1,
     "evolution.md": 5,
     "fe-space.md": 7,
@@ -76,12 +74,8 @@ DETTE_MIGRATION = {
     "node-field.md": 1,
     "node.md": 1,
     "operateurs/assemblage.md": 1,  # reste le bloc Rust, phase B4
-    "operateurs/comportement.md": 3,
-    "operateurs/construction.md": 1,
     "operateurs/maillage.md": 8,
-    "operateurs/solveur.md": 3,
     "sauvegarde.md": 6,
-    "thermique.md": 3,
     "thermomecanique-pas-a-pas.md": 3,
     "triangulation.md": 6,
     "visualization.md": 6,  # les 6 blocs Rust, phase B4

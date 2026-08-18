@@ -22,13 +22,7 @@ comme Dirichlet).
 | `sub_material_field(sub_model, [(nom, valeur), …])` | une **seule** zone (`SubElementField`) pour un sous-modèle donné |
 
 ```python
-import pyrucast
-
-# Thermique : conductivité uniforme.
-materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
-
-# Élasticité : deux propriétés.
-materials = pyrucast.element_field.material_field(model, [("E", 210e9), ("nu", 0.3)])
+{{#include ../../../tests/python/test_doc_ops_physiques.py:material_field}}
 ```
 
 Le champ produit est ensuite passé tel quel à

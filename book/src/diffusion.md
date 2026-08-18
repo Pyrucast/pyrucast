@@ -115,12 +115,7 @@ est `c`.
 Les deux physiques peuvent vivre sur le **même maillage** sans se gêner :
 
 ```python
-model = pyrucast.Model.fick(fes, "H2") | pyrucast.Model.heat_conduction(fes)
-materials = pyrucast.element_field.material_field(model, [("D_H2", 2.0), ("k", 5.0)])
-k = pyrucast.matrix.stiffness(model, materials)
-
-len(model.filter("diffusion"))  # 1
-len(model.filter("thermal"))  # 1
+{{#include ../../tests/python/test_doc_ops_physiques.py:fick}}
 ```
 
 Un seul champ matériau porte les deux jeux de coefficients. L'assembleur résout
@@ -155,16 +150,7 @@ contact) : un par grandeur transférée, nommé d'après elle.
 > **[Échanges](echanges.md)**.
 
 ```python
-model = (
-    pyrucast.Model.fick(gauche, "H2")
-    | pyrucast.Model.fick(droite, "H2")
-    | pyrucast.Model.interface_transfer(
-        face_gauche, face_droite, [("c_H2", "j_H2")], "diffusion"
-    )
-)
-materials = pyrucast.element_field.material_field(
-    model, [("D_H2", 2.0), ("h_c_H2", 5.0)]
-)
+{{#include ../../tests/python/test_doc_ops_physiques.py:interface_transfer}}
 ```
 
 #### Ce que ça vaut comme vérification

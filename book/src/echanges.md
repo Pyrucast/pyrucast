@@ -125,21 +125,7 @@ où un nœud partagé l'interdirait.
 ## Exemple Python
 
 ```python
-# Film thermique : entre dans la raideur d'une conduction.
-model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.boundary_transfer(
-    peau, [("T", "q")], "thermal"
-)
-materials = pyrucast.element_field.material_field(model, [("k", 5.0), ("h_T", 12.0)])
-
-# Résistance de contact entre deux maillages.
-joint = pyrucast.Model.interface_transfer(
-    face_gauche, face_droite, [("T", "q")], "thermal"
-)
-
-# Fondation élastique : la même loi, sur des déplacements.
-appui = pyrucast.Model.boundary_transfer(
-    semelle, [("u_x", "f_x"), ("u_y", "f_y")], "mechanical"
-)
+{{#include ../../tests/python/test_doc_ops_physiques.py:echanges}}
 ```
 
 ## Compléments
