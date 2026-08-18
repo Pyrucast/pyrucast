@@ -16,11 +16,11 @@ Parce que le projet s'est fait prendre trois fois, de la même façon.
 La suite de tests était verte, la CI aussi, et personne ne l'a vu pendant des
 semaines — parce que rien, nulle part, ne lisait ces pages.
 
-**Un vérificateur qui ne vérifiait rien.** `mdbook test` tourne à chaque
-`check`, égrène 85 chapitres et affiche un verdict. Il teste **zéro bloc** : les
-73 clôtures Rust du book sont toutes marquées `rust,ignore`, et `ignore` veut
-dire exactement « ne pas compiler ». Le pas était vert parce qu'il ne regardait
-rien.
+**Un vérificateur qui ne vérifiait rien.** `mdbook test` tournait à chaque
+`check`, égrenait 85 chapitres et affichait un verdict. Il testait **zéro
+bloc** : les 73 clôtures Rust du book étaient toutes marquées `rust,ignore`, et
+`ignore` veut dire exactement « ne pas compiler ». Le pas était vert parce
+qu'il ne regardait rien — il a depuis été retiré de la chaîne.
 
 **Un garde-fou aveugle, deux fois de suite.** L'outil écrit pour compenser est
 passé au vert alors qu'il ne vérifiait rien : d'abord parce que le fichier qu'il
@@ -139,7 +139,8 @@ quelque chose compile déjà ce fichier ?**
   l'inclusion simple suffit. La vérification a lieu à la source ; mdbook ne fait
   que l'afficher.
 - **Non** → `rustdoc_include`, qui passe le **fichier entier** à rustdoc tout en
-  n'affichant que l'ancre, de sorte que `mdbook test` le compile.
+  n'affichant que l'ancre, de sorte que `mdbook test` le compilerait. Il
+  faudrait alors le remettre dans `check_doc`, d'où il a été retiré.
 
 Il n'y a aujourd'hui aucun fichier du second cas dans ce dépôt, et il n'y a pas
 de raison d'en créer : un fichier d'exemple qui mérite d'être compilé mérite
@@ -157,16 +158,15 @@ Le corollaire pratique : quand on veut ajouter un exemple à un chapitre, on
 n'écrit pas dans le chapitre. On écrit un test, on l'encadre d'ancres, et on
 l'inclut. L'exemple devient de la couverture au lieu d'être une dette.
 
-État au 18 août 2026 — la règle n'est pas encore tenue partout :
+État au 18 août 2026 :
 
 | surface | conforme | écrit à la main |
 |---|---|---|
-| blocs Rust du book | 22 | 51 |
-| blocs Python du book | 61 | 129 |
+| blocs Rust du book | **69** | 0 |
+| blocs Python du book | **188** | 0 |
 
-La [mise en conformité](#ce-qui-reste-à-faire) est en cours, page par page. Le
-garde-fou `fences` empêche d'en ajouter : la dette est gelée à ce qu'elle était,
-elle ne peut plus que fondre.
+C'était 22 sur 73 et 61 sur 190 quand ces conventions ont été écrites. Le
+garde-fou `fences` empêche désormais d'en réintroduire.
 
 ## Les doctests
 
@@ -296,11 +296,11 @@ périmée. C'est le motif déjà en place dans `test_method_exposure.py` et
 
 ## Ce qui reste à faire
 
-1. Migrer les 169 blocs encore écrits à la main, Python d'abord — trois pages
-   d'opérateurs (`maillage.md`, `champs.md`, `assemblage.md`) en concentrent 47.
-   Le registre `DETTE_MIGRATION` de `script/doc_lint.py` les tient page par
-   page ; il ne peut que décroître.
-2. Écrire les 1531 doctests manquants, au fil des fonctions qu'on touche. Le
-   cliquet garantit que le nombre ne remonte pas.
-3. Retirer le filet provisoire (`cargo run --bin book_blocks`) et le pas
-   `mdbook test`, qui ne teste rien, une fois la migration faite.
+La migration est terminée : **257 blocs, aucun écrit à la main** — 188 Python,
+69 Rust. Le registre `DETTE_MIGRATION` de `script/doc_lint.py` est vide, et le
+garde-fou `fences` empêche qu'il se repeuple.
+
+Reste un chantier, sans échéance et sans registre autre que le cliquet :
+**écrire les ~1530 doctests manquants**, au fil des fonctions qu'on touche.
+`script/doc_coverage.txt` en tient la liste ; elle ne peut que fondre, et tout
+item public nouveau doit porter son exemple.

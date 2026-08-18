@@ -70,7 +70,6 @@ maturin develop            # construit et installe le module Python dans le venv
 python -m pytest           # tests Python
 cargo doc --no-deps --lib  # référence API Rust (rustdoc) — voir ci-dessous
 mdbook build book          # génère cette documentation HTML
-mdbook test book           # exécute le code testable de la documentation
 ```
 
 Le projet étant un *mixed layout*, `maturin develop` fait deux choses : il
@@ -218,7 +217,7 @@ seul. Chaque bloc existe en bash (`.sh`, Linux/macOS) et en PowerShell
 | `check_rust` | `cargo test`, `cargo test --doc`, `cargo test --features viz`, `cargo build --features viz-interactive` | minutes |
 | `check_python` | `maturin develop --features extension-module,viz`, `pytest` | minutes |
 | `check_examples` | `run_examples` — exemples et formation de bout en bout | ~1 min |
-| `check_doc` | `cargo doc` sans warning, **extraits Rust du book compilés**, `mdbook build`, `mdbook test` | ~1 min |
+| `check_doc` | `cargo doc` sans warning, les quatre garde-fous du book, `mdbook build` | ~30 s |
 
 ```bash
 bash script/check_doc.sh     # je viens de toucher à la doc
@@ -250,35 +249,33 @@ Trois points valent d'être notés :
 - **ne jamais piper `check_all`** (`| tail`, `| grep`) : le code de retour
   devient celui du dernier maillon du tube, et un échec passe pour un succès.
 
-### Les extraits Rust du book, compilés
+### Les extraits du book sont du code exécuté
 
-`mdbook test` ne compile **rien** : tous les blocs Rust du book sont marqués
-`rust,ignore`, faute de quoi il faudrait que chacun soit un programme complet.
-Un module renommé ou une signature changée pouvait donc y pourrir
-indéfiniment — c'est ainsi que trois pages sont restées sur des noms de modules
-disparus pendant tout un redécoupage d'API.
+Aucune page du book ne possède de code : **tout bloc `rust` ou `python` est un
+`{{#include}}`** pointant un test, un exemple ou une source. Le code affiché
+est donc exécuté par `check_rust`, `check_python` ou `check_examples`, et il ne
+peut plus diverger de l'API.
 
-`cargo run --bin book_blocks` lit `book/src/**.md`, retient les blocs qui sont
-de vrais programmes et les écrit dans `tests/book_blocks.rs` (généré, ignoré par
-git), **un bloc `fn` par page** : les extraits d'une même page sont concaténés
-dans l'ordre de lecture, donc un bloc qui continue le précédent voit ses
-variables. `check_doc` type-vérifie ensuite le tout :
+`check_doc` ne compile donc rien lui-même. Il lance `script/doc_lint.py`, quatre
+vérifications de texte :
 
-```bash
-cargo run --bin book_blocks
-cargo check --test book_blocks --features viz
-```
+| garde-fou | ce qu'il tient |
+|---|---|
+| `includes` | chaque `{{#include}}` résout : fichier, ancre, texte non vide |
+| `fences` | aucune page ne possède de code |
+| `symboles` | la prose ne cite aucun symbole disparu |
+| `doctests` | cliquet : la couverture des doctests ne peut que monter |
 
-Les extraits restent des extraits : beaucoup nomment une variable que la page ne
-définit jamais. `check_doc` **ignore** donc les codes qui signalent un fragment
-(`E0425` valeur inconnue, `E0412` type inconnu, `E0433` module non résolu,
-`E0252` import en double, `E0277` `?` hors d'une fonction `-> Result`…) et
-**échoue sur tout le reste** : import non résolu (`E0432`), méthode inconnue
-(`E0599`), mauvaise arité (`E0061`), type incompatible (`E0308`) — et les
-erreurs de syntaxe, qui rendraient le garde-fou aveugle si elles passaient.
+Le premier est le plus important, parce que le mécanisme porteur n'est gardé par
+rien d'autre : une ancre inexistante rend un bloc **vide**, avec un code de
+retour 0 et sans un mot.
 
-Chaque ligne d'erreur pointe `tests/book_blocks.rs` ; le commentaire
-`// --- page:ligne` qui la précède donne la page du book et la ligne d'origine.
+`mdbook test` a été retiré de la chaîne : tous les blocs Rust du book sont
+`rust,ignore` — c'est ce que le mécanisme d'inclusion impose —, si bien qu'il ne
+compilait rien. Un pas vert qui ne regarde rien coûte plus cher que son absence.
+
+La règle complète, et le choix entre doctest, test d'intégration et exemple, est
+page [Documentation et tests](developper/documentation-et-tests.md).
 
 ### `script/build.sh` / `script/build.ps1` — build complet + documentation
 
@@ -305,7 +302,7 @@ Il déroule, dans l'ordre :
 3. **Module Python avec visu interactive** — `maturin develop --release
    --features extension-module,viz-interactive`, puis `pytest`.
 4. **Documentation** — `cargo doc` (référence Rust), régénération du stub
-   `python/pyrucast/_pyrucast/__init__.pyi`, `mdbook build` + `mdbook test`, et
+   `python/pyrucast/_pyrucast/__init__.pyi`, `mdbook build`, et
    un export **pydoc HTML** de l'API Python
    (`target/python-doc/pyrucast.html`).
 5. **Vérification finale** — le module s'importe et la visualisation est bien

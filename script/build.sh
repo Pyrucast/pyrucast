@@ -71,7 +71,6 @@ step "pytest (Python test suite)"                    ; python -m pytest
 step "cargo doc (Rust API reference)"                ; cargo doc --no-deps --lib
 step "Regenerating the Python stub (.pyi)"           ; cargo run --quiet --bin stub_gen --features stub-gen
 step "mdbook build (theory book)"                    ; mdbook build book
-step "mdbook test (book doctests / includes)"        ; mdbook test book
 
 step "Python API doc (pydoc HTML)"
 mkdir -p target/python-doc

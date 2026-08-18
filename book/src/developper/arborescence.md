@@ -103,7 +103,6 @@ src/
 │
 └── bin/
     ├── stub_gen.rs     # génère le stub .pyi (feature `stub-gen`)
-    ├── book_blocks.rs  # extrait les blocs Rust du book en test compilable
     └── scaling.rs      # mesure de montée en charge (parallélisme)
 ```
 

@@ -52,7 +52,6 @@ step "pytest"                                                     ; python -m py
 step "cargo doc --no-deps --lib (sans warning)"
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --lib
 step "mdbook build"                                               ; mdbook build book
-step "mdbook test"                                                ; mdbook test book
 
 echo
 echo "OK: tout est vert, sans warning."

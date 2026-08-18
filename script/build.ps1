@@ -72,7 +72,6 @@ Run "pytest (Python test suite)"                    { python -m pytest }
 Run "cargo doc (Rust API reference)"                { cargo doc --no-deps --lib }
 Run "Regenerating the Python stub (pyrucast.pyi)"   { cargo run --quiet --bin stub_gen --features stub-gen }
 Run "mdbook build (theory book)"                    { mdbook build book }
-Run "mdbook test (book doctests / includes)"        { mdbook test book }
 
 Step "Python API doc (pydoc HTML)"
 New-Item -ItemType Directory -Force -Path target\python-doc | Out-Null

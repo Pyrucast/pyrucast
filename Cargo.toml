@@ -80,12 +80,6 @@ name = "geom"
 harness = false
 
 [features]
-# Turn on the generated `tests/book_blocks.rs` (the book's Rust snippets,
-# gathered by `cargo run --bin book_blocks`). Off by default so a plain
-# `cargo test` compiles that file to nothing: the snippets are excerpts and
-# do not type-check on their own — only `script/check_doc.sh` reads their
-# errors, and only the ones that mean the API itself moved.
-book-check = []
 # Compile the Python binding code (the `#[pyclass]` wrappers etc.). Pulls
 # in the optional `pyo3` dependency. On its own, pyo3 links to libpython
 # normally — fine for building utility binaries like `stub_gen`. Without
