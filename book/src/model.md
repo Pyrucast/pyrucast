@@ -197,9 +197,7 @@ sélectionné par une nature concrète — l'étiqueter `Physics::Other` le rend
 atteignable par `filter(Physics::Other)`.
 
 ```rust,ignore
-let meca = model.filter(Physics::Mechanical)?;   // sous-modèles au moins mécaniques
-let k_meca = k.filter(Physics::Mechanical)?;      // blocs au moins mécaniques (non assemblés)
-let natures = k.physics()?;                        // ex. [Thermal, Constraint]
+{{#include ../../tests/doc_conventions.rs:filtrer_par_nature}}
 ```
 
 ## Règle invariante : un Model = une Matrice
@@ -211,45 +209,7 @@ Cette uniformité simplifie tout : le solveur reçoit une seule `Matrix` + un se
 ## API Rust
 
 ```rust,ignore
-use pyrucast::coords::Coords;
-use pyrucast::atoms::element_type::ElementType;
-use pyrucast::atoms::node::Node;
-use pyrucast::containers::mesh::{Mesh, SubMesh};
-use pyrucast::containers::finite_element_space::FiniteElementSpace;
-use pyrucast::containers::model::Model;
-use pyrucast::models::RelationSense;
-use pyrucast::ops::{element_field, matrix, mesh};
-use pyrucast::aggregate::Aggregate;   // apporte `union`
-use pyrucast::handle::Handle;
-
-// 1-D : maillage [0, 1] à un seul SEG2.
-let coords = Handle::new(Coords::new(1).unwrap());
-let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
-let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
-let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
-mesh.add_cell(&[a.id(), b.id()]).unwrap();
-let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-
-// Modèle : conduction (le matériau est fourni à l'assemblage, pas ici)
-// + Dirichlet à gauche. Constructeurs au niveau parent (balaient les
-// sous-espaces de `fes`), composés par `|` (union — Rust : `union`) — on
-// ne construit jamais de `SubModel` à la main (cf. CONVENTIONS.md).
-let hc = Model::heat_conduction(&fes).unwrap();
-// Maillage des nœuds imposés + support des multiplicateurs (barycenter
-// colocalise des nœuds neufs). Le modèle ne crée aucun nœud lui-même.
-let imposed = mesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap();
-let multiplier = mesh::barycenter(&imposed).unwrap();
-let dir = Model::dirichlet(
-    "T".into(), "q".into(), &imposed, &multiplier, None, None,
-    RelationSense::Equality,
-).unwrap();
-let model = hc.union(&dir).unwrap();
-
-// Matériau k = 1, appliqué aux sous-modèles qui en ont besoin (Dirichlet
-// est automatiquement ignoré), puis assemblage.
-let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
-let k = matrix::stiffness(&model, &materials).unwrap();
-assert_eq!(k.n_rows().unwrap(), 3);  // 2 nœuds physiques + 1 multiplicateur
+{{#include ../../tests/doc_conventions.rs:modele}}
 ```
 
 ## API Python

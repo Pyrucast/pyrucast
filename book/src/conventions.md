@@ -145,18 +145,7 @@ Toute l'API publique renvoie `pyrucast::Result<T>`, alias de `Result<T, Pyrucast
 Rust :
 
 ```rust,ignore
-use pyrucast::coords::Coords;
-
-// Dimension nulle — erreur attendue.
-let err = Coords::new(0).unwrap_err();
-assert!(err.to_string().contains("dim must be ≥ 1"));
-
-// Pattern-matching sur les variantes.
-match Coords::new(0) {
-    Ok(_) => unreachable!(),
-    Err(pyrucast::PyrucastError::Message(msg)) => println!("erreur : {msg}"),
-    Err(e) => println!("autre erreur : {e}"),
-}
+{{#include ../../tests/doc_conventions.rs:erreurs}}
 ```
 
 Python :
@@ -177,13 +166,7 @@ Le binding PyO3 branche ces deux vues sur les dunder methods Python correspondan
 Rust :
 
 ```rust,ignore
-use pyrucast::coords::Coords;
-use pyrucast::handle::Handle;
-
-let coords = Handle::new(Coords::new(2).unwrap());
-let c = coords.read();
-println!("{:?}", &*c);  // vue structurelle (Debug)
-println!("{}", &*c);    // vue résumée (Display)
+{{#include ../../tests/doc_conventions.rs:affichage}}
 ```
 
 Python :
@@ -199,15 +182,7 @@ Le trait `Portable` (implémenté automatiquement pour tout type `serde::Seriali
 Rust — sérialisation manuelle d'un type quelconque :
 
 ```rust,ignore
-use pyrucast::archive::Portable;
-
-#[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
-struct Pt { x: f64, y: f64 }
-
-let original = Pt { x: 1.5, y: -2.0 };
-let bytes = original.to_bytes().unwrap();
-let restored = Pt::from_bytes(&bytes).unwrap();
-assert_eq!(original, restored);
+{{#include ../../tests/doc_conventions.rs:serialisation}}
 ```
 
 > **Python** : `Portable` n'est pas exposé côté Python — c'est une brique interne. La sérialisation depuis Python passe par [`pyrucast.save` / `pyrucast.load`](sauvegarde.md), qui écrivent un graphe entier plutôt qu'un objet isolé.

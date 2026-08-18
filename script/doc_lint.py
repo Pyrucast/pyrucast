@@ -47,18 +47,15 @@ LEDGER = ROOT / "script" / "doc_coverage.txt"
 # compte, et exige qu'une page tombée à zéro soit retirée. Rien ne s'y ajoute.
 DETTE_MIGRATION = {
     "compilation.md": 1,
-    "conventions.md": 3,  # les 3 blocs Rust, phase B4
     "element-field.md": 1,
     "evolution.md": 1,
     "fe-space.md": 4,  # les 4 blocs Rust, phase B4
     "introduction.md": 1,
     "mesh.md": 1,
-    "model.md": 2,
     "node-field.md": 1,
     "node.md": 1,
     "operateurs/assemblage.md": 1,  # reste le bloc Rust, phase B4
     "sauvegarde.md": 1,
-    "triangulation.md": 6,
     "visualization.md": 6,  # les 6 blocs Rust, phase B4
 }
 

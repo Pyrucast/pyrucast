@@ -19,21 +19,7 @@ avec la convention d'indices modulo \\(n\\). Le signe de \\(A\\) encode l'orient
 Implémentation : `signed_area` dans `src/ops/mesh/triangulation.rs`.
 
 ```rust,ignore
-use pyrucast::atoms::Point2;
-use pyrucast::ops::mesh::triangulation::signed_area;
-
-// Carré unitaire CCW — aire = +1.
-let pts = vec![
-    Point2::new(0.0, 0.0),
-    Point2::new(1.0, 0.0),
-    Point2::new(1.0, 1.0),
-    Point2::new(0.0, 1.0),
-];
-assert!((signed_area(&pts) - 1.0).abs() < 1e-12);
-
-// Même carré CW — aire = -1.
-let pts_cw: Vec<_> = pts.iter().cloned().rev().collect();
-assert!((signed_area(&pts_cw) + 1.0).abs() < 1e-12);
+{{#include ../../tests/doc_triangulation.rs:aire_signee}}
 ```
 
 > `signed_area` n'est pas exposée en Python : elle est utilisée en interne par `triangulate_surface`. Pour obtenir l'aire d'un maillage depuis Python, calculez-la à partir des coordonnées des triangles.
@@ -43,27 +29,7 @@ assert!((signed_area(&pts_cw) + 1.0).abs() < 1e-12);
 La fonction `ear_clip_2d` est utilisable indépendamment de `triangulate_surface` sur n'importe quel polygone 2D simple :
 
 ```rust,ignore
-use pyrucast::atoms::Point2;
-use pyrucast::ops::mesh::triangulation::ear_clip_2d;
-
-// Pentagone CCW quelconque.
-let pts = vec![
-    Point2::new(0.0, 0.0),
-    Point2::new(2.0, 0.0),
-    Point2::new(2.5, 1.5),
-    Point2::new(1.0, 2.5),
-    Point2::new(-0.5, 1.5),
-];
-let triangles = ear_clip_2d(&pts).unwrap();
-// n - 2 = 3 triangles, indices dans pts.
-assert_eq!(triangles.len(), 3);
-
-// Vérifier qu'un triangle est CCW (aire signée > 0).
-use pyrucast::ops::mesh::triangulation::signed_area;
-for [i, j, k] in &triangles {
-    let area = signed_area(&[pts[*i], pts[*j], pts[*k]]);
-    assert!(area > 0.0, "triangle non-CCW détecté");
-}
+{{#include ../../tests/doc_triangulation.rs:ear_clip}}
 ```
 
 ## Test d'oreille (ear clipping)
@@ -87,31 +53,7 @@ L'orientation est détectée d'abord via \\(A\\) ; si \\(A < 0\\), on parcourt l
 ## Plan moyen et base locale : usage direct
 
 ```rust,ignore
-use pyrucast::atoms::Point3;
-use pyrucast::ops::mesh::triangulation::{newell_normal, in_plane_basis};
-
-// Triangle dans le plan y = 0 (plan xz).
-let pts = vec![
-    Point3::new(0.0, 0.0, 0.0),
-    Point3::new(1.0, 0.0, 0.0),
-    Point3::new(0.5, 0.0, 1.0),
-];
-
-let normal = newell_normal(&pts).unwrap();
-// Normale attendue : (0, -1, 0) ou (0, 1, 0) selon le sens.
-assert!(normal.y.abs() > 0.99);
-
-let (u, v) = in_plane_basis(normal);
-// u et v sont orthogonaux entre eux et à la normale.
-assert!(u.dot(&v).abs() < 1e-12);
-assert!(u.dot(&normal).abs() < 1e-12);
-
-// Projeter un point dans le repère local (u, v).
-let origin = Point3::new(0.0, 0.0, 0.0);
-let p = Point3::new(0.5, 0.0, 0.5);
-let pu = (p - origin).dot(&u);
-let pv = (p - origin).dot(&v);
-println!("({pu:.3}, {pv:.3})");
+{{#include ../../tests/doc_triangulation.rs:repere_local}}
 ```
 
 > `newell_normal` et `in_plane_basis` ne sont pas exposées en Python. Elles sont utilisées en interne par `triangulate_surface` pour les configurations 3D.
@@ -189,73 +131,19 @@ Les fonctions du module `pyrucast::ops::mesh::triangulation` sont utilisables in
 ### Delaunay pur
 
 ```rust,ignore
-use pyrucast::atoms::Point2;
-use pyrucast::ops::mesh::triangulation::delaunay_2d;
-
-let pts = vec![
-    Point2::new(0.0, 0.0),
-    Point2::new(3.0, 0.0),
-    Point2::new(3.0, 3.0),
-    Point2::new(0.0, 3.0),
-    Point2::new(1.5, 1.5), // point intérieur
-];
-let triangles = delaunay_2d(&pts).unwrap();
-// 4 points = 2 triangles Delaunay ; le 5e point intérieur en ajoute d'autres.
-println!("{} triangles", triangles.len());
+{{#include ../../tests/doc_triangulation.rs:delaunay}}
 ```
 
 ### Delaunay contraint (CDT) avec trous
 
 ```rust,ignore
-use pyrucast::atoms::Point2;
-use pyrucast::ops::mesh::triangulation::triangulate_polygon_with_holes;
-
-// Contour extérieur : carré 4×4.
-let outer = vec![
-    Point2::new(0.0, 0.0),
-    Point2::new(4.0, 0.0),
-    Point2::new(4.0, 4.0),
-    Point2::new(0.0, 4.0),
-];
-// Trou : carré 2×2 centré.
-let hole = vec![
-    Point2::new(1.0, 1.0),
-    Point2::new(3.0, 1.0),
-    Point2::new(3.0, 3.0),
-    Point2::new(1.0, 3.0),
-];
-let triangles = triangulate_polygon_with_holes(&outer, &[hole]).unwrap();
-// Aire = 16 - 4 = 12 ; sans Steiner : 6 triangles bruts.
-println!("{} triangles", triangles.len());
+{{#include ../../tests/doc_triangulation.rs:polygone_troue}}
 ```
 
 ### CDT avec raffinement de Ruppert
 
 ```rust,ignore
-use pyrucast::atoms::Point2;
-use pyrucast::ops::mesh::triangulation::{
-    triangulate_polygon_with_holes_refined, RefinementOptions,
-};
-
-let outer = vec![
-    Point2::new(0.0, 0.0),
-    Point2::new(4.0, 0.0),
-    Point2::new(4.0, 4.0),
-    Point2::new(0.0, 4.0),
-];
-let opts = RefinementOptions {
-    max_edge_length: Some(1.0),
-    min_angle_deg: Some(20.0),
-};
-// Le raffinement insère des points de Steiner : la fonction renvoie donc
-// **les points** (entrée + Steiner) *et* les triangles qui les indexent.
-let (points, triangles) =
-    triangulate_polygon_with_holes_refined(&outer, &[], opts).unwrap();
-println!(
-    "{} triangles après raffinement, {} points",
-    triangles.len(),
-    points.len()
-);
+{{#include ../../tests/doc_triangulation.rs:raffinement}}
 ```
 
 > Ces fonctions renvoient des indices dans le tableau de points fourni en entrée (plus les Steiner éventuels). Elles ne touchent pas à la `Coords` — `triangulate_surface` se charge de la conversion vers les `NodeId`.
