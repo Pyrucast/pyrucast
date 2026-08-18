@@ -61,7 +61,7 @@ DETTE_MIGRATION = {
     "contraintes/embedded.md": 1,
     "contraintes/mpc.md": 1,
     "conventions.md": 7,
-    "coords.md": 8,
+    "coords.md": 4,  # les 4 blocs Rust, phase B4
     "diffusion.md": 2,
     "echanges.md": 1,
     "element-field.md": 2,
@@ -95,7 +95,7 @@ DETTE_MIGRATION = {
     "thermique.md": 3,
     "thermomecanique-pas-a-pas.md": 3,
     "triangulation.md": 6,
-    "visualization.md": 15,
+    "visualization.md": 6,  # les 6 blocs Rust, phase B4
 }
 
 # Symboles cités en prose que l'audit ne doit pas chercher à résoudre.

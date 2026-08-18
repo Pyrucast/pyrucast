@@ -70,8 +70,7 @@ Tout autre extension est rejetée avec une erreur explicite. Le format vectoriel
 Il est fait pour **s'accumuler sur un disque**, pas pour être publié. Sur le web le gain est nul : les serveurs compressent déjà le `.svg` à la volée, si bien qu'un `.svgz` ne change pas un octet transféré — et il rendrait binaires des fichiers que git suit très bien en texte. C'est pourquoi les figures de ce livre restent en `.svg`.
 
 ```python
-mesh.plot(save="piece.svg")  # à versionner, à publier
-mesh.plot(save="piece.svgz")  # à empiler par centaines
+{{#include ../../tests/python/test_doc_visualization.py:formats}}
 ```
 
 Le `.svg` lui-même est déjà allégé à l'écriture : le générateur de SVG répète le style complet sur chaque balise, et pyrucast retire ce que le format sait hériter — un dessin identique au pixel près, pour environ la moitié des octets.
@@ -105,18 +104,7 @@ sm.plot(Some(View::iso()), Some(Path::new("triangle.svg"))).unwrap();
 Côté Python, l'API miroir prend des tuples :
 
 ```python
-import pyrucast
-
-coords = pyrucast.Coords(3)
-a = coords.add_node([0.0, 0.0, 0.0])
-b = coords.add_node([1.0, 0.0, 0.0])
-c = coords.add_node([0.0, 1.0, 0.0])
-
-mesh = pyrucast.Mesh(coords, "TRI3")
-mesh.unit().add_cell([a, b, c])
-
-# (yaw, pitch, scale) ; save=None ouvre la fenêtre interactive.
-mesh.plot(view=(45.0, 35.264, 1.0), save="triangle.svg")
+{{#include ../../tests/python/test_doc_visualization.py:vue}}
 ```
 
 ## Nom de figure / de fenêtre (`title`)
@@ -129,9 +117,7 @@ Toutes les méthodes `plot(...)` — `Mesh`, `SubMesh`, `NodeField`, `ElementFie
 `title=None` (défaut) : aucune légende en bas et titre de fenêtre par défaut (`pyrucast`). Une chaîne vide vaut `None`.
 
 ```python
-mesh.plot(save="piece.svg", title="poutre encastrée")  # légende centrée en bas du SVG
-mesh.plot(save="t.svg", field=t_field, title="température")  # combinable avec field
-mesh.plot(title="ma pièce")  # nomme la fenêtre interactive
+{{#include ../../tests/python/test_doc_visualization.py:titre}}
 ```
 
 > Pour les **courbes** d'`Evolution` / `SubEvolution`, le `title` existant reste la légende en haut du graphe (voir plus bas) ; il n'est pas repris en bas.
@@ -155,9 +141,7 @@ assert_eq!(sm.face_color(), RgbColor::new(220, 60, 60));
 Côté Python :
 
 ```python
-sm = pyrucast.Mesh(coords, "TRI3")[0]  # vue du sous-maillage unique
-sm.face_color = (220, 60, 60)
-assert sm.face_color == (220, 60, 60)
+{{#include ../../tests/python/test_doc_visualization.py:couleur}}
 ```
 
 Quand on appelle `Mesh.plot`, chaque sous-maillage est rendu avec **sa propre** `face_color`, ce qui permet de distinguer visuellement des composants regroupés dans un même maillage (par exemple : peau / cœur / interfaces).
@@ -235,27 +219,7 @@ mesh.plot_with_field(None, Some(std::path::Path::new("flux.svg")),
 Côté Python, `cmap`, `vmin` et `vmax` sont des arguments nommés de `plot` :
 
 ```python
-# Composante par défaut, viridis, échelle auto.
-mesh.plot(save="t.svg", field=t_field)
-
-# Composante "UY", colormap "coolwarm", bornes fixées.
-mesh.plot(
-    save="uy.svg", field=u_field, component="UY", cmap="coolwarm", vmin=-1.0, vmax=1.0
-)
-
-# Plafond seul fixé : le plancher suit le minimum des données.
-mesh.plot(save="t.svg", field=t_field, vmax=100.0)
-
-# Champ aux points de Gauss : strictement le même appel.
-mesh.plot(save="flux.svg", field=flux_field)
-
-# Couleur plate par cellule (comportement historique).
-mesh.plot(save="t_flat.svg", field=t_field, smooth=0)
-
-# Champ seul : l'ElementField reconstruit son maillage ; le NodeField
-# trace un nuage de points (pas de connectivité dans son support).
-flux_field.plot(save="flux_alone.svg")
-t_field.plot(save="t_points.svg")
+{{#include ../../tests/python/test_doc_visualization.py:champ}}
 ```
 
 ### Bouton de sélection dans la fenêtre interactive
@@ -275,16 +239,7 @@ L'objet [`Evolution` / `SubEvolution`](evolution.md) expose `plot(...)`, qui s'a
 - **évolution de champs** → le champ est rendu **comme par `mesh.plot(field=...)`**, pour **une valeur tabulée** à la fois. La géométrie suit la même règle que le tracé d'un champ seul : champ par éléments → reconstruit son maillage via le support EF ; champ aux nœuds → **nuage de points** par défaut, ou surface si on passe `mesh=<maillage>`.
 
 ```python
-import pyrucast as pc
-
-# Courbe scalaire (variable → valeur).
-e = pc.Evolution([(0.0, 10.0), (1.0, 20.0), (2.0, 5.0)])
-e.plot(save="courbe.svg", x_label="temps", y_label="T", title="évolution de T")
-
-# Évolution d'un champ aux nœuds : un NodeField complet par pas de temps.
-ev = pc.Evolution([(0.0, champ_t0), (1.0, champ_t1), (2.0, champ_t2)])
-ev.plot(save="frame.png", frame=2)  # une valeur tabulée (défaut : la dernière)
-ev.plot(save="frame_surf.png", mesh=maillage)  # rendu surfacique sur un maillage fourni
+{{#include ../../tests/python/test_doc_visualization.py:evolution}}
 ```
 
 ### Slider de valeur tabulée (fenêtre interactive)
@@ -345,11 +300,7 @@ mesh.plot_styled(Some(View::iso()), Some(Path::new("fil.svg")), MeshStyle::Wiref
 Côté Python, c'est l'argument booléen `wireframe` de `plot` :
 
 ```python
-mesh.plot(save="solide.svg")  # peau opaque (défaut)
-mesh.plot(save="fil.svg", wireframe=True)  # fil de fer
-
-# Sans objet avec un champ : lève ValueError.
-# mesh.plot(save="x.svg", field=t_field, wireframe=True)
+{{#include ../../tests/python/test_doc_visualization.py:wireframe}}
 ```
 
 ## Axisymétrie : section méridienne ou corps de révolution
@@ -366,15 +317,7 @@ L'option `revolve` balaie cette section autour de l'axe `r = 0` et dessine le so
 Un angle **partiel** ouvre la pièce et dessine la section méridienne — et le champ qui la colore — aux deux extrémités du balayage, comme une coupe.
 
 ```python
-import pyrucast
-
-coords = pyrucast.Coords.axisymmetric()  # (r, z), r ≥ 0
-# … maillage de la section, calcul, champ t_field …
-
-mesh.plot(save="section.svg")  # la section plane (défaut)
-mesh.plot(save="piece.svg", revolve=True)  # le corps de révolution complet
-mesh.plot(save="coupe.svg", revolve=True, revolve_angle=270.0)  # ouvert à 270°
-mesh.plot(save="t3d.svg", field=t_field, revolve=True)  # champ sur le corps
+{{#include ../../tests/python/test_doc_visualization.py:revolve}}
 ```
 
 Côté Rust, c'est le champ `revolve` de la `View`, portant un [`Revolve`] :
@@ -419,17 +362,7 @@ Pour les maillages industriels — ou simplement pour exploiter les filtres de
 d'*export* (`src/ops/export`), pendant « écriture » du lecteur `read_gmsh`.
 
 ```python
-import pyrucast
-
-# Géométrie seule.
-pyrucast.export.export_vtk(mesh, "maillage.vtk")
-
-# Géométrie + champ aux nœuds (POINT_DATA).
-pyrucast.export.export_vtk(mesh, "solution.vtk", field=temperature)
-
-# Géométrie + champ aux points de Gauss (CELL_DATA) : une valeur par
-# cellule = moyenne intra-élément des points de Gauss de la cellule.
-pyrucast.export.export_vtk(mesh, "contraintes.vtk", field=stresses)
+{{#include ../../tests/python/test_doc_visualization.py:vtk}}
 ```
 
 - Chaque sous-maillage est écrit ; les types d'éléments se traduisent un pour

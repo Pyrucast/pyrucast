@@ -37,12 +37,7 @@ assert!(axi.is_axisymmetric());
 ```
 
 ```python
-import pyrucast
-
-c = pyrucast.Coords.axisymmetric()
-assert c.dim == 2 and c.is_axisymmetric
-c.add_node([1.0, 0.0])  # r = 1, z = 0
-c.add_node([-1.0, 0.0])  # erreur : x est un rayon, il doit être ≥ 0
+{{#include ../../tests/python/test_doc_coords.py:axisymetrique}}
 ```
 
 Un rayon négatif est refusé à l'ajout (et au `set_position`) plutôt que de
@@ -129,25 +124,7 @@ coords.write().select(c2).unwrap();
 Python :
 
 ```python
-import pyrucast
-
-c = pyrucast.Coords(dim=2)
-n = c.add_node([0.0, 0.0])
-
-# Créer une deuxième configuration (clone de la configuration active).
-c2 = c.add_config("deformed")
-print(c.names())  # ['default', 'deformed']
-
-# Basculer sur la configuration déformée et modifier les coordonnées.
-c.select(c2)
-n.set_position([0.1, 0.05])
-
-# Les coordonnées lues dépendent de la configuration active.
-c.select(0)
-print(n.position())  # [0.0, 0.0]  — configuration de référence
-c.select(c2)
-print(n.position())  # [0.1, 0.05] — configuration déformée
-print(c.active)  # 1
+{{#include ../../tests/python/test_doc_coords.py:configurations}}
 ```
 
 ## Pourquoi plusieurs configurations dans un `Coords` plutôt que plusieurs `Coords` ?
@@ -203,43 +180,13 @@ coords.write().clear_permutation();
 Python :
 
 ```python
-import pyrucast
-
-c = pyrucast.Coords(dim=2)
-c.add_node([0.0, 0.0])
-c.add_node([1.0, 0.0])
-c.add_node([0.5, 1.0])
-
-# Affecter une permutation manuellement.
-c.set_permutation([2, 0, 1])
-print(c.permutation())  # [2, 0, 1]
-
-# Retour à l'identité (None = identité).
-c.clear_permutation()
-print(c.permutation())  # None
+{{#include ../../tests/python/test_doc_coords.py:permutation}}
 ```
 
 ## API Python
 
 ```python
-import pyrucast
-
-c = pyrucast.Coords(dim=2)
-n = c.add_node([0.0, 0.0])  # n est un pyrucast.Node ; refcount = 1
-m = c.add_node([1.0, 0.0])
-
-print(c)  # Coords: dim=2, configs=1 (active="default"), nodes=2 ...
-n.set_position([0.5, 0.5])
-
-# GC ne touche pas tant qu'au moins un Node Python existe.
-assert c.gc() == 0
-
-# del + collect force le Drop côté Rust et libère le refcount.
-import gc as pygc
-
-del n
-pygc.collect()
-assert c.gc() == 1
+{{#include ../../tests/python/test_doc_coords.py:cycle_de_vie}}
 ```
 
 Méthodes d'inspection utiles : `node_count()` (nœuds vivants), `capacity()`
