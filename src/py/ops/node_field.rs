@@ -221,7 +221,7 @@ pub fn mask(
         let out = crate::ops::node_field::mask(&f.inner, &band, components)?;
         Ok(Py::new(py, PyNodeField { inner: out })?.into_any())
     } else if let Ok(f) = field.extract::<PyRef<PySubNodeField>>() {
-        let out = crate::ops::node_field::mask_sub(&*f.handle.read(), &band, components);
+        let out = crate::ops::node_field::mask_sub(&f.handle.read(), &band, components);
         Ok(Py::new(
             py,
             PySubNodeField {

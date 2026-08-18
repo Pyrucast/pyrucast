@@ -552,7 +552,7 @@ impl PySubNodeField {
             CompareOp::Lt => Band::new(None, None, None, Some(x)),
             CompareOp::Eq | CompareOp::Ne => return Ok(py.NotImplemented()),
         }?;
-        let out = crate::ops::node_field::mask_sub(&*self.handle.read(), &band, None);
+        let out = crate::ops::node_field::mask_sub(&self.handle.read(), &band, None);
         Ok(Py::new(
             py,
             PySubNodeField {

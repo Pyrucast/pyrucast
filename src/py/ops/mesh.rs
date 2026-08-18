@@ -1132,9 +1132,9 @@ pub fn select(
     } else if let Ok(f) = field.extract::<PyRef<PyElementField>>() {
         crate::ops::mesh::select_cells(&f.inner, &band, components)?
     } else if let Ok(f) = field.extract::<PyRef<PySubNodeField>>() {
-        crate::ops::mesh::select_sub_nodes(&*f.handle.read(), &band, components)?
+        crate::ops::mesh::select_sub_nodes(&f.handle.read(), &band, components)?
     } else if let Ok(f) = field.extract::<PyRef<PySubElementField>>() {
-        crate::ops::mesh::select_sub_cells(&*f.handle.read(), &band, components)?
+        crate::ops::mesh::select_sub_cells(&f.handle.read(), &band, components)?
     } else {
         return Err(PyTypeError::new_err(
             "expected a NodeField, SubNodeField, ElementField or SubElementField",

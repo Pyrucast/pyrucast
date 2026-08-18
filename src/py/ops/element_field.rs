@@ -148,7 +148,7 @@ pub fn sub_material_field(
         .iter()
         .map(|(c, v)| (c.as_str(), *v))
         .collect();
-    let sub = crate::ops::element_field::sub_material_field(&*sub_model.handle.read(), &pairs)?;
+    let sub = crate::ops::element_field::sub_material_field(&sub_model.handle.read(), &pairs)?;
     Ok(PySubElementField {
         handle: Handle::new(sub),
     })
@@ -258,7 +258,7 @@ pub fn mask(
         let out = crate::ops::element_field::mask(&f.inner, &band, components)?;
         Ok(Py::new(py, PyElementField { inner: out })?.into_any())
     } else if let Ok(f) = field.extract::<PyRef<PySubElementField>>() {
-        let out = crate::ops::element_field::mask_sub(&*f.handle.read(), &band, components);
+        let out = crate::ops::element_field::mask_sub(&f.handle.read(), &band, components);
         Ok(Py::new(
             py,
             PySubElementField {

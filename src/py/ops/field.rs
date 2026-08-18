@@ -530,7 +530,7 @@ impl PySubNodeField {
         components: Option<Vec<String>>,
     ) -> PyResult<PySubNodeField> {
         let band = crate::atoms::Band::new(ge, gt, le, lt)?;
-        let out = crate::ops::node_field::mask_sub(&*self.handle.read(), &band, components);
+        let out = crate::ops::node_field::mask_sub(&self.handle.read(), &band, components);
         Ok(PySubNodeField {
             handle: Handle::new(out),
         })
@@ -548,7 +548,7 @@ impl PySubNodeField {
     ) -> PyResult<PyMesh> {
         let band = crate::atoms::Band::new(ge, gt, le, lt)?;
         Ok(PyMesh {
-            inner: crate::ops::mesh::select_sub_nodes(&*self.handle.read(), &band, components)?,
+            inner: crate::ops::mesh::select_sub_nodes(&self.handle.read(), &band, components)?,
         })
     }
 
@@ -674,7 +674,7 @@ impl PySubElementField {
         components: Option<Vec<String>>,
     ) -> PyResult<PySubElementField> {
         let band = crate::atoms::Band::new(ge, gt, le, lt)?;
-        let out = crate::ops::element_field::mask_sub(&*self.handle.read(), &band, components);
+        let out = crate::ops::element_field::mask_sub(&self.handle.read(), &band, components);
         Ok(PySubElementField {
             handle: Handle::new(out),
         })
@@ -692,7 +692,7 @@ impl PySubElementField {
     ) -> PyResult<PyMesh> {
         let band = crate::atoms::Band::new(ge, gt, le, lt)?;
         Ok(PyMesh {
-            inner: crate::ops::mesh::select_sub_cells(&*self.handle.read(), &band, components)?,
+            inner: crate::ops::mesh::select_sub_cells(&self.handle.read(), &band, components)?,
         })
     }
 
