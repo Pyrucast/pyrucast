@@ -39,13 +39,7 @@ La caméra est décrite par une structure `View`, située sur une sphère orient
 Préréglages disponibles :
 
 ```rust,ignore
-use pyrucast::viz::View;
-
-let _ = View::front();   // yaw=0, pitch=0      : caméra en +X
-let _ = View::side();    // yaw=90, pitch=0     : caméra en +Y
-let _ = View::top();     // yaw=0, pitch=90     : vue du dessus
-let _ = View::iso();     // yaw=45, pitch≈35.26 : isométrique
-let _ = View::default(); // = iso()
+{{#include ../../tests/doc_visualization.rs:vues}}
 ```
 
 Convention : `yaw = pitch = 0` place la caméra en `+X`, regard vers l'origine, axe `Z` vers le haut. Le repère écran qui en résulte est `(Y, Z)`.
@@ -80,25 +74,7 @@ Dans la fenêtre interactive uniquement, le point de vue courant `view=(yaw, pit
 Exemple Rust :
 
 ```rust,ignore
-use pyrucast::coords::Coords;
-use pyrucast::atoms::ElementType;
-use pyrucast::containers::mesh::SubMesh;
-use pyrucast::atoms::Node;
-use pyrucast::handle::Handle;
-use pyrucast::viz::View;
-use std::path::Path;
-
-let coords = Handle::new(Coords::new(3).unwrap());
-let a = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0]).unwrap();
-let b = Node::create_in(coords.clone(), &[1.0, 0.0, 0.0]).unwrap();
-let c = Node::create_in(coords.clone(), &[0.0, 1.0, 0.0]).unwrap();
-let mut sm = SubMesh::new(coords, ElementType::TRI3);
-sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-
-// Export vectoriel.
-sm.plot(Some(View::iso()), Some(Path::new("triangle.svg"))).unwrap();
-// Fenêtre interactive (feature `viz-interactive`).
-// sm.plot(None, None).unwrap();
+{{#include ../../tests/doc_visualization.rs:export}}
 ```
 
 Côté Python, l'API miroir prend des tuples :
@@ -129,13 +105,7 @@ Chaque `SubMesh` porte une propriété `face_color` (type `RgbColor`, format `(r
 Côté Rust :
 
 ```rust,ignore
-use pyrucast::atoms::RgbColor;
-use pyrucast::atoms::ElementType;
-use pyrucast::containers::mesh::SubMesh;
-
-let mut sm = SubMesh::new(coords, ElementType::TRI3);
-sm.set_face_color(RgbColor::new(220, 60, 60));
-assert_eq!(sm.face_color(), RgbColor::new(220, 60, 60));
+{{#include ../../tests/doc_visualization.rs:couleur}}
 ```
 
 Côté Python :
@@ -192,28 +162,7 @@ Par défaut l'échelle couvre le min/max des valeurs **par cellule**. On peut fi
 Côté Rust, l'argument `scale` (`ColorScale`) regroupe colormap et bornes :
 
 ```rust,ignore
-use pyrucast::containers::node_field::{NodeField, SubNodeField};
-use pyrucast::viz::{Colormap, ColorScale};
-
-// Champ déplacement à 2 composantes "UX" / "UY" sur un POI1. `FieldArg`
-// prend l'**agrégat** : une zone seule se remonte par `NodeField::from_sub`.
-let mut sub = SubNodeField::from_poi1(&poi1_h, vec!["UX".into(), "UY".into()]).unwrap();
-// ... remplissage ...
-let u = NodeField::from_sub(sub);
-
-// Échelle auto, viridis, première composante, rendu interpolé niveau 4.
-use pyrucast::viz::FieldArg;
-mesh.plot_with_field(None, Some(std::path::Path::new("ux.svg")),
-    FieldArg::Node(&u), None, ColorScale::default(), 4).unwrap();
-
-// Composante "UY", colormap coolwarm, bornes fixées à [-1, 1], plat.
-let scale = ColorScale { cmap: Colormap::CoolWarm, vmin: Some(-1.0), vmax: Some(1.0) };
-mesh.plot_with_field(None, Some(std::path::Path::new("uy.svg")),
-    FieldArg::Node(&u), Some("UY"), scale, 0).unwrap();
-
-// Champ aux points de Gauss : même appel, FieldArg::Element.
-mesh.plot_with_field(None, Some(std::path::Path::new("flux.svg")),
-    FieldArg::Element(&flux), None, ColorScale::default(), 4).unwrap();
+{{#include ../../tests/doc_visualization.rs:champ}}
 ```
 
 Côté Python, `cmap`, `vmin` et `vmax` sont des arguments nommés de `plot` :
@@ -288,13 +237,7 @@ Le fil de fer trace chaque arête distincte (les arêtes partagées par plusieur
 Côté Rust, le style est un argument [`MeshStyle`] passé à `plot_styled` :
 
 ```rust,ignore
-use pyrucast::viz::{MeshStyle, View};
-use std::path::Path;
-
-// Peau opaque (équivalent de plot).
-mesh.plot_styled(Some(View::iso()), Some(Path::new("solide.svg")), MeshStyle::Surface).unwrap();
-// Fil de fer : toutes les arêtes.
-mesh.plot_styled(Some(View::iso()), Some(Path::new("fil.svg")), MeshStyle::Wireframe).unwrap();
+{{#include ../../tests/doc_visualization.rs:style}}
 ```
 
 Côté Python, c'est l'argument booléen `wireframe` de `plot` :
@@ -323,15 +266,7 @@ Un angle **partiel** ouvre la pièce et dessine la section méridienne — et le
 Côté Rust, c'est le champ `revolve` de la `View`, portant un [`Revolve`] :
 
 ```rust,ignore
-use pyrucast::viz::{Revolve, View};
-use std::path::Path;
-
-let vue = View { revolve: Some(Revolve::full()), ..View::iso() };
-mesh.plot(Some(vue), Some(Path::new("piece.svg"))).unwrap();
-
-// Balayage partiel, ou finesse angulaire choisie à la main.
-let _ = Revolve::new(270.0).unwrap();              // un secteur par 10°
-let _ = Revolve::with_sectors(360.0, 72).unwrap(); // silhouette plus lisse
+{{#include ../../tests/doc_visualization.rs:revolution}}
 ```
 
 Demander `revolve` sur une géométrie **non** axisymétrique est une erreur : l'abscisse n'y est pas un rayon, le balayage n'aurait aucun sens.

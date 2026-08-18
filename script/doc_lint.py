@@ -46,7 +46,6 @@ LEDGER = ROOT / "script" / "doc_coverage.txt"
 # registre ne peut que décroître** — l'hygiène refuse qu'une page dépasse son
 # compte, et exige qu'une page tombée à zéro soit retirée. Rien ne s'y ajoute.
 DETTE_MIGRATION = {
-    "visualization.md": 6,  # les 6 blocs Rust, phase B4
 }
 
 # Symboles cités en prose que l'audit ne doit pas chercher à résoudre.
