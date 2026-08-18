@@ -521,13 +521,15 @@ Ci-dessous, les règles seules.
    mdbook n'enlève pas l'indentation d'un extrait inclus : ancré dans une
    fonction, il s'afficherait décalé de quatre espaces, ce qu'aucun
    utilisateur n'écrirait. Au niveau module le fichier se lit d'ailleurs dans
-   l'ordre de la page, les variables coulant d'une ancre à la suivante. Deux
-   conséquences : pytest exécute le fichier à la **collecte** — un exemple qui
-   casse est une erreur de collecte, traceback complet et code de retour non
-   nul, d'où `--continue-on-collection-errors` dans `pyproject.toml` — et les
-   **fixtures ne sont pas disponibles**. Un exemple qui en exige une (écrire
-   des fichiers sous un nom court, donc `tmp_path` + `monkeypatch.chdir`)
-   garde l'ancrage en fonction, et l'indentation avec.
+   l'ordre de la page, les variables coulant d'une ancre à la suivante.
+
+   Deux conséquences. pytest exécute le fichier à la **collecte** : un exemple
+   qui casse est une erreur de collecte — traceback complet et code de retour
+   non nul —, d'où `--continue-on-collection-errors` dans `pyproject.toml`. Et
+   les **fixtures ne sont pas disponibles** : un extrait qui écrit des fichiers
+   sous un nom court bascule lui-même dans un dossier temporaire, et **rend le
+   répertoire courant à la fin** du module. Omettre la restitution déplacerait
+   tous les fichiers de test collectés ensuite.
 
    Corollaire : **doctest et bloc du book ne se confondent pas.** Le doctest
    sert le lecteur de la rustdoc — référence d'API, item par item ; le bloc du

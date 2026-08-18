@@ -104,10 +104,13 @@ Trois conséquences, toutes mesurées :
 - ces fichiers ne comptent plus de « tests » au sens de pytest. C'est un
   changement d'affichage, pas de couverture : le code s'exécute et les
   assertions mordent ;
-- les **fixtures ne sont pas disponibles**. Un exemple qui en exige une garde
-  l'ancrage en fonction, et l'indentation avec. Un seul cas aujourd'hui :
-  `visualization.md`, dont les extraits écrivent des fichiers sous des noms
-  courts et ont donc besoin de `tmp_path` + `monkeypatch.chdir`.
+- les **fixtures ne sont pas disponibles**. Ce que `tmp_path` +
+  `monkeypatch.chdir` donneraient — écrire des fichiers sous des noms courts
+  sans polluer le dépôt — s'obtient en trois lignes au niveau module :
+  `tempfile.TemporaryDirectory()`, un `os.chdir` en tête, et surtout un
+  `os.chdir` de retour **en fin de fichier**. Omettre la restitution
+  déplacerait tous les fichiers de test collectés ensuite. C'est le procédé de
+  `sauvegarde.md`, `installation.md` et `visualization.md`.
 
 ### Doctest et bloc du book ne se confondent pas
 
