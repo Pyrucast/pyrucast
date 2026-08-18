@@ -71,7 +71,7 @@ que le sous-modèle connaît déjà. Le helper la transforme en champ de
 chargement, à fusionner avec `|` :
 
 ```python
-rhs = traction | model.contact_gaps()
+{{#include ../../../tests/python/test_doc_contraintes.py:contact_gaps}}
 ```
 
 L'omettre revient à traiter toutes les paires comme **initialement en

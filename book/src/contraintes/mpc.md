@@ -87,45 +87,7 @@ Sur la barre 1-D `-u'' = 0`, un Dirichlet `T(0) = 0` et une MPC à deux termes
 `1·T(1) − 1·T(0) = 1` imposent `T(1) = 1`, d'où la solution linéaire `u(x) = x` :
 
 ```python
-import pyrucast
-
-c = pyrucast.Coords(dim=1)
-nodes = [c.add_node([i / 4.0]) for i in range(5)]
-mesh = pyrucast.Mesh(c, "SEG2")
-for i in range(4):
-    mesh.unit().add_cell([nodes[i], nodes[i + 1]])
-fes = pyrucast.FiniteElementSpace(mesh)
-
-base = pyrucast.Model.heat_conduction(fes)
-dual = base.dual_of("T")  # "q"
-
-# Dirichlet T(0) = 0.
-imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
-mult0 = pyrucast.mesh.barycenter(imposed0)
-dirichlet = pyrucast.Model.dirichlet("T", dual, imposed0, mult0)
-
-# MPC 1·T(dernier) − 1·T(0) = 1.
-mesh_last = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
-mesh_first = pyrucast.mesh.poi1_from_nodes([nodes[0]])
-mult_mpc = pyrucast.mesh.barycenter(mesh_last)
-mpc = pyrucast.Model.mpc(
-    [(mesh_last, "T", dual, 1.0), (mesh_first, "T", dual, -1.0)],
-    mult_mpc,
-)
-
-model = base | dirichlet | mpc
-materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
-
-# Chargement : valeur imposée de Dirichlet + second membre g de la MPC. Le
-# helper `constraint_rhs` désigne chaque relation par un nœud (nœud contraint
-# pour Dirichlet, nœud-terme pour la MPC) et retrouve seul le nœud-multiplicateur
-# et la composante (`imposed_T`, `mpc_rhs`). On fusionne les deux avec `|`.
-rhs = dirichlet.constraint_rhs([(nodes[0], 0.0)]) | mpc.constraint_rhs(
-    [(nodes[-1], 1.0)]
-)
-
-solution = pyrucast.solver.solve(pyrucast.matrix.stiffness(model, materials), rhs)
-assert abs(solution.value(nodes[2], "T") - 0.5) < 1e-10
+{{#include ../../../tests/python/test_doc_contraintes.py:mpc_complet}}
 ```
 
 L'exemple complet est dans `examples/mpc_periodicite.py`.

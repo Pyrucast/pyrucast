@@ -85,48 +85,7 @@ l'intérieur), et un nœud immergé au cœur : sa température résolue **égale
 l'interpolation de l'hôte.
 
 ```python
-import pyrucast
-
-corners = [
-    [0, 0, 0],
-    [1, 0, 0],
-    [1, 1, 0],
-    [0, 1, 0],
-    [0, 0, 1],
-    [1, 0, 1],
-    [1, 1, 1],
-    [0, 1, 1],
-]
-field = lambda c: 1.0 + 2.0 * c[0] + 3.0 * c[1] + 4.0 * c[2]
-
-c = pyrucast.Coords(dim=3)
-corner_nodes = [c.add_node(x) for x in corners]
-
-host = pyrucast.Mesh(c, "HEX8")
-host.unit().add_cell(corner_nodes)
-fes = pyrucast.FiniteElementSpace(host)
-base = pyrucast.Model.heat_conduction(fes)
-
-# Coins fixés au champ linéaire (Dirichlet).
-corner_mesh = pyrucast.mesh.poi1_from_nodes(corner_nodes)
-corner_mult = pyrucast.mesh.barycenter(corner_mesh)
-dirichlet = pyrucast.Model.dirichlet("T", "q", corner_mesh, corner_mult)
-
-# Nœud immergé, lié à l'hôte.
-p = c.add_node([0.3, 0.6, 0.2])
-bar = pyrucast.mesh.poi1_from_nodes([p])
-embedded = pyrucast.Model.embedded(bar, host, [("T", "q")])
-emb_mult = embedded.multiplier_mesh().node(0, 0, 0)
-
-model = base | dirichlet | embedded
-materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
-
-# Chargement : valeur du champ à chaque coin, g = 0 (tie) au nœud immergé.
-rhs = dirichlet.constraint_rhs([(n, field(x)) for n, x in zip(corner_nodes, corners)])
-rhs = rhs | embedded.constraint_rhs([(p, 0.0)])
-
-solution = pyrucast.solver.solve(pyrucast.matrix.stiffness(model, materials), rhs)
-assert abs(solution.value(p, "T") - field([0.3, 0.6, 0.2])) < 1e-9  # 4.2
+{{#include ../../../tests/python/test_doc_contraintes.py:embedded_complet}}
 ```
 
 L'exemple complet est dans `examples/barre_baignee.py`. La variante

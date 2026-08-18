@@ -181,3 +181,147 @@ solution = pyrucast.solver.solve_unilateral(
 )
 # ANCHOR_END: contact
 assert solution.node_count() > 0
+
+
+# ── Le second membre géométrique du contact ─────────────────────────────────
+
+traction = pyrucast.node_field.flux(edge_fes[0], -S, "f_y")
+
+# ANCHOR: contact_gaps
+rhs = traction | model.contact_gaps()
+# ANCHOR_END: contact_gaps
+
+assert rhs.node_count() > 0
+
+
+# ── Dirichlet : l'exemple complet ───────────────────────────────────────────
+
+# ANCHOR: dirichlet_complet
+import pyrucast
+
+# 1) Maillage + FE space
+c = pyrucast.Coords(dim=1)
+nodes = [c.add_node([i / 4.0]) for i in range(5)]
+mesh = pyrucast.Mesh(c, "SEG2")
+for i in range(4):
+    mesh.unit().add_cell([nodes[i], nodes[i + 1]])
+fes = pyrucast.FiniteElementSpace(mesh)
+
+# 2) Supports de multiplicateurs : barycenter colocalise des nœuds neufs.
+imposed_left = pyrucast.mesh.poi1_from_nodes([nodes[0]])
+imposed_right = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
+mult_mesh_left = pyrucast.mesh.barycenter(imposed_left)
+mult_mesh_right = pyrucast.mesh.barycenter(imposed_right)
+left = pyrucast.Model.dirichlet("T", "q", imposed_left, mult_mesh_left)
+right = pyrucast.Model.dirichlet("T", "q", imposed_right, mult_mesh_right)
+mult_left = mult_mesh_left.node(0, 0, 0)
+mult_right = mult_mesh_right.node(0, 0, 0)
+
+# 3) Modèle complet : conduction + les deux Dirichlet.
+model = pyrucast.Model.heat_conduction(fes) | left | right
+materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
+
+# 4) Chargement : le helper `constraint_rhs` désigne chaque contrainte par son
+#    nœud contraint et écrit u_d au slot imposed_T du nœud-multiplicateur. On
+#    fusionne les deux avec `|`.
+rhs = left.constraint_rhs([(nodes[0], 0.0)]) | right.constraint_rhs([(nodes[-1], 1.0)])
+
+# 5) Assemblage + résolution.
+K = pyrucast.matrix.stiffness(model, materials)
+solution = pyrucast.solver.solve(K, rhs)
+assert abs(solution.value(nodes[2], "T") - 0.5) < 1e-10  # T au milieu
+assert abs(solution.value(mult_left, "lambda_T") - 1.0) < 1e-10  # flux à gauche
+# ANCHOR_END: dirichlet_complet
+
+
+# ── MPC : l'exemple complet ─────────────────────────────────────────────────
+
+# ANCHOR: mpc_complet
+import pyrucast
+
+c = pyrucast.Coords(dim=1)
+nodes = [c.add_node([i / 4.0]) for i in range(5)]
+mesh = pyrucast.Mesh(c, "SEG2")
+for i in range(4):
+    mesh.unit().add_cell([nodes[i], nodes[i + 1]])
+fes = pyrucast.FiniteElementSpace(mesh)
+
+base = pyrucast.Model.heat_conduction(fes)
+dual = base.dual_of("T")  # "q"
+
+# Dirichlet T(0) = 0.
+imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
+mult0 = pyrucast.mesh.barycenter(imposed0)
+dirichlet = pyrucast.Model.dirichlet("T", dual, imposed0, mult0)
+
+# MPC 1·T(dernier) − 1·T(0) = 1.
+mesh_last = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
+mesh_first = pyrucast.mesh.poi1_from_nodes([nodes[0]])
+mult_mpc = pyrucast.mesh.barycenter(mesh_last)
+mpc = pyrucast.Model.mpc(
+    [(mesh_last, "T", dual, 1.0), (mesh_first, "T", dual, -1.0)],
+    mult_mpc,
+)
+
+model = base | dirichlet | mpc
+materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
+
+# Chargement : valeur imposée de Dirichlet + second membre g de la MPC. Le
+# helper `constraint_rhs` désigne chaque relation par un nœud (nœud contraint
+# pour Dirichlet, nœud-terme pour la MPC) et retrouve seul le nœud-multiplicateur
+# et la composante (`imposed_T`, `mpc_rhs`). On fusionne les deux avec `|`.
+rhs = dirichlet.constraint_rhs([(nodes[0], 0.0)]) | mpc.constraint_rhs(
+    [(nodes[-1], 1.0)]
+)
+
+solution = pyrucast.solver.solve(pyrucast.matrix.stiffness(model, materials), rhs)
+assert abs(solution.value(nodes[2], "T") - 0.5) < 1e-10
+# ANCHOR_END: mpc_complet
+
+
+# ── Baignage : l'exemple complet ────────────────────────────────────────────
+
+# ANCHOR: embedded_complet
+import pyrucast
+
+corners = [
+    [0, 0, 0],
+    [1, 0, 0],
+    [1, 1, 0],
+    [0, 1, 0],
+    [0, 0, 1],
+    [1, 0, 1],
+    [1, 1, 1],
+    [0, 1, 1],
+]
+field = lambda c: 1.0 + 2.0 * c[0] + 3.0 * c[1] + 4.0 * c[2]
+
+c = pyrucast.Coords(dim=3)
+corner_nodes = [c.add_node(x) for x in corners]
+
+host = pyrucast.Mesh(c, "HEX8")
+host.unit().add_cell(corner_nodes)
+fes = pyrucast.FiniteElementSpace(host)
+base = pyrucast.Model.heat_conduction(fes)
+
+# Coins fixés au champ linéaire (Dirichlet).
+corner_mesh = pyrucast.mesh.poi1_from_nodes(corner_nodes)
+corner_mult = pyrucast.mesh.barycenter(corner_mesh)
+dirichlet = pyrucast.Model.dirichlet("T", "q", corner_mesh, corner_mult)
+
+# Nœud immergé, lié à l'hôte.
+p = c.add_node([0.3, 0.6, 0.2])
+bar = pyrucast.mesh.poi1_from_nodes([p])
+embedded = pyrucast.Model.embedded(bar, host, [("T", "q")])
+emb_mult = embedded.multiplier_mesh().node(0, 0, 0)
+
+model = base | dirichlet | embedded
+materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
+
+# Chargement : valeur du champ à chaque coin, g = 0 (tie) au nœud immergé.
+rhs = dirichlet.constraint_rhs([(n, field(x)) for n, x in zip(corner_nodes, corners)])
+rhs = rhs | embedded.constraint_rhs([(p, 0.0)])
+
+solution = pyrucast.solver.solve(pyrucast.matrix.stiffness(model, materials), rhs)
+assert abs(solution.value(p, "T") - field([0.3, 0.6, 0.2])) < 1e-9  # 4.2
+# ANCHOR_END: embedded_complet

@@ -54,10 +54,6 @@ PAGES_ESQUISSES = {
 # compte, et exige qu'une page tombée à zéro soit retirée. Rien ne s'y ajoute.
 DETTE_MIGRATION = {
     "compilation.md": 1,
-    "contraintes/contact.md": 1,
-    "contraintes/dirichlet.md": 1,
-    "contraintes/embedded.md": 1,
-    "contraintes/mpc.md": 1,
     "conventions.md": 3,  # les 3 blocs Rust, phase B4
     "coords.md": 4,  # les 4 blocs Rust, phase B4
     "element-field.md": 1,
