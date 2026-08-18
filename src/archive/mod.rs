@@ -216,6 +216,12 @@ impl std::ops::Deref for Objects {
 }
 
 impl Objects {
+    /// Hand over the map itself, to walk every entry once — what the Python
+    /// binding does to fill its dictionary.
+    pub fn into_inner(self) -> BTreeMap<String, Root> {
+        self.0
+    }
+
     fn wrong(&self, key: &str, expected: &str) -> PyrucastError {
         match self.0.get(key) {
             Some(r) => PyrucastError::Message(format!(

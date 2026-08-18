@@ -58,6 +58,7 @@ __all__ = [
     "interp_to_gauss",
     "invert",
     "line",
+    "load",
     "log",
     "log10",
     "lump",
@@ -92,6 +93,7 @@ __all__ = [
     "restrict_like",
     "revolve",
     "rotate",
+    "save",
     "select",
     "set_positions",
     "sin",
@@ -3482,6 +3484,14 @@ def line(a: Node, b: Node, n_elems: builtins.int, element_type: builtins.str = '
     `element_type` is `"SEG2"` (default) or `"SEG3"`.
     """
 
+def load(path: builtins.str) -> dict:
+    r"""
+    Read back what [`save`] wrote, as a dictionary.
+    
+    The objects are **new**: nothing already alive in your session is touched,
+    they are simply added alongside.
+    """
+
 def log(field: typing.Any) -> typing.Any:
     r"""
     Element-wise natural logarithm of a field (`-inf`/`nan` for ≤ 0).
@@ -3902,6 +3912,24 @@ def rotate(mesh: Mesh, angle: builtins.float, center: typing.Sequence[builtins.f
     In 2-D, `center` is a point and `axis` is ignored. In 3-D, the rotation is
     about the line through `center` directed by `axis` (right-handed); `axis`
     is required.
+    """
+
+def save(path: builtins.str, objects: dict) -> None:
+    r"""
+    Write `objects` and everything they need to `path`.
+    
+    The keys are yours — a space, an accent, a unit are all fine. Values may be
+    any pyrucast object, or a `bool` / `int` / `float` / `str` / homogeneous
+    list of those.
+    
+    Objects shared by several entries are written **once**: two fields on one
+    support come back on one support, not on two copies of it. Saving the same
+    objects twice produces the same bytes.
+    
+    Caches are never written — the assembled matrix, the factorization, the
+    colourings — because they can be rebuilt. Reference counts are not written
+    either: they are recounted at load, from the objects the file holds. A
+    `Node` you are holding is *not* archived.
     """
 
 def select(field: typing.Any, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Mesh:

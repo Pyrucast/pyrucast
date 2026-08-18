@@ -5,6 +5,7 @@
 //! aim is to keep the container modules focused on Rust data + algorithms
 //! and concentrate the FFI surface in one place.
 
+pub mod archive;
 pub mod cell;
 pub mod coords;
 pub mod element;

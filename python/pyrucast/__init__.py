@@ -13,6 +13,8 @@ Package *mixed Rust/Python*. L'extension compilée est le sous-module privé
   sont rangés par activité : `pyrucast.measure.integral`,
   `pyrucast.export.export_vtk`. `pyrucast.solver.solve` est l'exception
   unique et assumée — il produit un champ nodal mais se cherche par son nom ;
+- `pyrucast.save` / `pyrucast.load` restent au top-level : ils ne produisent
+  aucun conteneur déterminé, mais un dictionnaire de ce qu'on leur a donné ;
 - la couche Python pure de plus haut niveau vit dans ses propres sous-modules
   (`pyrucast.thermomechanics`).
 """
@@ -37,6 +39,12 @@ from ._pyrucast import (
     SubMesh as SubMesh,
     SubModel as SubModel,
     SubNodeField as SubNodeField,
+)
+
+# ── Sauvegarde et relecture d'un graphe d'objets ────────────────────────────
+from ._pyrucast import (
+    load as load,
+    save as save,
 )
 
 from ._pyrucast import __doc__, __version__  # noqa: F401
@@ -77,6 +85,9 @@ __all__ = [
     "SubMesh",
     "SubModel",
     "SubNodeField",
+    # sauvegarde / relecture
+    "load",
+    "save",
     # sous-modules de verbes
     "coords",
     "element_field",

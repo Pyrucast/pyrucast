@@ -74,6 +74,8 @@ pyo3_stub_gen::define_stub_info_gatherer!(stub_info);
 #[pymodule]
 fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", VERSION)?;
+    m.add_function(wrap_pyfunction!(py::archive::save, m)?)?;
+    m.add_function(wrap_pyfunction!(py::archive::load, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::solver::solve, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::solver::solve_eliminate, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::solver::solve_unilateral, m)?)?;
