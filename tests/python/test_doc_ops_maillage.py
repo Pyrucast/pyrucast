@@ -11,6 +11,9 @@ traceback complet et au code de retour non nul.
 """
 
 import math
+import os
+import tempfile
+import textwrap
 
 import pyrucast
 
@@ -600,3 +603,146 @@ if solide.element_types() == ["TET4", "POI1"]:
 # ANCHOR_END: surface_nodes_compte
 
 assert solide.cell_count() > 0
+
+
+# ── Pavage quadrangulaire, puis extrusion en hexaèdres ──────────────────────
+
+
+def _contour_plaque_trouee(h=0.05):
+    """Contour extérieur CCW + cercle-trou CW, chaque boucle à nombre pair de
+    segments — condition pour que `all_quad` puisse aboutir."""
+    # `Coords` 3-D dès le départ : l'extrusion vers +z du bloc ci-dessous
+    # exige une direction à trois composantes, donc des nœuds à trois.
+    c = pyrucast.Coords(3)
+    coins = [
+        c.add_node(list(p) + [0.0])
+        for p in [(0.0, 0.0), (0.4, 0.0), (0.4, 0.4), (0.0, 0.4)]
+    ]
+    exterieur = None
+    for i in range(4):
+        seg = pyrucast.mesh.line(coins[i], coins[(i + 1) % 4], 8)
+        exterieur = seg if exterieur is None else exterieur | seg
+    centre = c.add_node([0.2, 0.2, 0.0])
+    trou = pyrucast.mesh.invert(pyrucast.mesh.circle(centre, [0.0, 0.0, 1.0], 0.08, 12))
+    # Chaque boucle est consolidée **séparément** : les fondre toutes les deux
+    # en un seul sous-maillage produirait un nœud répété, et `pave_surface`
+    # exige que chaque sous-maillage de bord soit une boucle simple.
+    return pyrucast.mesh.consolidate(exterieur) | pyrucast.mesh.consolidate(trou)
+
+
+contour = _contour_plaque_trouee()
+
+# ANCHOR: pave_surface
+import pyrucast as pc
+
+# … contour extérieur CCW et cercle-trou CW, consolidés en une boucle chacun.
+# Chaque boucle du contour a un nombre pair de segments, donc all_quad passe.
+plaque = pc.mesh.pave_surface(contour, "QUA4", size=0.05, all_quad=True)
+print(plaque.element_types())  # ['QUA4']
+
+# Le solide prismatique vient alors gratuitement, et en hexaèdres purs.
+volume = pc.mesh.extrude(plaque, [0, 0, 0.02], 2)
+print(volume.element_types())  # ['HEX8']
+# ANCHOR_END: pave_surface
+
+assert plaque.element_types() == ["QUA4"]
+assert volume.element_types() == ["HEX8"]
+
+
+# ── Couche limite hexaédrique sur un cœur tétraédrique ──────────────────────
+
+
+def _boite_hex(n=3):
+    """La peau d'une boîte n³ d'hexaèdres : coque QUA4 fermée, normales sortantes."""
+    coords = pyrucast.Coords(3)
+    a = coords.add_node([0.0, 0.0, 0.0])
+    b = coords.add_node([1.0, 0.0, 0.0])
+    cc = coords.add_node([1.0, 0.0, 1.0])
+    d = coords.add_node([0.0, 0.0, 1.0])
+    ring = None
+    for p, q in ((a, d), (d, cc), (cc, b), (b, a)):
+        seg = pyrucast.mesh.line(p, q, n)
+        ring = seg if ring is None else ring | seg
+    face = pyrucast.mesh.pave_surface(
+        pyrucast.mesh.consolidate(ring), "QUA4", all_quad=True
+    )
+    return pyrucast.mesh.extrude(face, [0.0, 1.0, 0.0], n)
+
+
+solide = _boite_hex()
+
+# ANCHOR: pave_volume
+import pyrucast as pc
+
+peau = pc.mesh.skin(solide)  # QUA4, normales sortantes
+maille = pc.mesh.pave_volume(peau, layers=1, thickness=0.15, size=0.4)
+print(dict(zip(maille.element_types(), maille.cell_counts())))
+# {'HEX8': 54, 'PYRA5': 54, 'TET4': 408}
+# ANCHOR_END: pave_volume
+
+assert dict(zip(maille.element_types(), maille.cell_counts()))["HEX8"] == 54
+
+
+# ── Tétraédriser une peau donnée ────────────────────────────────────────────
+
+solide_penta6 = _solide_penta6()
+
+# ANCHOR: triangulate_volume_taille
+peau = pyrucast.mesh.convert(pyrucast.mesh.skin(solide_penta6), "TRI3")
+volume = pyrucast.mesh.triangulate_volume(peau, size=0.3)
+# ANCHOR_END: triangulate_volume_taille
+
+assert volume.element_types()[0] == "TET4"
+
+
+# ── Lecture d'un fichier gmsh ───────────────────────────────────────────────
+
+# Le fichier de l'exemple est écrit dans un dossier jetable, et le module y
+# bascule le temps de l'extrait : celui-ci garde donc le nom court `piece.msh`
+# qu'un utilisateur écrirait. Le répertoire courant est rendu ensuite.
+_MSH = textwrap.dedent(
+    """\
+    $MeshFormat
+    2.2 0 8
+    $EndMeshFormat
+    $PhysicalNames
+    2
+    1 1 "bottom"
+    2 2 "plate"
+    $EndPhysicalNames
+    $Nodes
+    4
+    1 0 0 0
+    2 1 0 0
+    3 1 1 0
+    4 0 1 0
+    $EndNodes
+    $Elements
+    3
+    1 1 2 1 1 1 2
+    2 2 2 2 2 1 2 3
+    3 2 2 2 2 1 3 4
+    $EndElements
+    """
+)
+_TMP = tempfile.TemporaryDirectory()
+_CWD = os.getcwd()
+os.chdir(_TMP.name)
+open("piece.msh", "w").write(_MSH)
+
+# ANCHOR: read_gmsh
+import pyrucast
+
+coords = pyrucast.Coords(dim=2)
+regions = pyrucast.mesh.read_gmsh(coords, "piece.msh")
+# {'plate': Mesh<…>, 'bottom': Mesh<…>, …}  — ordre du fichier préservé
+
+plate = regions["plate"]
+print(plate.element_types())  # p.ex. ['TRI3']
+print(plate.cell_count())
+# ANCHOR_END: read_gmsh
+
+assert plate.element_types() == ["TRI3"]
+assert plate.cell_count() == 2
+
+os.chdir(_CWD)

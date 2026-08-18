@@ -598,17 +598,7 @@ triangle.
 ### Exemple Python
 
 ```python
-import pyrucast as pc
-
-coords = pc.Coords(2)
-# … contour extérieur CCW et cercle-trou CW, consolidés en une boucle chacun.
-# Chaque boucle du contour a un nombre pair de segments, donc all_quad passe.
-plaque = pc.mesh.pave_surface(contour, "QUA4", size=0.002, all_quad=True)
-print(plaque.element_types())  # ['QUA4']
-
-# Le solide prismatique vient alors gratuitement, et en hexaèdres purs.
-volume = pc.mesh.extrude(plaque, [0, 0.02, 0], 2)
-print(volume.element_types())  # ['HEX8']
+{{#include ../../../tests/python/test_doc_ops_maillage.py:pave_surface}}
 ```
 
 ### Interruption
@@ -1269,12 +1259,7 @@ chacun présent seulement s'il n'est pas vide.
 ### Exemple Python
 
 ```python
-import pyrucast as pc
-
-peau = pc.mesh.skin(solide)  # QUA4, normales sortantes
-maille = pc.mesh.pave_volume(peau, layers=1, thickness=0.15, size=0.4)
-print(dict(zip(maille.element_types(), maille.cell_counts())))
-# {'HEX8': 54, 'PYRA5': 54, 'TET4': 408}
+{{#include ../../../tests/python/test_doc_ops_maillage.py:pave_volume}}
 ```
 
 ### Pièges
@@ -1368,9 +1353,7 @@ surface fermée dont les normales pointent vers le trou — elle se soustrait
 d'elle-même, sans argument dédié.
 
 ```python
-peau = pyrucast.mesh.convert(pyrucast.mesh.skin(solide_penta6), "TRI3")
-peau = pyrucast.mesh.invert(peau)  # voir « pièges », plus bas
-volume = pyrucast.mesh.triangulate_volume(peau, size=0.01)
+{{#include ../../../tests/python/test_doc_ops_maillage.py:triangulate_volume_taille}}
 ```
 
 L'enveloppe est **respectée exactement** : ses nœuds sont réutilisés tels
@@ -2087,15 +2070,7 @@ laquelle lire (il garde ainsi la main sur les nœuds) ; le résultat est un
 `dict` Python qui associe à **chaque groupe physique** son `Mesh` :
 
 ```python
-import pyrucast
-
-coords = pyrucast.Coords(dim=2)
-regions = pyrucast.mesh.read_gmsh(coords, "piece.msh")
-# {'plate': Mesh<…>, 'bottom': Mesh<…>, …}  — ordre du fichier préservé
-
-plate = regions["plate"]
-print(plate.element_types())  # p.ex. ['TRI3']
-print(plate.cell_count())
+{{#include ../../../tests/python/test_doc_ops_maillage.py:read_gmsh}}
 ```
 
 ### Groupes, types et `Coords` partagée
