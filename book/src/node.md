@@ -21,16 +21,7 @@ propre `incref`) référence un `NodeId`, ce nœud est protégé du ramasse-miet
 dans [Coordonnées](coords.md).
 
 ```rust,ignore
-use pyrucast::atoms::Node;
-use pyrucast::coords::Coords;
-use pyrucast::handle::Handle;
-
-let coords = Handle::new(Coords::new(2).unwrap());
-let n = Node::create_in(coords.clone(), &[1.0, 2.0]).unwrap();
-let m = n.clone();             // refcount = 2
-drop(n);                       // refcount = 1
-drop(m);                       // refcount = 0
-coords.write().gc();  // collecte
+{{#include ../../tests/doc_conteneurs.rs:noeud}}
 ```
 
 Le code interne peut toujours manipuler directement les `NodeId` sans passer

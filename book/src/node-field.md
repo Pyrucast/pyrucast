@@ -87,37 +87,7 @@ zone (`SubNodeField`) sur `+`/`*`/… Le nommé `merge(a, b)` ≡ `a | b`.
 ## API Rust
 
 ```rust,ignore
-use pyrucast::aggregate::Aggregate;
-use pyrucast::atoms::{ElementType, Node};
-use pyrucast::coords::Coords;
-use pyrucast::containers::mesh::{Mesh, SubMesh};
-use pyrucast::containers::node_field::NodeField;
-use pyrucast::handle::Handle;
-
-let coords = Handle::new(Coords::new(2).unwrap());
-let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
-let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
-
-// Support : SubMesh POI1 contenant a et b.
-let sm = {
-    let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
-    sm.add_cell(&[a.id()]).unwrap();
-    sm.add_cell(&[b.id()]).unwrap();
-    Handle::new(sm)
-};
-
-// Champ de déplacement 2D mono-zone : composantes UX, UY.
-let u = NodeField::from_submesh(&sm, vec!["UX".into(), "UY".into()]).unwrap();
-
-// Écriture : via la zone. Lecture : via l'agrégat (ou la zone).
-write(&u.get(0).unwrap()).unwrap().set_value(a.id(), "UX", 1.5).unwrap();
-assert_eq!(u.value(a.id(), "UX").unwrap(), 1.5);
-assert_eq!(u.value(b.id(), "UX").unwrap(), 0.0);   // valeur par défaut
-
-// Depuis un maillage multi-zones : un SubNodeField par submesh.
-let field = NodeField::new(&mesh, vec!["T".into()]).unwrap();
-assert_eq!(field.len(), mesh.len());
-field.check().unwrap();   // zones cohérentes aux interfaces
+{{#include ../../tests/doc_conteneurs.rs:champ_nodal}}
 ```
 
 ## API Python

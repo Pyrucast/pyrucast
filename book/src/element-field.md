@@ -102,42 +102,7 @@ protégés par le `SubMesh` du sous-espace.
 ## API Rust
 
 ```rust,ignore
-use pyrucast::aggregate::Aggregate;
-use pyrucast::containers::element_field::ElementField;
-use pyrucast::containers::field::{Field, SubField};
-use pyrucast::containers::finite_element_space::FiniteElementSpace;
-use pyrucast::atoms::{ElementType, Node};
-use pyrucast::coords::Coords;
-use pyrucast::containers::mesh::{Mesh, SubMesh};
-use pyrucast::handle::Handle;
-
-let coords = Handle::new(Coords::new(2).unwrap());
-let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
-let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
-let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
-let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
-mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-
-// Élasticité linéaire 2-D : deux propriétés matériau, une zone (un sous-espace).
-let mat = ElementField::new(&fes, vec!["E".into(), "nu".into()]).unwrap();
-{
-    let mut z = write(&mat.get(0).unwrap()).unwrap();   // la zone (SubElementField)
-    z.set_uniform("E", 210e9).unwrap();                 // module d'Young constant
-    z.set_uniform("nu", 0.3).unwrap();                  // Poisson constant
-    assert_eq!(z.value(0, 0, "E").unwrap(), 210e9);
-}
-
-// Composantes par sous-espace (multi-matériau) :
-let mat2 = ElementField::with(
-    &fes,
-    &[vec!["E".into(), "nu".into()]],   // une liste par sous-espace
-).unwrap();
-
-// Statistiques et arithmétique au niveau agrégat.
-assert_eq!(Field::max(&mat, "E").unwrap(), 210e9);
-let scaled = &mat * 1.1;       // nouveau champ (référence : préserve `mat`)
-mat.mul_to_component("E", 0.95).unwrap();   // en place, seulement "E"
+{{#include ../../tests/doc_conteneurs.rs:champ_gauss}}
 ```
 
 ## API Python

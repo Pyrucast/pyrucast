@@ -91,17 +91,7 @@ La distinction n'est pas de la pudeur. Un format d'échange comme HDF5 apporte l
 ## Côté Rust
 
 ```rust,ignore
-use pyrucast::archive;
-
-archive::save("etude.pyr", &[
-    ("maillage fin", &mesh),
-    ("T (°C)",       &temperature),
-    ("pas de temps", &0.05_f64),
-])?;
-
-let mut objets = archive::load("etude.pyr")?;
-let mesh2 = objets.mesh("maillage fin")?;      // erreur nommant clef, type attendu, type trouvé
-let dt    = objets.float("pas de temps")?;
+{{#include ../../tests/doc_conteneurs.rs:archive}}
 ```
 
 À l'écriture les types sont connus du compilateur, une tranche de paires suffit. À la relecture ils ne le sont pas : `load` rend une table nommée, dont on tire chaque objet avec son type attendu.

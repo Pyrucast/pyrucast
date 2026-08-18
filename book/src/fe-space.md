@@ -445,63 +445,19 @@ Le déterminant du Jacobien n'est **pas** vérifié à la construction : un él�
 Constructeur principal — Lagrange-1 partout, quadrature de Gauss par défaut :
 
 ```rust,ignore
-use pyrucast::aggregate::Aggregate;   // apporte `get`
-use pyrucast::coords::Coords;
-use pyrucast::atoms::ElementType;
-use pyrucast::containers::finite_element_space::FiniteElementSpace;
-use pyrucast::containers::mesh::{Mesh, SubMesh};
-use pyrucast::atoms::Node;
-use pyrucast::handle::Handle;
-
-let coords = Handle::new(Coords::new(2).unwrap());
-let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
-let b = Node::create_in(coords.clone(), &[2.0, 0.0]).unwrap();
-let c = Node::create_in(coords.clone(), &[0.0, 2.0]).unwrap();
-
-let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
-mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-
-let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-let sub = fes.get(0).unwrap();
-let s = sub.read();
-assert_eq!(s.gauss_count(), 3);
-// Le triangle (0,0), (2,0), (0,2) a |J| = 4 partout :
-// mapping affine, det(J) = 4 = 2 × aire physique du triangle (1/2 × 2 × 2).
-for g in 0..s.gauss_count() {
-    let dj = s.det_jacobian(0, g).unwrap();
-    assert!((dj - 4.0).abs() < 1e-12);
-}
+{{#include ../../tests/doc_fespace.rs:constructeur}}
 ```
 
 Constructeur explicite — utile pour mélanger les interpolations / quadratures par sous-maillage :
 
 ```rust,ignore
-use pyrucast::atoms::Interpolation;
-use pyrucast::atoms::QuadratureRule;
-
-let fes = FiniteElementSpace::with(
-    &mesh,
-    &[
-        (Interpolation::Lagrange1, QuadratureRule::Gauss),
-        (Interpolation::Lagrange1, QuadratureRule::Gauss),
-    ],
-).unwrap();
+{{#include ../../tests/doc_fespace.rs:constructeur_explicite}}
 ```
 
 Évaluation des grandeurs sur une cellule :
 
 ```rust,ignore
-let s = sub.read();
-for cell_idx in 0..s.cell_count().unwrap() {
-    for g in 0..s.gauss_count() {
-        let n  = s.n_at_g(g).unwrap();          // N_i(ξ_g)
-        let dn = s.dn_at_g(g).unwrap();         // ∂N_i/∂ξ_k(ξ_g)
-        let jac     = s.jacobian(cell_idx, g).unwrap();
-        let det_j   = s.det_jacobian(cell_idx, g).unwrap();
-        let dn_dx   = s.dn_dx(cell_idx, g).unwrap();
-        // … utiliser ces buffers dans l'assemblage matrice-élémentaire …
-    }
-}
+{{#include ../../tests/doc_fespace.rs:evaluations}}
 ```
 
 ## Déplacement de maillage : exemple
@@ -509,16 +465,7 @@ for cell_idx in 0..s.cell_count().unwrap() {
 Après modification des coordonnées dans la `Coords`, les évaluations à la volée reflètent automatiquement le nouvel état :
 
 ```rust,ignore
-use pyrucast::handle::Handle;
-
-// SEG2 initial : nœuds en x=0 et x=1 → |J| = 0.5 (longueur 1 sur [-1,+1]).
-let dj_before = sub.read().det_jacobian(0, 0).unwrap();
-assert!((dj_before - 0.5).abs() < 1e-12);
-
-// Étirement : on déplace le second nœud en x=4 → |J| = 2.0 (longueur 4 sur [-1,+1]).
-coords.write().set_position(b.id(), &[4.0, 0.0]).unwrap();
-let dj_after = sub.read().det_jacobian(0, 0).unwrap();
-assert!((dj_after - 2.0).abs() < 1e-12);
+{{#include ../../tests/doc_fespace.rs:deplacement}}
 ```
 
 ## API Python

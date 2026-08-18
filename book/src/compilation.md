@@ -136,10 +136,7 @@ pyrucast = { path = "…", default-features = false }   # Rust pur, pas de pyo3
 ```
 
 ```rust,ignore
-use pyrucast::atoms::ElementType;
-use pyrucast::ops::mesh;
-
-let mesh = mesh::triangulate_surface(&contour, ElementType::TRI3, Some(1.0))?;
+{{#include ../../tests/doc_conteneurs.rs:mailler_en_rust}}
 ```
 
 Tout le cœur (`containers`, `ops`, `interrupt`, `handle`, …) est disponible et

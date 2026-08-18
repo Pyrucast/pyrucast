@@ -107,25 +107,7 @@ seuls leurs refcounts augmentent).
 ## API Rust
 
 ```rust,ignore
-use pyrucast::aggregate::Aggregate;   // apporte `add_sub`, `get`, `union`
-use pyrucast::coords::Coords;
-use pyrucast::atoms::ElementType;
-use pyrucast::containers::mesh::{Mesh, SubMesh};
-use pyrucast::atoms::Node;
-use pyrucast::handle::Handle;
-
-let coords = Handle::new(Coords::new(2).unwrap());
-let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
-let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
-let c = Node::create_in(coords.clone(), &[0.5, 1.0]).unwrap();
-
-let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-
-let sm_handle = Handle::new(sm);
-let mut mesh = Mesh::empty();          // l'agrégat ne porte pas la `Coords`
-mesh.add_sub(sm_handle).unwrap();
-assert_eq!(mesh.cell_count().unwrap(), 1);
+{{#include ../../tests/doc_conteneurs.rs:maillage}}
 ```
 
 ## API Python

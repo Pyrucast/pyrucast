@@ -110,32 +110,7 @@ l'agrégat à `"error"`.
 ## API Rust
 
 ```rust,ignore
-use pyrucast::containers::evolution::{SubEvolution, SubValue, OutOfRange, Evolution, Interpolated};
-
-// Courbe scalaire X→Y : 0→10, 1→20.
-let se = SubEvolution::new(
-    vec![(0.0, SubValue::Scalar(10.0)), (1.0, SubValue::Scalar(20.0))],
-    OutOfRange::Error,
-).unwrap();
-match se.interpolate(0.5, None).unwrap() {
-    SubValue::Scalar(v) => assert_eq!(v, 15.0),
-    _ => unreachable!(),
-}
-// Hors plage : Error (défaut) lève ; surcharge Clamp → extrémité.
-assert!(se.interpolate(2.0, None).is_err());
-
-// Agrégat scalaire → liste de flottants.
-let e = Evolution::from_scalars(vec![(0.0, 10.0), (1.0, 20.0)], OutOfRange::Error).unwrap();
-match e.interpolate(0.5, None).unwrap() {
-    Interpolated::Scalars(v) => assert_eq!(v, vec![15.0]),
-    _ => unreachable!(),
-}
-
-// Courbe de transfert typée : mapper un champ nœud par nœud.
-let mut loi = Evolution::from_scalars(vec![(0.0, 0.0), (100.0, 210e9)], OutOfRange::Error).unwrap();
-loi.set_abscissa_type(Some("T".into())).unwrap();     // composante lue
-loi.set_ordinate_type(Some("young".into())).unwrap(); // composante produite
-let young = loi.interpolate_node_field(&temperature, None).unwrap();
+{{#include ../../tests/doc_conteneurs.rs:evolution}}
 ```
 
 ## API Python
