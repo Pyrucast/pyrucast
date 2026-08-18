@@ -247,6 +247,21 @@ produit » ne désigne donc pas *un* module, et ils se rangent par domaine.
 | `write_vtk_node_field(mesh: &Mesh, field: &NodeField, path: &Path)` | `export_vtk(mesh, path, field=node_field) -> None` |
 | `write_vtk_element_field(mesh: &Mesh, field: &ElementField, path: &Path)` | `export_vtk(mesh, path, field=element_field) -> None` |
 
+### `archive` — sauvegarde et relecture d'un graphe
+
+Les deux seuls verbes qui restent au **niveau racine** : ils ne produisent
+aucun conteneur déterminé, mais un dictionnaire de ce qu'on leur a donné.
+
+| Rust (`archive::…`) | Python (`pyrucast.…`) |
+|---|---|
+| `save(path, &[(&str, &dyn ArchiveRoot)])` | `save(path, dict) -> None` |
+| `load(path) -> Objects` | `load(path) -> dict` |
+
+À l'écriture les types sont connus du compilateur, d'où la tranche de paires ;
+à la relecture non, d'où la table nommée dont on tire chaque objet avec son
+type attendu (`objets.mesh("clef")?`). Voir
+[Sauvegarde et relecture](sauvegarde.md).
+
 > `ops::geom` héberge `locate_points` (mapping iso-paramétrique inverse, sous
 > le [baignage](contraintes/embedded.md)) et `project_points` (projection au
 > point le plus proche sur une surface, sous le [contact](contraintes/contact.md)) ;

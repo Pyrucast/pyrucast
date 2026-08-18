@@ -76,6 +76,7 @@
   - [Assemblage](operateurs/assemblage.md)
   - [Comportement](operateurs/comportement.md)
   - [Solveur](operateurs/solveur.md)
+  - [Sauvegarde et relecture](sauvegarde.md)
   - [Visualisation](visualization.md)
 
 # Couche Python haut niveau

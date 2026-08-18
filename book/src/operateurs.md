@@ -24,6 +24,7 @@ correspondance.
 | `ops::element_field::behavior` | [Comportement](operateurs/comportement.md) | `integrate_behavior` (le `COMP`) |
 | `ops::solver` | [Solveur](operateurs/solveur.md) | `solve` (LU creux, Lagrange), `solve_eliminate` (condensation MPC), `solve_unilateral` (actif/inactif, relations unilatérales) |
 | `ops::export` | [Visualisation](visualization.md) | `export_vtk` (maillage / champ → VTK pour ParaView) |
+| `archive` | [Sauvegarde et relecture](sauvegarde.md) | `save` / `load` (graphe d'objets, partage préservé) — au niveau racine, hors `ops` |
 | `src/viz` | [Visualisation](visualization.md) | tracé des maillages, coloration par champ |
 
 Le découpage est **par conteneur produit** : `gradient(field, fespace)` rend un

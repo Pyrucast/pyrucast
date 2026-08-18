@@ -198,8 +198,9 @@ de sorte que les **discontinuités (flux, contraintes) restent visibles**. Voir
 `SubElementField` (et donc `ElementField`) implémente `Portable` via `serde`
 comme tous les objets pyrucast : le buffer de valeurs et la liste de noms
 voyagent dans le format binaire portable Linux ↔ Windows. Le lien vers l'espace
-EF, lui, est un `Handle` — il relèvera de la sauvegarde de graphe, encore à
-écrire (cf. [Modèle mémoire](memory-model.md)).
+EF, lui, est un `Handle` : il devient un identifiant local au fichier, et
+l'espace est écrit avec le champ — voir [Sauvegarde et
+relecture](sauvegarde.md).
 
 ## Limitations actuelles
 

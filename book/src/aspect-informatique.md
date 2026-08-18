@@ -115,10 +115,12 @@ seul type d'erreur dans la librairie — voir [Conventions](conventions.md).
 
 ## Persistance portable
 
-Un trait unique, `Portable` (`serde` + `bincode`), produit un format binaire
-**portable Linux ↔ Windows**. C'est le socle de la future
-**sauvegarde / reprise** d'une session (graphe complet d'objets). Voir
-[Conventions](conventions.md) et [Modèle mémoire](memory-model.md).
+Un trait unique, `Portable` (`serde` + `bincode`), fixe le contrat d'octets :
+un format binaire **identique Linux ↔ Windows**. Au-dessus, `pyrucast.save` /
+`pyrucast.load` écrivent un **graphe** d'objets et le relisent en préservant
+le partage — deux champs sur un support restent deux champs sur un support.
+Voir [Sauvegarde et relecture](sauvegarde.md), [Conventions](conventions.md)
+et [Modèle mémoire](memory-model.md).
 
 ## Pour le développeur
 

@@ -36,4 +36,6 @@ lues tôt :
   arithmétique scalaire et par composante.
 
 Pour le contexte informatique (handles, refcount, motif zone/agrégat),
-voir [Aspect informatique](aspect-informatique.md).
+voir [Aspect informatique](aspect-informatique.md). Pour les écrire dans un
+fichier et les relire tels qu'ils étaient, [Sauvegarde et
+relecture](sauvegarde.md).

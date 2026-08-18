@@ -20,7 +20,7 @@ première partie est un état des lieux daté ; la seconde est une liste de pist
 | Séparation des couches | `containers/` (structures) ⊥ `ops/` (opérateurs) ⊥ `py/` (binding). Un module d'`ops/` porte le nom du **conteneur qu'il produit**. Les règles complètes sont dans `CONVENTIONS.md`. |
 | Primitives géométriques | `nalgebra` (vecteurs et matrices de petite taille — géométrie, maillage, visualisation), `nalgebra-sparse` pour le stockage creux. |
 | Algèbre linéaire (solveur) | **LU creuse directe `faer`**, multithreadée, avec cache de factorisation sur la `Matrix` (*factoriser une fois, résoudre souvent*). `SolveMethod` est le point d'extension pour un autre back-end. |
-| Sérialisation | `serde` + `bincode` via un trait `Persist` **unique**, au service de la sauvegarde/relecture fichier. |
+| Sérialisation | `serde` + `bincode` via un trait `Portable` **unique**, contrat d'octets de la sauvegarde/relecture fichier. |
 | Parallélisme | `rayon`, **toujours actif**, porté *au-dessus* des noyaux de physique : un noyau ne voit ni rayon, ni un handle, ni un verrou. |
 | Binding Python | `pyo3` + `maturin`, *mixed layout* : extension plate privée `_pyrucast` + couche Python pure qui la range en sous-modules. |
 | Documentation | `mdbook` (théorie + doctests) + rustdoc, publiés sur GitHub Pages. |
@@ -305,26 +305,25 @@ alors que le contrat veut qu'un auteur de physique n'écrive que
 
 ## Sauvegarde et reprise
 
-Le trait `Persist` sérialise un objet isolé ; la **sauvegarde du graphe
-d'objets** n'existe pas. Elle est décidée dans sa forme :
+**Faite.** `save` / `load` écrivent un graphe d'objets sous des identifiants
+locaux au fichier et le relisent en préservant le partage — deux champs portés
+par le même support restent, après relecture, deux champs portés par un seul
+support. Racines nommées, dictionnaire à l'aller comme au retour, la relecture
+ajoute sans rien remplacer, les compteurs sont recomptés depuis zéro, l'en-tête
+est versionné et une version inconnue est refusée. Voir
+[book/src/sauvegarde.md](book/src/sauvegarde.md).
 
-- des **racines nommées** — on donne un ou plusieurs objets à sauver, on relit
-  un conteneur façon dictionnaire, les objets se retrouvent par leur clef ;
-- des **enregistrements explicites par type**, munis d'identifiants **locaux au
-  fichier** : l'adresse d'un objet dans un processus n'a aucun sens dans un
-  autre ;
-- le partage **préservé** : deux champs portés par le même support restent,
-  après relecture, deux champs portés par un seul support ;
-- les compteurs de références **jamais sauvegardés**, mais recomptés depuis zéro
-  à la relecture ;
-- la relecture **ajoute** les objets à ceux déjà présents, elle ne remplace rien ;
-- un **en-tête versionné** refusant toute autre version. Avant la 1.0.0 on
-  s'autorise à casser le format.
+Deux suites possibles, aucune engagée :
 
-Le format binaire visé est portable Linux ↔ Windows : entiers little-endian
-normalisés, `usize` sur 64 bits, `f64` IEEE-754, aucun chemin ni séparateur
-dépendant de l'OS dans le *payload*. Reste à écrire : le conteneur fichier et
-l'API Python `save` / `load`.
+- **la lecture partielle** — sortir un objet d'un très gros fichier sans tout
+  charger. Elle coûte un index en tête de fichier (identifiant → position), au
+  prix de la boucle avant unique qui fait la simplicité de la relecture. La
+  version de format laisse la porte ouverte.
+- **un export d'échange** (HDF5 ou autre), à ne pas confondre avec ce format :
+  HDF5 n'a aucune notion d'identité d'objet ni de référence partagée, la partie
+  difficile serait à réécrire par-dessus, et il coûterait une dépendance C au
+  socle. Il se justifiera pour ses propres mérites — publier des résultats — et
+  comme opérateur séparé.
 
 ## Qualité de maillage
 

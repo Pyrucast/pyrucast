@@ -118,6 +118,39 @@ Où est le coût réel du compteur ?
 
 ## Sauvegarde sur disque
 
-Le trait `Portable` (`serde` + `bincode`) est l'unique mécanisme de sérialisation, au format binaire identique Linux ↔ Windows (voir [Conventions](conventions.md)).
+Le trait `Portable` (`serde` + `bincode`) fixe le contrat d'octets : un format binaire identique Linux ↔ Windows (voir [Conventions](conventions.md)).
 
-La sauvegarde d'un **graphe d'objets** — écrire plusieurs objets dans un fichier et les relire en préservant leur partage, de sorte que deux champs portés par le même support restent, après relecture, deux champs portés par un seul support — est **décidée mais pas encore écrite**. Elle reposera sur des racines nommées, des enregistrements explicites par type munis d'identifiants locaux au fichier, et des compteurs jamais sauvegardés mais recomptés à la relecture. Voir la [feuille de route](https://github.com/Pyrucast/pyrucast/blob/master/ROADMAP.md).
+Au-dessus, l'archive sauve un **graphe** d'objets et le relit en préservant le partage — deux champs portés par un support restent, après relecture, deux champs portés par un seul support. Le mode d'emploi est au chapitre [Sauvegarde et relecture](sauvegarde.md) ; ce qui suit en est la mécanique, du point de vue mémoire.
+
+### Un handle devient un identifiant, le temps d'un fichier
+
+Un handle est une **adresse**. Une adresse n'a aucun sens dans un autre processus, donc ce qui part sur le disque est un identifiant **local au fichier**. La table qui traduit l'un en l'autre n'existe que pendant un `save` ou un `load` : hors de là, sérialiser un handle est une erreur — jamais un octet écrit au hasard.
+
+### La découverte des dépendances *est* la sérialisation
+
+Rien ne déclare ce qu'un objet référence. C'est `Handle::serialize` qui découvre :
+
+```text
+déjà vu ?  → écrire son identifiant, fini
+sinon      → réserver un identifiant
+             sérialiser l'objet pointé dans son propre enregistrement
+                (ce qui, récursivement, découvre ses propres dépendances)
+             déposer l'enregistrement
+             écrire l'identifiant
+```
+
+Ajouter un champ `Handle` à une structure en fait donc une arête, sans rien à tenir à jour ailleurs — c'est le point : une liste d'arêtes écrite à la main serait une liste qu'on oublie de compléter, et la sauvegarde serait silencieusement incomplète.
+
+Les enregistrements sortent dans l'ordre des **dépôts**, donc toute dépendance précède ce qui la référence : la relecture est une simple boucle avant.
+
+### Le cycle est refusé, pas supposé absent
+
+Le graphe **écrit** est acyclique. Le graphe **vivant**, lui, ne l'est pas : le compagnon POI1 mémoïsé d'un sous-maillage désigne un autre sous-maillage. L'acyclicité de l'écrit tient donc *par conséquence* — les caches ne sont pas écrits — et non par construction.
+
+L'écrivain ne la suppose pas : rencontrer un identifiant **réservé mais pas encore déposé** est la signature d'un cycle, et l'erreur nomme l'objet au lieu de laisser la pile déborder.
+
+### Les compteurs, aux deux niveaux
+
+Aucun n'est écrit. Ceux des **objets** se recomptent seuls : chaque référence que `load` fabrique compte pour une. Ceux des **nœuds** repartent de zéro — la `Coords` relue les remet à zéro, puis chaque sous-maillage relu ré-incrémente ce qu'il utilise, dans cet ordre que le post-ordre garantit.
+
+D'où la conséquence énoncée au chapitre [Sauvegarde et relecture](sauvegarde.md) : un nœud relu n'est protégé que par les objets présents dans le fichier.

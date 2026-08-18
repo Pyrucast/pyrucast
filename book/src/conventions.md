@@ -236,7 +236,7 @@ let restored = Pt::from_bytes(&bytes).unwrap();
 assert_eq!(original, restored);
 ```
 
-> **Python** : `Portable` n'est pas exposé côté Python — c'est une brique interne. La sérialisation des objets depuis Python passera par une API de sauvegarde / relecture, encore à écrire.
+> **Python** : `Portable` n'est pas exposé côté Python — c'est une brique interne. La sérialisation depuis Python passe par [`pyrucast.save` / `pyrucast.load`](sauvegarde.md), qui écrivent un graphe entier plutôt qu'un objet isolé.
 
 ## Definition of Done par objet
 

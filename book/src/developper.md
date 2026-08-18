@@ -10,7 +10,7 @@ courantes (ajouter une physique, ajouter un élément fini).
 - [Conventions & philosophie](conventions.md) — méthode vs fonction libre,
   erreurs, `Display`/`Debug`/`dump`, sérialisation, *Definition of Done*.
 - [Modèle mémoire](memory-model.md) — les objets derrière un `Handle`, les
-  guards, et le compteur par nœud de `Coords`.
+  guards, le compteur par nœud de `Coords`, et la mécanique de l'archive.
 - [Parallélisme](developper/parallelisme.md) — rayon porté *au-dessus* des
   noyaux, zéro-copie, déterminisme, et ce qui reste séquentiel.
 - [Compilation et tests](compilation.md) — installation détaillée, *features*
