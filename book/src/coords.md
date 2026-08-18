@@ -24,16 +24,7 @@ de l'**anneau complet** : les masses, volumes et résultantes nodales sont ceux 
 la pièce de révolution entière.
 
 ```rust,ignore
-use pyrucast::coords::Coords;
-
-// Cartésien (par défaut) : dim libre.
-let plan = Coords::new(2).unwrap();
-assert!(!plan.is_axisymmetric());
-
-// Révolution : la dimension vaut nécessairement 2, donc pas d'argument.
-let axi = Coords::axisymmetric().unwrap();
-assert_eq!(axi.dim(), 2);
-assert!(axi.is_axisymmetric());
+{{#include ../../tests/doc_coords.rs:repere}}
 ```
 
 ```python
@@ -69,17 +60,7 @@ Seul le ramasse-miettes `Coords::gc()` retire les nœuds dont le refcount
 **interne** est tombé à 0.
 
 ```rust,ignore
-use pyrucast::coords::Coords;
-use pyrucast::handle::Handle;
-
-let coords = Handle::new(Coords::new(2).unwrap());
-// add_node initialise refcount = 1 ; sans décrément, le nœud est protégé.
-let id = coords.write().add_node(&[0.0, 0.0]).unwrap();
-assert_eq!(coords.write().gc(), 0);
-
-// Après décrément, gc ramasse.
-coords.write().decref(id).unwrap();
-assert_eq!(coords.write().gc(), 1);
+{{#include ../../tests/doc_coords.rs:refcount}}
 ```
 
 ## Modèle de refcount à deux niveaux
@@ -116,9 +97,7 @@ active. `add_config(name)` clone la configuration active sous un nouveau nom.
 Rust :
 
 ```rust,ignore
-let c2 = coords.write().add_config("deformed");
-coords.write().select(c2).unwrap();
-// les `set_position` suivants modifient désormais la configuration "deformed".
+{{#include ../../tests/doc_coords.rs:configurations}}
 ```
 
 Python :
@@ -159,22 +138,7 @@ n'est jamais modifiée, dans les deux cas.
 Rust :
 
 ```rust,ignore
-use pyrucast::coords::Coords;
-use pyrucast::handle::Handle;
-
-let coords = Handle::new(Coords::new(2).unwrap());
-// Trois nœuds créés ; ids = 0, 1, 2.
-coords.write().add_node(&[0.0, 0.0]).unwrap();
-coords.write().add_node(&[1.0, 0.0]).unwrap();
-coords.write().add_node(&[0.5, 1.0]).unwrap();
-
-// Permutation posée à la main (le calcul automatique reste à écrire).
-coords.write().set_permutation(vec![2, 0, 1]).unwrap();
-// permutation[0] = 2 : le nœud d'id 0 est en position solveur 2.
-println!("{:?}", coords.read().permutation());
-
-// Retour à l'identité.
-coords.write().clear_permutation();
+{{#include ../../tests/doc_coords.rs:permutation}}
 ```
 
 Python :

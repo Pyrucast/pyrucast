@@ -48,12 +48,10 @@ LEDGER = ROOT / "script" / "doc_coverage.txt"
 DETTE_MIGRATION = {
     "compilation.md": 1,
     "conventions.md": 3,  # les 3 blocs Rust, phase B4
-    "coords.md": 4,  # les 4 blocs Rust, phase B4
     "element-field.md": 1,
     "evolution.md": 1,
     "fe-space.md": 4,  # les 4 blocs Rust, phase B4
     "introduction.md": 1,
-    "matrix.md": 6,
     "mesh.md": 1,
     "model.md": 2,
     "node-field.md": 1,

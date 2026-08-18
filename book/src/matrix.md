@@ -45,8 +45,7 @@ atteignable. `Matrix::physics()` renvoie l'ensemble des natures présentes dans 
 matrice (dédupliqué — « plusieurs tags » au niveau de l'agrégat).
 
 ```rust,ignore
-let k_meca = k.filter(Physics::Mechanical)?;   // blocs au moins mécaniques
-let natures = k.physics()?;                     // ex. [Thermal, Constraint]
+{{#include ../../tests/doc_matrix.rs:filtrage}}
 ```
 
 ## Assemblage : motif + scatter
@@ -94,8 +93,7 @@ même bloc. Comme pour `filter`, le résultat n'est **pas assemblé** — `final
 `m.assemble()` avant de résoudre.
 
 ```rust,ignore
-let m_dt = (&m / dt)?;      // facteur = 1/dt sur chaque bloc de M, aucune valeur réécrite
-assert_eq!(m.get(a, "q", a, "T"), m_dt.get(a, "q", a, "T") * dt); // m inchangée
+{{#include ../../tests/doc_matrix.rs:facteur}}
 ```
 
 **Pas d'opérateur `Matrix + Matrix`** : l'assembleur somme déjà les contributions qui
@@ -104,10 +102,7 @@ tombent sur le même `(row, col)` global (`build_global_triplets`,
 existantes — l'union `|` (partage de blocs, pas de copie) suivie d'un réassemblage :
 
 ```rust,ignore
-let mut sys = (&(&m / dt)? | &k)?;
-sys.assemble()?;                   // requis dès qu'un bloc calculé est présent
-let rhs = (&f_ext + &(&m_dt * &u0)?)?;
-let u = solver::lu::solve(&sys, &rhs)?;
+{{#include ../../tests/doc_matrix.rs:somme}}
 ```
 
 Aucun traitement particulier n'est nécessaire quand `K` et `M` n'ont pas le même
@@ -127,49 +122,7 @@ Le dernier argument de `SubMatrix::new` est un drapeau qui déclare l'intention 
 ## Cas d'usage typique : matrice de raideur du laplacien
 
 ```rust,ignore
-use pyrucast::aggregate::Aggregate;
-use pyrucast::atoms::{ElementType, Node};
-use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
-use pyrucast::containers::mesh::SubMesh;
-use pyrucast::coords::Coords;
-use pyrucast::handle::Handle;
-
-// Les entrées vivent dans un **bloc**, jamais dans l'agrégat : un bloc
-// connaît ses supports POI1 (lignes et colonnes) et ses noms de variables.
-let coords = Handle::new(Coords::new(1).unwrap());
-let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
-let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
-let support = {
-    let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
-    sm.add_cell(&[a.id()]).unwrap();
-    sm.add_cell(&[b.id()]).unwrap();
-    Handle::new(sm)
-};
-
-let mut block = SubMatrix::new(
-    support.clone(),          // support des lignes
-    support.clone(),          // support des colonnes (carré ici)
-    vec!["q".into()],         // variables duales   → lignes
-    vec!["T".into()],         // variables primales → colonnes
-    DofOrdering::NodesThenVars,
-    true,                     // symétrique
-)
-.unwrap();
-
-// Modèle simple à 2 nœuds (segment) :
-//   K = [[ 2, -1], [-1,  2]]
-block.add_entry(a.id(), "q", a.id(), "T",  2.0).unwrap();
-block.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
-block.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
-block.add_entry(b.id(), "q", b.id(), "T",  2.0).unwrap();
-
-let mut k = Matrix::empty();
-k.add_sub(Handle::new(block)).unwrap();
-k.finalize().unwrap();        // requis avant tout usage solveur
-
-assert_eq!(k.n_rows().unwrap(), 2);
-assert_eq!(k.n_cols().unwrap(), 2);
-assert!(k.symmetric().unwrap());
+{{#include ../../tests/doc_matrix.rs:bloc_carre}}
 ```
 
 ## Matrice rectangulaire : bloc Lagrange
@@ -177,90 +130,13 @@ assert!(k.symmetric().unwrap());
 Une contrainte de Dirichlet introduit, par sa nature, un bloc **rectangulaire** : lignes indexées par les nœuds-multiplicateurs (un par contrainte), colonnes par les nœuds primaires contraints.
 
 ```rust,ignore
-// 2 contraintes : les multiplicateurs m0/m1 lient les nœuds primaires a/b.
-// Le bloc est rectangulaire dès que les deux supports diffèrent — ici ils ont
-// la même taille, mais ce sont deux nuages de nœuds distincts.
-let m0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
-let m1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
-let mult_support = {
-    let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
-    sm.add_cell(&[m0.id()]).unwrap();
-    sm.add_cell(&[m1.id()]).unwrap();
-    Handle::new(sm)
-};
-let mut block = SubMatrix::new(
-    mult_support,
-    support.clone(),
-    vec!["T".into()],
-    vec!["T".into()],
-    DofOrdering::NodesThenVars,
-    false,
-)
-.unwrap();
-block.add_entry(m0.id(), "T", a.id(), "T", 1.0).unwrap();
-block.add_entry(m1.id(), "T", b.id(), "T", 1.0).unwrap();
-
-let mut c = Matrix::empty();
-c.add_sub(Handle::new(block)).unwrap();
-c.finalize().unwrap();
-assert_eq!(c.n_rows().unwrap(), 2);
-assert_eq!(c.n_cols().unwrap(), 2);
-// "T" est interné une seule fois dans la table de noms même s'il apparaît
-// côté ligne ET côté colonne (la collision est résolue par les `NodeId`
-// distincts : les multiplicateurs sont des nœuds à part entière).
-assert_eq!(c.field_names().unwrap().len(), 1);
+{{#include ../../tests/doc_matrix.rs:bloc_rectangulaire}}
 ```
 
 ## API Rust — accès en lecture
 
 ```rust,ignore
-// Toutes ces lectures traversent l'état assemblé : elles rendent un `Result`
-// et échouent tant que `finalize()` (ou `assemble()`) n'a pas été appelé.
-
-// Valeur à une coordonnée (somme de toutes les entrées COO à ce point).
-let v: f64 = k.get(a.id(), "q", a.id(), "T")?;
-
-// Vue dense ligne-major (flat Vec, pratique pour Python).
-let d: Vec<f64> = k.dense()?;
-assert_eq!(d.len(), k.n_rows()? * k.n_cols()?);
-
-// Vue dense typée nalgebra (column-major DMatrix), prête pour LU/Cholesky.
-let m: nalgebra::DMatrix<f64> = k.to_dmatrix()?;
-
-// Vues creuses nalgebra-sparse, prêtes pour les solveurs creux.
-let csr: &nalgebra_sparse::CsrMatrix<f64> = k.to_csr()?;
-let csc: nalgebra_sparse::CscMatrix<f64> = k.to_csc()?;
-
-// Itération sur les triplets bruts (ordre d'insertion préservé). Une entrée
-// est un 5-uplet `(nœud ligne, var duale, nœud colonne, var primale, valeur)`
-// — les noms de variables y sont déjà résolus.
-for (row_node, row_var, col_node, col_var, value) in k.iter_entries()? {
-    // …
-}
-
-// Produit matrice-vecteur dense : y = A · x (passe par CSR sous le capot).
-let y = k.mul_dense(&[1.0, 1.0])?;
-
-// Produit matrice · champ : `x` est lu aux DOFs *colonnes* (vars **primales** ;
-// une entrée qu'aucune zone ne définit vaut 0), le résultat est un `NodeField`
-// sur les DOFs *lignes* (vars **duales**) — `K · u = f` — avec une zone par
-// support **ligne** des blocs, sur le handle du bloc lui-même (`same_support`
-// garanti avec tout champ posé sur ces supports). L'opérateur `*` (`&k * &x`)
-// est le sucre syntaxique de `mul_field`. C'est le miroir exact de
-// `solver::lu::solve`, qui lit un champ dual aux lignes et rend un champ primal aux colonnes.
-let y: NodeField = k.mul_field(&x)?;
-let y: NodeField = (&k * &x)?;
-
-// Maillages des supports des blocs (handles partagés, dédupliqués ; disponibles
-// avant `finalize`) : `row_mesh` côté dual (lignes), `col_mesh` côté primal
-// (colonnes). Cible de projection pour poser un champ sur les supports mêmes
-// des sorties de `mul_field` / `solve` et le combiner zone à zone :
-let f_ext_r = restrict(&f_ext, &k.row_mesh()?)?;
-let r = (&f_ext_r - &y).unwrap();     // s'aligne par support, pas de passthrough de zone
-// ⚠ une composante absente d'un côté passe brute (union) ; pour un résidu
-// strict (toute composante soustraite, absente lue à 0), reprojeter sur le
-// support ET les composantes de l'autre opérande :
-let r = (&restrict_like(&f_ext, &y).unwrap() - &y).unwrap();
+{{#include ../../tests/doc_matrix.rs:lecture}}
 ```
 
 ## API Python
