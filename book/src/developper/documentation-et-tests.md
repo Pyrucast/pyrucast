@@ -85,6 +85,30 @@ d'exemples nommé `doc_ops_assemblage.py` est inclus dans le book et exécuté p
 personne. Le garde-fou `includes` ne peut pas le voir — l'ancre résout très
 bien —, et on retombe sur une page qui montre du code que rien ne vérifie.
 
+### Au niveau module, pas dans une fonction
+
+**mdbook n'enlève pas l'indentation d'un extrait inclus.** Un bloc ancré à
+l'intérieur d'une fonction de test s'affiche donc décalé de quatre espaces,
+sur chaque page, indéfiniment — ce qu'aucun utilisateur n'écrirait. Le code
+ancré vit par conséquent au **niveau module**, et le fichier se lit dans
+l'ordre de la page, les variables coulant d'une ancre à la suivante, comme
+elles le font pour le lecteur du chapitre.
+
+Trois conséquences, toutes mesurées :
+
+- pytest exécute le fichier à la **collecte**. Un exemple qui casse est une
+  *erreur de collecte* et non un test en échec : le traceback est complet, la
+  réécriture d'assertion fonctionne (`assert 450 == 451`), et le code de
+  retour vaut 1. `--continue-on-collection-errors`, posé dans
+  `pyproject.toml`, évite qu'elle interrompe le reste de la suite ;
+- ces fichiers ne comptent plus de « tests » au sens de pytest. C'est un
+  changement d'affichage, pas de couverture : le code s'exécute et les
+  assertions mordent ;
+- les **fixtures ne sont pas disponibles**. Un exemple qui en exige une garde
+  l'ancrage en fonction, et l'indentation avec. Un seul cas aujourd'hui :
+  `visualization.md`, dont les extraits écrivent des fichiers sous des noms
+  courts et ont donc besoin de `tmp_path` + `monkeypatch.chdir`.
+
 ### Doctest et bloc du book ne se confondent pas
 
 C'est la première question qu'on se pose, et la réponse est : ce sont deux

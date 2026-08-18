@@ -49,3 +49,8 @@ extend-exclude = ["python/pyrucast/_pyrucast/__init__.pyi"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/python"]
+# Les fichiers `test_doc_*.py` portent les exemples du book **au niveau
+# module**, pour que l'extrait inclus s'affiche en colonne 0. Un exemple qui
+# casse est donc une erreur de collecte : sans cette option, elle
+# interromprait toute la session au lieu du seul fichier concerné.
+addopts = "--continue-on-collection-errors"
