@@ -55,6 +55,34 @@ use serde::{Deserialize, Serialize};
 /// Mirrors Cast3M, where `ISOTROPE` / `ORTHOTROPE` / `ANISOTROPE` qualifies the
 /// **material** of a formulation rather than naming a different model — hence an
 /// axis carried by the existing physics, not three duplicated ones.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let mut mat = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(),
+/// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
+/// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
+/// // Un axe porté par la physique existante, pas trois physiques dupliquées :
+/// // c'est le **matériau** qui est isotrope, orthotrope ou anisotrope.
+/// assert!(!MaterialSymmetry::Isotropic.has_frame());
+/// assert!(MaterialSymmetry::Orthotropic.has_frame());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MaterialSymmetry {
     /// Two constants, no privileged direction.
@@ -69,6 +97,33 @@ pub enum MaterialSymmetry {
 impl MaterialSymmetry {
     /// Parse from a lowercase tag (`"isotropic"`, `"orthotropic"`,
     /// `"anisotropic"`) — the Python-facing spelling.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let mut mat = SubElementField::from_uniform_per_component(
+    /// #     fes.get(0).unwrap(),
+    /// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
+    /// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
+    /// assert_eq!(MaterialSymmetry::from_tag("orthotropic"),
+    ///            Some(MaterialSymmetry::Orthotropic));
+    /// assert_eq!(MaterialSymmetry::from_tag("ORTHOTROPE"), None); // minuscules
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn from_tag(tag: &str) -> Option<Self> {
         match tag {
             "isotropic" => Some(Self::Isotropic),
@@ -79,6 +134,34 @@ impl MaterialSymmetry {
     }
 
     /// The lowercase tag for this symmetry (the inverse of [`from_tag`](Self::from_tag)).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let mut mat = SubElementField::from_uniform_per_component(
+    /// #     fes.get(0).unwrap(),
+    /// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
+    /// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
+    /// assert_eq!(MaterialSymmetry::Anisotropic.to_tag(), "anisotropic");
+    /// // Réciproque exacte de `from_tag`.
+    /// assert_eq!(MaterialSymmetry::from_tag(MaterialSymmetry::Anisotropic.to_tag()),
+    ///            Some(MaterialSymmetry::Anisotropic));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn to_tag(self) -> &'static str {
         match self {
             Self::Isotropic => "isotropic",
@@ -88,6 +171,33 @@ impl MaterialSymmetry {
     }
 
     /// Whether this symmetry needs material axes (everything but isotropy).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let mut mat = SubElementField::from_uniform_per_component(
+    /// #     fes.get(0).unwrap(),
+    /// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
+    /// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
+    /// // Un repère matériau n'a de sens que s'il y a une direction privilégiée.
+    /// assert!(!MaterialSymmetry::Isotropic.has_frame());
+    /// assert!(MaterialSymmetry::Anisotropic.has_frame());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn has_frame(self) -> bool {
         self != Self::Isotropic
     }
@@ -102,12 +212,92 @@ impl std::fmt::Display for MaterialSymmetry {
 // ─── The material frame ─────────────────────────────────────────────────────
 
 /// Frame components required in 2-D: the first axis, in the plane.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let mut mat = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(),
+/// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
+/// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
+/// // En 2-D, le premier axe suffit : le second est sa normale dans le plan.
+/// assert_eq!(symmetry::FRAME_2D, ["V1X", "V1Y"]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub const FRAME_2D: [&str; 2] = ["V1X", "V1Y"];
 /// Frame components required in 3-D: the first two axes (the third is `V1 × V2`).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let mut mat = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(),
+/// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
+/// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
+/// // En 3-D, deux axes ; le troisième est V1 × V2.
+/// assert_eq!(symmetry::FRAME_3D.len(), 6);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub const FRAME_3D: [&str; 6] = ["V1X", "V1Y", "V1Z", "V2X", "V2Y", "V2Z"];
 
 /// The frame components a symmetry requires in a space of dimension `space_dim`
 /// — empty for isotropy, which has no privileged direction.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let mut mat = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(),
+/// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
+/// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
+/// // Ce que le champ matériau doit porter **en plus** des constantes.
+/// assert!(symmetry::frame_components(MaterialSymmetry::Isotropic, 3).is_empty());
+/// assert_eq!(symmetry::frame_components(MaterialSymmetry::Orthotropic, 2).len(), 2);
+/// assert_eq!(symmetry::frame_components(MaterialSymmetry::Orthotropic, 3).len(), 6);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn frame_components(symmetry: MaterialSymmetry, space_dim: usize) -> &'static [&'static str] {
     if !symmetry.has_frame() {
         &[]
@@ -128,6 +318,37 @@ pub fn frame_components(symmetry: MaterialSymmetry, space_dim: usize) -> &'stati
 ///
 /// Errors on a degenerate frame (a null `V1`, or a `V2` parallel to it), which
 /// would otherwise produce a silently meaningless material.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let mut mat = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(),
+/// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
+/// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
+/// // R mène des axes **matériau** aux axes globaux : ses colonnes sont les
+/// // axes matériau vus globalement. Ici V1 = (0, 1) : un quart de tour.
+/// let r = symmetry::frame_rotation(&mat, 0, 2)?;
+/// assert!((r[(0, 0)] - 0.0).abs() < 1e-12 && (r[(1, 0)] - 1.0).abs() < 1e-12);
+/// // Un repère dégénéré est refusé plutôt que silencieusement absurde.
+/// mat.set_uniform("V1Y", 0.0)?;
+/// assert!(symmetry::frame_rotation(&mat, 0, 2).is_err());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn frame_rotation(
     material: &SubElementField,
     cell: usize,
@@ -243,6 +464,39 @@ fn rotate_tensor(c: &Tensor4, r: &Matrix3<f64>) -> Tensor4 {
 }
 
 /// Rotate a 6×6 engineering-Voigt matrix from material to global axes.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let mut mat = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(),
+/// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
+/// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
+/// # use nalgebra::Matrix3;
+/// // Une rotation identité ne change rien…
+/// let d = symmetry::orthotropic_from_constants(
+///     [210e3, 10e3, 10e3], [0.3, 0.3, 0.3], [5e3, 5e3, 5e3])?;
+/// assert_eq!(symmetry::rotate_voigt(&d, &Matrix3::identity()), d);
+/// // …un quart de tour échange les deux premières directions.
+/// let r = symmetry::frame_rotation(&mat, 0, 2)?;
+/// let dr = symmetry::rotate_voigt(&d, &r);
+/// assert!((dr[0][0] - d[1][1]).abs() < 1e-6);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn rotate_voigt(d: &[[f64; 6]; 6], r: &Matrix3<f64>) -> [[f64; 6]; 6] {
     from_tensor(&rotate_tensor(&to_tensor(d), r))
 }
@@ -250,6 +504,34 @@ pub fn rotate_voigt(d: &[[f64; 6]; 6], r: &Matrix3<f64>) -> [[f64; 6]; 6] {
 // ─── Elasticity ─────────────────────────────────────────────────────────────
 
 /// Orthotropic elastic constants, in the material axes.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let mut mat = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(),
+/// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
+/// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
+/// // Neuf constantes dans les axes matériau : trois modules, trois
+/// // coefficients de Poisson, trois modules de cisaillement.
+/// assert_eq!(symmetry::ORTHOTROPIC_ELASTIC[0], "E_1");
+/// assert_eq!(symmetry::ORTHOTROPIC_ELASTIC.len(), 9);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub const ORTHOTROPIC_ELASTIC: [&str; 9] = [
     "E_1", "E_2", "E_3", "nu_12", "nu_13", "nu_23", "G_12", "G_13", "G_23",
 ];
@@ -257,6 +539,33 @@ pub const ORTHOTROPIC_ELASTIC: [&str; 9] = [
 /// The 21 independent constants of a general anisotropic stiffness, named
 /// `C_<i><j>` over the upper triangle of the Voigt matrix (`1..=6`, this crate's
 /// order `[xx, yy, zz, yz, xz, xy]`).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let mut mat = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(),
+/// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
+/// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
+/// // Les 21 constantes indépendantes, sur le triangle supérieur de Voigt.
+/// assert_eq!(symmetry::ANISOTROPIC_ELASTIC[0], "C_11");
+/// assert_eq!(symmetry::ANISOTROPIC_ELASTIC.len(), 21);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub const ANISOTROPIC_ELASTIC: [&str; 21] = [
     "C_11", "C_12", "C_13", "C_14", "C_15", "C_16", "C_22", "C_23", "C_24", "C_25", "C_26", "C_33",
     "C_34", "C_35", "C_36", "C_44", "C_45", "C_46", "C_55", "C_56", "C_66",
@@ -281,6 +590,40 @@ fn orthotropic_stiffness(material: &SubElementField, cell: usize) -> Result<[[f6
 
 /// The same, from bare constants — the arithmetic core, so it can be exercised
 /// without a material field. `nu` is `[ν_12, ν_13, ν_23]`, `g` is `[G_12, G_13, G_23]`.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let mut mat = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(),
+/// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
+/// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
+/// // Le cœur arithmétique, exerçable sans champ matériau. Un matériau
+/// // orthotrope dégénéré en isotrope redonne la matrice isotrope.
+/// let d = symmetry::orthotropic_from_constants(
+///     [210e3, 210e3, 210e3], [0.3, 0.3, 0.3], [80769.0, 80769.0, 80769.0])?;
+/// assert!((d[0][0] - d[1][1]).abs() < 1e-6);
+/// assert!((d[0][1] - d[0][2]).abs() < 1e-6);
+/// // Un module nul ou négatif est refusé ; la souplesse doit par ailleurs
+/// // rester inversible.
+/// assert!(symmetry::orthotropic_from_constants(
+///     [0.0, 210e3, 210e3], [0.3, 0.3, 0.3], [80769.0, 80769.0, 80769.0]).is_err());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn orthotropic_from_constants(e: [f64; 3], nu: [f64; 3], g: [f64; 3]) -> Result<[[f64; 6]; 6]> {
     let ([e1, e2, e3], [nu12, nu13, nu23], [g12, g13, g23]) = (e, nu, g);
     for (name, value) in [("E_1", e1), ("E_2", e2), ("E_3", e3)] {
@@ -345,6 +688,37 @@ fn anisotropic_stiffness(material: &SubElementField, cell: usize) -> Result<[[f6
 /// closed forms (and therefore the exact numbers of every assembly that predates
 /// this module). The other two build the full 3-D stiffness in the material
 /// axes, rotate it by the frame, then reduce.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let mut mat = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(),
+/// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
+/// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
+/// # let iso = SubElementField::from_uniform_per_component(
+/// #     fes.get(0)?, vec!["E".into(), "nu".into()], &[210e3, 0.3])?;
+/// // L'unique porte d'entrée des noyaux mécaniques. L'isotropie
+/// // court-circuite vers les formes closes, donc rien ne bouge pour elle.
+/// let d = symmetry::elastic_constitutive(
+///     &iso, 0, MaterialSymmetry::Isotropic, ElasticityModel::PlaneStress, 2)?;
+/// assert_eq!(d.len(), 3);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn elastic_constitutive(
     material: &SubElementField,
     cell: usize,
@@ -377,6 +751,41 @@ pub fn elastic_constitutive(
 /// Shared by the anisotropic constitutive path and by the consistent tangent of
 /// the non-linear laws — the reduction is a property of the *kinematics*, not of
 /// the constitutive law that produced the 6×6.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let mut mat = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(),
+/// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
+/// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
+/// // La réduction tient à la **cinématique**, pas à la loi qui a produit
+/// // la 6×6 — d'où son partage avec les tangentes non linéaires.
+/// let d = symmetry::orthotropic_from_constants(
+///     [210e3, 210e3, 210e3], [0.3, 0.3, 0.3], [80769.0, 80769.0, 80769.0])?;
+/// assert_eq!(symmetry::reduce_to_model(&d, ElasticityModel::PlaneStrain).len(), 3);
+/// assert_eq!(symmetry::reduce_to_model(&d, ElasticityModel::Solid).len(), 6);
+/// // Contraintes planes : condensation statique sur ε_zz, donc σ_zz = 0 —
+/// // le terme (0,0) y est plus **petit** qu'en déformations planes.
+/// let cp = symmetry::reduce_to_model(&d, ElasticityModel::PlaneStress);
+/// let dp = symmetry::reduce_to_model(&d, ElasticityModel::PlaneStrain);
+/// assert!(cp[0][0] < dp[0][0]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn reduce_to_model(d3: &[[f64; 6]; 6], model: ElasticityModel) -> Vec<Vec<f64>> {
     /// Where each axisymmetric Voigt slot `[rr, zz, θθ, rz]` sits in the 3-D order.
     const AXI_TO_3D: [usize; 4] = [0, 1, 2, 5];
@@ -412,6 +821,33 @@ pub fn reduce_to_model(d3: &[[f64; 6]; 6], model: ElasticityModel) -> Vec<Vec<f6
 
 /// Orthotropic conductivities / diffusivities, in the material axes. The prefix
 /// is the physics' own (`k` for heat, `D` for Fick).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let mut mat = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(),
+/// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
+/// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
+/// // Le préfixe est celui de la physique : `k` pour la chaleur, `D` pour Fick.
+/// assert_eq!(symmetry::orthotropic_scalar("k"),
+///            ["k_1".to_string(), "k_2".to_string(), "k_3".to_string()]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn orthotropic_scalar(prefix: &str) -> [String; 3] {
     [
         format!("{prefix}_1"),
@@ -422,6 +858,33 @@ pub fn orthotropic_scalar(prefix: &str) -> [String; 3] {
 
 /// The six independent components of a symmetric anisotropic conductivity /
 /// diffusivity tensor, upper triangle.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let mut mat = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(),
+/// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
+/// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
+/// // Les six composantes du triangle supérieur d'un tenseur symétrique.
+/// assert_eq!(symmetry::anisotropic_scalar("D")[0], "D_11");
+/// assert_eq!(symmetry::anisotropic_scalar("D").len(), 6);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn anisotropic_scalar(prefix: &str) -> [String; 6] {
     [
         format!("{prefix}_11"),
@@ -441,6 +904,36 @@ pub fn anisotropic_scalar(prefix: &str) -> [String; 6] {
 /// allowed a conductivity varying inside a cell, and that is preserved;
 /// orthotropy and anisotropy read their constants per cell, like the mechanical
 /// moduli.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let mut mat = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(),
+/// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
+/// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
+/// // Orthotrope, axes tournés d'un quart de tour : la conductivité forte
+/// // (k_1 = 9) se retrouve **sur y**, pas sur x.
+/// let k = symmetry::transport_tensor(
+///     &mat, 0, 0, MaterialSymmetry::Orthotropic, 2, "k")?;
+/// assert!((k[(1, 1)] - 9.0).abs() < 1e-12);
+/// assert!((k[(0, 0)] - 1.0).abs() < 1e-12);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn transport_tensor(
     material: &SubElementField,
     cell: usize,

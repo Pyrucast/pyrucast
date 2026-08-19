@@ -51,12 +51,25 @@ use crate::models::{CellGeom, Physics};
 /// Derived rather than tabulated, which is what made
 /// [`Domain::material_components`](crate::models::Domain::material_components)
 /// owned: the name is not known until the caller says what is transferred.
+///
+/// ```
+/// # use pyrucast::models::transfer;
+/// // Le nom n'est pas tabulé : il se déduit de ce que l'appelant transporte.
+/// assert_eq!(transfer::coefficient_name("T"), "h_T");
+/// assert_eq!(transfer::coefficient_name("c_H2"), "h_c_H2");
+/// ```
 pub fn coefficient_name(primal: &str) -> String {
     format!("h_{primal}")
 }
 
 /// The behaviour **output** component of one transferred quantity: the exchanged
 /// flux density `h·(a − b)`.
+///
+/// ```
+/// # use pyrucast::models::transfer;
+/// // La **sortie** de la loi : la densité de flux échangée.
+/// assert_eq!(transfer::flux_name("T"), "flux_T");
+/// ```
 pub fn flux_name(primal: &str) -> String {
     format!("flux_{primal}")
 }
@@ -66,6 +79,13 @@ pub fn flux_name(primal: &str) -> String {
 ///
 /// A boundary law needs no such name — its input is the field itself, the far
 /// side being a datum rather than a second unknown.
+///
+/// ```
+/// # use pyrucast::models::transfer;
+/// // L'**entrée** d'une loi d'interface : le saut a₁ − a₂. Une loi de bord
+/// // n'en a pas besoin — son entrée est le champ lui-même.
+/// assert_eq!(transfer::jump_name("T"), "jump_T");
+/// ```
 pub fn jump_name(primal: &str) -> String {
     format!("jump_{primal}")
 }
@@ -73,6 +93,17 @@ pub fn jump_name(primal: &str) -> String {
 /// Check a caller's transferred list, and return the material contract it
 /// implies. An empty list is a caller error: a law that transfers nothing has no
 /// matrix to assemble and no coefficient to read.
+///
+/// ```
+/// # use pyrucast::models::transfer;
+/// let paires = vec![("T".to_string(), "q".to_string())];
+/// assert_eq!(transfer::material_contract("BoundaryTransfer", &paires)?,
+///            vec!["h_T".to_string()]);
+/// // Une loi qui ne transporte rien n'a ni matrice ni coefficient : c'est
+/// // une erreur d'appel, pas un cas dégénéré à laisser passer.
+/// assert!(transfer::material_contract("BoundaryTransfer", &[]).is_err());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn material_contract(label: &str, components: &[(String, String)]) -> Result<Vec<String>> {
     if components.is_empty() {
         return Err(PyrucastError::Message(format!(
@@ -95,6 +126,15 @@ pub fn material_contract(label: &str, components: &[(String, String)]) -> Result
 /// A transfer law's nature cannot be deduced from its variable names, which the
 /// caller chooses freely, so it is declared and kept; but there are finitely
 /// many natures, and each has exactly one slice.
+///
+/// ```
+/// # use pyrucast::models::transfer;
+/// # use pyrucast::models::Physics;
+/// // La nature d'une loi de transfert ne se déduit pas des noms de
+/// // variables, que l'appelant choisit : elle est déclarée, puis rendue
+/// // ici sous la forme d'une tranche `'static`.
+/// assert_eq!(transfer::physics_slice(Physics::Thermal), &[Physics::Thermal]);
+/// ```
 pub fn physics_slice(physics: Physics) -> &'static [Physics] {
     match physics {
         Physics::Mechanical => &[Physics::Mechanical],
@@ -113,6 +153,36 @@ pub fn physics_slice(physics: Physics) -> &'static [Physics] {
 /// names, so calling it inside the Gauss loop — as both physics used to — pays a
 /// string comparison per point. Hoisting it here is why the multi-component form
 /// costs less than the scalar one it replaces, rather than more.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::kernel::assemble_block;
+/// # use pyrucast::models::transfer;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+/// #     zone.clone(), vec!["h_T".into()], &[2.0]).unwrap());
+/// // Les index sont **hissés hors de la boucle de Gauss** : `value` cherche
+/// // son nom par balayage linéaire, et le payer par point coûtait plus que
+/// // la forme scalaire qu'on remplace.
+/// let paires = vec![("T".to_string(), "q".to_string())];
+/// assert_eq!(transfer::coefficient_indices(&mat.read(), &paires)?, vec![0]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn coefficient_indices(
     material: &SubElementField,
     components: &[(String, String)],
@@ -140,6 +210,46 @@ pub fn coefficient_indices(
 /// carry the same surface, so either would do, and taking the row side keeps the
 /// four blocks integrated identically — which is what makes them sum to a
 /// consistent operator.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::kernel::assemble_block;
+/// # use pyrucast::models::transfer;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+/// #     zone.clone(), vec!["h_T".into()], &[2.0]).unwrap());
+/// let paires = vec![("T".to_string(), "q".to_string())];
+/// let idx = transfer::coefficient_indices(&mat.read(), &paires)?;
+/// // h ∫ N_i N_j dΓ : la mesure vient du côté **ligne**, ce qui fait que
+/// // les quatre blocs d'une interface s'intègrent identiquement.
+/// let bloc = assemble_block(
+///     std::slice::from_ref(&zone), &support, &support,
+///     vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+///     Some(&mat), None,
+///     |geoms, m, _s, ke| {
+///         transfer::exchange_matrix(&geoms[0], &geoms[0], m.unwrap(), &idx, 1.0, ke)
+///     },
+/// )?;
+/// // La somme des entrées vaut h × la longueur du segment.
+/// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
+/// assert!((total - 2.0).abs() < 1e-12);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn exchange_matrix(
     row_geom: &CellGeom,
     col_geom: &CellGeom,
@@ -177,6 +287,42 @@ pub fn exchange_matrix(
 /// A film integrand is a flux **density**, not a gradient-conjugate quantity, so
 /// the continuum default would be wrong here. For a linear law this equals
 /// `(K·u)_i`, which is the invariant the internal forces must satisfy.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::kernel::assemble_block;
+/// # use pyrucast::models::transfer;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+/// #     zone.clone(), vec!["h_T".into()], &[2.0]).unwrap());
+/// # let flux = SubElementField::from_uniform_per_component(
+/// #     zone.clone(), vec!["flux_T".into()], &[1.0])?;
+/// # let paires = vec![("T".to_string(), "q".to_string())];
+/// # let fe = std::sync::Mutex::new(vec![0.0; 2]);
+/// // ∫ Nᵀ · flux dΓ — le résidu d'une loi de transfert, du côté nodal.
+/// // Une densité unité sur un segment de longueur 1 se partage en deux.
+/// pyrucast::models::kernel::reduce_cells(&zone, |geom| {
+///     transfer::internal_force(geom, &flux, &paires, &mut fe.lock().unwrap())?;
+///     Ok(0.0)
+/// })?;
+/// assert!((fe.lock().unwrap().iter().sum::<f64>() - 1.0).abs() < 1e-12);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn internal_force(
     geom: &CellGeom,
     stress: &SubElementField,
