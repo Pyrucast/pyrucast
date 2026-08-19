@@ -1263,6 +1263,29 @@ impl Matrix {
 
     /// Aggregate is symmetric iff every block is. Vacuously true for an
     /// empty aggregate.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::Matrix;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::Model;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::{element_field, matrix};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+    /// # let k = matrix::stiffness(&model, &materials).unwrap();
+    /// // Une raideur de Galerkine est symétrique : le drapeau le déclare.
+    /// assert!(k.symmetric().unwrap());
+    /// ```
     pub fn symmetric(&self) -> Result<bool> {
         for h in self {
             if !h.read().symmetric() {
@@ -1274,6 +1297,31 @@ impl Matrix {
 
     /// Union of all row DOFs across blocks, in first-seen order.
     /// If finalized, returns the cached order (consistent with the CSR).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::Matrix;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::Model;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::{element_field, matrix};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+    /// # let k = matrix::stiffness(&model, &materials).unwrap();
+    /// // Un DDL de ligne : (nœud, variable **duale**).
+    /// let lignes = k.row_dofs().unwrap();
+    /// assert_eq!(lignes.len(), k.n_rows().unwrap());
+    /// assert_eq!(lignes[0].1, "q");
+    /// ```
     pub fn row_dofs(&self) -> Result<Vec<NamedDof>> {
         if let Some(a) = &self.assembled {
             return Ok(a.row_dofs.clone());
@@ -1283,6 +1331,29 @@ impl Matrix {
 
     /// Union of all column DOFs across blocks, in first-seen order.
     /// If finalized, returns the cached order (consistent with the CSR).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::Matrix;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::Model;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::{element_field, matrix};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+    /// # let k = matrix::stiffness(&model, &materials).unwrap();
+    /// // Un DDL de colonne : (nœud, variable **primale**).
+    /// assert_eq!(k.col_dofs().unwrap()[0].1, "T");
+    /// ```
     pub fn col_dofs(&self) -> Result<Vec<NamedDof>> {
         if let Some(a) = &self.assembled {
             return Ok(a.col_dofs.clone());
@@ -1291,6 +1362,54 @@ impl Matrix {
     }
 
     /// Union of all field names (dual + primal) across blocks.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::Matrix;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::Model;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::{element_field, matrix};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+    /// # let k = matrix::stiffness(&model, &materials).unwrap();
+    /// // Les noms sont internés une seule fois, lignes et colonnes confondues.
+    /// let noms = k.field_names().unwrap();
+    /// assert!(noms.contains(&"T".to_string()) && noms.contains(&"q".to_string()));
+    /// ```
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::Matrix;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::Model;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::{element_field, matrix};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+    /// # let k = matrix::stiffness(&model, &materials).unwrap();
+    /// // Les noms sont internés une seule fois, lignes et colonnes confondues.
+    /// let noms = k.field_names().unwrap();
+    /// assert!(noms.contains(&"T".to_string()) && noms.contains(&"q".to_string()));
+    /// ```
     pub fn field_names(&self) -> Result<Vec<String>> {
         let mut out: Vec<String> = Vec::new();
         for h in self {
@@ -1304,16 +1423,86 @@ impl Matrix {
     }
 
     /// Number of distinct row DOFs.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::Matrix;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::Model;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::{element_field, matrix};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+    /// # let k = matrix::stiffness(&model, &materials).unwrap();
+    /// assert_eq!(k.n_rows().unwrap(), 2); // deux nœuds, une variable duale
+    /// ```
     pub fn n_rows(&self) -> Result<usize> {
         Ok(self.row_dofs()?.len())
     }
 
     /// Number of distinct column DOFs.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::Matrix;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::Model;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::{element_field, matrix};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+    /// # let k = matrix::stiffness(&model, &materials).unwrap();
+    /// assert_eq!(k.n_cols().unwrap(), 2);
+    /// ```
     pub fn n_cols(&self) -> Result<usize> {
         Ok(self.col_dofs()?.len())
     }
 
     /// Total COO entries stored across all blocks (counting duplicates).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::Matrix;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::Model;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::{element_field, matrix};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+    /// # let k = matrix::stiffness(&model, &materials).unwrap();
+    /// // Compte les entrées **stockées** dans les blocs. Un bloc *calculé*
+    /// // — ce que produit `stiffness` — n'en stocke aucune : ses valeurs
+    /// // naissent à l'assemblage et vivent dans le CSR global.
+    /// assert_eq!(k.entry_count().unwrap(), 0);
+    /// assert_eq!(k.to_csr().unwrap().nnz(), 4); // le CSR, lui, les porte
+    /// ```
     pub fn entry_count(&self) -> Result<usize> {
         let mut total = 0usize;
         for h in self {
@@ -1323,6 +1512,32 @@ impl Matrix {
     }
 
     /// Sum of contributions at `(row, col)` across every block.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::Matrix;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::Model;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::{element_field, matrix};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+    /// # let k = matrix::stiffness(&model, &materials).unwrap();
+    /// // Un SEG2 de longueur 1, k = 1 : K = [[1, -1], [-1, 1]].
+    /// assert_eq!(k.get(a.id(), "q", a.id(), "T").unwrap(), 1.0);
+    /// assert_eq!(k.get(a.id(), "q", b.id(), "T").unwrap(), -1.0);
+    /// // Une coordonnée absente du motif vaut zéro : la lecture ne lève pas.
+    /// assert_eq!(k.get(a.id(), "q", a.id(), "absente").unwrap(), 0.0);
+    /// ```
     pub fn get(
         &self,
         row_node: NodeId,
@@ -1355,6 +1570,32 @@ impl Matrix {
     }
 
     /// All COO entries across every block, in block-insertion order.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::Matrix;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::Model;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::{element_field, matrix};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+    /// # let k = matrix::stiffness(&model, &materials).unwrap();
+    /// // Un 5-uplet par entrée : nœud ligne, var duale, nœud colonne, var
+    /// // primale, valeur — les noms y sont déjà résolus. Comme
+    /// // `entry_count`, cela parcourt les entrées **stockées** : un bloc
+    /// // calculé n'en a aucune, ses valeurs vivant dans le CSR global.
+    /// assert!(k.iter_entries().unwrap().is_empty());
+    /// ```
     pub fn iter_entries(&self) -> Result<Vec<MatrixEntry>> {
         let mut out = Vec::new();
         for h in self {
@@ -1366,11 +1607,58 @@ impl Matrix {
     // ── Solver-facing (require finalize) ────────────────────────────────
 
     /// Assembled CSR. Requires [`finalize`](Self::finalize).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::Matrix;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::Model;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::{element_field, matrix};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+    /// # let k = matrix::stiffness(&model, &materials).unwrap();
+    /// // Le CSR **est** l'état assemblé : emprunté, pas reconstruit.
+    /// assert_eq!(k.to_csr().unwrap().nnz(), 4);
+    /// ```
     pub fn to_csr(&self) -> Result<&CsrMatrix<f64>> {
         Ok(&self.assembled_or_err()?.csr)
     }
 
     /// Assembled dense matrix. Requires [`finalize`](Self::finalize).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::Matrix;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::Model;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::{element_field, matrix};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+    /// # let k = matrix::stiffness(&model, &materials).unwrap();
+    /// // Vue nalgebra (column-major), prête pour LU ou Cholesky.
+    /// let m = k.to_dmatrix().unwrap();
+    /// assert_eq!((m.nrows(), m.ncols()), (2, 2));
+    /// ```
     pub fn to_dmatrix(&self) -> Result<DMatrix<f64>> {
         let a = self.assembled_or_err()?;
         let nr = a.row_dofs.len();
@@ -1383,6 +1671,31 @@ impl Matrix {
     }
 
     /// Row-major dense buffer. Requires [`finalize`](Self::finalize).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::Matrix;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::Model;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::{element_field, matrix};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+    /// # let k = matrix::stiffness(&model, &materials).unwrap();
+    /// // Vue dense ligne-major, longueur n_rows × n_cols.
+    /// let d = k.dense().unwrap();
+    /// assert_eq!(d.len(), k.n_rows().unwrap() * k.n_cols().unwrap());
+    /// assert_eq!(d, vec![1.0, -1.0, -1.0, 1.0]);
+    /// ```
     pub fn dense(&self) -> Result<Vec<f64>> {
         let m = self.to_dmatrix()?;
         let mut out = Vec::with_capacity(m.nrows() * m.ncols());
@@ -1395,6 +1708,28 @@ impl Matrix {
     }
 
     /// Assembled COO (rebuilt from the CSR). Requires [`finalize`](Self::finalize).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::Matrix;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::Model;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::{element_field, matrix};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+    /// # let k = matrix::stiffness(&model, &materials).unwrap();
+    /// assert_eq!(k.to_coo().unwrap().nnz(), 4);
+    /// ```
     pub fn to_coo(&self) -> Result<CooMatrix<f64>> {
         let a = self.assembled_or_err()?;
         let mut coo = CooMatrix::<f64>::new(a.row_dofs.len(), a.col_dofs.len());
@@ -1405,11 +1740,56 @@ impl Matrix {
     }
 
     /// Assembled CSC. Requires [`finalize`](Self::finalize).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::Matrix;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::Model;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::{element_field, matrix};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+    /// # let k = matrix::stiffness(&model, &materials).unwrap();
+    /// assert_eq!(k.to_csc().unwrap().ncols(), 2);
+    /// ```
     pub fn to_csc(&self) -> Result<CscMatrix<f64>> {
         Ok(CscMatrix::from(&self.assembled_or_err()?.csr))
     }
 
     /// `y = A · x` (dense). Requires [`finalize`](Self::finalize).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::Matrix;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::Model;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::{element_field, matrix};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+    /// # let k = matrix::stiffness(&model, &materials).unwrap();
+    /// // K · [1, 1] = 0 : le mode rigide d'une conduction.
+    /// assert_eq!(k.mul_dense(&[1.0, 1.0]).unwrap(), vec![0.0, 0.0]);
+    /// ```
     pub fn mul_dense(&self, x: &[f64]) -> Result<Vec<f64>> {
         let a = self.assembled_or_err()?;
         let nc = a.col_dofs.len();
@@ -1436,6 +1816,29 @@ impl Matrix {
     /// (internal forces `K·u`) lives on, so `&f_ext_r - &f_int` aligns zone by
     /// zone instead of passing through. Available before
     /// [`finalize`](Self::finalize) (the supports are structural).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::Matrix;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::Model;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::{element_field, matrix};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+    /// # let k = matrix::stiffness(&model, &materials).unwrap();
+    /// // Le support **ligne** : la cible de projection d'un second membre.
+    /// assert_eq!(k.row_mesh().unwrap().cell_count().unwrap(), 2);
+    /// ```
     pub fn row_mesh(&self) -> Result<Mesh> {
         self.support_mesh(true)
     }
@@ -1444,6 +1847,29 @@ impl Matrix {
     /// side: where a `solve` solution lives). Column twin of
     /// [`row_mesh`](Self::row_mesh) — e.g. to project an initial or imposed
     /// field onto the exact supports of the solution before combining.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::Matrix;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::Model;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::{element_field, matrix};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+    /// # let k = matrix::stiffness(&model, &materials).unwrap();
+    /// // Le support **colonne** : celui d'un champ que l'on multiplie.
+    /// assert_eq!(k.col_mesh().unwrap().cell_count().unwrap(), 2);
+    /// ```
     pub fn col_mesh(&self) -> Result<Mesh> {
         self.support_mesh(false)
     }
@@ -1459,6 +1885,32 @@ impl Matrix {
     /// them [`Physics::Other`] to reach them with `filter(Physics::Other)`. The
     /// result is **not assembled** — like any matrix with freshly added blocks,
     /// call [`Matrix::assemble`] before handing it to a solver.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::Matrix;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::Model;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::{element_field, matrix};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+    /// # let k = matrix::stiffness(&model, &materials).unwrap();
+    /// # use pyrucast::models::Physics;
+    /// // Le résultat n'est **pas** assemblé : appeler `assemble` avant de résoudre.
+    /// let thermique = k.filter(Physics::Thermal).unwrap();
+    /// assert_eq!(thermique.len(), 1);
+    /// assert!(k.filter(Physics::Mechanical).unwrap().is_empty());
+    /// ```
     pub fn filter(&self, physics: Physics) -> Result<Matrix> {
         let mut indices: Vec<usize> = Vec::new();
         for (i, h) in self.iter().enumerate() {
@@ -1473,6 +1925,30 @@ impl Matrix {
     /// first-seen order, deduplicated. Empty if no block is tagged (« rien »).
     /// A matrix aggregating several physics reports **several** tags here (e.g.
     /// a heat model with a Dirichlet → `[Thermal, Constraint]`).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::Matrix;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::Model;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::{element_field, matrix};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+    /// # let k = matrix::stiffness(&model, &materials).unwrap();
+    /// # use pyrucast::models::Physics;
+    /// // Les natures **présentes**, dédupliquées.
+    /// assert!(k.physics().unwrap().contains(&Physics::Thermal));
+    /// ```
     pub fn physics(&self) -> Result<Vec<Physics>> {
         let mut out: Vec<Physics> = Vec::new();
         for h in self {

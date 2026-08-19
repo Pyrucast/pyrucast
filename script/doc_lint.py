@@ -383,19 +383,25 @@ def delegations():
     exemple dupliquerait le sien, et alourdirait de six cents lignes des
     fichiers dont tout l'objet est de tenir en une ligne par verbe.
     """
-    noms = set()
+    noms, generiques = set(), set()
     for p in (ROOT / "src" / "ops").rglob("methods.rs"):
         source = p.read_text(errors="ignore")
         typ = None
         for ligne in source.split("\n"):
-            m = re.match(r"impl(?:<[^>]*>)? ([A-Za-z0-9_]+)", ligne)
+            m = re.match(r"\s*impl(?:<[^>]*>)? (\$?[A-Za-z0-9_]+)", ligne)
             if m:
                 typ = m.group(1)
                 continue
             m = re.match(r"\s+pub fn ([a-z_0-9]+)", ligne)
             if m and typ:
-                noms.add(f"{typ}::{m.group(1)}")
-    return noms
+                if typ.startswith("$"):
+                    # `impl $T` : une macro qui décline la même délégation sur
+                    # plusieurs saveurs de champ. Le nom seul fait foi, faute
+                    # de connaître ici les types auxquels elle est appliquée.
+                    generiques.add(m.group(1))
+                else:
+                    noms.add(f"{typ}::{m.group(1)}")
+    return noms, generiques
 
 
 def api_publique():
@@ -437,8 +443,13 @@ def api_publique():
         ):
             methodes.add(f"{chemin}::{nom}")
     # Les délégations sont documentées par leur cible, pas par elles-mêmes.
-    deleguees = delegations()
-    methodes = {m for m in methodes if "::".join(m.split("::")[-2:]) not in deleguees}
+    deleguees, generiques = delegations()
+    methodes = {
+        m
+        for m in methodes
+        if "::".join(m.split("::")[-2:]) not in deleguees
+        and m.split("::")[-1] not in generiques
+    }
     return libres, methodes
 
 
