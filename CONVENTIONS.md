@@ -512,12 +512,17 @@ Ci-dessous, les règles seules.
    | l'usage d'un opérateur en Python | `tests/python/test_doc_<famille>.py`, ancré | `{{#include …:ancre}}` |
    | ce qui n'est **pas du code** | la page elle-même | ` ```text `, sans coloration |
 
-   **Une méthode de pure délégation ne porte pas d'exemple.** Les
-   `src/ops/**/methods.rs` n'exposent que la face « sujet » d'un opérateur :
-   aucune logique, un appel à la fonction libre. C'est elle la forme
-   canonique, c'est elle qui est documentée — leur réclamer un exemple
-   dupliquerait le sien, et donnerait un second texte à maintenir pour rien.
-   Le cliquet les écarte du dénominateur.
+   **Une méthode de pure délégation ne porte pas d'exemple.** Elle n'a aucune
+   logique : elle appelle la fonction libre, receveur compris. C'est cette
+   dernière la forme canonique, c'est elle qui est documentée — leur réclamer
+   un exemple dupliquerait le sien, et donnerait un second texte à maintenir
+   pour rien.
+
+   On les reconnaît à leur **marqueur** : toute leur documentation tient en un
+   « voir [`module::verbe`] ». C'est ce marqueur qui fait foi, pas
+   l'emplacement — ces blocs vivent dans `src/ops/**/methods.rs`, mais aussi au
+   bas de `src/ops/matrix.rs`, et certains naissent d'une macro sur `impl $T`.
+   Le cliquet les écarte du dénominateur sur ce critère.
 
    Le préfixe `test_` n'est pas décoratif : `pytest` ne collecte que
    `test_*.py`. Un fichier de sources d'exemples nommé autrement est inclus

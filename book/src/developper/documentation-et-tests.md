@@ -178,13 +178,17 @@ liens, il n'y a ni chemin de bibliothèque à passer, ni ancre à maintenir. On
 
 Le vocabulaire des attributs, et lequel choisir :
 
-Une exception, et une seule : **la méthode de pure délégation**. Les fichiers
-`src/ops/**/methods.rs` exposent la face « sujet » d'un opérateur — aucune
-logique, un appel à la fonction libre — et c'est cette dernière qui est la forme
-canonique et qui porte la documentation. Y ajouter un exemple dupliquerait le
-sien : soixante-huit exemples de plus, six cents lignes dans des fichiers dont
-tout l'objet est de tenir en une ligne par verbe, et un second texte à faire
-vieillir. Le cliquet les écarte du dénominateur.
+Une exception, et une seule : **la méthode de pure délégation**. Elle expose la
+face « sujet » d'un opérateur — aucune logique, un appel à la fonction libre —
+et c'est cette dernière qui est la forme canonique et qui porte la
+documentation. Y ajouter un exemple dupliquerait le sien : soixante-treize
+exemples de plus, plus de six cents lignes dans des fichiers dont tout l'objet
+est de tenir en une ligne par verbe, et un second texte à faire vieillir.
+
+On les reconnaît à leur **marqueur**, non à leur emplacement : toute leur
+documentation tient en un « voir [`module::verbe`] ». Chercher par répertoire en
+laissait passer la moitié — il y en a au bas de `src/ops/matrix.rs`, et d'autres
+que produit une macro sur `impl $T`.
 
 | attribut | effet | quand |
 |---|---|---|

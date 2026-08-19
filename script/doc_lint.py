@@ -53,6 +53,7 @@ SYMBOLES_TOLERES = {
     "ops::mesher": "nom historique, cité pour raconter le renommage du 2026-08-03",
     "SubMesh::connectivity": "pub(crate) : la page Parallélisme décrit la machinerie interne",
     "Type::membre": "métavariable de la page Documentation et tests",
+    "module::verbe": "métavariable : le marqueur des méthodes de délégation",
     "Coords::acquire": "nom fautif, cité pour raconter ce que le garde-fou a trouvé",
 }
 
@@ -374,34 +375,38 @@ DOC = ROOT / "target" / "doc" / "pyrucast"
 
 
 def delegations():
-    """Les méthodes de pure délégation, `Type::verbe`.
+    """Les méthodes de **pure délégation** — celles dont toute la documentation
+    est « voir [la fonction libre] ».
 
-    Elles vivent dans `src/ops/**/methods.rs`, ne contiennent aucune logique et
-    appellent la fonction libre, receveur compris. C'est la **fonction libre**
-    qui est la forme canonique et qui porte la documentation
-    (`CONVENTIONS.md`, « Le verbe exposé aussi en méthode ») : leur réclamer un
-    exemple dupliquerait le sien, et alourdirait de six cents lignes des
-    fichiers dont tout l'objet est de tenir en une ligne par verbe.
+    Elles n'ont aucune logique : elles appellent l'opérateur, receveur compris.
+    C'est la fonction libre qui est la forme canonique et qui porte la
+    documentation (`CONVENTIONS.md`, « Le verbe exposé aussi en méthode ») :
+    leur réclamer un exemple dupliquerait le sien, et donnerait un second texte
+    à faire vieillir.
+
+    Le critère est ce **marqueur intentionnel**, pas l'emplacement : ces blocs
+    vivent dans `src/ops/**/methods.rs` mais aussi au bas de `src/ops/matrix.rs`,
+    et certains sont produits par macro sur `impl $T`. Chercher par répertoire
+    en laissait passer la moitié.
     """
-    noms, generiques = set(), set()
-    for p in (ROOT / "src" / "ops").rglob("methods.rs"):
-        source = p.read_text(errors="ignore")
-        typ = None
-        for ligne in source.split("\n"):
-            m = re.match(r"\s*impl(?:<[^>]*>)? (\$?[A-Za-z0-9_]+)", ligne)
-            if m:
-                typ = m.group(1)
-                continue
+    noms = set()
+    for p in (ROOT / "src").rglob("*.rs"):
+        lignes = p.read_text(errors="ignore").split("\n")
+        for i, ligne in enumerate(lignes):
             m = re.match(r"\s+pub fn ([a-z_0-9]+)", ligne)
-            if m and typ:
-                if typ.startswith("$"):
-                    # `impl $T` : une macro qui décline la même délégation sur
-                    # plusieurs saveurs de champ. Le nom seul fait foi, faute
-                    # de connaître ici les types auxquels elle est appliquée.
-                    generiques.add(m.group(1))
-                else:
-                    noms.add(f"{typ}::{m.group(1)}")
-    return noms, generiques
+            if not m:
+                continue
+            doc, k = [], i - 1
+            while k >= 0 and lignes[k].strip().startswith("///"):
+                doc.insert(0, lignes[k].strip())
+                k -= 1
+            if (
+                len(doc) == 1
+                and re.search(r"[Vv]oir \[", doc[0])
+                and "fn@crate::ops::" in doc[0]
+            ):
+                noms.add(m.group(1))
+    return noms
 
 
 def api_publique():
@@ -443,13 +448,8 @@ def api_publique():
         ):
             methodes.add(f"{chemin}::{nom}")
     # Les délégations sont documentées par leur cible, pas par elles-mêmes.
-    deleguees, generiques = delegations()
-    methodes = {
-        m
-        for m in methodes
-        if "::".join(m.split("::")[-2:]) not in deleguees
-        and m.split("::")[-1] not in generiques
-    }
+    deleguees = delegations()
+    methodes = {m for m in methodes if m.split("::")[-1] not in deleguees}
     return libres, methodes
 
 
