@@ -161,6 +161,45 @@ fn scale_slope_slots(row: &[f64], j: f64) -> Vec<f64> {
 /// need them), so a point-local kernel that never asks for geometry (most
 /// behaviour integrands) pays nothing. `CellGeom` is created and used within one
 /// rayon task, so the interior-mutable cache is single-threaded.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::kernel::{assemble_block, CellGeom};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
+/// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
+/// # // une physique.
+/// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
+/// #     assemble_block(
+/// #         std::slice::from_ref(&zone), &support, &support,
+/// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+/// #         None, None,
+/// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
+/// #     ).map(|_| ())
+/// # };
+/// // La géométrie d'une maille, sans jamais toucher au magasin : le noyau
+/// // ne voit que ça — ni rayon, ni verrou.
+/// noyau(&|geom| {
+///     assert_eq!(geom.n_nodes, 3);
+///     assert_eq!(geom.space_dim, 2);
+///     assert!(!geom.axisymmetric);
+///     Ok(())
+/// })?;
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub struct CellGeom<'a> {
     rd: &'a RefData,
     coords: &'a Coords,
@@ -197,12 +236,84 @@ impl<'a> CellGeom<'a> {
     }
 
     /// Global node ids of this cell, in connectivity order.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::kernel::{assemble_block, CellGeom};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
+    /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
+    /// # // une physique.
+    /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
+    /// #     assemble_block(
+    /// #         std::slice::from_ref(&zone), &support, &support,
+    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+    /// #         None, None,
+    /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
+    /// #     ).map(|_| ())
+    /// # };
+    /// noyau(&|geom| {
+    ///     assert_eq!(geom.node_ids().len(), 3); // dans l'ordre de connectivité
+    ///     Ok(())
+    /// })?;
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn node_ids(&self) -> &'a [NodeId] {
         &self.conn[self.cell * self.n_nodes..(self.cell + 1) * self.n_nodes]
     }
 
     /// Coordinates of local node `local` (0-based within the cell). Read straight
     /// from the held `Coords` (no gather).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::kernel::{assemble_block, CellGeom};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
+    /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
+    /// # // une physique.
+    /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
+    /// #     assemble_block(
+    /// #         std::slice::from_ref(&zone), &support, &support,
+    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+    /// #         None, None,
+    /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
+    /// #     ).map(|_| ())
+    /// # };
+    /// noyau(&|geom| {
+    ///     // Les coordonnées sont rassemblées **paresseusement** : un noyau
+    ///     // purement local ne les paie pas.
+    ///     assert_eq!(geom.node_coord(1)?, &[2.0, 0.0]);
+    ///     Ok(())
+    /// })?;
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn node_coord(&self, local: usize) -> Result<&[f64]> {
         self.coords.position(self.node_ids()[local])
     }
@@ -222,6 +333,43 @@ impl<'a> CellGeom<'a> {
     }
 
     /// `∂N_i/∂x_a` at Gauss point `g`, flat layout `[i * space_dim + a]`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::kernel::{assemble_block, CellGeom};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
+    /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
+    /// # // une physique.
+    /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
+    /// #     assemble_block(
+    /// #         std::slice::from_ref(&zone), &support, &support,
+    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+    /// #         None, None,
+    /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
+    /// #     ).map(|_| ())
+    /// # };
+    /// noyau(&|geom| {
+    ///     // La matrice B. Les gradients somment au vecteur nul.
+    ///     let b = geom.dn_dx(0)?;
+    ///     assert!((b[0] + b[2] + b[4]).abs() < 1e-12);
+    ///     Ok(())
+    /// })?;
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn dn_dx(&self, g: usize) -> Result<Vec<f64>> {
         self.ensure_cell_coords()?;
         let cc = self.cell_coords.borrow();
@@ -232,6 +380,41 @@ impl<'a> CellGeom<'a> {
     }
 
     /// Shape-function values `N_i(ξ_g)` at Gauss point `g`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::kernel::{assemble_block, CellGeom};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
+    /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
+    /// # // une physique.
+    /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
+    /// #     assemble_block(
+    /// #         std::slice::from_ref(&zone), &support, &support,
+    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+    /// #         None, None,
+    /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
+    /// #     ).map(|_| ())
+    /// # };
+    /// noyau(&|geom| {
+    ///     assert!((geom.n_at_g(0)?.iter().sum::<f64>() - 1.0).abs() < 1e-12);
+    ///     Ok(())
+    /// })?;
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn n_at_g(&self, g: usize) -> Result<&[f64]> {
         Ok(&self.rd.n_ref[g])
     }
@@ -242,6 +425,41 @@ impl<'a> CellGeom<'a> {
     /// the subspace's, but the functions to evaluate at it are the element's own
     /// — a discrete-Kirchhoff shell interpolates its rotations quadratically over
     /// a mesh the space declares linear.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::kernel::{assemble_block, CellGeom};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
+    /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
+    /// # // une physique.
+    /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
+    /// #     assemble_block(
+    /// #         std::slice::from_ref(&zone), &support, &support,
+    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+    /// #         None, None,
+    /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
+    /// #     ).map(|_| ())
+    /// # };
+    /// noyau(&|geom| {
+    ///     assert_eq!(geom.gauss_xi(0)?.len(), 2); // dans l'élément de référence
+    ///     Ok(())
+    /// })?;
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn gauss_xi(&self, g: usize) -> Result<&[f64]> {
         self.rd
             .gauss_xi
@@ -257,6 +475,43 @@ impl<'a> CellGeom<'a> {
 
     /// Number of **field** shape functions — `n_nodes` for a Lagrange space,
     /// twice that under a C¹ interpolation.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::kernel::{assemble_block, CellGeom};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
+    /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
+    /// # // une physique.
+    /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
+    /// #     assemble_block(
+    /// #         std::slice::from_ref(&zone), &support, &support,
+    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+    /// #         None, None,
+    /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
+    /// #     ).map(|_| ())
+    /// # };
+    /// noyau(&|geom| {
+    ///     // Le nombre de formes du **champ** : il diffère de `n_nodes` dès que
+    ///     // l'interpolation est d'Hermite.
+    ///     assert_eq!(geom.shape_count(), 3);
+    ///     Ok(())
+    /// })?;
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn shape_count(&self) -> usize {
         self.rd.shape_count
     }
@@ -268,6 +523,41 @@ impl<'a> CellGeom<'a> {
     /// reference degree of freedom is `∂w/∂ξ` while the physical one is
     /// `∂w/∂x`: they carry an extra factor `J`. For a Lagrange space this is
     /// [`n_at_g`](Self::n_at_g) unchanged.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::kernel::{assemble_block, CellGeom};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
+    /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
+    /// # // une physique.
+    /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
+    /// #     assemble_block(
+    /// #         std::slice::from_ref(&zone), &support, &support,
+    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+    /// #         None, None,
+    /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
+    /// #     ).map(|_| ())
+    /// # };
+    /// noyau(&|geom| {
+    ///     assert_eq!(geom.field_n_at_g(0)?.len(), geom.shape_count());
+    ///     Ok(())
+    /// })?;
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn field_n_at_g(&self, g: usize) -> Result<Vec<f64>> {
         self.reject_if_model_embedded("shape values")?;
         if self.rd.field_n_ref.is_empty() {
@@ -338,6 +628,44 @@ impl<'a> CellGeom<'a> {
     /// Physical coordinates of Gauss point `g`, `x_a = Σ_i N_i(ξ_g) · x_{i,a}`
     /// (length `space_dim`). Uses the same lazy coordinate gather as
     /// [`dn_dx`](Self::dn_dx), so a kernel that never asks pays nothing.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::kernel::{assemble_block, CellGeom};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
+    /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
+    /// # // une physique.
+    /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
+    /// #     assemble_block(
+    /// #         std::slice::from_ref(&zone), &support, &support,
+    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+    /// #         None, None,
+    /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
+    /// #     ).map(|_| ())
+    /// # };
+    /// noyau(&|geom| {
+    ///     // Le point de Gauss en coordonnées **physiques** : Σ N_i x_i.
+    ///     // La règle du TRI3 place ses points aux **milieux des arêtes** :
+    ///     // le premier est donc sur le bord, en (1, 0).
+    ///     assert_eq!(geom.x_at_g(0)?, vec![1.0, 0.0]);
+    ///     Ok(())
+    /// })?;
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn x_at_g(&self, g: usize) -> Result<Vec<f64>> {
         self.ensure_cell_coords()?;
         let cc = self.cell_coords.borrow();
@@ -360,6 +688,39 @@ impl<'a> CellGeom<'a> {
     /// Gauss points are interior to the cell, so `r > 0` even for a cell touching
     /// the axis: the `N_i / r` of the hoop strain stays finite — the standard
     /// treatment of the axis in an axisymmetric formulation.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::kernel::assemble_block;
+    /// // Le rayon n'a de sens que sur un repère de **révolution**.
+    /// let coords = Handle::new(Coords::axisymmetric()?);
+    /// # let n: Vec<Node> = [[1.0, 0.0], [3.0, 0.0], [1.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
+    /// # let zone = fes.get(0)?;
+    /// # let support = zone.read().submesh().read().to_poi1()?;
+    /// assemble_block(
+    ///     std::slice::from_ref(&zone), &support, &support,
+    ///     vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+    ///     None, None,
+    ///     |geoms, _m, _s, _ke| {
+    ///         let geom = &geoms[0];
+    ///         assert!(geom.axisymmetric);
+    ///         // `x = r` : le rayon est l'abscisse du point de Gauss.
+    ///         assert_eq!(geom.radius(0)?, geom.x_at_g(0)?[0]);
+    ///         Ok(())
+    ///     },
+    /// )?;
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn radius(&self, g: usize) -> Result<f64> {
         if !self.axisymmetric {
             return Err(PyrucastError::Message(
@@ -401,6 +762,43 @@ impl<'a> CellGeom<'a> {
     /// component along the normal and so cannot be completed into a deformation
     /// gradient: `I + ∇_s u` goes singular under a quarter-turn, while the
     /// tangents never do.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::kernel::{assemble_block, CellGeom};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
+    /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
+    /// # // une physique.
+    /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
+    /// #     assemble_block(
+    /// #         std::slice::from_ref(&zone), &support, &support,
+    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+    /// #         None, None,
+    /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
+    /// #     ).map(|_| ())
+    /// # };
+    /// noyau(&|geom| {
+    ///     // Une tangente par direction de l'élément de référence : deux pour
+    ///     // une surface, une pour une ligne.
+    ///     assert_eq!(geom.tangents(0)?.len(), 2);
+    ///     Ok(())
+    /// })?;
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn tangents(&self, g: usize) -> Result<Vec<Vec<f64>>> {
         self.ensure_cell_coords()?;
         let cc = self.cell_coords.borrow();
@@ -422,6 +820,44 @@ impl<'a> CellGeom<'a> {
     /// Shared by [`normal`](Self::normal) and by the surface kinematics of a
     /// follower load, which needs the same construction on the *deformed*
     /// tangents.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::kernel::{assemble_block, CellGeom};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
+    /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
+    /// # // une physique.
+    /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
+    /// #     assemble_block(
+    /// #         std::slice::from_ref(&zone), &support, &support,
+    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+    /// #         None, None,
+    /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
+    /// #     ).map(|_| ())
+    /// # };
+    /// // Une fonction libre : la normale déduite des tangentes — le produit
+    /// // vectoriel en 3-D, la rotation d'un quart de tour en 2-D. Elle porte
+    /// // la **norme** des tangentes, elle n'est pas normalisée ;
+    /// // [`normal`](Self::normal) s'en charge.
+    /// assert_eq!(CellGeom::normal_from_tangents(&[vec![2.0, 0.0]])?, vec![0.0, -2.0]);
+    /// // Une ou deux tangentes, pas davantage.
+    /// assert!(CellGeom::normal_from_tangents(&[]).is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn normal_from_tangents(tangents: &[Vec<f64>]) -> Result<Vec<f64>> {
         match tangents {
             [t] => Ok(vec![t[1], -t[0]]),
@@ -486,6 +922,45 @@ impl<'a> CellGeom<'a> {
     /// on `CellGeom` — stiffness, mass, conductivity, distributed flux, volumes,
     /// internal forces, on the body and on its boundary alike — integrates over
     /// the full ring without its kernel knowing.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::kernel::{assemble_block, CellGeom};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
+    /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
+    /// # // une physique.
+    /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
+    /// #     assemble_block(
+    /// #         std::slice::from_ref(&zone), &support, &support,
+    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+    /// #         None, None,
+    /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
+    /// #     ).map(|_| ())
+    /// # };
+    /// noyau(&|geom| {
+    ///     // **L'unique endroit** où se décide la mesure d'intégration : ici
+    ///     // |J|·w, et 2πr·|J|·w en révolution. C'est ce qui permet à toute
+    ///     // physique d'intégrer sur l'anneau complet sans rien changer.
+    ///     let aire: f64 = (0..geom.n_gauss).map(|g| geom.det_j_w(g).unwrap()).sum();
+    ///     assert!((aire - 2.0).abs() < 1e-12); // l'aire du triangle
+    ///     Ok(())
+    /// })?;
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn det_j_w(&self, g: usize) -> Result<f64> {
         self.ensure_cell_coords()?;
         let cc = self.cell_coords.borrow();
@@ -518,6 +993,41 @@ impl<'a> CellGeom<'a> {
 /// [`crate::ops::element_field::thermal_strain`](fn@crate::ops::element_field::thermal_strain).
 ///
 /// Returns the material-state field (flux/stress + `VAR1`) on `fespace`.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::kernel;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let mut entree = SubElementField::new(zone.clone(), vec!["eps".into()])?;
+/// # entree.set_uniform("eps", 2.0)?;
+/// # let entree = Handle::new(entree);
+/// // Un noyau **au point de Gauss** : la loi de comportement en est un —
+/// // lire la déformation et le matériau, écrire la contrainte.
+/// let sortie = kernel::element_pointwise(
+///     &zone, &entree, None, vec!["sig".into()],
+///     |_geom, champ, _mat, g, slot| {
+///         slot[0] = 3.0 * champ.get(0, g, 0)?;
+///         Ok(())
+///     },
+/// )?;
+/// assert_eq!(sortie.value(0, 0, "sig")?, 6.0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn element_pointwise(
     fespace: &Handle<SubFiniteElementSpace>,
     input: &Handle<SubElementField>,
@@ -627,6 +1137,45 @@ pub(crate) fn nodal_pointwise(
 /// (same order); a single-space physics reads `geoms[0]`, a multi-quadrature one
 /// reads each. The driver scatters `ke` into the block's COO serially in cell
 /// order. `material` is `Some` iff the physics supplied one.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::kernel;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// // Le pilote appelle un noyau **pur et séquentiel** par maille ; la
+/// // parallélisation, l'emprunt zéro-copie et le rangement en COO sont à
+/// // lui. Ici, une matrice identité locale.
+/// let bloc = kernel::assemble_block(
+///     std::slice::from_ref(&zone), &support, &support,
+///     vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+///     None, None,
+///     |geoms, _m, _s, ke| {
+///         let npc = geoms[0].n_nodes;
+///         for i in 0..npc {
+///             ke[i * npc + i] = 1.0;
+///         }
+///         Ok(())
+///     },
+/// )?;
+/// assert_eq!((bloc.n_rows(), bloc.n_cols()), (3, 3));
+/// assert_eq!(bloc.get(n[0].id(), "q", n[0].id(), "T"), 1.0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[allow(clippy::too_many_arguments)]
 pub fn assemble_block(
     fespaces: &[Handle<SubFiniteElementSpace>],
@@ -680,6 +1229,37 @@ pub fn assemble_block(
 
 /// `(nrows, ncols, local (row, col, value) triplets)` — the shape returned by
 /// [`element_block_triplets`].
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::kernel;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// // Ce que rend `element_block_triplets` : la taille du bloc et ses
+/// // triplets, en numérotation **locale** au bloc.
+/// let (nr, nc, trips): kernel::BlockTriplets = kernel::element_block_triplets(
+///     std::slice::from_ref(&zone), &support, &support, 1, 1,
+///     DofOrdering::NodesThenVars, None, None,
+///     |geoms, _m, _s, ke| { ke[0] = geoms[0].det_j_w(0)?; Ok(()) },
+/// )?;
+/// assert_eq!((nr, nc), (3, 3));
+/// assert!(!trips.is_empty());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub type BlockTriplets = (usize, usize, Vec<(usize, usize, f64)>);
 
 /// Compute one stiffness block's entries as **local** `(row, col, value)`
@@ -731,6 +1311,38 @@ pub fn element_block_triplets(
 
 /// `(nrows, ncols, per-cell local (row, col, value) triplets)` — the shape
 /// returned by [`element_block_triplets_per_cell`].
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::kernel;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// // La même chose, **groupée par maille** : ce que consomme l'assembleur
+/// // global pour verser droit dans le CSR sans matérialiser de valeurs.
+/// let (nr, nc, par_maille): kernel::BlockTripletsPerCell =
+///     kernel::element_block_triplets_per_cell(
+///         std::slice::from_ref(&zone), &support, &support, 1, 1,
+///         DofOrdering::NodesThenVars, None, None,
+///         |geoms, _m, _s, ke| { ke[0] = geoms[0].det_j_w(0)?; Ok(()) },
+///     )?;
+/// assert_eq!((nr, nc), (3, 3));
+/// assert_eq!(par_maille.len(), 1); // une maille
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub type BlockTripletsPerCell = (usize, usize, Vec<Vec<(usize, usize, f64)>>);
 
 /// Same as [`element_block_triplets`] but keeps each cell's triplets in its own
@@ -874,6 +1486,35 @@ pub fn element_block_triplets_per_cell(
 
 /// `(nrows, ncols, per-cell block-local (row, col) index pairs)` — the shape
 /// returned by [`element_block_pattern`].
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::kernel;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// // Le **motif** seul, sans valeurs : c'est lui qui est mis en cache et
+/// // réutilisé d'un assemblage à l'autre, la matière ne le changeant pas.
+/// let (nr, nc, motif): kernel::BlockPattern = kernel::element_block_pattern(
+///     &zone, &support, &support, 1, 1, DofOrdering::NodesThenVars,
+/// )?;
+/// assert_eq!((nr, nc), (3, 3));
+/// assert_eq!(motif[0].len(), 3 * 3); // toutes les paires d'une maille
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub type BlockPattern = (usize, usize, Vec<Vec<(usize, usize)>>);
 
 /// The **symbolic** structure of a computed stiffness block: for each cell, the
@@ -1193,6 +1834,41 @@ fn local_positions(ids: &[NodeId], pos: &HashMap<NodeId, u32>, side: &str) -> Re
 /// [`crate::parallel::colored_scatter`]). The local vector lives on a per-thread
 /// scratch buffer, so the whole element set is never materialised. Returns the
 /// [`SubNodeField`] with one component per `dual_vars` on `support`.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::kernel;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// // Le pilote des **producteurs de champ nodal** : forces internes, flux.
+/// // L'écriture concurrente passe par un coloriage, d'où un résultat
+/// // reproductible bit à bit.
+/// let f = kernel::scatter_to_nodes(
+///     std::slice::from_ref(&zone), &support, vec!["q".into()],
+///     |geoms, fe| {
+///         for (i, slot) in fe.iter_mut().enumerate() {
+///             *slot = geoms[0].det_j_w(0)? * (i as f64);
+///         }
+///         Ok(())
+///     },
+/// )?;
+/// assert_eq!(f.node_count(), 3);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn scatter_to_nodes(
     fespaces: &[Handle<SubFiniteElementSpace>],
     support: &Handle<SubMesh>,
@@ -1298,6 +1974,34 @@ pub fn scatter_to_nodes(
 /// the last ULP (not bit-for-bit reproducible). Cell-local contributions and the
 /// geometry are identical to a sequential run; only the summation grouping
 /// varies.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::kernel;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// // Une réduction sur les mailles : l'aire du maillage, par exemple, se
+/// // lit comme la somme des mesures d'intégration.
+/// let aire = kernel::reduce_cells(&zone, |geom| {
+///     (0..geom.n_gauss).map(|g| geom.det_j_w(g)).sum()
+/// })?;
+/// assert!((aire - 2.0).abs() < 1e-12);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn reduce_cells(
     fespace: &Handle<SubFiniteElementSpace>,
     cell: impl Fn(&CellGeom) -> Result<f64> + Sync,

@@ -422,7 +422,19 @@ def api_publique():
     confondrait.
     """
     tous = (DOC / "all.html").read_text(errors="ignore")
-    libres = set(re.findall(r'<li><a href="[^"]+">([^<]+)</a></li>', tous))
+    # `all.html` liste aussi ce qui est **réexporté d'un autre crate** : le
+    # `pub use rayon::prelude::*` de `parallel` y met treize traits qui ne sont
+    # pas de nous. Leur page rustdoc n'a pas de lien « source » vers
+    # `src/pyrucast/` — c'est ce qui les sépare des nôtres. Exiger un exemple
+    # sur `rayon::ParallelIterator` reviendrait à documenter rayon.
+    libres = set()
+    for href, nom in re.findall(r'<li><a href="([^"]+)">([^<]+)</a></li>', tous):
+        page = DOC / href
+        # Le lien « source » est relatif : sa profondeur en `../` dépend de
+        # celle de la page. On cherche donc le segment, pas le chemin entier.
+        if page.is_file() and "/src/pyrucast/" not in page.read_text(errors="ignore"):
+            continue
+        libres.add(nom)
     methodes = set()
     for p in DOC.rglob("*.html"):
         m = re.match(r"(?:struct|enum|trait)\.([A-Za-z0-9_]+)\.html$", p.name)

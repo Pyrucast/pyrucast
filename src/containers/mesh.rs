@@ -57,6 +57,24 @@ use std::sync::OnceLock;
 /// A [`RgbColor`] is attached as the **face colour** used by the
 /// visualization layer (`viz` feature); it has no effect on numerics and
 /// defaults to a light blue.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// // Une zone homogène : un type d'élément, un repère, une connectivité
+/// // à plat. Elle se fige dès qu'un consommateur la capture.
+/// assert_eq!(sm.element_type(), ElementType::TRI3);
+/// assert_eq!(sm.cell_count(), 1);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Serialize, Deserialize)]
 pub struct SubMesh {
     element_type: ElementType,
@@ -101,6 +119,24 @@ pub struct SubMesh {
 
 impl SubMesh {
     /// Create an empty submesh for the given element type, attached to `coords`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// // Une zone est **homogène** : un seul type d'élément, un seul repère.
+    /// let mut z = SubMesh::new(coords.clone(), ElementType::SEG2);
+    /// z.add_cell(&[n[0].id(), n[1].id()])?;
+    /// assert_eq!(z.cell_count(), 1);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn new(coords: Handle<Coords>, element_type: ElementType) -> Self {
         Self {
             element_type,
@@ -114,6 +150,26 @@ impl SubMesh {
     }
 
     /// Whether this submesh is sealed (connectivity frozen).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// let mesh = Mesh::from_submesh(sm);
+    /// assert!(!mesh.get(0)?.read().is_sealed());
+    /// // Le premier consommateur non-maillage scelle la zone.
+    /// let _fes = FiniteElementSpace::lagrange1(&mesh)?;
+    /// assert!(mesh.get(0)?.read().is_sealed());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn is_sealed(&self) -> bool {
         self.sealed
     }
@@ -126,6 +182,24 @@ impl SubMesh {
     /// Meant for sealed supports: the map is derived from `connectivity`, and
     /// a sealed submesh can no longer grow, so the cache can never go stale.
     /// (It is only ever queried through a sealed support in practice.)
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// // `NodeId → rang`, sur les nœuds **distincts**, en ordre de première
+    /// // apparition : c'est ce qui donne aux champs leur adressage.
+    /// sm.seal();
+    /// assert_eq!(sm.node_index()[&n[1].id()], 1);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn node_index(&self) -> &HashMap<NodeId, usize> {
         self.node_index.get_or_init(|| {
             let mut map = HashMap::with_capacity(self.connectivity.len());
@@ -144,16 +218,71 @@ impl SubMesh {
     /// Called by the container layer whenever a non-mesh object captures the
     /// submesh — see the free function [`seal`]. A bare [`Mesh`] holding the
     /// submesh does **not** seal it (a mesh may keep growing until consumed).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// // Sceller à la main : la connectivité gèle, et pour de bon.
+    /// sm.seal();
+    /// assert!(sm.is_sealed());
+    /// assert!(sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).is_err());
+    /// sm.seal(); // idempotent
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn seal(&mut self) {
         self.sealed = true;
     }
 
     /// Face colour used when this submesh is drawn (no numerical effect).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # use pyrucast::atoms::RgbColor;
+    /// // Une couleur d'affichage, sans effet numérique.
+    /// sm.set_face_color(RgbColor::new(220, 60, 60));
+    /// assert_eq!(sm.face_color().r, 220);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn face_color(&self) -> RgbColor {
         self.face_color
     }
 
     /// Replace the face colour used when this submesh is drawn.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # use pyrucast::atoms::RgbColor;
+    /// let rouge = RgbColor::new(220, 60, 60);
+    /// sm.set_face_color(rouge);
+    /// assert_eq!(sm.face_color(), rouge);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn set_face_color(&mut self, color: RgbColor) {
         self.face_color = color;
     }
@@ -219,6 +348,26 @@ impl SubMesh {
     /// The caller is responsible for the ownership claim; this method
     /// only checks that the cell length matches the element type and
     /// that the nodes are alive at the moment of the call.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// // La variante qui **prend** la propriété au lieu de l'acquérir : pour
+    /// // un nœud tout juste créé, dont le compteur vaut déjà 1.
+    /// let id = coords.write().add_node(&[2.0, 2.0])?;
+    /// let mut poi = SubMesh::new(coords.clone(), ElementType::POI1);
+    /// poi.add_cell_taking(&[id])?;
+    /// assert_eq!(poi.cell_count(), 1);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn add_cell_taking(&mut self, nodes: &[NodeId]) -> Result<usize> {
         if self.sealed {
             return Err(PyrucastError::MeshSealed);
@@ -256,6 +405,28 @@ impl SubMesh {
     /// submesh, `duplicate()` hands back an independent copy you can keep
     /// editing with [`SubMesh::add_cell`]. The two share the same `Coords`
     /// (nodes are not cloned, only their refcounts bumped).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// // L'échappatoire au sceau : une copie indépendante, jamais scellée,
+    /// // partageant les **mêmes** nœuds (leurs compteurs seuls montent).
+    /// sm.seal();
+    /// let mut copie = sm.duplicate()?;
+    /// assert!(!copie.is_sealed());
+    /// copie.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
+    /// assert_eq!(copie.cell_count(), 2);
+    /// assert_eq!(sm.cell_count(), 1); // l'original n'a pas bougé
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn duplicate(&self) -> Result<SubMesh> {
         let mut copy = SubMesh::new(self.coords.clone(), self.element_type);
         copy.face_color = self.face_color;
@@ -299,6 +470,28 @@ impl SubMesh {
     ///
     /// Node **positions** are never touched — this only rewrites which node a
     /// cell refers to.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # use std::collections::HashMap;
+    /// // Réécrire **à quel nœud** une maille se réfère — les positions ne
+    /// // bougent pas. Refusé sur une zone scellée : sa numérotation est tenue.
+    /// let autre = Node::create_in(coords.clone(), &[5.0, 5.0])?;
+    /// let map = HashMap::from([(n[2].id(), autre.id())]);
+    /// assert_eq!(sm.remap_nodes(&map)?, 1);
+    /// sm.seal();
+    /// assert!(sm.remap_nodes(&map).is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn remap_nodes(&mut self, map: &HashMap<NodeId, NodeId>) -> Result<usize> {
         if self.sealed {
             return Err(PyrucastError::MeshSealed);
@@ -345,11 +538,41 @@ impl SubMesh {
     }
 
     /// Element type of the submesh.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// assert_eq!(sm.element_type(), ElementType::TRI3);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn element_type(&self) -> ElementType {
         self.element_type
     }
 
     /// Number of cells in the submesh.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// assert_eq!(sm.cell_count(), 1);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn cell_count(&self) -> usize {
         self.connectivity.len() / self.element_type.nodes_per_cell()
     }
@@ -360,6 +583,22 @@ impl SubMesh {
     }
 
     /// Handle to the owning `Coords` (internal clone).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # use pyrucast::handle::Handle as H;
+    /// assert!(H::same_object(&sm.coords(), &coords)); // partagé, pas copié
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn coords(&self) -> Handle<Coords> {
         self.coords.clone()
     }
@@ -373,6 +612,25 @@ impl SubMesh {
     /// [`SubMesh::poi1_from_node_ids`]. The canonical, parent-level form is
     /// the operator
     /// [`ops::mesh::poi1_from_nodes`](crate::ops::mesh::poi1_from_nodes()).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// // Un nuage de points : une maille POI1 par nœud, dans l'ordre donné.
+    /// // La forme canonique est l'opérateur `ops::mesh::poi1_from_nodes`.
+    /// let nuage = SubMesh::poi1_from_nodes(&n)?;
+    /// assert_eq!(nuage.cell_count(), 3);
+    /// assert!(SubMesh::poi1_from_nodes(&[]).is_err()); // aucun repère où s'attacher
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn poi1_from_nodes(nodes: &[Node]) -> Result<SubMesh> {
         let coords = nodes
             .first()
@@ -390,6 +648,24 @@ impl SubMesh {
     /// for any de-duplication (see [`SubMesh::to_poi1`] for the deduped
     /// variant) and supplies the owning `coords` explicitly. When you have
     /// [`Node`] objects, prefer [`SubMesh::poi1_from_nodes`].
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// // La forme basse quand on tient déjà les identifiants et le repère.
+    /// let ids: Vec<_> = n.iter().map(|x| x.id()).collect();
+    /// let nuage = SubMesh::poi1_from_node_ids(coords.clone(), &ids)?;
+    /// assert_eq!(nuage.element_type(), ElementType::POI1);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn poi1_from_node_ids(coords: Handle<Coords>, nodes: &[NodeId]) -> Result<SubMesh> {
         let mut sm = SubMesh::new(coords, ElementType::POI1);
         for &nid in nodes {

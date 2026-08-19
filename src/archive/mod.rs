@@ -205,6 +205,31 @@ impl std::fmt::Debug for Root {
 /// available — and sorted, which is also what makes an archive byte-reproducible.
 /// The typed accessors ([`mesh`](Objects::mesh), …) exist to give an error that
 /// names the key, the type expected and the type found.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::archive::{self, ArchiveRoot};
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+/// # let mesh = Mesh::from_submesh(sm);
+/// # let chemin = std::env::temp_dir()
+/// #     .join(format!("pyrucast_doc_{}_objets.pyr", std::process::id()));
+/// # archive::save(&chemin, &[("maillage", &mesh as &dyn ArchiveRoot)]).unwrap();
+/// # let objets = archive::load(&chemin).unwrap();
+/// // Le `Deref` vers `BTreeMap` donne `keys`, `len` et l'itération — triés,
+/// // ce qui est aussi ce qui rend une archive reproductible octet pour octet.
+/// assert_eq!(objets.len(), 1);
+/// assert_eq!(objets.keys().collect::<Vec<_>>(), vec!["maillage"]);
+/// # let _ = std::fs::remove_file(&chemin);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Default, Debug)]
 pub struct Objects(BTreeMap<String, Root>);
 
@@ -218,6 +243,32 @@ impl std::ops::Deref for Objects {
 impl Objects {
     /// Hand over the map itself, to walk every entry once — what the Python
     /// binding does to fill its dictionary.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::archive::{self, ArchiveRoot};
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+    /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+    /// # let mesh = Mesh::from_submesh(sm);
+    /// # let chemin = std::env::temp_dir()
+    /// #     .join(format!("pyrucast_doc_{}_inner.pyr", std::process::id()));
+    /// # archive::save(&chemin, &[("maillage", &mesh as &dyn ArchiveRoot)]).unwrap();
+    /// # let objets = archive::load(&chemin).unwrap();
+    /// // Parcourir chaque entrée une fois, quel que soit son type — ce que fait
+    /// // la liaison Python pour remplir son dictionnaire.
+    /// for (nom, racine) in objets.into_inner() {
+    ///     assert_eq!((nom.as_str(), racine.type_name()), ("maillage", "Mesh"));
+    /// }
+    /// # let _ = std::fs::remove_file(&chemin);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn into_inner(self) -> BTreeMap<String, Root> {
         self.0
     }
@@ -242,6 +293,33 @@ macro_rules! accessors {
         impl Objects {
             $(
                 #[doc = concat!("The `", $label, "` named `key`, or an error naming what was found instead.")]
+                ///
+                /// ```
+                /// # use pyrucast::aggregate::Aggregate;
+                /// # use pyrucast::archive::{self, ArchiveRoot};
+                /// # use pyrucast::atoms::{ElementType, Node};
+                /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+                /// # use pyrucast::coords::Coords;
+                /// # use pyrucast::handle::Handle;
+                /// # let coords = Handle::new(Coords::new(2).unwrap());
+                /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+                /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+                /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+                /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+                /// # let mesh = Mesh::from_submesh(sm);
+                /// # let chemin = std::env::temp_dir()
+                /// #     .join(format!("pyrucast_doc_{}_sub.pyr", std::process::id()));
+                /// archive::save(&chemin, &[("maillage", &mesh as &dyn ArchiveRoot)])?;
+                /// let mut objets = archive::load(&chemin)?;
+                ///
+                /// // Chaque accesseur est **typé** : demander le mauvais type
+                /// // échoue en nommant ce qui a été trouvé à la place.
+                /// assert_eq!(objets.mesh("maillage")?.len(), 1);
+                /// assert!(objets.int("maillage").is_err());
+                /// assert!(objets.mesh("absent").is_err());
+                /// # let _ = std::fs::remove_file(&chemin);
+                /// # Ok::<(), pyrucast::PyrucastError>(())
+                /// ```
                 pub fn $name(&self, key: &str) -> Result<$ty> {
                     match self.0.get(key) {
                         Some(Root::$variant(v)) => Ok(v.clone()),
@@ -271,6 +349,33 @@ macro_rules! take_accessors {
         impl Objects {
             $(
                 #[doc = concat!("The `", $label, "` named `key`, removed from the map (it is held by value).")]
+                ///
+                /// ```
+                /// # use pyrucast::aggregate::Aggregate;
+                /// # use pyrucast::archive::{self, ArchiveRoot};
+                /// # use pyrucast::atoms::{ElementType, Node};
+                /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+                /// # use pyrucast::coords::Coords;
+                /// # use pyrucast::handle::Handle;
+                /// # let coords = Handle::new(Coords::new(2).unwrap());
+                /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+                /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+                /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+                /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+                /// # let mesh = Mesh::from_submesh(sm);
+                /// # let chemin = std::env::temp_dir()
+                /// #     .join(format!("pyrucast_doc_{}_agg.pyr", std::process::id()));
+                /// archive::save(&chemin, &[("maillage", &mesh as &dyn ArchiveRoot)])?;
+                /// let mut objets = archive::load(&chemin)?;
+                ///
+                /// // Chaque accesseur est **typé** : demander le mauvais type
+                /// // échoue en nommant ce qui a été trouvé à la place.
+                /// assert_eq!(objets.mesh("maillage")?.len(), 1);
+                /// assert!(objets.int("maillage").is_err());
+                /// assert!(objets.mesh("absent").is_err());
+                /// # let _ = std::fs::remove_file(&chemin);
+                /// # Ok::<(), pyrucast::PyrucastError>(())
+                /// ```
                 pub fn $name(&mut self, key: &str) -> Result<$ty> {
                     match self.0.get(key) {
                         Some(Root::$variant(_)) => match self.0.remove(key) {
@@ -301,6 +406,33 @@ macro_rules! value_accessors {
         impl Objects {
             $(
                 #[doc = concat!("The `", $label, "` named `key`.")]
+                ///
+                /// ```
+                /// # use pyrucast::aggregate::Aggregate;
+                /// # use pyrucast::archive::{self, ArchiveRoot};
+                /// # use pyrucast::atoms::{ElementType, Node};
+                /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+                /// # use pyrucast::coords::Coords;
+                /// # use pyrucast::handle::Handle;
+                /// # let coords = Handle::new(Coords::new(2).unwrap());
+                /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+                /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+                /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+                /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+                /// # let mesh = Mesh::from_submesh(sm);
+                /// # let chemin = std::env::temp_dir()
+                /// #     .join(format!("pyrucast_doc_{}_val.pyr", std::process::id()));
+                /// archive::save(&chemin, &[("maillage", &mesh as &dyn ArchiveRoot)])?;
+                /// let mut objets = archive::load(&chemin)?;
+                ///
+                /// // Chaque accesseur est **typé** : demander le mauvais type
+                /// // échoue en nommant ce qui a été trouvé à la place.
+                /// assert_eq!(objets.mesh("maillage")?.len(), 1);
+                /// assert!(objets.int("maillage").is_err());
+                /// assert!(objets.mesh("absent").is_err());
+                /// # let _ = std::fs::remove_file(&chemin);
+                /// # Ok::<(), pyrucast::PyrucastError>(())
+                /// ```
                 pub fn $name(&self, key: &str) -> Result<$ty> {
                     match self.0.get(key) {
                         Some(Root::Value(Value::$variant(v))) => Ok(v.clone()),
