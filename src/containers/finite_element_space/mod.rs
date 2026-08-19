@@ -78,6 +78,28 @@ use std::sync::OnceLock;
 ///
 /// Stores only the **reference-space** tables (independent of the node
 /// coordinates); physical quantities are computed on the fly.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+/// # use pyrucast::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// // Une zone du maillage, augmentée d'une interpolation et d'une
+/// // quadrature : c'est là que vivent formes, poids et jacobien.
+/// let z = SubFiniteElementSpace::new(
+///     maillage.get(0)?, Interpolation::Lagrange1, QuadratureRule::Gauss)?;
+/// assert_eq!(z.element_type()?, ElementType::TRI3);
+/// assert_eq!(z.gauss_count(), 3);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Serialize, Deserialize)]
 pub struct SubFiniteElementSpace {
     submesh: Handle<SubMesh>,
@@ -136,6 +158,30 @@ impl SubFiniteElementSpace {
     /// `(ElementType, Interpolation)` pair supported,
     /// `space_dim ≥ ref_dim`). The Jacobian is **not** evaluated at
     /// construction.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// let z = SubFiniteElementSpace::new(
+    ///     maillage.get(0)?, Interpolation::Lagrange1, QuadratureRule::Gauss)?;
+    /// assert_eq!(z.nodes_per_cell()?, 3);
+    /// // Un POI1 n'a pas d'élément de référence sur quoi intégrer : refusé.
+    /// # let mut p = SubMesh::new(coords.clone(), ElementType::POI1);
+    /// # p.add_cell(&[n[0].id()])?;
+    /// assert!(SubFiniteElementSpace::new(
+    ///     Handle::new(p), Interpolation::Lagrange1, QuadratureRule::Gauss).is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn new(
         submesh: Handle<SubMesh>,
         interpolation: Interpolation,
@@ -243,6 +289,31 @@ impl SubFiniteElementSpace {
     /// this container layer stays free of any assembly dependency and free to
     /// choose the conflict keys (cell nodes today; global/master DOFs once MPC
     /// condensation lands). It runs at most once per subspace.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// // Le coloriage est fourni par l'appelant — la couche conteneur reste
+    /// // libre de toute dépendance à l'assemblage — et calculé **au plus une
+    /// // fois** par sous-espace.
+    /// let fes = FiniteElementSpace::lagrange1(&maillage)?;
+    /// let z = fes.get(0)?;
+    /// let z = z.read();
+    /// assert_eq!(z.coloring(|| vec![vec![0]]), &[vec![0]]);
+    /// // Le second appel rend le premier résultat : la fermeture ne tourne pas.
+    /// assert_eq!(z.coloring(|| unreachable!()), &[vec![0]]);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn coloring(&self, compute: impl FnOnce() -> Vec<Vec<usize>>) -> &[Vec<usize>] {
         self.coloring.get_or_init(compute)
     }
@@ -717,6 +788,28 @@ impl SubFiniteElementSpace {
 
     /// Field reference derivatives `∂N_i/∂ξ_j(ξ_g)`, flat row-major of length
     /// `shape_count × ref_dim`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// // Les dérivées des formes **du champ** — celles de la géométrie dès que
+    /// // l'élément est isoparamétrique, distinctes sinon.
+    /// let fes = FiniteElementSpace::lagrange1(&maillage)?;
+    /// let z = fes.get(0)?;
+    /// let z = z.read();
+    /// assert_eq!(z.field_dn_at_g(0)?, z.dn_at_g(0)?);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn field_dn_at_g(&self, g: usize) -> Result<&[f64]> {
         self.reject_if_model_embedded("reference derivatives")?;
         if self.field_dn_at_g.is_empty() {
@@ -733,6 +826,29 @@ impl SubFiniteElementSpace {
     ///
     /// The space is not C¹ — a Lagrange basis has none tabulated. See
     /// [`Interpolation::d2shape_dxi2`].
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+    /// # sm.add_cell(&[n[0].id(), n[1].id()])?;
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// // Seules les familles C¹ tabulent des dérivées secondes : c'est ce que
+    /// // demande une équation d'ordre quatre, celle de la poutre.
+    /// let hermite = FiniteElementSpace::new(&maillage, Interpolation::Hermite3)?;
+    /// assert!(hermite.get(0)?.read().field_d2n_at_g(0).is_ok());
+    /// // Une base de Lagrange n'en a pas — et le dit.
+    /// let lagrange = FiniteElementSpace::lagrange1(&maillage)?;
+    /// assert!(lagrange.get(0)?.read().field_d2n_at_g(0).is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn field_d2n_at_g(&self, g: usize) -> Result<&[f64]> {
         self.reject_if_model_embedded("second derivatives")?;
         self.check_g(g)?;
@@ -954,6 +1070,26 @@ impl crate::dump::Dump for SubFiniteElementSpace {
 /// each `SubFiniteElementSpace` captures its `SubMesh` handle. The node coordinates
 /// in the underlying `Coords` may evolve later; the on-the-fly
 /// Jacobian computation always reflects the current coordinates.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+/// # use pyrucast::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// // L'agrégat : un sous-espace par zone du maillage, chacun avec son
+/// // interpolation et sa quadrature.
+/// let fes = FiniteElementSpace::lagrange1(&maillage)?;
+/// assert_eq!(fes.len(), maillage.len());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Serialize, Deserialize, Default)]
 pub struct FiniteElementSpace {
     subs: Vec<Handle<SubFiniteElementSpace>>,
@@ -974,6 +1110,27 @@ impl FiniteElementSpace {
     ///
     /// `choices.len()` must equal `mesh.len()`. The mesh must
     /// have at least one submesh and none of them may be POI1.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// // Un couple (interpolation, quadrature) **par zone** : c'est ce qui
+    /// // permet à un même maillage de porter des formulations différentes.
+    /// let fes = FiniteElementSpace::with(
+    ///     &maillage, &[(Interpolation::Lagrange1, QuadratureRule::Gauss)])?;
+    /// assert_eq!(fes.get(0)?.read().interpolation(), Interpolation::Lagrange1);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn with(mesh: &Mesh, choices: &[(Interpolation, QuadratureRule)]) -> Result<Self> {
         let n_sub = mesh.len();
         if n_sub == 0 {
@@ -999,6 +1156,25 @@ impl FiniteElementSpace {
 
     /// Build a `FiniteElementSpace` using the same `interpolation` for
     /// every submesh, with the default Gauss quadrature.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// // La même interpolation partout, quadrature de Gauss par défaut.
+    /// let fes = FiniteElementSpace::new(&maillage, Interpolation::Lagrange1)?;
+    /// assert_eq!(fes.get(0)?.read().quadrature(), QuadratureRule::Gauss);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn new(mesh: &Mesh, interpolation: Interpolation) -> Result<Self> {
         let n_sub = mesh.len();
         let choices: Vec<_> = (0..n_sub)
@@ -1009,17 +1185,75 @@ impl FiniteElementSpace {
 
     /// Build the default Lagrange-1 FE space over `mesh`. Equivalent to
     /// `FiniteElementSpace::new(mesh, Interpolation::Lagrange1)`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// // Le cas courant, en un mot.
+    /// let fes = FiniteElementSpace::lagrange1(&maillage)?;
+    /// assert_eq!(fes.get(0)?.read().interpolation(), Interpolation::Lagrange1);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn lagrange1(mesh: &Mesh) -> Result<Self> {
         Self::new(mesh, Interpolation::Lagrange1)
     }
 
     /// Element view on cell `cell_idx` of subspace `subspace_idx`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// let fes = FiniteElementSpace::lagrange1(&maillage)?;
+    /// // Une vue sur une maille précise, repérée par (zone, rang).
+    /// assert!((fes.element(0, 0)?.det_jacobian(0)? - 4.0).abs() < 1e-12);
+    /// assert!(fes.element(0, 7).is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn element(&self, subspace_idx: usize, cell_idx: usize) -> Result<Element> {
         let sub = self.get(subspace_idx)?;
         Element::new(sub, cell_idx)
     }
 
     /// Iterator over every element of subspace `subspace_idx`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// let fes = FiniteElementSpace::lagrange1(&maillage)?;
+    /// // Le parcours d'une zone, sans allocation par élément.
+    /// assert_eq!(fes.elements(0)?.count(), 1);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn elements(&self, subspace_idx: usize) -> Result<ElementIter> {
         let sub = self.get(subspace_idx)?;
         let n = sub.read().cell_count()?;
@@ -1029,6 +1263,27 @@ impl FiniteElementSpace {
     /// Rebuild the [`Mesh`] this space spans: one submesh per subspace, in
     /// order, deduplicated by object identity. Submesh handles are **shared** (no
     /// copy); they are sealed (frozen) as long as this space captures them.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// # use pyrucast::handle::Handle as H;
+    /// let fes = FiniteElementSpace::lagrange1(&maillage)?;
+    /// // Le maillage est **reconstruit**, mais ses zones sont partagées : rien
+    /// // n'est copié, et l'identité des supports est préservée.
+    /// assert!(H::same_object(&fes.mesh()?.get(0)?, &maillage.get(0)?));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn mesh(&self) -> Result<Mesh> {
         let mut mesh = Mesh::empty();
         for sub in self.iter() {
