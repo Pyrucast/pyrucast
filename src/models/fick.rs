@@ -57,11 +57,65 @@ use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use serde::{Deserialize, Serialize};
 
 /// Column DOF name of a species — `c_H2`.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::kernel::assemble_block;
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+/// #     zone.clone(), vec!["D_H2".into()], &[2.0]).unwrap());
+/// # use pyrucast::models::fick;
+/// // L'espèce nomme la concentration : c'est ce qui permet à plusieurs
+/// // diffusions de coexister dans un même modèle.
+/// assert_eq!(fick::primal_var("H2"), "c_H2");
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn primal_var(species: &str) -> String {
     format!("c_{species}")
 }
 
 /// Row DOF name of a species — `j_H2`.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::kernel::assemble_block;
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+/// #     zone.clone(), vec!["D_H2".into()], &[2.0]).unwrap());
+/// # use pyrucast::models::fick;
+/// assert_eq!(fick::dual_var("H2"), "j_H2");
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn dual_var(species: &str) -> String {
     format!("j_{species}")
 }
@@ -154,6 +208,34 @@ pub struct Fick {
 
 impl Fick {
     /// **Isotropic** Fickian diffusion of `species` on an FE subspace.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::kernel::assemble_block;
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+    /// #     zone.clone(), vec!["D_H2".into()], &[2.0]).unwrap());
+    /// # use pyrucast::models::fick::Fick;
+    /// # use pyrucast::models::SubModelKind;
+    /// let f = Fick::new(zone.clone(), "H2")?;
+    /// assert_eq!(f.primal_vars(), vec!["c_H2".to_string()]);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn new(fespace: Handle<SubFiniteElementSpace>, species: &str) -> Result<Self> {
         Self::with_symmetry(fespace, MaterialSymmetry::Isotropic, species)
     }
@@ -164,6 +246,37 @@ impl Fick {
     /// The species names the concentration, the flux and the diffusivity; an
     /// empty one is refused, since it would give back the bare `c`/`j` the
     /// suffix exists to avoid.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::kernel::assemble_block;
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+    /// #     zone.clone(), vec!["D_H2".into()], &[2.0]).unwrap());
+    /// # use pyrucast::models::fick::Fick;
+    /// # use pyrucast::models::SubModelKind;
+    /// let f = Fick::with_symmetry(zone.clone(), MaterialSymmetry::Isotropic, "H2")?;
+    /// assert_eq!(f.dual_vars(), vec!["j_H2".to_string()]);
+    /// // Une espèce vide est refusée : elle rendrait les `c`/`j` nus que le
+    /// // suffixe existe précisément pour éviter.
+    /// assert!(Fick::with_symmetry(zone.clone(), MaterialSymmetry::Isotropic, "").is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn with_symmetry(
         fespace: Handle<SubFiniteElementSpace>,
         symmetry: MaterialSymmetry,
@@ -356,6 +469,41 @@ impl Domain for Fick {
 /// `K[i, j] = Σ_g ∇N_iᵀ · D · ∇N_j · |J|_g · w_g`, written into `ke` (flat
 /// row-major, side `n_nodes`). Pure and sequential — driven in parallel by
 /// [`crate::models::kernel::assemble_block`].
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::kernel::assemble_block;
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+/// #     zone.clone(), vec!["D_H2".into()], &[2.0]).unwrap());
+/// # use pyrucast::models::fick;
+/// // Le même laplacien que la conduction, avec la diffusivité de l'espèce.
+/// let bloc = assemble_block(
+///     std::slice::from_ref(&zone), &support, &support,
+///     vec!["j_H2".into()], vec!["c_H2".into()], DofOrdering::NodesThenVars, true,
+///     Some(&mat), None,
+///     |geoms, m, _s, ke| fick::element_stiffness(
+///         &geoms[0], m.unwrap(), MaterialSymmetry::Isotropic, "H2", ke),
+/// )?;
+/// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
+/// assert!(total.abs() < 1e-9); // une concentration uniforme ne diffuse pas
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn element_stiffness(
     geom: &CellGeom,
     material: &SubElementField,
@@ -416,6 +564,40 @@ pub fn element_stiffness(
 /// Element kernel: local **storage** (mass) matrix of one cell,
 /// `C[i, j] = Σ_g poro · N_i N_j · |J|_g · w_g`. Same `ke` layout as
 /// [`element_stiffness`].
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::kernel::assemble_block;
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+/// #     zone.clone(), vec!["poro".into()], &[3.0]).unwrap());
+/// # use pyrucast::models::fick;
+/// // Le pendant de la capacité thermique, côté transport de masse.
+/// let bloc = assemble_block(
+///     std::slice::from_ref(&zone), &support, &support,
+///     vec!["j_H2".into()], vec!["c_H2".into()], DofOrdering::NodesThenVars, true,
+///     Some(&mat), None,
+///     |geoms, m, _s, ke| fick::element_storage(&geoms[0], m.unwrap(), ke),
+/// )?;
+/// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
+/// assert!((total - 3.0 * 0.5).abs() < 1e-9);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn element_storage(geom: &CellGeom, material: &SubElementField, ke: &mut [f64]) -> Result<()> {
     let n_nodes = geom.n_nodes;
     let poro = material.value(geom.cell, 0, "poro").map_err(|_| {

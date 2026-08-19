@@ -181,6 +181,46 @@ fn transpose(a: &[[f64; 12]; 12]) -> [[f64; 12]; 12] {
 /// element, written into `ke` (flat row-major 12×12, **node-major /
 /// variable-minor** dof order `dof = node·6 + var`). Pure and sequential —
 /// driven in parallel by [`crate::models::kernel::assemble_block`].
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::kernel::assemble_block;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+/// #     zone.clone(), vec!["E".into(), "G".into(), "A".into(), "I_y".into(), "I_z".into(), "A_sy".into(), "A_sz".into(), "J".into()],
+/// #     &[210000.0, 80000.0, 0.01, 1e-05, 1e-05, 0.008, 0.008, 2e-05]).unwrap());
+/// # let ddl = || (vec!["f_x".to_string(), "f_y".to_string(), "f_z".to_string(), "m_x".to_string(), "m_y".to_string(), "m_z".to_string()], vec!["u_x".to_string(), "u_y".to_string(), "u_z".to_string(), "r_x".to_string(), "r_y".to_string(), "r_z".to_string()]);
+/// # use pyrucast::models::frame3d;
+/// let (duals, primals) = ddl();
+/// let bloc = assemble_block(
+///     std::slice::from_ref(&zone), &support, &support, duals, primals,
+///     DofOrdering::NodesThenVars, true, Some(&mat), None,
+///     |geoms, m, s, ke| frame3d::element_stiffness(&geoms[0], m.unwrap(), ke),
+/// )?;
+/// // Portique spatial : axial, torsion et flexion autour de deux axes
+/// // principaux — six DDL par nœud.
+/// assert_eq!((bloc.n_rows(), bloc.n_cols()), (12, 12));
+/// // La somme brute des entrées ne vaut pas zéro : les DDL mêlent
+/// // translations et rotations, et seul le mode de **translation** est
+/// // rigide. On vérifie plutôt la symétrie, propre à toute raideur.
+/// let d = bloc.dense();
+/// assert!((0..12).all(|i| (0..12).all(|j| (d[i * 12 + j] - d[j * 12 + i]).abs() < 1e-6)));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn element_stiffness(
     geom: &CellGeom,
     material: &SubElementField,
@@ -288,6 +328,38 @@ fn local_geometric(n: f64, l: f64) -> [[f64; 12]; 12] {
 /// Element kernel: local 3-D frame **consistent mass** `M = Tᵀ M_loc T` (Cast3M
 /// `MASS`), from density `rho`, area `A` and second moments `I_y`, `I_z`. Same
 /// `ke` layout as [`element_stiffness`].
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::kernel::assemble_block;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+/// #     zone.clone(), vec!["rho".into(), "A".into(), "I_y".into(), "I_z".into(), "E".into(), "G".into(), "A_sy".into(), "A_sz".into()], &[3.0, 0.01, 1e-05, 1e-05, 210000.0, 80000.0, 0.008, 0.008]).unwrap());
+/// # let ddl = || (vec!["f_x".to_string(), "f_y".to_string(), "f_z".to_string(), "m_x".to_string(), "m_y".to_string(), "m_z".to_string()], vec!["u_x".to_string(), "u_y".to_string(), "u_z".to_string(), "r_x".to_string(), "r_y".to_string(), "r_z".to_string()]);
+/// # use pyrucast::models::frame3d;
+/// let (duals, primals) = ddl();
+/// let bloc = assemble_block(
+///     std::slice::from_ref(&zone), &support, &support, duals, primals,
+///     DofOrdering::NodesThenVars, true, Some(&mat), None,
+///     |geoms, m, s, ke| frame3d::element_mass(&geoms[0], m.unwrap(), ke),
+/// )?;
+/// assert_eq!((bloc.n_rows(), bloc.n_cols()), (12, 12));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64]) -> Result<()> {
     let cell = geom.cell;
     let xa = geom.node_coord(0)?;
@@ -319,6 +391,39 @@ pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64])
 /// Element kernel: local 3-D frame **geometric stiffness** `K_g = Tᵀ K_loc T`
 /// (Cast3M `KSIG`), from the axial force `N` (state component `N`). Same `ke`
 /// layout as [`element_stiffness`].
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::kernel::assemble_block;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [2.0, 0.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+/// #     zone.clone(), vec!["N".into()], &[100.0]).unwrap());
+/// # let ddl = || (vec!["f_x".to_string(), "f_y".to_string(), "f_z".to_string(), "m_x".to_string(), "m_y".to_string(), "m_z".to_string()], vec!["u_x".to_string(), "u_y".to_string(), "u_z".to_string(), "r_x".to_string(), "r_y".to_string(), "r_z".to_string()]);
+/// # use pyrucast::models::frame3d;
+/// let (duals, primals) = ddl();
+/// let bloc = assemble_block(
+///     std::slice::from_ref(&zone), &support, &support, duals, primals,
+///     DofOrdering::NodesThenVars, true, None, Some(&mat),
+///     |geoms, m, s, ke| frame3d::element_geometric(&geoms[0], s.unwrap(), ke),
+/// )?;
+/// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
+/// assert!(total.abs() < 1e-6);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn element_geometric(geom: &CellGeom, state: &SubElementField, ke: &mut [f64]) -> Result<()> {
     let cell = geom.cell;
     let xa = geom.node_coord(0)?;

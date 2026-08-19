@@ -141,6 +141,31 @@ fn echoes_sigma_zz(space_dim: usize, model: ElasticityModel) -> bool {
 ///
 /// Holds the same supports as [`crate::models::elasticity::Elasticity`];
 /// material (`E`, `nu`, `sigma_y`) is supplied at assembly / integration time.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::Domain;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # use pyrucast::models::plasticity::Plasticity;
+/// # use pyrucast::models::plastic::PlasticLaw;
+/// // La physique élastoplastique d'une zone : sa loi décide du matériau
+/// // qu'elle réclame et de l'état qu'elle porte.
+/// let p = Plasticity::new(zone.clone(), ElasticityModel::PlaneStrain)?;
+/// assert!(p.material_components().unwrap().contains(&"sigma_y".to_string()));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Plasticity {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
@@ -154,6 +179,30 @@ pub struct Plasticity {
 impl Plasticity {
     /// **Perfect** (non-hardening) von Mises plasticity on an FE subspace — the
     /// default law, and the one this physics shipped with.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::Domain;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # use pyrucast::models::plasticity::Plasticity;
+    /// // Von Mises **parfaite** : la loi par défaut, celle avec laquelle cette
+    /// // physique est née.
+    /// let p = Plasticity::new(zone.clone(), ElasticityModel::PlaneStrain)?;
+    /// assert_eq!(p.material_components().unwrap().len(), 3); // E, nu, sigma_y
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn new(fespace: Handle<SubFiniteElementSpace>, model: ElasticityModel) -> Result<Self> {
         Self::with_law(fespace, model, PlasticLaw::Perfect)
     }
@@ -162,6 +211,35 @@ impl Plasticity {
     /// given 2-D/3-D model. Errors if `model` is inconsistent with the space
     /// dimension (same rule as
     /// [`crate::models::elasticity::Elasticity::new`]).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::Domain;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # use pyrucast::models::plasticity::Plasticity;
+    /// # use pyrucast::models::plastic::PlasticLaw;
+    /// // La loi explicite, et le contrôle de cohérence entre la cinématique et
+    /// // la dimension de l'espace.
+    /// let p = Plasticity::with_law(
+    ///     zone.clone(), ElasticityModel::PlaneStrain, PlasticLaw::Isotropic)?;
+    /// assert!(p.material_components().unwrap().contains(&"H".to_string()));
+    /// // Un modèle solide sur une zone 2-D est refusé.
+    /// assert!(Plasticity::with_law(
+    ///     zone.clone(), ElasticityModel::Solid, PlasticLaw::Perfect).is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn with_law(
         fespace: Handle<SubFiniteElementSpace>,
         model: ElasticityModel,
