@@ -250,36 +250,168 @@ impl SubFiniteElementSpace {
     // ── Accessors (structural) ──────────────────────────────────────────────
 
     /// Handle to the underlying submesh (internal clone).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let sub = fes.get(0).unwrap();
+    /// # let s = sub.read();
+    /// # use pyrucast::handle::Handle as H;
+    /// // L'espace EF ne copie pas le maillage : il le tient par son handle.
+    /// assert!(H::same_object(&s.submesh(), &mesh.get(0).unwrap()));
+    /// ```
     pub fn submesh(&self) -> Handle<SubMesh> {
         self.submesh.clone()
     }
 
     /// Handle to the owning `Coords` (internal clone).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let sub = fes.get(0).unwrap();
+    /// # let s = sub.read();
+    /// # use pyrucast::handle::Handle as H;
+    /// assert!(H::same_object(&s.coords().unwrap(), &coords));
+    /// ```
     pub fn coords(&self) -> Result<Handle<Coords>> {
         Ok(self.submesh.read().coords())
     }
 
     /// Interpolation in use.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let sub = fes.get(0).unwrap();
+    /// # let s = sub.read();
+    /// assert_eq!(s.interpolation(), Interpolation::Lagrange1);
+    /// ```
     pub fn interpolation(&self) -> Interpolation {
         self.interpolation
     }
 
     /// Quadrature rule in use.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let sub = fes.get(0).unwrap();
+    /// # let s = sub.read();
+    /// assert_eq!(s.quadrature(), QuadratureRule::Gauss);
+    /// ```
     pub fn quadrature(&self) -> QuadratureRule {
         self.quadrature
     }
 
     /// Element type of the submesh.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let sub = fes.get(0).unwrap();
+    /// # let s = sub.read();
+    /// assert_eq!(s.element_type().unwrap(), ElementType::TRI3);
+    /// ```
     pub fn element_type(&self) -> Result<ElementType> {
         Ok(self.submesh.read().element_type())
     }
 
     /// Reference dimension (= topological dim of the element type).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let sub = fes.get(0).unwrap();
+    /// # let s = sub.read();
+    /// // Dimension de l'élément **de référence** : 2 pour un triangle…
+    /// assert_eq!(s.ref_dim().unwrap(), 2);
+    /// ```
     pub fn ref_dim(&self) -> Result<usize> {
         Ok(self.element_type()?.topological_dim())
     }
 
     /// Geometric (physical) dimension of the underlying `Coords`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let sub = fes.get(0).unwrap();
+    /// # let s = sub.read();
+    /// // …et dimension de l'espace où il est plongé. Les deux diffèrent pour
+    /// // une coque ou une poutre.
+    /// assert_eq!(s.space_dim(), 2);
+    /// ```
     pub fn space_dim(&self) -> usize {
         self.space_dim
     }
@@ -289,21 +421,93 @@ impl SubFiniteElementSpace {
     /// `x = r`, `y = z`, and every integral over this subspace runs over the
     /// full ring (`dΩ = 2πr |J| dξ`). Read from the geometry at construction —
     /// never a per-space choice, so a body and its boundary can never disagree.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let sub = fes.get(0).unwrap();
+    /// # let s = sub.read();
+    /// assert!(!s.is_axisymmetric()); // le repère vient de la `Coords`
+    /// ```
     pub fn is_axisymmetric(&self) -> bool {
         self.axisymmetric
     }
 
     /// Number of nodes per cell (= `element_type().nodes_per_cell()`).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let sub = fes.get(0).unwrap();
+    /// # let s = sub.read();
+    /// assert_eq!(s.nodes_per_cell().unwrap(), 3);
+    /// ```
     pub fn nodes_per_cell(&self) -> Result<usize> {
         Ok(self.element_type()?.nodes_per_cell())
     }
 
     /// Number of cells in the underlying submesh.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let sub = fes.get(0).unwrap();
+    /// # let s = sub.read();
+    /// assert_eq!(s.cell_count().unwrap(), 1);
+    /// ```
     pub fn cell_count(&self) -> Result<usize> {
         Ok(self.submesh.read().cell_count())
     }
 
     /// Number of Gauss points per cell.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let sub = fes.get(0).unwrap();
+    /// # let s = sub.read();
+    /// assert_eq!(s.gauss_count(), 3); // Gauss sur un TRI3
+    /// ```
     pub fn gauss_count(&self) -> usize {
         self.gauss_w.len()
     }
@@ -311,6 +515,25 @@ impl SubFiniteElementSpace {
     // ── Reference-space accessors ───────────────────────────────────────────
 
     /// Reference coordinates of the `g`-th Gauss point (length `ref_dim`).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let sub = fes.get(0).unwrap();
+    /// # let s = sub.read();
+    /// // Coordonnées du point de Gauss dans l'élément de référence.
+    /// assert_eq!(s.gauss_xi(0).unwrap().len(), s.ref_dim().unwrap());
+    /// ```
     pub fn gauss_xi(&self, g: usize) -> Result<&[f64]> {
         self.check_g(g)?;
         let ref_dim = self.ref_dim()?;
@@ -318,6 +541,26 @@ impl SubFiniteElementSpace {
     }
 
     /// Weight of the `g`-th Gauss point.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let sub = fes.get(0).unwrap();
+    /// # let s = sub.read();
+    /// // Les poids somment à l'aire de référence — 1/2 pour un triangle.
+    /// let total: f64 = (0..s.gauss_count()).map(|g| s.gauss_weight(g).unwrap()).sum();
+    /// assert!((total - 0.5).abs() < 1e-12);
+    /// ```
     pub fn gauss_weight(&self, g: usize) -> Result<f64> {
         self.check_g(g)?;
         Ok(self.gauss_w[g])
@@ -330,6 +573,26 @@ impl SubFiniteElementSpace {
     /// nothing outside a C¹ element has ever had to distinguish the two. Under
     /// a C¹ interpolation they differ: use
     /// [`field_n_at_g`](Self::field_n_at_g) to interpolate the unknown.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let sub = fes.get(0).unwrap();
+    /// # let s = sub.read();
+    /// // Partition de l'unité : les N_i somment à 1 en tout point.
+    /// let n_i = s.n_at_g(0).unwrap();
+    /// assert!((n_i.iter().sum::<f64>() - 1.0).abs() < 1e-12);
+    /// ```
     pub fn n_at_g(&self, g: usize) -> Result<&[f64]> {
         self.check_g(g)?;
         let n_nodes = self.nodes_per_cell()?;
@@ -340,6 +603,25 @@ impl SubFiniteElementSpace {
     ///
     /// Flat row-major buffer of length `nodes_per_cell × ref_dim`, with
     /// `[i * ref_dim + j]` = `∂N_i/∂ξ_j`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let sub = fes.get(0).unwrap();
+    /// # let s = sub.read();
+    /// // ∂N_i/∂ξ_k à plat : nodes_per_cell × ref_dim.
+    /// assert_eq!(s.dn_at_g(0).unwrap().len(), 3 * 2);
+    /// ```
     pub fn dn_at_g(&self, g: usize) -> Result<&[f64]> {
         self.check_g(g)?;
         let n_nodes = self.nodes_per_cell()?;
@@ -377,11 +659,52 @@ impl SubFiniteElementSpace {
     /// Number of **field** shape functions per cell: the cell's nodes for a
     /// Lagrange space, twice that for a C¹ one, and **zero** when the
     /// formulation owns the basis.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let sub = fes.get(0).unwrap();
+    /// # let s = sub.read();
+    /// // Le nombre de fonctions de forme **du champ** — il diffère du nombre
+    /// // de nœuds pour une interpolation d'Hermite, où chaque nœud porte une
+    /// // valeur et une pente.
+    /// assert_eq!(s.shape_count().unwrap(), 3);
+    /// ```
     pub fn shape_count(&self) -> Result<usize> {
         Ok(self.interpolation.shape_count(self.element_type()?))
     }
 
     /// Field shape values `N_i(ξ_g)`, length [`shape_count`](Self::shape_count).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let sub = fes.get(0).unwrap();
+    /// # let s = sub.read();
+    /// // Les formes du **champ**, distinctes de celles de la géométrie dès que
+    /// // l'élément est sous- ou sur-paramétrique.
+    /// assert_eq!(s.field_n_at_g(0).unwrap().len(), s.shape_count().unwrap());
+    /// ```
     pub fn field_n_at_g(&self, g: usize) -> Result<&[f64]> {
         self.reject_if_model_embedded("shape values")?;
         if self.field_n_at_g.is_empty() {
@@ -431,6 +754,25 @@ impl SubFiniteElementSpace {
     /// Flat row-major buffer of length `space_dim × ref_dim`, with
     /// `[a * ref_dim + k]` = `∂x_a/∂ξ_k`. Each entry is built from the
     /// **current** node coordinates in the `Coords`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let sub = fes.get(0).unwrap();
+    /// # let s = sub.read();
+    /// // Le triangle (0,0), (2,0), (0,2) : J = 2·I, à plat en ligne-major.
+    /// assert_eq!(s.jacobian(0, 0).unwrap(), vec![2.0, 0.0, 0.0, 2.0]);
+    /// ```
     pub fn jacobian(&self, cell_idx: usize, g: usize) -> Result<Vec<f64>> {
         self.check_g(g)?;
         let coords = self.cell_node_coords(cell_idx)?;
@@ -454,6 +796,25 @@ impl SubFiniteElementSpace {
     /// stays the meridian-plane `|J|` — the circumferential `2πr` belongs to the
     /// integration weight, and is applied by
     /// [`CellGeom::det_j_w`](crate::models::kernel::CellGeom::det_j_w).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let sub = fes.get(0).unwrap();
+    /// # let s = sub.read();
+    /// // |J| = 4 partout : mapping affine, deux fois l'aire physique.
+    /// assert!((s.det_jacobian(0, 0).unwrap() - 4.0).abs() < 1e-12);
+    /// ```
     pub fn det_jacobian(&self, cell_idx: usize, g: usize) -> Result<f64> {
         let jac = self.jacobian(cell_idx, g)?;
         Ok(jacobian_measure(&jac, self.space_dim, self.ref_dim()?))
@@ -466,6 +827,28 @@ impl SubFiniteElementSpace {
     /// with `[i * space_dim + a]` = `∂N_i/∂x_a`. For manifold elements
     /// (`space_dim > ref_dim`), the returned gradient is the **tangent**
     /// gradient on the embedded surface / curve.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let sub = fes.get(0).unwrap();
+    /// # let s = sub.read();
+    /// // ∂N_i/∂x_a — la matrice B de l'assemblage, calculée à la volée.
+    /// let b = s.dn_dx(0, 0).unwrap();
+    /// assert_eq!(b.len(), 3 * 2);
+    /// // Les gradients somment au vecteur nul : la partition de l'unité dérivée.
+    /// assert!((b[0] + b[2] + b[4]).abs() < 1e-12);
+    /// ```
     pub fn dn_dx(&self, cell_idx: usize, g: usize) -> Result<Vec<f64>> {
         let jac = self.jacobian(cell_idx, g)?;
         let dn_dxi = self.dn_at_g(g)?;
