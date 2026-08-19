@@ -623,14 +623,13 @@ def api_python():
             obj = getattr(mod, nom)
             if inspect.isclass(obj):
                 classes.setdefault(id(obj), (nom, obj))
-            elif callable(obj):
-                # Préférer le module de façade au module d'extension compilé.
-                if id(obj) not in libres or court != "_pyrucast":
-                    libres[id(obj)] = f"{prefixe}.{nom}"
+            # Préférer le module de façade au module d'extension compilé.
+            elif callable(obj) and (id(obj) not in libres or court != "_pyrucast"):
+                libres[id(obj)] = f"{prefixe}.{nom}"
 
     verbes = {n.split(".")[-1] for n in libres.values()}
     methodes = {}
-    for _, (nom_classe, classe) in classes.items():
+    for nom_classe, classe in classes.values():
         for m in dir(classe):
             if m.startswith("_") or not callable(getattr(classe, m, None)):
                 continue
@@ -680,9 +679,7 @@ def check_api_python(ratchet=False):
     absents = {f for f in fonctions if f.split(".")[-1] not in vus}
     absents |= {m for m in methodes if m not in vus}
     absents |= {
-        c
-        for c in classes
-        if c not in vus and not (methodes_de(c, methodes) & vus)
+        c for c in classes if c not in vus and not (methodes_de(c, methodes) & vus)
     }
 
     if ratchet:
