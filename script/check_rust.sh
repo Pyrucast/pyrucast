@@ -4,14 +4,26 @@
 
 . "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 
-# `viz-interactive` implique `viz`, et `cargo test` exécute déjà les doctests :
-# un seul jeu de features couvre ce que quatre pas couvraient, sans les
-# recompiler trois fois ni relancer les ~890 doctests à chaque fois.
+# Trois pas, un rôle chacun, et le choix du jeu de features n'est pas neutre.
 #
-# Le `check` par défaut est le filet qui reste : la bibliothèque se veut du
-# **Rust pur** sans feature, et sans lui plus rien ne compilerait cette
-# configuration-là. Il coûte 25 s, contre 200 s pour un `test` complet.
-step "cargo check (features par défaut)"      cargo check --all-targets
-step "cargo test --features viz-interactive"  cargo test --features viz-interactive
+# `cargo test` exécute déjà les doctests : les relancer par un `--doc` explicite
+# était une pure répétition, qui coûtait quatre secondes quand il y en avait 31
+# et deux cents aujourd'hui.
+#
+# Les doctests tournent sous `viz`, **pas** sous `viz-interactive`. Chacun est
+# un binaire séparé, lié contre tout le graphe de dépendances : 120 crates sous
+# `viz`, 178 sous `viz-interactive` — winit, Wayland, X11, tiny-skia. Mesuré sur
+# un même lot, 2,88 s contre 4,68 s ; sur les ~890, 237 s contre 364 s.
+#
+# La couche interactive est donc **compilée sans être testée** : elle ne porte
+# aucun test (960 lignes de fenêtre winit, que rien ne peut exercer sans écran),
+# et un `build` suffit à garantir qu'elle compile encore. Il coûte 6 s quand les
+# deux jeux sont en cache, 30 s au premier basculement.
+#
+# Le `check` par défaut, enfin : la bibliothèque se veut du **Rust pur** sans
+# feature, et sans lui plus rien ne compilerait cette configuration-là.
+step "cargo check (features par défaut)"       cargo check --all-targets
+step "cargo test --features viz"               cargo test --features viz
+step "cargo build --features viz-interactive"  cargo build --features viz-interactive
 
 echo "OK : Rust."
