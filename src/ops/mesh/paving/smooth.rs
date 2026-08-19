@@ -161,6 +161,7 @@ impl Incidence {
     }
 
     /// Number of elements around `v` — the valence the cleanup pass reads.
+    #[allow(dead_code)] // tenu par ses tests, pas encore appelé par le pipeline
     pub fn valence(&self, v: usize) -> usize {
         self.elems_of(v).len()
     }

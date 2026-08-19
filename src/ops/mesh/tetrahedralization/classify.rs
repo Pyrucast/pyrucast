@@ -28,6 +28,7 @@ use super::envelope::Envelope;
 /// Which tetrahedra of `mesh` lie in the material bounded by `envelope`.
 ///
 /// Indexed by slot; dead slots are `false`.
+#[allow(dead_code)] // tenu par ses tests, pas encore appelé par le pipeline
 pub fn interior(mesh: &TetMesh, envelope: &Envelope, cancel: &dyn Cancel) -> Result<Vec<bool>> {
     let walls = walls_of(envelope);
     interior_within(mesh, envelope, &walls, cancel)

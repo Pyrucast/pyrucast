@@ -70,6 +70,7 @@ fn cell_quality(pts: &[Point3], cell: &[u32], corners: &[[usize; 4]]) -> f64 {
 
 /// Worst scaled Jacobian in the whole patch — the number the mesher is judged
 /// on, and the one the guard below preserves.
+#[allow(dead_code)] // tenu par ses tests, pas encore appelé par le pipeline
 pub fn worst_quality(pts: &[Point3], patch: &Patch) -> f64 {
     let h = patch
         .hexes

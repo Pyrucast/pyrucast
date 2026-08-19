@@ -6,9 +6,9 @@
 //! Internal helpers:
 //! - [`triangulation`] — 2-D primitives (ear clipping, CDT,
 //!   polygon-with-holes pipeline).
-//! - [`tetrahedralization`] — 3-D primitives (exact predicates, Delaunay
+//! - `tetrahedralization` — 3-D primitives (exact predicates, Delaunay
 //!   kernel) behind the tetrahedral mesher.
-//! - [`sweep_kernel`] — extrusion, revolution and SEG2→QUA4 kernel used
+//! - `sweep_kernel` — extrusion, revolution and SEG2→QUA4 kernel used
 //!   by [`sweep()`](fn@sweep), [`extrude()`] and [`revolve()`].
 
 pub mod arc;
@@ -17,7 +17,7 @@ pub mod border;
 pub mod chain;
 pub mod circle;
 pub mod consolidate;
-pub mod contour;
+pub(crate) mod contour;
 pub mod convert;
 pub mod elements_on;
 pub mod extrude;
@@ -32,8 +32,8 @@ pub mod methods;
 pub mod orient;
 pub mod pave_surface;
 pub mod pave_volume;
-pub mod paving;
-pub mod plaster;
+pub(crate) mod paving;
+pub(crate) mod plaster;
 pub mod poi1_from_nodes;
 pub mod points;
 pub mod predicates;
@@ -42,9 +42,9 @@ pub mod revolve;
 pub mod select;
 pub mod skin;
 pub mod sweep;
-pub mod sweep_kernel;
+pub(crate) mod sweep_kernel;
 pub mod sweep_solid;
-pub mod tetrahedralization;
+pub(crate) mod tetrahedralization;
 pub mod to_poi1;
 pub mod transfinite;
 pub mod transform;

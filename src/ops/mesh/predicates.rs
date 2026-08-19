@@ -37,7 +37,7 @@
 //! # Example
 //!
 //! ```
-//! use pyrucast::ops::mesh::tetrahedralization::predicates::{insphere, orient3d};
+//! use pyrucast::ops::mesh::predicates::{insphere, orient3d};
 //!
 //! let a = [0.0, 0.0, 0.0];
 //! let b = [1.0, 0.0, 0.0];
@@ -299,7 +299,7 @@ fn minor2(a: &[f64], b: &[f64], c: &[f64], d: &[f64]) -> Vec<f64> {
 /// # Example
 ///
 /// ```
-/// use pyrucast::ops::mesh::tetrahedralization::predicates::orient2d;
+/// use pyrucast::ops::mesh::predicates::orient2d;
 ///
 /// assert!(orient2d(&[0.0, 0.0], &[1.0, 0.0], &[0.0, 1.0]) > 0.0);
 /// assert!(orient2d(&[0.0, 0.0], &[0.0, 1.0], &[1.0, 0.0]) < 0.0);
@@ -350,7 +350,7 @@ fn orient2d_exact(pa: &[f64; 2], pb: &[f64; 2], pc: &[f64; 2]) -> f64 {
 /// # Example
 ///
 /// ```
-/// use pyrucast::ops::mesh::tetrahedralization::predicates::collinear3d;
+/// use pyrucast::ops::mesh::predicates::collinear3d;
 ///
 /// assert!(collinear3d(&[0.0, 0.0, 0.0], &[1.0, 2.0, 3.0], &[2.0, 4.0, 6.0]));
 /// assert!(!collinear3d(&[0.0, 0.0, 0.0], &[1.0, 2.0, 3.0], &[2.0, 4.0, 7.0]));
@@ -384,7 +384,7 @@ pub fn collinear3d(pa: &[f64; 3], pb: &[f64; 3], pc: &[f64; 3]) -> bool {
 /// # Example
 ///
 /// ```
-/// use pyrucast::ops::mesh::tetrahedralization::predicates::orient3d;
+/// use pyrucast::ops::mesh::predicates::orient3d;
 ///
 /// let (a, b, c) = ([0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
 /// assert!(orient3d(&a, &b, &c, &[0.0, 0.0, 1.0]) > 0.0);
@@ -444,7 +444,7 @@ fn orient3d_exact(pa: &[f64; 3], pb: &[f64; 3], pc: &[f64; 3], pd: &[f64; 3]) ->
 /// # Example
 ///
 /// ```
-/// use pyrucast::ops::mesh::tetrahedralization::predicates::{insphere, orient3d};
+/// use pyrucast::ops::mesh::predicates::{insphere, orient3d};
 ///
 /// let a = [0.0, 0.0, 0.0];
 /// let b = [1.0, 0.0, 0.0];

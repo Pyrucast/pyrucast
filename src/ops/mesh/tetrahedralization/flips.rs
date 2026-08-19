@@ -68,6 +68,7 @@ pub fn flip23(mesh: &mut TetMesh, t: usize, i: usize) -> Result<Option<Vec<u32>>
 ///
 /// Returns `None` when the edge is not shared by exactly three cells, or
 /// when the union is not convex — the inverse situation of [`flip23`].
+#[allow(dead_code)] // tenu par ses tests, pas encore appelé par le pipeline
 pub fn flip32(mesh: &mut TetMesh, u: u32, v: u32) -> Result<Option<Vec<u32>>> {
     let Some(ring) = mesh.tets_around_edge(u, v) else {
         return Ok(None);
@@ -116,6 +117,7 @@ pub fn flip32(mesh: &mut TetMesh, u: u32, v: u32) -> Result<Option<Vec<u32>>> {
 /// Applies only when the fan is two cells whose outer faces are coplanar and
 /// meet nothing, so that swapping the diagonal re-cuts the same flat
 /// quadrilateral and leaves the solid untouched.
+#[allow(dead_code)] // tenu par ses tests, pas encore appelé par le pipeline
 pub fn flip22(mesh: &mut TetMesh, p: u32, q: u32) -> Result<Option<Vec<u32>>> {
     let fan = mesh.tets_with_edge(p, q);
     if fan.len() != 2 {

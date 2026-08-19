@@ -80,6 +80,7 @@ impl Effort {
 /// facets, inside a loop, inside a loop. Indexing once costs one pass and
 /// makes every answer local.
 pub struct Protected<'a> {
+    #[allow(dead_code)] // lu par `all()`, tenu par ses tests
     facets: &'a [[u32; 3]],
     by_key: HashSet<[u32; 3]>,
     by_edge: HashMap<(u32, u32), Vec<[u32; 3]>>,
@@ -111,6 +112,7 @@ impl<'a> Protected<'a> {
     }
 
     /// Every facet, in the order they came.
+    #[allow(dead_code)] // tenu par ses tests, pas encore appelé par le pipeline
     pub fn all(&self) -> &[[u32; 3]] {
         self.facets
     }

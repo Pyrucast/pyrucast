@@ -35,7 +35,7 @@ pub mod envelope;
 pub mod fill;
 pub mod flips;
 pub mod intersect;
-pub use super::predicates;
+pub(crate) use super::predicates;
 
 pub mod recovery;
 pub mod refine;

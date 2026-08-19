@@ -51,7 +51,7 @@ fn barre() -> Result<(
     )?)?;
     let materials = element_field::material_field(&model, &[("k", 1.0)])?;
 
-    let mut rhs = NodeField::from_submesh(&mult.get(0)?, vec!["imposed_T".into()])?;
+    let rhs = NodeField::from_submesh(&mult.get(0)?, vec!["imposed_T".into()])?;
     rhs.get(0)?
         .write()
         .set_value(mult_node.id(), "imposed_T", 1.0)?;
@@ -236,9 +236,9 @@ fn lire_une_matrice_assemblee() -> Result<()> {
     // **primales**), le résultat est un `NodeField` sur les DOFs *lignes*
     // (vars **duales**) — `K · u = f`. L'opérateur `*` en est le sucre.
     let y: NodeField = k.mul_field(&x)?;
-    let y: NodeField = (&k * &x)?;
+    let y_sucre: NodeField = (&k * &x)?; // le même produit, en opérateur
 
-    let _ = (v, m, csr, csc, y);
+    let _ = (v, m, csr, csc, y, y_sucre);
     Ok(())
 }
 // ANCHOR_END: lecture

@@ -471,7 +471,6 @@ pub fn build(
     let (nx, ny) = (grid.nx(), grid.ny());
     if nx == 0 || ny == 0 {
         return Core {
-            cells: 0,
             band: contour_loops.iter().map(|l| (l.clone(), false)).collect(),
         };
     }
@@ -508,7 +507,6 @@ pub fn build(
     // ── Emit the cells, sharing the contour's nodes where they coincide ───
     // Only the nodes cells actually use are added, and each exactly once.
     let mut vert: HashMap<(usize, usize), u32> = HashMap::new();
-    let mut cells = 0usize;
     for j in 0..ny {
         for i in 0..nx {
             if !keep[j * nx + i] {
@@ -527,13 +525,11 @@ pub fn build(
                 });
             }
             fab.push_quad(q);
-            cells += 1;
         }
     }
 
     let core_loops = boundary_loops(&keep, nx, ny, &vert);
     Core {
-        cells,
         band: band_loops(contour_loops, &core_loops),
     }
 }

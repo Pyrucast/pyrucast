@@ -788,6 +788,7 @@ impl TetMesh {
     /// `None` when the edge is absent, or when its fan is open — which for
     /// an interior edge means it reaches the outer boundary, and makes the
     /// edge unflippable.
+    #[allow(dead_code)] // tenu par ses tests, pas encore appelé par le pipeline
     pub(super) fn tets_around_edge(&self, u: u32, v: u32) -> Option<Vec<u32>> {
         let start = self
             .tets_around_vertex(u)
@@ -824,11 +825,6 @@ impl TetMesh {
             return None;
         }
         cell.v.iter().copied().find(|x| !f.contains(x))
-    }
-
-    /// Temporary probe accessor.
-    pub fn has_edge_pub(&self, u: u32, v: u32) -> bool {
-        self.has_edge(u, v)
     }
 
     /// Whether `(u, v)` is an edge of some tetrahedron.
@@ -1031,11 +1027,6 @@ impl TetMesh {
         self.tets.iter().filter(|t| !t.dead).count()
     }
 
-    /// Whether no tetrahedron is left.
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
     /// Six times the signed volume of a tetrahedron — positive for every
     /// well-formed cell.
     pub fn orientation(&self, v: &[u32; 4]) -> f64 {
@@ -1048,6 +1039,7 @@ impl TetMesh {
     }
 
     /// Total volume of the live tetrahedra.
+    #[allow(dead_code)] // tenu par ses tests, pas encore appelé par le pipeline
     pub fn volume(&self) -> f64 {
         self.iter().map(|(_, v)| self.orientation(&v)).sum::<f64>() / 6.0
     }

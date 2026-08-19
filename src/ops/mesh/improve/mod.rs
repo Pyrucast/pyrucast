@@ -53,7 +53,7 @@ use std::collections::HashMap;
 /// The same shape the pavers hand to [`paving::smooth`](super::paving::smooth)
 /// and [`paving::cleanup`](super::paving::cleanup), so those two are reused as
 /// they are rather than reimplemented against a different layout.
-pub struct Surface {
+pub(crate) struct Surface {
     pub pts: Vec<Point2>,
     pub quads: Vec<[u32; 4]>,
     pub tris: Vec<[u32; 3]>,
@@ -69,7 +69,7 @@ pub struct Surface {
 impl Surface {
     /// Read `mesh`'s `QUA4` and `TRI3` cells. `op` names the calling operator
     /// and only ever appears in error messages.
-    pub fn read(mesh: &Mesh, op: &str) -> Result<Surface> {
+    pub(crate) fn read(mesh: &Mesh, op: &str) -> Result<Surface> {
         let coords = mesh.coords()?;
         let dim = coords.read().dim();
         if dim != 2 {
@@ -163,7 +163,7 @@ impl Surface {
     }
 
     /// How many nodes sit on the boundary — the ones nothing may move.
-    pub fn pinned(&self) -> usize {
+    pub(crate) fn pinned(&self) -> usize {
         self.movable.iter().filter(|m| !**m).count()
     }
 
@@ -173,7 +173,7 @@ impl Surface {
     /// The one operator that mutates rather than copies. Pinned nodes are
     /// never written, so a node shared with another mesh only ever moves if it
     /// was interior to this one.
-    pub fn write_positions(&self, mesh: &Mesh) -> Result<Mesh> {
+    pub(crate) fn write_positions(&self, mesh: &Mesh) -> Result<Mesh> {
         for (i, &id) in self.ids.iter().enumerate() {
             if !self.movable[i] {
                 continue;
@@ -188,7 +188,7 @@ impl Surface {
 
     /// Build a fresh mesh: pinned nodes are shared, since they did not move,
     /// and only the nodes that actually moved are duplicated.
-    pub fn to_mesh(&self, op: &str) -> Result<Mesh> {
+    pub(crate) fn to_mesh(&self, op: &str) -> Result<Mesh> {
         let mut ids = self.ids.clone();
         let mut kept: Vec<Node> = Vec::new();
         for (i, id) in ids.iter_mut().enumerate() {
@@ -204,7 +204,7 @@ impl Surface {
 
     /// Build a fresh mesh over the caller's own nodes — for the passes that
     /// change connectivity and never geometry.
-    pub fn to_mesh_same_nodes(&self, op: &str) -> Result<Mesh> {
+    pub(crate) fn to_mesh_same_nodes(&self, op: &str) -> Result<Mesh> {
         let ids = self.ids.clone();
         self.emit(&ids, op)
     }

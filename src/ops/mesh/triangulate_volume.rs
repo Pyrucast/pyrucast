@@ -4,14 +4,14 @@
 //! Pipeline:
 //! 1. Read the envelope and check it is watertight, consistently oriented,
 //!    free of degenerate facets and of self-intersections
-//!    ([`tetrahedralization::envelope`](crate::ops::mesh::tetrahedralization::envelope)).
+//!    (`tetrahedralization::envelope`).
 //! 2. Delaunay-tetrahedralize its nodes — and only its nodes
-//!    ([`tetrahedralization::delaunay`](crate::ops::mesh::tetrahedralization::delaunay)).
+//!    (`tetrahedralization::delaunay`).
 //! 3. Recover every envelope edge and facet by local reconnection
-//!    ([`tetrahedralization::recovery`](crate::ops::mesh::tetrahedralization::recovery)).
+//!    (`tetrahedralization::recovery`).
 //! 4. Flood from both sides of the recovered surface to separate the
 //!    material from the void
-//!    ([`tetrahedralization::classify`](crate::ops::mesh::tetrahedralization::classify)).
+//!    (`tetrahedralization::classify`).
 //! 5. Check the result against the envelope, then materialize it.
 //!
 //! **The envelope is respected exactly.** Its nodes are reused verbatim —
@@ -44,7 +44,7 @@
 //! triangulation unaided.
 //!
 //! What is added is then handed back wherever the mesh will part with it
-//! ([`tetrahedralization::simplify`](crate::ops::mesh::tetrahedralization::simplify)).
+//! (`tetrahedralization::simplify`).
 //! Asking *afterwards* is a far kinder question than asking recovery to
 //! manage without: there is already a valid mesh, and each point only needs
 //! its own neighbourhood rearranged. What comes back is the **collateral**
@@ -100,10 +100,10 @@
 //! own nodes is always full of flat ones. Two further passes turn it into a
 //! mesh one can compute on:
 //!
-//! - [`tetrahedralization::refine`](super::tetrahedralization::refine) puts nodes
+//! - `tetrahedralization::refine` puts nodes
 //!   **inside** the solid, at the circumcentres of the cells whose
 //!   radius-edge ratio or size says they are wrong;
-//! - [`tetrahedralization::smooth`](super::tetrahedralization::smooth) then chases
+//! - `tetrahedralization::smooth` then chases
 //!   the **slivers** refinement cannot reach, by reconnecting cells, taking
 //!   out the edges a sliver is flat across, and relaxing interior nodes.
 //!

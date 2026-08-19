@@ -8,19 +8,19 @@
 //! result is quadrangular by construction rather than by luck of pairing.
 //!
 //! Pipeline per domain (one outer counter-clockwise loop and its clockwise
-//! holes, parsed by [`super::contour`]):
+//! holes, parsed by `contour`):
 //!
 //! 1. Seed the advancing front with the domain's boundary loops.
-//! 2. Lay a whole row of quadrangles along a loop ([`paving::row`]): each
+//! 2. Lay a whole row of quadrangles along a loop (`paving::row`): each
 //!    front node is given as many quadrangles as its interior angle asks for,
 //!    at the local element size.
 //! 3. Refuse and retreat if the row would produce a quadrangle that is not
 //!    strictly convex, or edges that cross the front. Every such test runs on
-//!    the exact predicates of [`super::predicates`].
+//!    the exact predicates of `predicates`.
 //! 4. Seam front nodes that have come within touching distance — which splits
 //!    a loop where the domain is concave and joins two loops where a hole is
 //!    being swallowed.
-//! 5. Close small loops with quadrangles ([`paving::close`]).
+//! 5. Close small loops with quadrangles (`paving::close`).
 //! 6. Smooth, under a validity guard that never moves a contour node.
 //!
 //! A 3-D contour is fitted to its best plane, paved there, and lifted back.

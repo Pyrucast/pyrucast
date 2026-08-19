@@ -189,6 +189,7 @@ impl Front {
 
     /// Collapse the front edge `(s, s.next)` onto the single vertex `v`.
     /// The loop loses one slot. Returns the surviving slot.
+    #[allow(dead_code)] // tenu par ses tests, pas encore appelé par le pipeline
     pub fn collapse_edge(&mut self, s: u32, v: u32) -> u32 {
         let b = self.next(s);
         debug_assert_ne!(b, s);
@@ -258,6 +259,7 @@ impl Front {
     }
 
     /// Are `a` and `b` on the same loop?
+    #[allow(dead_code)] // tenu par ses tests, pas encore appelé par le pipeline
     pub fn same_loop(&self, a: u32, b: u32) -> bool {
         let mut s = a;
         loop {
@@ -272,6 +274,7 @@ impl Front {
     }
 
     /// One representative slot per live loop, in ascending slot order.
+    #[allow(dead_code)] // tenu par ses tests, pas encore appelé par le pipeline
     pub fn loop_representatives(&self) -> Vec<u32> {
         let mut seen: HashSet<u32> = HashSet::new();
         let mut reps = Vec::new();

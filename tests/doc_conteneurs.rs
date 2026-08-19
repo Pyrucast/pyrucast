@@ -121,7 +121,7 @@ fn un_champ_aux_points_de_gauss_porte_le_materiau() -> Result<()> {
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
 
     // Élasticité linéaire 2-D : deux propriétés matériau, une zone (un sous-espace).
-    let mut mat = ElementField::new(&fes, vec!["E".into(), "nu".into()])?;
+    let mat = ElementField::new(&fes, vec!["E".into(), "nu".into()])?;
     {
         let mut z = mat.get(0)?.write(); // la zone (SubElementField) — guard
         z.set_uniform("E", 210e9)?; // module d'Young constant

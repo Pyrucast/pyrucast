@@ -46,6 +46,7 @@ pub fn interior_angle(p: Point2, c: Point2, n: Point2) -> f64 {
 /// Built by rotating `n - c` counter-clockwise by half the interior angle,
 /// which is correct for reflex corners too — unlike the sum of the two unit
 /// edge vectors, which flips to the outside beyond `π`.
+#[allow(dead_code)] // tenu par ses tests, pas encore appelé par le pipeline
 pub fn interior_direction(p: Point2, c: Point2, n: Point2, frac: f64) -> Option<Vector2> {
     let a = n - c;
     let na = a.norm();
