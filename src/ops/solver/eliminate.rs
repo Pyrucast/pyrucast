@@ -74,6 +74,44 @@ struct SlaveInfo {
 /// The condensation of a model's constraints against an assembled matrix — the
 /// expensive artifact cached transparently on the [`Matrix`] (exactly like
 /// [`super::lu::Factorization`]; cleared on any matrix mutation).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::RelationSense;
+/// # use pyrucast::ops::{element_field, matrix, mesh, solver};
+/// # let coords = Handle::new(Coords::new(1).unwrap());
+/// # let n: Vec<Node> = (0..3)
+/// #     .map(|i| Node::create_in(coords.clone(), &[i as f64 / 2.0]).unwrap())
+/// #     .collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # let modele = Model::heat_conduction(&fes).unwrap()
+/// #     .union(&Model::dirichlet("T".into(), "q".into(), &impose, &mult,
+/// #                              None, None, RelationSense::Equality).unwrap()).unwrap();
+/// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
+/// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
+/// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
+/// #                                      vec!["imposed_T".into()]).unwrap();
+/// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
+/// // L'artefact coûteux de l'élimination, mis en cache sur la matrice tout
+/// // comme la factorisation LU — et vidé dès que la matrice change.
+/// # use pyrucast::ops::solver::eliminate::Condensation;
+/// assert!(k.cached_factorization::<Condensation>().is_none());
+/// solver::eliminate::solve(&k, &modele, &charge)?;
+/// assert!(k.cached_factorization::<Condensation>().is_some());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub struct Condensation {
     /// Prolongation `T` (`n_phys × n_free`): `u_phys = T·û + u₀`.
     t: CsrMatrix<f64>,
@@ -98,12 +136,88 @@ pub struct Condensation {
 /// live at the multiplier nodes' imposed-value slots).
 ///
 /// A model with no constraint falls back to a plain [`lu::solve`].
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::RelationSense;
+/// # use pyrucast::ops::{element_field, matrix, mesh, solver};
+/// # let coords = Handle::new(Coords::new(1).unwrap());
+/// # let n: Vec<Node> = (0..3)
+/// #     .map(|i| Node::create_in(coords.clone(), &[i as f64 / 2.0]).unwrap())
+/// #     .collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # let modele = Model::heat_conduction(&fes).unwrap()
+/// #     .union(&Model::dirichlet("T".into(), "q".into(), &impose, &mult,
+/// #                              None, None, RelationSense::Equality).unwrap()).unwrap();
+/// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
+/// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
+/// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
+/// #                                      vec!["imposed_T".into()]).unwrap();
+/// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
+/// // La voie **alternative** à Lagrange : on élimine les esclaves au lieu
+/// // d'agrandir le système. Même solution, système plus petit.
+/// let par_elimination = solver::eliminate::solve(&k, &modele, &charge)?;
+/// let par_lagrange = solver::lu::solve(&k, &charge)?;
+/// let lu = |f: &NodeField| f.get(0).unwrap().read().value(n[2].id(), "T").unwrap();
+/// assert!((lu(&par_elimination) - lu(&par_lagrange)).abs() < 1e-9);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn solve(matrix: &Matrix, model: &Model, rhs: &NodeField) -> Result<NodeField> {
     solve_inner(matrix, model, rhs, &SolveOptions::default(), &NoCancel)
 }
 
 /// Like [`solve`] but with explicit [`SolveOptions`] (`method` selects the direct
 /// back-end for the *reduced* system; `cache` toggles the condensation cache).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::RelationSense;
+/// # use pyrucast::ops::{element_field, matrix, mesh, solver};
+/// # let coords = Handle::new(Coords::new(1).unwrap());
+/// # let n: Vec<Node> = (0..3)
+/// #     .map(|i| Node::create_in(coords.clone(), &[i as f64 / 2.0]).unwrap())
+/// #     .collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # let modele = Model::heat_conduction(&fes).unwrap()
+/// #     .union(&Model::dirichlet("T".into(), "q".into(), &impose, &mult,
+/// #                              None, None, RelationSense::Equality).unwrap()).unwrap();
+/// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
+/// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
+/// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
+/// #                                      vec!["imposed_T".into()]).unwrap();
+/// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
+/// # use pyrucast::ops::solver::lu::SolveOptions;
+/// // `method` choisit le moteur direct du système **réduit** ; `cache`
+/// // pilote la condensation.
+/// let u = solver::eliminate::solve_with_options(
+///     &k, &modele, &charge, &SolveOptions::default())?;
+/// assert!((u.get(0)?.read().value(n[2].id(), "T")? - 100.0).abs() < 1e-9);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn solve_with_options(
     matrix: &Matrix,
     model: &Model,
@@ -117,6 +231,43 @@ pub fn solve_with_options(
 /// stopped early (returning [`PyrucastError::Interrupted`]). Same granularity as
 /// [`lu::solve_cancellable`]: the heavy library calls are not interrupted
 /// mid-way, only around them.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::RelationSense;
+/// # use pyrucast::ops::{element_field, matrix, mesh, solver};
+/// # let coords = Handle::new(Coords::new(1).unwrap());
+/// # let n: Vec<Node> = (0..3)
+/// #     .map(|i| Node::create_in(coords.clone(), &[i as f64 / 2.0]).unwrap())
+/// #     .collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # let modele = Model::heat_conduction(&fes).unwrap()
+/// #     .union(&Model::dirichlet("T".into(), "q".into(), &impose, &mult,
+/// #                              None, None, RelationSense::Equality).unwrap()).unwrap();
+/// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
+/// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
+/// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
+/// #                                      vec!["imposed_T".into()]).unwrap();
+/// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
+/// # use std::sync::atomic::{AtomicBool, Ordering};
+/// let stop = AtomicBool::new(false);
+/// assert!(solver::eliminate::solve_cancellable(&k, &modele, &charge, &stop).is_ok());
+/// stop.store(true, Ordering::Relaxed);
+/// assert!(solver::eliminate::solve_cancellable(&k, &modele, &charge, &stop).is_err());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn solve_cancellable(
     matrix: &Matrix,
     model: &Model,
@@ -128,6 +279,44 @@ pub fn solve_cancellable(
 
 /// [`solve_cancellable`] with explicit [`SolveOptions`] — the full form the
 /// Python binding routes to.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::RelationSense;
+/// # use pyrucast::ops::{element_field, matrix, mesh, solver};
+/// # let coords = Handle::new(Coords::new(1).unwrap());
+/// # let n: Vec<Node> = (0..3)
+/// #     .map(|i| Node::create_in(coords.clone(), &[i as f64 / 2.0]).unwrap())
+/// #     .collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # for i in 0..2 { sm.add_cell(&[n[i].id(), n[i + 1].id()]).unwrap(); }
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # let modele = Model::heat_conduction(&fes).unwrap()
+/// #     .union(&Model::dirichlet("T".into(), "q".into(), &impose, &mult,
+/// #                              None, None, RelationSense::Equality).unwrap()).unwrap();
+/// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
+/// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
+/// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
+/// #                                      vec!["imposed_T".into()]).unwrap();
+/// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
+/// # use pyrucast::ops::solver::lu::SolveOptions;
+/// # use std::sync::atomic::AtomicBool;
+/// let stop = AtomicBool::new(false);
+/// let u = solver::eliminate::solve_cancellable_with_options(
+///     &k, &modele, &charge, &SolveOptions::default(), &stop)?;
+/// assert!(u.node_count()? > 0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn solve_cancellable_with_options(
     matrix: &Matrix,
     model: &Model,
