@@ -92,6 +92,27 @@ fn map_coords(
 ///
 /// `vector` must match the mesh's coordinate dimension. The original mesh is
 /// left untouched.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+/// # let barre = Mesh::from_submesh(sm);
+/// # let ou = |m: &Mesh, i| m.node(0, 0, i).unwrap().position().unwrap();
+/// // Des nœuds **neufs**, aux positions décalées : l'original ne bouge pas.
+/// let deplacee = mesh::translate(&barre, &[0.0, 2.0, 0.0])?;
+/// assert_eq!(ou(&deplacee, 0), vec![0.0, 2.0, 0.0]);
+/// assert_eq!(ou(&barre, 0), vec![0.0, 0.0, 0.0]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn translate(mesh: &Mesh, vector: &[f64]) -> Result<Mesh> {
     let dim = mesh.coords()?.read().dim() as usize;
     if vector.len() != dim {
@@ -115,6 +136,28 @@ pub fn translate(mesh: &Mesh, vector: &[f64]) -> Result<Mesh> {
 ///   `center` directed by `axis` (Rodrigues' formula), right-handed about
 ///   `axis`. `axis` is required and must be non-degenerate; it need not be
 ///   normalized.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+/// # let barre = Mesh::from_submesh(sm);
+/// # let ou = |m: &Mesh, i| m.node(0, 0, i).unwrap().position().unwrap();
+/// // Un quart de tour autour de z : (1, 0, 0) devient (0, 1, 0).
+/// let tournee = mesh::rotate(
+///     &barre, std::f64::consts::FRAC_PI_2, &[0.0, 0.0, 0.0], Some(&[0.0, 0.0, 1.0]))?;
+/// let p = ou(&tournee, 1);
+/// assert!(p[0].abs() < 1e-12 && (p[1] - 1.0).abs() < 1e-12);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn rotate(mesh: &Mesh, angle: f64, center: &[f64], axis: Option<&[f64]>) -> Result<Mesh> {
     let dim = mesh.coords()?.read().dim() as usize;
     if center.len() != dim {
@@ -217,6 +260,29 @@ fn unit(v: &[f64], name: &str, op: &str) -> Result<Vec<f64>> {
 ///
 /// Orientation-reversing in 3-D (and in 1-D), so the cells are re-ordered
 /// there — see the [module documentation](self).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+/// # let barre = Mesh::from_submesh(sm);
+/// # let ou = |m: &Mesh, i| m.node(0, 0, i).unwrap().position().unwrap();
+/// // Chaque point passe de l'autre côté du centre. La transformation est de
+/// // déterminant −1, donc la connectivité est **réinversée** pour garder une
+/// // orientation directe : l'image de (1, 0, 0) est en position locale 0.
+/// let image = mesh::symmetry_point(&barre, &[0.0, 0.0, 0.0])?;
+/// assert_eq!(ou(&image, 0), vec![-1.0, 0.0, 0.0]);
+/// assert_eq!(ou(&image, 1), vec![0.0, 0.0, 0.0]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn symmetry_point(mesh: &Mesh, center: &[f64]) -> Result<Mesh> {
     let dim = dim_of(mesh, center, "center", "symmetry_point")?;
     // x ↦ 2c − x flips every axis: reversing iff the dimension is odd.
@@ -240,6 +306,35 @@ pub fn symmetry_point(mesh: &Mesh, center: &[f64]) -> Result<Mesh> {
 /// Errors if `a` or `b` do not have the coordinate dimension, if they
 /// coincide (no direction), or if the mesh is 1-D (where the line is the
 /// whole space).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+/// # let barre = Mesh::from_submesh(sm);
+/// # let ou = |m: &Mesh, i| m.node(0, 0, i).unwrap().position().unwrap();
+/// // Symétrie **axiale** autour de l'axe des x : un point sur cet axe ne
+/// // bouge pas.
+/// # let hors_axe = Node::create_in(coords.clone(), &[0.5, 1.0, 0.0])?;
+/// # let mut s2 = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # s2.add_cell(&[n[0].id(), hors_axe.id()])?;
+/// # let coude = Mesh::from_submesh(s2);
+/// let image = mesh::symmetry_line(&coude, &[0.0, 0.0, 0.0], &[1.0, 0.0, 0.0])?;
+/// assert_eq!(ou(&image, 0), vec![0.0, 0.0, 0.0]);
+/// assert_eq!(ou(&image, 1), vec![0.5, -1.0, 0.0]);
+/// // En 3-D une symétrie axiale est une **rotation** d'un demi-tour : son
+/// // déterminant vaut +1, donc la connectivité est laissée telle quelle —
+/// // contrairement à `symmetry_point` et `symmetry_plane`.
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn symmetry_line(mesh: &Mesh, a: &[f64], b: &[f64]) -> Result<Mesh> {
     let dim = dim_of(mesh, a, "a", "symmetry_line")?;
     dim_of(mesh, b, "b", "symmetry_line")?;
@@ -278,6 +373,35 @@ pub fn symmetry_line(mesh: &Mesh, a: &[f64], b: &[f64]) -> Result<Mesh> {
 ///
 /// Errors if the mesh is not 3-D, if `a`, `b` or `c` is not a 3-D point, or
 /// if the three points are aligned (they then span no plane).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+/// # let barre = Mesh::from_submesh(sm);
+/// # let ou = |m: &Mesh, i| m.node(0, 0, i).unwrap().position().unwrap();
+/// // Le plan est donné par **trois points**, non par une normale.
+/// # let hors_plan = Node::create_in(coords.clone(), &[0.5, 0.0, 1.0])?;
+/// # let mut s2 = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # s2.add_cell(&[n[0].id(), hors_plan.id()])?;
+/// # let oblique = Mesh::from_submesh(s2);
+/// // Le plan z = 0 : seule la troisième coordonnée change de signe. Comme
+/// // pour `symmetry_point`, la connectivité est réinversée — l'image du
+/// // second nœud arrive en position locale 0.
+/// let image = mesh::symmetry_plane(
+///     &oblique, &[0.0, 0.0, 0.0], &[1.0, 0.0, 0.0], &[0.0, 1.0, 0.0])?;
+/// assert_eq!(ou(&image, 0), vec![0.5, 0.0, -1.0]);
+/// assert_eq!(ou(&image, 1), vec![0.0, 0.0, 0.0]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn symmetry_plane(mesh: &Mesh, a: &[f64], b: &[f64], c: &[f64]) -> Result<Mesh> {
     let dim = dim_of(mesh, a, "a", "symmetry_plane")?;
     dim_of(mesh, b, "b", "symmetry_plane")?;

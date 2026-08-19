@@ -46,12 +46,30 @@ use std::sync::atomic::{AtomicU64, Ordering};
 ///
 /// Apply with `.with_min_len(MIN_PARALLEL_LEN)` on an indexed parallel
 /// iterator (`par_iter`, `par_chunks_mut`, …).
+///
+/// ```
+/// # use pyrucast::parallel;
+/// // Découper un travail minuscule coûte plus qu'il ne rapporte : en deçà
+/// // de ce grain, une boucle parallèle tourne de fait séquentiellement.
+/// assert_eq!(parallel::MIN_PARALLEL_LEN, 256);
+/// // S'applique par `.with_min_len(MIN_PARALLEL_LEN)` sur un itérateur indexé.
+/// ```
 pub const MIN_PARALLEL_LEN: usize = 256;
 
 /// Apply `f` to every element of `buf` **in place**, in parallel, honouring the
 /// grain-size policy. Each slot is written exactly once ⇒ result is independent
 /// of the thread count. The single primitive behind element-wise field maths
 /// (`map_all`, the scalar `+ − × ÷` operators, …).
+///
+/// ```
+/// # use pyrucast::parallel;
+/// // Chaque case est écrite **exactement une fois** : le résultat ne
+/// // dépend pas du nombre de fils. C'est l'unique primitive derrière les
+/// // maths de champ élément par élément.
+/// let mut v = vec![1.0, 4.0, 9.0];
+/// parallel::map_inplace(&mut v, f64::sqrt);
+/// assert_eq!(v, vec![1.0, 2.0, 3.0]);
+/// ```
 pub fn map_inplace(buf: &mut [f64], f: impl Fn(f64) -> f64 + Sync + Send) {
     buf.par_iter_mut()
         .with_min_len(MIN_PARALLEL_LEN)
@@ -60,6 +78,14 @@ pub fn map_inplace(buf: &mut [f64], f: impl Fn(f64) -> f64 + Sync + Send) {
 
 /// Apply `f` in place to component `ci` (stride `ncomp`, `ci < ncomp`) of a
 /// flat component-major buffer, in parallel. Each touched slot is written once.
+///
+/// ```
+/// # use pyrucast::parallel;
+/// // Une seule composante d'un tampon entrelacé : ici la deuxième de trois.
+/// let mut v = vec![1.0, 10.0, 100.0, 2.0, 20.0, 200.0];
+/// parallel::map_component_inplace(&mut v, 3, 1, |x| x * 2.0);
+/// assert_eq!(v, vec![1.0, 20.0, 100.0, 2.0, 40.0, 200.0]);
+/// ```
 pub fn map_component_inplace(
     buf: &mut [f64],
     ncomp: usize,
@@ -89,12 +115,38 @@ pub(crate) fn add_atomic(a: &AtomicU64, v: f64) {
 /// Handle onto a colour-scatter's flat f64 accumulator (held as atomics), handed
 /// to the per-cell closure of [`colored_scatter`]. Within one colour the cells
 /// touch pairwise-disjoint slots, so [`Scatter::add`] never races.
+///
+/// ```
+/// # use pyrucast::parallel;
+/// // L'accumulateur d'un scatter colorié, tenu en atomiques. Dans une
+/// // couleur, les mailles touchent des cases **disjointes** : `add` ne
+/// // court jamais.
+/// let couleurs = vec![vec![0, 1]];
+/// let v = parallel::colored_scatter(2, &couleurs, 1, || (), |cell, _s, out| {
+///     out.add(cell, 1.0);
+///     Ok(())
+/// })?;
+/// assert_eq!(v, vec![1.0, 1.0]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub struct Scatter<'a> {
     values: &'a [AtomicU64],
 }
 
 impl Scatter<'_> {
     /// Accumulate `v` into slot `slot` of the shared accumulator.
+    ///
+    /// ```
+    /// # use pyrucast::parallel;
+    /// // Les contributions **s'accumulent** dans la case visée.
+    /// let couleurs = vec![vec![0, 1], vec![2]];
+    /// let v = parallel::colored_scatter(1, &couleurs, 1, || (), |_cell, _s, out| {
+    ///     out.add(0, 2.0);
+    ///     Ok(())
+    /// })?;
+    /// assert_eq!(v, vec![6.0]); // trois mailles × 2
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     #[inline]
     pub fn add(&self, slot: usize, v: f64) {
         add_atomic(&self.values[slot], v);
@@ -118,6 +170,22 @@ impl Scatter<'_> {
 /// the internal forces and the distributed flux load
 /// [`crate::ops::node_field::flux`](fn@crate::ops::node_field::flux)). Returns the
 /// accumulator as plain `f64`.
+///
+/// ```
+/// # use pyrucast::parallel;
+/// // Les mailles sont partagées en couleurs qui touchent des cases
+/// // disjointes ; chaque case additionne donc ses mailles dans un ordre
+/// // fixe — couleur croissante, puis ordre des mailles — quel que soit
+/// // `RAYON_NUM_THREADS`.
+/// let couleurs = vec![vec![0, 2], vec![1]];
+/// let v = parallel::colored_scatter(3, &couleurs, 1, || 0usize, |cell, tampon, out| {
+///     *tampon += 1; // un état par tâche, réutilisé d'une maille à l'autre
+///     out.add(cell, (cell + 1) as f64);
+///     Ok(())
+/// })?;
+/// assert_eq!(v, vec![1.0, 2.0, 3.0]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn colored_scatter<S>(
     n_slots: usize,
     coloring: &[Vec<usize>],

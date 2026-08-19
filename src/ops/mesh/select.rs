@@ -150,6 +150,43 @@ fn sub_element_submesh(
 ///
 /// See the [module documentation](self) for the component-filter and
 /// AND-across-components semantics.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{Band, ElementType, Node};
+/// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh::{self, select};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// # let temp = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+/// # {
+/// #     let mut z = temp.get(0).unwrap().write();
+/// #     z.set_value(n[0].id(), "T", 10.0).unwrap();
+/// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
+/// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
+/// # }
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let mut flux = ElementField::new(&fes, vec!["q".into()]).unwrap();
+/// # flux.get(0).unwrap().write().set_uniform("q", 5.0).unwrap();
+/// # let bande = Band::new(Some(40.0), None, None, None).unwrap();
+/// // Les nœuds dont T ≥ 40 : deux sur trois. Le résultat est un maillage
+/// // POI1, une zone par zone traitée.
+/// let chauds = select::select_nodes(&temp, &bande, None)?;
+/// assert_eq!(chauds.cell_count()?, 2);
+/// assert_eq!(chauds.element_types()?, vec![ElementType::POI1]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn select_nodes(
     field: &NodeField,
     band: &Band,
@@ -170,6 +207,46 @@ pub fn select_nodes(
 ///
 /// See the [module documentation](self) for the component-filter and
 /// AND semantics.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{Band, ElementType, Node};
+/// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh::{self, select};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// # let temp = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+/// # {
+/// #     let mut z = temp.get(0).unwrap().write();
+/// #     z.set_value(n[0].id(), "T", 10.0).unwrap();
+/// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
+/// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
+/// # }
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let mut flux = ElementField::new(&fes, vec!["q".into()]).unwrap();
+/// # flux.get(0).unwrap().write().set_uniform("q", 5.0).unwrap();
+/// # let bande = Band::new(Some(40.0), None, None, None).unwrap();
+/// // Une maille n'est retenue que si **tous** ses points de Gauss passent.
+/// let forte = Band::new(Some(1.0), None, None, None)?;
+/// assert_eq!(select::select_cells(&flux, &forte, None)?.cell_count()?, 1);
+/// let trop = Band::new(Some(10.0), None, None, None)?;
+/// assert_eq!(select::select_cells(&flux, &trop, None)?.cell_count()?, 0);
+/// // Et la zone garde son type d'élément, non POI1.
+/// assert_eq!(select::select_cells(&flux, &forte, None)?.element_types()?,
+///            vec![ElementType::TRI3]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn select_cells(
     field: &ElementField,
     band: &Band,
@@ -186,6 +263,47 @@ pub fn select_cells(
 
 /// Single-zone [`select_nodes`] — a [`Mesh`] with one POI1 submesh, or an
 /// empty mesh when the component filter skips the zone.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{Band, ElementType, Node};
+/// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh::{self, select};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// # let temp = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+/// # {
+/// #     let mut z = temp.get(0).unwrap().write();
+/// #     z.set_value(n[0].id(), "T", 10.0).unwrap();
+/// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
+/// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
+/// # }
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let mut flux = ElementField::new(&fes, vec!["q".into()]).unwrap();
+/// # flux.get(0).unwrap().write().set_uniform("q", 5.0).unwrap();
+/// # let bande = Band::new(Some(40.0), None, None, None).unwrap();
+/// // La forme mono-zone : un maillage à un seul sous-maillage POI1.
+/// let chauds = select::select_sub_nodes(&temp.get(0)?.read(), &bande, None)?;
+/// assert_eq!(chauds.len(), 1);
+/// assert_eq!(chauds.cell_count()?, 2);
+/// // Un filtre de composante qui ne s'applique pas à la zone la saute, et
+/// // rend un maillage **vide** plutôt qu'une erreur.
+/// let absente = select::select_sub_nodes(
+///     &temp.get(0)?.read(), &bande, Some(vec!["u_x".into()]))?;
+/// assert!(absente.is_empty());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn select_sub_nodes(
     sub: &SubNodeField,
     band: &Band,
@@ -200,6 +318,42 @@ pub fn select_sub_nodes(
 
 /// Single-zone [`select_cells`] — a [`Mesh`] with one submesh, or an empty
 /// mesh when the component filter skips the zone.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{Band, ElementType, Node};
+/// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh::{self, select};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// # let temp = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+/// # {
+/// #     let mut z = temp.get(0).unwrap().write();
+/// #     z.set_value(n[0].id(), "T", 10.0).unwrap();
+/// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
+/// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
+/// # }
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let mut flux = ElementField::new(&fes, vec!["q".into()]).unwrap();
+/// # flux.get(0).unwrap().write().set_uniform("q", 5.0).unwrap();
+/// # let bande = Band::new(Some(40.0), None, None, None).unwrap();
+/// let forte = Band::new(Some(1.0), None, None, None)?;
+/// let zone = flux.get(0)?;
+/// let retenues = select::select_sub_cells(&zone.read(), &forte, None)?;
+/// assert_eq!(retenues.cell_count()?, 1);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn select_sub_cells(
     sub: &SubElementField,
     band: &Band,
