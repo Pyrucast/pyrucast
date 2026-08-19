@@ -7,6 +7,20 @@
 use std::fmt;
 
 /// Standard result type used throughout the library.
+///
+/// ```
+/// # use pyrucast::{PyrucastError, Result};
+/// # use pyrucast::coords::Coords;
+/// // Toute la bibliothèque rend ce `Result` : une erreur porte un message
+/// // qui nomme l'opération et ce qui a manqué, jamais un code nu.
+/// fn repere(dim: u8) -> Result<Coords> {
+///     Coords::new(dim)
+/// }
+/// assert!(repere(2).is_ok());
+/// let e = repere(0).unwrap_err();
+/// assert!(matches!(e, PyrucastError::Message(_)));
+/// assert!(e.to_string().contains("dim"));
+/// ```
 pub type Result<T> = std::result::Result<T, PyrucastError>;
 
 /// Single error type for pyrucast.

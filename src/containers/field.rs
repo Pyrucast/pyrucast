@@ -69,6 +69,34 @@ pub(crate) fn check_components(kind: &str, components: &[String]) -> Result<()> 
 /// `field.filter_components("u_x")` and `field.filter_components(["u_x", "u_y"])`
 /// (and `field.filter_components(model.primal_vars())`, a `Vec<String>`). It is
 /// the Rust twin of the Python `str | list[str]` argument.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::field::{Field, SubField};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// # let temp = NodeField::from_submesh(&support.get(0).unwrap(),
+/// #                                    vec!["T".into()]).unwrap();
+/// # temp.get(0).unwrap().write().add_to_component("T", 4.0).unwrap();
+/// // Le jumeau Rust de l'argument Python `str | list[str]` : les
+/// // opérateurs de composantes se lisent pareil dans les deux sens.
+/// assert_eq!(temp.filter_components("T")?.components()?, vec!["T".to_string()]);
+/// assert_eq!(temp.filter_components(["T"])?.components()?, vec!["T".to_string()]);
+/// assert_eq!(temp.filter_components(vec!["T".to_string()])?.components()?,
+///            vec!["T".to_string()]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub trait IntoComponentNames {
     /// The requested component names, as an owned list.
     fn into_names(self) -> Vec<String>;
@@ -122,6 +150,32 @@ impl<const N: usize> IntoComponentNames for [&str; N] {
 ///
 /// The kind-specific reading methods live next to each concrete sub
 /// type, on the `NodeFieldView` and `ElementFieldView` aliases.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::field::{Field, SubField};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// # let temp = NodeField::from_submesh(&support.get(0).unwrap(),
+/// #                                    vec!["T".into()]).unwrap();
+/// # temp.get(0).unwrap().write().add_to_component("T", 4.0).unwrap();
+/// // Une vue en lecture sur **toutes** les zones à la fois : les guards
+/// // sont pris une fois, et les lectures concurrentes ne s'attendent pas.
+/// let vue = temp.view()?;
+/// assert_eq!(vue.components(), &["T".to_string()]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub struct FieldView<S: Any + Send + Sync> {
     pub(crate) zones: Vec<ReadGuard<S>>,
     components: Vec<String>,
@@ -129,6 +183,31 @@ pub struct FieldView<S: Any + Send + Sync> {
 
 impl<S: Any + Send + Sync> FieldView<S> {
     /// Union of the zones' component names, first-seen order.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::field::{Field, SubField};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// # let support = mesh::poi1_from_nodes(&n).unwrap();
+    /// # let temp = NodeField::from_submesh(&support.get(0).unwrap(),
+    /// #                                    vec!["T".into()]).unwrap();
+    /// # temp.get(0).unwrap().write().add_to_component("T", 4.0).unwrap();
+    /// // L'union des composantes des zones, dans l'ordre de première
+    /// // apparition — la même règle que partout ailleurs dans les agrégats.
+    /// assert_eq!(temp.view()?.components(), &["T".to_string()]);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn components(&self) -> &[String] {
         &self.components
     }
@@ -142,6 +221,37 @@ impl<S: Any + Send + Sync> FieldView<S> {
 /// buffer in which the component index varies fastest (stride =
 /// `component_count()`). Both `SubNodeField` (node-major) and
 /// `SubElementField` (cell → gauss major) satisfy it.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::field::{Field, SubField};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// # let temp = NodeField::from_submesh(&support.get(0).unwrap(),
+/// #                                    vec!["T".into()]).unwrap();
+/// # temp.get(0).unwrap().write().add_to_component("T", 4.0).unwrap();
+/// // Un contrat purement **structurel** : des composantes nommées et un
+/// // tampon plat où l'index de composante varie le plus vite. Champs
+/// // nodaux et champs par éléments le satisfont tous deux, d'où une
+/// // arithmétique écrite une seule fois.
+/// let z = temp.get(0)?;
+/// let z = z.read();
+/// assert_eq!(z.components(), &["T".to_string()]);
+/// assert_eq!(z.component_index("T"), Some(0));
+/// assert_eq!(z.map_all(f64::sqrt).value(n[0].id(), "T")?, 2.0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub trait SubField {
     /// Type of the object backing this sub-field's support — a `SubMesh` for
     /// node fields, a `SubFiniteElementSpace` for element fields. Its store
@@ -747,6 +857,33 @@ macro_rules! __field_op {
 /// [`SubField`] — `ElementField` today, `NodeField` once it becomes an
 /// aggregate. A component may exist on some subs only; `min`/`max` fold
 /// over the subs that define it and error if none does.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::field::{Field, SubField};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// # let temp = NodeField::from_submesh(&support.get(0).unwrap(),
+/// #                                    vec!["T".into()]).unwrap();
+/// # temp.get(0).unwrap().write().add_to_component("T", 4.0).unwrap();
+/// // Ce que l'agrégat ajoute au contrat de zone : les vues d'ensemble et
+/// // les opérations qui traversent toutes les zones.
+/// assert_eq!(temp.components()?, vec!["T".to_string()]);
+/// assert_eq!(temp.map_subs(|s| Ok(s.map_all(f64::sqrt)))?
+///     .get(0)?.read().value(n[0].id(), "T")?, 2.0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub trait Field: Aggregate
 where
     Self::Sub: SubField,
@@ -1162,6 +1299,37 @@ impl<A: Aggregate> Field for A where A::Sub: SubField {}
 /// `map_all` ([`SubField::map_all`] / [`Field::map_all`]); the method keeps a
 /// distinct name to avoid colliding with those inherent `map_all` methods at
 /// concrete call sites.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::field::{Field, SubField};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// # let temp = NodeField::from_submesh(&support.get(0).unwrap(),
+/// #                                    vec!["T".into()]).unwrap();
+/// # temp.get(0).unwrap().write().add_to_component("T", 4.0).unwrap();
+/// # use pyrucast::containers::field::MapValues;
+/// # use pyrucast::ops::field;
+/// // Ce qui unifie la zone et l'agrégat pour les maths élément par
+/// // élément : une seule définition de `sqrt` sert les quatre types de
+/// // champ.
+/// assert_eq!(field::sqrt(&temp)?.get(0)?.read().value(n[0].id(), "T")?, 2.0);
+/// let z = temp.get(0)?;
+/// let z = z.read();
+/// assert_eq!(field::sqrt(&*z)?.value(n[0].id(), "T")?, 2.0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub trait MapValues: Sized {
     /// A new field with `f` applied to every value.
     fn map_values(&self, f: fn(f64) -> f64) -> Result<Self>;
@@ -1197,6 +1365,34 @@ impl MapValues for ElementField {
 /// [`psca`](fn@crate::ops::field::psca) be written once, generically, instead
 /// of dispatching over four types. `pscal` (zone) and `pscal_field`
 /// (aggregate) do the work; this trait only unifies their names.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::field::{Field, SubField};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// # let temp = NodeField::from_submesh(&support.get(0).unwrap(),
+/// #                                    vec!["T".into()]).unwrap();
+/// # temp.get(0).unwrap().write().add_to_component("T", 4.0).unwrap();
+/// # use pyrucast::ops::field;
+/// // Le produit scalaire rend un champ à **une** composante, nommée
+/// // `psca`, quelle que soit la saveur du champ d'entrée.
+/// let p = field::psca(&temp, &temp)?;
+/// assert_eq!(p.get(0)?.read().components(), &["psca".to_string()]);
+/// assert_eq!(p.get(0)?.read().value(n[0].id(), "psca")?, 16.0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub trait Pscal: Sized {
     /// A new field of the same flavour, carrying the single `"psca"` component.
     fn pscal_with(&self, other: &Self) -> Result<Self>;

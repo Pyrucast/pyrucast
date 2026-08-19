@@ -43,6 +43,40 @@ use std::any::Any;
 ///
 /// All access mechanics (length, indexing, iteration) are derived from the
 /// two required methods [`Aggregate::items`] and [`Aggregate::items_mut`].
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::field::{Field, SubField};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// # let temp = NodeField::from_submesh(&support.get(0).unwrap(),
+/// #                                    vec!["T".into()]).unwrap();
+/// # temp.get(0).unwrap().write().add_to_component("T", 4.0).unwrap();
+/// // Toute la mécanique d'accès — longueur, indexation, itération, union —
+/// // se dérive de deux méthodes seulement, `items` et `items_mut`. Un même
+/// // vocabulaire vaut donc pour les maillages, les champs, les modèles et
+/// // les matrices.
+/// assert_eq!(maillage.len(), 1);
+/// assert!(!maillage.is_empty());
+/// assert_eq!(maillage.iter().count(), 1);
+/// // Et l'union partage les zones plutôt que de les copier.
+/// # use pyrucast::handle::Handle as H;
+/// let deux = maillage.union(&support)?;
+/// assert_eq!(deux.len(), 2);
+/// assert!(H::same_object(&deux.get(0)?, &maillage.get(0)?));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub trait Aggregate: Default {
     /// Type of the sub-object held (referenced via `Handle<Sub>`).
     type Sub: Any + Send + Sync;
@@ -285,6 +319,34 @@ pub trait Aggregate: Default {
 /// Safe against the non-reentrant per-object lock: one read guard is held at
 /// a time, on a different sub-object each turn, and every sub-object `Debug`
 /// is itself lock-free.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::field::{Field, SubField};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// # let temp = NodeField::from_submesh(&support.get(0).unwrap(),
+/// #                                    vec!["T".into()]).unwrap();
+/// # temp.get(0).unwrap().write().add_to_component("T", 4.0).unwrap();
+/// # use pyrucast::aggregate::DebugItems;
+/// // Une vue `Debug` qui **déréférence** les handles : sans elle, un
+/// // agrégat s'afficherait comme une liste de pointeurs.
+/// let rendu = format!("{:?}", DebugItems(Aggregate::items(&maillage)));
+/// assert!(rendu.starts_with('['));
+/// assert!(rendu.contains("TRI3"));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub struct DebugItems<'a, S: Any + Send + Sync>(pub &'a [Handle<S>]);
 
 impl<S: Any + Send + Sync + std::fmt::Debug> std::fmt::Debug for DebugItems<'_, S> {

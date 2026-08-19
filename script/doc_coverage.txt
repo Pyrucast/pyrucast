@@ -2,9 +2,6 @@
 # Il ne peut que RÉTRÉCIR : un item public nouveau porte son exemple
 # (CONVENTIONS.md, règle 2), et un item documenté sort d'ici.
 # Régénérer : python script/doc_lint.py --ratchet
-VERSION
-aggregate::Aggregate
-aggregate::DebugItems
 archive::Archivable
 archive::ArchiveRoot
 archive::Root
@@ -16,18 +13,7 @@ atoms::cell::Cell
 atoms::cell::CellIter
 atoms::element_type::ElementType::as_kind
 atoms::node::Node::union
-atoms::point::Point2
-atoms::point::Point3
-atoms::point::Vector2
-atoms::point::Vector3
 containers::evolution::Evolution::interpolate_node_field
-containers::field::Field
-containers::field::FieldView
-containers::field::FieldView::components
-containers::field::IntoComponentNames
-containers::field::MapValues
-containers::field::Pscal
-containers::field::SubField
 containers::matrix::Matrix
 containers::matrix::SubMatrix
 containers::mesh::Mesh
@@ -41,7 +27,6 @@ dump::Dump
 dump::DumpOptions
 dump::labeled_grid
 dump::table
-error::Result
 handle::ReadGuard
 handle::WriteGuard
 impl_aggregate
@@ -70,9 +55,6 @@ models::kernel::element_block_triplets
 models::kernel::element_block_triplets_per_cell
 models::owned_components
 models::plastic::MatParams
-models::radiation::DUAL_VAR
-models::radiation::PRIMAL_VAR
-models::radiation::STEFAN_BOLTZMANN
 ops::coloring::greedy_color
 ops::element_field::beam_deformation::beam_deformation
 ops::element_field::behavior::integrate

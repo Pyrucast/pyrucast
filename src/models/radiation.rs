@@ -58,8 +58,28 @@ use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use serde::{Deserialize, Serialize};
 
 /// Column DOF name (temperature) — shared with heat conduction.
+///
+/// ```
+/// # use pyrucast::models::radiation;
+/// // `q·n = σε(T⁴ − T_∞⁴)`, sur les DDL de la conduction — d'où un
+/// // couplage direct dans sa raideur.
+/// assert_eq!((radiation::PRIMAL_VAR, radiation::DUAL_VAR), ("T", "q"));
+/// // La constante de Stefan-Boltzmann, en W·m⁻²·K⁻⁴ ; un matériau peut la
+/// // redonner pour travailler dans un autre système d'unités.
+/// assert!((radiation::STEFAN_BOLTZMANN - 5.670_374_419e-8).abs() < 1e-20);
+/// ```
 pub const PRIMAL_VAR: &str = "T";
 /// Row DOF name (heat flux) — shared with heat conduction.
+///
+/// ```
+/// # use pyrucast::models::radiation;
+/// // `q·n = σε(T⁴ − T_∞⁴)`, sur les DDL de la conduction — d'où un
+/// // couplage direct dans sa raideur.
+/// assert_eq!((radiation::PRIMAL_VAR, radiation::DUAL_VAR), ("T", "q"));
+/// // La constante de Stefan-Boltzmann, en W·m⁻²·K⁻⁴ ; un matériau peut la
+/// // redonner pour travailler dans un autre système d'unités.
+/// assert!((radiation::STEFAN_BOLTZMANN - 5.670_374_419e-8).abs() < 1e-20);
+/// ```
 pub const DUAL_VAR: &str = "q";
 /// Required material components: the emissivity and the far-field temperature.
 /// `T_inf` is **required**, not optional, because the linearised stiffness needs
@@ -70,6 +90,16 @@ const MATERIAL_COMPONENTS: &[&str] = &["emis", "T_inf"];
 const OPTIONAL_COMPONENTS: &[&str] = &["sigma"];
 
 /// The Stefan-Boltzmann constant, in SI (`W·m⁻²·K⁻⁴`).
+///
+/// ```
+/// # use pyrucast::models::radiation;
+/// // `q·n = σε(T⁴ − T_∞⁴)`, sur les DDL de la conduction — d'où un
+/// // couplage direct dans sa raideur.
+/// assert_eq!((radiation::PRIMAL_VAR, radiation::DUAL_VAR), ("T", "q"));
+/// // La constante de Stefan-Boltzmann, en W·m⁻²·K⁻⁴ ; un matériau peut la
+/// // redonner pour travailler dans un autre système d'unités.
+/// assert!((radiation::STEFAN_BOLTZMANN - 5.670_374_419e-8).abs() < 1e-20);
+/// ```
 pub const STEFAN_BOLTZMANN: f64 = 5.670_374_419e-8;
 
 /// Behaviour-**input** component: the temperature interpolated at the Gauss

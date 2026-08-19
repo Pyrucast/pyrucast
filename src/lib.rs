@@ -56,6 +56,11 @@ pub mod viz;
 pub use error::{PyrucastError, Result};
 
 /// Library version (taken from `Cargo.toml`).
+///
+/// ```
+/// // Celle de `Cargo.toml`, et celle qu'une archive inscrit en tête.
+/// assert!(pyrucast::VERSION.split('.').count() >= 2);
+/// ```
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg(feature = "python-api")]
