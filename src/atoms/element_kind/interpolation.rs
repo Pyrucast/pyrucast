@@ -30,6 +30,15 @@ use std::fmt;
 /// Names mix cast3m and standard FE terminology. See
 /// [`crate::atoms::element_type`] for the conventions on reference frames and
 /// node order.
+///
+/// ```
+/// # use pyrucast::atoms::{ElementType, Interpolation};
+/// // Le degré d'interpolation du **champ**, distinct de celui de la
+/// // géométrie : un élément peut être sous-paramétrique.
+/// assert_eq!(Interpolation::Lagrange1.shape_count(ElementType::TRI3), 3);
+/// // Hermite porte deux fonctions par nœud — une valeur, une pente.
+/// assert_eq!(Interpolation::Hermite3.shape_count(ElementType::SEG2), 4);
+/// ```
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub enum Interpolation {
     /// Linear Lagrange (P1 / Q1). One shape function per geometric node, equal
@@ -81,6 +90,14 @@ impl Interpolation {
     /// For the Lagrange families this asks whether it is that element's own
     /// degree; `Hermite3` is defined on `SEG2` alone. `POI1` has no reference
     /// frame and is always rejected.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::{ElementType, Interpolation};
+    /// assert!(Interpolation::Lagrange1.is_compatible_with(ElementType::TRI3));
+    /// // Hermite cubique n'est défini que sur le segment.
+    /// assert!(Interpolation::Hermite3.is_compatible_with(ElementType::SEG2));
+    /// assert!(!Interpolation::Hermite3.is_compatible_with(ElementType::TRI3));
+    /// ```
     pub fn is_compatible_with(self, element_type: ElementType) -> bool {
         match self {
             Self::Lagrange1 | Self::Lagrange2 => element_type.as_kind().degree() == Some(self),
@@ -92,6 +109,14 @@ impl Interpolation {
     }
 
     /// Whether the space declares **no** field basis, the formulation owning it.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::{ElementType, Interpolation};
+    /// // « Aucune base de champ » : la formulation possède la sienne, sous
+    /// // forme close — une barre, un portique.
+    /// assert!(Interpolation::ModelEmbedded.is_model_embedded());
+    /// assert!(!Interpolation::Lagrange1.is_model_embedded());
+    /// ```
     pub fn is_model_embedded(self) -> bool {
         matches!(self, Self::ModelEmbedded)
     }
@@ -102,6 +127,15 @@ impl Interpolation {
     /// This is the stride every reference-space table is built on. Reading it
     /// instead of `nodes_per_cell()` is what lets a basis carry more than one
     /// function per node.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::{ElementType, Interpolation};
+    /// // Le nombre de nœuds pour les familles de Lagrange…
+    /// assert_eq!(Interpolation::Lagrange1.shape_count(ElementType::QUA4), 4);
+    /// assert_eq!(Interpolation::Lagrange2.shape_count(ElementType::QUA8), 8);
+    /// // …et le double pour Hermite, qui tabule aussi les pentes.
+    /// assert_eq!(Interpolation::Hermite3.shape_count(ElementType::SEG2), 4);
+    /// ```
     pub fn shape_count(self, element_type: ElementType) -> usize {
         match self {
             Self::Lagrange1 | Self::Lagrange2 => element_type.nodes_per_cell(),
@@ -117,6 +151,12 @@ impl Interpolation {
     ///
     /// A physics reads this to know whether a nodal variable it declares is an
     /// independent field or the derivative of another one.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::{ElementType, Interpolation};
+    /// assert_eq!(Interpolation::Lagrange1.dofs_per_node(), 1);
+    /// assert_eq!(Interpolation::Hermite3.dofs_per_node(), 2); // valeur + pente
+    /// ```
     pub fn dofs_per_node(self) -> usize {
         match self {
             Self::Lagrange1 | Self::Lagrange2 => 1,
@@ -126,11 +166,22 @@ impl Interpolation {
     }
 
     /// Whether the basis is C¹ — i.e. interpolates a slope as well as a value.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::{ElementType, Interpolation};
+    /// assert!(Interpolation::Hermite3.is_hermite());
+    /// assert!(!Interpolation::Lagrange2.is_hermite());
+    /// ```
     pub fn is_hermite(self) -> bool {
         matches!(self, Self::Hermite3)
     }
 
     /// Short name (cast3m-style).
+    ///
+    /// ```
+    /// # use pyrucast::atoms::{ElementType, Interpolation};
+    /// assert_eq!(Interpolation::Lagrange1.name(), "LAGRANGE1");
+    /// ```
     pub fn name(self) -> &'static str {
         match self {
             Self::Lagrange1 => "LAGRANGE1",
@@ -141,6 +192,12 @@ impl Interpolation {
     }
 
     /// Parse from a short name (case-insensitive).
+    ///
+    /// ```
+    /// # use pyrucast::atoms::{ElementType, Interpolation};
+    /// assert_eq!(Interpolation::from_name("LAGRANGE1"), Some(Interpolation::Lagrange1));
+    /// assert_eq!(Interpolation::from_name("P17"), None);
+    /// ```
     pub fn from_name(s: &str) -> Option<Self> {
         match s.to_ascii_uppercase().as_str() {
             "LAGRANGE1" | "LAG1" => Some(Self::Lagrange1),
@@ -163,6 +220,15 @@ impl Interpolation {
     /// - `xi` has the wrong length;
     /// - the `(self, element_type)` pair is not supported (`POI1`, a degree
     ///   that is not the element's own, …).
+    ///
+    /// ```
+    /// # use pyrucast::atoms::{ElementType, Interpolation};
+    /// // Au centre du triangle de référence, les trois N_i valent 1/3 —
+    /// // et somment à 1, comme partout.
+    /// let n = Interpolation::Lagrange1.shape(ElementType::TRI3, &[1.0 / 3.0, 1.0 / 3.0])?;
+    /// assert!(n.iter().all(|v| (v - 1.0 / 3.0).abs() < 1e-12));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn shape(self, element_type: ElementType, xi: &[f64]) -> Result<Vec<f64>> {
         self.check(element_type, xi)?;
         match self {
@@ -191,6 +257,16 @@ impl Interpolation {
     /// # Errors
     ///
     /// Same as [`shape`](Self::shape).
+    ///
+    /// ```
+    /// # use pyrucast::atoms::{ElementType, Interpolation};
+    /// // Sur un TRI3 les dérivées sont constantes : ∂N/∂ξ = [-1, 1, 0].
+    /// let d = Interpolation::Lagrange1.dshape_dxi(ElementType::TRI3, &[0.0, 0.0])?;
+    /// assert_eq!(d.len(), 3 * 2); // ∂N_i/∂ξ_k, à plat
+    /// // Elles somment au vecteur nul : la partition de l'unité, dérivée.
+    /// assert!((d[0] + d[2] + d[4]).abs() < 1e-12);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn dshape_dxi(self, element_type: ElementType, xi: &[f64]) -> Result<Vec<f64>> {
         self.check(element_type, xi)?;
         match self {
@@ -212,6 +288,17 @@ impl Interpolation {
     /// # Errors
     ///
     /// Same as [`shape`](Self::shape), plus a Lagrange family.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::{ElementType, Interpolation};
+    /// // Les dérivées **secondes** : ce qu'exige une équation d'ordre quatre,
+    /// // et que seules les familles C¹ tabulent.
+    /// let d2 = Interpolation::Hermite3.d2shape_dxi2(ElementType::SEG2, &[0.0])?;
+    /// assert!(d2.iter().any(|v| v.abs() > 1e-12));
+    /// // Une base de Lagrange n'en a pas — et le dit plutôt que de rendre zéro.
+    /// assert!(Interpolation::Lagrange1.d2shape_dxi2(ElementType::SEG2, &[0.0]).is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn d2shape_dxi2(self, element_type: ElementType, xi: &[f64]) -> Result<Vec<f64>> {
         self.check(element_type, xi)?;
         match self {

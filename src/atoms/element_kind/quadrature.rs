@@ -21,6 +21,15 @@ use std::fmt;
 /// the Lagrange-1 mass matrix exactly** on a straight reference element — see
 /// each element's [`gauss`](super::ElementKind::gauss). `POI1` has no reference
 /// frame and is rejected.
+///
+/// ```
+/// # use pyrucast::atoms::{ElementType, QuadratureRule};
+/// // La règle d'intégration, choisie par sous-espace EF. Ses poids somment
+/// // à la mesure de l'élément de référence — 1/2 pour un triangle.
+/// let (_xi, w) = QuadratureRule::Gauss.points(ElementType::TRI3)?;
+/// assert!((w.iter().sum::<f64>() - 0.5).abs() < 1e-12);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub enum QuadratureRule {
     /// Standard Gauss rule, picked per element type.
@@ -34,6 +43,11 @@ pub enum QuadratureRule {
 
 impl QuadratureRule {
     /// Short name.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::{ElementType, QuadratureRule};
+    /// assert_eq!(QuadratureRule::Gauss.name(), "GAUSS");
+    /// ```
     pub fn name(self) -> &'static str {
         match self {
             Self::Gauss => "GAUSS",
@@ -42,6 +56,13 @@ impl QuadratureRule {
     }
 
     /// Parse from a short name (case-insensitive).
+    ///
+    /// ```
+    /// # use pyrucast::atoms::{ElementType, QuadratureRule};
+    /// // Insensible à la casse.
+    /// assert_eq!(QuadratureRule::from_name("gauss"), Some(QuadratureRule::Gauss));
+    /// assert_eq!(QuadratureRule::from_name("simpson"), None);
+    /// ```
     pub fn from_name(s: &str) -> Option<Self> {
         match s.to_ascii_uppercase().as_str() {
             "GAUSS" => Some(Self::Gauss),
@@ -52,11 +73,25 @@ impl QuadratureRule {
 
     /// Whether this rule is defined for `element_type` — i.e. anything but
     /// `POI1`, which has no reference frame to integrate over.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::{ElementType, QuadratureRule};
+    /// assert!(QuadratureRule::Gauss.is_compatible_with(ElementType::TRI3));
+    /// // Un point n'a pas d'élément de référence sur quoi intégrer.
+    /// assert!(!QuadratureRule::Gauss.is_compatible_with(ElementType::POI1));
+    /// ```
     pub fn is_compatible_with(self, element_type: ElementType) -> bool {
         element_type.topological_dim() > 0
     }
 
     /// Number of integration points for this rule on `element_type`.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::{ElementType, QuadratureRule};
+    /// assert_eq!(QuadratureRule::Gauss.point_count(ElementType::TRI3)?, 3);
+    /// assert!(QuadratureRule::Gauss.point_count(ElementType::POI1).is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn point_count(self, element_type: ElementType) -> Result<usize> {
         Ok(self.points(element_type)?.1.len())
     }
@@ -68,6 +103,16 @@ impl QuadratureRule {
     ///   `xi[g * ref_dim .. (g+1) * ref_dim]` the coordinates of the `g`-th
     ///   integration point;
     /// - `w` has length `n_g`, and sums to the element's reference measure.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::{ElementType, QuadratureRule};
+    /// // `xi` est à plat, ligne-major : n_g × ref_dim ; `w` a n_g entrées.
+    /// let (xi, w) = QuadratureRule::Gauss.points(ElementType::QUA4)?;
+    /// assert_eq!((xi.len(), w.len()), (4 * 2, 4));
+    /// // La somme des poids est la mesure du carré de référence : 4.
+    /// assert!((w.iter().sum::<f64>() - 4.0).abs() < 1e-12);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn points(self, element_type: ElementType) -> Result<(Vec<f64>, Vec<f64>)> {
         self.check_compat(element_type)?;
         let k = element_type.as_kind();

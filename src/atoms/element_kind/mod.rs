@@ -67,6 +67,17 @@ mod tri6;
 /// [`corners`](Self::corners) narrows it to the corner indices, which is what
 /// adjacency keying wants: two neighbouring cells agree on the corners of the
 /// facet they share whatever their degree.
+///
+/// ```
+/// # use pyrucast::atoms::ElementType;
+/// // Une face de TET10 est un TRI6 : elle porte ses nœuds milieux.
+/// let f = &ElementType::TET10.as_kind().facets()[0];
+/// assert_eq!(f.element_type, ElementType::TRI6);
+/// assert_eq!(f.nodes.len(), 6);
+/// // Les coins seuls suffisent à apparier deux mailles voisines, quel que
+/// // soit leur degré.
+/// assert_eq!(f.corners().len(), 3);
+/// ```
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Facet {
     /// The facet seen as an element (`SEG2` for a surface's side, `TRI6` for a
@@ -80,6 +91,13 @@ pub struct Facet {
 impl Facet {
     /// The facet's corner indices — the first `element_type.corner_count()`
     /// entries of [`nodes`](Self::nodes), by the corners-first convention.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::ElementType;
+    /// let f = &ElementType::QUA8.as_kind().facets()[0];
+    /// assert_eq!(f.element_type, ElementType::SEG3); // le côté est quadratique
+    /// assert_eq!(f.corners(), &f.nodes[..2]); // ses deux extrémités
+    /// ```
     pub fn corners(&self) -> &'static [usize] {
         &self.nodes[..self.element_type.as_kind().corner_count()]
     }
@@ -91,6 +109,15 @@ impl Facet {
 /// (the compiler forces every element to answer) and **provided** ones derived
 /// from a more primitive datum. A new element writes the required set; the
 /// rest follows.
+///
+/// ```
+/// # use pyrucast::atoms::ElementType;
+/// // L'unique `match` par type d'élément : `as_kind()`. Tout le reste —
+/// // nombre de nœuds, facettes, domaine de référence — passe par le trait.
+/// let k = ElementType::TRI3.as_kind();
+/// assert_eq!(k.corner_count(), 3);
+/// assert_eq!(k.facets().len(), 3);
+/// ```
 pub trait ElementKind: Sync {
     // ── Identity (required) ─────────────────────────────────────────────
 

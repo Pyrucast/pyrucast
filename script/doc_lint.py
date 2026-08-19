@@ -496,7 +496,10 @@ def items_documentes(publics):
 
     documentes, ambigus = set(), []
     for m in re.finditer(r"^\S+ - (\S+) \(line \d+\): test$", sortie, re.M):
-        chemin = m.group(1)
+        # rustdoc nomme le doctest d'un `impl` paramétré avec ses paramètres —
+        # `CellGeom<'a>::det_j_w` — là où la page du type s'appelle `CellGeom`.
+        # Sans cette normalisation, un item documenté restait au registre.
+        chemin = re.sub(r"<[^>]*>", "", m.group(1))
         if chemin in publics:
             documentes.add(chemin)
             continue

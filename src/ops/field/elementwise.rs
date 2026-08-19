@@ -27,6 +27,35 @@ use crate::error::Result;
 macro_rules! field_unary {
     ($(#[$doc:meta])* $name:ident, $f:expr) => {
         $(#[$doc])*
+        ///
+        /// ```
+        /// # use pyrucast::aggregate::Aggregate;
+        /// # use pyrucast::atoms::Node;
+        /// # use pyrucast::containers::field::SubField;
+        /// # use pyrucast::containers::node_field::NodeField;
+        /// # use pyrucast::coords::Coords;
+        /// # use pyrucast::handle::Handle;
+        /// # use pyrucast::ops::{field, mesh};
+        /// # let coords = Handle::new(Coords::new(2).unwrap());
+        /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+        /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+        /// # let support = mesh::poi1_from_nodes(&n).unwrap();
+        /// # let f = NodeField::from_submesh(&support.get(0).unwrap(), vec!["v".into()]).unwrap();
+        /// # f.get(0).unwrap().write().add_to_component("v", 4.0).unwrap();
+        /// // Un champ **neuf** : toutes les valeurs, toutes les composantes,
+        /// // toutes les zones. Les mêmes fonctions valent pour une zone seule
+        /// // comme pour un agrégat, par le trait `MapValues`.
+        /// let g = field::sqrt(&f)?;
+        /// assert_eq!(g.get(0)?.read().value(n[0].id(), "v")?, 2.0);
+        /// assert_eq!(f.get(0)?.read().value(n[0].id(), "v")?, 4.0); // f intacte
+        ///
+        /// // Résultats **non gardés**, à la manière de numpy : la racine d'un
+        /// // négatif rend `nan`, le logarithme de zéro `-inf`.
+        /// # let neg = NodeField::from_submesh(&support.get(0)?, vec!["v".into()])?;
+        /// # neg.get(0)?.write().add_to_component("v", -1.0)?;
+        /// assert!(field::sqrt(&neg)?.get(0)?.read().value(n[0].id(), "v")?.is_nan());
+        /// # Ok::<(), pyrucast::PyrucastError>(())
+        /// ```
         pub fn $name<T: MapValues>(field: &T) -> Result<T> {
             field.map_values($f)
         }
