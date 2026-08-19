@@ -37,12 +37,66 @@ use crate::models::damage::{elastic_stress, lame, pos, DamageUpdate, MatRead};
 use nalgebra::Matrix3;
 
 /// The law's material contract.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::damage::{self, DamageLaw, MatRead};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "f_t".into(), "f_c".into(), "A_t".into(), "A_c".into()], &[30000.0, 0.2, 3.0, 30.0, 0.5, 0.5]).unwrap();
+/// # let mat = MatRead { field: &materiau, cell: 0 };
+/// // Deux résistances et deux fragilités : traction et compression sont
+/// // suivies séparément.
+/// assert!(damage::damage_tc::MATERIAL.contains(&"f_t"));
+/// assert!(damage::damage_tc::MATERIAL.contains(&"f_c"));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub const MATERIAL: &[&str] = &["E", "nu", "f_t", "f_c", "A_t", "A_c"];
 
 /// One Damage-TC step.
 ///
 /// `prev` carries `[r⁺, r⁻]`; the update returns them alongside the two damages
 /// and the degraded stress.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::damage::{self, DamageLaw, MatRead};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "f_t".into(), "f_c".into(), "A_t".into(), "A_c".into()], &[30000.0, 0.2, 3.0, 30.0, 0.5, 0.5]).unwrap();
+/// # let mat = MatRead { field: &materiau, cell: 0 };
+/// // Deux endommagements distincts : la traction en active un, la
+/// // compression l'autre — c'est ce qui **restitue la raideur** quand une
+/// // fissure se referme.
+/// let traction = damage::damage_tc::update(&[1e-3, 0.0, 0.0, 0.0, 0.0, 0.0], &[0.0; 4], &mat)?;
+/// let compression =
+///     damage::damage_tc::update(&[-1e-3, 0.0, 0.0, 0.0, 0.0, 0.0], &[0.0; 4], &mat)?;
+/// assert_eq!(traction.vars.len(), 4); // r⁺, r⁻, d⁺, d⁻
+/// assert!(traction.vars[2] > compression.vars[2]); // d⁺ : la traction seule
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn update(eps: &[f64; 6], prev: &[f64], mat: &MatRead) -> Result<DamageUpdate> {
     let e = mat.get("E")?;
     let nu = mat.get("nu")?;

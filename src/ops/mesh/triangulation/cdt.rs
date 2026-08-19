@@ -44,6 +44,20 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 /// but may diverge on pathological inputs; pyrucast guards against this
 /// by capping the total number of inserted Steiner points and returning
 /// a clear error if the cap is hit.
+///
+/// ```
+/// # use pyrucast::atoms::Point2;
+/// # use pyrucast::ops::mesh::triangulation;
+/// # use pyrucast::ops::mesh::triangulation::RefinementOptions;
+/// // Par défaut, aucun raffinement demandé.
+/// assert!(!RefinementOptions::default().is_active());
+/// // Ruppert n'est **prouvé terminer** que jusqu'à 20,7° ; au-delà, un
+/// // plafond de points de Steiner rend une erreur claire plutôt qu'une
+/// // divergence.
+/// let o = RefinementOptions { max_edge_length: Some(0.5), min_angle_deg: Some(20.0) };
+/// assert!(o.is_active());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Clone, Copy, Debug, Default)]
 pub struct RefinementOptions {
     /// Maximum allowed length for any triangle edge. Triangles having an
@@ -58,6 +72,16 @@ pub struct RefinementOptions {
 
 impl RefinementOptions {
     /// True iff the options request any refinement work.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::Point2;
+    /// # use pyrucast::ops::mesh::triangulation;
+    /// # use pyrucast::ops::mesh::triangulation::RefinementOptions;
+    /// assert!(!RefinementOptions::default().is_active());
+    /// assert!(RefinementOptions { max_edge_length: Some(0.5), ..Default::default() }
+    ///     .is_active());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn is_active(&self) -> bool {
         self.max_edge_length.is_some() || self.min_angle_deg.is_some()
     }
@@ -1463,6 +1487,19 @@ fn in_circle_tolerant(a: Point2, b: Point2, c: Point2, d: Point2) -> bool {
 /// let tris = delaunay_2d(&pts).unwrap();
 /// assert_eq!(tris.len(), 2);
 /// ```
+///
+/// ```
+/// # use pyrucast::atoms::Point2;
+/// # use pyrucast::ops::mesh::triangulation;
+/// // L'enveloppe convexe d'un carré : deux triangles, quel que soit le
+/// // découpage choisi par la condition de Delaunay.
+/// let carre = [Point2::new(0.0, 0.0), Point2::new(1.0, 0.0),
+///              Point2::new(1.0, 1.0), Point2::new(0.0, 1.0)];
+/// assert_eq!(triangulation::delaunay_2d(&carre)?.len(), 2);
+/// // Moins de trois points : rien à trianguler.
+/// assert!(triangulation::delaunay_2d(&carre[..2]).is_err());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn delaunay_2d(points: &[Point2]) -> Result<Vec<[usize; 3]>> {
     let n = points.len();
     if n < 3 {
@@ -1511,6 +1548,20 @@ pub fn delaunay_2d(points: &[Point2]) -> Result<Vec<[usize; 3]>> {
 /// - a constraint cannot be enforced (e.g. its segment lies on the hull
 ///   in a way the walk cannot follow, or it crosses another already-
 ///   forced constraint).
+///
+/// ```
+/// # use pyrucast::atoms::Point2;
+/// # use pyrucast::ops::mesh::triangulation;
+/// // Une contrainte force une arête à survivre à la triangulation, même
+/// // si Delaunay seul aurait choisi l'autre diagonale.
+/// let carre = [Point2::new(0.0, 0.0), Point2::new(1.0, 0.0),
+///              Point2::new(1.0, 1.0), Point2::new(0.0, 1.0)];
+/// let cells = triangulation::constrained_delaunay_2d(&carre, &[(1, 3)])?;
+/// assert_eq!(cells.len(), 2);
+/// // La diagonale (1,3) est bien une arête d'un des deux triangles.
+/// assert!(cells.iter().any(|t| t.contains(&1) && t.contains(&3)));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn constrained_delaunay_2d(
     points: &[Point2],
     constraints: &[(usize, usize)],
@@ -1579,6 +1630,20 @@ pub fn constrained_delaunay_2d(
 /// - a constraint cannot be enforced (e.g. loops cross),
 /// - the flood-fill ends up empty (likely a degenerate or self-
 ///   intersecting polygon).
+///
+/// ```
+/// # use pyrucast::atoms::Point2;
+/// # use pyrucast::ops::mesh::triangulation;
+/// // Un carré percé d'un carré : la couronne est maillée, le trou reste
+/// // vide. Huit sommets, huit triangles.
+/// let outer = vec![Point2::new(0.0, 0.0), Point2::new(3.0, 0.0),
+///                  Point2::new(3.0, 3.0), Point2::new(0.0, 3.0)];
+/// let hole = vec![Point2::new(1.0, 1.0), Point2::new(2.0, 1.0),
+///                 Point2::new(2.0, 2.0), Point2::new(1.0, 2.0)];
+/// let cells = triangulation::triangulate_polygon_with_holes(&outer, &[hole])?;
+/// assert_eq!(cells.len(), 8);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn triangulate_polygon_with_holes(
     outer: &[Point2],
     holes: &[Vec<Point2>],
@@ -1669,6 +1734,22 @@ pub fn triangulate_polygon_with_holes(
 /// `options` is inactive (both fields `None`), the result is identical
 /// to [`triangulate_polygon_with_holes`] except that `points` echoes
 /// the input flat list.
+///
+/// ```
+/// # use pyrucast::atoms::Point2;
+/// # use pyrucast::ops::mesh::triangulation;
+/// # use pyrucast::ops::mesh::triangulation::RefinementOptions;
+/// // Le raffinement **ajoute des points** : la fonction rend donc les
+/// // sommets en plus des mailles, contrairement à sa version brute.
+/// let outer = vec![Point2::new(0.0, 0.0), Point2::new(3.0, 0.0),
+///                  Point2::new(3.0, 3.0), Point2::new(0.0, 3.0)];
+/// let (pts, cells) = triangulation::triangulate_polygon_with_holes_refined(
+///     &outer, &[], RefinementOptions { max_edge_length: Some(0.5),
+///                                      min_angle_deg: Some(20.0) })?;
+/// assert!(pts.len() > outer.len()); // des points de Steiner ont été posés
+/// assert!(cells.len() > 2);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn triangulate_polygon_with_holes_refined(
     outer: &[Point2],
     holes: &[Vec<Point2>],

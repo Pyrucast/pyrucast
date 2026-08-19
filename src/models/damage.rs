@@ -58,6 +58,32 @@ const AXES: [&str; 3] = ["x", "y", "z"];
 /// The same attribute pattern as [`PlasticLaw`](crate::models::plastic::PlasticLaw):
 /// the DOFs, the elastic operator and the incremental montage are shared, and
 /// only the law that turns a strain into a degraded stress differs.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::damage::{self, DamageLaw, MatRead};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
+/// # let mat = MatRead { field: &materiau, cell: 0 };
+/// // Même motif que `PlasticLaw` : les DDL, l'opérateur élastique et le
+/// // montage incrémental sont partagés ; seule diffère la loi qui dégrade
+/// // la contrainte.
+/// assert_eq!(DamageLaw::ALL.len(), 3);
+/// assert_eq!(DamageLaw::Mazars.internal_names(), vec!["kappa".to_string()]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DamageLaw {
     /// Mazars — one scalar, two branches blended. Concrete.
@@ -73,6 +99,29 @@ pub enum DamageLaw {
 
 impl DamageLaw {
     /// Parse from a lowercase tag (`"mazars"`, `"damage_tc"`, `"sic_sic"`).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::damage::{self, DamageLaw, MatRead};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let materiau = SubElementField::from_uniform_per_component(
+    /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
+    /// # let mat = MatRead { field: &materiau, cell: 0 };
+    /// assert_eq!(DamageLaw::from_tag("mazars"), Some(DamageLaw::Mazars));
+    /// assert_eq!(DamageLaw::from_tag("kachanov"), None);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn from_tag(tag: &str) -> Option<Self> {
         match tag {
             "mazars" => Some(Self::Mazars),
@@ -83,6 +132,30 @@ impl DamageLaw {
     }
 
     /// The lowercase tag (the inverse of [`from_tag`](Self::from_tag)).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::damage::{self, DamageLaw, MatRead};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let materiau = SubElementField::from_uniform_per_component(
+    /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
+    /// # let mat = MatRead { field: &materiau, cell: 0 };
+    /// // Réciproque exacte de `from_tag`, pour les trois lois.
+    /// assert!(DamageLaw::ALL.iter()
+    ///     .all(|l| DamageLaw::from_tag(l.to_tag()) == Some(*l)));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn to_tag(self) -> &'static str {
         match self {
             Self::Mazars => "mazars",
@@ -92,9 +165,54 @@ impl DamageLaw {
     }
 
     /// Every law, in declaration order.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::damage::{self, DamageLaw, MatRead};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let materiau = SubElementField::from_uniform_per_component(
+    /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
+    /// # let mat = MatRead { field: &materiau, cell: 0 };
+    /// assert_eq!(DamageLaw::ALL, [DamageLaw::Mazars, DamageLaw::DamageTc, DamageLaw::SicSic]);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub const ALL: [DamageLaw; 3] = [Self::Mazars, Self::DamageTc, Self::SicSic];
 
     /// The accepted tags, `|`-joined — for error messages.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::damage::{self, DamageLaw, MatRead};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let materiau = SubElementField::from_uniform_per_component(
+    /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
+    /// # let mat = MatRead { field: &materiau, cell: 0 };
+    /// // Ce que citent les messages quand un nom de loi est inconnu.
+    /// assert!(DamageLaw::tag_list().contains("mazars"));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn tag_list() -> String {
         Self::ALL
             .iter()
@@ -104,6 +222,32 @@ impl DamageLaw {
     }
 
     /// The material components this law requires.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::damage::{self, DamageLaw, MatRead};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let materiau = SubElementField::from_uniform_per_component(
+    /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
+    /// # let mat = MatRead { field: &materiau, cell: 0 };
+    /// // Mazars : un seuil et deux branches. SiC/SiC porte en plus les axes
+    /// // du tissage, donc **plus de composantes en 3-D qu'en 2-D**.
+    /// assert!(DamageLaw::Mazars.material_components(2).contains(&"eps_d0"));
+    /// assert!(DamageLaw::SicSic.material_components(3).len()
+    ///         > DamageLaw::SicSic.material_components(2).len());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn material_components(self, space_dim: usize) -> &'static [&'static str] {
         match self {
             Self::Mazars => mazars::MATERIAL,
@@ -114,6 +258,31 @@ impl DamageLaw {
     }
 
     /// The law's internal variables, beyond the reported `damage`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::damage::{self, DamageLaw, MatRead};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let materiau = SubElementField::from_uniform_per_component(
+    /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
+    /// # let mat = MatRead { field: &materiau, cell: 0 };
+    /// // L'état de la loi, au-delà du `damage` rapporté pour la visualisation.
+    /// assert_eq!(DamageLaw::Mazars.internal_names(), vec!["kappa".to_string()]);
+    /// // Damage-TC en porte quatre : deux seuils et deux endommagements.
+    /// assert_eq!(DamageLaw::DamageTc.internal_names().len(), 4);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn internal_names(self) -> Vec<String> {
         match self {
             Self::Mazars => vec!["kappa".into()],
@@ -135,6 +304,39 @@ impl DamageLaw {
     }
 
     /// One step of the law, at a Gauss point.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::damage::{self, DamageLaw, MatRead};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let materiau = SubElementField::from_uniform_per_component(
+    /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
+    /// # let mat = MatRead { field: &materiau, cell: 0 };
+    /// // Sous le seuil `eps_d0`, rien ne s'endommage.
+    /// let petit = [1e-5, 0.0, 0.0, 0.0, 0.0, 0.0];
+    /// let u = DamageLaw::Mazars.update(&petit, &[0.0], &mat, 2)?;
+    /// assert_eq!(u.damage, 0.0);
+    ///
+    /// // Au-delà, l'endommagement croît et la contrainte est **dégradée** :
+    /// // elle tombe sous la contrainte élastique correspondante.
+    /// let grand = [1e-3, 0.0, 0.0, 0.0, 0.0, 0.0];
+    /// let u = DamageLaw::Mazars.update(&grand, &[0.0], &mat, 2)?;
+    /// assert!(u.damage > 0.0 && u.damage < 1.0);
+    /// let (lambda, mu) = damage::lame(30_000.0, 0.2);
+    /// assert!(u.sigma[0] < damage::elastic_stress(&grand, lambda, mu)[0]);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn update(
         self,
         eps: &[f64; 6],
@@ -157,6 +359,31 @@ impl std::fmt::Display for DamageLaw {
 }
 
 /// What a damage law returns for one Gauss point.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::damage::{self, DamageLaw, MatRead};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
+/// # let mat = MatRead { field: &materiau, cell: 0 };
+/// // `damage` est un **résumé** pour la visualisation ; l'état est `vars`.
+/// // Une loi à plusieurs endommagements y rapporte le pire.
+/// let u = DamageLaw::Mazars.update(&[1e-3, 0.0, 0.0, 0.0, 0.0, 0.0], &[0.0], &mat, 2)?;
+/// assert_eq!(u.vars.len(), DamageLaw::Mazars.internal_names().len());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub struct DamageUpdate {
     /// The degraded stress, full 3-D Voigt.
     pub sigma: [f64; 6],
@@ -168,6 +395,30 @@ pub struct DamageUpdate {
 }
 
 /// A cell's material, read by name — the same shape every law wants.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::damage::{self, DamageLaw, MatRead};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
+/// # let mat = MatRead { field: &materiau, cell: 0 };
+/// // La forme que veut chaque loi : le matériau d'une maille, lu par nom.
+/// assert_eq!(mat.get("eps_d0")?, 1e-4);
+/// assert_eq!(mat.cell, 0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub struct MatRead<'a> {
     /// The material field, exposed so a law can reach the shared frame reader.
     pub field: &'a SubElementField,
@@ -177,12 +428,59 @@ pub struct MatRead<'a> {
 
 impl MatRead<'_> {
     /// A material component of this cell, by name.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::damage::{self, DamageLaw, MatRead};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let materiau = SubElementField::from_uniform_per_component(
+    /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
+    /// # let mat = MatRead { field: &materiau, cell: 0 };
+    /// assert_eq!(mat.get("A_t")?, 0.8);
+    /// // Une constante absente est une erreur, pas un zéro silencieux.
+    /// assert!(mat.get("sigma_y").is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn get(&self, name: &str) -> Result<f64> {
         self.field.value(self.cell, 0, name)
     }
 }
 
 /// Lamé coefficients `(λ, μ)` from `E`, `nu` — shared by every law.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::damage::{self, DamageLaw, MatRead};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
+/// # let mat = MatRead { field: &materiau, cell: 0 };
+/// let (lambda, mu) = damage::lame(30_000.0, 0.2);
+/// assert!((mu - 30_000.0 / 2.4).abs() < 1e-9);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn lame(e: f64, nu: f64) -> (f64, f64) {
     let lambda = e * nu / ((1.0 + nu) * (1.0 - 2.0 * nu));
     let mu = e / (2.0 * (1.0 + nu));
@@ -190,6 +488,31 @@ pub fn lame(e: f64, nu: f64) -> (f64, f64) {
 }
 
 /// Isotropic elastic (effective) stress, full 3-D Voigt, from a **tensor** strain.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::damage::{self, DamageLaw, MatRead};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
+/// # let mat = MatRead { field: &materiau, cell: 0 };
+/// // La contrainte **effective**, celle que la loi dégrade ensuite.
+/// let (lambda, mu) = damage::lame(30_000.0, 0.2);
+/// let s = damage::elastic_stress(&[0.0, 0.0, 0.0, 0.0, 0.0, 1.0], lambda, mu);
+/// assert!((s[5] - 2.0 * mu).abs() < 1e-9);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn elastic_stress(eps: &[f64; 6], lambda: f64, mu: f64) -> [f64; 6] {
     let tr = eps[0] + eps[1] + eps[2];
     [
@@ -203,6 +526,30 @@ pub fn elastic_stress(eps: &[f64; 6], lambda: f64, mu: f64) -> [f64; 6] {
 }
 
 /// Positive part `⟨x⟩₊ = max(x, 0)`.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::damage::{self, DamageLaw, MatRead};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
+/// # let mat = MatRead { field: &materiau, cell: 0 };
+/// // La partie positive, dont se servent les lois pour séparer traction
+/// // et compression.
+/// assert_eq!((damage::pos(3.0), damage::pos(-3.0)), (3.0, 0.0));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn pos(x: f64) -> f64 {
     x.max(0.0)
 }

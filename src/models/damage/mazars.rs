@@ -93,9 +93,66 @@ fn mazars_update(eps: &[f64; 6], kappa_old: f64, p: &MazarsParams) -> ([f64; 6],
 }
 
 /// The law's material contract and its history variable.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::damage::{self, DamageLaw, MatRead};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
+/// # let mat = MatRead { field: &materiau, cell: 0 };
+/// // Un seuil `eps_d0`, puis deux branches : traction (A_t, B_t) et
+/// // compression (A_c, B_c), mélangées par la part de traction.
+/// assert!(damage::mazars::MATERIAL.contains(&"eps_d0"));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub const MATERIAL: &[&str] = &["E", "nu", "eps_d0", "A_t", "B_t", "A_c", "B_c"];
 
 /// One Mazars step: `(σ, D, κ)` from the strain and the previous history.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::damage::{self, DamageLaw, MatRead};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
+/// # let mat = MatRead { field: &materiau, cell: 0 };
+/// // `kappa` est la mémoire de la loi : il **ne décroît pas**. Décharger
+/// // après avoir endommagé ne répare rien.
+/// let grand = [1e-3, 0.0, 0.0, 0.0, 0.0, 0.0];
+/// let charge = damage::mazars::update(&grand, &[0.0], &mat)?;
+/// let petit = [1e-5, 0.0, 0.0, 0.0, 0.0, 0.0];
+/// let decharge = damage::mazars::update(&petit, &charge.vars, &mat)?;
+/// assert_eq!(decharge.vars[0], charge.vars[0]);
+/// // `damage` est recalculé depuis κ, d'où l'égalité à l'arrondi près.
+/// assert!((decharge.damage - charge.damage).abs() < 1e-12);
+/// // La contrainte, elle, retombe : la raideur est celle du matériau
+/// // endommagé, pas celle du matériau sain.
+/// assert!(decharge.sigma[0] < charge.sigma[0]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn update(eps: &[f64; 6], prev: &[f64], mat: &MatRead) -> Result<DamageUpdate> {
     let p = MazarsParams {
         e: mat.get("E")?,

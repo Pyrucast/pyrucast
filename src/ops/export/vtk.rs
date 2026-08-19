@@ -171,6 +171,41 @@ fn write_geometry(out: &mut String, geo: &Geometry, title: &str) {
 // ─── String builders (pure: no file I/O) ─────────────────────────────────────
 
 /// Legacy-VTK text for a mesh (geometry only).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::{export, mesh as ops_mesh};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let support = ops_mesh::poi1_from_nodes(&n).unwrap();
+/// # let temp = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+/// # temp.get(0).unwrap().write().add_to_component("T", 20.0).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let mut flux = ElementField::new(&fes, vec!["q".into()]).unwrap();
+/// # flux.get(0).unwrap().write().set_uniform("q", 1.0).unwrap();
+/// # let dossier = std::env::temp_dir()
+/// #     .join(format!("pyrucast_vtk_{}", std::process::id()));
+/// # std::fs::create_dir_all(&dossier).unwrap();
+/// // Le VTK « legacy », en texte : points, cellules, types de cellules.
+/// let s = export::vtk::vtk_mesh_string(&maillage)?;
+/// assert!(s.starts_with("# vtk DataFile Version"));
+/// assert!(s.contains("POINTS 3 double"));
+/// assert!(s.contains("CELL_TYPES 1"));
+/// # let _ = std::fs::remove_dir_all(&dossier);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn vtk_mesh_string(mesh: &Mesh) -> Result<String> {
     let geo = geometry(mesh)?;
     let mut out = String::new();
@@ -179,6 +214,40 @@ pub fn vtk_mesh_string(mesh: &Mesh) -> Result<String> {
 }
 
 /// Legacy-VTK text for `mesh` carrying `field` as `POINT_DATA`.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::{export, mesh as ops_mesh};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let support = ops_mesh::poi1_from_nodes(&n).unwrap();
+/// # let temp = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+/// # temp.get(0).unwrap().write().add_to_component("T", 20.0).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let mut flux = ElementField::new(&fes, vec!["q".into()]).unwrap();
+/// # flux.get(0).unwrap().write().set_uniform("q", 1.0).unwrap();
+/// # let dossier = std::env::temp_dir()
+/// #     .join(format!("pyrucast_vtk_{}", std::process::id()));
+/// # std::fs::create_dir_all(&dossier).unwrap();
+/// // Le même maillage, plus les valeurs **aux nœuds**.
+/// let s = export::vtk::vtk_node_field_string(&maillage, &temp)?;
+/// assert!(s.contains("POINT_DATA 3"));
+/// assert!(s.contains("T"));
+/// # let _ = std::fs::remove_dir_all(&dossier);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn vtk_node_field_string(mesh: &Mesh, field: &NodeField) -> Result<String> {
     let geo = geometry(mesh)?;
     let mut out = String::new();
@@ -204,6 +273,41 @@ pub fn vtk_node_field_string(mesh: &Mesh, field: &NodeField) -> Result<String> {
 /// per the union invariant), so the value for a `(submesh, component)` comes
 /// from the **unique** zone on that support carrying the component — the field
 /// must not fold cells across zones.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::{export, mesh as ops_mesh};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let support = ops_mesh::poi1_from_nodes(&n).unwrap();
+/// # let temp = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+/// # temp.get(0).unwrap().write().add_to_component("T", 20.0).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let mut flux = ElementField::new(&fes, vec!["q".into()]).unwrap();
+/// # flux.get(0).unwrap().write().set_uniform("q", 1.0).unwrap();
+/// # let dossier = std::env::temp_dir()
+/// #     .join(format!("pyrucast_vtk_{}", std::process::id()));
+/// # std::fs::create_dir_all(&dossier).unwrap();
+/// // Et ici les valeurs **par maille** : les points de Gauss sont moyennés
+/// // par cellule, car VTK ne connaît pas de donnée au point d'intégration.
+/// let s = export::vtk::vtk_element_field_string(&maillage, &flux)?;
+/// assert!(s.contains("CELL_DATA 1"));
+/// assert!(s.contains("q"));
+/// # let _ = std::fs::remove_dir_all(&dossier);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn vtk_element_field_string(mesh: &Mesh, field: &ElementField) -> Result<String> {
     let geo = geometry(mesh)?;
 
@@ -299,18 +403,118 @@ pub fn vtk_element_field_string(mesh: &Mesh, field: &ElementField) -> Result<Str
 // ─── File writers ────────────────────────────────────────────────────────────
 
 /// Write a mesh (geometry only) to a legacy `.vtk` file.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::{export, mesh as ops_mesh};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let support = ops_mesh::poi1_from_nodes(&n).unwrap();
+/// # let temp = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+/// # temp.get(0).unwrap().write().add_to_component("T", 20.0).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let mut flux = ElementField::new(&fes, vec!["q".into()]).unwrap();
+/// # flux.get(0).unwrap().write().set_uniform("q", 1.0).unwrap();
+/// # let dossier = std::env::temp_dir()
+/// #     .join(format!("pyrucast_vtk_{}", std::process::id()));
+/// # std::fs::create_dir_all(&dossier).unwrap();
+/// let chemin = dossier.join("maillage.vtk");
+/// export::vtk::write_vtk_mesh(&maillage, &chemin)?;
+/// assert_eq!(std::fs::read_to_string(&chemin)?,
+///            export::vtk::vtk_mesh_string(&maillage)?);
+/// # let _ = std::fs::remove_dir_all(&dossier);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn write_vtk_mesh(mesh: &Mesh, path: &Path) -> Result<()> {
     std::fs::write(path, vtk_mesh_string(mesh)?)?;
     Ok(())
 }
 
 /// Write `mesh` + a [`NodeField`] (`POINT_DATA`) to a legacy `.vtk` file.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::{export, mesh as ops_mesh};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let support = ops_mesh::poi1_from_nodes(&n).unwrap();
+/// # let temp = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+/// # temp.get(0).unwrap().write().add_to_component("T", 20.0).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let mut flux = ElementField::new(&fes, vec!["q".into()]).unwrap();
+/// # flux.get(0).unwrap().write().set_uniform("q", 1.0).unwrap();
+/// # let dossier = std::env::temp_dir()
+/// #     .join(format!("pyrucast_vtk_{}", std::process::id()));
+/// # std::fs::create_dir_all(&dossier).unwrap();
+/// let chemin = dossier.join("temperature.vtk");
+/// export::vtk::write_vtk_node_field(&maillage, &temp, &chemin)?;
+/// assert!(std::fs::read_to_string(&chemin)?.contains("POINT_DATA 3"));
+/// # let _ = std::fs::remove_dir_all(&dossier);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn write_vtk_node_field(mesh: &Mesh, field: &NodeField, path: &Path) -> Result<()> {
     std::fs::write(path, vtk_node_field_string(mesh, field)?)?;
     Ok(())
 }
 
 /// Write `mesh` + an [`ElementField`] (`CELL_DATA`) to a legacy `.vtk` file.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::{export, mesh as ops_mesh};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let support = ops_mesh::poi1_from_nodes(&n).unwrap();
+/// # let temp = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+/// # temp.get(0).unwrap().write().add_to_component("T", 20.0).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let mut flux = ElementField::new(&fes, vec!["q".into()]).unwrap();
+/// # flux.get(0).unwrap().write().set_uniform("q", 1.0).unwrap();
+/// # let dossier = std::env::temp_dir()
+/// #     .join(format!("pyrucast_vtk_{}", std::process::id()));
+/// # std::fs::create_dir_all(&dossier).unwrap();
+/// let chemin = dossier.join("flux.vtk");
+/// export::vtk::write_vtk_element_field(&maillage, &flux, &chemin)?;
+/// assert!(std::fs::read_to_string(&chemin)?.contains("CELL_DATA 1"));
+/// # let _ = std::fs::remove_dir_all(&dossier);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn write_vtk_element_field(mesh: &Mesh, field: &ElementField, path: &Path) -> Result<()> {
     std::fs::write(path, vtk_element_field_string(mesh, field)?)?;
     Ok(())

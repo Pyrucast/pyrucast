@@ -82,6 +82,19 @@ pub fn newell_normal(points: &[Point3]) -> Option<Vector3> {
 /// `normal`. The choice of axis is deterministic — same input ⇒ same
 /// basis — but otherwise arbitrary; do not rely on `u` or `v` having a
 /// specific direction.
+///
+/// ```
+/// # use pyrucast::atoms::Point2;
+/// # use pyrucast::ops::mesh::triangulation;
+/// # use pyrucast::atoms::Vector3;
+/// // Deux vecteurs unitaires orthogonaux entre eux et à la normale : de quoi
+/// // ramener une facette 3-D dans son plan.
+/// let (u, v) = triangulation::in_plane_basis(Vector3::new(0.0, 0.0, 2.0));
+/// assert!((u.norm() - 1.0).abs() < 1e-12);
+/// assert!(u.dot(&v).abs() < 1e-12);
+/// assert!(u.z.abs() < 1e-12 && v.z.abs() < 1e-12);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn in_plane_basis(normal: Vector3) -> (Vector3, Vector3) {
     let abs_n = normal.map(|x| x.abs());
     let e: Vector3 = if abs_n.x <= abs_n.y && abs_n.x <= abs_n.z {
@@ -103,6 +116,19 @@ pub fn in_plane_basis(normal: Vector3) -> (Vector3, Vector3) {
 /// Returns a **positive** value for a counter-clockwise polygon, a
 /// negative value for clockwise, and a value close to zero for a
 /// degenerate (collinear) one. Uses the shoelace formula.
+///
+/// ```
+/// # use pyrucast::atoms::Point2;
+/// # use pyrucast::ops::mesh::triangulation;
+/// // Positive dans le sens trigonométrique, négative dans l'autre — c'est
+/// // ce qui distingue un contour extérieur d'un trou.
+/// let carre = [Point2::new(0.0, 0.0), Point2::new(1.0, 0.0),
+///              Point2::new(1.0, 1.0), Point2::new(0.0, 1.0)];
+/// assert!((triangulation::signed_area(&carre) - 1.0).abs() < 1e-12);
+/// let inverse: Vec<_> = carre.iter().rev().copied().collect();
+/// assert!((triangulation::signed_area(&inverse) + 1.0).abs() < 1e-12);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn signed_area(points: &[Point2]) -> f64 {
     let n = points.len();
     if n < 3 {
@@ -130,6 +156,21 @@ pub fn signed_area(points: &[Point2]) -> f64 {
 /// follows: a quadrangle with a reflex corner encloses a perfectly positive
 /// area and is negative right there. `cells` is a closure because the check
 /// walks them twice — once for the worst, once to count.
+///
+/// ```
+/// # use pyrucast::atoms::Point2;
+/// # use pyrucast::ops::mesh::triangulation;
+/// // Un garde-fou partagé : une maille retournée est une erreur nommée,
+/// // pas un jacobien négatif découvert à l'assemblage.
+/// let pts = [Point2::new(0.0, 0.0), Point2::new(1.0, 0.0), Point2::new(0.0, 1.0)];
+/// let bonnes = [[0u32, 1, 2]];
+/// assert!(triangulation::reject_cells_turned_the_wrong_way(
+///     &pts, || bonnes.iter().map(|c| &c[..]), "exemple").is_ok());
+/// let retournee = [[0u32, 2, 1]];
+/// assert!(triangulation::reject_cells_turned_the_wrong_way(
+///     &pts, || retournee.iter().map(|c| &c[..]), "exemple").is_err());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn reject_cells_turned_the_wrong_way<'a, I, F>(pts: &[Point2], cells: F, op: &str) -> Result<()>
 where
     F: Fn() -> I,

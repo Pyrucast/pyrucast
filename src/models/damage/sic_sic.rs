@@ -42,11 +42,60 @@ use nalgebra::Matrix3;
 /// The law's material contract: the elastic constants, then a threshold, a
 /// characteristic strain and a saturation per direction — plus the material
 /// frame, which the assembler resolves like any other component.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::damage::{self, DamageLaw, MatRead};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_0_1".into(), "eps_c_1".into(), "d_max_1".into(), "eps_0_2".into(), "eps_c_2".into(), "d_max_2".into(), "eps_0_3".into(), "eps_c_3".into(), "d_max_3".into(), "V1X".into(), "V1Y".into()], &[200000.0, 0.2, 0.0001, 0.01, 0.9, 0.0001, 0.01, 0.9, 0.0001, 0.01, 0.9, 1.0, 0.0]).unwrap();
+/// # let mat = MatRead { field: &materiau, cell: 0 };
+/// // Trois directions de tissage, chacune avec son seuil, sa saturation et
+/// // son endommagement maximal — plus l'axe du repère matériau.
+/// assert!(damage::sic_sic::MATERIAL_2D.contains(&"V1X"));
+/// assert!(!damage::sic_sic::MATERIAL_2D.contains(&"V2X")); // 2-D : un seul axe
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub const MATERIAL_2D: &[&str] = &[
     "E", "nu", "eps_0_1", "eps_c_1", "d_max_1", "eps_0_2", "eps_c_2", "d_max_2", "eps_0_3",
     "eps_c_3", "d_max_3", "V1X", "V1Y",
 ];
 /// The same, with the two axes a 3-D frame needs.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::damage::{self, DamageLaw, MatRead};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_0_1".into(), "eps_c_1".into(), "d_max_1".into(), "eps_0_2".into(), "eps_c_2".into(), "d_max_2".into(), "eps_0_3".into(), "eps_c_3".into(), "d_max_3".into(), "V1X".into(), "V1Y".into()], &[200000.0, 0.2, 0.0001, 0.01, 0.9, 0.0001, 0.01, 0.9, 0.0001, 0.01, 0.9, 1.0, 0.0]).unwrap();
+/// # let mat = MatRead { field: &materiau, cell: 0 };
+/// // En 3-D, le repère demande deux axes ; le troisième est V1 × V2.
+/// assert!(damage::sic_sic::MATERIAL_3D.contains(&"V2X"));
+/// assert!(damage::sic_sic::MATERIAL_3D.len() > damage::sic_sic::MATERIAL_2D.len());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub const MATERIAL_3D: &[&str] = &[
     "E", "nu", "eps_0_1", "eps_c_1", "d_max_1", "eps_0_2", "eps_c_2", "d_max_2", "eps_0_3",
     "eps_c_3", "d_max_3", "V1X", "V1Y", "V1Z", "V2X", "V2Y", "V2Z",
@@ -56,6 +105,34 @@ pub const MATERIAL_3D: &[&str] = &[
 ///
 /// `prev` carries the three history variables `κ_i = max_t ⟨ε_i⟩₊`, one per
 /// material direction.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::damage::{self, DamageLaw, MatRead};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_0_1".into(), "eps_c_1".into(), "d_max_1".into(), "eps_0_2".into(), "eps_c_2".into(), "d_max_2".into(), "eps_0_3".into(), "eps_c_3".into(), "d_max_3".into(), "V1X".into(), "V1Y".into()], &[200000.0, 0.2, 0.0001, 0.01, 0.9, 0.0001, 0.01, 0.9, 0.0001, 0.01, 0.9, 1.0, 0.0]).unwrap();
+/// # let mat = MatRead { field: &materiau, cell: 0 };
+/// // Un endommagement **par direction de tissage** : l'état en porte six,
+/// // trois seuils et trois endommagements.
+/// let u = damage::sic_sic::update(&[1e-3, 0.0, 0.0, 0.0, 0.0, 0.0], &[0.0; 6], &mat, 2)?;
+/// assert_eq!(u.vars.len(), 6);
+/// // Une traction selon le premier axe n'endommage que celui-là.
+/// assert!(u.vars[3] > 0.0);
+/// assert_eq!(u.vars[4], 0.0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn update(
     eps: &[f64; 6],
     prev: &[f64],
