@@ -40,7 +40,7 @@ D'où la ligne directrice de toute cette page :
 | type | où | ce qu'il prouve | lancé par |
 |---|---|---|---|
 | **test unitaire** | `#[cfg(test)] mod tests` dans `src/**.rs` | le comportement d'une unité, publique ou privée | `cargo test` — [`check_rust`](../compilation.md#scriptcheck_sh--vérifications-en-bloc-ou-à-la-carte) |
-| **doctest** | commentaires `///` et `//!` dans `src/**.rs` | que l'exemple **documentant un item** compile et tourne | `cargo test --doc` — `check_rust` |
+| **doctest** | commentaires `///` et `//!` dans `src/**.rs` | que l'exemple **documentant un item** compile et tourne | `cargo test --features viz` — `check_rust` |
 | **test d'intégration** | `tests/*.rs` | une chaîne complète vue **de l'extérieur du crate** | `cargo test` — `check_rust` |
 | **test Python** | `tests/python/*.py` | la surface pyo3 et le comportement côté Python | `pytest` — `check_python` |
 | **garde-fou** | `tests/python/test_method_exposure.py`, `test_mirror_completeness.py` | une **invariante d'API**, pas un comportement | `pytest` — `check_python` |
@@ -225,6 +225,10 @@ Deux points utiles :
 | la prose ne cite pas de symbole disparu | `doc_lint.py symboles` | `check_doc` |
 | tout item public a un exemple | `doc_lint.py doctests` | `check_doc` |
 | toute entrée Python est citée par un exemple | `doc_lint.py api-python` | `check_doc` |
+
+Le détail de ce que chaque script lance — commande par commande, avec les
+fichiers concernés et les durées mesurées — est dans
+[Compilation et tests](../compilation.md#scriptcheck_sh--vérifications-en-bloc-ou-à-la-carte).
 
 Les cinq derniers vivent dans `script/doc_lint.py` et se lancent aussi un par
 un : `python script/doc_lint.py includes`. Chacun porte son registre de

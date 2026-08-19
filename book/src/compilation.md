@@ -208,18 +208,59 @@ les SVG de la formation, qui sont des artefacts commités).
 ### `script/check_*.sh` — vérifications, en bloc ou à la carte
 
 La vérification est découpée en **cinq blocs indépendants**, chacun lançable
-seul. Chaque bloc existe en bash (`.sh`, Linux/macOS) et en PowerShell
-(`.ps1`, Windows), au comportement identique :
+seul, plus deux enchaîneurs. Chaque bloc existe en bash (`.sh`, Linux/macOS) et
+en PowerShell (`.ps1`, Windows), au comportement identique.
 
-| bloc | ce qu'il vérifie | durée indicative |
-|---|---|---|
-| `check_format` | `cargo fmt --check`, `ruff format --check .` | secondes |
-| `check_rust` | `cargo test`, `cargo test --doc`, `cargo test --features viz`, `cargo build --features viz-interactive` | minutes |
-| `check_python` | `maturin develop --features extension-module,viz`, `pytest` | minutes |
-| `check_examples` | `run_examples` — exemples et formation de bout en bout | ~1 min |
-| `check_doc` | `cargo doc` sans warning, les quatre garde-fous du book, `mdbook build` | ~30 s |
+Le tableau ci-dessous donne, commande par commande, ce qu'elle vérifie, où
+vivent les tests qu'elle exécute, ce qu'elle coûte, et quels scripts la
+lancent. Les durées sont mesurées **à chaud** — arbre déjà compilé, ce qui est
+le cas courant ; un premier tour après un changement de features paie en plus
+la recompilation.
+
+| commande | ce qu'elle teste | où vivent les tests | temps | quick | fmt | rust | py | ex | doc | all | version |
+|---|---|---|--:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| `cargo fmt --check` | le Rust est formaté | — | 1 s | ✓ | ✓ | | | | | ✓ | ✓ |
+| `ruff format --check .` | le Python est formaté | — | 1 s | ✓ | ✓ | | | | | ✓ | ✓ |
+| `cargo check --all-targets` | le build **Rust pur** compile encore | — | <1 s | ✓ | | ✓ | | | | ✓ | ✓ |
+| `cargo test --features viz` | 1036 tests + 893 doctests | `#[cfg(test)]` dans 123 fichiers de `src/`, 42 fichiers `tests/*.rs`, commentaires `///` et `//!` | 154 s | ✓ | | ✓ | | | | ✓ | ✓ |
+| `cargo build --features viz-interactive` | la fenêtre winit compile | aucun test — 960 lignes que rien n'exerce sans écran | 14 s | ✓ | | ✓ | | | | ✓ | ✓ |
+| `maturin develop --features extension-module,viz` | l'extension Python s'installe | — | 20 s | | | | ✓ | | | ✓ | ✓ |
+| `python -m pytest` | l'API Python, unité par unité | 73 fichiers `tests/python/test_*.py`, dont 13 `test_doc_*.py` qui sont aussi les sources des exemples du book | 32 s | | | | ✓ | | | ✓ | ✓ |
+| `script/run_examples.sh` | des chaînes de calcul **de bout en bout** | 30 `examples/*.py`, 3 `examples/*.rs`, 6 `formation/*.py` | 80 s | | | | | ✓ | | ✓ | ✓ |
+| `cargo doc --no-deps --lib` (`-D warnings`) | la rustdoc n'a aucun lien cassé | — | 1 s | | | | | | ✓ | ✓ | ✓ |
+| `python script/doc_lint.py` | les **cinq garde-fous** du book et des exemples | `book/src/**.md`, la rustdoc, le module Python installé | 28 s | | | | | | ✓ | ✓ | ✓ |
+| `mdbook build book` | le book se rend | `book/src/**` | 1 s | | | | | | ✓ | ✓ | ✓ |
+| `cargo clippy` × 4 jeux de features | aucun avertissement, `-D warnings` | — | 105 s | | | | | | | | ✓ |
+
+Et les totaux, dans le même régime :
+
+| script | contenu | temps |
+|---|---|--:|
+| `check_format` | formatage seul | 2 s |
+| `check_rust` | cœur Rust | 169 s |
+| `check_python` | liaison et tests Python | 64 s |
+| `check_examples` | exemples et formation | 80 s |
+| `check_doc` | rustdoc, garde-fous, book | 50 s |
+| **`check_quick`** | **formatage + Rust — la boucle de commit** | **~3 min** |
+| `check_all` | les cinq blocs | ~6 min |
+| `set_new_version` | `check_all` + les quatre clippy | ~8 min |
+
+Deux remarques que ces chiffres appellent.
+
+**Les doctests ne coûtent presque plus rien**, alors qu'ils représentaient 44 %
+de la suite entière. Le crate est passé à l'**edition 2024**, qui les fusionne
+en un seul binaire au lieu d'en compiler un par exemple : 893 doctests sont
+passés de 232 s à 17 s. Ce qui domine aujourd'hui le bloc Rust, ce n'est plus
+l'exécution des tests (37 s) mais la **compilation des 42 fichiers de tests
+d'intégration**.
+
+**Les doctests tournent sous `viz`, jamais sous `viz-interactive`.** La couche
+interactive tire 58 crates de plus — winit, Wayland, X11 — et chaque binaire de
+test les lie. Elle est donc *compilée sans être testée*, ce qui suffit : elle ne
+porte aucun test qu'un écran ne soit nécessaire pour exercer.
 
 ```bash
+bash script/check_quick.sh   # la boucle de commit : formatage + Rust
 bash script/check_doc.sh     # je viens de toucher à la doc
 bash script/check_all.sh     # la passe complète, à brancher en CI
 ```
@@ -235,7 +276,13 @@ formatage d'abord (il échoue en une seconde), le cœur Rust ensuite, puis Pytho
 et la documentation en dernier, la plus lente. Un bloc lancé seul qui a besoin
 du module compilé le dit plutôt que d'échouer obscurément.
 
-`script/check.sh` reste comme alias de `check_all.sh`.
+`script/check.sh` reste comme alias de `check_all.sh`. `check_quick` est le
+raccourci du cas courant : il ne remplace pas `check_all`, il le précède — les
+exemples, Python et la doc restent à passer avant de pousser.
+
+`set_new_version.sh` **appelle** `check_all` plutôt que de recopier ses pas :
+la copie précédente avait divergé, et ne lançait ni les garde-fous de
+documentation ni les exemples au moment précis où l'on pose un tag.
 
 Trois points valent d'être notés :
 

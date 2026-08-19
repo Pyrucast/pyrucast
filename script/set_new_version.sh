@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # pyrucast — passe le projet à une nouvelle version.
 #
-# 1. vérifie que tout est vert et SANS WARNING (fmt, clippy, tests Rust,
-#    doctests, tests Python, build de la doc rustdoc/mdbook) ;
+# 1. vérifie que tout est vert et SANS WARNING : `check_all.sh` en entier,
+#    plus les quatre passes de clippy qu'aucun bloc ne couvre ;
 # 2. demande le nouveau numéro de version ;
 # 3. le reporte dans Cargo.toml et pyproject.toml ;
 # 4. commit + tag annoté `vX.Y.Z` sur master.
@@ -29,9 +29,18 @@ $(git status --porcelain)"
 . ./.venv/bin/activate
 
 # ── 1. Vérifications complètes, sans warning ────────────────────────────────
-step "cargo fmt --check"                                        ; cargo fmt --check
-step "ruff format --check (Python)"                              ; ruff format --check .
+# Les vérifications **appellent** les blocs au lieu de les recopier. La copie
+# précédente avait divergé, et pas seulement en durée : elle relançait les
+# doctests trois fois, mais surtout elle ne lançait ni les cinq garde-fous de
+# documentation ni les exemples de bout en bout — au moment précis où l'on pose
+# un tag.
+step "check_all (formatage, Rust, Python, exemples, documentation)"
+bash script/check_all.sh
 
+# Clippy, en revanche, n'appartient à aucun bloc : les quatre passes coûtent
+# trop cher pour la boucle quotidienne, et c'est ici qu'elles ont leur place.
+# Quatre jeux de features, parce qu'un avertissement peut n'exister que dans
+# l'un d'eux — le code derrière un `cfg` n'est compilé que s'il est demandé.
 step "cargo clippy (défaut) -D warnings"
 cargo clippy --all-targets -- -D warnings
 step "cargo clippy --features viz -D warnings"
@@ -40,18 +49,6 @@ step "cargo clippy --features extension-module,viz -D warnings"
 cargo clippy --all-targets --features extension-module,viz -- -D warnings
 step "cargo clippy --features extension-module,viz,viz-interactive,abi3 -D warnings"
 cargo clippy --all-targets --features extension-module,viz,viz-interactive,abi3 -- -D warnings
-
-step "cargo test (défaut)"                                       ; cargo test
-step "cargo test --doc"                                          ; cargo test --doc
-step "cargo test --features viz"                                 ; cargo test --features viz
-step "cargo build --features viz-interactive"                    ; cargo build --features viz-interactive
-
-step "maturin develop --features extension-module,viz"          ; maturin develop --features extension-module,viz
-step "pytest"                                                     ; python -m pytest
-
-step "cargo doc --no-deps --lib (sans warning)"
-RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --lib
-step "mdbook build"                                               ; mdbook build book
 
 echo
 echo "OK: tout est vert, sans warning."

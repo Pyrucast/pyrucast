@@ -138,8 +138,11 @@ impl Scatter<'_> {
     ///
     /// ```
     /// # use pyrucast::parallel;
-    /// // Les contributions **s'accumulent** dans la case visée.
-    /// let couleurs = vec![vec![0, 1], vec![2]];
+    /// // Les contributions **s'accumulent** dans la case visée — d'une couleur
+    /// // à la suivante, jamais au sein d'une même. Trois mailles écrivant la
+    /// // même case doivent donc être de trois couleurs : c'est exactement ce
+    /// // que le coloriage garantit, et sans quoi les additions se perdraient.
+    /// let couleurs = vec![vec![0], vec![1], vec![2]];
     /// let v = parallel::colored_scatter(1, &couleurs, 1, || (), |_cell, _s, out| {
     ///     out.add(0, 2.0);
     ///     Ok(())
