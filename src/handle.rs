@@ -75,11 +75,33 @@ use std::sync::Arc;
 /// struct. Dereferences to `&T`; the lock is released when the guard goes out
 /// of scope. The guard holds the object itself alive, so it may outlive every
 /// handle it came from.
+///
+/// ```
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # let handle = Handle::new(Coords::new(2).unwrap());
+/// // Le verrou porte sur **cet objet seul**, et dure le temps du guard :
+/// // plusieurs lectures peuvent coexister.
+/// let a = handle.read();
+/// let b = handle.read();
+/// assert_eq!(a.dim(), b.dim());
+/// ```
 pub type ReadGuard<T> = ArcRwLockReadGuard<RawRwLock, T>;
 
 /// Exclusive (write) access to an object, returned by [`Handle::write`].
 ///
 /// Same ownership properties as [`ReadGuard`]; dereferences to `&mut T`.
+///
+/// ```
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # let handle = Handle::new(Coords::new(2).unwrap());
+/// // L'écriture est exclusive, le temps de l'appel. Le relâcher avant de
+/// // reprendre en lecture est ce qui évite l'interblocage.
+/// handle.write().add_node(&[0.0, 0.0])?;
+/// assert_eq!(handle.read().node_count(), 1);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub type WriteGuard<T> = ArcRwLockWriteGuard<RawRwLock, T>;
 
 /// A counted reference to an object, with its own lock.

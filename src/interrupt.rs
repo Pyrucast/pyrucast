@@ -28,6 +28,19 @@ use crate::error::{PyrucastError, Result};
 /// to request a clean stop. Implementations decide *how* cancellation is
 /// signalled, keeping operators free of any frontend concern.
 // ANCHOR: trait
+///
+/// ```
+/// # use pyrucast::error::PyrucastError;
+/// # use pyrucast::interrupt::{Cancel, Deadline};
+/// # use std::sync::atomic::{AtomicBool, Ordering};
+/// // Le jeton décide **comment** l'arrêt est signalé ; les opérateurs
+/// // n'en savent rien, et restent libres de toute considération de
+/// // frontal — Ctrl+C, délai, bouton d'interface.
+/// let stop = AtomicBool::new(false);
+/// assert!(stop.check().is_ok());
+/// stop.store(true, Ordering::Relaxed);
+/// assert!(matches!(stop.check(), Err(PyrucastError::Interrupted)));
+/// ```
 pub trait Cancel {
     /// Poll the cancellation state. Called frequently, so keep it cheap.
     fn check(&self) -> Result<()>;
@@ -79,6 +92,15 @@ impl Cancel for std::sync::atomic::AtomicBool {
 }
 
 /// Cancel once a deadline has passed (a wall-clock timeout).
+///
+/// ```
+/// # use pyrucast::error::PyrucastError;
+/// # use pyrucast::interrupt::{Cancel, Deadline};
+/// # use std::time::{Duration, Instant};
+/// // Un délai d'horloge : la même interface qu'un jeton armé à la main.
+/// assert!(Deadline(Instant::now() + Duration::from_secs(3600)).check().is_ok());
+/// assert!(Deadline(Instant::now() - Duration::from_secs(1)).check().is_err());
+/// ```
 pub struct Deadline(pub std::time::Instant);
 
 impl Deadline {

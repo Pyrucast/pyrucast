@@ -33,6 +33,25 @@
 /// Defaults: `precision = 3`, `max_rows = 20`, `max_cols = 12`. Beyond the row
 /// / column caps the renderers elide and append a `… (N de plus)` marker, so a
 /// dump never grows without bound on a large object.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::dump::{self, Dump, DumpOptions};
+/// # use pyrucast::handle::Handle;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+/// # let mesh = Mesh::from_submesh(sm);
+/// // Précision, et deux plafonds au-delà desquels les rendus élident et
+/// // ajoutent un « … (N de plus) » : un dump ne grossit jamais sans borne.
+/// let d = DumpOptions::default();
+/// assert_eq!((d.precision, d.max_rows, d.max_cols), (3, 20, 12));
+/// ```
 #[derive(Clone, Copy, Debug)]
 pub struct DumpOptions {
     /// Digits after the decimal point for floating-point values.
@@ -62,6 +81,28 @@ impl Default for DumpOptions {
 /// to stdout (it returns nothing): the content is meant to be *looked at* in a
 /// terminal, not parsed — use the typed accessors (`entries`, `value`, …) for
 /// programmatic access.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::dump::{self, Dump, DumpOptions};
+/// # use pyrucast::handle::Handle;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+/// # let mesh = Mesh::from_submesh(sm);
+/// // `render` rend le texte, `dump` l'imprime : le contenu est fait pour
+/// // être **regardé** dans un terminal, non analysé — les accesseurs
+/// // typés sont là pour le reste.
+/// let texte = mesh.render(&DumpOptions::default());
+/// assert!(texte.contains("SEG2"));
+/// // `dump_with` est la même chose, imprimée avec des options choisies.
+/// mesh.dump_with(&DumpOptions { precision: 6, ..Default::default() });
+/// ```
 pub trait Dump {
     /// Render the full content as a `String`. This is the composition core
     /// (aggregates concatenate their sub-objects' renders); end users normally
@@ -113,6 +154,32 @@ pub fn fmt_float(v: f64, precision: usize) -> String {
 /// kept; the remaining columns are capped at `opts.max_cols`. Rows are capped at
 /// `opts.max_rows`. Truncation appends `⋮` cue rows/columns and a trailing
 /// `… (N de plus)` note.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::dump::{self, Dump, DumpOptions};
+/// # use pyrucast::handle::Handle;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+/// # let mesh = Mesh::from_submesh(sm);
+/// // La colonne 0 est une **colonne d'étiquettes** : elle est toujours
+/// // gardée, les autres étant plafonnées.
+/// let entetes = vec!["nœud".to_string(), "x".to_string()];
+/// let lignes = vec![vec!["0".to_string(), "0.000".to_string()]];
+/// let t = dump::table(&entetes, &lignes, &DumpOptions::default());
+/// assert!(t.contains("nœud") && t.contains("0.000"));
+/// // Au-delà du plafond de lignes, l'élision est annoncée.
+/// let longues: Vec<Vec<String>> = (0..50)
+///     .map(|i| vec![i.to_string(), "0".to_string()]).collect();
+/// assert!(dump::table(&entetes, &longues, &DumpOptions::default())
+///     .contains("de plus"));
+/// ```
 pub fn table(headers: &[String], rows: &[Vec<String>], opts: &DumpOptions) -> String {
     let ncol = headers.len();
     if ncol == 0 {
@@ -194,6 +261,26 @@ pub fn table(headers: &[String], rows: &[Vec<String>], opts: &DumpOptions) -> St
 /// `col_labels.len()`) with in-line labels and elision.
 ///
 /// Used for matrix dumps: row/column DOF labels sit directly on the grid.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::dump::{self, Dump, DumpOptions};
+/// # use pyrucast::handle::Handle;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+/// # let mesh = Mesh::from_submesh(sm);
+/// // Une grille dense dont les étiquettes de ligne et de colonne sont
+/// // posées **sur** la grille — ce dont vit le dump d'une matrice.
+/// let l = vec!["a".to_string(), "b".to_string()];
+/// let g = dump::labeled_grid(&l, &l, &[1.0, 0.0, 0.0, 1.0], &DumpOptions::default());
+/// assert!(g.contains('a') && g.contains("1.000"));
+/// ```
 pub fn labeled_grid(
     row_labels: &[String],
     col_labels: &[String],

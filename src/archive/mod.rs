@@ -91,6 +91,30 @@ const FORMAT: u32 = 1;
 /// serialization itself: `Handle::serialize` interns what it meets. Adding a
 /// `Handle` field to a
 /// type therefore adds an edge, with nothing to keep in step.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::archive::{self, ArchiveRoot};
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+/// # let mesh = Mesh::from_submesh(sm);
+/// # let chemin = std::env::temp_dir()
+/// #     .join(format!("pyrucast_doc_{}_arc.pyr", std::process::id()));
+/// // Ce qu'un objet doit savoir faire pour entrer dans une archive : se
+/// // nommer d'un nom stable tant que le numéro de format ne change pas.
+/// // Toutes les briques partageables l'implémentent.
+/// archive::save(&chemin, &[("maillage", &mesh as &dyn ArchiveRoot)])?;
+/// assert_eq!(archive::load(&chemin)?["maillage"].type_name(), "Mesh");
+/// # let _ = std::fs::remove_file(&chemin);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub trait Archivable: Portable + Any + Send + Sync {
     /// Name of the type in the file. Must be unique, and stable as long as the
     /// format number is.
@@ -108,6 +132,35 @@ pub trait Archivable: Portable + Any + Send + Sync {
 /// case, the list of instants.
 ///
 /// Lists are **homogeneous**. Nested lists and dictionaries are out of scope.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::archive::{self, ArchiveRoot};
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+/// # let mesh = Mesh::from_submesh(sm);
+/// # let chemin = std::env::temp_dir()
+/// #     .join(format!("pyrucast_doc_{}_val.pyr", std::process::id()));
+/// # use pyrucast::archive::{Root, Value};
+/// // Les valeurs simples qu'une archive porte à côté des conteneurs :
+/// // scalaires et listes, de quoi ranger un jeu de paramètres avec le
+/// // maillage qu'il décrit.
+/// archive::save(&chemin, &[("pas", &0.25_f64 as &dyn ArchiveRoot),
+///                          ("noms", &vec!["a".to_string()] as &dyn ArchiveRoot)])?;
+/// let objets = archive::load(&chemin)?;
+/// assert_eq!(objets.float("pas")?, 0.25);
+/// assert_eq!(objets.texts("noms")?, vec!["a".to_string()]);
+/// assert!(matches!(objets["pas"], Root::Value(Value::Float(_))));
+/// # let _ = std::fs::remove_file(&chemin);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub enum Value {
     Bool(bool),
@@ -127,6 +180,31 @@ pub enum Value {
 /// The set is **closed**, which is the point: a `match` on it is exhaustive, so
 /// a type added to the archive cannot be silently forgotten at the boundary —
 /// the Python binding included.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::archive::{self, ArchiveRoot};
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+/// # let mesh = Mesh::from_submesh(sm);
+/// # let chemin = std::env::temp_dir()
+/// #     .join(format!("pyrucast_doc_{}_root.pyr", std::process::id()));
+/// // Ce qu'une archive sait porter à sa racine : les conteneurs, plus les
+/// // valeurs simples. `type_name` nomme ce qu'on a trouvé — c'est lui que
+/// // citent les messages d'un accesseur typé mal choisi.
+/// archive::save(&chemin, &[("maillage", &mesh as &dyn ArchiveRoot)])?;
+/// let objets = archive::load(&chemin)?;
+/// assert_eq!(objets["maillage"].type_name(), "Mesh");
+/// # let _ = std::fs::remove_file(&chemin);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub enum Root {
     Coords(Handle<Coords>),
     Mesh(Mesh),
@@ -149,6 +227,31 @@ pub enum Root {
 
 impl Root {
     /// Name of the kind held, for error messages: `"Mesh"`, `"float"`, …
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::archive::{self, ArchiveRoot};
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+    /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+    /// # let mesh = Mesh::from_submesh(sm);
+    /// # let chemin = std::env::temp_dir()
+    /// #     .join(format!("pyrucast_doc_{}_tn.pyr", std::process::id()));
+    /// // Ce qu'une archive sait porter à sa racine : les conteneurs, plus les
+    /// // valeurs simples. `type_name` nomme ce qu'on a trouvé — c'est lui que
+    /// // citent les messages d'un accesseur typé mal choisi.
+    /// archive::save(&chemin, &[("maillage", &mesh as &dyn ArchiveRoot)])?;
+    /// let objets = archive::load(&chemin)?;
+    /// assert_eq!(objets["maillage"].type_name(), "Mesh");
+    /// # let _ = std::fs::remove_file(&chemin);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn type_name(&self) -> &'static str {
         match self {
             Root::Coords(_) => Coords::TAG,
@@ -474,6 +577,33 @@ pub enum Entry {
 /// Implemented for every handle to an archivable object, for the seven
 /// aggregates, and for the simple values. Sealed in practice: the method is
 /// hidden, since it speaks the file format.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::archive::{self, ArchiveRoot};
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+/// # let mesh = Mesh::from_submesh(sm);
+/// # let chemin = std::env::temp_dir()
+/// #     .join(format!("pyrucast_doc_{}_root2.pyr", std::process::id()));
+/// // Ce qu'on peut nommer **à la racine** d'une archive : un conteneur,
+/// // ou une valeur simple. C'est l'objet du `&dyn ArchiveRoot` que
+/// // `save` réclame.
+/// let racines: Vec<(&str, &dyn ArchiveRoot)> =
+///     vec![("maillage", &mesh), ("pas", &0.25_f64)];
+/// archive::save(&chemin, &racines)?;
+/// let objets = archive::load(&chemin)?;
+/// assert_eq!(objets.len(), 2);
+/// # let _ = std::fs::remove_file(&chemin);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub trait ArchiveRoot {
     #[doc(hidden)]
     fn to_entry(&self) -> Result<Entry>;
@@ -560,6 +690,35 @@ struct Body {
 ///
 /// Fails, rather than looping, if the graph has a cycle — only recomputable
 /// caches may point backwards, and caches are not written.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::archive::{self, ArchiveRoot};
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+/// # let mesh = Mesh::from_submesh(sm);
+/// # let chemin = std::env::temp_dir()
+/// #     .join(format!("pyrucast_doc_{}_save.pyr", std::process::id()));
+/// // Les objets **partagés** par plusieurs racines sont écrits une seule
+/// // fois : c'est là que se tient la garantie de non-duplication. Deux
+/// // sauvegardes des mêmes objets produisent les mêmes octets.
+/// archive::save(&chemin, &[("maillage", &mesh as &dyn ArchiveRoot)])?;
+/// let a = std::fs::read(&chemin)?;
+/// archive::save(&chemin, &[("maillage", &mesh as &dyn ArchiveRoot)])?;
+/// assert_eq!(a, std::fs::read(&chemin)?);
+/// // Un nom donné deux fois est une erreur.
+/// assert!(archive::save(&chemin,
+///     &[("m", &mesh as &dyn ArchiveRoot), ("m", &mesh)]).is_err());
+/// # let _ = std::fs::remove_file(&chemin);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn save<P: AsRef<Path>>(path: P, roots: &[(&str, &dyn ArchiveRoot)]) -> Result<()> {
     let (root_map, records) = scope::with_write(|| {
         // Sorted first, so the identifiers are handed out in a deterministic
@@ -599,6 +758,36 @@ pub fn save<P: AsRef<Path>>(path: P, roots: &[(&str, &dyn ArchiveRoot)]) -> Resu
 /// Read back what [`save`] wrote, preserving what was shared.
 ///
 /// The objects are **new**: nothing already alive in the session is touched.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::archive::{self, ArchiveRoot};
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+/// # let mesh = Mesh::from_submesh(sm);
+/// # let chemin = std::env::temp_dir()
+/// #     .join(format!("pyrucast_doc_{}_load.pyr", std::process::id()));
+/// // Ce qui revient est **neuf** : rien de ce qui vit déjà dans la session
+/// // n'est touché.
+/// archive::save(&chemin, &[("maillage", &mesh as &dyn ArchiveRoot)])?;
+/// let mut objets = archive::load(&chemin)?;
+/// let relu = objets.mesh("maillage")?;
+/// # use pyrucast::handle::Handle as H;
+/// assert!(!H::same_object(&relu.get(0)?, &mesh.get(0)?));
+/// assert_eq!(relu.cell_count()?, mesh.cell_count()?);
+/// // Un fichier qui n'est pas une archive est refusé sur sa signature.
+/// std::fs::write(&chemin, b"pas une archive")?;
+/// assert!(archive::load(&chemin).is_err());
+/// # let _ = std::fs::remove_file(&chemin);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn load<P: AsRef<Path>>(path: P) -> Result<Objects> {
     let bytes = std::fs::read(path.as_ref())
         .map_err(|e| PyrucastError::Io(format!("reading {}: {e}", path.as_ref().display())))?;

@@ -71,6 +71,40 @@ const VOIGT_AXES: [&str; 3] = ["x", "y", "z"];
 /// ([`crate::ops::matrix`]) drives the **same** machinery with a different
 /// per-element kernel; a physics that has no term for a given kind contributes
 /// nothing (its [`matrix_layout`](SubModelKind::matrix_layout) returns `None`).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::{Model, SubModel};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Constraint, Domain, MatrixKind, RelationSense, SubModelKind};
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
+/// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
+/// #     None, None, RelationSense::Equality).unwrap();
+/// // Quatre natures de matrice, et **une seule** machinerie : un noyau par
+/// // élément diffère, le reste est partagé. Une physique sans terme pour
+/// // une nature n'y contribue rien.
+/// assert_eq!(MatrixKind::COUNT, 4);
+/// assert_eq!(MatrixKind::Stiffness.index(), 0);
+/// assert!(volume.as_kind().matrix_layout(MatrixKind::Stiffness).is_some());
+/// // Une contrainte n'a pas de disposition matricielle : elle passe par
+/// // `contributions`, non par un noyau d'élément.
+/// assert!(appui.as_kind().matrix_layout(MatrixKind::Stiffness).is_none());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum MatrixKind {
     /// Stiffness / conductivity `K` — `∫ Bᵀ D B` (Cast3M `RIGI` / `COND`).
@@ -86,9 +120,70 @@ pub enum MatrixKind {
 
 impl MatrixKind {
     /// Number of variants — the width of the per-kind pattern cache.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::{Model, SubModel};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::{Constraint, Domain, MatrixKind, RelationSense, SubModelKind};
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+    /// # let mult = mesh::barycenter(&impose).unwrap();
+    /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
+    /// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
+    /// #     None, None, RelationSense::Equality).unwrap();
+    /// // Quatre natures de matrice, et **une seule** machinerie : un noyau par
+    /// // élément diffère, le reste est partagé. Une physique sans terme pour
+    /// // une nature n'y contribue rien.
+    /// assert_eq!(MatrixKind::COUNT, 4);
+    /// assert_eq!(MatrixKind::Stiffness.index(), 0);
+    /// assert!(volume.as_kind().matrix_layout(MatrixKind::Stiffness).is_some());
+    /// // Une contrainte n'a pas de disposition matricielle : elle passe par
+    /// // `contributions`, non par un noyau d'élément.
+    /// assert!(appui.as_kind().matrix_layout(MatrixKind::Stiffness).is_none());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub const COUNT: usize = 4;
 
     /// Dense index in `0..COUNT`, for indexing per-kind caches.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::{Model, SubModel};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::{Constraint, Domain, MatrixKind, RelationSense, SubModelKind};
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+    /// # let mult = mesh::barycenter(&impose).unwrap();
+    /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
+    /// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
+    /// #     None, None, RelationSense::Equality).unwrap();
+    /// // L'index sert de rang dans le cache de motifs, un par nature.
+    /// assert!(MatrixKind::Stiffness.index() < MatrixKind::COUNT);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub const fn index(self) -> usize {
         self as usize
     }
@@ -105,6 +200,38 @@ impl MatrixKind {
 /// literal `build_stiffness_blocks` is **kept** alongside it as the bit-for-bit
 /// equivalence reference. Volumetric blocks are square on a single support, so
 /// one [`SubMesh`] gives both the row and column node sequence.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::{Model, SubModel};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Constraint, Domain, MatrixKind, RelationSense, SubModelKind};
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
+/// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
+/// #     None, None, RelationSense::Equality).unwrap();
+/// // La déclaration **structurelle** d'une physique de volume : de quoi
+/// // bâtir un bloc *calculé* et le verser droit dans le CSR global. Chaque
+/// // champ reflète un argument d'`assemble_block`.
+/// let l = volume.as_kind().matrix_layout(MatrixKind::Stiffness).unwrap();
+/// assert_eq!(l.dual_vars, vec!["q".to_string()]);
+/// assert_eq!(l.primal_vars, vec!["T".to_string()]);
+/// assert!(l.symmetric);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub struct MatrixLayout {
     /// FE subspaces the element kernel integrates over. **Give a `Vec`**: a
     /// single subspace for a plain volumetric physics, or several — sharing one
@@ -135,6 +262,43 @@ pub struct MatrixLayout {
 /// sub-model on one uniform path — the discriminant is the variant, not a
 /// per-type `match` in the assembler.
 ///
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::{Model, SubModel};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Constraint, Domain, MatrixKind, RelationSense, SubModelKind};
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
+/// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
+/// #     None, None, RelationSense::Equality).unwrap();
+/// # use pyrucast::models::Contribution;
+/// // Le discriminant qui met sur une seule voie une contrainte, une
+/// // physique de volume et un couplage : c'est la variante qui décide, non
+/// // un `match` par type dans l'assembleur.
+/// let c = appui.as_kind().contributions(MatrixKind::Stiffness, None)?;
+/// assert!(!c.is_empty());
+/// // Un appui apporte des blocs **littéraux** ; une physique de volume,
+/// // une recette calculée.
+/// assert!(matches!(c[0], Contribution::Literal(_)));
+/// assert!(matches!(
+///     volume.as_kind().contributions(MatrixKind::Stiffness, None)?[0],
+///     Contribution::Computed(_)));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub enum Contribution {
     /// A block integrated on the fly and scattered straight into the global CSR
     /// (no values materialised): the fast path of every volumetric physics. The
@@ -165,6 +329,49 @@ pub enum Contribution {
 /// is built, and reported rather than approximated: a non-matching interface is
 /// a meshing problem, not something an assembler should paper over.
 // ANCHOR: coupling_layout
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::{Model, SubModel};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Constraint, Domain, MatrixKind, RelationSense, SubModelKind};
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
+/// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
+/// #     None, None, RelationSense::Equality).unwrap();
+/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::models::CouplingLayout;
+/// // Ce qu'une loi d'**interface** décrit : des sous-espaces de ligne *et*
+/// // de colonne, sur deux maillages en vis-à-vis, là où un
+/// // [`MatrixLayout`] tient sur un seul support. La conformité est
+/// // vérifiée à la construction du bloc, et **signalée** plutôt
+/// // qu'approximée : une interface qui ne correspond pas est un problème
+/// // de maillage.
+/// let l = CouplingLayout {
+///     fespaces: vec![zone.clone()],
+///     col_fespaces: vec![zone.clone()],
+///     row_support: zone.read().submesh().read().to_poi1()?,
+///     col_support: zone.read().submesh().read().to_poi1()?,
+///     dual_vars: vec!["q".into()],
+///     primal_vars: vec!["T".into()],
+///     ordering: DofOrdering::NodesThenVars,
+/// };
+/// assert_eq!(l.fespaces.len(), l.col_fespaces.len());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub struct CouplingLayout {
     /// FE subspaces carrying the **rows** (the primary drives the cell loop).
     pub fespaces: Vec<Handle<SubFiniteElementSpace>>,
@@ -325,6 +532,42 @@ impl std::fmt::Display for Physics {
 /// only what is specific to it (a plain domain physics typically implements
 /// `primal_vars`, `dual_vars`, `as_domain` + the [`Domain`] capability,
 /// `element_matrix`, `stiffness_layout`, `label` and `render`).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::{Model, SubModel};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Constraint, Domain, MatrixKind, RelationSense, SubModelKind};
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
+/// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
+/// #     None, None, RelationSense::Equality).unwrap();
+/// // Le contrat de base, avec des défauts partout où c'est possible : une
+/// // physique n'écrit que ce qui lui est propre. C'est par lui que passe
+/// // **toute** la couche modèle, `as_kind` étant l'unique `match`.
+/// let k = volume.as_kind();
+/// assert_eq!(k.primal_vars(), vec!["T".to_string()]);
+/// assert!(k.as_domain().is_some());   // une physique de volume
+/// assert!(k.as_constraint().is_none());
+/// // Et réciproquement pour un appui : c'est un fait de **compilation**,
+/// // non une erreur d'exécution.
+/// assert!(appui.as_kind().as_domain().is_none());
+/// assert!(appui.as_kind().as_constraint().is_some());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub trait SubModelKind: Sync {
     /// Primal variable names introduced by this physics (column labels).
     fn primal_vars(&self) -> Vec<String>;
@@ -679,6 +922,37 @@ pub trait SubModelKind: Sync {
 /// This is the seam of the constraint family — `Dirichlet` today, MPC and strong
 /// contact later — and the natural home for the multiplier-driven logic they
 /// share (e.g. the future condensation of the multiplier DOFs).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::{Model, SubModel};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Constraint, Domain, MatrixKind, RelationSense, SubModelKind};
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
+/// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
+/// #     None, None, RelationSense::Equality).unwrap();
+/// // La capacité **contrainte** : des relations, chacune avec son nœud
+/// // multiplicateur et la composante où son second membre s'écrit.
+/// let c = appui.as_kind().as_constraint().unwrap();
+/// let r = c.relations()?;
+/// assert_eq!(r.len(), 1);
+/// assert_eq!(r[0].terms.len(), 1);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub trait Constraint {
     /// POI1 mesh carrying this constraint's multiplier nodes. Borrowed from the
     /// sub-model (the user supplied it); generic code clones it when an owned
@@ -698,6 +972,38 @@ pub trait Constraint {
 /// One term of a linear constraint relation, carried **method-neutrally**:
 /// `coefficient · u(node, variable)`. Its reaction `coefficient · λ` lands in
 /// `target_dual`, the dual (residual) row of `variable` in its physics.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::{Model, SubModel};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Constraint, Domain, MatrixKind, RelationSense, SubModelKind};
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
+/// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
+/// #     None, None, RelationSense::Equality).unwrap();
+/// // Un terme de relation : un nœud, sa variable, et le dual de la
+/// // physique visée — c'est ce dernier qui accroche la contrainte à la
+/// // physique qu'elle contraint.
+/// let r = appui.as_kind().as_constraint().unwrap().relations()?;
+/// assert_eq!(r[0].terms[0].node, n[0].id());
+/// assert_eq!(r[0].terms[0].variable, "T");
+/// assert_eq!(r[0].terms[0].target_dual, "q");
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Clone, Debug)]
 pub struct ConstraintTerm {
     /// Constrained node (a column of the target physics' stiffness).
@@ -719,6 +1025,35 @@ pub struct ConstraintTerm {
 ///
 /// - [`GreaterEqual`](Self::GreaterEqual): `C·u ≥ g`, `λ ≥ 0`, `λ·(C·u − g) = 0`;
 /// - [`LessEqual`](Self::LessEqual): `C·u ≤ g`, `λ ≤ 0`, `λ·(C·u − g) = 0`.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::{Model, SubModel};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Constraint, Domain, MatrixKind, RelationSense, SubModelKind};
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
+/// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
+/// #     None, None, RelationSense::Equality).unwrap();
+/// // Égalité, ou inégalité — ce qui fait passer la contrainte du solveur
+/// // direct à l'ensemble actif.
+/// assert_eq!(RelationSense::parse(None)?, RelationSense::Equality);
+/// assert_eq!(RelationSense::parse(Some(">="))?, RelationSense::GreaterEqual);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RelationSense {
     /// `Σₖ aₖ·uₖ = g` — always enforced (both solve paths).
@@ -734,6 +1069,36 @@ impl RelationSense {
     /// Parse the user-facing spelling: `"="` (equality), `">="` (`≥`), `"<="`
     /// (`≤`). `None` defaults to equality. The single place the string form is
     /// interpreted (Rust convenience constructors and the Python bindings).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::{Model, SubModel};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::{Constraint, Domain, MatrixKind, RelationSense, SubModelKind};
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+    /// # let mult = mesh::barycenter(&impose).unwrap();
+    /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
+    /// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
+    /// #     None, None, RelationSense::Equality).unwrap();
+    /// // L'**unique** endroit où la forme en chaîne est interprétée : les
+    /// // constructeurs Rust de confort et les liaisons Python y passent tous.
+    /// assert_eq!(RelationSense::parse(None)?, RelationSense::Equality);
+    /// assert_eq!(RelationSense::parse(Some("<="))?, RelationSense::LessEqual);
+    /// assert!(RelationSense::parse(Some("≠")).is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn parse(sense: Option<&str>) -> Result<Self> {
         match sense {
             None | Some("=") | Some("==") => Ok(Self::Equality),
@@ -761,6 +1126,36 @@ impl std::fmt::Display for RelationSense {
 /// `multiplier_node` whose solved value is the reaction. The right-hand
 /// side `g` is supplied by the user in the load field at the multiplier node's
 /// imposed-value component, so it is **not** carried here.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::{Model, SubModel};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Constraint, Domain, MatrixKind, RelationSense, SubModelKind};
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
+/// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
+/// #     None, None, RelationSense::Equality).unwrap();
+/// // Une relation : son multiplicateur, la composante où son `g` s'écrit,
+/// // et ses termes. C'est la couture partagée par toutes les contraintes.
+/// let r = appui.as_kind().as_constraint().unwrap().relations()?;
+/// assert_eq!(r[0].imposed_value, "imposed_T");
+/// assert_eq!(r[0].multiplier_node, mult.node(0, 0, 0)?.id());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Clone, Debug)]
 pub struct Relation {
     /// The Lagrange-multiplier node that enforces this relation.
@@ -829,6 +1224,36 @@ pub(crate) fn constraint_block_pair(
 
 /// A static component list in the owned form [`Domain::material_components`]
 /// returns — the one line every physics whose contract is fixed needs.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::{Model, SubModel};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Constraint, Domain, MatrixKind, RelationSense, SubModelKind};
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
+/// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
+/// #     None, None, RelationSense::Equality).unwrap();
+/// # use pyrucast::models::owned_components;
+/// // Le raccourci que toute physique emploie pour rendre son contrat
+/// // matériau sans le retaper.
+/// assert_eq!(owned_components(&["E", "nu"]),
+///            vec!["E".to_string(), "nu".to_string()]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn owned_components(names: &[&str]) -> Vec<String> {
     names.iter().map(|s| s.to_string()).collect()
 }
@@ -856,6 +1281,35 @@ pub fn owned_components(names: &[&str]) -> Vec<String> {
 /// [`element_matrix`](SubModelKind::element_matrix) stays on the base trait, and
 /// the parallel driver [`integrate_behavior`](Self::integrate_behavior) is
 /// provided.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::{Model, SubModel};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Constraint, Domain, MatrixKind, RelationSense, SubModelKind};
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
+/// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
+/// #     None, None, RelationSense::Equality).unwrap();
+/// // Matière et comportement sont **une seule** capacité : le matériau
+/// // paramètre la loi de comportement, il n'a pas de sens sans elle.
+/// let d = volume.as_kind().as_domain().unwrap();
+/// assert_eq!(d.material_components(), Some(vec!["k".to_string()]));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub trait Domain: Sync {
     /// FE subspace on which this domain expects its material data.
     fn material_fespace(&self) -> Handle<SubFiniteElementSpace>;

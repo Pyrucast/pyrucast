@@ -2,13 +2,6 @@
 # Il ne peut que RÉTRÉCIR : un item public nouveau porte son exemple
 # (CONVENTIONS.md, règle 2), et un item documenté sort d'ici.
 # Régénérer : python script/doc_lint.py --ratchet
-archive::Archivable
-archive::ArchiveRoot
-archive::Root
-archive::Root::type_name
-archive::Value
-archive::load
-archive::save
 atoms::cell::Cell
 atoms::cell::CellIter
 atoms::element_type::ElementType::as_kind
@@ -23,28 +16,7 @@ containers::node_field::NodeField
 containers::node_field::SubNodeField
 coords::CoordinateFrame
 coords::Coords
-dump::Dump
-dump::DumpOptions
-dump::labeled_grid
-dump::table
-handle::ReadGuard
-handle::WriteGuard
 impl_aggregate
-interrupt::Cancel
-interrupt::Deadline
-models::Constraint
-models::ConstraintTerm
-models::Contribution
-models::CouplingLayout
-models::Domain
-models::MatrixKind
-models::MatrixKind::COUNT
-models::MatrixKind::index
-models::MatrixLayout
-models::Relation
-models::RelationSense
-models::RelationSense::parse
-models::SubModelKind
 models::damage::mazars::MazarsParams
 models::kernel::CellGeom::field_d2n_dx2
 models::kernel::CellGeom::normal
@@ -53,7 +25,6 @@ models::kernel::coupling_block_triplets_per_cell
 models::kernel::element_block_pattern
 models::kernel::element_block_triplets
 models::kernel::element_block_triplets_per_cell
-models::owned_components
 models::plastic::MatParams
 ops::coloring::greedy_color
 ops::element_field::beam_deformation::beam_deformation
