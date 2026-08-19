@@ -32,6 +32,43 @@ use std::collections::HashMap;
 ///
 /// `field` must define `component` at every node of `fespace` (else an error).
 /// Returns the total; see the module docs for the per-element counterpart.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{Band, ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::{coords as ops_coords, element_field, field, measure, mesh, node_field};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// # let champ = |noms: Vec<String>| {
+/// #     NodeField::from_submesh(&support.get(0).unwrap(), noms).unwrap()
+/// # };
+/// # let temp = champ(vec!["T".into()]);
+/// # {
+/// #     let mut z = temp.get(0).unwrap().write();
+/// #     z.set_value(n[0].id(), "T", 10.0).unwrap();
+/// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
+/// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
+/// # }
+/// // ∫ T dΩ sur le triangle (0,0), (2,0), (0,2), d'aire 2. La moyenne
+/// // des trois valeurs nodales étant 50, l'intégrale vaut 100.
+/// assert!((measure::integral(&temp, &fes, "T")? - 100.0).abs() < 1e-9);
+/// // Une composante absente est une erreur.
+/// assert!(measure::integral(&temp, &fes, "q").is_err());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn integral(field: &NodeField, fespace: &FiniteElementSpace, component: &str) -> Result<f64> {
     let view = field.view()?;
     let mut total = 0.0;
@@ -72,6 +109,43 @@ pub fn integral(field: &NodeField, fespace: &FiniteElementSpace, component: &str
 ///
 /// Errors if no subspace defines `component`. Returns the total; see the module
 /// docs for the nodal (shape-function) counterpart.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{Band, ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::{coords as ops_coords, element_field, field, measure, mesh, node_field};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// # let champ = |noms: Vec<String>| {
+/// #     NodeField::from_submesh(&support.get(0).unwrap(), noms).unwrap()
+/// # };
+/// # let temp = champ(vec!["T".into()]);
+/// # {
+/// #     let mut z = temp.get(0).unwrap().write();
+/// #     z.set_value(n[0].id(), "T", 10.0).unwrap();
+/// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
+/// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
+/// # }
+/// // Le pendant pour un champ **par éléments** : il n'a besoin d'aucun
+/// // espace EF, le champ portant déjà son support.
+/// # let mut f = ElementField::new(&fes, vec!["q".into()])?;
+/// # f.get(0)?.write().set_uniform("q", 3.0)?;
+/// assert!((measure::integral_element(&f, "q")? - 3.0 * 2.0).abs() < 1e-9);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn integral_element(field: &ElementField, component: &str) -> Result<f64> {
     let mut total = 0.0;
     let mut found = false;

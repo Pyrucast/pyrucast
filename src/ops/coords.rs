@@ -68,6 +68,46 @@ fn per_node_values(field: &NodeField, comps: &[String]) -> Result<Vec<(NodeId, V
 /// per spatial axis, in axis order; `None` → `["X", "Y", "Z"][..dim]`
 /// (symmetric with [`crate::ops::node_field::positions`](fn@crate::ops::node_field::positions)). In-place on the field's
 /// `Coords`.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{Band, ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::{coords as ops_coords, element_field, field, measure, mesh, node_field};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// # let champ = |noms: Vec<String>| {
+/// #     NodeField::from_submesh(&support.get(0).unwrap(), noms).unwrap()
+/// # };
+/// # let temp = champ(vec!["T".into()]);
+/// # {
+/// #     let mut z = temp.get(0).unwrap().write();
+/// #     z.set_value(n[0].id(), "T", 10.0).unwrap();
+/// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
+/// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
+/// # }
+/// // Écrit les positions **dans le repère** : la réciproque de
+/// // `node_field::positions`. C'est un effet de bord assumé.
+/// // Les composantes par défaut sont `X`, `Y`, `Z` — celles que
+/// // `positions` produit.
+/// let cible = node_field::positions(&maillage, None)?;
+/// cible.get(0)?.write().add_to_component("X", 1.0)?;
+/// ops_coords::set(&cible, None)?;
+/// assert_eq!(n[0].position()?, vec![1.0, 0.0]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn set(field: &NodeField, components: Option<Vec<String>>) -> Result<()> {
     let coords = field.coords()?;
     let dim = coords.read().dim() as usize;
@@ -86,6 +126,45 @@ pub fn set(field: &NodeField, components: Option<Vec<String>>) -> Result<()> {
 /// exactly once. `components` lists one displacement-component name per
 /// spatial axis, in axis order; `None` → `["ux", "uy", "uz"][..dim]`.
 /// In-place on the field's `Coords`.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{Band, ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::{coords as ops_coords, element_field, field, measure, mesh, node_field};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// # let champ = |noms: Vec<String>| {
+/// #     NodeField::from_submesh(&support.get(0).unwrap(), noms).unwrap()
+/// # };
+/// # let temp = champ(vec!["T".into()]);
+/// # {
+/// #     let mut z = temp.get(0).unwrap().write();
+/// #     z.set_value(n[0].id(), "T", 10.0).unwrap();
+/// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
+/// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
+/// # }
+/// // Ajoute un déplacement aux positions, au lieu de les remplacer — la
+/// // façon de passer en configuration déformée.
+/// // Les composantes par défaut sont ici `ux`, `uy`, `uz`.
+/// let u = champ(vec!["ux".into(), "uy".into()]);
+/// u.get(0)?.write().add_to_component("ux", 0.5)?;
+/// ops_coords::displace(&u, None)?;
+/// assert_eq!(n[0].position()?, vec![0.5, 0.0]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn displace(field: &NodeField, components: Option<Vec<String>>) -> Result<()> {
     let coords = field.coords()?;
     let dim = coords.read().dim() as usize;

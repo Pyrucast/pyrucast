@@ -12,6 +12,43 @@ use crate::error::Result;
 ///
 /// Errors on a value conflict or if the fields are attached to different
 /// `Coords`s.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{Band, ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::{coords as ops_coords, element_field, field, measure, mesh, node_field};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// # let champ = |noms: Vec<String>| {
+/// #     NodeField::from_submesh(&support.get(0).unwrap(), noms).unwrap()
+/// # };
+/// # let temp = champ(vec!["T".into()]);
+/// # {
+/// #     let mut z = temp.get(0).unwrap().write();
+/// #     z.set_value(n[0].id(), "T", 10.0).unwrap();
+/// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
+/// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
+/// # }
+/// // L'union de deux champs : **symétrique**, d'où l'opérateur `|` côté
+/// // Python. Les composantes s'additionnent, les supports se rejoignent.
+/// let flux = champ(vec!["q".into()]);
+/// let f = node_field::merge(&temp, &flux)?;
+/// assert_eq!(f.get(0)?.read().components(), &["T".to_string(), "q".to_string()]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn merge(a: &NodeField, b: &NodeField) -> Result<NodeField> {
     a.union(b)
 }

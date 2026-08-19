@@ -31,6 +31,42 @@ use crate::handle::Handle;
 /// See the module documentation. Errors if two zones on the same support
 /// disagree on a shared `(node, component)` value, or if the global
 /// cross-zone check fails.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{Band, ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::{coords as ops_coords, element_field, field, measure, mesh, node_field};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// # let champ = |noms: Vec<String>| {
+/// #     NodeField::from_submesh(&support.get(0).unwrap(), noms).unwrap()
+/// # };
+/// # let temp = champ(vec!["T".into()]);
+/// # {
+/// #     let mut z = temp.get(0).unwrap().write();
+/// #     z.set_value(n[0].id(), "T", 10.0).unwrap();
+/// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
+/// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
+/// # }
+/// // Fusionne en une zone les champs qui partagent un support.
+/// let flux = champ(vec!["q".into()]);
+/// let deux = node_field::merge(&temp, &flux)?;
+/// assert_eq!(node_field::consolidate(&deux)?.len(), 1);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn consolidate(field: &NodeField) -> Result<NodeField> {
     // Snapshot every sub once (one lock each, never nested), keeping its
     // support handle for grouping and the singleton-sharing case.

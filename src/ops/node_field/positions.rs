@@ -29,6 +29,48 @@ fn axis_index(name: &str) -> Option<usize> {
 /// Errors if `mesh` has no submeshes, if a requested component is not one
 /// of `"X"` / `"Y"` / `"Z"`, or if it names an axis the Coords does
 /// not have (e.g. `"Z"` on a 2-D mesh).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{Band, ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::{coords as ops_coords, element_field, field, measure, mesh, node_field};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// # let champ = |noms: Vec<String>| {
+/// #     NodeField::from_submesh(&support.get(0).unwrap(), noms).unwrap()
+/// # };
+/// # let temp = champ(vec!["T".into()]);
+/// # {
+/// #     let mut z = temp.get(0).unwrap().write();
+/// #     z.set_value(n[0].id(), "T", 10.0).unwrap();
+/// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
+/// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
+/// # }
+/// // Les coordonnées d'un maillage, **en tant que champ** : de quoi les
+/// // passer à l'arithmétique de champs comme n'importe quelle grandeur.
+/// let x = node_field::positions(&maillage, None)?;
+/// assert_eq!(x.get(0)?.read().components(), &["X".to_string(), "Y".to_string()]);
+/// assert_eq!(x.get(0)?.read().value(n[1].id(), "X")?, 2.0);
+/// // Les composantes se **choisissent**, mais parmi les axes : demander
+/// // autre chose est une erreur nommée, non un renommage silencieux.
+/// let plan = node_field::positions(&maillage, Some(vec!["X".into()]))?;
+/// assert_eq!(plan.get(0)?.read().components(), &["X".to_string()]);
+/// assert!(node_field::positions(&maillage, Some(vec!["u_x".into()])).is_err());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn positions(mesh: &Mesh, components: Option<Vec<String>>) -> Result<NodeField> {
     let coords = mesh.coords()?;
     let dim = coords.read().dim() as usize;

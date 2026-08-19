@@ -29,6 +29,43 @@ pub(crate) const AXES: [&str; 3] = ["x", "y", "z"];
 ///
 /// `∇f = Σ_i f_i ∇N_i` evaluated cell-by-cell, Gauss point by Gauss point, via
 /// the shared parallel driver `models::kernel::nodal_pointwise`.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{Band, ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::{coords as ops_coords, element_field, field, measure, mesh, node_field};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// # let champ = |noms: Vec<String>| {
+/// #     NodeField::from_submesh(&support.get(0).unwrap(), noms).unwrap()
+/// # };
+/// # let temp = champ(vec!["T".into()]);
+/// # {
+/// #     let mut z = temp.get(0).unwrap().write();
+/// #     z.set_value(n[0].id(), "T", 10.0).unwrap();
+/// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
+/// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
+/// # }
+/// // ∇T aux points de Gauss. Sur ce triangle T croît de 10 à 50 sur deux
+/// // unités en x : le gradient vaut 20.
+/// let g = element_field::gradient(&temp, &fes)?;
+/// assert!((g.get(0)?.read().value(0, 0, "grad_T_x")? - 20.0).abs() < 1e-9);
+/// assert!((g.get(0)?.read().value(0, 0, "grad_T_y")? - 40.0).abs() < 1e-9);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn gradient(field: &NodeField, fespace: &FiniteElementSpace) -> Result<ElementField> {
     let components = Field::components(field)?;
     let view = field.view()?;

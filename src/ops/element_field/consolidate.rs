@@ -24,6 +24,46 @@ use crate::handle::Handle;
 /// Fuse the zones of `field` that share the same support
 /// `SubFiniteElementSpace`. See the module documentation. Errors if two
 /// zones on the same support disagree on a shared `(cell, gauss, component)`.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{Band, ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::{coords as ops_coords, element_field, field, measure, mesh, node_field};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// # let champ = |noms: Vec<String>| {
+/// #     NodeField::from_submesh(&support.get(0).unwrap(), noms).unwrap()
+/// # };
+/// # let temp = champ(vec!["T".into()]);
+/// # {
+/// #     let mut z = temp.get(0).unwrap().write();
+/// #     z.set_value(n[0].id(), "T", 10.0).unwrap();
+/// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
+/// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
+/// # }
+/// // Le pendant par éléments : une zone par support, composantes réunies.
+/// let a = ElementField::new(&fes, vec!["s_xx".into()])?;
+/// let b = ElementField::new(&fes, vec!["s_yy".into()])?;
+/// let deux = a.union(&b)?;
+/// assert_eq!(deux.len(), 2);
+/// let une = element_field::consolidate(&deux)?;
+/// assert_eq!(une.len(), 1);
+/// assert_eq!(une.get(0)?.read().component_count(), 2);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn consolidate(field: &ElementField) -> Result<ElementField> {
     struct Snap {
         handle: Handle<SubElementField>,
@@ -130,6 +170,49 @@ pub fn consolidate(field: &ElementField) -> Result<ElementField> {
 /// as the VTK export or [`crate::ops::measure::integral_element`] would otherwise
 /// double-count), so it is rejected. Call
 /// [`consolidate`] explicitly to fuse zones instead.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{Band, ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::{coords as ops_coords, element_field, field, measure, mesh, node_field};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// # let champ = |noms: Vec<String>| {
+/// #     NodeField::from_submesh(&support.get(0).unwrap(), noms).unwrap()
+/// # };
+/// # let temp = champ(vec!["T".into()]);
+/// # {
+/// #     let mut z = temp.get(0).unwrap().write();
+/// #     z.set_value(n[0].id(), "T", 10.0).unwrap();
+/// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
+/// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
+/// # }
+/// // Deux zones sur le même support **peuvent** coexister si leurs
+/// // composantes sont disjointes — c'est ce que ce contrôle autorise.
+/// let a = ElementField::new(&fes, vec!["s_xx".into()])?;
+/// let b = ElementField::new(&fes, vec!["s_yy".into()])?;
+/// let deux = a.union(&b)?;
+/// assert_eq!(deux.len(), 2);
+/// assert!(element_field::check_unique_component_per_support(&deux).is_ok());
+/// // La même composante portée deux fois sur un support, non : l'union
+/// // elle-même la refuse, en nommant la composante fautive.
+/// let doublon = ElementField::new(&fes, vec!["s_xx".into()])?;
+/// assert!(a.union(&doublon).is_err());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn check_unique_component_per_support(field: &ElementField) -> Result<()> {
     // (support identity, component) already seen.
     let mut seen: Vec<(usize, String)> = Vec::new();

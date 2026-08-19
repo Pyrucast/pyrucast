@@ -70,6 +70,47 @@ where
 /// Per-component 0/1 mask of `field` against `band`, zone by zone (one value
 /// per Gauss point × component). Returns an `ElementField` with the same
 /// structure as the input.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{Band, ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::{coords as ops_coords, element_field, field, measure, mesh, node_field};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// # let champ = |noms: Vec<String>| {
+/// #     NodeField::from_submesh(&support.get(0).unwrap(), noms).unwrap()
+/// # };
+/// # let temp = champ(vec!["T".into()]);
+/// # {
+/// #     let mut z = temp.get(0).unwrap().write();
+/// #     z.set_value(n[0].id(), "T", 10.0).unwrap();
+/// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
+/// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
+/// # }
+/// # let mut f = ElementField::new(&fes, vec!["q".into()])?;
+/// # f.get(0)?.write().set_uniform("q", 5.0)?;
+/// // Un indicateur 0/1 aux points de Gauss, de même forme que l'entrée.
+/// let haute = Band::new(Some(10.0), None, None, None)?;
+/// assert_eq!(element_field::mask(&f, &haute, None)?
+///     .get(0)?.read().value(0, 0, "q")?, 0.0);
+/// let basse = Band::new(Some(1.0), None, None, None)?;
+/// assert_eq!(element_field::mask(&f, &basse, None)?
+///     .get(0)?.read().value(0, 0, "q")?, 1.0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn mask(
     field: &ElementField,
     band: &Band,
@@ -79,6 +120,43 @@ pub fn mask(
 }
 
 /// Single-zone [`mask`].
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{Band, ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::{coords as ops_coords, element_field, field, measure, mesh, node_field};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// # let champ = |noms: Vec<String>| {
+/// #     NodeField::from_submesh(&support.get(0).unwrap(), noms).unwrap()
+/// # };
+/// # let temp = champ(vec!["T".into()]);
+/// # {
+/// #     let mut z = temp.get(0).unwrap().write();
+/// #     z.set_value(n[0].id(), "T", 10.0).unwrap();
+/// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
+/// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
+/// # }
+/// # let mut f = ElementField::new(&fes, vec!["q".into()])?;
+/// # f.get(0)?.write().set_uniform("q", 5.0)?;
+/// let haute = Band::new(Some(10.0), None, None, None)?;
+/// let m = element_field::mask_sub(&f.get(0)?.read(), &haute, None);
+/// assert_eq!(m.value(0, 0, "q")?, 0.0); // 5 < 10
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn mask_sub(
     sub: &SubElementField,
     band: &Band,

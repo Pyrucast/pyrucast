@@ -23,6 +23,45 @@ use crate::models::kernel;
 /// The result is an [`ElementField`] carrying the **same component names** as
 /// the input, one value per `(cell, Gauss point)`. Runs on the shared parallel
 /// driver `models::kernel::nodal_pointwise`.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{Band, ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::{coords as ops_coords, element_field, field, measure, mesh, node_field};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// # let champ = |noms: Vec<String>| {
+/// #     NodeField::from_submesh(&support.get(0).unwrap(), noms).unwrap()
+/// # };
+/// # let temp = champ(vec!["T".into()]);
+/// # {
+/// #     let mut z = temp.get(0).unwrap().write();
+/// #     z.set_value(n[0].id(), "T", 10.0).unwrap();
+/// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
+/// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
+/// # }
+/// // Un champ **nodal** porté aux points de Gauss par les fonctions de
+/// // forme — ce qu'attend une loi de comportement, qui travaille au point
+/// // d'intégration.
+/// let g = element_field::interp_to_gauss(&temp, &fes)?;
+/// assert_eq!(g.get(0)?.read().components(), &["T".to_string()]);
+/// // Aux milieux d'arêtes du TRI3, la moyenne des deux nœuds concernés.
+/// assert!((g.get(0)?.read().value(0, 0, "T")? - 30.0).abs() < 1e-9);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn interp_to_gauss(field: &NodeField, fespace: &FiniteElementSpace) -> Result<ElementField> {
     let components = Field::components(field)?;
     let view = field.view()?;
