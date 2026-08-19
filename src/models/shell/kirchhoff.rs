@@ -236,6 +236,49 @@ fn bending_b(
 ///
 /// One [`CellGeom`], not two: there is no shear term, so there is no second
 /// quadrature to integrate it at.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::kernel::{assemble_block, reduce_cells};
+/// # use pyrucast::models::shell;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+/// #     zone.clone(), vec!["E".into(), "nu".into(), "h".into()],
+/// #     &[210_000.0, 0.3, 0.01]).unwrap());
+/// # let ddl = || (vec!["f_x".to_string(), "f_y".to_string(), "f_z".to_string(),
+/// #                    "m_x".to_string(), "m_y".to_string(), "m_z".to_string()],
+/// #               vec!["u_x".to_string(), "u_y".to_string(), "u_z".to_string(),
+/// #                    "r_x".to_string(), "r_y".to_string(), "r_z".to_string()]);
+/// # use pyrucast::models::shell::kirchhoff;
+/// // **Une** `CellGeom`, non deux : il n'y a pas de terme de cisaillement,
+/// // donc pas de seconde quadrature pour l'intégrer.
+/// let (duals, primals) = ddl();
+/// let bloc = assemble_block(
+///     std::slice::from_ref(&zone), &support, &support, duals, primals,
+///     DofOrdering::NodesThenVars, true, Some(&mat), None,
+///     |geoms, m, _s, ke| kirchhoff::element_stiffness(&geoms[0], m.unwrap(), ke),
+/// )?;
+/// // Le bloc porte les six DDL de chaque nœud : 18 × 18 sur un TRI3.
+/// assert_eq!((bloc.n_rows(), bloc.n_cols()), (18, 18));
+/// // Et il est symétrique, comme toute raideur.
+/// let d = bloc.dense();
+/// assert!((0..18).all(|i| (0..18).all(|j| (d[i * 18 + j] - d[j * 18 + i]).abs() < 1e-6)));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn element_stiffness(
     geom: &CellGeom,
     material: &SubElementField,

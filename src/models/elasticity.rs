@@ -73,6 +73,14 @@ fn material_contract(symmetry: MaterialSymmetry, space_dim: usize) -> &'static [
 }
 
 /// Which 2-D assumption (or 3-D solid) to use for the constitutive matrix.
+///
+/// ```
+/// # use pyrucast::models::elasticity::{self, ElasticityModel};
+/// // La cinématique choisie décide du nombre de composantes de Voigt.
+/// assert_eq!(elasticity::constitutive(210e3, 0.3, ElasticityModel::PlaneStress, 2).len(), 3);
+/// assert_eq!(elasticity::constitutive(210e3, 0.3, ElasticityModel::Axisymmetric, 2).len(), 4);
+/// assert_eq!(elasticity::constitutive(210e3, 0.3, ElasticityModel::Solid, 3).len(), 6);
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ElasticityModel {
     /// 2-D plane stress (thin plate loaded in its plane).
@@ -90,6 +98,13 @@ pub enum ElasticityModel {
 impl ElasticityModel {
     /// Parse from a lowercase tag (`"plane_stress"`, `"plane_strain"`,
     /// `"axisymmetric"`, `"solid"`).
+    ///
+    /// ```
+    /// # use pyrucast::models::elasticity::{self, ElasticityModel};
+    /// assert_eq!(ElasticityModel::from_tag("plane_stress"),
+    ///            Some(ElasticityModel::PlaneStress));
+    /// assert_eq!(ElasticityModel::from_tag("coque"), None);
+    /// ```
     pub fn from_tag(tag: &str) -> Option<Self> {
         match tag {
             "plane_stress" => Some(Self::PlaneStress),
@@ -102,6 +117,14 @@ impl ElasticityModel {
 
     /// Whether this model carries the hoop (θθ) component — i.e. is
     /// [`Axisymmetric`](Self::Axisymmetric).
+    ///
+    /// ```
+    /// # use pyrucast::models::elasticity::{self, ElasticityModel};
+    /// // Seul le plan méridien d'un corps de révolution porte la déformation
+    /// // orthoradiale ε_θθ = u_r / r.
+    /// assert!(ElasticityModel::Axisymmetric.is_axisymmetric());
+    /// assert!(!ElasticityModel::PlaneStrain.is_axisymmetric());
+    /// ```
     pub fn is_axisymmetric(self) -> bool {
         self == Self::Axisymmetric
     }
@@ -413,6 +436,19 @@ impl Domain for Elasticity {
 }
 
 /// Isotropic constitutive (Voigt) matrix `D` from `E`, `nu` and the model.
+///
+/// ```
+/// # use pyrucast::models::elasticity::{self, ElasticityModel};
+/// // Contraintes planes : σ_zz = 0, la souplesse hors plan est condensée.
+/// // Déformations planes : ε_zz = 0, le matériau est plus **raide**.
+/// let cp = elasticity::constitutive(210e3, 0.3, ElasticityModel::PlaneStress, 2);
+/// let dp = elasticity::constitutive(210e3, 0.3, ElasticityModel::PlaneStrain, 2);
+/// assert!(dp[0][0] > cp[0][0]);
+/// // En contraintes planes, D₀₀ = E/(1−ν²).
+/// assert!((cp[0][0] - 210e3 / (1.0 - 0.09)).abs() < 1e-6);
+/// // Le bloc de cisaillement vaut μ dans les deux cas (Voigt de l'ingénieur).
+/// assert!((cp[2][2] - dp[2][2]).abs() < 1e-6);
+/// ```
 pub fn constitutive(e: f64, nu: f64, model: ElasticityModel, space_dim: usize) -> Vec<Vec<f64>> {
     match (space_dim, model) {
         (2, ElasticityModel::PlaneStress) => {
@@ -549,6 +585,47 @@ fn b_matrix(
 /// sequential — driven in parallel by [`crate::models::kernel::assemble_block`].
 /// Reused as-is by [`crate::models::plasticity`] and [`crate::models::damage`]
 /// (their iteration operator is the elastic stiffness).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::{self, ElasticityModel};
+/// # use pyrucast::models::kernel::assemble_block;
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let vars = || (vec!["f_x".to_string(), "f_y".to_string()],
+/// #                vec!["u_x".to_string(), "u_y".to_string()]);
+/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+/// #     zone.clone(), vec!["E".into(), "nu".into()], &[210_000.0, 0.3])?);
+/// // Le noyau d'élément, tel que le pilote l'appelle. La matrice de
+/// // raideur d'un solide libre est **singulière** : ses lignes somment à
+/// // zéro, un mouvement de corps rigide n'engendrant aucune force.
+/// let (duals, primals) = vars();
+/// let bloc = assemble_block(
+///     std::slice::from_ref(&zone), &support, &support, duals, primals,
+///     DofOrdering::NodesThenVars, true, Some(&mat), None,
+///     |geoms, m, _s, ke| elasticity::element_stiffness(
+///         &geoms[0], m.unwrap(), ElasticityModel::PlaneStress,
+///         MaterialSymmetry::Isotropic, ke),
+/// )?;
+/// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
+/// assert!(total.abs() < 1e-6);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn element_stiffness(
     geom: &CellGeom,
     material: &SubElementField,
@@ -602,6 +679,44 @@ pub fn element_stiffness(
 /// from the material component `rho` (constant per cell). Pure and sequential,
 /// law-independent — reused as-is by [`crate::models::plasticity`] and
 /// [`crate::models::damage`].
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::{self, ElasticityModel};
+/// # use pyrucast::models::kernel::assemble_block;
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let vars = || (vec!["f_x".to_string(), "f_y".to_string()],
+/// #                vec!["u_x".to_string(), "u_y".to_string()]);
+/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+/// #     zone.clone(), vec!["rho".into()], &[2.0])?);
+/// // La masse totale se retrouve dans la somme des entrées, une fois par
+/// // direction : ρ × aire × space_dim.
+/// let (duals, primals) = vars();
+/// let bloc = assemble_block(
+///     std::slice::from_ref(&zone), &support, &support, duals, primals,
+///     DofOrdering::NodesThenVars, true, Some(&mat), None,
+///     |geoms, m, _s, ke| elasticity::element_mass(&geoms[0], m.unwrap(), ke),
+/// )?;
+/// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
+/// assert!((total - 2.0 * 0.5 * 2.0).abs() < 1e-9);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64]) -> Result<()> {
     let n_nodes = geom.n_nodes;
     let space_dim = geom.space_dim;
@@ -636,6 +751,48 @@ pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64])
 /// `σ` (Voigt-named) is read from `state` per Gauss point. Pure and sequential,
 /// law-independent — reused as-is by [`crate::models::plasticity`] and
 /// [`crate::models::damage`].
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::{self, ElasticityModel};
+/// # use pyrucast::models::kernel::assemble_block;
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let vars = || (vec!["f_x".to_string(), "f_y".to_string()],
+/// #                vec!["u_x".to_string(), "u_y".to_string()]);
+/// # let etat = Handle::new(SubElementField::from_uniform_per_component(
+/// #     zone.clone(),
+/// #     vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_xy".into()],
+/// #     &[100.0, 0.0, 0.0])?);
+/// // La raideur **géométrique**, celle du flambement : elle vient de l'état
+/// // de contrainte, non du matériau. Sous traction elle est définie
+/// // positive ; c'est son signe qui décide de la charge critique.
+/// let (duals, primals) = vars();
+/// let bloc = assemble_block(
+///     std::slice::from_ref(&zone), &support, &support, duals, primals,
+///     DofOrdering::NodesThenVars, true, None, Some(&etat),
+///     |geoms, _m, s, ke| elasticity::element_geometric(&geoms[0], s.unwrap(), ke),
+/// )?;
+/// // Elle est singulière elle aussi : les modes rigides n'y coûtent rien.
+/// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
+/// assert!(total.abs() < 1e-9);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn element_geometric(geom: &CellGeom, stress: &SubElementField, ke: &mut [f64]) -> Result<()> {
     let n_nodes = geom.n_nodes;
     let d = geom.space_dim;
@@ -685,6 +842,16 @@ pub fn element_geometric(geom: &CellGeom, stress: &SubElementField, ke: &mut [f6
 /// `ktan_{i}_{j}` for `i ≤ j`. `v = 3` in 2-D plane, `4` axisymmetric, `6` in
 /// 3-D — so 6, 10 or 21 names.
 /// The tangent assembler reads them back with [`read_tangent_matrix`].
+///
+/// ```
+/// # use pyrucast::models::elasticity::{self, ElasticityModel};
+/// // Le triangle supérieur d'un module symétrique v×v : 6, 10 ou 21 noms.
+/// assert_eq!(elasticity::tangent_component_names(2, ElasticityModel::PlaneStress).len(), 6);
+/// assert_eq!(elasticity::tangent_component_names(2, ElasticityModel::Axisymmetric).len(), 10);
+/// assert_eq!(elasticity::tangent_component_names(3, ElasticityModel::Solid).len(), 21);
+/// assert_eq!(elasticity::tangent_component_names(2, ElasticityModel::PlaneStress)[0],
+///            "ktan_0_0");
+/// ```
 pub fn tangent_component_names(space_dim: usize, model: ElasticityModel) -> Vec<String> {
     let v = voigt_size(space_dim, model);
     let mut names = Vec::with_capacity(v * (v + 1) / 2);
@@ -698,6 +865,47 @@ pub fn tangent_component_names(space_dim: usize, model: ElasticityModel) -> Vec<
 
 /// Reconstruct the symmetric `v×v` consistent tangent `D_alg` at `(cell, g)` from
 /// the `ktan_{i}_{j}` state components emitted by the constitutive integrator.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::{self, ElasticityModel};
+/// # use pyrucast::models::kernel::assemble_block;
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let vars = || (vec!["f_x".to_string(), "f_y".to_string()],
+/// #                vec!["u_x".to_string(), "u_y".to_string()]);
+/// // Le producteur écrit `ktan_i_j`, le consommateur les relit ici : c'est
+/// // tout le contrat entre l'intégrateur constitutif et l'assembleur.
+/// let noms = elasticity::tangent_component_names(2, ElasticityModel::PlaneStress);
+/// let d0 = elasticity::constitutive(210e3, 0.3, ElasticityModel::PlaneStress, 2);
+/// let mut etat = SubElementField::new(zone.clone(), noms.clone())?;
+/// let mut k = 0;
+/// for i in 0..3 {
+///     for j in i..3 {
+///         etat.set_uniform(&noms[k], d0[i][j])?;
+///         k += 1;
+///     }
+/// }
+/// // Relu, le module est **symétrique** et identique à ce qu'on a écrit.
+/// let d = elasticity::read_tangent_matrix(&etat, 0, 0, 2, ElasticityModel::PlaneStress)?;
+/// assert_eq!(d, d0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn read_tangent_matrix(
     state: &SubElementField,
     cell: usize,
@@ -722,6 +930,59 @@ pub fn read_tangent_matrix(
 /// (the constitutive integrator's `ktan_*` output). Same `ke` layout as
 /// [`element_stiffness`]; law-independent given `D_alg`, so plasticity and Mazars
 /// share it — only the `D_alg` they produce differs.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::{self, ElasticityModel};
+/// # use pyrucast::models::kernel::assemble_block;
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let vars = || (vec!["f_x".to_string(), "f_y".to_string()],
+/// #                vec!["u_x".to_string(), "u_y".to_string()]);
+/// // Indépendante de la loi une fois `D_alg` donné : plasticité et Mazars
+/// // partagent ce noyau, seul le module algorithmique qu'elles produisent
+/// // diffère. Avec le module **élastique** en entrée, on retrouve la
+/// // raideur élastique.
+/// # let noms = elasticity::tangent_component_names(2, ElasticityModel::PlaneStress);
+/// # let d0 = elasticity::constitutive(210e3, 0.3, ElasticityModel::PlaneStress, 2);
+/// # let mut e = SubElementField::new(zone.clone(), noms.clone())?;
+/// # let mut k = 0;
+/// # for i in 0..3 { for j in i..3 { e.set_uniform(&noms[k], d0[i][j])?; k += 1; } }
+/// # let etat = Handle::new(e);
+/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+/// #     zone.clone(), vec!["E".into(), "nu".into()], &[210_000.0, 0.3])?);
+/// let (duals, primals) = vars();
+/// let tangente = assemble_block(
+///     std::slice::from_ref(&zone), &support, &support, duals.clone(), primals.clone(),
+///     DofOrdering::NodesThenVars, true, None, Some(&etat),
+///     |geoms, _m, s, ke| elasticity::element_tangent_from_state(
+///         &geoms[0], s.unwrap(), ElasticityModel::PlaneStress, ke),
+/// )?;
+/// let raideur = assemble_block(
+///     std::slice::from_ref(&zone), &support, &support, duals, primals,
+///     DofOrdering::NodesThenVars, true, Some(&mat), None,
+///     |geoms, m, _s, ke| elasticity::element_stiffness(
+///         &geoms[0], m.unwrap(), ElasticityModel::PlaneStress,
+///         MaterialSymmetry::Isotropic, ke),
+/// )?;
+/// assert_eq!(tangente.dense(), raideur.dense());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn element_tangent_from_state(
     geom: &CellGeom,
     state: &SubElementField,

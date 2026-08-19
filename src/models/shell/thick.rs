@@ -57,6 +57,15 @@ use crate::models::shell::{
 use crate::models::CellGeom;
 
 /// The membrane law `D_m` of a homogeneous section (plane stress × thickness).
+///
+/// ```
+/// # use pyrucast::models::shell::{self, ShellModel};
+/// # use pyrucast::models::shell::thick;
+/// // Contraintes planes × épaisseur : D_m est proportionnelle à h.
+/// let a = thick::membrane_law(210_000.0, 0.3, 0.01);
+/// let b = thick::membrane_law(210_000.0, 0.3, 0.02);
+/// assert!((b[0][0] - 2.0 * a[0][0]).abs() < 1e-6);
+/// ```
 pub fn membrane_law(e: f64, nu: f64, h: f64) -> [[f64; 3]; 3] {
     let c = e * h / (1.0 - nu * nu);
     [
@@ -68,6 +77,16 @@ pub fn membrane_law(e: f64, nu: f64, h: f64) -> [[f64; 3]; 3] {
 
 /// The bending law `D_b = D_m · h²/12` — the same material, weighted by `z²`
 /// across the thickness.
+///
+/// ```
+/// # use pyrucast::models::shell::{self, ShellModel};
+/// # use pyrucast::models::shell::thick;
+/// // Le même matériau pondéré par z² sur l'épaisseur : D_b = D_m · h²/12.
+/// let h = 0.01;
+/// let m = thick::membrane_law(210_000.0, 0.3, h);
+/// let b = thick::bending_law(210_000.0, 0.3, h);
+/// assert!((b[0][0] - m[0][0] * h * h / 12.0).abs() < 1e-12);
+/// ```
 pub fn bending_law(e: f64, nu: f64, h: f64) -> [[f64; 3]; 3] {
     let m = membrane_law(e, nu, h);
     let s = h * h / 12.0;
@@ -75,12 +94,59 @@ pub fn bending_law(e: f64, nu: f64, h: f64) -> [[f64; 3]; 3] {
 }
 
 /// The transverse-shear modulus `k_s·G·h`.
+///
+/// ```
+/// # use pyrucast::models::shell::{self, ShellModel};
+/// # use pyrucast::models::shell::thick;
+/// // k_s·G·h, avec G = E / 2(1+ν).
+/// let g = 210_000.0 / 2.6;
+/// assert!((thick::shear_law(210_000.0, 0.3, 0.01, 5.0 / 6.0)
+///          - 5.0 / 6.0 * g * 0.01).abs() < 1e-9);
+/// ```
 pub fn shear_law(e: f64, nu: f64, h: f64, k_s: f64) -> f64 {
     k_s * e / (2.0 * (1.0 + nu)) * h
 }
 
 /// The shear-correction factor: the material's own `k_s` if it carries one,
 /// `5/6` otherwise — the value for a homogeneous rectangular section.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::kernel::{assemble_block, reduce_cells};
+/// # use pyrucast::models::shell;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+/// #     zone.clone(), vec!["E".into(), "nu".into(), "h".into()],
+/// #     &[210_000.0, 0.3, 0.01]).unwrap());
+/// # let ddl = || (vec!["f_x".to_string(), "f_y".to_string(), "f_z".to_string(),
+/// #                    "m_x".to_string(), "m_y".to_string(), "m_z".to_string()],
+/// #               vec!["u_x".to_string(), "u_y".to_string(), "u_z".to_string(),
+/// #                    "r_x".to_string(), "r_y".to_string(), "r_z".to_string()]);
+/// # use pyrucast::models::shell::thick;
+/// // Sans `k_s` au matériau, la valeur d'une section rectangulaire
+/// // homogène : 5/6.
+/// assert!((thick::shear_factor(&mat.read(), 0) - 5.0 / 6.0).abs() < 1e-12);
+/// // Avec, c'est celle du matériau qui l'emporte.
+/// # let propre = SubElementField::from_uniform_per_component(
+/// #     zone.clone(), vec!["E".into(), "nu".into(), "h".into(), "k_s".into()],
+/// #     &[210_000.0, 0.3, 0.01, 0.85])?;
+/// assert!((thick::shear_factor(&propre, 0) - 0.85).abs() < 1e-12);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn shear_factor(material: &SubElementField, cell: usize) -> f64 {
     match material.component_index("k_s") {
         Some(_) => material.value(cell, 0, "k_s").unwrap_or(5.0 / 6.0),
@@ -92,6 +158,50 @@ pub fn shear_factor(material: &SubElementField, cell: usize) -> f64 {
 ///
 /// `full` carries the membrane and bending terms, `reduced` the transverse
 /// shear — two [`CellGeom`] over the same cell, differing only by quadrature.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::kernel::{assemble_block, reduce_cells};
+/// # use pyrucast::models::shell;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+/// #     zone.clone(), vec!["E".into(), "nu".into(), "h".into()],
+/// #     &[210_000.0, 0.3, 0.01]).unwrap());
+/// # let ddl = || (vec!["f_x".to_string(), "f_y".to_string(), "f_z".to_string(),
+/// #                    "m_x".to_string(), "m_y".to_string(), "m_z".to_string()],
+/// #               vec!["u_x".to_string(), "u_y".to_string(), "u_z".to_string(),
+/// #                    "r_x".to_string(), "r_y".to_string(), "r_z".to_string()]);
+/// # use pyrucast::models::shell::thick;
+/// // Deux `CellGeom` : la quadrature **complète** pour la membrane et la
+/// // flexion, la **réduite** pour le cisaillement transverse — c'est ce
+/// // qui empêche le blocage en mince.
+/// let (duals, primals) = ddl();
+/// let bloc = assemble_block(
+///     &[zone.clone(), zone.clone()], &support, &support, duals, primals,
+///     DofOrdering::NodesThenVars, true, Some(&mat), None,
+///     |geoms, m, _s, ke| thick::element_stiffness(&geoms[0], &geoms[1], m.unwrap(), ke),
+/// )?;
+/// // Le bloc porte les six DDL de chaque nœud : 18 × 18 sur un TRI3.
+/// assert_eq!((bloc.n_rows(), bloc.n_cols()), (18, 18));
+/// // Et il est symétrique, comme toute raideur.
+/// let d = bloc.dense();
+/// assert!((0..18).all(|i| (0..18).all(|j| (d[i * 18 + j] - d[j * 18 + i]).abs() < 1e-6)));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn element_stiffness(
     full: &CellGeom,
     reduced: &CellGeom,
