@@ -512,6 +512,13 @@ Ci-dessous, les règles seules.
    | l'usage d'un opérateur en Python | `tests/python/test_doc_<famille>.py`, ancré | `{{#include …:ancre}}` |
    | ce qui n'est **pas du code** | la page elle-même | ` ```text `, sans coloration |
 
+   **Une méthode de pure délégation ne porte pas d'exemple.** Les
+   `src/ops/**/methods.rs` n'exposent que la face « sujet » d'un opérateur :
+   aucune logique, un appel à la fonction libre. C'est elle la forme
+   canonique, c'est elle qui est documentée — leur réclamer un exemple
+   dupliquerait le sien, et donnerait un second texte à maintenir pour rien.
+   Le cliquet les écarte du dénominateur.
+
    Le préfixe `test_` n'est pas décoratif : `pytest` ne collecte que
    `test_*.py`. Un fichier de sources d'exemples nommé autrement est inclus
    dans le book et **exécuté par personne** — exactement ce que la règle

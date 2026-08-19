@@ -178,6 +178,14 @@ liens, il n'y a ni chemin de bibliothèque à passer, ni ancre à maintenir. On
 
 Le vocabulaire des attributs, et lequel choisir :
 
+Une exception, et une seule : **la méthode de pure délégation**. Les fichiers
+`src/ops/**/methods.rs` exposent la face « sujet » d'un opérateur — aucune
+logique, un appel à la fonction libre — et c'est cette dernière qui est la forme
+canonique et qui porte la documentation. Y ajouter un exemple dupliquerait le
+sien : soixante-huit exemples de plus, six cents lignes dans des fichiers dont
+tout l'objet est de tenir en une ligne par verbe, et un second texte à faire
+vieillir. Le cliquet les écarte du dénominateur.
+
 | attribut | effet | quand |
 |---|---|---|
 | *(aucun)* | compile **et exécute** | le cas normal, à viser toujours |

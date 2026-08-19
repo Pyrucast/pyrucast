@@ -373,6 +373,31 @@ def check_symboles():
 DOC = ROOT / "target" / "doc" / "pyrucast"
 
 
+def delegations():
+    """Les méthodes de pure délégation, `Type::verbe`.
+
+    Elles vivent dans `src/ops/**/methods.rs`, ne contiennent aucune logique et
+    appellent la fonction libre, receveur compris. C'est la **fonction libre**
+    qui est la forme canonique et qui porte la documentation
+    (`CONVENTIONS.md`, « Le verbe exposé aussi en méthode ») : leur réclamer un
+    exemple dupliquerait le sien, et alourdirait de six cents lignes des
+    fichiers dont tout l'objet est de tenir en une ligne par verbe.
+    """
+    noms = set()
+    for p in (ROOT / "src" / "ops").rglob("methods.rs"):
+        source = p.read_text(errors="ignore")
+        typ = None
+        for ligne in source.split("\n"):
+            m = re.match(r"impl(?:<[^>]*>)? ([A-Za-z0-9_]+)", ligne)
+            if m:
+                typ = m.group(1)
+                continue
+            m = re.match(r"\s+pub fn ([a-z_0-9]+)", ligne)
+            if m and typ:
+                noms.add(f"{typ}::{m.group(1)}")
+    return noms
+
+
 def api_publique():
     """L'ensemble public au sens de rustdoc : items libres + méthodes.
 
@@ -411,6 +436,9 @@ def api_publique():
             re.findall(r'id="(?:method|associatedconstant)\.([A-Za-z0-9_]+)"', segment)
         ):
             methodes.add(f"{chemin}::{nom}")
+    # Les délégations sont documentées par leur cible, pas par elles-mêmes.
+    deleguees = delegations()
+    methodes = {m for m in methodes if "::".join(m.split("::")[-2:]) not in deleguees}
     return libres, methodes
 
 
