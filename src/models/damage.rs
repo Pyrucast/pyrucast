@@ -593,6 +593,30 @@ fn stress_names(space_dim: usize, model: ElasticityModel) -> Vec<String> {
 /// Damage on an FE subspace. Same supports as
 /// [`crate::models::elasticity::Elasticity`]; material is supplied at
 /// assembly / integration time.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Interpolation, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Domain, SubModelKind};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>()).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # use pyrucast::models::damage::Damage;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// // Mazars par défaut : un seuil et deux branches, traction et compression.
+/// let d = Damage::new(zone.clone(), ElasticityModel::PlaneStress)?;
+/// assert!(d.material_components().unwrap().contains(&"eps_d0".to_string()));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Damage {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
@@ -605,6 +629,30 @@ pub struct Damage {
 
 impl Damage {
     /// **Mazars** damage on an FE subspace — the default law.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::{Domain, SubModelKind};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>()).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # use pyrucast::models::damage::Damage;
+    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// // Mazars par défaut : un seuil et deux branches, traction et compression.
+    /// let d = Damage::new(zone.clone(), ElasticityModel::PlaneStress)?;
+    /// assert!(d.material_components().unwrap().contains(&"eps_d0".to_string()));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn new(fespace: Handle<SubFiniteElementSpace>, model: ElasticityModel) -> Result<Self> {
         Self::with_law(fespace, model, DamageLaw::Mazars)
     }
@@ -613,6 +661,32 @@ impl Damage {
     /// model. Errors if
     /// `model` is inconsistent with the space dimension (same rule as
     /// [`crate::models::elasticity::Elasticity::new`]).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::{Domain, SubModelKind};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>()).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # use pyrucast::models::damage::{Damage, DamageLaw};
+    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// // La loi explicite. Damage-TC suit deux endommagements, donc réclame
+    /// // deux résistances là où Mazars n'en demande qu'une.
+    /// let tc = Damage::with_law(
+    ///     zone.clone(), ElasticityModel::PlaneStress, DamageLaw::DamageTc)?;
+    /// assert!(tc.material_components().unwrap().contains(&"f_t".to_string()));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn with_law(
         fespace: Handle<SubFiniteElementSpace>,
         model: ElasticityModel,

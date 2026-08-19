@@ -79,6 +79,35 @@ use crate::models::{
 use serde::{Deserialize, Serialize};
 
 /// Exchange law between two conforming boundary FE subspaces.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # use pyrucast::models::interface_transfer::InterfaceTransfer;
+/// # use pyrucast::models::Domain;
+/// // Deux bords **conformes** — ici le même, ce qui suffit à montrer le
+/// // contrat ; en pratique deux faces en vis-à-vis.
+/// let i = InterfaceTransfer::new(zone.clone(), zone.clone(),
+///     vec![("T".into(), "q".into())], Physics::Thermal, 1e-6)?;
+/// assert_eq!(i.primal_vars(), vec!["T".to_string()]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InterfaceTransfer {
     pub(crate) side_a: Handle<SubFiniteElementSpace>,
@@ -97,6 +126,35 @@ impl InterfaceTransfer {
     /// Exchange law across the interface between two **conforming** boundary FE
     /// subspaces. Errors unless the two sides match cell for cell and node for
     /// node, within `tol` of each other geometrically.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+    /// # let mult = mesh::barycenter(&impose).unwrap();
+    /// # use pyrucast::models::interface_transfer::InterfaceTransfer;
+    /// # use pyrucast::models::Domain;
+    /// // Deux bords **conformes** — ici le même, ce qui suffit à montrer le
+    /// // contrat ; en pratique deux faces en vis-à-vis.
+    /// let i = InterfaceTransfer::new(zone.clone(), zone.clone(),
+    ///     vec![("T".into(), "q".into())], Physics::Thermal, 1e-6)?;
+    /// assert_eq!(i.primal_vars(), vec!["T".to_string()]);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn new(
         side_a: Handle<SubFiniteElementSpace>,
         side_b: Handle<SubFiniteElementSpace>,

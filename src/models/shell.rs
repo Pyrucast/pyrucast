@@ -164,6 +164,30 @@ impl std::fmt::Display for ShellModel {
 }
 
 /// Shell physics on a **surface** FE subspace in 3-D.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Interpolation, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Domain, SubModelKind};
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>()).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # use pyrucast::models::shell::{Shell, ShellModel};
+/// // Une coque vit sur une surface plongée en 3-D et porte l'épaisseur
+/// // dans son matériau.
+/// let s = Shell::new(zone.clone(), ShellModel::Thick)?;
+/// assert!(s.material_components().unwrap().contains(&"h".to_string()));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Shell {
     /// Full-quadrature subspace — membrane and bending.
@@ -180,6 +204,30 @@ pub struct Shell {
 impl Shell {
     /// Shell physics on a surface FE subspace. Errors unless the subspace is a
     /// **manifold** of TRI3 or QUA4 in a 3-D configuration.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::{Domain, SubModelKind};
+    /// # let coords = Handle::new(Coords::new(3).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>()).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # use pyrucast::models::shell::{Shell, ShellModel};
+    /// // Une coque vit sur une surface plongée en 3-D et porte l'épaisseur
+    /// // dans son matériau.
+    /// let s = Shell::new(zone.clone(), ShellModel::Thick)?;
+    /// assert!(s.material_components().unwrap().contains(&"h".to_string()));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn new(fespace: Handle<SubFiniteElementSpace>, model: ShellModel) -> Result<Self> {
         let (submesh, space_dim, ref_dim, element) = {
             let s = fespace.read();

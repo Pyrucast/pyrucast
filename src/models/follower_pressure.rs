@@ -90,6 +90,28 @@ use serde::{Deserialize, Serialize};
 /// Axis suffixes for the vector components, indexed by spatial direction.
 const AXES: [&str; 3] = ["x", "y", "z"];
 /// Required material component: the pressure.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Interpolation, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Domain, SubModelKind};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>()).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # use pyrucast::models::follower_pressure;
+/// // La pression appliquée, fournie au moment de l'assemblage.
+/// assert_eq!(follower_pressure::MATERIAL_COMPONENT, "p");
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub const MATERIAL_COMPONENT: &str = "p";
 /// Material contract returned by [`Domain::material_components`].
 const MATERIAL_COMPONENTS: &[&str] = &[MATERIAL_COMPONENT];
@@ -106,6 +128,30 @@ fn traction_names(space_dim: usize) -> Vec<String> {
 }
 
 /// Follower pressure on a boundary FE subspace.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Interpolation, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Domain, SubModelKind};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>()).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # use pyrucast::models::follower_pressure::{self, FollowerPressure};
+/// // Une pression qui tourne avec la surface : une seule constante.
+/// let f = FollowerPressure::new(zone.clone())?;
+/// assert_eq!(f.material_components(),
+///            Some(vec![follower_pressure::MATERIAL_COMPONENT.to_string()]));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Clone, Serialize, Deserialize)]
 pub struct FollowerPressure {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
@@ -118,6 +164,30 @@ impl FollowerPressure {
     /// Follower pressure on a **boundary** FE subspace — an edge mesh in 2-D, a
     /// surface mesh in 3-D. Errors on anything else: a pressure acts on a
     /// surface, and a cell that fills its space has no normal to follow.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::{Domain, SubModelKind};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+    /// # sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>()).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # use pyrucast::models::follower_pressure::{self, FollowerPressure};
+    /// // Une pression qui tourne avec la surface : une seule constante.
+    /// let f = FollowerPressure::new(zone.clone())?;
+    /// assert_eq!(f.material_components(),
+    ///            Some(vec![follower_pressure::MATERIAL_COMPONENT.to_string()]));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn new(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
         let (submesh, space_dim, ref_dim) = {
             let s = fespace.read();

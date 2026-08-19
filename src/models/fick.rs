@@ -195,6 +195,29 @@ fn flux_components(space_dim: usize, species: &str) -> Vec<String> {
 /// - primal variable: `c_<species>` (concentration, columns).
 /// - dual variable:   `j_<species>` (mass flux, row labels).
 /// - Material data is supplied at assembly time, not stored here.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Interpolation, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Domain, SubModelKind};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>()).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # use pyrucast::models::fick::{self, Fick};
+/// // L'espèce nomme tout : la concentration, le flux et la diffusivité.
+/// let f = Fick::new(zone.clone(), "H2")?;
+/// assert_eq!(f.primal_vars(), vec![fick::primal_var("H2")]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Fick {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,

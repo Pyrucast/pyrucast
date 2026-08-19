@@ -64,11 +64,69 @@ use std::collections::HashSet;
 const DEFAULT_TOL: f64 = 1e-6;
 
 /// Default multiplier (primal) name for a constrained variable: `lambda_<v>`.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # use pyrucast::models::embedded;
+/// // Dérivés plutôt que tabulés : `multiplier` et `imposed_value` laissés
+/// // à `None` prennent ces valeurs.
+/// assert_eq!(
+///     (embedded::default_multiplier("u_x").as_str(),
+///      embedded::default_imposed_value("u_x").as_str()),
+///     ("lambda_u_x", "imposed_u_x"));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn default_multiplier(variable: &str) -> String {
     format!("lambda_{variable}")
 }
 
 /// Default imposed-value (dual) name for a constrained variable: `imposed_<v>`.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # use pyrucast::models::embedded;
+/// // Dérivés plutôt que tabulés : `multiplier` et `imposed_value` laissés
+/// // à `None` prennent ces valeurs.
+/// assert_eq!(
+///     (embedded::default_multiplier("u_x").as_str(),
+///      embedded::default_imposed_value("u_x").as_str()),
+///     ("lambda_u_x", "imposed_u_x"));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn default_imposed_value(variable: &str) -> String {
     format!("imposed_{variable}")
 }
@@ -96,6 +154,42 @@ struct Component {
 /// See the module documentation. The right-hand side `g` defaults to `0` (a
 /// rigid tie); a non-zero `g` is supplied through the load `SubNodeField` at the
 /// multiplier node's `imposed_value` component, as for `Dirichlet` / `Mpc`.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # use pyrucast::models::embedded::{self, Embedded};
+/// # let p: Vec<Node> = [[0.25, 0.25], [0.5, 0.25]].iter()
+/// #     .map(|q| Node::create_in(coords.clone(), q).unwrap()).collect();
+/// # let mut barre = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # barre.add_cell(&[p[0].id(), p[1].id()])?;
+/// # let immergee = Mesh::from_submesh(barre);
+/// // Une barre baignée dans un volume : chaque nœud immergé est lié à
+/// // l'interpolation de l'hôte, avec des poids Nᵢ **variant d'un nœud à
+/// // l'autre** — une relation par nœud et par composante.
+/// let e = Embedded::new(&immergee, &maillage,
+///     vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
+///     None, None, None)?;
+/// assert_eq!(e.relations()?.len(), 4); // deux nœuds × deux composantes
+/// assert_eq!(e.relations()?[0].imposed_value, embedded::default_imposed_value("u_x"));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Serialize, Deserialize)]
 pub struct Embedded {
     /// POI1 mesh of the immersed nodes, one cell per relation-group (its cell
@@ -129,6 +223,42 @@ impl Embedded {
     /// - `components` is empty, or an override length mismatches;
     /// - `immersed` and `host` do not share a `Coords`;
     /// - an immersed node lies in no host cell.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+    /// # let mult = mesh::barycenter(&impose).unwrap();
+    /// # use pyrucast::models::embedded::{self, Embedded};
+    /// # let p: Vec<Node> = [[0.25, 0.25], [0.5, 0.25]].iter()
+    /// #     .map(|q| Node::create_in(coords.clone(), q).unwrap()).collect();
+    /// # let mut barre = SubMesh::new(coords.clone(), ElementType::SEG2);
+    /// # barre.add_cell(&[p[0].id(), p[1].id()])?;
+    /// # let immergee = Mesh::from_submesh(barre);
+    /// // Une barre baignée dans un volume : chaque nœud immergé est lié à
+    /// // l'interpolation de l'hôte, avec des poids Nᵢ **variant d'un nœud à
+    /// // l'autre** — une relation par nœud et par composante.
+    /// let e = Embedded::new(&immergee, &maillage,
+    ///     vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
+    ///     None, None, None)?;
+    /// assert_eq!(e.relations()?.len(), 4); // deux nœuds × deux composantes
+    /// assert_eq!(e.relations()?[0].imposed_value, embedded::default_imposed_value("u_x"));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn new(
         immersed: &Mesh,
         host: &Mesh,

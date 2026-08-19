@@ -51,17 +51,109 @@ use crate::models::{
 use serde::{Deserialize, Serialize};
 
 /// Default multiplier (primal) name shared by every relation of an MPC.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # use pyrucast::models::mpc;
+/// // Dérivés plutôt que tabulés : `multiplier` et `imposed_value` laissés
+/// // à `None` prennent ces valeurs.
+/// assert_eq!(
+///     (mpc::default_multiplier().as_str(),
+///      mpc::default_imposed_value().as_str()),
+///     ("lambda_mpc", "mpc_rhs"));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn default_multiplier() -> String {
     "lambda_mpc".to_string()
 }
 
 /// Default imposed-value (dual) name — the constraint-equation row and `g` slot.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # use pyrucast::models::mpc;
+/// // Dérivés plutôt que tabulés : `multiplier` et `imposed_value` laissés
+/// // à `None` prennent ces valeurs.
+/// assert_eq!(
+///     (mpc::default_multiplier().as_str(),
+///      mpc::default_imposed_value().as_str()),
+///     ("lambda_mpc", "mpc_rhs"));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn default_imposed_value() -> String {
     "mpc_rhs".to_string()
 }
 
 /// One term `coefficient · u(node, variable)` shared by every relation of an
 /// [`Mpc`]. Its mesh is POI1: cell `r` holds the node of relation `r`.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # use pyrucast::models::mpc::{self, Mpc, MpcTerm};
+/// # let a = mesh::poi1_from_nodes(&n[..1])?;
+/// # let b = mesh::poi1_from_nodes(&n[1..2])?;
+/// // « Les deux nœuds ont la même température » : Σ aₖ·uₖ = g, avec un λ
+/// // par relation.
+/// let m = Mpc::new(
+///     vec![MpcTerm::new(&a, "T".into(), "q".into(), 1.0)?,
+///          MpcTerm::new(&b, "T".into(), "q".into(), -1.0)?],
+///     &mult, None, None, RelationSense::Equality)?;
+/// assert_eq!(m.relations()?.len(), 1);
+/// assert_eq!(m.relations()?[0].terms.len(), 2);
+/// assert_eq!(m.relations()?[0].imposed_value, mpc::default_imposed_value());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Serialize, Deserialize)]
 pub struct MpcTerm {
     /// POI1 mesh, paired element-for-element with the other terms and the
@@ -79,6 +171,40 @@ pub struct MpcTerm {
 impl MpcTerm {
     /// Build a term. `mesh` must be POI1 (one node per relation); it is shared
     /// (its submeshes are increfed so the nodes stay alive).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+    /// # let mult = mesh::barycenter(&impose).unwrap();
+    /// # use pyrucast::models::mpc::{self, Mpc, MpcTerm};
+    /// # let a = mesh::poi1_from_nodes(&n[..1])?;
+    /// # let b = mesh::poi1_from_nodes(&n[1..2])?;
+    /// // « Les deux nœuds ont la même température » : Σ aₖ·uₖ = g, avec un λ
+    /// // par relation.
+    /// let m = Mpc::new(
+    ///     vec![MpcTerm::new(&a, "T".into(), "q".into(), 1.0)?,
+    ///          MpcTerm::new(&b, "T".into(), "q".into(), -1.0)?],
+    ///     &mult, None, None, RelationSense::Equality)?;
+    /// assert_eq!(m.relations()?.len(), 1);
+    /// assert_eq!(m.relations()?[0].terms.len(), 2);
+    /// assert_eq!(m.relations()?[0].imposed_value, mpc::default_imposed_value());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn new(
         mesh: &Mesh,
         variable: String,
@@ -101,6 +227,40 @@ impl MpcTerm {
 /// `g` is **not** stored here: the user supplies it through the load
 /// `SubNodeField` at the multiplier node's `imposed_value` component (default
 /// `g = 0`).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # use pyrucast::models::mpc::{self, Mpc, MpcTerm};
+/// # let a = mesh::poi1_from_nodes(&n[..1])?;
+/// # let b = mesh::poi1_from_nodes(&n[1..2])?;
+/// // « Les deux nœuds ont la même température » : Σ aₖ·uₖ = g, avec un λ
+/// // par relation.
+/// let m = Mpc::new(
+///     vec![MpcTerm::new(&a, "T".into(), "q".into(), 1.0)?,
+///          MpcTerm::new(&b, "T".into(), "q".into(), -1.0)?],
+///     &mult, None, None, RelationSense::Equality)?;
+/// assert_eq!(m.relations()?.len(), 1);
+/// assert_eq!(m.relations()?[0].terms.len(), 2);
+/// assert_eq!(m.relations()?[0].imposed_value, mpc::default_imposed_value());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Serialize, Deserialize)]
 pub struct Mpc {
     /// The terms summed on the left-hand side of every relation (at least one).
@@ -130,6 +290,40 @@ impl Mpc {
     /// A non-equality `sense` turns the relations unilateral (enforced only
     /// while active); such a model is solved by the active-set operator
     /// [`unilateral`](crate::ops::solver::unilateral).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+    /// # let mult = mesh::barycenter(&impose).unwrap();
+    /// # use pyrucast::models::mpc::{self, Mpc, MpcTerm};
+    /// # let a = mesh::poi1_from_nodes(&n[..1])?;
+    /// # let b = mesh::poi1_from_nodes(&n[1..2])?;
+    /// // « Les deux nœuds ont la même température » : Σ aₖ·uₖ = g, avec un λ
+    /// // par relation.
+    /// let m = Mpc::new(
+    ///     vec![MpcTerm::new(&a, "T".into(), "q".into(), 1.0)?,
+    ///          MpcTerm::new(&b, "T".into(), "q".into(), -1.0)?],
+    ///     &mult, None, None, RelationSense::Equality)?;
+    /// assert_eq!(m.relations()?.len(), 1);
+    /// assert_eq!(m.relations()?[0].terms.len(), 2);
+    /// assert_eq!(m.relations()?[0].imposed_value, mpc::default_imposed_value());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn new(
         terms: Vec<MpcTerm>,
         multiplier_mesh: &Mesh,

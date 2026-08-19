@@ -77,6 +77,30 @@ fn behavior_of(model: BeamModel) -> &'static [&'static str] {
 }
 
 /// Euler-Bernoulli beam physics on a `SEG2` FE subspace.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Interpolation, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Domain, SubModelKind};
+/// # let coords = Handle::new(Coords::new(1).unwrap());
+/// # let n: Vec<Node> = [[0.0], [1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>()).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::new(&maillage, Interpolation::Hermite3).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # use pyrucast::models::bernoulli::Bernoulli;
+/// // La poutre d'Euler-Bernoulli : flèche interpolée en Hermite cubique,
+/// // d'où deux fonctions de forme par nœud.
+/// let b = Bernoulli::new(zone.clone())?;
+/// assert!(b.material_components().unwrap().contains(&"E".to_string()));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Bernoulli {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
@@ -88,6 +112,30 @@ pub struct Bernoulli {
 impl Bernoulli {
     /// Euler-Bernoulli beam on a `SEG2` FE subspace. Errors unless the subspace
     /// is `SEG2` in a configuration matching `model`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::{Domain, SubModelKind};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let n: Vec<Node> = [[0.0], [1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+    /// # sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>()).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// # let fes = FiniteElementSpace::new(&maillage, Interpolation::Hermite3).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # use pyrucast::models::bernoulli::Bernoulli;
+    /// // La poutre d'Euler-Bernoulli : flèche interpolée en Hermite cubique,
+    /// // d'où deux fonctions de forme par nœud.
+    /// let b = Bernoulli::new(zone.clone())?;
+    /// assert!(b.material_components().unwrap().contains(&"E".to_string()));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn new(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
         let (submesh, space_dim, element, axisymmetric, interpolation) = {
             let s = fespace.read();

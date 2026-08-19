@@ -62,11 +62,69 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 /// Default multiplier (primal) name — the contact reaction intensity.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # use pyrucast::models::contact;
+/// // Dérivés plutôt que tabulés : `multiplier` et `imposed_value` laissés
+/// // à `None` prennent ces valeurs.
+/// assert_eq!(
+///     (contact::default_multiplier().as_str(),
+///      contact::default_imposed_value().as_str()),
+///     ("lambda_contact", "contact_gap"));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn default_multiplier() -> String {
     "lambda_contact".to_string()
 }
 
 /// Default imposed-value (dual) name — the constraint row and `−g₀` slot.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # use pyrucast::models::contact;
+/// // Dérivés plutôt que tabulés : `multiplier` et `imposed_value` laissés
+/// // à `None` prennent ces valeurs.
+/// assert_eq!(
+///     (contact::default_multiplier().as_str(),
+///      contact::default_imposed_value().as_str()),
+///     ("lambda_contact", "contact_gap"));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn default_imposed_value() -> String {
     "contact_gap".to_string()
 }
@@ -93,6 +151,41 @@ struct Component {
 /// See the module documentation. Built by pairing each slave node with its
 /// closest master facet once, at construction; the pairing, the normal and the
 /// weights are then **fixed** (linearised contact).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # use pyrucast::models::contact::{self, Contact};
+/// # let mut maitre = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # maitre.add_cell(&[n[0].id(), n[1].id()])?;
+/// # let master = Mesh::from_submesh(maitre);
+/// # let slave = mesh::poi1_from_nodes(&n[2..3])?;
+/// // Une relation **unilatérale** par nœud esclave, appariée dès la
+/// // construction à sa facette maître la plus proche.
+/// let c = Contact::new(&slave, &master,
+///     vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
+///     None, None)?;
+/// assert_eq!(c.relations()?.len(), 1);
+/// assert_eq!(c.gaps().len(), 1);
+/// assert_eq!(c.relations()?[0].imposed_value, contact::default_imposed_value());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Serialize, Deserialize)]
 pub struct Contact {
     /// POI1 mesh of the slave nodes, one cell per relation (its cell `r` is
@@ -129,6 +222,41 @@ impl Contact {
     /// - `components` is empty or does not match the space dimension;
     /// - `slave` and `master` do not share a `Coords`;
     /// - `master` is not a surface mesh (facet dim ≠ `sdim − 1`), or is empty.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+    /// # let mult = mesh::barycenter(&impose).unwrap();
+    /// # use pyrucast::models::contact::{self, Contact};
+    /// # let mut maitre = SubMesh::new(coords.clone(), ElementType::SEG2);
+    /// # maitre.add_cell(&[n[0].id(), n[1].id()])?;
+    /// # let master = Mesh::from_submesh(maitre);
+    /// # let slave = mesh::poi1_from_nodes(&n[2..3])?;
+    /// // Une relation **unilatérale** par nœud esclave, appariée dès la
+    /// // construction à sa facette maître la plus proche.
+    /// let c = Contact::new(&slave, &master,
+    ///     vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
+    ///     None, None)?;
+    /// assert_eq!(c.relations()?.len(), 1);
+    /// assert_eq!(c.gaps().len(), 1);
+    /// assert_eq!(c.relations()?[0].imposed_value, contact::default_imposed_value());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn new(
         slave: &Mesh,
         master: &Mesh,
@@ -221,6 +349,41 @@ impl Contact {
     /// order — positive when separated, negative when penetrating. The
     /// relation's right-hand side is `−g₀` (see
     /// [`Model::contact_gaps`](crate::containers::model::Model::contact_gaps)).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+    /// # let mult = mesh::barycenter(&impose).unwrap();
+    /// # use pyrucast::models::contact::{self, Contact};
+    /// # let mut maitre = SubMesh::new(coords.clone(), ElementType::SEG2);
+    /// # maitre.add_cell(&[n[0].id(), n[1].id()])?;
+    /// # let master = Mesh::from_submesh(maitre);
+    /// # let slave = mesh::poi1_from_nodes(&n[2..3])?;
+    /// // Une relation **unilatérale** par nœud esclave, appariée dès la
+    /// // construction à sa facette maître la plus proche.
+    /// let c = Contact::new(&slave, &master,
+    ///     vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
+    ///     None, None)?;
+    /// assert_eq!(c.relations()?.len(), 1);
+    /// assert_eq!(c.gaps().len(), 1);
+    /// assert_eq!(c.relations()?[0].imposed_value, contact::default_imposed_value());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn gaps(&self) -> Vec<f64> {
         self.pairings.iter().map(|p| p.gap).collect()
     }

@@ -204,6 +204,31 @@ pub(crate) fn check_continuum_dimensions(
 /// plane strain, axisymmetric, solid) and `symmetry` is the **material** one.
 /// They combine freely — an orthotropic axisymmetric body is as ordinary as an
 /// isotropic plane one.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Interpolation, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Domain, SubModelKind};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>()).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # use pyrucast::models::elasticity::{Elasticity, ElasticityModel};
+/// let e = Elasticity::new(zone.clone(), ElasticityModel::PlaneStress)?;
+/// assert_eq!(e.material_components(), Some(vec!["E".to_string(), "nu".to_string()]));
+/// // La dilatation thermique est **facultative** : sans `alpha`, le modèle
+/// // s'assemble sans elle.
+/// assert!(e.optional_material_components().contains(&"alpha"));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Elasticity {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
@@ -217,12 +242,63 @@ pub struct Elasticity {
 impl Elasticity {
     /// **Isotropic** linear elasticity on an FE subspace, with the given
     /// 2-D/3-D model. Errors if `model` is inconsistent with the space dimension.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::{Domain, SubModelKind};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>()).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # use pyrucast::models::elasticity::{Elasticity, ElasticityModel};
+    /// let e = Elasticity::new(zone.clone(), ElasticityModel::PlaneStress)?;
+    /// assert_eq!(e.material_components(), Some(vec!["E".to_string(), "nu".to_string()]));
+    /// // La dilatation thermique est **facultative** : sans `alpha`, le modèle
+    /// // s'assemble sans elle.
+    /// assert!(e.optional_material_components().contains(&"alpha"));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn new(fespace: Handle<SubFiniteElementSpace>, model: ElasticityModel) -> Result<Self> {
         Self::with_symmetry(fespace, model, MaterialSymmetry::Isotropic)
     }
 
     /// Linear elasticity with an explicit material symmetry — the general
     /// constructor, of which [`new`](Self::new) is the isotropic case.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::{Domain, SubModelKind};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>()).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # use pyrucast::models::elasticity::{Elasticity, ElasticityModel};
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
+    /// // Le constructeur général : une symétrie orthotrope élargit le contrat
+    /// // matériau, qui porte alors les modules **et** les axes.
+    /// let o = Elasticity::with_symmetry(
+    ///     zone.clone(), ElasticityModel::PlaneStress, MaterialSymmetry::Orthotropic)?;
+    /// assert!(o.material_components().unwrap().len() > 2);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn with_symmetry(
         fespace: Handle<SubFiniteElementSpace>,
         model: ElasticityModel,

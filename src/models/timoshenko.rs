@@ -79,6 +79,30 @@ fn behavior_of(model: BeamModel) -> &'static [&'static str] {
 }
 
 /// Timoshenko beam physics on a `SEG2` FE subspace.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Interpolation, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Domain, SubModelKind};
+/// # let coords = Handle::new(Coords::new(1).unwrap());
+/// # let n: Vec<Node> = [[0.0], [1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>()).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::new(&maillage, Interpolation::ModelEmbedded).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # use pyrucast::models::timoshenko::Timoshenko;
+/// // La poutre exacte : son interpolation dépend du matériau par Φ, donc
+/// // elle appartient à la formulation, non à l'espace.
+/// let t = Timoshenko::new(zone.clone())?;
+/// assert!(t.material_components().unwrap().contains(&"A_s".to_string()));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Timoshenko {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
@@ -90,6 +114,30 @@ pub struct Timoshenko {
 impl Timoshenko {
     /// Timoshenko beam on a `SEG2` FE subspace. The configuration follows the
     /// dimension of the mesh; the subspace must be `MODEL_EMBEDDED`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::{Domain, SubModelKind};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let n: Vec<Node> = [[0.0], [1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+    /// # sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>()).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// # let fes = FiniteElementSpace::new(&maillage, Interpolation::ModelEmbedded).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # use pyrucast::models::timoshenko::Timoshenko;
+    /// // La poutre exacte : son interpolation dépend du matériau par Φ, donc
+    /// // elle appartient à la formulation, non à l'espace.
+    /// let t = Timoshenko::new(zone.clone())?;
+    /// assert!(t.material_components().unwrap().contains(&"A_s".to_string()));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn new(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
         let (submesh, space_dim, et, axisymmetric, interpolation) = {
             let s = fespace.read();

@@ -49,11 +49,69 @@ use crate::models::{
 use serde::{Deserialize, Serialize};
 
 /// Default multiplier (primal) name for a constrained variable: `lambda_<v>`.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # use pyrucast::models::dirichlet;
+/// // Dérivés plutôt que tabulés : `multiplier` et `imposed_value` laissés
+/// // à `None` prennent ces valeurs.
+/// assert_eq!(
+///     (dirichlet::default_multiplier("T").as_str(),
+///      dirichlet::default_imposed_value("T").as_str()),
+///     ("lambda_T", "imposed_T"));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn default_multiplier(imposed_variable: &str) -> String {
     format!("lambda_{imposed_variable}")
 }
 
 /// Default imposed-value (dual) name for a constrained variable: `imposed_<v>`.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # use pyrucast::models::dirichlet;
+/// // Dérivés plutôt que tabulés : `multiplier` et `imposed_value` laissés
+/// // à `None` prennent ces valeurs.
+/// assert_eq!(
+///     (dirichlet::default_multiplier("T").as_str(),
+///      dirichlet::default_imposed_value("T").as_str()),
+///     ("lambda_T", "imposed_T"));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn default_imposed_value(imposed_variable: &str) -> String {
     format!("imposed_{imposed_variable}")
 }
@@ -64,6 +122,35 @@ pub fn default_imposed_value(imposed_variable: &str) -> String {
 /// the two meshes. The imposed value `u_d` is **not** stored here: the user
 /// supplies it through the load `SubNodeField` at the multiplier node's
 /// `imposed_value` component.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # use pyrucast::models::dirichlet::{self, Dirichlet};
+/// // Un appui : `u = u_d` aux nœuds imposés, par multiplicateur de Lagrange.
+/// let d = Dirichlet::new("T".into(), "q".into(), &impose, &mult,
+///                        None, None, RelationSense::Equality)?;
+/// // Sans noms donnés, les défauts se dérivent de la variable imposée.
+/// assert_eq!(d.relations()?.len(), 1);
+/// assert_eq!(d.relations()?[0].imposed_value, dirichlet::default_imposed_value("T"));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Serialize, Deserialize)]
 pub struct Dirichlet {
     /// Constrained primal of the target physics (e.g. `"T"`).
@@ -101,6 +188,35 @@ impl Dirichlet {
     /// `u ≥ u_d` (`LessEqual`: `u ≤ u_d`), enforced only while in contact — such
     /// a model is solved by the active-set operator
     /// [`unilateral`](crate::ops::solver::unilateral).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+    /// # let mult = mesh::barycenter(&impose).unwrap();
+    /// # use pyrucast::models::dirichlet::{self, Dirichlet};
+    /// // Un appui : `u = u_d` aux nœuds imposés, par multiplicateur de Lagrange.
+    /// let d = Dirichlet::new("T".into(), "q".into(), &impose, &mult,
+    ///                        None, None, RelationSense::Equality)?;
+    /// // Sans noms donnés, les défauts se dérivent de la variable imposée.
+    /// assert_eq!(d.relations()?.len(), 1);
+    /// assert_eq!(d.relations()?[0].imposed_value, dirichlet::default_imposed_value("T"));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn new(
         imposed_variable: String,
         target_dual: String,

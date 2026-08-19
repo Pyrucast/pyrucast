@@ -59,6 +59,38 @@ use serde::{Deserialize, Serialize};
 /// Material data (the coefficients `h_<primal>`) is **not** stored here; it is
 /// supplied at assembly time via [`crate::ops::matrix::stiffness`], read from
 /// the boundary cells of the material field.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// # use pyrucast::models::boundary_transfer::BoundaryTransfer;
+/// # use pyrucast::models::Domain;
+/// // L'échange de surface : nommer les DDL de la physique de volume est ce
+/// // qui fait que le terme s'y couple.
+/// let b = BoundaryTransfer::new(
+///     zone.clone(), vec![("T".into(), "q".into())], Physics::Thermal)?;
+/// assert_eq!(b.primal_vars(), vec!["T".to_string()]);
+/// assert!(b.material_components().unwrap().contains(&"h_T".to_string()));
+/// // Une liste vide n'a ni matrice ni coefficient : refusée.
+/// assert!(BoundaryTransfer::new(zone.clone(), vec![], Physics::Thermal).is_err());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Clone, Serialize, Deserialize)]
 pub struct BoundaryTransfer {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
@@ -79,6 +111,38 @@ impl BoundaryTransfer {
     /// surface mesh in 3-D). Builds the stable POI1 [`SubMesh`] covering the
     /// subspace's unique nodes (reused as the row/col support of every assembled
     /// block). Errors on an empty `components`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+    /// # let mult = mesh::barycenter(&impose).unwrap();
+    /// # use pyrucast::models::boundary_transfer::BoundaryTransfer;
+    /// # use pyrucast::models::Domain;
+    /// // L'échange de surface : nommer les DDL de la physique de volume est ce
+    /// // qui fait que le terme s'y couple.
+    /// let b = BoundaryTransfer::new(
+    ///     zone.clone(), vec![("T".into(), "q".into())], Physics::Thermal)?;
+    /// assert_eq!(b.primal_vars(), vec!["T".to_string()]);
+    /// assert!(b.material_components().unwrap().contains(&"h_T".to_string()));
+    /// // Une liste vide n'a ni matrice ni coefficient : refusée.
+    /// assert!(BoundaryTransfer::new(zone.clone(), vec![], Physics::Thermal).is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn new(
         fespace: Handle<SubFiniteElementSpace>,
         components: Vec<(String, String)>,

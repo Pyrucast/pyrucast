@@ -81,6 +81,31 @@ const OUTPUT_FLUX: &str = "flux";
 const OUTPUT_TANGENT: &str = "ktan";
 
 /// Radiation to infinity on a boundary FE subspace.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Interpolation, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{Domain, SubModelKind};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>()).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # use pyrucast::models::radiation::Radiation;
+/// // Rayonnement vers l'infini, sur un bord. Mêmes DDL que la conduction,
+/// // d'où un couplage direct dans sa raideur.
+/// let r = Radiation::new(zone.clone())?;
+/// assert_eq!(r.primal_vars(), vec!["T".to_string()]);
+/// assert!(r.material_components().unwrap().contains(&"emis".to_string()));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Radiation {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
@@ -93,6 +118,31 @@ impl Radiation {
     /// surface mesh in 3-D). Like convection, it needs no normal: the direction
     /// is already consumed in writing `q·n = σε(T⁴ − T_∞⁴)`, and what remains
     /// under the integral is a scalar times the surface measure.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Interpolation, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::{Domain, SubModelKind};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+    /// # sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>()).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # use pyrucast::models::radiation::Radiation;
+    /// // Rayonnement vers l'infini, sur un bord. Mêmes DDL que la conduction,
+    /// // d'où un couplage direct dans sa raideur.
+    /// let r = Radiation::new(zone.clone())?;
+    /// assert_eq!(r.primal_vars(), vec!["T".to_string()]);
+    /// assert!(r.material_components().unwrap().contains(&"emis".to_string()));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn new(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
         let submesh = fespace.read().submesh();
         let support = submesh.read().to_poi1()?;
