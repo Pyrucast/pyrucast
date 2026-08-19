@@ -30,6 +30,35 @@ use crate::ops::mesh::paving::smooth::{self, Incidence, Patch, Rule};
 ///
 /// Only `TRI3` and `QUA4` cells, in 2-D. `POI1` and `SEG2` submeshes are
 /// ignored, anything else is an error.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::ops::{element_field, geom, mesh, node_field};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// // La **géométrie** : où sont les nœuds. Tout nœud de bord est épinglé,
+/// // de sorte que le maillage garde exactement le contour reçu — et qu'un
+/// // maillage d'une seule maille, sans intérieur, est refusé en le disant.
+/// assert!(mesh::regularize(&maillage, 3, false, false).is_err());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn regularize(mesh: &Mesh, sweeps: usize, angular: bool, in_place: bool) -> Result<Mesh> {
     let mut surf = Surface::read(mesh, "regularize")?;
     if surf.pinned() == surf.pts.len() {

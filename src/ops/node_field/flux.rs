@@ -27,6 +27,38 @@ use crate::handle::Handle;
 use crate::models::kernel;
 
 /// Per-Gauss flux density consumed by [`flux`].
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::ops::{element_field, geom, mesh, node_field};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// # use pyrucast::ops::node_field::flux::FluxDensity;
+/// // Une densité **uniforme**, ou lue point par point dans un champ par
+/// // éléments — le même opérateur sert les deux.
+/// let f = node_field::flux(&zone, FluxDensity::Uniform(3.0), "q")?;
+/// // ∫ Nᵢ dΩ somme à l'aire × densité : ici 2 × 3.
+/// let total: f64 = (0..3).map(|i| f.value(n[i].id(), "q").unwrap()).sum();
+/// assert!((total - 6.0).abs() < 1e-9);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub enum FluxDensity<'a> {
     /// Spatially uniform density (same value at every Gauss point).
     Uniform(f64),
@@ -39,6 +71,38 @@ pub enum FluxDensity<'a> {
 /// Consistent nodal loads of a distributed flux over `fespace` (see the module
 /// docs). Returns a [`SubNodeField`] on the subspace's unique nodes carrying
 /// the single component `component` (the dual variable, e.g. `"q"`).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::ops::{element_field, geom, mesh, node_field};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// # use pyrucast::ops::node_field::flux::FluxDensity;
+/// // Le chargement nodal **cohérent** d'un flux réparti : il répartit par
+/// // les fonctions de forme, non à parts égales.
+/// let f = node_field::flux(&zone, FluxDensity::Uniform(3.0), "q")?;
+/// assert_eq!(f.components(), &["q".to_string()]);
+/// let total: f64 = (0..3).map(|i| f.value(n[i].id(), "q").unwrap()).sum();
+/// assert!((total - 6.0).abs() < 1e-9);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn flux(
     fespace: &Handle<SubFiniteElementSpace>,
     density: FluxDensity,

@@ -42,6 +42,40 @@ const AXES: [&str; 3] = ["x", "y", "z"];
 /// subspace), its `Bᵀ` kernel is integrated cell-by-cell and scattered to the
 /// nodes. Returns a [`NodeField`] with one zone per behaviour-bearing sub-model
 /// in model order, its components the sub-model's dual variables.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::ops::{element_field, geom, mesh, node_field};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// // La forme qui passe par le **modèle** : chaque sous-modèle y apporte
+/// // son propre opérateur, une barre n'ayant pas le Bᵀ d'un continuum.
+/// # let modele = Model::elasticity(&fes, ElasticityModel::PlaneStress)?;
+/// # let mut s = ElementField::new(&fes,
+/// #     vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_xy".into()])?;
+/// # s.get(0)?.write().set_uniform("sigma_xx", 100.0)?;
+/// let f = node_field::internal_forces(&s, &modele)?;
+/// assert_eq!(f.get(0)?.read().components(),
+///            &["f_x".to_string(), "f_y".to_string()]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn internal_forces(stresses: &ElementField, model: &Model) -> Result<NodeField> {
     let mut out = NodeField::empty();
     for h in model {
@@ -70,6 +104,41 @@ pub fn internal_forces(stresses: &ElementField, model: &Model) -> Result<NodeFie
 /// Bars and beams are **not** covered — their `B` is not the symmetric gradient
 /// and their DOFs are not a displacement vector, so use
 /// [`internal_forces`] (which dispatches per physics) for those.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::ops::{element_field, geom, mesh, node_field};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// // ∫ Bᵀσ dΩ : le résidu mécanique. Un état de contrainte uniforme donne
+/// // des forces nodales de **somme nulle** — l'équilibre global.
+/// # let mut s = ElementField::new(&fes,
+/// #     vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_xy".into()])?;
+/// # s.get(0)?.write().set_uniform("sigma_xx", 100.0)?;
+/// let f = node_field::internal_forces_continuum(&s, &fes)?;
+/// let total: f64 = (0..3)
+///     .map(|i| f.get(0).unwrap().read().value(n[i].id(), "f_x").unwrap())
+///     .sum();
+/// assert!(total.abs() < 1e-9);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn internal_forces_continuum(
     stresses: &ElementField,
     fespace: &FiniteElementSpace,

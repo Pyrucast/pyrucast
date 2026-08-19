@@ -32,6 +32,42 @@ use crate::models::kernel::{self, CellGeom};
 /// driver [`crate::models::kernel::scatter_to_nodes`] (with `B` = the gradient
 /// operator): it inherits the driver's colour-parallel, per-thread-scratch
 /// scatter rather than duplicating the loop.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::ops::{element_field, geom, mesh, node_field};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// // L'opérateur Bᵀ : d'un champ aux points de Gauss vers un champ nodal.
+/// // Un flux **uniforme** a une divergence nodale de somme nulle — ce qui
+/// // ne sort par un nœud entre y par un autre.
+/// # let mut q = ElementField::new(&fes, vec!["q_x".into(), "q_y".into()])?;
+/// # q.get(0)?.write().set_uniform("q_x", 1.0)?;
+/// let d = node_field::divergence(&q)?;
+/// assert_eq!(d.get(0)?.read().components(), &["div".to_string()]);
+/// let total: f64 = (0..3)
+///     .map(|i| d.get(0).unwrap().read().value(n[i].id(), "div").unwrap())
+///     .sum();
+/// assert!(total.abs() < 1e-12);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn divergence(field: &ElementField) -> Result<NodeField> {
     let mut out = NodeField::empty();
     for sub in field {

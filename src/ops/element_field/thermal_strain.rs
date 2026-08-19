@@ -48,6 +48,43 @@ const ALPHA: &str = "alpha";
 /// Runs on the shared parallel driver
 /// [`kernel::element_pointwise`](fn@crate::models::kernel::element_pointwise),
 /// like [`crate::ops::element_field::behavior::integrate`].
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::ops::{element_field, geom, mesh, node_field};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// // ε_th = α(T − T_ref)·I : purement sphérique, et **nulle à la
+/// // température de référence**.
+/// # let mut t = ElementField::new(&fes, vec!["T".into()])?;
+/// # t.get(0)?.write().set_uniform("T", 120.0)?;
+/// # let mut m = ElementField::new(&fes, vec!["alpha".into()])?;
+/// # m.get(0)?.write().set_uniform("alpha", 1e-5)?;
+/// let eps = element_field::thermal_strain(&t, &m, &fes, 20.0)?;
+/// assert!((eps.get(0)?.read().value(0, 0, "eps_xx")? - 1e-3).abs() < 1e-12);
+/// assert!(eps.get(0)?.read().value(0, 0, "eps_xy")?.abs() < 1e-15);
+/// // À T = T_ref, rien.
+/// let nulle = element_field::thermal_strain(&t, &m, &fes, 120.0)?;
+/// assert!(nulle.get(0)?.read().value(0, 0, "eps_xx")?.abs() < 1e-15);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn thermal_strain(
     temperature: &ElementField,
     material: &ElementField,

@@ -32,6 +32,43 @@ use crate::parallel::*;
 use super::locate::{interpolation_for, reference_centroid, solve_normal};
 
 /// The closest point of a surface mesh to one query point.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::ops::{element_field, geom, mesh, node_field};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// // La « surface » est de dimension topologique **dim − 1** : en 2-D, des
+/// // segments. C'est le bord du maillage qui joue ce rôle.
+/// let bord = mesh::border(&maillage, None)?;
+/// // Un point hors facette **retombe dessus**, les coordonnées de
+/// // référence étant bornées au domaine.
+/// let p = geom::project_points(&bord, &[vec![1.0, -5.0]])?;
+/// assert!((p[0].point[1] - 0.0).abs() < 1e-12); // ramené sur l'arête y = 0
+/// assert!((p[0].weights.iter().sum::<f64>() - 1.0).abs() < 1e-12);
+/// // Le `gap` est **signé** : positif du côté de la normale, négatif
+/// // derrière — c'est lui qui dit la pénétration, en contact.
+/// assert!(p[0].gap.abs() > 0.0);
+/// assert!((p[0].normal.iter().map(|x| x * x).sum::<f64>() - 1.0).abs() < 1e-12);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Clone, Debug)]
 pub struct Projection {
     /// Index of the surface submesh the closest facet belongs to.
@@ -63,6 +100,43 @@ pub struct Projection {
 /// Every point receives a projection (the closest point always exists); an
 /// empty surface is an error. Ties between facets (a point facing a shared
 /// edge) resolve to the first facet in (submesh, cell) order — deterministic.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::ops::{element_field, geom, mesh, node_field};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// // La « surface » est de dimension topologique **dim − 1** : en 2-D, des
+/// // segments. C'est le bord du maillage qui joue ce rôle.
+/// let bord = mesh::border(&maillage, None)?;
+/// // Un point hors facette **retombe dessus**, les coordonnées de
+/// // référence étant bornées au domaine.
+/// let p = geom::project_points(&bord, &[vec![1.0, -5.0]])?;
+/// assert!((p[0].point[1] - 0.0).abs() < 1e-12); // ramené sur l'arête y = 0
+/// assert!((p[0].weights.iter().sum::<f64>() - 1.0).abs() < 1e-12);
+/// // Le `gap` est **signé** : positif du côté de la normale, négatif
+/// // derrière — c'est lui qui dit la pénétration, en contact.
+/// assert!(p[0].gap.abs() > 0.0);
+/// assert!((p[0].normal.iter().map(|x| x * x).sum::<f64>() - 1.0).abs() < 1e-12);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn project_points(surface: &Mesh, points: &[Vec<f64>]) -> Result<Vec<Projection>> {
     // Snapshot every facet once (same pattern as `locate_points`): no Coords
     // guard is held during the Gauss–Newton solves.

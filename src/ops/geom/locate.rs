@@ -23,6 +23,41 @@ use crate::error::Result;
 use crate::parallel::*;
 
 /// Where one physical point sits inside a host mesh.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::ops::{element_field, geom, mesh, node_field};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// // Localiser un point dans le maillage hôte : la maille qui le contient,
+/// // ses coordonnées de référence, et les poids Nᵢ qui l'interpolent —
+/// // c'est de là que vient le couplage d'une barre baignée.
+/// let l = geom::locate_points(&maillage, &[vec![0.5, 0.5]], 1e-6)?;
+/// let l = l[0].as_ref().unwrap();
+/// assert_eq!(l.cell, 0);
+/// assert_eq!(l.nodes.len(), 3);
+/// assert!((l.weights.iter().sum::<f64>() - 1.0).abs() < 1e-12);
+/// // Hors du maillage, `None` plutôt qu'une erreur : c'est un renseignement.
+/// assert!(geom::locate_points(&maillage, &[vec![9.0, 9.0]], 1e-6)?[0].is_none());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Clone, Debug)]
 pub struct Location {
     /// Index of the host submesh the containing cell belongs to.
@@ -47,6 +82,41 @@ pub struct Location {
 /// `tol` is the reference-domain slack for the containment test (a point up to
 /// `tol` outside the reference element is still accepted, so points exactly on
 /// a face are captured); `1e-6` is a sensible default.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::ops::{element_field, geom, mesh, node_field};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// // Localiser un point dans le maillage hôte : la maille qui le contient,
+/// // ses coordonnées de référence, et les poids Nᵢ qui l'interpolent —
+/// // c'est de là que vient le couplage d'une barre baignée.
+/// let l = geom::locate_points(&maillage, &[vec![0.5, 0.5]], 1e-6)?;
+/// let l = l[0].as_ref().unwrap();
+/// assert_eq!(l.cell, 0);
+/// assert_eq!(l.nodes.len(), 3);
+/// assert!((l.weights.iter().sum::<f64>() - 1.0).abs() < 1e-12);
+/// // Hors du maillage, `None` plutôt qu'une erreur : c'est un renseignement.
+/// assert!(geom::locate_points(&maillage, &[vec![9.0, 9.0]], 1e-6)?[0].is_none());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn locate_points(host: &Mesh, points: &[Vec<f64>], tol: f64) -> Result<Vec<Option<Location>>> {
     // Snapshot every host cell once: (submesh, cell, element type, node ids,
     // node coordinates, bbox). One read lock per submesh; coordinates are copied

@@ -32,6 +32,47 @@ use crate::ops::element_field::gradient::AXES;
 ///
 /// Runs on the shared parallel driver `models::kernel::nodal_pointwise`,
 /// like [`crate::ops::element_field::gradient`](fn@crate::ops::element_field::gradient).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::ops::{element_field, geom, mesh, node_field};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let support = mesh::poi1_from_nodes(&n).unwrap();
+/// // ε = ½(∇u + ∇uᵀ) aux points de Gauss. Une **translation** d'ensemble
+/// // ne déforme rien.
+/// let u = NodeField::from_submesh(&support.get(0)?, vec!["u_x".into(), "u_y".into()])?;
+/// u.get(0)?.write().add_to_component("u_x", 0.5)?;
+/// let eps = element_field::deformation(&u, &fes)?;
+/// assert!(eps.get(0)?.read().value(0, 0, "eps_xx")?.abs() < 1e-12);
+/// // Un étirement uniforme en x, lui, se lit tel quel : u_x = 0,1·x donne
+/// // ε_xx = 0,1.
+/// # let x = node_field::positions(&maillage, None)?;
+/// let etire = NodeField::from_submesh(&support.get(0)?, vec!["u_x".into(), "u_y".into()])?;
+/// for i in 0..3 {
+///     let v = x.get(0)?.read().value(n[i].id(), "X")? * 0.1;
+///     etire.get(0)?.write().set_value(n[i].id(), "u_x", v)?;
+/// }
+/// let eps = element_field::deformation(&etire, &fes)?;
+/// assert!((eps.get(0)?.read().value(0, 0, "eps_xx")? - 0.1).abs() < 1e-12);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn deformation(u: &NodeField, fespace: &FiniteElementSpace) -> Result<ElementField> {
     let components = Field::components(u)?;
     let view = u.view()?;
