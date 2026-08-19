@@ -47,6 +47,36 @@ use crate::models::plastic::{
 
 /// Ottosen's yield function, exactly as written above. Negative inside the
 /// elastic domain.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PrevState};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "a".into(), "b".into(), "k_1".into(), "k_2".into(), "sigma_c".into()], &[30000.0, 0.2, 1.2759, 3.1962, 11.7365, 0.9801, 30.0]).unwrap();
+/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+/// #                         vars: Vec::new() };
+/// // Le critère distingue traction et compression par l'angle de Lode :
+/// // à contrainte équivalente égale, la traction est bien plus pénalisante.
+/// let q = 20.0;
+/// let traction = plastic::ottosen::yield_function(&[q, 0.0, 0.0, 0.0, 0.0, 0.0], &mat)?;
+/// let compression =
+///     plastic::ottosen::yield_function(&[-q, 0.0, 0.0, 0.0, 0.0, 0.0], &mat)?;
+/// assert!(traction > compression);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn yield_function(sigma: &[f64; 6], mat: &MatParams) -> Result<f64> {
     let a = mat.get("a")?;
     let b = mat.get("b")?;
@@ -92,6 +122,35 @@ fn numerical_normal(sigma: &[f64; 6], mat: &MatParams, scale: f64) -> Result<[f6
 /// re-evaluated at the current iterate rather than solved for implicitly. It
 /// converges robustly on a strongly curved surface without needing second
 /// derivatives, which is what makes it the right choice here.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PrevState};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "a".into(), "b".into(), "k_1".into(), "k_2".into(), "sigma_c".into()], &[30000.0, 0.2, 1.2759, 3.1962, 11.7365, 0.9801, 30.0]).unwrap();
+/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+/// #                         vars: Vec::new() };
+/// // Un essai hors surface est ramené dessus : la fonction de charge
+/// // s'annule à la solution.
+/// let trial = [40.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+/// let pas = plastic::ottosen::return_map(&trial, &repos, &mat)?;
+/// assert!(plastic::ottosen::yield_function(&pas.sigma, &mat)?.abs() < 1e-4);
+/// assert!(pas.p > 0.0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn return_map(trial: &[f64; 6], prev: &PrevState, mat: &MatParams) -> Result<PlasticStep> {
     let sc = mat.get("sigma_c")?;
     if yield_function(trial, mat)? <= 0.0 {

@@ -58,6 +58,38 @@ use crate::models::plastic::{
 /// `rate(dp)` must return the flow rate that a multiplier `dp` would imply; it
 /// is decreasing in `dp` (more flow relaxes the stress that drives it), which is
 /// what makes the residual monotone and the bracket sound.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PrevState};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "K".into(), "n".into()], &[210000.0, 0.3, 300.0, 4.0]).unwrap();
+/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+/// #                         vars: Vec::new() };
+/// // Une bissection plutôt qu'un Newton : le résidu est monotone, et un
+/// // Newton non gardé dépasserait vers un multiplicateur négatif ou
+/// // partirait à l'infini sur une loi raide.
+/// let dp = plastic::viscous::solve_multiplier(
+///     PlasticLaw::CreepNorton, 1.0, 1.0, |dp| Ok(0.5 - dp))?;
+/// assert!((dp - 0.25).abs() < 1e-9); // dp = dt·(0,5 − dp) ⇒ dp = 0,25
+/// // Un taux nul à l'origine : rien ne coule, le multiplicateur est nul.
+/// assert_eq!(plastic::viscous::solve_multiplier(
+///     PlasticLaw::CreepNorton, 1.0, 1.0, |_| Ok(0.0))?, 0.0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn solve_multiplier(
     law: PlasticLaw,
     dt: f64,
@@ -178,6 +210,38 @@ fn scale_deviator(
 /// The workhorse of steady-state creep. There is **no yield threshold**: any
 /// stress creeps, however slowly, which is what distinguishes creep from
 /// plasticity.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PrevState};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "K".into(), "n".into()], &[210000.0, 0.3, 300.0, 4.0]).unwrap();
+/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+/// #                         vars: Vec::new() };
+/// // Fluage secondaire : **aucun seuil**, la moindre contrainte coule.
+/// let trial = [100.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+/// let pas = plastic::viscous::norton(&trial, &repos, &mat, 1.0)?;
+/// assert!(pas.p > 0.0);
+/// // Le taux est en (q/K)^n : dix fois plus longtemps, bien plus de fluage.
+/// let long = plastic::viscous::norton(&trial, &repos, &mat, 10.0)?;
+/// assert!(long.p > pas.p);
+/// // Un pas de temps nul ne fait rien couler.
+/// assert_eq!(plastic::viscous::norton(&trial, &repos, &mat, 0.0)?.p, 0.0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn norton(trial: &[f64; 6], prev: &PrevState, mat: &MatParams, dt: f64) -> Result<PlasticStep> {
     let k = require_positive(PlasticLaw::CreepNorton, "K", mat.get("K")?)?;
     let n = mat.get("n")?;
@@ -198,6 +262,38 @@ pub fn norton(trial: &[f64; 6], prev: &PrevState, mat: &MatParams, dt: f64) -> R
 /// `p` is floored at a tiny value so the very first step, where `p = 0` and the
 /// rate would be infinite, starts from a finite one instead of a division by
 /// zero. The floor is far below any meaningful strain.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PrevState};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "K".into(), "N".into(), "M".into()], &[210000.0, 0.3, 300.0, 4.0, 0.2]).unwrap();
+/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+/// #                         vars: Vec::new() };
+/// // Fluage primaire par écrouissage en déformation : le taux décroît à
+/// // mesure que `p` s'accumule, d'où un fluage qui **ralentit**.
+/// let trial = [200.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+/// let premier = plastic::viscous::lemaitre(&trial, &repos, &mat, 1.0)?;
+/// let plus_loin = PrevState { p: 0.01, ..repos };
+/// let ensuite = plastic::viscous::lemaitre(&trial, &plus_loin, &mat, 1.0)?;
+/// assert!(ensuite.p - plus_loin.p < premier.p);
+/// // `p` est plancherisé : au tout premier pas le taux serait infini.
+/// assert!(premier.p.is_finite());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn lemaitre(
     trial: &[f64; 6],
     prev: &PrevState,
@@ -231,6 +327,36 @@ pub fn lemaitre(
 /// inferred from the total: only then does the law integrate correctly under a
 /// varying load, which is the whole reason to prefer a strain-based form to a
 /// time-based one.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PrevState};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "A_1".into(), "alpha_1".into(), "r_1".into(), "B_s".into(), "beta_s".into()], &[210000.0, 0.3, 0.0001, 0.001, 1.0, 1e-06, 0.001]).unwrap();
+/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+/// #                         vars: vec![0.0] };
+/// // Un étage primaire **saturant** plus un étage secondaire constant. La
+/// // déformation primaire est suivie comme variable interne propre, ce qui
+/// // est la seule façon d'intégrer juste sous charge variable.
+/// let trial = [200.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+/// let pas = plastic::viscous::blackburn(&trial, &repos, &mat, 1.0)?;
+/// assert_eq!(pas.vars.len(), 1); // p_prim
+/// assert!(pas.vars[0] > 0.0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn blackburn(
     trial: &[f64; 6],
     prev: &PrevState,
@@ -300,6 +426,35 @@ pub fn blackburn(
 /// A fully implicit treatment would re-evaluate the direction, at the cost of a
 /// tensor Newton; freezing it is the standard semi-implicit scheme, and its
 /// error is second order in the step.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PrevState};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "k".into(), "K".into(), "n".into(), "C_1".into(), "gamma_1".into(), "b".into(), "Q".into()], &[210000.0, 0.3, 100.0, 300.0, 4.0, 10000.0, 100.0, 10.0, 50.0]).unwrap();
+/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+/// #                         vars: vec![0.0; 8] };
+/// // Écrouissages cinématique (Armstrong-Frederick) et isotrope : l'état
+/// // porte une contrainte cinématique **tensorielle** et un traînage.
+/// let trial = [400.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+/// let pas = plastic::viscous::chaboche(&trial, &repos, &mat, 1.0, false)?;
+/// assert!(pas.p > 0.0);
+/// assert_eq!(pas.vars.len(), PlasticLaw::ViscoplasticChaboche.internal_names().len());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn chaboche(
     trial: &[f64; 6],
     prev: &PrevState,

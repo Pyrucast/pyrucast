@@ -72,6 +72,13 @@ pub mod von_mises;
 
 /// Full 3-D tensor component suffixes, in the internal state order
 /// `[xx, yy, zz, yz, xz, xy]` (off-diagonals are **tensor** strains, `ε_ij`).
+///
+/// ```
+/// # use pyrucast::models::plastic;
+/// // L'ordre interne de l'état : les hors-diagonaux sont des déformations
+/// // **tensorielles** ε_ij, non les doubles de l'ingénieur.
+/// assert_eq!(plastic::TENSOR_SUFFIXES, ["xx", "yy", "zz", "yz", "xz", "xy"]);
+/// ```
 pub const TENSOR_SUFFIXES: [&str; 6] = ["xx", "yy", "zz", "yz", "xz", "xy"];
 
 /// Which yield surface and flow rule an elastoplastic model obeys.
@@ -79,6 +86,37 @@ pub const TENSOR_SUFFIXES: [&str; 6] = ["xx", "yy", "zz", "yz", "xz", "xy"];
 /// An attribute of the plasticity physics, not a physics of its own: the DOFs,
 /// the elastic operator, the internal state and the incremental montage are the
 /// same for all of them.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PlasticStep, PrevState};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(),
+/// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
+/// #     &[210_000.0, 0.3, 250.0]).unwrap();
+/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+/// #                         vars: Vec::new() };
+/// // Une loi déclare **elle-même** le matériau qu'elle exige et l'état
+/// // qu'elle porte : c'est ce qui permet d'en ajouter une sans toucher
+/// // au reste.
+/// assert!(PlasticLaw::Perfect.material_components().contains(&"sigma_y"));
+/// assert!(PlasticLaw::Perfect.internal_names().is_empty());
+/// assert_eq!(PlasticLaw::Gurson.internal_names(), vec!["porosity".to_string()]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PlasticLaw {
     /// von Mises with **no** hardening — the yield stress is a constant.
@@ -114,6 +152,33 @@ pub enum PlasticLaw {
 impl PlasticLaw {
     /// Parse from a lowercase tag (`"perfect"`, `"isotropic"`,
     /// `"drucker_prager"`, `"ottosen"`).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PlasticStep, PrevState};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let materiau = SubElementField::from_uniform_per_component(
+    /// #     fes.get(0).unwrap(),
+    /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
+    /// #     &[210_000.0, 0.3, 250.0]).unwrap();
+    /// # let mat = MatParams::new(&materiau, 0).unwrap();
+    /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+    /// #                         vars: Vec::new() };
+    /// assert_eq!(PlasticLaw::from_tag("perfect"), Some(PlasticLaw::Perfect));
+    /// assert_eq!(PlasticLaw::from_tag("tresca"), None);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn from_tag(tag: &str) -> Option<Self> {
         match tag {
             "perfect" => Some(Self::Perfect),
@@ -131,6 +196,34 @@ impl PlasticLaw {
     }
 
     /// The lowercase tag (the inverse of [`from_tag`](Self::from_tag)).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PlasticStep, PrevState};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let materiau = SubElementField::from_uniform_per_component(
+    /// #     fes.get(0).unwrap(),
+    /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
+    /// #     &[210_000.0, 0.3, 250.0]).unwrap();
+    /// # let mat = MatParams::new(&materiau, 0).unwrap();
+    /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+    /// #                         vars: Vec::new() };
+    /// // Réciproque exacte de `from_tag`, pour les dix lois.
+    /// assert!(PlasticLaw::ALL.iter()
+    ///     .all(|l| PlasticLaw::from_tag(l.to_tag()) == Some(*l)));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn to_tag(self) -> &'static str {
         match self {
             Self::Perfect => "perfect",
@@ -149,6 +242,34 @@ impl PlasticLaw {
     /// Every law, in declaration order — the source of the `|`-joined tag list
     /// quoted in error messages, so a new law cannot be added without them
     /// following.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PlasticStep, PrevState};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let materiau = SubElementField::from_uniform_per_component(
+    /// #     fes.get(0).unwrap(),
+    /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
+    /// #     &[210_000.0, 0.3, 250.0]).unwrap();
+    /// # let mat = MatParams::new(&materiau, 0).unwrap();
+    /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+    /// #                         vars: Vec::new() };
+    /// // La liste exhaustive, dont se servent la surface Python et les messages.
+    /// assert_eq!(PlasticLaw::ALL.len(), 10);
+    /// assert!(PlasticLaw::ALL.contains(&PlasticLaw::Perfect));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub const ALL: [PlasticLaw; 10] = [
         Self::Perfect,
         Self::Isotropic,
@@ -163,6 +284,33 @@ impl PlasticLaw {
     ];
 
     /// The accepted tags, `|`-joined — for error messages.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PlasticStep, PrevState};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let materiau = SubElementField::from_uniform_per_component(
+    /// #     fes.get(0).unwrap(),
+    /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
+    /// #     &[210_000.0, 0.3, 250.0]).unwrap();
+    /// # let mat = MatParams::new(&materiau, 0).unwrap();
+    /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+    /// #                         vars: Vec::new() };
+    /// // Ce que citent les messages d'erreur quand un nom est inconnu.
+    /// assert!(PlasticLaw::tag_list().contains("perfect"));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn tag_list() -> String {
         Self::ALL
             .iter()
@@ -173,6 +321,34 @@ impl PlasticLaw {
 
     /// The material components this law requires. Elasticity (`E`, `nu`) is
     /// common to all; what follows describes the surface.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PlasticStep, PrevState};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let materiau = SubElementField::from_uniform_per_component(
+    /// #     fes.get(0).unwrap(),
+    /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
+    /// #     &[210_000.0, 0.3, 250.0]).unwrap();
+    /// # let mat = MatParams::new(&materiau, 0).unwrap();
+    /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+    /// #                         vars: Vec::new() };
+    /// // Perfect : un seuil constant. Isotropic : plus le module d'écrouissage.
+    /// assert!(PlasticLaw::Perfect.material_components().contains(&"sigma_y"));
+    /// assert!(PlasticLaw::Isotropic.material_components().contains(&"H"));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn material_components(self) -> &'static [&'static str] {
         match self {
             Self::Perfect => &["E", "nu", "sigma_y"],
@@ -209,6 +385,35 @@ impl PlasticLaw {
     ///
     /// These become extra components of the behaviour output, so a law can grow
     /// its state without any other file changing.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PlasticStep, PrevState};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let materiau = SubElementField::from_uniform_per_component(
+    /// #     fes.get(0).unwrap(),
+    /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
+    /// #     &[210_000.0, 0.3, 250.0]).unwrap();
+    /// # let mat = MatParams::new(&materiau, 0).unwrap();
+    /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+    /// #                         vars: Vec::new() };
+    /// // Ce que la loi porte **au-delà** de ε_p et p — rien pour la plupart.
+    /// assert!(PlasticLaw::Perfect.internal_names().is_empty());
+    /// // La porosité **est** l'état d'une loi de métal poreux.
+    /// assert_eq!(PlasticLaw::Gurson.internal_names(), vec!["porosity".to_string()]);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn internal_names(self) -> Vec<String> {
         match self {
             Self::Perfect
@@ -232,6 +437,35 @@ impl PlasticLaw {
     /// Whether this law is **rate-dependent** — it needs the time increment, and
     /// erroring without one is better than silently integrating a viscous law as
     /// if it were instantaneous.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PlasticStep, PrevState};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let materiau = SubElementField::from_uniform_per_component(
+    /// #     fes.get(0).unwrap(),
+    /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
+    /// #     &[210_000.0, 0.3, 250.0]).unwrap();
+    /// # let mat = MatParams::new(&materiau, 0).unwrap();
+    /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+    /// #                         vars: Vec::new() };
+    /// // Une loi visqueuse exige l'incrément de temps ; intégrer sans lui,
+    /// // comme si la loi était instantanée, serait faux en silence.
+    /// assert!(!PlasticLaw::Perfect.is_viscous());
+    /// assert!(PlasticLaw::CreepNorton.is_viscous());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn is_viscous(self) -> bool {
         matches!(
             self,
@@ -247,6 +481,46 @@ impl PlasticLaw {
     ///
     /// `dt` is the time increment: `None` for a rate-independent law, and
     /// **required** by a viscous one.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PlasticStep, PrevState};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let materiau = SubElementField::from_uniform_per_component(
+    /// #     fes.get(0).unwrap(),
+    /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
+    /// #     &[210_000.0, 0.3, 250.0]).unwrap();
+    /// # let mat = MatParams::new(&materiau, 0).unwrap();
+    /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+    /// #                         vars: Vec::new() };
+    /// // Sous le seuil, la contrainte d'essai passe telle quelle.
+    /// let sous = [100.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+    /// let pas = PlasticLaw::Perfect.return_map(&sous, &repos, &mat, None)?;
+    /// assert_eq!(pas.sigma, sous);
+    /// assert_eq!(pas.p, 0.0);
+    ///
+    /// // Au-dessus, elle est **projetée** sur la surface de charge : von Mises
+    /// // sans écrouissage ramène exactement q à σ_y, et p devient non nul.
+    /// let au_dessus = [400.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+    /// let pas = PlasticLaw::Perfect.return_map(&au_dessus, &repos, &mat, None)?;
+    /// assert!((plastic::von_mises_stress(&pas.sigma) - 250.0).abs() < 1e-6);
+    /// assert!(pas.p > 0.0);
+    ///
+    /// // Une loi visqueuse sans `dt` est refusée plutôt qu'approximée.
+    /// assert!(PlasticLaw::CreepNorton.return_map(&sous, &repos, &mat, None).is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn return_map(
         &self,
         trial: &[f64; 6],
@@ -311,6 +585,35 @@ pub struct MatParams<'a> {
 
 impl<'a> MatParams<'a> {
     /// Read `E` and `nu` for this cell and pre-compute the Lamé coefficients.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PlasticStep, PrevState};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let materiau = SubElementField::from_uniform_per_component(
+    /// #     fes.get(0).unwrap(),
+    /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
+    /// #     &[210_000.0, 0.3, 250.0]).unwrap();
+    /// # let mat = MatParams::new(&materiau, 0).unwrap();
+    /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+    /// #                         vars: Vec::new() };
+    /// // `E` et `nu` sont lus une fois par maille, et les coefficients de Lamé
+    /// // calculés d'avance — pas à chaque point de Gauss.
+    /// let m = MatParams::new(&materiau, 0)?;
+    /// assert!((m.mu - 210_000.0 / 2.6).abs() < 1e-9);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn new(material: &'a SubElementField, cell: usize) -> Result<Self> {
         let (lambda, mu) = lame(
             material.value(cell, 0, "E")?,
@@ -325,11 +628,66 @@ impl<'a> MatParams<'a> {
     }
 
     /// A material component of this cell, by name.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PlasticStep, PrevState};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let materiau = SubElementField::from_uniform_per_component(
+    /// #     fes.get(0).unwrap(),
+    /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
+    /// #     &[210_000.0, 0.3, 250.0]).unwrap();
+    /// # let mat = MatParams::new(&materiau, 0).unwrap();
+    /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+    /// #                         vars: Vec::new() };
+    /// assert_eq!(mat.get("sigma_y")?, 250.0);
+    /// // Une constante absente est une erreur, pas un zéro silencieux.
+    /// assert!(mat.get("H").is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn get(&self, name: &str) -> Result<f64> {
         self.material.value(self.cell, 0, name)
     }
 
     /// Bulk modulus `K = λ + 2μ/3`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PlasticStep, PrevState};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let materiau = SubElementField::from_uniform_per_component(
+    /// #     fes.get(0).unwrap(),
+    /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
+    /// #     &[210_000.0, 0.3, 250.0]).unwrap();
+    /// # let mat = MatParams::new(&materiau, 0).unwrap();
+    /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+    /// #                         vars: Vec::new() };
+    /// // K = λ + 2μ/3 — ce dont a besoin toute loi sensible à la pression.
+    /// assert!((mat.bulk() - (mat.lambda + 2.0 * mat.mu / 3.0)).abs() < 1e-9);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn bulk(&self) -> f64 {
         self.lambda + 2.0 * self.mu / 3.0
     }
@@ -338,6 +696,14 @@ impl<'a> MatParams<'a> {
 // ─── Elastic kinematics, shared by every law ────────────────────────────────
 
 /// Lamé coefficients `(λ, μ)` from `E`, `nu`.
+///
+/// ```
+/// # use pyrucast::models::plastic;
+/// let (lambda, mu) = plastic::lame(210_000.0, 0.3);
+/// // μ = E / 2(1+ν), λ = Eν / (1+ν)(1−2ν).
+/// assert!((mu - 210_000.0 / 2.6).abs() < 1e-9);
+/// assert!((lambda - 121_153.846_153_85).abs() < 1e-6);
+/// ```
 pub fn lame(e: f64, nu: f64) -> (f64, f64) {
     let lambda = e * nu / ((1.0 + nu) * (1.0 - 2.0 * nu));
     let mu = e / (2.0 * (1.0 + nu));
@@ -346,6 +712,15 @@ pub fn lame(e: f64, nu: f64) -> (f64, f64) {
 
 /// Isotropic elastic stress (full 3-D, order `[xx, yy, zz, yz, xz, xy]`) from a
 /// **tensor** strain: `σ = λ tr(ε) I + 2μ ε`.
+///
+/// ```
+/// # use pyrucast::models::plastic;
+/// let (lambda, mu) = plastic::lame(210_000.0, 0.3);
+/// // Un cisaillement pur **tensoriel** ε_xy = 1 donne σ_xy = 2μ.
+/// let s = plastic::elastic_stress(&[0.0, 0.0, 0.0, 0.0, 0.0, 1.0], lambda, mu);
+/// assert!((s[5] - 2.0 * mu).abs() < 1e-9);
+/// assert!(s[0].abs() < 1e-9); // trace nulle ⇒ pas de part sphérique
+/// ```
 pub fn elastic_stress(eps: &[f64; 6], lambda: f64, mu: f64) -> [f64; 6] {
     let tr = eps[0] + eps[1] + eps[2];
     [
@@ -359,11 +734,25 @@ pub fn elastic_stress(eps: &[f64; 6], lambda: f64, mu: f64) -> [f64; 6] {
 }
 
 /// First invariant `I₁ = tr(σ)`.
+///
+/// ```
+/// # use pyrucast::models::plastic;
+/// // I₁ = tr(σ) : la part sphérique, trois fois la pression moyenne.
+/// assert_eq!(plastic::i1(&[1.0, 2.0, 3.0, 9.0, 9.0, 9.0]), 6.0);
+/// ```
 pub fn i1(sigma: &[f64; 6]) -> f64 {
     sigma[0] + sigma[1] + sigma[2]
 }
 
 /// The stress deviator `s = σ − (I₁/3)·I` (same Voigt order).
+///
+/// ```
+/// # use pyrucast::models::plastic;
+/// // Le déviateur est de trace nulle, et laisse les cisaillements intacts.
+/// let s = plastic::deviator(&[3.0, 0.0, 0.0, 0.0, 0.0, 5.0]);
+/// assert!(plastic::i1(&s).abs() < 1e-12);
+/// assert_eq!(s[5], 5.0);
+/// ```
 pub fn deviator(sigma: &[f64; 6]) -> [f64; 6] {
     let mean = i1(sigma) / 3.0;
     [
@@ -377,6 +766,16 @@ pub fn deviator(sigma: &[f64; 6]) -> [f64; 6] {
 }
 
 /// Second deviatoric invariant `J₂ = ½ s:s` (off-diagonals counted twice).
+///
+/// ```
+/// # use pyrucast::models::plastic;
+/// // J₂ = ½ s:s, les hors-diagonaux comptés **deux fois**.
+/// assert_eq!(plastic::j2(&[0.0, 0.0, 0.0, 0.0, 0.0, 1.0]), 1.0);
+/// // Insensible à la pression : ajouter une part sphérique ne change rien.
+/// let a = plastic::j2(&[1.0, -1.0, 0.0, 0.0, 0.0, 0.0]);
+/// let b = plastic::j2(&[101.0, 99.0, 100.0, 0.0, 0.0, 0.0]);
+/// assert!((a - b).abs() < 1e-9);
+/// ```
 pub fn j2(sigma: &[f64; 6]) -> f64 {
     let s = deviator(sigma);
     0.5 * (s[0] * s[0]
@@ -386,6 +785,14 @@ pub fn j2(sigma: &[f64; 6]) -> f64 {
 }
 
 /// Third deviatoric invariant `J₃ = det(s)`.
+///
+/// ```
+/// # use pyrucast::models::plastic;
+/// // J₃ = det(s) — ce qui distingue traction et compression, et fait
+/// // l'angle de Lode des critères à quatre paramètres.
+/// assert!(plastic::j3(&[1.0, 1.0, 1.0, 0.0, 0.0, 0.0]).abs() < 1e-12);
+/// assert!(plastic::j3(&[2.0, -1.0, -1.0, 0.0, 0.0, 0.0]) > 0.0);
+/// ```
 pub fn j3(sigma: &[f64; 6]) -> f64 {
     let s = deviator(sigma);
     // det of the symmetric tensor [[s0, s5, s4], [s5, s1, s3], [s4, s3, s2]].
@@ -394,12 +801,47 @@ pub fn j3(sigma: &[f64; 6]) -> f64 {
 }
 
 /// von Mises equivalent stress `q = √(3 J₂)`.
+///
+/// ```
+/// # use pyrucast::models::plastic;
+/// // q = √(3 J₂). En traction uniaxiale, q vaut la contrainte appliquée.
+/// let q = plastic::von_mises_stress(&[300.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+/// assert!((q - 300.0).abs() < 1e-9);
+/// ```
 pub fn von_mises_stress(sigma: &[f64; 6]) -> f64 {
     (3.0 * j2(sigma)).sqrt()
 }
 
 /// The converged state at the **start of the step A** — the input to the
 /// incremental montage. All full 3-D.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PlasticStep, PrevState};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(),
+/// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
+/// #     &[210_000.0, 0.3, 250.0]).unwrap();
+/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+/// #                         vars: Vec::new() };
+/// // L'état au début du pas A : c'est de là que part chaque intégration.
+/// assert_eq!(repos.p, 0.0);
+/// assert_eq!(repos.var(0), 0.0); // aucune variable interne portée
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Clone, Default)]
 pub struct PrevState {
     /// Strain `ε(A)`.
@@ -420,12 +862,73 @@ pub struct PrevState {
 impl PrevState {
     /// Internal variable `i`, or `0` when the state does not carry it (the first
     /// step, where A is the reference configuration).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PlasticStep, PrevState};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let materiau = SubElementField::from_uniform_per_component(
+    /// #     fes.get(0).unwrap(),
+    /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
+    /// #     &[210_000.0, 0.3, 250.0]).unwrap();
+    /// # let mat = MatParams::new(&materiau, 0).unwrap();
+    /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+    /// #                         vars: Vec::new() };
+    /// // Rend `0` plutôt que d'échouer quand l'état ne porte pas la variable —
+    /// // ce qui est le cas au premier pas, où A est la configuration de départ.
+    /// assert_eq!(repos.var(0), 0.0);
+    /// let avec = PrevState { vars: vec![0.02], ..repos };
+    /// assert_eq!(avec.var(0), 0.02);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn var(&self, i: usize) -> f64 {
         self.vars.get(i).copied().unwrap_or(0.0)
     }
 }
 
 /// The updated state at the **end of the step B**, as a law returns it.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PlasticStep, PrevState};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(),
+/// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
+/// #     &[210_000.0, 0.3, 250.0]).unwrap();
+/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+/// #                         vars: Vec::new() };
+/// // Ce qu'une loi rend en fin de pas B : contrainte, déformation
+/// // plastique, plasticité cumulée, et ses variables internes.
+/// let trial = [100.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+/// let pas = PlasticStep::elastic(&trial, &repos);
+/// assert_eq!(pas.sigma, trial);
+/// assert_eq!(pas.p, 0.0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub struct PlasticStep {
     /// Stress `σ(B)`, full 3-D.
     pub sigma: [f64; 6],
@@ -440,6 +943,35 @@ pub struct PlasticStep {
 
 impl PlasticStep {
     /// An **elastic** step: the trial stress stands, nothing evolves.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PlasticStep, PrevState};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let materiau = SubElementField::from_uniform_per_component(
+    /// #     fes.get(0).unwrap(),
+    /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
+    /// #     &[210_000.0, 0.3, 250.0]).unwrap();
+    /// # let mat = MatParams::new(&materiau, 0).unwrap();
+    /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+    /// #                         vars: Vec::new() };
+    /// // Un pas **élastique** : la contrainte d'essai tient, rien n'évolue.
+    /// let trial = [100.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+    /// let pas = PlasticStep::elastic(&trial, &repos);
+    /// assert_eq!((pas.sigma, pas.eps_p, pas.p), (trial, repos.eps_p, repos.p));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn elastic(trial: &[f64; 6], prev: &PrevState) -> Self {
         Self {
             sigma: *trial,
@@ -456,6 +988,39 @@ impl PlasticStep {
 /// Algebraically identical to `C:(ε(B) − ε_p(A))` in small strain, but this is
 /// the form that carries `σ(A)` explicitly — the shape a large-strain law reuses
 /// (with `σ(A)` rotated and `Δε` an objective increment).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PlasticStep, PrevState};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(),
+/// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
+/// #     &[210_000.0, 0.3, 250.0]).unwrap();
+/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+/// #                         vars: Vec::new() };
+/// // σ_trial = σ(A) + C:Δε — la forme qui porte σ(A) explicitement, celle
+/// // qu'une loi en grandes déformations reprend telle quelle.
+/// let eps_b = [1e-3, 0.0, 0.0, 0.0, 0.0, 0.0];
+/// let trial = plastic::elastic_predictor(&eps_b, &repos, mat.lambda, mat.mu);
+/// assert!(trial[0] > 0.0);
+/// // Partant du repos, elle coïncide avec C:ε.
+/// let direct = plastic::elastic_stress(&eps_b, mat.lambda, mat.mu);
+/// assert!((trial[0] - direct[0]).abs() < 1e-9);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn elastic_predictor(eps_b: &[f64; 6], prev: &PrevState, lambda: f64, mu: f64) -> [f64; 6] {
     let deps: [f64; 6] = std::array::from_fn(|i| eps_b[i] - prev.eps[i]);
     let c_deps = elastic_stress(&deps, lambda, mu);
@@ -469,6 +1034,51 @@ pub fn elastic_predictor(eps_b: &[f64; 6], prev: &PrevState, lambda: f64, mu: f6
 /// Returns `(σ(B), ε_p(B), p(B), ε(B))`. The returned strain is what should be
 /// echoed as `ε(A)` of the next step: in plane stress it carries the
 /// out-of-plane `ε_zz` solved here, which the caller could not know.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PrevState};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "sigma_y".into()],
+/// #     &[210_000.0, 0.3, 250.0]).unwrap();
+/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+/// #                         vars: Vec::new() };
+/// // Un pas élastique laisse `p` où il était…
+/// let petit = [1e-4, 0.0, 0.0, 0.0, 0.0, 0.0];
+/// let (pas, eps) = plastic::incremental_step(
+///     PlasticLaw::Perfect, &petit, &repos, &mat, ElasticityModel::PlaneStrain, None)?;
+/// assert_eq!(pas.p, 0.0);
+/// assert_eq!(eps, petit); // en déformations planes, ε(B) est imposé
+///
+/// // …un pas plastique la fait croître, et ramène q sur σ_y.
+/// let grand = [5e-3, 0.0, 0.0, 0.0, 0.0, 0.0];
+/// let (pas, _) = plastic::incremental_step(
+///     PlasticLaw::Perfect, &grand, &repos, &mat, ElasticityModel::PlaneStrain, None)?;
+/// assert!(pas.p > 0.0);
+/// assert!((plastic::von_mises_stress(&pas.sigma) - 250.0).abs() < 1e-6);
+///
+/// // En contraintes planes, ε_zz est **résolu ici** : la déformation
+/// // rendue diffère de celle qu'on a passée, et c'est elle qu'il faut
+/// // renvoyer comme ε(A) du pas suivant.
+/// let (_, eps) = plastic::incremental_step(
+///     PlasticLaw::Perfect, &grand, &repos, &mat, ElasticityModel::PlaneStress, None)?;
+/// assert!(eps[2] != 0.0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn incremental_step(
     law: PlasticLaw,
     eps_b: &[f64; 6],
@@ -539,6 +1149,43 @@ fn plane_stress_step(
 /// converge quadratically, and the numerical route costs twelve evaluations of a
 /// cheap update — far less than a hand-derived tangent nobody can check, which
 /// in the Drucker-Prager case turned out to be 24 % wrong.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PrevState};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "sigma_y".into()],
+/// #     &[210_000.0, 0.3, 250.0]).unwrap();
+/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+/// #                         vars: Vec::new() };
+/// // Dans le domaine élastique, la tangente cohérente **est** la tangente
+/// // élastique — quelle que soit la loi.
+/// let petit = [1e-5, 0.0, 0.0, 0.0, 0.0, 0.0];
+/// let d = plastic::consistent_tangent(PlasticLaw::Perfect, &petit, &repos, &mat, None)?;
+/// let e = plastic::elastic_tangent(mat.lambda, mat.mu);
+/// assert!((d[0][0] - e[0][0]).abs() < 1e-3);
+///
+/// // Une fois plastifié, elle s'assouplit — c'est ce qui donne à Newton sa
+/// // convergence quadratique.
+/// let grand = [5e-3, 0.0, 0.0, 0.0, 0.0, 0.0];
+/// let dp = plastic::consistent_tangent(PlasticLaw::Perfect, &grand, &repos, &mat, None)?;
+/// assert!(dp[0][0] < d[0][0]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn consistent_tangent(
     law: PlasticLaw,
     eps_b: &[f64; 6],
@@ -633,6 +1280,15 @@ fn finite_difference_tangent(
 
 /// The elastic modulus in full-3-D engineering Voigt — the tangent wherever the
 /// step stayed elastic, and the starting point of every analytic one.
+///
+/// ```
+/// # use pyrucast::models::plastic;
+/// let (lambda, mu) = plastic::lame(210_000.0, 0.3);
+/// let d = plastic::elastic_tangent(lambda, mu);
+/// // Voigt **de l'ingénieur** : le bloc de cisaillement vaut μ, non 2μ.
+/// assert!((d[3][3] - mu).abs() < 1e-9);
+/// assert!((d[0][0] - (lambda + 2.0 * mu)).abs() < 1e-9);
+/// ```
 pub fn elastic_tangent(lambda: f64, mu: f64) -> [[f64; 6]; 6] {
     let mut c = [[0.0; 6]; 6];
     for i in 0..3 {
@@ -648,6 +1304,17 @@ pub fn elastic_tangent(lambda: f64, mu: f64) -> [[f64; 6]; 6] {
 
 /// Guard a law's material against a value that would make its return map
 /// meaningless, with a message naming the law and the constant.
+///
+/// ```
+/// # use pyrucast::models::plastic;
+/// # use pyrucast::models::plastic::PlasticLaw;
+/// // Un garde-fou qui nomme la loi **et** la constante fautive ; il rend la
+/// // valeur, pour s'enchaîner à la lecture du matériau.
+/// let l = PlasticLaw::Perfect;
+/// assert_eq!(plastic::require_positive(l, "sigma_y", 250.0)?, 250.0);
+/// assert!(plastic::require_positive(l, "sigma_y", 0.0).is_err());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn require_positive(law: PlasticLaw, name: &str, value: f64) -> Result<f64> {
     if value <= 0.0 {
         return Err(PyrucastError::Message(format!(

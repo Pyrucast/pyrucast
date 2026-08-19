@@ -71,6 +71,35 @@ fn effective_porosity(f: f64, q1: f64, f_c: f64, f_f: f64) -> f64 {
 
 /// Gurson's yield function. Negative inside the elastic domain, and exactly
 /// `(q/σ_y)² − 1` when the porosity vanishes.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PrevState};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "sigma_y".into(), "q_1".into(), "q_2".into(), "q_3".into(), "f_0".into(), "f_c".into(), "f_f".into()], &[210000.0, 0.3, 250.0, 1.5, 1.0, 2.25, 0.001, 0.15, 0.25]).unwrap();
+/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+/// #                         vars: vec![0.001] };
+/// // La porosité **rétrécit** la surface de charge : à contrainte égale, un
+/// // métal plus poreux est plus près de céder.
+/// let s = [200.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+/// let sain = plastic::gurson::yield_function(&s, 0.001, &mat)?;
+/// let poreux = plastic::gurson::yield_function(&s, 0.05, &mat)?;
+/// assert!(poreux > sain);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn yield_function(sigma: &[f64; 6], f: f64, mat: &MatParams) -> Result<f64> {
     let sigma_y = require_positive(PlasticLaw::Gurson, "sigma_y", mat.get("sigma_y")?)?;
     let (q1, q2, q3) = (mat.get("q_1")?, mat.get("q_2")?, mat.get("q_3")?);
@@ -102,6 +131,36 @@ fn numerical_normal(sigma: &[f64; 6], f: f64, mat: &MatParams, scale: f64) -> Re
 
 /// Cutting-plane return onto Gurson's surface, with the porosity updated from
 /// the volumetric plastic flow it produces.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PrevState};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "sigma_y".into(), "q_1".into(), "q_2".into(), "q_3".into(), "f_0".into(), "f_c".into(), "f_f".into()], &[210000.0, 0.3, 250.0, 1.5, 1.0, 2.25, 0.001, 0.15, 0.25]).unwrap();
+/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+/// #                         vars: vec![0.001] };
+/// // La porosité **est** l'état : elle croît avec l'écoulement, et c'est
+/// // elle qui mène à la rupture ductile.
+/// let trial = [800.0, 400.0, 400.0, 0.0, 0.0, 0.0];
+/// let pas = plastic::gurson::return_map(&trial, &repos, &mat)?;
+/// assert!(pas.p > 0.0);
+/// assert_eq!(pas.vars.len(), 1);
+/// assert!(pas.vars[0] >= repos.vars[0]); // la porosité ne décroît pas
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn return_map(trial: &[f64; 6], prev: &PrevState, mat: &MatParams) -> Result<PlasticStep> {
     let sigma_y = mat.get("sigma_y")?;
     // The porosity at A: the law's own variable, or the **initial** porosity on

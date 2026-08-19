@@ -34,6 +34,40 @@ use crate::models::plastic::{
 ///
 /// `hardening` is `H`; pass `0.0` for the perfect law. Returns the updated
 /// `(σ, ε_p, p)`, all full 3-D.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PrevState};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "sigma_y".into()], &[210000.0, 0.3, 250.0]).unwrap();
+/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+/// #                         vars: Vec::new() };
+/// // Sans écrouissage (`hardening = 0`), la projection ramène **exactement**
+/// // q sur σ_y, et la déformation plastique est purement déviatorique.
+/// let trial = [400.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+/// let pas = plastic::von_mises::return_map(&trial, &repos, &mat, 0.0)?;
+/// assert!((plastic::von_mises_stress(&pas.sigma) - 250.0).abs() < 1e-6);
+/// assert!(plastic::i1(&pas.eps_p).abs() < 1e-12); // écoulement isochore
+///
+/// // Avec écrouissage isotrope, le seuil monte de H·p : la contrainte
+/// // retenue est **plus grande**.
+/// let dur = plastic::von_mises::return_map(&trial, &repos, &mat, 20_000.0)?;
+/// assert!(plastic::von_mises_stress(&dur.sigma) > 250.0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn return_map(
     trial: &[f64; 6],
     prev: &PrevState,
@@ -87,6 +121,38 @@ pub fn return_map(
 /// Note the difference from the **continuum** elastoplastic modulus: `θ` here
 /// accounts for the *finite* step, and dropping it would cost Newton its
 /// quadratic convergence.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PrevState};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "sigma_y".into()], &[210000.0, 0.3, 250.0]).unwrap();
+/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+/// #                         vars: Vec::new() };
+/// // Sous le seuil, la tangente cohérente **est** la tangente élastique.
+/// let sous = [100.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+/// let d = plastic::von_mises::tangent(&sous, &mat, 0.0, 0.0);
+/// assert_eq!(d, plastic::elastic_tangent(mat.lambda, mat.mu));
+///
+/// // Au-delà, elle s'assouplit : le module apparent chute.
+/// let au_dela = [400.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+/// let dp = plastic::von_mises::tangent(&au_dela, &mat, 0.0, 0.0);
+/// assert!(dp[0][0] < d[0][0]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn tangent(trial: &[f64; 6], mat: &MatParams, hardening: f64, p_prev: f64) -> [[f64; 6]; 6] {
     let (lambda, mu) = (mat.lambda, mat.mu);
     let sigma_y0 = mat.get("sigma_y").unwrap_or(0.0);

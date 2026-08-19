@@ -193,6 +193,48 @@ impl Params {
 }
 
 /// Return onto the Drucker-Prager cone, with the apex case handled separately.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PrevState};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "friction".into(), "k".into(), "psi".into()], &[210000.0, 0.3, 0.5, 100.0, 0.2]).unwrap();
+/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
+/// #                         vars: Vec::new() };
+/// // Sensible à la pression : une traction hydrostatique plastifie, là où
+/// // von Mises la laisserait passer indéfiniment. Le retour se fait sur
+/// // l'**apex** du cône, à I₁ = k/α, quelle que soit l'intensité.
+/// for s in [200.0, 1000.0] {
+///     let pas = plastic::drucker_prager::return_map(
+///         &[s, s, s, 0.0, 0.0, 0.0], &repos, &mat)?;
+///     assert!((plastic::i1(&pas.sigma) - 200.0).abs() < 1e-9);
+///     // L'apex ne produit aucun écoulement **déviatorique** : `p`, qui
+///     // cumule celui-ci, reste nul, tandis que ε_p gonfle en volume.
+///     assert_eq!(pas.p, 0.0);
+///     assert!(plastic::i1(&pas.eps_p) > 0.0);
+/// }
+///
+/// // Hors de l'apex, `p` croît, et l'écoulement est **non associé** : la
+/// // dilatance `psi` diffère du frottement, donc ε_p n'est pas isochore.
+/// let pas = plastic::drucker_prager::return_map(
+///     &[400.0, 0.0, 0.0, 0.0, 0.0, 0.0], &repos, &mat)?;
+/// assert!(pas.p > 0.0);
+/// assert!(plastic::i1(&pas.eps_p) > 0.0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn return_map(trial: &[f64; 6], prev: &PrevState, mat: &MatParams) -> Result<PlasticStep> {
     let p = params(mat)?;
     let (mu, bulk) = (mat.mu, mat.bulk());
