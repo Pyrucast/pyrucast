@@ -42,6 +42,29 @@ use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 
 /// Lightweight view on a single element of a [`SubFiniteElementSpace`].
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{Element, ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+/// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let el = Element::new(zone.clone(), 0).unwrap();
+/// // Une vue sur **une** maille de la zone : elle donne accès aux formes,
+/// // au jacobien et à B sans jamais matérialiser de tableau par maille.
+/// for el in fes.elements(0)? {
+///     assert!((el.det_jacobian(0)? - 4.0).abs() < 1e-12);
+/// }
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Clone)]
 pub struct Element {
     pub(crate) fespace: Handle<SubFiniteElementSpace>,
@@ -50,6 +73,28 @@ pub struct Element {
 
 impl Element {
     /// Build an element view. Errors if `idx ≥ cell_count()`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{Element, ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let el = Element::new(zone.clone(), 0).unwrap();
+    /// // Une vue légère : elle ne copie rien, elle tient la zone par son handle.
+    /// let el = Element::new(zone.clone(), 0)?;
+    /// assert_eq!(el.index(), 0);
+    /// assert!(Element::new(zone.clone(), 7).is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn new(fespace: Handle<SubFiniteElementSpace>, idx: usize) -> Result<Self> {
         let n = fespace.read().cell_count()?;
         if idx >= n {
@@ -61,16 +106,76 @@ impl Element {
     }
 
     /// Index of this element inside its parent [`SubFiniteElementSpace`].
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{Element, ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let el = Element::new(zone.clone(), 0).unwrap();
+    /// assert_eq!(el.index(), 0); // rang de la maille dans sa zone
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn index(&self) -> usize {
         self.idx
     }
 
     /// Handle to the parent [`SubFiniteElementSpace`] (internal clone).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{Element, ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let el = Element::new(zone.clone(), 0).unwrap();
+    /// # use pyrucast::handle::Handle as H;
+    /// assert!(H::same_object(&el.fespace(), &zone)); // partagé, pas copié
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.fespace.clone()
     }
 
     /// Underlying [`Cell`] view in the parent submesh.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{Element, ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let el = Element::new(zone.clone(), 0).unwrap();
+    /// // La maille géométrique sous-jacente — la connectivité, sans les
+    /// // fonctions de forme.
+    /// assert_eq!(el.cell()?.node_ids()?.len(), 3);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn cell(&self) -> Result<Cell> {
         let sm = self.fespace.read().submesh();
         Cell::new(sm, self.idx)
@@ -79,27 +184,124 @@ impl Element {
     // ── Structural accessors ────────────────────────────────────────────
 
     /// Number of nodes per element (= element type's nodes_per_cell).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{Element, ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let el = Element::new(zone.clone(), 0).unwrap();
+    /// assert_eq!(el.nodes_per_cell()?, 3);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn nodes_per_cell(&self) -> Result<usize> {
         self.fespace.read().nodes_per_cell()
     }
 
     /// Geometric (physical) dimension of the underlying `Coords`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{Element, ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let el = Element::new(zone.clone(), 0).unwrap();
+    /// assert_eq!(el.space_dim()?, 2);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn space_dim(&self) -> Result<usize> {
         Ok(self.fespace.read().space_dim())
     }
 
     /// Reference dimension (= topological dim of the element type).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{Element, ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let el = Element::new(zone.clone(), 0).unwrap();
+    /// // Un triangle est de dimension 2 dans son élément de référence ; il
+    /// // pourrait vivre dans un espace 3-D (coque) sans que cela change.
+    /// assert_eq!(el.ref_dim()?, 2);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn ref_dim(&self) -> Result<usize> {
         self.fespace.read().ref_dim()
     }
 
     /// Number of Gauss points per element.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{Element, ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let el = Element::new(zone.clone(), 0).unwrap();
+    /// assert_eq!(el.gauss_count(), zone.read().gauss_count());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn gauss_count(&self) -> usize {
         // Static across the fespace; cheap to look up under the guard.
         self.fespace.read().gauss_count()
     }
 
     /// Connectivity (node ids) of this element.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{Element, ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let el = Element::new(zone.clone(), 0).unwrap();
+    /// assert_eq!(el.node_ids()?, vec![n[0].id(), n[1].id(), n[2].id()]);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn node_ids(&self) -> Result<Vec<NodeId>> {
         self.cell()?.node_ids()
     }
@@ -107,22 +309,101 @@ impl Element {
     // ── Reference-space accessors (shared with the FE space) ────────────
 
     /// Reference coordinates of the `g`-th Gauss point.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{Element, ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let el = Element::new(zone.clone(), 0).unwrap();
+    /// assert_eq!(el.gauss_xi(0)?.len(), el.ref_dim()?);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn gauss_xi(&self, g: usize) -> Result<Vec<f64>> {
         Ok(self.fespace.read().gauss_xi(g)?.to_vec())
     }
 
     /// Weight of the `g`-th Gauss point.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{Element, ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let el = Element::new(zone.clone(), 0).unwrap();
+    /// // Les poids somment à l'aire de référence — 1/2 pour un triangle.
+    /// let total: f64 = (0..el.gauss_count()).map(|g| el.gauss_weight(g).unwrap()).sum();
+    /// assert!((total - 0.5).abs() < 1e-12);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn gauss_weight(&self, g: usize) -> Result<f64> {
         self.fespace.read().gauss_weight(g)
     }
 
     /// `N_i(ξ_g)` for all nodes `i` at the `g`-th Gauss point.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{Element, ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let el = Element::new(zone.clone(), 0).unwrap();
+    /// // Partition de l'unité.
+    /// assert!((el.n_at_g(0)?.iter().sum::<f64>() - 1.0).abs() < 1e-12);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn n_at_g(&self, g: usize) -> Result<Vec<f64>> {
         Ok(self.fespace.read().n_at_g(g)?.to_vec())
     }
 
     /// `∂N_i/∂ξ_j(ξ_g)` for all nodes at the `g`-th Gauss point
     /// (flat row-major `[i * ref_dim + j]`).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{Element, ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let el = Element::new(zone.clone(), 0).unwrap();
+    /// assert_eq!(el.dn_at_g(0)?.len(), 3 * 2); // ∂N_i/∂ξ_k à plat
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn dn_at_g(&self, g: usize) -> Result<Vec<f64>> {
         Ok(self.fespace.read().dn_at_g(g)?.to_vec())
     }
@@ -130,17 +411,79 @@ impl Element {
     // ── Physical quantities (cell-specific, on-the-fly) ─────────────────
 
     /// Jacobian `J = ∂x/∂ξ` at the `g`-th Gauss point of this element.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{Element, ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let el = Element::new(zone.clone(), 0).unwrap();
+    /// // Le triangle (0,0), (2,0), (0,2) : J = 2·I, à plat en ligne-major.
+    /// assert_eq!(el.jacobian(0)?, vec![2.0, 0.0, 0.0, 2.0]);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn jacobian(&self, g: usize) -> Result<Vec<f64>> {
         self.fespace.read().jacobian(self.idx, g)
     }
 
     /// `|J|` (measure scaling factor) at the `g`-th Gauss point.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{Element, ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let el = Element::new(zone.clone(), 0).unwrap();
+    /// // |J| = 4 en tout point : le mapping est affine.
+    /// assert!((el.det_jacobian(0)? - 4.0).abs() < 1e-12);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn det_jacobian(&self, g: usize) -> Result<f64> {
         self.fespace.read().det_jacobian(self.idx, g)
     }
 
     /// Physical derivatives `∂N_i/∂x_a` at the `g`-th Gauss point
     /// (flat row-major `[i * space_dim + a]`).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{Element, ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let el = Element::new(zone.clone(), 0).unwrap();
+    /// // La matrice B, calculée à la volée. Ses lignes somment au vecteur nul :
+    /// // la partition de l'unité, dérivée.
+    /// let b = el.dn_dx(0)?;
+    /// assert!((b[0] + b[2] + b[4]).abs() < 1e-12);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn dn_dx(&self, g: usize) -> Result<Vec<f64>> {
         self.fespace.read().dn_dx(self.idx, g)
     }
@@ -179,6 +522,28 @@ impl crate::dump::Dump for Element {
 }
 
 /// Iterator over the elements of a single [`SubFiniteElementSpace`].
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{Element, ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+/// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let el = Element::new(zone.clone(), 0).unwrap();
+/// // Ce que rend `FiniteElementSpace::elements` : un parcours de la zone,
+/// // maille par maille, sans allocation par élément.
+/// let els: Vec<_> = fes.elements(0)?.collect();
+/// assert_eq!(els.len(), 1);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Clone)]
 pub struct ElementIter {
     fespace: Handle<SubFiniteElementSpace>,

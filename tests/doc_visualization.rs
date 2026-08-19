@@ -20,7 +20,6 @@ use pyrucast::handle::Handle;
 use pyrucast::ops::mesh;
 use pyrucast::viz::{ColorScale, Colormap, FieldArg, MeshStyle, Revolve, View};
 use pyrucast::Result;
-use std::path::Path;
 
 /// Un dossier jetable, et le triangle 3-D dont tous les extraits se servent.
 fn scene() -> Result<(std::path::PathBuf, Handle<Coords>, Mesh)> {
