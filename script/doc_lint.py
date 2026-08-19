@@ -437,9 +437,20 @@ def api_publique():
         # traits, mais aussi les **méthodes héritées par `Deref`** (`Objects`
         # déréférence vers `BTreeMap`). Exiger un exemple sur `BTreeMap::range`
         # serait réclamer de documenter la bibliothèque standard.
+        #
+        # Les impls **génériques** et **synthétiques** comptent au même titre :
+        # un type sans aucune impl de trait écrite à la main n'a pas de section
+        # `trait-implementations`, et sans elles la borne manquait — d'où les
+        # `from_subset`, `into_either` et `vzip` de nalgebra et d'either qui
+        # figuraient au registre comme s'ils étaient de nous.
         bornes = [
             x
-            for x in (h.find('id="trait-implementations"'), h.find('id="deref-methods'))
+            for x in (
+                h.find('id="trait-implementations"'),
+                h.find('id="deref-methods'),
+                h.find('id="blanket-implementations"'),
+                h.find('id="synthetic-implementations"'),
+            )
             if x > i
         ]
         segment = h[i : min(bornes)] if bornes else h[i:]
