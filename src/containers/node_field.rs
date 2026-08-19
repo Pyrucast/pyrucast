@@ -105,6 +105,22 @@ impl SubNodeField {
     /// - the SubMesh is not POI1,
     /// - `components` is empty,
     /// - `components` contains duplicate names.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::node_field::SubNodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+    /// # let poi1 = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
+    /// # let mut u = SubNodeField::from_poi1(&poi1, vec!["UX".into(), "UY".into()]).unwrap();
+    /// // Le support doit être un POI1 : un nœud par cellule, l'ordre fait foi.
+    /// assert_eq!(u.node_count(), 2);
+    /// ```
     pub fn from_poi1(submesh: &Handle<SubMesh>, components: Vec<String>) -> Result<Self> {
         crate::containers::field::check_components("SubNodeField", &components)?;
 
@@ -154,6 +170,21 @@ impl SubNodeField {
     }
 
     /// Number of nodes in the support.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::node_field::SubNodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+    /// # let poi1 = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
+    /// # let mut u = SubNodeField::from_poi1(&poi1, vec!["UX".into(), "UY".into()]).unwrap();
+    /// assert_eq!(u.node_count(), 2);
+    /// ```
     pub fn node_count(&self) -> usize {
         self.nodes.len()
     }
@@ -167,6 +198,22 @@ impl SubNodeField {
     }
 
     /// Handle to the owning `Coords` (derived from the support).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::node_field::SubNodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+    /// # let poi1 = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
+    /// # let mut u = SubNodeField::from_poi1(&poi1, vec!["UX".into(), "UY".into()]).unwrap();
+    /// # use pyrucast::handle::Handle as H;
+    /// assert!(H::same_object(&u.coords(), &coords));
+    /// ```
     pub fn coords(&self) -> Handle<Coords> {
         self.support.read().coords()
     }
@@ -177,12 +224,46 @@ impl SubNodeField {
     }
 
     /// Read a value by `(node_index, component_index)`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::node_field::SubNodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+    /// # let poi1 = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
+    /// # let mut u = SubNodeField::from_poi1(&poi1, vec!["UX".into(), "UY".into()]).unwrap();
+    /// // Accès par **indices** : position dans le support, position dans les
+    /// // composantes. La forme rapide, celle des boucles d'assemblage.
+    /// u.set(0, 1, 2.5).unwrap();
+    /// assert_eq!(u.get(0, 1).unwrap(), 2.5);
+    /// ```
     pub fn get(&self, node_idx: usize, comp_idx: usize) -> Result<f64> {
         self.check_indices(node_idx, comp_idx)?;
         Ok(self.values[node_idx * self.components.len() + comp_idx])
     }
 
     /// Write a value by `(node_index, component_index)`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::node_field::SubNodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+    /// # let poi1 = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
+    /// # let mut u = SubNodeField::from_poi1(&poi1, vec!["UX".into(), "UY".into()]).unwrap();
+    /// u.set(1, 0, -1.0).unwrap();
+    /// assert_eq!(u.get(1, 0).unwrap(), -1.0);
+    /// ```
     pub fn set(&mut self, node_idx: usize, comp_idx: usize, value: f64) -> Result<()> {
         self.check_indices(node_idx, comp_idx)?;
         let ncomp = self.components.len();
@@ -191,6 +272,24 @@ impl SubNodeField {
     }
 
     /// Read a value by `(NodeId, component_index)`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::node_field::SubNodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+    /// # let poi1 = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
+    /// # let mut u = SubNodeField::from_poi1(&poi1, vec!["UX".into(), "UY".into()]).unwrap();
+    /// // Même chose, mais le nœud est désigné par son id — une recherche de
+    /// // plus, à éviter dans une boucle serrée.
+    /// u.set_by_node(a.id(), 0, 1.0).unwrap();
+    /// assert_eq!(u.get_by_node(a.id(), 0).unwrap(), 1.0);
+    /// ```
     pub fn get_by_node(&self, nid: NodeId, comp_idx: usize) -> Result<f64> {
         let i = self
             .index_of(nid)
@@ -199,6 +298,22 @@ impl SubNodeField {
     }
 
     /// Write a value by `(NodeId, component_index)`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::node_field::SubNodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+    /// # let poi1 = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
+    /// # let mut u = SubNodeField::from_poi1(&poi1, vec!["UX".into(), "UY".into()]).unwrap();
+    /// u.set_by_node(b.id(), 1, 3.0).unwrap();
+    /// assert_eq!(u.get_by_node(b.id(), 1).unwrap(), 3.0);
+    /// ```
     pub fn set_by_node(&mut self, nid: NodeId, comp_idx: usize, value: f64) -> Result<()> {
         let i = self
             .index_of(nid)
@@ -216,6 +331,26 @@ impl SubNodeField {
     /// looping over many nodes should hoist it with [`index_of_with`].
     ///
     /// [`index_of_with`]: SubNodeField::index_of_with
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::node_field::SubNodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+    /// # let poi1 = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
+    /// # let mut u = SubNodeField::from_poi1(&poi1, vec!["UX".into(), "UY".into()]).unwrap();
+    /// // La position d'un nœud dans le support, dans l'ordre du POI1.
+    /// assert_eq!(u.index_of(a.id()), Some(0));
+    /// assert_eq!(u.index_of(b.id()), Some(1));
+    /// // Un nœud étranger au support : None, pas une erreur.
+    /// let ailleurs = Node::create_in(coords.clone(), &[9.0, 9.0]).unwrap();
+    /// assert_eq!(u.index_of(ailleurs.id()), None);
+    /// ```
     pub fn index_of(&self, nid: NodeId) -> Option<usize> {
         let support = self.support.read();
         self.index_of_with(&support, nid)
@@ -269,6 +404,22 @@ impl SubNodeField {
 
     /// Build a [`Mesh`] with a single POI1 submesh mirroring the support of
     /// this field.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::node_field::SubNodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+    /// # let poi1 = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
+    /// # let mut u = SubNodeField::from_poi1(&poi1, vec!["UX".into(), "UY".into()]).unwrap();
+    /// // Le support vu comme agrégat — la cible de projection d'un autre champ.
+    /// assert_eq!(u.support_mesh().unwrap().cell_count().unwrap(), 2);
+    /// ```
     pub fn support_mesh(&self) -> Result<Mesh> {
         let sm_handle = Handle::new(self.support_submesh()?);
         let mut mesh = Mesh::empty();
@@ -277,6 +428,24 @@ impl SubNodeField {
     }
 
     /// All values of node `node_idx`, in component order.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::node_field::SubNodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+    /// # let poi1 = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
+    /// # let mut u = SubNodeField::from_poi1(&poi1, vec!["UX".into(), "UY".into()]).unwrap();
+    /// // Toutes les composantes d'un nœud, contiguës en mémoire.
+    /// u.set(0, 0, 1.0).unwrap();
+    /// u.set(0, 1, 2.0).unwrap();
+    /// assert_eq!(u.node_values(0).unwrap(), &[1.0, 2.0]);
+    /// ```
     pub fn node_values(&self, node_idx: usize) -> Result<&[f64]> {
         if node_idx >= self.nodes.len() {
             return Err(PyrucastError::Message(format!(
@@ -307,6 +476,23 @@ impl SubNodeField {
     // ── Accès idiomatique ───────────────────────────────────────────────────
 
     /// Read a value by `(NodeId, component name)`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::node_field::SubNodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+    /// # let poi1 = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
+    /// # let mut u = SubNodeField::from_poi1(&poi1, vec!["UX".into(), "UY".into()]).unwrap();
+    /// // La forme nommée : id de nœud et nom de composante.
+    /// u.set_value(a.id(), "UY", 4.0).unwrap();
+    /// assert_eq!(u.value(a.id(), "UY").unwrap(), 4.0);
+    /// ```
     pub fn value(&self, nid: NodeId, component: &str) -> Result<f64> {
         let ni = self
             .index_of(nid)
@@ -316,6 +502,24 @@ impl SubNodeField {
     }
 
     /// Write a value by `(NodeId, component name)`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::node_field::SubNodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+    /// # let poi1 = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
+    /// # let mut u = SubNodeField::from_poi1(&poi1, vec!["UX".into(), "UY".into()]).unwrap();
+    /// u.set_value(b.id(), "UX", -0.5).unwrap();
+    /// assert_eq!(u.value(b.id(), "UX").unwrap(), -0.5);
+    /// // Une composante inconnue est une erreur, pas un silence.
+    /// assert!(u.set_value(b.id(), "UZ", 0.0).is_err());
+    /// ```
     pub fn set_value(&mut self, nid: NodeId, component: &str, value: f64) -> Result<()> {
         let ni = self
             .index_of(nid)
@@ -549,6 +753,23 @@ impl NodeField {
     /// submeshes are therefore stored once **per zone**.
     ///
     /// `mesh` must have at least one submesh.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+    /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap();
+    /// // Une zone par sous-maillage du support ; toutes les valeurs à zéro.
+    /// let u = NodeField::new(&support, vec!["UX".into(), "UY".into()]).unwrap();
+    /// assert_eq!(u.len(), support.len());
+    /// assert_eq!(u.value(a.id(), "UX").unwrap(), 0.0);
+    /// ```
     pub fn new(mesh: &Mesh, components: Vec<String>) -> Result<Self> {
         if mesh.is_empty() {
             return Err(PyrucastError::Message(
@@ -566,6 +787,26 @@ impl NodeField {
 
     /// Build a `NodeField` with an explicit `components` list per submesh.
     /// `components_per_submesh.len()` must equal `mesh.len()`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+    /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap();
+    /// // Composantes **par zone** : le cas multiphysique, une liste par
+    /// // sous-maillage du support.
+    /// let deux = mesh::poi1_from_nodes(&[a.clone()]).unwrap()
+    ///     .union(&mesh::poi1_from_nodes(&[b.clone()]).unwrap()).unwrap();
+    /// # use pyrucast::containers::field::Field;
+    /// let f = NodeField::with(&deux, &[vec!["T".into()], vec!["UX".into()]]).unwrap();
+    /// assert_eq!(f.components().unwrap(), vec!["T".to_string(), "UX".to_string()]);
+    /// ```
     pub fn with(mesh: &Mesh, components_per_submesh: &[Vec<String>]) -> Result<Self> {
         if mesh.is_empty() {
             return Err(PyrucastError::Message(
@@ -588,6 +829,22 @@ impl NodeField {
     }
 
     /// Single-zone `NodeField` over the distinct nodes of one [`SubMesh`].
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+    /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap();
+    /// // Depuis une **zone** plutôt qu'un agrégat : le champ n'en aura qu'une.
+    /// let u = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// assert_eq!(u.len(), 1);
+    /// ```
     pub fn from_submesh(submesh: &Handle<SubMesh>, components: Vec<String>) -> Result<Self> {
         let mut field = Self::default();
         field.add_sub(Handle::new(SubNodeField::from_support(
@@ -597,6 +854,23 @@ impl NodeField {
     }
 
     /// Wrap a single [`SubNodeField`] into a unitary aggregate.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+    /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap();
+    /// # use pyrucast::containers::node_field::SubNodeField;
+    /// // Remonter une zone en agrégat — ce qu'attendent les opérateurs.
+    /// let zone = SubNodeField::from_poi1(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// assert_eq!(NodeField::from_sub(zone).len(), 1);
+    /// ```
     pub fn from_sub(sub: SubNodeField) -> Self {
         let mut field = Self::default();
         field.subs.push(Handle::new(sub));
@@ -605,6 +879,22 @@ impl NodeField {
 
     /// Handle to the owning `Coords` (from the first sub).
     /// Errors if the aggregate is empty.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+    /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap();
+    /// # use pyrucast::handle::Handle as H;
+    /// let u = NodeField::new(&support, vec!["T".into()]).unwrap();
+    /// assert!(H::same_object(&u.coords().unwrap(), &coords));
+    /// ```
     pub fn coords(&self) -> Result<Handle<Coords>> {
         let h = self.get(0)?;
         Ok(h.read().coords())
@@ -612,6 +902,24 @@ impl NodeField {
 
     /// Value at `(node, component)` — the **first** sub defining both
     /// wins. Errors if no sub does.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+    /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap();
+    /// let u = NodeField::new(&support, vec!["T".into()]).unwrap();
+    /// u.get(0).unwrap().write().set_value(a.id(), "T", 20.0).unwrap();
+    /// assert_eq!(u.value(a.id(), "T").unwrap(), 20.0);
+    /// // Un nœud du support jamais écrit vaut zéro.
+    /// assert_eq!(u.value(b.id(), "T").unwrap(), 0.0);
+    /// ```
     pub fn value(&self, nid: NodeId, component: &str) -> Result<f64> {
         self.value_opt(nid, component)?.ok_or_else(|| {
             PyrucastError::Message(format!(
@@ -623,6 +931,24 @@ impl NodeField {
 
     /// Like [`NodeField::value`], but `None` when no sub defines
     /// `(node, component)`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+    /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap();
+    /// let u = NodeField::new(&support, vec!["T".into()]).unwrap();
+    /// // La variante qui distingue « absent du support » de « vaut zéro ».
+    /// assert_eq!(u.value_opt(a.id(), "T").unwrap(), Some(0.0));
+    /// let ailleurs = Node::create_in(coords.clone(), &[9.0, 9.0]).unwrap();
+    /// assert_eq!(u.value_opt(ailleurs.id(), "T").unwrap(), None);
+    /// ```
     pub fn value_opt(&self, nid: NodeId, component: &str) -> Result<Option<f64>> {
         for h in self {
             if let Some(v) = h.read().component_value_opt(nid, component) {
@@ -637,6 +963,23 @@ impl NodeField {
     /// first sub defining each `(node, component)` pair wins; errors on the
     /// first node no sub defines. The view is built once, so this is a
     /// single pass over the zones per node.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+    /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap();
+    /// let u = NodeField::new(&support, vec!["T".into()]).unwrap();
+    /// u.get(0).unwrap().write().set_value(b.id(), "T", 1.5).unwrap();
+    /// // Lecture par lot, dans l'ordre demandé.
+    /// assert_eq!(u.values_at(&[a.id(), b.id()], "T").unwrap(), vec![0.0, 1.5]);
+    /// ```
     pub fn values_at(&self, nodes: &[NodeId], component: &str) -> Result<Vec<f64>> {
         let view = self.view()?;
         nodes
@@ -646,6 +989,21 @@ impl NodeField {
     }
 
     /// Distinct node ids across the subs, first-seen order.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+    /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap();
+    /// let u = NodeField::new(&support, vec!["T".into()]).unwrap();
+    /// assert_eq!(u.node_ids().unwrap(), vec![a.id(), b.id()]);
+    /// ```
     pub fn node_ids(&self) -> Result<Vec<NodeId>> {
         let mut out: Vec<NodeId> = Vec::new();
         for h in self {
@@ -660,6 +1018,21 @@ impl NodeField {
     }
 
     /// Number of distinct nodes across the subs.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+    /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap();
+    /// let u = NodeField::new(&support, vec!["T".into()]).unwrap();
+    /// assert_eq!(u.node_count().unwrap(), 2); // nœuds **distincts**, zones confondues
+    /// ```
     pub fn node_count(&self) -> Result<usize> {
         Ok(self.node_ids()?.len())
     }
@@ -688,6 +1061,23 @@ impl NodeField {
     /// verification — call it before trusting a field assembled from
     /// independently mutated zones. `ops::node_field::consolidate` runs the
     /// same verification while deduplicating.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+    /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap();
+    /// let u = NodeField::new(&support, vec!["T".into()]).unwrap();
+    /// // Cohérence aux interfaces : un nœud partagé par deux zones doit y
+    /// // porter la même valeur pour chaque composante commune.
+    /// u.check().unwrap();
+    /// ```
     pub fn check(&self) -> Result<()> {
         use crate::containers::field::SubField;
         use std::collections::HashMap;
