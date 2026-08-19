@@ -781,6 +781,34 @@ impl SubMesh {
 /// whereas a write lock would deadlock against it. Taking a write lock while a
 /// **write** guard on the same slot is held is still a deadlock (the slot lock is
 /// not reentrant — see [`crate::handle`]); only the sealed-read case is relaxed.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # use pyrucast::containers::mesh::seal;
+/// // Sceller par la fonction libre plutôt que par la méthode : elle prend
+/// // le verrou d'écriture **seulement si nécessaire**, ce qui lui permet
+/// // de sceller un support qu'un lecteur tient déjà — un `view` de champ.
+/// let zone = maillage.get(0)?;
+/// assert!(!zone.read().is_sealed());
+/// seal(&zone)?;
+/// assert!(zone.read().is_sealed());
+/// // Idempotent, et sans écriture la seconde fois : le guard de lecture
+/// // ci-dessous coexiste, là où un verrou d'écriture s'interbloquerait.
+/// let lecteur = zone.read();
+/// seal(&zone)?;
+/// assert!(lecteur.is_sealed());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn seal(handle: &Handle<SubMesh>) -> Result<Handle<SubMesh>> {
     if handle.read().is_sealed() {
         return Ok(handle.clone());
@@ -851,6 +879,30 @@ impl crate::dump::Dump for SubMesh {
 /// Mesh: aggregate of submeshes. Each submesh carries its own
 /// `Handle<Coords>`; the mesh itself imposes no constraint on
 /// `Coords` homogeneity.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::{NodeField, SubNodeField};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// // L'agrégat de zones : chacune homogène, l'ensemble ne l'étant pas.
+/// // C'est ce qui permet à un maillage de mêler triangles et quadrangles
+/// // sans que rien, en aval, ait à s'en soucier.
+/// assert_eq!(maillage.len(), 1);
+/// assert_eq!(maillage.cell_count()?, 1);
+/// assert_eq!(maillage.element_types()?, vec![ElementType::TRI3]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Serialize, Deserialize, Default)]
 pub struct Mesh {
     subs: Vec<Handle<SubMesh>>,
@@ -889,6 +941,27 @@ crate::impl_aggregate_dump!(Mesh);
 impl Node {
     /// `node.union(other)` → a unitary POI1 [`Mesh`] over both nodes.
     /// Python: `node | node`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// // Le même `|` que celui des agrégats, appliqué à deux nœuds : un
+    /// // maillage POI1 unitaire, qu'on fait ensuite croître nœud par nœud.
+    /// let deux = n[0].union(&n[1])?;
+    /// assert_eq!(deux.cell_count()?, 2);
+    /// assert_eq!(deux.element_types()?, vec![ElementType::POI1]);
+    /// assert_eq!(deux.union_node(&n[2])?.cell_count()?, 3);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn union(&self, other: &Node) -> Result<Mesh> {
         let sm = SubMesh::poi1_from_nodes(&[self.clone(), other.clone()])?;
         Ok(Mesh::from_submesh(sm))
@@ -1033,6 +1106,29 @@ impl Mesh {
     }
 
     /// Add a cell directly when the mesh has exactly one submesh.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::node_field::{NodeField, SubNodeField};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// // Le raccourci du cas **unitaire** : il ajoute dans la zone unique, et
+    /// // refuse dès qu'il y en a plusieurs — l'ambiguïté serait silencieuse.
+    /// let mut m = maillage;
+    /// m.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
+    /// assert_eq!(m.cell_count()?, 2);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn add_cell(&mut self, nodes: &[NodeId]) -> Result<usize> {
         if self.len() != 1 {
             return Err(PyrucastError::Message(

@@ -233,14 +233,27 @@ périmée.
 Deux d'entre eux méritent une précision.
 
 **Le cliquet de couverture.** La règle « tout item public porte un exemple » ne
-peut pas être vérifiée frontalement : la dette de départ est de **1531 items sur
-1542**, et un garde-fou rouge dès le premier jour finit désactivé. Le registre
-`script/doc_coverage.txt` liste donc les items qui n'en ont pas, et le garde-fou
-échoue dans deux cas : un item public **absent du registre** qui n'a pas
-d'exemple — donc tout item nouveau —, et un item **du registre** qui en a
-désormais un sans avoir été retiré. La liste ne peut que fondre, et sa fonte est
-le seul indicateur d'avancement lisible. On la régénère avec
+pouvait pas être vérifiée frontalement au départ : la dette était de **1531
+items sur 1542**, et un garde-fou rouge dès le premier jour finit désactivé. Le
+registre `script/doc_coverage.txt` liste donc les items qui n'en ont pas, et le
+garde-fou échoue dans deux cas : un item public **absent du registre** qui n'a
+pas d'exemple — donc tout item nouveau —, et un item **du registre** qui en a
+désormais un sans avoir été retiré. La liste ne pouvant que fondre, sa fonte a
+servi d'indicateur d'avancement jusqu'à ce qu'elle **atteigne zéro**, le
+2026-08-19. Le registre reste en place, vide : c'est lui qui refuse un item
+public nouveau sans exemple. On le régénère avec
 `python script/doc_lint.py --ratchet`.
+
+Sur ce chemin, le cliquet lui-même a dû apprendre trois choses. Un item n'est
+pas de nous parce qu'il figure dans `all.html` : les impls **génériques** de
+nalgebra et d'either, et les traits **réexportés** de rayon, y entrent sans être
+de l'API du crate — le garde-fou les écarte en bornant l'extraction et en
+exigeant un lien « source » vers `src/pyrucast/`. Et deux chemins peuvent
+désigner le même item : rustdoc nomme le doctest d'un `impl` paramétré
+`CellGeom<'a>::det_j_w`, et fait passer un **réexport** par son chemin d'origine
+— d'où une normalisation des paramètres et une comparaison par sous-suite de
+segments. Chacune de ces corrections a été vérifiée en cassant volontairement le
+garde-fou.
 
 **L'audit de la prose** ne lit que les passages en `code inline`, hors blocs :
 c'est ce qui écarte les noms de fichiers et les domaines, qui ressemblent à des
@@ -306,13 +319,29 @@ nom → raison, accompagné d'un test d'hygiène qui échoue si l'entrée devien
 périmée. C'est le motif déjà en place dans `test_method_exposure.py` et
 `test_mirror_completeness.py` ; il n'en est pas créé d'autre.
 
-## Ce qui reste à faire
+## Où en est la mise au propre
 
-La migration est terminée : **257 blocs, aucun écrit à la main** — 188 Python,
-69 Rust. Le registre `DETTE_MIGRATION` de `script/doc_lint.py` est vide, et le
+Les deux chantiers sont terminés.
+
+La migration du book : **257 blocs, aucun écrit à la main** — 188 Python, 69
+Rust. Le registre `DETTE_MIGRATION` de `script/doc_lint.py` est vide, et le
 garde-fou `fences` empêche qu'il se repeuple.
 
-Reste un chantier, sans échéance et sans registre autre que le cliquet :
-**écrire les ~1530 doctests manquants**, au fil des fonctions qu'on touche.
-`script/doc_coverage.txt` en tient la liste ; elle ne peut que fondre, et tout
-item public nouveau doit porter son exemple.
+Les doctests : **`script/doc_coverage.txt` est vide**. Tout item public porte un
+exemple exécutable, et le cliquet refuse désormais qu'un item nouveau entre sans
+le sien. `cargo test --doc` en exécute un peu plus de neuf cents.
+
+Une partie de la dette apparente n'en était pas une, et c'est le fait le plus
+utile de l'exercice : sur les ~1530 items du départ, un tiers environ n'aurait
+jamais dû figurer dans l'API publique — machinerie de mailleur `pub` par
+défaut plutôt que par intention, méthodes de bibliothèques tierces entrées par
+impl générique ou par `pub use rayon::prelude::*`. Écrire les exemples a servi
+d'audit de la surface publique autant que de documentation.
+
+Et écrire ces exemples a **corrigé la documentation** en une trentaine
+d'endroits, chaque fois dans le même sens : l'assertion disait ce que le code
+fait, la prose disait autre chose. Quelques-uns valent d'être retenus — une
+symétrie réinverse la connectivité de ses mailles, `mask` rend un indicateur 0/1
+et non un champ filtré, `to_poi1` dédoublonne par zone et non entre zones, et
+Drucker-Prager, au sommet de son cône, laisse `p` à zéro pendant que `ε_p`
+gonfle en volume.

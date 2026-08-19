@@ -1212,6 +1212,34 @@ impl Evolution {
     /// [`SubEvolution::interpolate_field`]. Each zone's abscissa-typed
     /// component is looked up; the result is a node field of one component
     /// (named after the ordinate type) on the same decomposition.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::evolution::{Evolution, OutOfRange};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let support = mesh::poi1_from_nodes(&n).unwrap();
+    /// # let temp = NodeField::from_submesh(&support.get(0).unwrap(),
+    /// #                                    vec!["T".into()]).unwrap();
+    /// # temp.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
+    /// // La courbe en **fonction de transfert** : ce sont les types qui
+    /// // l'accrochent au champ — l'abscisse nomme la composante lue,
+    /// // l'ordonnée celle produite.
+    /// let mut loi = Evolution::from_scalars(
+    ///     vec![(20.0, 50.0), (120.0, 30.0)], OutOfRange::Clamp)?;
+    /// loi.set_abscissa_type(Some("T".into()))?;
+    /// loi.set_ordinate_type(Some("k".into()))?;
+    /// let k = loi.interpolate_node_field(&temp, None)?;
+    /// assert_eq!(k.get(0)?.read().value(n[0].id(), "k")?, 30.0);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn interpolate_node_field(
         &self,
         field: &NodeField,

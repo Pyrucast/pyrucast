@@ -42,6 +42,39 @@ use crate::handle::Handle;
 /// material-state aggregate at B (dual flux/stress + updated state `VAR1`), one
 /// sub-field per behaviour-bearing sub-model in model order — the aggregate to
 /// feed back as `prev` at the next step.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::ops::element_field;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let modele = Model::elasticity(&fes, ElasticityModel::PlaneStress).unwrap();
+/// # let materiaux = element_field::material_field(&modele,
+/// #     &[("E", 210e3), ("nu", 0.3)]).unwrap();
+/// // La loi de comportement, intégrée point de Gauss par point de Gauss :
+/// // une déformation entre, une contrainte sort. En élasticité linéaire,
+/// // σ_xx = E/(1−ν²)·ε_xx.
+/// let mut eps = ElementField::new(&fes,
+///     vec!["eps_xx".into(), "eps_yy".into(), "eps_xy".into()])?;
+/// eps.get(0)?.write().set_uniform("eps_xx", 1e-3)?;
+/// let sig = element_field::behavior::integrate(&modele, &eps, None, &materiaux, None)?;
+/// let attendu = 210e3 / (1.0 - 0.09) * 1e-3;
+/// assert!((sig.get(0)?.read().value(0, 0, "sigma_xx")? - attendu).abs() < 1e-6);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn integrate(
     model: &Model,
     deformation: &ElementField,

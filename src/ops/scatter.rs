@@ -33,6 +33,44 @@ use std::sync::atomic::AtomicU64;
 /// `(row, col)` entries (a computed block via [`kernel::element_block_pattern`],
 /// a literal block via its stored COO indices); columns are then sorted and
 /// deduplicated per row.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::MatrixKind;
+/// # use pyrucast::ops::{element_field, matrix, mesh, scatter};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let modele = Model::heat_conduction(&fes).unwrap();
+/// # let materiaux = element_field::material_field(&modele,
+/// #     &[("k", 1.0), ("rho", 2.0), ("cp", 3.0)]).unwrap();
+/// // Le motif est **matériau-indépendant** : il se bâtit une fois, puis
+/// // les deux phases numériques le remplissent — la série, référence
+/// // bit-à-bit, et la parallèle par coloriage.
+/// let k = matrix::stiffness(&modele, &materiaux)?;
+/// let motif = scatter::build_pattern(&k)?;
+/// let serie = scatter::scatter_serial(&k, &motif)?;
+/// let para = scatter::scatter_parallel(&k, &motif)?;
+/// assert_eq!(serie.nnz(), motif.nnz());
+/// assert_eq!(para.nnz(), serie.nnz());
+/// // Mêmes valeurs, à l'ordre de sommation des couleurs près.
+/// for (a, b) in serie.values().iter().zip(para.values()) {
+///     assert!((a - b).abs() < 1e-12);
+/// }
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn build_pattern(k: &Matrix) -> Result<AssemblyPattern> {
     let row_dofs = k.row_dofs()?;
     let col_dofs = k.col_dofs()?;
@@ -171,6 +209,44 @@ pub fn build_pattern(k: &Matrix) -> Result<AssemblyPattern> {
 /// triplet stream had, the result is bit-for-bit identical to the triplet path.
 /// This is the reference numeric phase; the colour-parallel scatter reuses the
 /// same pattern and slots.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::MatrixKind;
+/// # use pyrucast::ops::{element_field, matrix, mesh, scatter};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let modele = Model::heat_conduction(&fes).unwrap();
+/// # let materiaux = element_field::material_field(&modele,
+/// #     &[("k", 1.0), ("rho", 2.0), ("cp", 3.0)]).unwrap();
+/// // Le motif est **matériau-indépendant** : il se bâtit une fois, puis
+/// // les deux phases numériques le remplissent — la série, référence
+/// // bit-à-bit, et la parallèle par coloriage.
+/// let k = matrix::stiffness(&modele, &materiaux)?;
+/// let motif = scatter::build_pattern(&k)?;
+/// let serie = scatter::scatter_serial(&k, &motif)?;
+/// let para = scatter::scatter_parallel(&k, &motif)?;
+/// assert_eq!(serie.nnz(), motif.nnz());
+/// assert_eq!(para.nnz(), serie.nnz());
+/// // Mêmes valeurs, à l'ordre de sommation des couleurs près.
+/// for (a, b) in serie.values().iter().zip(para.values()) {
+///     assert!((a - b).abs() < 1e-12);
+/// }
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix<f64>> {
     let nrows = pattern.row_dofs.len();
     let ncols = pattern.col_dofs.len();
@@ -266,6 +342,44 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix
 /// the assembled values are reproducible regardless of thread count (though the
 /// per-slot summation order differs from the serial path, hence not bit-for-bit
 /// with it).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::MatrixKind;
+/// # use pyrucast::ops::{element_field, matrix, mesh, scatter};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let modele = Model::heat_conduction(&fes).unwrap();
+/// # let materiaux = element_field::material_field(&modele,
+/// #     &[("k", 1.0), ("rho", 2.0), ("cp", 3.0)]).unwrap();
+/// // Le motif est **matériau-indépendant** : il se bâtit une fois, puis
+/// // les deux phases numériques le remplissent — la série, référence
+/// // bit-à-bit, et la parallèle par coloriage.
+/// let k = matrix::stiffness(&modele, &materiaux)?;
+/// let motif = scatter::build_pattern(&k)?;
+/// let serie = scatter::scatter_serial(&k, &motif)?;
+/// let para = scatter::scatter_parallel(&k, &motif)?;
+/// assert_eq!(serie.nnz(), motif.nnz());
+/// assert_eq!(para.nnz(), serie.nnz());
+/// // Mêmes valeurs, à l'ordre de sommation des couleurs près.
+/// for (a, b) in serie.values().iter().zip(para.values()) {
+///     assert!((a - b).abs() < 1e-12);
+/// }
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix<f64>> {
     let nrows = pattern.row_dofs.len();
     let ncols = pattern.col_dofs.len();

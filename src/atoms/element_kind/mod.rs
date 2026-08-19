@@ -305,6 +305,26 @@ impl ElementType {
     /// generic consumer (facets, reference domain, rendering) dispatches
     /// through it. Mirrors
     /// [`SubModel::as_kind`](crate::containers::model::SubModel::as_kind).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// // **L'unique** `match` par type d'élément de toute la bibliothèque :
+    /// // tout le reste — nombre de coins, facettes, domaine de référence —
+    /// // passe par le trait qu'il rend.
+    /// assert_eq!(ElementType::TRI3.as_kind().corner_count(), 3);
+    /// assert_eq!(ElementType::HEX8.as_kind().facets().len(), 6);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn as_kind(self) -> &'static dyn ElementKind {
         match self {
             ElementType::POI1 => &poi1::Poi1,

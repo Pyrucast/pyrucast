@@ -791,6 +791,29 @@ macro_rules! impl_dump_pymethod {
 /// });
 /// impl_aggregate!(Model, SubModel, sub_model, "sub-model(s)");
 /// ```
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&[n[0].id(), n[1].id()])?;
+/// // Ce que la macro donne à chaque agrégat, sans alias par type : le même
+/// // vocabulaire pour les maillages, les champs, les modèles et les
+/// // matrices.
+/// let m = Mesh::from_submesh(sm);
+/// assert_eq!(m.len(), 1);
+/// assert!(!m.is_empty());
+/// assert!(m.unit().is_ok());        // le raccourci du cas à une zone
+/// assert_eq!(m.iter().count(), 1);
+/// assert_eq!(m.union(&m)?.len(), 1); // dédupliqué par handle
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[macro_export]
 macro_rules! impl_aggregate {
     // Without Aggregate overrides.

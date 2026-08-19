@@ -16,6 +16,34 @@ use crate::models::damage::{elastic_stress, lame, pos, DamageUpdate, MatRead};
 use nalgebra::Matrix3;
 
 /// Material parameters of the Mazars model at one Gauss point.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::damage::{self, MatRead};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0)?, vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(),
+/// #                       "B_t".into(), "A_c".into(), "B_c".into()],
+/// #     &[30_000.0, 0.2, 1e-4, 0.8, 20_000.0, 1.4, 1_850.0])?;
+/// # let mat = MatRead { field: &materiau, cell: 0 };
+/// // Les paramètres de Mazars, lus une fois par maille : le seuil `eps_d0`
+/// // et les deux branches, traction et compression. Ils ne sont pas
+/// // exposés champ par champ — c'est `update` qui les emploie.
+/// let u = damage::mazars::update(&[1e-3, 0.0, 0.0, 0.0, 0.0, 0.0], &[0.0], &mat)?;
+/// assert!(u.damage > 0.0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub struct MazarsParams {
     e: f64,
     nu: f64,

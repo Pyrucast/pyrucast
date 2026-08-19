@@ -574,6 +574,33 @@ fn back_stress_names(damage: bool) -> Vec<String> {
 ///
 /// The elastic constants are pre-computed (every law needs them); the rest is
 /// looked up by name, so adding a law adds no plumbing here.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::plastic::{self, MatParams};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
+/// # let materiau = SubElementField::from_uniform_per_component(
+/// #     fes.get(0)?, vec!["E".into(), "nu".into(), "sigma_y".into()],
+/// #     &[210_000.0, 0.3, 250.0])?;
+/// // Les constantes élastiques sont **pré-calculées** — toute loi en a
+/// // besoin — le reste se cherche par nom, de sorte qu'ajouter une loi
+/// // n'ajoute aucune plomberie ici.
+/// let m = MatParams::new(&materiau, 0)?;
+/// assert_eq!((m.lambda, m.mu), plastic::lame(210_000.0, 0.3));
+/// assert_eq!(m.get("sigma_y")?, 250.0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub struct MatParams<'a> {
     /// Lamé's first coefficient.
     pub lambda: f64,

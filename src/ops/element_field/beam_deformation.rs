@@ -70,6 +70,43 @@ const DOFS_3D: &[&str] = &["u_x", "u_y", "u_z", "r_x", "r_y", "r_z"];
 /// in 2-D, or `u_x, u_y, u_z, r_x, r_y, r_z` in 3-D. Each subspace must be
 /// oriented `SEG2` in that same configuration (as required by the frame
 /// physics).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Interpolation, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::{element_field, mesh};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::new(&maillage, Interpolation::ModelEmbedded)?;
+/// # let support = mesh::poi1_from_nodes(&n)?;
+/// # let u = NodeField::from_submesh(&support.get(0)?,
+/// #     vec!["u_x".into(), "u_y".into(), "r_z".into()])?;
+/// # let mut mat = ElementField::new(&fes,
+/// #     vec!["E".into(), "A".into(), "I".into(), "G".into(), "A_s".into()])?;
+/// # for c in ["E", "A", "I", "G", "A_s"] { mat.get(0)?.write().set_uniform(c, 1.0)?; }
+/// // Les déformations **généralisées** d'une poutre : allongement,
+/// // courbure, distorsion — non un tenseur, la section étant réduite à
+/// // trois nombres.
+/// u.get(0)?.write().set_value(n[1].id(), "u_x", 1.0)?;
+/// let d = element_field::beam_deformation(&u, &fes, &mat)?;
+/// assert_eq!(d.get(0)?.read().components(),
+///            &["eps".to_string(), "kappa".to_string(), "gamma".to_string()]);
+/// // Un allongement de 1 sur une portée de 2 : ε = 0,5, et rien d'autre.
+/// assert!((d.get(0)?.read().value(0, 0, "eps")? - 0.5).abs() < 1e-12);
+/// assert!(d.get(0)?.read().value(0, 0, "kappa")?.abs() < 1e-12);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn beam_deformation(
     field: &NodeField,
     fespace: &FiniteElementSpace,

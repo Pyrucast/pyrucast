@@ -84,6 +84,39 @@ pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
 /// [`ComputedRecipe`]. `state` is an [`ElementField`] aggregate (current stress
 /// / algorithmic tangent) resolved zone-wise like `materials`, or `None` for the
 /// state-free kinds.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::MatrixKind;
+/// # use pyrucast::ops::{element_field, matrix, mesh, scatter};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let modele = Model::heat_conduction(&fes).unwrap();
+/// # let materiaux = element_field::material_field(&modele,
+/// #     &[("k", 1.0), ("rho", 2.0), ("cp", 3.0)]).unwrap();
+/// // Une seule machinerie pour les quatre natures : `stiffness` et `mass`
+/// // n'en sont que les formes nommées.
+/// let k = matrix::assemble_kind(&modele, &materiaux, MatrixKind::Stiffness, None)?;
+/// assert_eq!(k.dense()?, matrix::stiffness(&modele, &materiaux)?.dense()?);
+/// let m = matrix::assemble_kind(&modele, &materiaux, MatrixKind::Mass, None)?;
+/// // La capacité somme à ρ·c_p × aire ; la conduction, elle, somme à zéro.
+/// assert!((m.dense()?.iter().sum::<f64>() - 2.0 * 3.0 * 0.5).abs() < 1e-9);
+/// assert!(k.dense()?.iter().sum::<f64>().abs() < 1e-9);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn assemble_kind(
     model: &Model,
     materials: &ElementField,

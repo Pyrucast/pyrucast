@@ -2,35 +2,5 @@
 # Il ne peut que RÉTRÉCIR : un item public nouveau porte son exemple
 # (CONVENTIONS.md, règle 2), et un item documenté sort d'ici.
 # Régénérer : python script/doc_lint.py --ratchet
-atoms::cell::Cell
-atoms::cell::CellIter
-atoms::element_type::ElementType::as_kind
-atoms::node::Node::union
-containers::evolution::Evolution::interpolate_node_field
-containers::matrix::Matrix
-containers::matrix::SubMatrix
-containers::mesh::Mesh
-containers::mesh::Mesh::add_cell
-containers::mesh::seal
-containers::node_field::NodeField
-containers::node_field::SubNodeField
-coords::CoordinateFrame
-coords::Coords
-impl_aggregate
-models::damage::mazars::MazarsParams
-models::kernel::CellGeom::field_d2n_dx2
-models::kernel::CellGeom::normal
-models::kernel::coupling_block_pattern
-models::kernel::coupling_block_triplets_per_cell
-models::kernel::element_block_pattern
-models::kernel::element_block_triplets
-models::kernel::element_block_triplets_per_cell
-models::plastic::MatParams
-ops::coloring::greedy_color
-ops::element_field::beam_deformation::beam_deformation
-ops::element_field::behavior::integrate
-ops::matrix::assemble_kind
-ops::mesh::transfinite::transfinite
-ops::scatter::build_pattern
-ops::scatter::scatter_parallel
-ops::scatter::scatter_serial
+#
+# 2026-08-19 : le registre est VIDE — tout item public porte son exemple.

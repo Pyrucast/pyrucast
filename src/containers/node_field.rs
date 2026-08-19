@@ -76,6 +76,33 @@ use std::ops::{Index, IndexMut};
 ///
 /// Values are stored row-major: component `c` of node `i` is at index
 /// `i * component_count + c` in the internal flat buffer.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::{NodeField, SubNodeField};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// // Les valeurs aux **nœuds** d'un support POI1 : une zone de champ.
+/// let support = mesh::poi1_from_nodes(&n)?;
+/// let mut f = SubNodeField::from_poi1(&support.get(0)?, vec!["T".into()])?;
+/// f.set_value(n[0].id(), "T", 20.0)?;
+/// assert_eq!(f.node_count(), 3);
+/// assert_eq!(f.value(n[0].id(), "T")?, 20.0);
+/// // Un nœud hors support est une erreur, non un zéro.
+/// # let dehors = Node::create_in(coords.clone(), &[9.0, 9.0])?;
+/// assert!(f.value(dehors.id(), "T").is_err());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Serialize, Deserialize)]
 pub struct SubNodeField {
     /// POI1 SubMesh owning the per-node refcounts. The field keeps a
@@ -772,6 +799,32 @@ crate::impl_subfield_field_ops!(SubNodeField);
 /// sub defining `(node, component)`; whether the duplicates agree is
 /// verified on demand by [`NodeField::check`]. Writes go through the subs
 /// (`with_mut` on `field.get(i)`), exactly like `ElementField`.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::{NodeField, SubNodeField};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// // L'agrégat : une zone par support. Deux physiques posées sur des
+/// // régions différentes cohabitent donc dans un seul champ.
+/// let support = mesh::poi1_from_nodes(&n)?;
+/// let f = NodeField::from_submesh(&support.get(0)?, vec!["T".into()])?;
+/// assert_eq!(f.len(), 1);
+/// assert_eq!(f.node_count()?, 3);
+/// # use pyrucast::containers::field::Field;
+/// assert_eq!(f.components()?, vec!["T".to_string()]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Serialize, Deserialize, Default)]
 pub struct NodeField {
     subs: Vec<Handle<SubNodeField>>,

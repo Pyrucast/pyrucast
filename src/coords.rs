@@ -75,6 +75,30 @@ use std::fmt;
 /// This is the Cast3M `OPTI MODE` axis: it belongs to the **geometry**, not to
 /// any one physics, because it changes the integration measure `dΩ` itself —
 /// stiffness, mass, distributed flux, volumes and internal forces alike.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # use pyrucast::coords::CoordinateFrame;
+/// // Le repère appartient à la **géométrie**, non à une physique : c'est
+/// // lui qui change la mesure d'intégration dΩ, donc raideur, masse, flux
+/// // réparti, volumes et forces internes à la fois.
+/// assert_eq!(Coords::new(2)?.frame(), CoordinateFrame::Cartesian);
+/// let axi = Coords::axisymmetric()?;
+/// assert_eq!(axi.frame(), CoordinateFrame::Axisymmetric);
+/// assert!(axi.is_axisymmetric());
+/// assert_eq!(axi.dim(), 2); // `x = r`, `y = z`
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CoordinateFrame {
     /// Plain Cartesian coordinates in `dim` dimensions, `dΩ = |J| dξ`.
@@ -112,6 +136,23 @@ impl fmt::Display for CoordinateFrame {
 /// Node coordinates with stable identity, multiple configurations,
 /// optional solver permutation, and a garbage collector for unreferenced
 /// nodes.
+///
+/// ```
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// // Des positions à **identité stable** : un nœud garde son `NodeId` quoi
+/// // qu'il advienne des tableaux. S'y ajoutent plusieurs configurations,
+/// // une permutation pour le solveur, et un ramasse-miettes.
+/// let c = Handle::new(Coords::new(2)?);
+/// let id = c.write().add_node(&[1.0, 2.0])?;
+/// assert_eq!(c.read().position(id)?, vec![1.0, 2.0]);
+/// assert_eq!(c.read().node_count(), 1);
+/// // Le compteur de références protège le nœud tant qu'on le tient.
+/// assert_eq!(c.write().gc(), 0);
+/// c.write().decref(id)?;
+/// assert_eq!(c.write().gc(), 1);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Serialize, Deserialize)]
 pub struct Coords {
     dim: u8,

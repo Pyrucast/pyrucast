@@ -40,6 +40,26 @@ use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 
 /// Lightweight view on a single cell of a `SubMesh`.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// // Une vue légère sur **une** maille : sa connectivité, sans les
+/// // fonctions de forme — c'est `Element` qui les porte.
+/// let c = maillage.cell(0, 0)?;
+/// assert_eq!(c.node_ids()?.len(), 3);
+/// assert_eq!(c.element_type()?, ElementType::TRI3);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Clone)]
 pub struct Cell {
     pub(crate) sm: Handle<SubMesh>,
@@ -243,6 +263,23 @@ impl crate::dump::Dump for Cell {
 }
 
 /// Iterator over the cells of a single submesh.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// // Le parcours des mailles d'une zone, sans allocation par maille.
+/// assert_eq!(maillage.cells(0)?.count(), 1);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Clone)]
 pub struct CellIter {
     sm: Handle<SubMesh>,

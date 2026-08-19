@@ -23,6 +23,40 @@ use std::hash::Hash;
 /// `O(n_cells × keys_per_cell × cells_per_key)`: one pass to build the
 /// key→cells incidence, one greedy pass. Purely topological, so a caller caches
 /// the result and reuses it across assemblies.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::MatrixKind;
+/// # use pyrucast::ops::{element_field, matrix, mesh, scatter};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let modele = Model::heat_conduction(&fes).unwrap();
+/// # let materiaux = element_field::material_field(&modele,
+/// #     &[("k", 1.0), ("rho", 2.0), ("cp", 3.0)]).unwrap();
+/// # use pyrucast::ops::coloring;
+/// // Deux mailles qui partagent une clé — un nœud — ne peuvent pas être de
+/// // la même couleur : c'est ce qui rend le scatter parallèle sans course.
+/// let couleurs = coloring::greedy_color(2, 2, &[0u32, 1, 1, 2]);
+/// assert_eq!(couleurs.len(), 2); // elles partagent le nœud 1
+/// // Sans clé commune, une seule couleur suffit.
+/// assert_eq!(coloring::greedy_color(2, 2, &[0u32, 1, 2, 3]).len(), 1);
+/// // Et chaque maille apparaît exactement une fois.
+/// assert_eq!(couleurs.iter().map(|c| c.len()).sum::<usize>(), 2);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn greedy_color<K: Eq + Hash + Copy>(
     n_cells: usize,
     keys_per_cell: usize,

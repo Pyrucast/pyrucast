@@ -372,6 +372,35 @@ fn default_factor() -> f64 {
     1.0
 }
 
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+/// # use pyrucast::containers::mesh::SubMesh;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # let coords = Handle::new(Coords::new(1).unwrap());
+/// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+/// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+/// # let support = {
+/// #     let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+/// #     sm.add_cell(&[a.id()]).unwrap();
+/// #     sm.add_cell(&[b.id()]).unwrap();
+/// #     Handle::new(sm)
+/// # };
+/// # let mut bloc = SubMatrix::new(
+/// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
+/// #     DofOrdering::NodesThenVars, true).unwrap();
+/// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
+/// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
+/// // Un **bloc** : ses supports de ligne et de colonne, ses variables
+/// // duales et primales, et ses entrées. Rien ne vit dans l'agrégat.
+/// assert_eq!((bloc.n_rows(), bloc.n_cols()), (2, 2));
+/// assert_eq!(bloc.dual_vars(), &["q".to_string()]);
+/// assert_eq!(bloc.get(a.id(), "q", a.id(), "T"), 2.0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SubMatrix {
     /// POI1 mesh: cell `k` holds the k-th row-support node.
@@ -1901,6 +1930,36 @@ struct AssembledData {
 /// (`to_csr`, `to_dmatrix`, `mul_dense`, `dense`, `to_coo`, `to_csc`) return
 /// an error if the matrix has not been finalized. `add_sub` invalidates the
 /// assembled state.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+/// # use pyrucast::containers::mesh::SubMesh;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # let coords = Handle::new(Coords::new(1).unwrap());
+/// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+/// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+/// # let support = {
+/// #     let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+/// #     sm.add_cell(&[a.id()]).unwrap();
+/// #     sm.add_cell(&[b.id()]).unwrap();
+/// #     Handle::new(sm)
+/// # };
+/// # let mut bloc = SubMatrix::new(
+/// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
+/// #     DofOrdering::NodesThenVars, true).unwrap();
+/// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
+/// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
+/// // L'agrégat : des blocs, une numérotation globale, un état assemblé.
+/// let mut k = Matrix::empty();
+/// k.add_sub(Handle::new(bloc))?;
+/// k.finalize()?;
+/// assert_eq!((k.n_rows()?, k.n_cols()?), (2, 2));
+/// assert_eq!(k.to_csr()?.nnz(), 2);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Serialize, Deserialize, Default)]
 pub struct Matrix {
     subs: Vec<Handle<SubMatrix>>,

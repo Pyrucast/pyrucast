@@ -23,6 +23,45 @@ use crate::handle::Handle;
 /// incremented); interior nodes are newly created by bilinear blending of
 /// the four boundary curves, corrected against the four corners (discrete
 /// Coons patch — exact on the boundary).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::MatrixKind;
+/// # use pyrucast::ops::{element_field, matrix, mesh, scatter};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let modele = Model::heat_conduction(&fes).unwrap();
+/// # let materiaux = element_field::material_field(&modele,
+/// #     &[("k", 1.0), ("rho", 2.0), ("cp", 3.0)]).unwrap();
+/// // Quatre côtés **chaînés bout à bout** — la fin de l'un est le début du
+/// // suivant — et opposés deux à deux de même découpage : la grille les
+/// // interpole.
+/// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
+/// # let (a, b, c, d) = (p(&[0.0, 0.0]), p(&[2.0, 0.0]), p(&[2.0, 2.0]), p(&[0.0, 2.0]));
+/// let bas = mesh::line(&a, &b, 2, ElementType::SEG2)?;
+/// let droite = mesh::line(&b, &c, 3, ElementType::SEG2)?;
+/// let haut = mesh::line(&c, &d, 2, ElementType::SEG2)?;
+/// let gauche = mesh::line(&d, &a, 3, ElementType::SEG2)?;
+/// let m = mesh::transfinite(&bas, &droite, &haut, &gauche, ElementType::QUA4)?;
+/// assert_eq!(m.cell_count()?, 2 * 3);
+/// // Deux côtés opposés de découpages différents : refusé, en le disant.
+/// let trop = mesh::line(&c, &d, 5, ElementType::SEG2)?;
+/// assert!(mesh::transfinite(&bas, &droite, &trop, &gauche, ElementType::QUA4).is_err());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn transfinite(
     side1: &Mesh,
     side2: &Mesh,
