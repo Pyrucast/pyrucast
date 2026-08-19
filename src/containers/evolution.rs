@@ -65,12 +65,36 @@ use std::fmt;
 
 /// One labelled `(abscissa, value)` curve per zone — the input of a scalar
 /// X-Y plot ([`Evolution::scalar_series_set`]).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange, SubEvolution, SubValue, ValueKind};
+/// # use pyrucast::containers::evolution::ScalarSeriesSet;
+/// // Ce que consomme un tracé X-Y : une série étiquetée par zone.
+/// let e = Evolution::from_scalars(vec![(0.0, 20.0), (1.0, 120.0)], OutOfRange::Clamp)?;
+/// let series: ScalarSeriesSet = e.scalar_series_set()?;
+/// assert_eq!(series.len(), 1);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub type ScalarSeriesSet = Vec<(String, Vec<(f64, f64)>)>;
 
 // ─── OutOfRange policy ──────────────────────────────────────────────────────
 
 /// What an interpolation does when the requested abscissa falls **outside**
 /// the tabulated `[x_min, x_max]` range.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange, SubEvolution, SubValue, ValueKind};
+/// # let c = SubEvolution::new(
+/// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
+/// #     OutOfRange::Error).unwrap();
+/// // Trois réponses possibles à « et au-delà du dernier point tabulé ? »
+/// assert!(c.eval_scalar(2.0, Some(OutOfRange::Error)).is_err());
+/// assert_eq!(c.eval_scalar(2.0, Some(OutOfRange::Clamp))?, 120.0);
+/// assert_eq!(c.eval_scalar(2.0, Some(OutOfRange::Extrapolate))?, 220.0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum OutOfRange {
     /// Raise an error (the default).
@@ -85,6 +109,14 @@ pub enum OutOfRange {
 impl OutOfRange {
     /// Parse a policy from its lowercase name (`"error"`, `"clamp"`,
     /// `"extrapolate"`). Used by the Python layer.
+    ///
+    /// ```
+    /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange, SubEvolution, SubValue, ValueKind};
+    /// // Le nom que porte l'API Python — et rien d'autre.
+    /// assert_eq!(OutOfRange::from_name("clamp")?, OutOfRange::Clamp);
+    /// assert!(OutOfRange::from_name("saturate").is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn from_name(name: &str) -> Result<Self> {
         match name {
             "error" => Ok(OutOfRange::Error),
@@ -97,6 +129,11 @@ impl OutOfRange {
     }
 
     /// The policy's canonical name.
+    ///
+    /// ```
+    /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange, SubEvolution, SubValue, ValueKind};
+    /// assert_eq!(OutOfRange::Extrapolate.name(), "extrapolate");
+    /// ```
     pub fn name(self) -> &'static str {
         match self {
             OutOfRange::Error => "error",
@@ -110,6 +147,15 @@ impl OutOfRange {
 
 /// The kind of value carried by a [`SubValue`] — used for homogeneity checks
 /// and messages.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange, SubEvolution, SubValue, ValueKind};
+/// # let c = SubEvolution::new(vec![(0.0, SubValue::Scalar(20.0))], OutOfRange::Clamp).unwrap();
+/// // Une courbe est homogène : scalaires, champs nodaux ou champs par
+/// // éléments, jamais un mélange.
+/// assert_eq!(c.kind(), ValueKind::Scalar);
+/// ```
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ValueKind {
     Scalar,
@@ -130,6 +176,21 @@ impl ValueKind {
 /// A single tabulated value: a scalar, a node sub-field, or an element
 /// sub-field. Stored **inline** (owned) inside a [`SubEvolution`], like the
 /// physics structs inside `SubModel`.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange, SubEvolution, SubValue, ValueKind};
+/// # let c = SubEvolution::new(
+/// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
+/// #     OutOfRange::Clamp).unwrap();
+/// // Une valeur tabulée se lit par filtrage de variante — ou, pour le cas
+/// // scalaire, par le raccourci `eval_scalar`.
+/// match c.value_at(0)? {
+///     SubValue::Scalar(v) => assert_eq!(v, 20.0),
+///     SubValue::Node(_) | SubValue::Element(_) => unreachable!(),
+/// }
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Serialize, Deserialize, Clone)]
 pub enum SubValue {
     /// A plain scalar.
@@ -142,6 +203,11 @@ pub enum SubValue {
 
 impl SubValue {
     /// This value's [`ValueKind`].
+    ///
+    /// ```
+    /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange, SubEvolution, SubValue, ValueKind};
+    /// assert_eq!(SubValue::Scalar(1.0).kind(), ValueKind::Scalar);
+    /// ```
     pub fn kind(&self) -> ValueKind {
         match self {
             SubValue::Scalar(_) => ValueKind::Scalar,
@@ -182,6 +248,18 @@ fn lerp(lo: &SubValue, hi: &SubValue, t: f64) -> Result<SubValue> {
 /// One tabulated curve: abscissas (sorted, strictly increasing) and the
 /// matching values, all of the same [`ValueKind`] (and, for fields, on the
 /// same support).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange, SubEvolution, SubValue, ValueKind};
+/// // Une température qui monte de 20 à 120 en une unité de temps.
+/// let c = SubEvolution::new(
+///     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
+///     OutOfRange::Clamp)?;
+/// assert_eq!(c.len(), 2);
+/// assert_eq!(c.eval_scalar(0.5, None)?, 70.0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Serialize, Deserialize, Clone)]
 pub struct SubEvolution {
     /// Strictly increasing abscissas of the samples.
@@ -211,6 +289,23 @@ impl SubEvolution {
     /// Errors:
     /// - no sample, a `NaN` abscissa, or duplicate abscissas;
     /// - mixed value kinds, or field values on different supports.
+    ///
+    /// ```
+    /// # use pyrucast::containers::evolution::{OutOfRange, SubEvolution, SubValue, ValueKind};
+    /// # let courbe = SubEvolution::new(
+    /// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
+    /// #     OutOfRange::Clamp).unwrap();
+    /// // Les échantillons sont **triés** à la construction : les donner dans le
+    /// // désordre est licite, les donner deux fois à la même abscisse ne l'est pas.
+    /// let c = SubEvolution::new(
+    ///     vec![(1.0, SubValue::Scalar(120.0)), (0.0, SubValue::Scalar(20.0))],
+    ///     OutOfRange::Clamp)?;
+    /// assert_eq!(c.abscissas(), &[0.0, 1.0]);
+    /// assert!(SubEvolution::new(
+    ///     vec![(0.0, SubValue::Scalar(1.0)), (0.0, SubValue::Scalar(2.0))],
+    ///     OutOfRange::Error).is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn new(mut samples: Vec<(f64, SubValue)>, out_of_range: OutOfRange) -> Result<Self> {
         if samples.is_empty() {
             return Err(PyrucastError::Message(
@@ -258,16 +353,47 @@ impl SubEvolution {
     }
 
     /// The abscissa's physical type, if set.
+    ///
+    /// ```
+    /// # use pyrucast::containers::evolution::{OutOfRange, SubEvolution, SubValue, ValueKind};
+    /// # let courbe = SubEvolution::new(
+    /// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
+    /// #     OutOfRange::Clamp).unwrap();
+    /// let c = courbe.with_abscissa_type(Some("T".into()));
+    /// assert_eq!(c.abscissa_type(), Some("T"));
+    /// ```
     pub fn abscissa_type(&self) -> Option<&str> {
         self.abscissa_type.as_deref()
     }
 
     /// The ordinate's physical type (scalar curves), if set.
+    ///
+    /// ```
+    /// # use pyrucast::containers::evolution::{OutOfRange, SubEvolution, SubValue, ValueKind};
+    /// # let courbe = SubEvolution::new(
+    /// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
+    /// #     OutOfRange::Clamp).unwrap();
+    /// let c = courbe.with_ordinate_type(Some("young".into()))?;
+    /// assert_eq!(c.ordinate_type(), Some("young"));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn ordinate_type(&self) -> Option<&str> {
         self.ordinate_type.as_deref()
     }
 
     /// Set (or clear) the abscissa's physical type.
+    ///
+    /// ```
+    /// # use pyrucast::containers::evolution::{OutOfRange, SubEvolution, SubValue, ValueKind};
+    /// # let courbe = SubEvolution::new(
+    /// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
+    /// #     OutOfRange::Clamp).unwrap();
+    /// let mut c = courbe;
+    /// c.set_abscissa_type(Some("time".into()));
+    /// assert_eq!(c.abscissa_type(), Some("time"));
+    /// c.set_abscissa_type(None); // et l'on peut le retirer
+    /// assert!(c.abscissa_type().is_none());
+    /// ```
     pub fn set_abscissa_type(&mut self, t: Option<String>) {
         self.abscissa_type = t;
     }
@@ -275,6 +401,19 @@ impl SubEvolution {
     /// Set (or clear) the ordinate's physical type. Errors if a type is given
     /// for a curve that carries fields rather than scalars — only a scalar
     /// curve has an ordinate to type.
+    ///
+    /// ```
+    /// # use pyrucast::containers::evolution::{OutOfRange, SubEvolution, SubValue, ValueKind};
+    /// # let courbe = SubEvolution::new(
+    /// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
+    /// #     OutOfRange::Clamp).unwrap();
+    /// let mut c = courbe;
+    /// c.set_ordinate_type(Some("young".into()))?;
+    /// assert_eq!(c.ordinate_type(), Some("young"));
+    /// // Une ordonnée n'a de type que sur une courbe **scalaire** : sur une
+    /// // courbe de champs, la pose échoue.
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn set_ordinate_type(&mut self, t: Option<String>) -> Result<()> {
         if t.is_some() && self.kind() != ValueKind::Scalar {
             return Err(PyrucastError::Message(format!(
@@ -287,44 +426,121 @@ impl SubEvolution {
     }
 
     /// Builder form of [`SubEvolution::set_abscissa_type`].
+    ///
+    /// ```
+    /// # use pyrucast::containers::evolution::{OutOfRange, SubEvolution, SubValue, ValueKind};
+    /// # let courbe = SubEvolution::new(
+    /// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
+    /// #     OutOfRange::Clamp).unwrap();
+    /// // Forme chaînée, pour poser le type à la construction.
+    /// let c = SubEvolution::new(
+    ///     vec![(20.0, SubValue::Scalar(210_000.0)), (300.0, SubValue::Scalar(180_000.0))],
+    ///     OutOfRange::Clamp)?
+    ///     .with_abscissa_type(Some("T".into()));
+    /// assert_eq!(c.abscissa_type(), Some("T"));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn with_abscissa_type(mut self, t: Option<String>) -> Self {
         self.abscissa_type = t;
         self
     }
 
     /// Builder form of [`SubEvolution::set_ordinate_type`] (validated).
+    ///
+    /// ```
+    /// # use pyrucast::containers::evolution::{OutOfRange, SubEvolution, SubValue, ValueKind};
+    /// # let courbe = SubEvolution::new(
+    /// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
+    /// #     OutOfRange::Clamp).unwrap();
+    /// // Un module d'Young qui dépend de la température : les deux types posés
+    /// // ensemble font de la courbe une fonction de transfert nommée.
+    /// let c = courbe
+    ///     .with_abscissa_type(Some("T".into()))
+    ///     .with_ordinate_type(Some("young".into()))?;
+    /// assert_eq!((c.abscissa_type(), c.ordinate_type()), (Some("T"), Some("young")));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn with_ordinate_type(mut self, t: Option<String>) -> Result<Self> {
         self.set_ordinate_type(t)?;
         Ok(self)
     }
 
     /// Number of samples.
+    ///
+    /// ```
+    /// # use pyrucast::containers::evolution::{OutOfRange, SubEvolution, SubValue, ValueKind};
+    /// # let courbe = SubEvolution::new(
+    /// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
+    /// #     OutOfRange::Clamp).unwrap();
+    /// assert_eq!(courbe.len(), 2); // deux points tabulés
+    /// ```
     pub fn len(&self) -> usize {
         self.abscissas.len()
     }
 
     /// Whether the curve holds no sample (never true for a constructed one).
+    ///
+    /// ```
+    /// # use pyrucast::containers::evolution::{OutOfRange, SubEvolution, SubValue, ValueKind};
+    /// # let courbe = SubEvolution::new(
+    /// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
+    /// #     OutOfRange::Clamp).unwrap();
+    /// assert!(!courbe.is_empty());
+    /// ```
     pub fn is_empty(&self) -> bool {
         self.abscissas.is_empty()
     }
 
     /// The sorted abscissas.
+    ///
+    /// ```
+    /// # use pyrucast::containers::evolution::{OutOfRange, SubEvolution, SubValue, ValueKind};
+    /// # let courbe = SubEvolution::new(
+    /// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
+    /// #     OutOfRange::Clamp).unwrap();
+    /// assert_eq!(courbe.abscissas(), &[0.0, 1.0]); // toujours croissantes
+    /// ```
     pub fn abscissas(&self) -> &[f64] {
         &self.abscissas
     }
 
     /// This curve's value kind.
+    ///
+    /// ```
+    /// # use pyrucast::containers::evolution::{OutOfRange, SubEvolution, SubValue, ValueKind};
+    /// # let courbe = SubEvolution::new(
+    /// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
+    /// #     OutOfRange::Clamp).unwrap();
+    /// assert_eq!(courbe.kind(), ValueKind::Scalar);
+    /// ```
     pub fn kind(&self) -> ValueKind {
         self.values[0].kind()
     }
 
     /// This curve's stored out-of-range policy.
+    ///
+    /// ```
+    /// # use pyrucast::containers::evolution::{OutOfRange, SubEvolution, SubValue, ValueKind};
+    /// # let courbe = SubEvolution::new(
+    /// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
+    /// #     OutOfRange::Clamp).unwrap();
+    /// assert_eq!(courbe.out_of_range(), OutOfRange::Clamp);
+    /// ```
     pub fn out_of_range(&self) -> OutOfRange {
         self.out_of_range
     }
 
     /// The `(abscissa, value)` points of a **scalar** curve, in abscissa
     /// order. Errors if the curve carries fields rather than scalars.
+    ///
+    /// ```
+    /// # use pyrucast::containers::evolution::{OutOfRange, SubEvolution, SubValue, ValueKind};
+    /// # let courbe = SubEvolution::new(
+    /// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
+    /// #     OutOfRange::Clamp).unwrap();
+    /// assert_eq!(courbe.scalar_series()?, vec![(0.0, 20.0), (1.0, 120.0)]);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn scalar_series(&self) -> Result<Vec<(f64, f64)>> {
         if self.kind() != ValueKind::Scalar {
             return Err(PyrucastError::Message(
@@ -343,6 +559,20 @@ impl SubEvolution {
     }
 
     /// The `k`-th tabulated value (a clone). Errors if `k` is out of range.
+    ///
+    /// ```
+    /// # use pyrucast::containers::evolution::{OutOfRange, SubEvolution, SubValue, ValueKind};
+    /// # let courbe = SubEvolution::new(
+    /// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
+    /// #     OutOfRange::Clamp).unwrap();
+    /// // La valeur **tabulée** d'indice k — sans interpolation.
+    /// match courbe.value_at(1)? {
+    ///     SubValue::Scalar(v) => assert_eq!(v, 120.0),
+    ///     _ => unreachable!(),
+    /// }
+    /// assert!(courbe.value_at(2).is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn value_at(&self, k: usize) -> Result<SubValue> {
         self.values.get(k).cloned().ok_or_else(|| {
             PyrucastError::Message(format!(
@@ -381,6 +611,22 @@ impl SubEvolution {
 
     /// Interpolate at `x`. `policy` overrides the stored [`OutOfRange`] for
     /// this single query when `Some`.
+    ///
+    /// ```
+    /// # use pyrucast::containers::evolution::{OutOfRange, SubEvolution, SubValue, ValueKind};
+    /// # let courbe = SubEvolution::new(
+    /// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
+    /// #     OutOfRange::Clamp).unwrap();
+    /// // Interpolation linéaire entre deux points tabulés…
+    /// match courbe.interpolate(0.25, None)? {
+    ///     SubValue::Scalar(v) => assert_eq!(v, 45.0),
+    ///     _ => unreachable!(),
+    /// }
+    /// // …et hors domaine, la politique de la courbe s'applique — sauf si
+    /// // l'appel en impose une autre.
+    /// assert!(courbe.interpolate(2.0, Some(OutOfRange::Error)).is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn interpolate(&self, x: f64, policy: Option<OutOfRange>) -> Result<SubValue> {
         let policy = policy.unwrap_or(self.out_of_range);
         let xs = &self.abscissas;
@@ -449,6 +695,17 @@ impl SubEvolution {
 
     /// Interpolate a **scalar** curve at `x`, returning the value directly.
     /// Errors if this curve carries fields rather than scalars.
+    ///
+    /// ```
+    /// # use pyrucast::containers::evolution::{OutOfRange, SubEvolution, SubValue, ValueKind};
+    /// # let courbe = SubEvolution::new(
+    /// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
+    /// #     OutOfRange::Clamp).unwrap();
+    /// // Le raccourci sans filtrage de variante, pour une courbe scalaire.
+    /// assert_eq!(courbe.eval_scalar(0.5, None)?, 70.0);
+    /// assert_eq!(courbe.eval_scalar(9.0, None)?, 120.0); // Clamp
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn eval_scalar(&self, x: f64, policy: Option<OutOfRange>) -> Result<f64> {
         match self.interpolate(x, policy)? {
             SubValue::Scalar(v) => Ok(v),
@@ -469,6 +726,36 @@ impl SubEvolution {
     /// Errors if the curve is not scalar-valued, has no abscissa type set, or
     /// the field has no component matching that type (the requested
     /// **type correspondence**).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::evolution::{OutOfRange, SubEvolution, SubValue};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let support = mesh::poi1_from_nodes(&n).unwrap();
+    /// # let temp = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// # temp.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
+    /// // Une conductivité qui dépend de la température : la courbe est une
+    /// // fonction de transfert, et ce sont les **types** qui l'accrochent au
+    /// // champ — l'abscisse nomme la composante lue, l'ordonnée celle produite.
+    /// let loi = SubEvolution::new(
+    ///     vec![(20.0, SubValue::Scalar(50.0)), (120.0, SubValue::Scalar(30.0))],
+    ///     OutOfRange::Clamp)?
+    ///     .with_abscissa_type(Some("T".into()))
+    ///     .with_ordinate_type(Some("k".into()))?;
+    ///
+    /// let k = loi.interpolate_field(&*temp.get(0)?.read(), None)?;
+    /// assert_eq!(k.components(), &["k".to_string()]);
+    /// assert_eq!(k.value(n[0].id(), "k")?, 30.0);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn interpolate_field<F>(&self, field: &F, policy: Option<OutOfRange>) -> Result<F>
     where
         F: SubField + Clone,
@@ -601,6 +888,18 @@ impl crate::dump::Dump for SubEvolution {
 /// The aggregate carries its own [`OutOfRange`] policy, applied to every
 /// curve at interpolation time. Note that the structural union (`a | b`) and
 /// slicing reset the policy to the default [`OutOfRange::Error`].
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange, SubEvolution, SubValue, ValueKind};
+/// let e = Evolution::from_scalars(vec![(0.0, 20.0), (1.0, 120.0)], OutOfRange::Clamp)?;
+/// assert_eq!(e.len(), 1); // une courbe par zone ; ici une seule
+/// match e.interpolate(0.5, None)? {
+///     Interpolated::Scalars(v) => assert_eq!(v, vec![70.0]),
+///     _ => unreachable!(),
+/// }
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Serialize, Deserialize, Default)]
 pub struct Evolution {
     subs: Vec<Handle<SubEvolution>>,
@@ -636,6 +935,19 @@ crate::impl_aggregate_dump!(Evolution);
 /// The result of interpolating an [`Evolution`]: an aggregate of the per-zone
 /// results, except for scalars where a plain `Vec<f64>` is returned (there is
 /// no aggregate of floats).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange, SubEvolution, SubValue, ValueKind};
+/// // Interpoler un agrégat rend un agrégat — sauf pour les scalaires, dont
+/// // il n'existe pas d'agrégat : un `Vec<f64>`, une valeur par zone.
+/// let e = Evolution::from_scalars(vec![(0.0, 20.0), (1.0, 120.0)], OutOfRange::Clamp)?;
+/// match e.interpolate(0.25, None)? {
+///     Interpolated::Scalars(v) => assert_eq!(v, vec![45.0]),
+///     Interpolated::Node(_) | Interpolated::Element(_) => unreachable!(),
+/// }
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub enum Interpolated {
     /// One scalar per sub-evolution.
     Scalars(Vec<f64>),
@@ -647,6 +959,28 @@ pub enum Interpolated {
 
 impl Evolution {
     /// The aggregate's stored out-of-range policy.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let support = mesh::poi1_from_nodes(&n).unwrap();
+    /// # let mut froid = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// # froid.get(0).unwrap().write().add_to_component("T", 20.0).unwrap();
+    /// # let mut chaud = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// # chaud.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
+    /// let e = Evolution::from_node_fields(&[(0.0, &froid), (1.0, &chaud)], OutOfRange::Clamp)?;
+    /// assert_eq!(e.out_of_range(), OutOfRange::Clamp);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn out_of_range(&self) -> OutOfRange {
         self.out_of_range
     }
@@ -655,6 +989,32 @@ impl Evolution {
     ///
     /// `policy` overrides the aggregate's [`OutOfRange`] for this query when
     /// `Some`; the effective policy is applied to every curve.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let support = mesh::poi1_from_nodes(&n).unwrap();
+    /// # let mut froid = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// # froid.get(0).unwrap().write().add_to_component("T", 20.0).unwrap();
+    /// # let mut chaud = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// # chaud.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
+    /// let e = Evolution::from_node_fields(&[(0.0, &froid), (1.0, &chaud)], OutOfRange::Clamp)?;
+    /// // Un chargement à mi-course : le champ entier, zone par zone.
+    /// match e.interpolate(0.5, None)? {
+    ///     Interpolated::Node(f) => assert_eq!(f.get(0)?.read().value(n[0].id(), "T")?, 70.0),
+    ///     _ => unreachable!(),
+    /// }
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn interpolate(&self, x: f64, policy: Option<OutOfRange>) -> Result<Interpolated> {
         if self.subs.is_empty() {
             return Err(PyrucastError::Message(
@@ -698,6 +1058,30 @@ impl Evolution {
 
     /// The abscissa's physical type (taken from the first sub-evolution), if
     /// set. `None` for an empty evolution.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let support = mesh::poi1_from_nodes(&n).unwrap();
+    /// # let mut froid = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// # froid.get(0).unwrap().write().add_to_component("T", 20.0).unwrap();
+    /// # let mut chaud = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// # chaud.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
+    /// let mut e = Evolution::from_scalars(vec![(0.0, 1.0), (1.0, 2.0)], OutOfRange::Clamp)?;
+    /// assert_eq!(e.abscissa_type()?, None);
+    /// e.set_abscissa_type(Some("time".into()))?;
+    /// assert_eq!(e.abscissa_type()?, Some("time".into()));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn abscissa_type(&self) -> Result<Option<String>> {
         match self.subs.first() {
             Some(h) => Ok(h.read().abscissa_type().map(str::to_string)),
@@ -707,6 +1091,29 @@ impl Evolution {
 
     /// The ordinate's physical type (scalar evolutions), if set. `None` for an
     /// empty evolution.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let support = mesh::poi1_from_nodes(&n).unwrap();
+    /// # let mut froid = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// # froid.get(0).unwrap().write().add_to_component("T", 20.0).unwrap();
+    /// # let mut chaud = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// # chaud.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
+    /// let mut e = Evolution::from_scalars(vec![(20.0, 210e3), (300.0, 180e3)], OutOfRange::Clamp)?;
+    /// e.set_ordinate_type(Some("young".into()))?;
+    /// assert_eq!(e.ordinate_type()?, Some("young".into()));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn ordinate_type(&self) -> Result<Option<String>> {
         match self.subs.first() {
             Some(h) => Ok(h.read().ordinate_type().map(str::to_string)),
@@ -715,6 +1122,30 @@ impl Evolution {
     }
 
     /// Set (or clear) the abscissa type on **every** sub-evolution.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let support = mesh::poi1_from_nodes(&n).unwrap();
+    /// # let mut froid = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// # froid.get(0).unwrap().write().add_to_component("T", 20.0).unwrap();
+    /// # let mut chaud = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// # chaud.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
+    /// // Le type est posé sur **toutes** les zones à la fois.
+    /// let mut e = Evolution::from_node_fields(&[(0.0, &froid), (1.0, &chaud)], OutOfRange::Clamp)?;
+    /// e.set_abscissa_type(Some("time".into()))?;
+    /// assert_eq!(e.abscissa_type()?, Some("time".into()));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn set_abscissa_type(&mut self, t: Option<String>) -> Result<()> {
         for h in &self.subs {
             h.write().set_abscissa_type(t.clone());
@@ -724,6 +1155,32 @@ impl Evolution {
 
     /// Set (or clear) the ordinate type on **every** sub-evolution. Errors on a
     /// field-valued evolution (only scalar curves have an ordinate to type).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let support = mesh::poi1_from_nodes(&n).unwrap();
+    /// # let mut froid = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// # froid.get(0).unwrap().write().add_to_component("T", 20.0).unwrap();
+    /// # let mut chaud = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// # chaud.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
+    /// let mut e = Evolution::from_scalars(vec![(0.0, 1.0), (1.0, 2.0)], OutOfRange::Clamp)?;
+    /// e.set_ordinate_type(Some("young".into()))?;
+    /// // Sur une évolution de champs, l'ordonnée n'a pas de type à porter.
+    /// let mut champs = Evolution::from_node_fields(
+    ///     &[(0.0, &froid), (1.0, &chaud)], OutOfRange::Clamp)?;
+    /// assert!(champs.set_ordinate_type(Some("young".into())).is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn set_ordinate_type(&mut self, t: Option<String>) -> Result<()> {
         for h in &self.subs {
             h.write().set_ordinate_type(t.clone())?;
@@ -767,6 +1224,40 @@ impl Evolution {
 
     /// Map a whole [`ElementField`] through the (single, scalar) curve — see
     /// [`Evolution::interpolate_node_field`].
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+    /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let faire = |v: f64| {
+    /// #     let f = ElementField::new(&fes, vec!["T".into()]).unwrap();
+    /// #     f.get(0).unwrap().write().set_uniform("T", v).unwrap();
+    /// #     f
+    /// # };
+    /// # let (froid, chaud) = (faire(20.0), faire(120.0));
+    /// // La courbe joue ici le rôle de **fonction de transfert** : `T` fournit
+    /// // les abscisses, `k` est la composante produite.
+    /// let mut loi =
+    ///     Evolution::from_scalars(vec![(20.0, 50.0), (120.0, 30.0)], OutOfRange::Clamp)?;
+    /// loi.set_abscissa_type(Some("T".into()))?;
+    /// loi.set_ordinate_type(Some("k".into()))?;
+    /// let k = loi.interpolate_element_field(&chaud, None)?;
+    /// assert_eq!(k.get(0)?.read().value(0, 0, "k")?, 30.0);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn interpolate_element_field(
         &self,
         field: &ElementField,
@@ -779,6 +1270,29 @@ impl Evolution {
 
     /// The aggregate's value kind (taken from the first sub-evolution).
     /// Errors if the evolution is empty.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let support = mesh::poi1_from_nodes(&n).unwrap();
+    /// # let mut froid = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// # froid.get(0).unwrap().write().add_to_component("T", 20.0).unwrap();
+    /// # let mut chaud = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// # chaud.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
+    /// # use pyrucast::containers::evolution::ValueKind;
+    /// let e = Evolution::from_node_fields(&[(0.0, &froid), (1.0, &chaud)], OutOfRange::Clamp)?;
+    /// assert_eq!(e.kind()?, ValueKind::Node);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn kind(&self) -> Result<ValueKind> {
         if self.subs.is_empty() {
             return Err(PyrucastError::Message("Evolution: empty evolution".into()));
@@ -789,6 +1303,29 @@ impl Evolution {
     /// The abscissa grid **shared** by every sub-evolution, validated to be
     /// identical across zones (a global frame slider requires it). Errors on
     /// an empty evolution or mismatched grids.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let support = mesh::poi1_from_nodes(&n).unwrap();
+    /// # let mut froid = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// # froid.get(0).unwrap().write().add_to_component("T", 20.0).unwrap();
+    /// # let mut chaud = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// # chaud.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
+    /// let e = Evolution::from_node_fields(&[(0.0, &froid), (1.0, &chaud)], OutOfRange::Clamp)?;
+    /// // Une grille commune à toutes les zones — ce qu'exige un curseur d'image.
+    /// assert_eq!(e.shared_abscissas()?, vec![0.0, 1.0]);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn shared_abscissas(&self) -> Result<Vec<f64>> {
         if self.subs.is_empty() {
             return Err(PyrucastError::Message("Evolution: empty evolution".into()));
@@ -807,12 +1344,58 @@ impl Evolution {
     }
 
     /// Number of tabulated frames (length of the shared abscissa grid).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let support = mesh::poi1_from_nodes(&n).unwrap();
+    /// # let mut froid = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// # froid.get(0).unwrap().write().add_to_component("T", 20.0).unwrap();
+    /// # let mut chaud = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// # chaud.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
+    /// let e = Evolution::from_node_fields(&[(0.0, &froid), (1.0, &chaud)], OutOfRange::Clamp)?;
+    /// assert_eq!(e.frame_count()?, 2);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn frame_count(&self) -> Result<usize> {
         Ok(self.shared_abscissas()?.len())
     }
 
     /// Regroup the `k`-th tabulated node sub-field of every zone into a
     /// [`NodeField`]. Errors if the values are not node fields.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let support = mesh::poi1_from_nodes(&n).unwrap();
+    /// # let mut froid = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// # froid.get(0).unwrap().write().add_to_component("T", 20.0).unwrap();
+    /// # let mut chaud = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// # chaud.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
+    /// let e = Evolution::from_node_fields(&[(0.0, &froid), (1.0, &chaud)], OutOfRange::Clamp)?;
+    /// // L'image tabulée k, recomposée en champ multi-zones.
+    /// let f = e.node_frame(1)?;
+    /// assert_eq!(f.get(0)?.read().value(n[0].id(), "T")?, 120.0);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn node_frame(&self, k: usize) -> Result<NodeField> {
         let mut field = NodeField::default();
         for h in &self.subs {
@@ -826,6 +1409,35 @@ impl Evolution {
 
     /// Regroup the `k`-th tabulated element sub-field of every zone into an
     /// [`ElementField`]. Errors if the values are not element fields.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+    /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let faire = |v: f64| {
+    /// #     let f = ElementField::new(&fes, vec!["T".into()]).unwrap();
+    /// #     f.get(0).unwrap().write().set_uniform("T", v).unwrap();
+    /// #     f
+    /// # };
+    /// # let (froid, chaud) = (faire(20.0), faire(120.0));
+    /// let e = Evolution::from_element_fields(&[(0.0, &froid), (1.0, &chaud)], OutOfRange::Clamp)?;
+    /// let f = e.element_frame(1)?;
+    /// assert_eq!(f.get(0)?.read().value(0, 0, "T")?, 120.0);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn element_frame(&self, k: usize) -> Result<ElementField> {
         let mut field = ElementField::default();
         for h in &self.subs {
@@ -839,6 +1451,31 @@ impl Evolution {
 
     /// One labelled `(abscissa, value)` series per sub-evolution — for a
     /// scalar X-Y plot. Errors if the values are not scalars.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let support = mesh::poi1_from_nodes(&n).unwrap();
+    /// # let mut froid = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// # froid.get(0).unwrap().write().add_to_component("T", 20.0).unwrap();
+    /// # let mut chaud = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// # chaud.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
+    /// let e = Evolution::from_scalars(vec![(0.0, 20.0), (1.0, 120.0)], OutOfRange::Clamp)?;
+    /// // Une série étiquetée par zone, prête pour un tracé X-Y.
+    /// let series = e.scalar_series_set()?;
+    /// assert_eq!(series[0].0, "value"); // « zone i » dès qu'il y en a plusieurs
+    /// assert_eq!(series[0].1, vec![(0.0, 20.0), (1.0, 120.0)]);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn scalar_series_set(&self) -> Result<ScalarSeriesSet> {
         let mut out = Vec::with_capacity(self.subs.len());
         for (i, h) in self.subs.iter().enumerate() {
@@ -947,6 +1584,28 @@ impl Evolution {
 
     /// Build a single-curve scalar `Evolution` from `(abscissa, scalar)`
     /// samples — the classic X→Y curve (one sub-evolution).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let support = mesh::poi1_from_nodes(&n).unwrap();
+    /// # let mut froid = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// # froid.get(0).unwrap().write().add_to_component("T", 20.0).unwrap();
+    /// # let mut chaud = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// # chaud.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
+    /// let e = Evolution::from_scalars(vec![(0.0, 20.0), (1.0, 120.0)], OutOfRange::Clamp)?;
+    /// assert_eq!(e.len(), 1); // une seule courbe
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn from_scalars(samples: Vec<(f64, f64)>, out_of_range: OutOfRange) -> Result<Self> {
         let pairs = samples
             .into_iter()
@@ -963,6 +1622,31 @@ impl Evolution {
     /// (time-major). The fields are **transposed** into one curve per zone:
     /// zones are identified by their support (matched across steps), so every
     /// step must carry the same set of supports as the first.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let support = mesh::poi1_from_nodes(&n).unwrap();
+    /// # let mut froid = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// # froid.get(0).unwrap().write().add_to_component("T", 20.0).unwrap();
+    /// # let mut chaud = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
+    /// # chaud.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
+    /// // Les champs sont donnés **par date** ; l'évolution les transpose en une
+    /// // courbe par zone, les zones étant appariées par leur support.
+    /// let e = Evolution::from_node_fields(&[(0.0, &froid), (1.0, &chaud)], OutOfRange::Clamp)?;
+    /// assert_eq!(e.len(), froid.len());
+    /// assert_eq!(e.frame_count()?, 2);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn from_node_fields(
         samples: &[(f64, &NodeField)],
         out_of_range: OutOfRange,
@@ -998,6 +1682,36 @@ impl Evolution {
     /// Build an `Evolution` from whole element fields tabulated at each
     /// abscissa (time-major). Transposed into one curve per FE subspace zone,
     /// matched across steps by support — see [`Evolution::from_node_fields`].
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+    /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let faire = |v: f64| {
+    /// #     let f = ElementField::new(&fes, vec!["T".into()]).unwrap();
+    /// #     f.get(0).unwrap().write().set_uniform("T", v).unwrap();
+    /// #     f
+    /// # };
+    /// # let (froid, chaud) = (faire(20.0), faire(120.0));
+    /// // Les champs par éléments se transposent comme les champs nodaux : une
+    /// // courbe par sous-espace EF, apparié par son support.
+    /// let e = Evolution::from_element_fields(&[(0.0, &froid), (1.0, &chaud)], OutOfRange::Clamp)?;
+    /// assert_eq!(e.frame_count()?, 2);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn from_element_fields(
         samples: &[(f64, &ElementField)],
         out_of_range: OutOfRange,

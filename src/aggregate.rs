@@ -823,6 +823,32 @@ macro_rules! impl_aggregate_std_traits {
             /// Build the aggregate that is the union of two sub-objects
             /// (first-seen order, deduplicated by handle, then finalized).
             /// Backs Python's `sub | sub`.
+            ///
+            /// ```
+            /// # use pyrucast::aggregate::Aggregate;
+            /// # use pyrucast::atoms::{ElementType, Node};
+            /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+            /// # use pyrucast::coords::Coords;
+            /// # use pyrucast::handle::Handle;
+            /// # let coords = Handle::new(Coords::new(2).unwrap());
+            /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+            /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+            /// # let faire = |t| {
+            /// #     let mut sm = SubMesh::new(coords.clone(), t);
+            /// #     sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+            /// #     Handle::new(sm)
+            /// # };
+            /// # let (a, b) = (faire(ElementType::SEG2), faire(ElementType::SEG2));
+            /// // Deux sous-objets seuls ne savent pas nommer leur agrégat :
+            /// // le constructeur est porté par le type agrégat.
+            /// let m = Mesh::union_subs(&a, &b)?;
+            /// assert_eq!(m.len(), 2);
+            ///
+            /// // Le même sous-objet deux fois ne compte qu'une : la
+            /// // déduplication se fait **par handle**, pas par contenu.
+            /// assert_eq!(Mesh::union_subs(&a, &a)?.len(), 1);
+            /// # Ok::<(), pyrucast::PyrucastError>(())
+            /// ```
             pub fn union_subs(
                 a: &$crate::handle::Handle<<$T as $crate::aggregate::Aggregate>::Sub>,
                 b: &$crate::handle::Handle<<$T as $crate::aggregate::Aggregate>::Sub>,

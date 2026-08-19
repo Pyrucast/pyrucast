@@ -103,6 +103,32 @@ use std::fmt;
 ///
 /// Layout: flat row-major in the order *cell → gauss → component*
 /// (see the module-level documentation).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// // Une zone matériau : les valeurs vivent aux **points de Gauss**, pas aux
+/// // nœuds — c'est ce qui permet à un champ d'être discontinu d'une maille
+/// // à l'autre sans rien moyenner.
+/// let acier = SubElementField::from_uniform_per_component(
+///     zone.clone(), vec!["E".into(), "nu".into()], &[210_000.0, 0.3])?;
+/// assert_eq!(acier.cell_count(), 1);
+/// assert_eq!(acier.value(0, 0, "E")?, 210_000.0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Serialize, Deserialize)]
 pub struct SubElementField {
     support: Handle<SubFiniteElementSpace>,
@@ -122,6 +148,29 @@ impl SubElementField {
     ///
     /// - `components` is empty;
     /// - `components` contains a duplicate name.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// // Une zone matériau : un champ par point de Gauss, tout à zéro.
+    /// let f = SubElementField::new(zone.clone(), vec!["E".into(), "nu".into()])?;
+    /// assert_eq!(f.component_count(), 2);
+    /// assert_eq!(f.get(0, 0, 0)?, 0.0);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn new(fespace: Handle<SubFiniteElementSpace>, components: Vec<String>) -> Result<Self> {
         crate::containers::field::check_components("SubElementField", &components)?;
         let (n_cells, n_gauss) = {
@@ -142,6 +191,30 @@ impl SubElementField {
     /// Convenience: build a sub-field with a uniform value per component.
     ///
     /// `values_per_component` must have the same length as `components`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// // La forme courante d'un matériau homogène : une valeur par composante.
+    /// let acier = SubElementField::from_uniform_per_component(
+    ///     zone.clone(), vec!["E".into(), "nu".into()], &[210_000.0, 0.3])?;
+    /// assert_eq!(acier.value(0, 0, "E")?, 210_000.0);
+    /// assert_eq!(acier.value(0, 2, "nu")?, 0.3); // tous les points de Gauss
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn from_uniform_per_component(
         fespace: Handle<SubFiniteElementSpace>,
         components: Vec<String>,
@@ -165,11 +238,54 @@ impl SubElementField {
     // ── Structural accessors ────────────────────────────────────────────────
 
     /// Number of cells captured at construction.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// let f = SubElementField::new(zone.clone(), vec!["k".into()])?;
+    /// assert_eq!(f.cell_count(), 1);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn cell_count(&self) -> usize {
         self.n_cells
     }
 
     /// Number of Gauss points per cell.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// let f = SubElementField::new(zone.clone(), vec!["k".into()])?;
+    /// // Le champ tient autant de valeurs que l'espace EF a de points de Gauss.
+    /// assert_eq!(f.gauss_count(), zone.read().gauss_count());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn gauss_count(&self) -> usize {
         self.n_gauss
     }
@@ -180,12 +296,59 @@ impl SubElementField {
     // ── Value access by indices ─────────────────────────────────────────────
 
     /// Read the value at `(cell, gauss, component_index)`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// let mut f = SubElementField::new(zone.clone(), vec!["k".into()])?;
+    /// f.set(0, 0, 0, 1.5)?;
+    /// assert_eq!(f.get(0, 0, 0)?, 1.5);
+    /// // Les trois index sont vérifiés : hors maille, hors Gauss, hors composante.
+    /// assert!(f.get(0, 0, 1).is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn get(&self, cell: usize, gauss: usize, comp: usize) -> Result<f64> {
         let idx = self.linear_index(cell, gauss, comp)?;
         Ok(self.values[idx])
     }
 
     /// Write the value at `(cell, gauss, component_index)`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// let mut f = SubElementField::new(zone.clone(), vec!["k".into()])?;
+    /// f.set(0, 1, 0, 2.0)?; // le second point de Gauss seulement
+    /// assert_eq!(f.get(0, 0, 0)?, 0.0);
+    /// assert_eq!(f.get(0, 1, 0)?, 2.0);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn set(&mut self, cell: usize, gauss: usize, comp: usize, value: f64) -> Result<()> {
         let idx = self.linear_index(cell, gauss, comp)?;
         self.values[idx] = value;
@@ -194,6 +357,30 @@ impl SubElementField {
 
     /// All component values at `(cell, gauss)`, in component order
     /// (length = `component_count`).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// let f = SubElementField::from_uniform_per_component(
+    ///     zone.clone(), vec!["s_xx".into(), "s_yy".into(), "s_xy".into()],
+    ///     &[10.0, 20.0, 5.0])?;
+    /// // Le tenseur entier en un point, dans l'ordre des composantes.
+    /// assert_eq!(f.point_values(0, 0)?, &[10.0, 20.0, 5.0]);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn point_values(&self, cell: usize, gauss: usize) -> Result<&[f64]> {
         self.check_cell(cell)?;
         self.check_gauss(gauss)?;
@@ -205,12 +392,57 @@ impl SubElementField {
     // ── Value access by component name ──────────────────────────────────────
 
     /// Read by `(cell, gauss, component name)`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// let f = SubElementField::from_uniform_per_component(
+    ///     zone.clone(), vec!["E".into(), "nu".into()], &[210_000.0, 0.3])?;
+    /// assert_eq!(f.value(0, 0, "nu")?, 0.3);
+    /// assert!(f.value(0, 0, "rho").is_err()); // composante inconnue
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn value(&self, cell: usize, gauss: usize, component: &str) -> Result<f64> {
         let c = self.component_index_or_err(component)?;
         self.get(cell, gauss, c)
     }
 
     /// Write by `(cell, gauss, component name)`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// let mut f = SubElementField::new(zone.clone(), vec!["E".into()])?;
+    /// f.set_value(0, 0, "E", 210_000.0)?;
+    /// assert_eq!(f.value(0, 0, "E")?, 210_000.0);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn set_value(
         &mut self,
         cell: usize,
@@ -229,6 +461,29 @@ impl SubElementField {
 
     /// Set every Gauss point of a given cell to the same value for one
     /// component (cell-piecewise-constant material).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// let mut f = SubElementField::new(zone.clone(), vec!["k".into()])?;
+    /// // Matériau constant par maille : tous les points de Gauss d'un coup.
+    /// f.set_cell_uniform(0, "k", 4.0)?;
+    /// assert!((0..f.gauss_count()).all(|g| f.value(0, g, "k").unwrap() == 4.0));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn set_cell_uniform(&mut self, cell: usize, component: &str, value: f64) -> Result<()> {
         self.check_cell(cell)?;
         let c = self.component_index_or_err(component)?;
@@ -389,6 +644,29 @@ crate::impl_subfield_field_ops!(SubElementField);
 /// `ElementField` is to `FiniteElementSpace` what a `SubElementField` is
 /// to `SubFiniteElementSpace`. The component lists captured by the underlying
 /// sub-fields may differ from one subspace to the next.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// // L'agrégat : une zone par sous-espace EF, chacune avec ses composantes.
+/// let mut f = ElementField::new(&fes, vec!["k".into()])?;
+/// f.get(0)?.write().set_uniform("k", 1.5)?;
+/// assert_eq!(f.get(0)?.read().value(0, 0, "k")?, 1.5);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 #[derive(Serialize, Deserialize, Default)]
 pub struct ElementField {
     subs: Vec<Handle<SubElementField>>,
@@ -421,6 +699,28 @@ impl ElementField {
     /// on every subspace.
     ///
     /// `fespace` must have at least one subspace.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// // Les mêmes composantes sur toutes les zones de l'espace EF.
+    /// let f = ElementField::new(&fes, vec!["E".into(), "nu".into()])?;
+    /// assert_eq!(f.len(), fes.len());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn new(fespace: &FiniteElementSpace, components: Vec<String>) -> Result<Self> {
         let n_sub = fespace.len();
         if n_sub == 0 {
@@ -538,6 +838,29 @@ impl ElementField {
     /// Build an `ElementField` with an explicit `components` list per
     /// subspace. `components_per_subspace.len()` must equal
     /// `fespace.len()`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::{ElementField, SubElementField};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// // Une liste de composantes **par zone** : c'est ce qui permet à un
+    /// // modèle multi-physique de porter `k` ici et `E`, `nu` là.
+    /// let f = ElementField::with(&fes, &[vec!["k".into()]])?;
+    /// assert_eq!(f.get(0)?.read().components(), &["k".to_string()]);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn with(
         fespace: &FiniteElementSpace,
         components_per_subspace: &[Vec<String>],
