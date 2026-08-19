@@ -224,8 +224,9 @@ Deux points utiles :
 | aucune page ne possède de code | `doc_lint.py fences` | `check_doc` |
 | la prose ne cite pas de symbole disparu | `doc_lint.py symboles` | `check_doc` |
 | tout item public a un exemple | `doc_lint.py doctests` | `check_doc` |
+| toute entrée Python est citée par un exemple | `doc_lint.py api-python` | `check_doc` |
 
-Les quatre derniers vivent dans `script/doc_lint.py` et se lancent aussi un par
+Les cinq derniers vivent dans `script/doc_lint.py` et se lancent aussi un par
 un : `python script/doc_lint.py includes`. Chacun porte son registre de
 dérogations — nom → raison — et son test d'hygiène, qui échoue sur une entrée
 périmée.
@@ -254,6 +255,20 @@ désigner le même item : rustdoc nomme le doctest d'un `impl` paramétré
 — d'où une normalisation des paramètres et une comparaison par sous-suite de
 segments. Chacune de ces corrections a été vérifiée en cassant volontairement le
 garde-fou.
+
+**Le cliquet Python** est le pendant du précédent, à une granularité plus
+lâche, et le compromis mérite d'être dit. Les docstrings Python sont écrites
+dans les `///` de `src/py/` et le module est compilé : le `DocTestFinder` de la
+bibliothèque standard ne descend pas dans les fonctions d'un module
+d'extension — sur `pyrucast.mesh` il ne trouve que le module lui-même. Un
+doctest par item y demanderait donc un collecteur maison. On exige à la place
+qu'une entrée publique soit **citée** par un exemple exécuté du book, lu par
+AST pour qu'un nom en commentaire ou dans une chaîne ne compte pas. La
+granularité est le *nom*, non l'appel : `.get(` cité une fois vaut pour les
+`get` de tous les conteneurs. C'est assumé, et cela garantit ce qu'on cherchait
+— aucune entrée publique absente des exemples, et aucune entrée nouvelle qui
+entre sans être montrée. Registre : `script/python_coverage.txt`, régénéré par
+`python script/doc_lint.py --ratchet-python`.
 
 **L'audit de la prose** ne lit que les passages en `code inline`, hors blocs :
 c'est ce qui écarte les noms de fichiers et les domaines, qui ressemblent à des

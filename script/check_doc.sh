@@ -12,9 +12,10 @@
 
 step "cargo doc --no-deps --lib (sans warning)" \
     env RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --lib
-# Quatre garde-fous de texte : includes qui résolvent, aucune page qui possède
-# de code, prose sans symbole disparu, cliquet de couverture des doctests.
-# Après `cargo doc`, dont le dernier lit la sortie.
+# Cinq garde-fous de texte : includes qui résolvent, aucune page qui possède de
+# code, prose sans symbole disparu, cliquet de couverture des doctests Rust,
+# cliquet de citation de l'API Python. Après `cargo doc`, dont le quatrième lit
+# la sortie ; le cinquième, lui, importe le module Python installé.
 step "garde-fous de la documentation"           python script/doc_lint.py
 step "mdbook build"                             mdbook build book
 

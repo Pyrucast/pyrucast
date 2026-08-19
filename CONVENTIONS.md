@@ -524,6 +524,23 @@ Ci-dessous, les règles seules.
    bas de `src/ops/matrix.rs`, et certains naissent d'une macro sur `impl $T`.
    Le cliquet les écarte du dénominateur sur ce critère.
 
+   **La surface Python répond à la même règle, à une granularité plus lâche.**
+   Ses docstrings sont écrites dans les `///` de `src/py/`, et le module est
+   compilé : un doctest par item y coûterait un collecteur maison, le
+   `DocTestFinder` de la bibliothèque standard ne descendant pas dans les
+   fonctions d'un module d'extension. Ce qu'on exige donc est qu'une entrée
+   publique soit **citée** par un exemple exécuté du book — un
+   `tests/python/test_doc_*.py`, lu par AST pour qu'un nom en commentaire ou
+   dans une chaîne ne compte pas.
+
+   La garantie est plus étroite que celle du cliquet Rust, et il faut le dire :
+   la granularité est le *nom*, non l'appel, de sorte qu'un `.get(` cité une
+   fois vaut pour les `get` de tous les conteneurs. Elle suffit à ce qu'on lui
+   demande — **aucune entrée publique n'est absente des exemples**, et une
+   entrée nouvelle ne peut pas arriver sans être montrée. Une classe compte
+   comme citée dès qu'une de ses méthodes l'est : le Python idiomatique écrit
+   `mesh.unit()`, jamais `SubMesh(...)`.
+
    Le préfixe `test_` n'est pas décoratif : `pytest` ne collecte que
    `test_*.py`. Un fichier de sources d'exemples nommé autrement est inclus
    dans le book et **exécuté par personne** — exactement ce que la règle

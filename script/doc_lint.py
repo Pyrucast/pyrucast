@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Garde-fous de la documentation — quatre vérifications, aucune compilation.
+"""Garde-fous de la documentation — cinq vérifications, aucune compilation.
 
 Appelé par `script/check_doc.{sh,ps1}`, après `cargo doc` (dont il lit la
 sortie). Les règles qu'il fait respecter sont écrites dans `CONVENTIONS.md`,
@@ -16,8 +16,14 @@ partie « Documentation et tests », et racontées dans
 3. `symboles`   — la prose ne cite pas de symbole disparu. Rien d'autre ne
                   couvre un paragraphe, et c'est là qu'étaient trois des neuf
                   erreurs trouvées en août 2026.
-4. `doctests`   — cliquet de couverture : un item public nouveau porte son
-                  exemple, et la dette existante ne peut que décroître.
+4. `doctests`   — cliquet de couverture Rust : un item public nouveau porte
+                  son exemple, et la dette existante ne peut que décroître.
+5. `api-python` — le pendant Python, à une granularité plus lâche : chaque
+                  entrée publique est **citée** par un exemple exécuté du book
+                  (`tests/python/test_doc_*.py`). Les docstrings Python étant
+                  écrites dans les `///` de `src/py/`, un doctest par item y
+                  coûterait un collecteur maison ; la citation donne la même
+                  garantie de non-régression pour vingt lignes.
 
 Chaque registre de dérogations porte une **raison** et son test d'hygiène, qui
 échoue sur une entrée périmée — le motif de
@@ -25,11 +31,14 @@ Chaque registre de dérogations porte une **raison** et son test d'hygiène, qui
 
     python script/doc_lint.py            # tout
     python script/doc_lint.py includes   # une seule vérification
-    python script/doc_lint.py --ratchet  # réécrit script/doc_coverage.txt
+    python script/doc_lint.py --ratchet         # réécrit doc_coverage.txt
+    python script/doc_lint.py --ratchet-python  # réécrit python_coverage.txt
 """
 
 from __future__ import annotations
 
+import ast
+import inspect
 import re
 import subprocess
 import sys
@@ -38,6 +47,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 BOOK = ROOT / "book" / "src"
 LEDGER = ROOT / "script" / "doc_coverage.txt"
+LEDGER_PY = ROOT / "script" / "python_coverage.txt"
+EXEMPLES_PY = ROOT / "tests" / "python"
 
 # ── Registres ───────────────────────────────────────────────────────────────
 
@@ -583,6 +594,135 @@ def check_doctests(ratchet=False):
     return erreurs
 
 
+# ── 5. L'API Python est-elle citée par un exemple exécuté ? ─────────────────
+
+
+def api_python():
+    """La surface publique du module installé, en trois familles.
+
+    Dédoublonnée par **identité** : une classe est atteignable comme
+    `pyrucast.Coords` et comme `pyrucast.coords.Coords`. Les méthodes qui
+    **reprennent le nom d'un opérateur** sont écartées — ce sont les
+    délégations (`mesh.skin()` pour `pyrucast.mesh.skin(mesh)`), exemptées
+    côté Rust pour la même raison : la cible porte l'exemple.
+    """
+    import pyrucast
+
+    classes, libres = {}, {}
+    modules = [pyrucast] + [
+        getattr(pyrucast, n)
+        for n in dir(pyrucast)
+        if inspect.ismodule(getattr(pyrucast, n, None))
+    ]
+    for mod in modules:
+        court = mod.__name__.split(".")[-1]
+        prefixe = "pyrucast" if mod is pyrucast else f"pyrucast.{court}"
+        for nom in dir(mod):
+            if nom.startswith("_"):
+                continue
+            obj = getattr(mod, nom)
+            if inspect.isclass(obj):
+                classes.setdefault(id(obj), (nom, obj))
+            elif callable(obj):
+                # Préférer le module de façade au module d'extension compilé.
+                if id(obj) not in libres or court != "_pyrucast":
+                    libres[id(obj)] = f"{prefixe}.{nom}"
+
+    verbes = {n.split(".")[-1] for n in libres.values()}
+    methodes = {}
+    for _, (nom_classe, classe) in classes.items():
+        for m in dir(classe):
+            if m.startswith("_") or not callable(getattr(classe, m, None)):
+                continue
+            if m not in verbes:  # une délégation : sa cible porte l'exemple
+                methodes.setdefault(m, set()).add(nom_classe)
+    return set(libres.values()), {n for n, _ in classes.values()}, methodes
+
+
+def noms_cites():
+    """Tout identifiant et tout attribut qu'écrivent les exemples du book.
+
+    Lecture par AST plutôt que par expression rationnelle : un nom en
+    commentaire ou dans une chaîne ne compte pas.
+    """
+    vus = set()
+    for fichier in sorted(EXEMPLES_PY.glob("test_doc_*.py")):
+        for noeud in ast.walk(ast.parse(fichier.read_text(encoding="utf-8"))):
+            if isinstance(noeud, ast.Attribute):
+                vus.add(noeud.attr)
+            elif isinstance(noeud, ast.Name):
+                vus.add(noeud.id)
+    return vus
+
+
+def check_api_python(ratchet=False):
+    """Cliquet de citation : toute entrée publique Python paraît dans un
+    exemple exécuté du book.
+
+    **Ce que cela prouve, et ce que cela ne prouve pas.** La granularité est le
+    *nom*, non l'appel : `.get(` cité une fois vaut pour les `get` de tous les
+    conteneurs. C'est assumé — ces méthodes-là sont la grammaire commune des
+    agrégats, et une citation couvre bien la notion. Ce que le garde-fou
+    garantit est plus étroit que le cliquet Rust et suffit à ce qu'on lui
+    demande : **aucune entrée publique n'est absente des exemples**, et une
+    entrée nouvelle ne peut pas y entrer sans être montrée.
+
+    Une classe compte comme citée dès qu'une de ses méthodes l'est : le Python
+    idiomatique écrit `mesh.unit()`, jamais `SubMesh(...)`, et exiger le nom
+    d'un `Sub*` reviendrait à réclamer une tournure que personne n'écrit.
+    """
+    try:
+        fonctions, classes, methodes = api_python()
+    except ImportError:
+        return ["module `pyrucast` non installé — lancer `maturin develop` d'abord"]
+
+    vus = noms_cites()
+    absents = {f for f in fonctions if f.split(".")[-1] not in vus}
+    absents |= {m for m in methodes if m not in vus}
+    absents |= {
+        c
+        for c in classes
+        if c not in vus and not (methodes_de(c, methodes) & vus)
+    }
+
+    if ratchet:
+        LEDGER_PY.write_text(
+            "# Entrées publiques Python qu'aucun exemple du book ne cite.\n"
+            "# Registre du cliquet : il ne peut que RÉTRÉCIR.\n"
+            "# Régénérer : python script/doc_lint.py --ratchet-python\n"
+            + "".join(f"{n}\n" for n in sorted(absents)),
+            encoding="utf-8",
+        )
+        return []
+
+    connus = set()
+    if LEDGER_PY.exists():
+        connus = {
+            l.strip()
+            for l in LEDGER_PY.read_text(encoding="utf-8").splitlines()
+            if l.strip() and not l.startswith("#")
+        }
+
+    erreurs = []
+    for nom in sorted(absents - connus):
+        erreurs.append(
+            f"{nom} : entrée publique Python qu'aucun exemple du book ne cite "
+            f"(CONVENTIONS.md, règle 2). L'ajouter à un `tests/python/test_doc_*.py`, "
+            f"d'où la page qui la présente le tirera."
+        )
+    for nom in sorted(connus - absents):
+        erreurs.append(
+            f"{nom} : désormais cité — le retirer de script/python_coverage.txt "
+            f"(le registre ne doit garder que la dette réelle)."
+        )
+    return erreurs
+
+
+def methodes_de(nom_classe, methodes):
+    """Les noms de méthodes propres à `nom_classe`."""
+    return {m for m, classes in methodes.items() if nom_classe in classes}
+
+
 # ── Point d'entrée ──────────────────────────────────────────────────────────
 
 VERIFICATIONS = {
@@ -590,10 +730,16 @@ VERIFICATIONS = {
     "fences": ("aucune page ne possède de code", check_fences),
     "symboles": ("symboles cités en prose", check_symboles),
     "doctests": ("cliquet de couverture des doctests", check_doctests),
+    "api-python": ("cliquet de citation de l'API Python", check_api_python),
 }
 
 
 def main(argv):
+    if "--ratchet-python" in argv:
+        erreurs = check_api_python(ratchet=True)
+        for e in erreurs:
+            print(f"    {e}", file=sys.stderr)
+        return 1 if erreurs else 0
     if "--ratchet" in argv:
         erreurs = check_doctests(ratchet=True)
         for e in erreurs:
