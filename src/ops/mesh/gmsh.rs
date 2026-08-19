@@ -869,6 +869,30 @@ fn build_groups(parsed: &Parsed, coords: Handle<Coords>) -> Result<Vec<(String, 
 /// `coords.dim()` of gmsh's three coordinates are kept. The nodes land in
 /// `coords` (which may already hold geometry — the import is merged in), so
 /// the caller keeps the handle it needs to pose boundary conditions etc.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let maillage_gmsh = "\
+/// # $MeshFormat\n2.2 0 8\n$EndMeshFormat\n\
+/// # $Nodes\n3\n1 0 0 0\n2 1 0 0\n3 0 1 0\n$EndNodes\n\
+/// # $Elements\n1\n1 2 2 7 1 1 2 3\n$EndElements\n";
+/// // Les nœuds atterrissent dans le `Coords` fourni — qui peut déjà porter
+/// // de la géométrie, l'import s'y fondant — de sorte que l'appelant garde
+/// // la poignée dont il a besoin pour poser ses conditions aux limites.
+/// # let chemin = std::env::temp_dir()
+/// #     .join(format!("pyrucast_gmsh_{}.msh", std::process::id()));
+/// # std::fs::write(&chemin, maillage_gmsh)?;
+/// let coords = Handle::new(Coords::new(2)?);
+/// assert_eq!(coords.read().node_count(), 0);
+/// let regions = mesh::read_gmsh(coords.clone(), &chemin)?;
+/// assert_eq!(regions[0].1.cell_count()?, 1);
+/// assert_eq!(coords.read().node_count(), 3);
+/// # let _ = std::fs::remove_file(&chemin);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn read_gmsh(coords: Handle<Coords>, path: &Path) -> Result<Vec<(String, Mesh)>> {
     let bytes = std::fs::read(path)?;
     read_gmsh_bytes(coords, &bytes)
@@ -876,12 +900,45 @@ pub fn read_gmsh(coords: Handle<Coords>, path: &Path) -> Result<Vec<(String, Mes
 
 /// Like [`read_gmsh`] but parsing **ASCII** file contents already held in a
 /// string. For binary content use [`read_gmsh_bytes`].
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let maillage_gmsh = "\
+/// # $MeshFormat\n2.2 0 8\n$EndMeshFormat\n\
+/// # $Nodes\n3\n1 0 0 0\n2 1 0 0\n3 0 1 0\n$EndNodes\n\
+/// # $Elements\n1\n1 2 2 7 1 1 2 3\n$EndElements\n";
+/// // Les mailles reviennent **groupées** par nom de région physique.
+/// let coords = Handle::new(Coords::new(2)?);
+/// let regions = mesh::read_gmsh_str(coords.clone(), maillage_gmsh)?;
+/// assert_eq!(regions.len(), 1);
+/// assert_eq!(regions[0].1.cell_count()?, 1);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn read_gmsh_str(coords: Handle<Coords>, text: &str) -> Result<Vec<(String, Mesh)>> {
     read_gmsh_bytes(coords, text.as_bytes())
 }
 
 /// Like [`read_gmsh`] but parsing the raw file bytes already held in memory
 /// (ASCII or binary).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let maillage_gmsh = "\
+/// # $MeshFormat\n2.2 0 8\n$EndMeshFormat\n\
+/// # $Nodes\n3\n1 0 0 0\n2 1 0 0\n3 0 1 0\n$EndNodes\n\
+/// # $Elements\n1\n1 2 2 7 1 1 2 3\n$EndElements\n";
+/// // La même chose depuis des octets bruts — ASCII **ou** binaire.
+/// let coords = Handle::new(Coords::new(2)?);
+/// let regions = mesh::gmsh::read_gmsh_bytes(coords.clone(), maillage_gmsh.as_bytes())?;
+/// assert_eq!(regions[0].1.cell_count()?, 1);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn read_gmsh_bytes(coords: Handle<Coords>, bytes: &[u8]) -> Result<Vec<(String, Mesh)>> {
     let parsed = parse_gmsh(bytes)?;
     build_groups(&parsed, coords)

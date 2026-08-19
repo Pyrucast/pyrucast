@@ -493,6 +493,18 @@ def items_documentes(publics):
     par_suffixe = {}
     for item in publics:
         par_suffixe.setdefault("::".join(item.split("::")[-2:]), []).append(item)
+    # Un **réexport** ne fait qu'enlever des segments : `ops::mesh::triangulation`
+    # réexporte `…::triangulation::cdt::delaunay_2d` sous
+    # `…::triangulation::delaunay_2d`. Le chemin public est donc une
+    # sous-suite du chemin que rustdoc donne au doctest. C'est plus étroit
+    # qu'une comparaison du seul dernier segment, qui confondrait les `new`.
+    par_dernier = {}
+    for item in publics:
+        par_dernier.setdefault(item.split("::")[-1], []).append(item)
+
+    def sous_suite(court, long):
+        it = iter(long)
+        return all(seg in it for seg in court)
 
     documentes, ambigus = set(), []
     for m in re.finditer(r"^\S+ - (\S+) \(line \d+\): test$", sortie, re.M):
@@ -504,6 +516,13 @@ def items_documentes(publics):
             documentes.add(chemin)
             continue
         candidats = par_suffixe.get("::".join(chemin.split("::")[-2:]), [])
+        if not candidats:
+            segments = chemin.split("::")
+            candidats = [
+                item
+                for item in par_dernier.get(segments[-1], [])
+                if sous_suite(item.split("::"), segments)
+            ]
         if len(candidats) == 1:
             documentes.add(candidats[0])
         elif len(candidats) > 1:

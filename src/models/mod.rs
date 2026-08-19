@@ -202,6 +202,16 @@ pub struct CouplingLayout {
 /// [`Model::filter`](crate::containers::model::Model::filter) /
 /// [`Matrix::filter`](crate::containers::matrix::Matrix::filter) selectors
 /// (which match by **containment**).
+///
+/// ```
+/// # use pyrucast::models::Physics;
+/// // La nature d'un sous-modèle voyage avec chaque bloc assemblé : c'est
+/// // elle que `Model::filter` et `Matrix::filter` lisent.
+/// assert_eq!(Physics::ALL.len(), 6);
+/// // Diffusion et thermique sont **distinctes** malgré leur laplacien
+/// // commun : un problème couplé doit pouvoir choisir l'une sans l'autre.
+/// assert_ne!(Physics::Diffusion, Physics::Thermal);
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Physics {
     /// Solid mechanics — elasticity, plasticity, damage, bars, beams, frames.
@@ -230,6 +240,12 @@ impl Physics {
     /// `"other"`, `"diffusion"`, `"radiation"`) — the Python-facing spelling,
     /// mirroring
     /// [`ElasticityModel::from_tag`](crate::models::elasticity::ElasticityModel::from_tag).
+    ///
+    /// ```
+    /// # use pyrucast::models::Physics;
+    /// assert_eq!(Physics::from_tag("thermal"), Some(Physics::Thermal));
+    /// assert_eq!(Physics::from_tag("acoustique"), None);
+    /// ```
     pub fn from_tag(tag: &str) -> Option<Self> {
         match tag {
             "mechanical" => Some(Self::Mechanical),
@@ -243,6 +259,12 @@ impl Physics {
     }
 
     /// The lowercase tag for this nature (the inverse of [`from_tag`](Self::from_tag)).
+    ///
+    /// ```
+    /// # use pyrucast::models::Physics;
+    /// // Réciproque exacte de `from_tag`, pour les six natures.
+    /// assert!(Physics::ALL.iter().all(|p| Physics::from_tag(p.to_tag()) == Some(*p)));
+    /// ```
     pub fn to_tag(self) -> &'static str {
         match self {
             Self::Mechanical => "mechanical",
@@ -257,6 +279,13 @@ impl Physics {
     /// Every nature, in declaration order — the single source for the tag list
     /// quoted in the `filter` error messages, so a new nature cannot be added
     /// without the messages following.
+    ///
+    /// ```
+    /// # use pyrucast::models::Physics;
+    /// // L'unique source de la liste citée par les messages de `filter` : une
+    /// // nature ne peut pas être ajoutée sans que les messages suivent.
+    /// assert!(Physics::ALL.contains(&Physics::Radiation));
+    /// ```
     pub const ALL: [Physics; 6] = [
         Self::Mechanical,
         Self::Thermal,
@@ -267,6 +296,11 @@ impl Physics {
     ];
 
     /// The accepted tags, `|`-joined — for error messages.
+    ///
+    /// ```
+    /// # use pyrucast::models::Physics;
+    /// assert!(Physics::tag_list().contains("diffusion"));
+    /// ```
     pub fn tag_list() -> String {
         Self::ALL
             .iter()

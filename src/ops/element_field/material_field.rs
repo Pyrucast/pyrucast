@@ -13,6 +13,46 @@ use crate::handle::Handle;
 /// only if supplied, appended after the required ones. Any other pair is
 /// dropped. Errors if `sub` needs no material (e.g. `Dirichlet`) or if a
 /// required component is missing from `components_and_values`.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::RelationSense;
+/// # use pyrucast::ops::{element_field, mesh};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// let meca = Model::elasticity(&fes, ElasticityModel::PlaneStress)?;
+/// // Les composantes **requises** doivent toutes être là ; les
+/// // **facultatives** — `alpha`, la dilatation — ne sont gardées que si on
+/// // les donne, et à la suite. Le reste est écarté.
+/// let m = element_field::sub_material_field(
+///     &meca.get(0)?.read(),
+///     &[("E", 210e3), ("nu", 0.3), ("alpha", 1.2e-5), ("inconnu", 1.0)])?;
+/// assert_eq!(m.components(),
+///            &["E".to_string(), "nu".to_string(), "alpha".to_string()]);
+/// // Une composante requise manquante est une erreur.
+/// assert!(element_field::sub_material_field(
+///     &meca.get(0)?.read(), &[("E", 210e3)]).is_err());
+/// // Une contrainte n'a pas de matière à recevoir.
+/// let appui = Model::dirichlet("T".into(), "q".into(), &impose, &mult,
+///                              None, None, RelationSense::Equality)?;
+/// assert!(element_field::sub_material_field(
+///     &appui.get(0)?.read(), &[]).is_err());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn sub_material_field(
     sub: &SubModel,
     components_and_values: &[(&str, f64)],
@@ -61,6 +101,37 @@ pub fn sub_material_field(
 /// Build a material [`ElementField`] applying the same uniform
 /// `(component, value)` pairs to **every** material-hungry sub-model of
 /// `model`. Sub-models that need no material (`Dirichlet`, …) are skipped.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::RelationSense;
+/// # use pyrucast::ops::{element_field, mesh};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// // Les mêmes valeurs pour **tous** les sous-modèles qui demandent de la
+/// // matière ; ceux qui n'en veulent pas sont sautés sans erreur.
+/// let modele = Model::heat_conduction(&fes)?.union(
+///     &Model::dirichlet("T".into(), "q".into(), &impose, &mult,
+///                       None, None, RelationSense::Equality)?)?;
+/// assert_eq!(modele.len(), 2);
+/// let mat = element_field::material_field(&modele, &[("k", 1.0)])?;
+/// assert_eq!(mat.len(), 1); // la conduction seule
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn material_field(
     model: &Model,
     components_and_values: &[(&str, f64)],
@@ -87,6 +158,40 @@ pub fn material_field(
 ///
 /// `per_sub_model.len()` must equal `model.len()`. An empty
 /// slot (`&[]`) skips that sub-model — typical for `Dirichlet`.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::RelationSense;
+/// # use pyrucast::ops::{element_field, mesh};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+/// # let mult = mesh::barycenter(&impose).unwrap();
+/// // Une liste **par sous-modèle**, quand deux physiques cohabitent et
+/// // n'attendent pas les mêmes constantes.
+/// let modele = Model::heat_conduction(&fes)?
+///     .union(&Model::elasticity(&fes, ElasticityModel::PlaneStress)?)?;
+/// let mat = element_field::material_field_per_sub_model(
+///     &modele, &[&[("k", 1.0)], &[("E", 210e3), ("nu", 0.3)]])?;
+/// assert_eq!(mat.len(), 2);
+/// assert_eq!(mat.get(0)?.read().components(), &["k".to_string()]);
+/// // Il en faut exactement autant que de sous-modèles.
+/// assert!(element_field::material_field_per_sub_model(
+///     &modele, &[&[("k", 1.0)]]).is_err());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn material_field_per_sub_model(
     model: &Model,
     per_sub_model: &[&[(&str, f64)]],

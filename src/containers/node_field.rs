@@ -156,6 +156,33 @@ impl SubNodeField {
     /// materialised once and cached, so every field restricted to this submesh
     /// (and the stiffness block / `divergence` / `flux` output over it) shares
     /// one support slot and pairs under `same_support`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::node_field::{NodeField, SubNodeField};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// # use pyrucast::handle::Handle as H;
+    /// // Sur un TRI3, le champ se pose sur le **compagnon POI1 canonique** du
+    /// // sous-maillage, matérialisé une fois et partagé : deux champs bâtis
+    /// // ainsi s'apparient sous `same_support`.
+    /// let zone = maillage.get(0)?;
+    /// let a = SubNodeField::from_support(&zone, vec!["T".into()])?;
+    /// let b = SubNodeField::from_support(&zone, vec!["q".into()])?;
+    /// assert!(H::same_object(&a.support(), &b.support()));
+    /// assert_eq!(a.node_count(), 3);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn from_support(submesh: &Handle<SubMesh>, components: Vec<String>) -> Result<Self> {
         let element_type = submesh.read().element_type();
         if element_type == ElementType::POI1 {
@@ -219,6 +246,27 @@ impl SubNodeField {
     }
 
     /// Handle to the POI1 SubMesh backing this field's support.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::node_field::{NodeField, SubNodeField};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// let f = SubNodeField::from_support(&maillage.get(0)?, vec!["T".into()])?;
+    /// // Toujours un POI1 : c'est le nuage de nœuds qui porte les valeurs.
+    /// assert_eq!(f.support().read().element_type(), ElementType::POI1);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn support(&self) -> Handle<SubMesh> {
         self.support.clone()
     }
@@ -359,6 +407,32 @@ impl SubNodeField {
     /// Position of a NodeId in the support using a caller-held read guard on
     /// the support SubMesh — the O(1) map lookup without re-locking. Meant for
     /// tight loops (per-node writes) that resolve many ids under one guard.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::node_field::{NodeField, SubNodeField};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// // La recherche O(1) **sans reprendre le verrou** : pour une boucle
+    /// // serrée qui résout beaucoup d'identifiants sous un seul guard.
+    /// let f = SubNodeField::from_support(&maillage.get(0)?, vec!["T".into()])?;
+    /// let support = f.support();
+    /// let guard = support.read();
+    /// assert_eq!(f.index_of_with(&guard, n[1].id()), Some(1));
+    /// # let etranger = Node::create_in(coords.clone(), &[9.0, 9.0])?;
+    /// assert_eq!(f.index_of_with(&guard, etranger.id()), None);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn index_of_with(&self, support: &SubMesh, nid: NodeId) -> Option<usize> {
         support.node_index().get(&nid).copied()
     }
@@ -1116,6 +1190,31 @@ impl NodeField {
     /// pair wins. A DOF no zone defines reads as `0.0` — the natural neutral for
     /// a right-hand side or a multiplied vector (see [`crate::ops::solver::lu::solve`]
     /// and [`Matrix::mul_field`](crate::containers::matrix::Matrix::mul_field)).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::node_field::{NodeField, SubNodeField};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// let support = mesh::poi1_from_nodes(&n)?;
+    /// let f = NodeField::from_submesh(&support.get(0)?, vec!["T".into()])?;
+    /// f.get(0)?.write().set_value(n[1].id(), "T", 50.0)?;
+    /// // Dans l'ordre demandé. Un DDL qu'aucune zone ne définit lit **zéro** —
+    /// // le neutre naturel d'un second membre.
+    /// let v = f.gather(&[(n[1].id(), "T".into()), (n[0].id(), "q".into())])?;
+    /// assert_eq!(v, vec![50.0, 0.0]);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn gather(&self, dofs: &[(NodeId, String)]) -> Result<Vec<f64>> {
         let view = self.view()?;
         Ok(dofs
@@ -1132,6 +1231,31 @@ impl NodeField {
     ///
     /// The inverse of [`gather`](Self::gather): together they bridge the
     /// abstract `NodeField` and the flat DOF vectors the linear algebra speaks.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::node_field::{NodeField, SubNodeField};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// // La réciproque de `gather` : ensemble, elles font le pont entre le
+    /// // champ abstrait et les vecteurs plats de l'algèbre linéaire.
+    /// let dofs = vec![(n[0].id(), "T".to_string()), (n[1].id(), "T".to_string())];
+    /// let f = NodeField::from_dof_values(coords.clone(), &dofs, &[10.0, 50.0])?;
+    /// assert_eq!(f.gather(&dofs)?, vec![10.0, 50.0]);
+    /// // Longueurs inégales : refusé.
+    /// assert!(NodeField::from_dof_values(coords.clone(), &dofs, &[10.0]).is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn from_dof_values(
         coords: Handle<Coords>,
         dofs: &[(NodeId, String)],

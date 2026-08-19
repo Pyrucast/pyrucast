@@ -47,6 +47,15 @@ use crate::error::{PyrucastError, Result};
 use serde::{Deserialize, Serialize};
 
 /// Which configuration a beam is in — the kinematics, not the theory.
+///
+/// ```
+/// # use pyrucast::models::beam::{self, BeamModel};
+/// // La configuration se **lit sur la géométrie** : la dimension de
+/// // l'espace décide du nombre de DDL par nœud.
+/// assert_eq!(BeamModel::Planar1d.dofs_per_node(), 2); // flèche, rotation
+/// assert_eq!(BeamModel::Frame2d.dofs_per_node(), 3);
+/// assert_eq!(BeamModel::Frame3d.dofs_per_node(), 6);
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BeamModel {
     /// Pure bending in a 1-D configuration: deflection and section rotation.
@@ -59,6 +68,13 @@ pub enum BeamModel {
 
 impl BeamModel {
     /// The configuration, **read from the geometry**.
+    ///
+    /// ```
+    /// # use pyrucast::models::beam::{self, BeamModel};
+    /// assert_eq!(BeamModel::from_space_dim(2)?, BeamModel::Frame2d);
+    /// assert!(BeamModel::from_space_dim(4).is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn from_space_dim(space_dim: usize) -> Result<Self> {
         match space_dim {
             1 => Ok(Self::Planar1d),
@@ -71,6 +87,11 @@ impl BeamModel {
     }
 
     /// The lowercase name of the configuration — for messages and rendering.
+    ///
+    /// ```
+    /// # use pyrucast::models::beam::{self, BeamModel};
+    /// assert_eq!(BeamModel::Frame3d.to_tag(), "frame_3d");
+    /// ```
     pub fn to_tag(self) -> &'static str {
         match self {
             Self::Planar1d => "planar_1d",
@@ -80,6 +101,14 @@ impl BeamModel {
     }
 
     /// Primal DOF names, per node.
+    ///
+    /// ```
+    /// # use pyrucast::models::beam::{self, BeamModel};
+    /// // Une poutre plane porte flèche et rotation ; un portique spatial y
+    /// // ajoute l'axial, la torsion et la seconde flexion.
+    /// assert_eq!(BeamModel::Planar1d.primal().len(), 2);
+    /// assert_eq!(BeamModel::Frame3d.primal().len(), 6);
+    /// ```
     pub fn primal(self) -> &'static [&'static str] {
         match self {
             Self::Planar1d => &["w", "theta"],
@@ -89,6 +118,12 @@ impl BeamModel {
     }
 
     /// Dual DOF names, per node.
+    ///
+    /// ```
+    /// # use pyrucast::models::beam::{self, BeamModel};
+    /// // Autant de duales que de primales, appariées **par position**.
+    /// assert_eq!(BeamModel::Frame2d.dual().len(), BeamModel::Frame2d.primal().len());
+    /// ```
     pub fn dual(self) -> &'static [&'static str] {
         match self {
             Self::Planar1d => &["f_w", "m_theta"],
@@ -98,6 +133,11 @@ impl BeamModel {
     }
 
     /// Degrees of freedom per node — the side of the element matrix is twice it.
+    ///
+    /// ```
+    /// # use pyrucast::models::beam::{self, BeamModel};
+    /// assert_eq!(BeamModel::Frame3d.dofs_per_node(), BeamModel::Frame3d.primal().len());
+    /// ```
     pub fn dofs_per_node(self) -> usize {
         self.primal().len()
     }
@@ -114,6 +154,21 @@ impl std::fmt::Display for BeamModel {
 /// `gas` is `G·A_s`; passing `None` drops the shear compliance entirely
 /// (`Φ = 0`) and returns the Euler-Bernoulli matrix — used by the beam whose
 /// theory has no shear, so that the two share one derivation instead of two.
+///
+/// ```
+/// # use pyrucast::models::beam::{self, BeamModel};
+/// // `gas = None` retire la souplesse de cisaillement et redonne la
+/// // matrice d'Euler-Bernoulli — une seule dérivation pour les deux
+/// // théories. Ses termes classiques : 12EI/L³ et 4EI/L.
+/// let k = beam::bending_4x4(2.0, None, 1.0);
+/// assert!((k[0][0] - 24.0).abs() < 1e-9);
+/// assert!((k[1][1] - 8.0).abs() < 1e-9);
+/// // Elle est singulière : une **translation d'ensemble** — les DDL étant
+/// // [w_A, θ_A, w_B, θ_B], le mode (1, 0, 1, 0) — n'engendre aucune force.
+/// assert!((k[0][0] + k[0][2]).abs() < 1e-9);
+/// // Avec cisaillement, elle s'assouplit.
+/// assert!(beam::bending_4x4(2.0, Some(1.0), 1.0)[0][0] < k[0][0]);
+/// ```
 pub fn bending_4x4(ei: f64, gas: Option<f64>, l: f64) -> Vec<Vec<f64>> {
     // `Φ` is the ratio of bending to shear compliance.
     let phi = phi(ei, gas, l);
@@ -186,6 +241,19 @@ const GAUSS_01: [(f64, f64); 4] = [
 ///
 /// `gas = None` drops the shear compliance (`Φ = 0`) and yields the classical
 /// Euler-Bernoulli consistent mass.
+///
+/// ```
+/// # use pyrucast::models::beam::{self, BeamModel};
+/// // Intégrée avec les **mêmes** fonctions de forme que la raideur, à
+/// // quatre points de Gauss : la quadrature est exacte et rien n'est
+/// // retranscrit à la main.
+/// let m = beam::mass_4x4(3.0, 0.0, 1.0, None, 2.0);
+/// // La somme des termes de translation redonne la masse totale ρA·L.
+/// let masse: f64 = [0usize, 2].iter()
+///     .flat_map(|&i| [0usize, 2].iter().map(move |&j| (i, j)))
+///     .map(|(i, j)| m[i][j]).sum();
+/// assert!((masse - 6.0).abs() < 1e-9);
+/// ```
 pub fn mass_4x4(rho_a: f64, rho_i: f64, ei: f64, gas: Option<f64>, l: f64) -> Vec<Vec<f64>> {
     let phi = phi(ei, gas, l);
     let mut m = vec![vec![0.0_f64; 4]; 4];
@@ -220,6 +288,22 @@ pub fn mass_4x4(rho_a: f64, rho_i: f64, ei: f64, gas: Option<f64>, l: f64) -> Ve
 /// Both depend on the material through `Φ`. A recovery that did not take a
 /// material could therefore only ever report a mean — which is what the
 /// previous one did.
+///
+/// ```
+/// # use pyrucast::models::beam::{self, BeamModel};
+/// // Une rotation d'ensemble ne déforme rien : ni courbure, ni distorsion.
+/// let (k, g) = beam::section_strains(0.0, 2.0, &[0.0, 0.5, 1.0, 0.5], 0.5);
+/// assert!(k.abs() < 1e-12 && g.abs() < 1e-12);
+/// // La distorsion γ est **constante** le long de la travée — un effort
+/// // tranchant constant sur une travée non chargée.
+/// let d = [0.0, 0.0, 1.0, 0.0];
+/// let a = beam::section_strains(0.5, 2.0, &d, 0.1).1;
+/// let b = beam::section_strains(0.5, 2.0, &d, 0.9).1;
+/// assert!((a - b).abs() < 1e-12);
+/// // La courbure, elle, varie : c'est ce que `M' = V` exige.
+/// assert!((beam::section_strains(0.5, 2.0, &d, 0.1).0
+///          - beam::section_strains(0.5, 2.0, &d, 0.9).0).abs() > 1e-9);
+/// ```
 pub fn section_strains(phi: f64, l: f64, d: &[f64; 4], xi: f64) -> (f64, f64) {
     let dd = 1.0 / (1.0 + phi);
     // ∂N_θ/∂ξ — the curvature is its physical derivative, `κ = (1/L)·∂N_θ/∂ξ·d`.
@@ -245,6 +329,15 @@ pub fn section_strains(phi: f64, l: f64, d: &[f64; 4], xi: f64) -> (f64, f64) {
 
 /// `Φ = 12EI/(G·A_s·L²)`, the ratio the whole element hangs on. `gas = None`
 /// means no shear compliance.
+///
+/// ```
+/// # use pyrucast::models::beam::{self, BeamModel};
+/// // Φ = 12EI/(G·A_s·L²), le rapport dont dépend tout l'élément.
+/// assert_eq!(beam::phi(1.0, None, 2.0), 0.0); // pas de souplesse de cisaillement
+/// assert!((beam::phi(1.0, Some(3.0), 2.0) - 1.0).abs() < 1e-12);
+/// // Il s'efface quand la poutre s'allonge : la théorie mince est la limite.
+/// assert!(beam::phi(1.0, Some(3.0), 100.0) < 1e-3);
+/// ```
 pub fn phi(ei: f64, gas: Option<f64>, l: f64) -> f64 {
     match gas {
         Some(g) if g.abs() > f64::MIN_POSITIVE => 12.0 * ei / (g * l * l),
