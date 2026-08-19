@@ -136,11 +136,11 @@ fn flood(
             if walls.contains(&key) {
                 continue;
             }
-            if let Some(n) = mesh.neighbour(t as usize, i) {
-                if !reached[n] {
-                    reached[n] = true;
-                    stack.push(n as u32);
-                }
+            if let Some(n) = mesh.neighbour(t as usize, i)
+                && !reached[n]
+            {
+                reached[n] = true;
+                stack.push(n as u32);
             }
         }
     }

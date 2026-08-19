@@ -661,12 +661,12 @@ impl Context {
     /// at 0 and every check passes trivially, since [`Self::select`] has
     /// nothing to select from anyway.
     fn new(mesh: &Mesh, tol: Option<f64>, op: &'static str) -> Result<Self> {
-        if let Some(t) = tol {
-            if t < 0.0 || t.is_nan() {
-                return Err(PyrucastError::Message(format!(
-                    "{op}: tol must be ≥ 0, got {t}"
-                )));
-            }
+        if let Some(t) = tol
+            && (t < 0.0 || t.is_nan())
+        {
+            return Err(PyrucastError::Message(format!(
+                "{op}: tol must be ≥ 0, got {t}"
+            )));
         }
         if mesh.is_empty() {
             return Ok(Self {

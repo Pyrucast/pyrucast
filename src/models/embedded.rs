@@ -272,19 +272,19 @@ impl Embedded {
                 "Embedded: at least one component is required".into(),
             ));
         }
-        if let Some(m) = &multipliers {
-            if m.len() != components.len() {
-                return Err(PyrucastError::Message(
-                    "Embedded: multipliers length must match components".into(),
-                ));
-            }
+        if let Some(m) = &multipliers
+            && m.len() != components.len()
+        {
+            return Err(PyrucastError::Message(
+                "Embedded: multipliers length must match components".into(),
+            ));
         }
-        if let Some(iv) = &imposed_values {
-            if iv.len() != components.len() {
-                return Err(PyrucastError::Message(
-                    "Embedded: imposed_values length must match components".into(),
-                ));
-            }
+        if let Some(iv) = &imposed_values
+            && iv.len() != components.len()
+        {
+            return Err(PyrucastError::Message(
+                "Embedded: imposed_values length must match components".into(),
+            ));
         }
 
         // Immersed and host must live in the same Coords (node ids are relative).

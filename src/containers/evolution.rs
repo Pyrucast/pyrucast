@@ -803,26 +803,26 @@ fn check_same_support(samples: &[(f64, SubValue)]) -> Result<()> {
         SubValue::Scalar(_) => Ok(()),
         SubValue::Node(f0) => {
             for (_, v) in &samples[1..] {
-                if let SubValue::Node(f) = v {
-                    if !f.same_support(f0) || f.component_count() != f0.component_count() {
-                        return Err(PyrucastError::Message(
-                            "SubEvolution: node values must share the same support and components"
-                                .into(),
-                        ));
-                    }
+                if let SubValue::Node(f) = v
+                    && (!f.same_support(f0) || f.component_count() != f0.component_count())
+                {
+                    return Err(PyrucastError::Message(
+                        "SubEvolution: node values must share the same support and components"
+                            .into(),
+                    ));
                 }
             }
             Ok(())
         }
         SubValue::Element(f0) => {
             for (_, v) in &samples[1..] {
-                if let SubValue::Element(f) = v {
-                    if !f.same_support(f0) || f.component_count() != f0.component_count() {
-                        return Err(PyrucastError::Message(
-                            "SubEvolution: element values must share the same support and components"
-                                .into(),
-                        ));
-                    }
+                if let SubValue::Element(f) = v
+                    && (!f.same_support(f0) || f.component_count() != f0.component_count())
+                {
+                    return Err(PyrucastError::Message(
+                        "SubEvolution: element values must share the same support and components"
+                            .into(),
+                    ));
                 }
             }
             Ok(())

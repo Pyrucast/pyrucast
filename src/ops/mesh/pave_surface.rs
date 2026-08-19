@@ -152,12 +152,12 @@ pub fn pave_surface_cancellable(
             "pave_surface: element_type must be QUA4, QUA8 or QUA9, got {element_type}"
         )));
     }
-    if let Some(h) = target_size {
-        if h <= 0.0 || h.is_nan() {
-            return Err(PyrucastError::Message(format!(
-                "pave_surface: target_size must be > 0, got {h}"
-            )));
-        }
+    if let Some(h) = target_size
+        && (h <= 0.0 || h.is_nan())
+    {
+        return Err(PyrucastError::Message(format!(
+            "pave_surface: target_size must be > 0, got {h}"
+        )));
     }
 
     let parsed = contour::parse(contour, "pave_surface")?;

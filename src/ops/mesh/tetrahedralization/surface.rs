@@ -152,10 +152,10 @@ fn widen(mesh: &TetMesh, region: &[u32]) -> Vec<u32> {
     let mut out: Vec<u32> = region.to_vec();
     for &t in region {
         for i in 0..4 {
-            if let Some(n) = mesh.neighbour(t as usize, i) {
-                if !out.contains(&(n as u32)) {
-                    out.push(n as u32);
-                }
+            if let Some(n) = mesh.neighbour(t as usize, i)
+                && !out.contains(&(n as u32))
+            {
+                out.push(n as u32);
             }
         }
     }

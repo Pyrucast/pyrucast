@@ -214,10 +214,10 @@ pub fn project_points(surface: &Mesh, points: &[Vec<f64>]) -> Result<Vec<Project
             }
             let mut best: Option<(f64, &Facet, Vec<f64>)> = None;
             for facet in &facets {
-                if let Some((d2_min, _, _)) = &best {
-                    if bbox_dist2(x, &facet.lo, &facet.hi) >= *d2_min {
-                        continue; // cannot beat the current best
-                    }
+                if let Some((d2_min, _, _)) = &best
+                    && bbox_dist2(x, &facet.lo, &facet.hi) >= *d2_min
+                {
+                    continue; // cannot beat the current best
                 }
                 let xi = closest_on_facet(facet.element_type, &facet.coords, x)?;
                 let interp = interpolation_for(facet.element_type);

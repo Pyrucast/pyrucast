@@ -415,15 +415,15 @@ pub fn materialize(parsed: &Contour, fabrics: Vec<Fabric>, op: &str) -> Result<M
     }
 
     let mut mesh = Mesh::empty();
-    if let Some(q) = quad_sub {
-        if q.cell_count() > 0 {
-            mesh.add_sub(Handle::new(q))?;
-        }
+    if let Some(q) = quad_sub
+        && q.cell_count() > 0
+    {
+        mesh.add_sub(Handle::new(q))?;
     }
-    if let Some(t) = tri_sub {
-        if t.cell_count() > 0 {
-            mesh.add_sub(Handle::new(t))?;
-        }
+    if let Some(t) = tri_sub
+        && t.cell_count() > 0
+    {
+        mesh.add_sub(Handle::new(t))?;
     }
     drop(kept);
     if mesh.is_empty() {

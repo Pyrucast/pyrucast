@@ -870,10 +870,10 @@ impl Cdt {
             if !t.alive || outside[idx] {
                 continue;
             }
-            if let Some(max_sq) = max_edge_sq {
-                if self.triangle_longest_edge_sq(idx) > max_sq {
-                    return Some(idx);
-                }
+            if let Some(max_sq) = max_edge_sq
+                && self.triangle_longest_edge_sq(idx) > max_sq
+            {
+                return Some(idx);
             }
             if let Some(threshold) = radius_ratio_sq_threshold {
                 let r2 = self.triangle_circumradius_sq(idx);
@@ -935,10 +935,10 @@ impl Cdt {
                 return true;
             }
         }
-        if let Some(p) = extra_point {
-            if (p - mid).norm_squared() < r2 - strict {
-                return true;
-            }
+        if let Some(p) = extra_point
+            && (p - mid).norm_squared() < r2 - strict
+        {
+            return true;
         }
         false
     }
@@ -1770,21 +1770,21 @@ pub fn triangulate_polygon_with_holes_refined(
             )));
         }
     }
-    if let Some(h) = options.max_edge_length {
-        if h.is_nan() || h <= 0.0 {
-            return Err(PyrucastError::Message(format!(
-                "triangulate_polygon_with_holes_refined: max_edge_length must be > 0, got {}",
-                h
-            )));
-        }
+    if let Some(h) = options.max_edge_length
+        && (h.is_nan() || h <= 0.0)
+    {
+        return Err(PyrucastError::Message(format!(
+            "triangulate_polygon_with_holes_refined: max_edge_length must be > 0, got {}",
+            h
+        )));
     }
-    if let Some(a) = options.min_angle_deg {
-        if !(a > 0.0 && a < 60.0) {
-            return Err(PyrucastError::Message(format!(
-                "triangulate_polygon_with_holes_refined: min_angle_deg must be in (0, 60), got {}",
-                a
-            )));
-        }
+    if let Some(a) = options.min_angle_deg
+        && !(a > 0.0 && a < 60.0)
+    {
+        return Err(PyrucastError::Message(format!(
+            "triangulate_polygon_with_holes_refined: min_angle_deg must be in (0, 60), got {}",
+            a
+        )));
     }
 
     // Flatten and build constraints — same as the unrefined façade.

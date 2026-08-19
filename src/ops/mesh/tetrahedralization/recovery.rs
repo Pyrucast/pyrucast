@@ -313,13 +313,11 @@ fn rebuild_along(
                 ..Default::default()
             },
             DEFAULT_BUDGET,
-        ) {
-            if mesh
-                .replace_region(&region, &cells, "an edge recovery")
-                .is_ok()
-            {
-                return Ok(true);
-            }
+        ) && mesh
+            .replace_region(&region, &cells, "an edge recovery")
+            .is_ok()
+        {
+            return Ok(true);
         }
         let wider = grow_region(mesh, &region);
         if wider.len() == region.len() || wider.len() > effort.max_region {
@@ -424,10 +422,10 @@ fn corridor(mesh: &TetMesh, u: u32, v: u32) -> Vec<u32> {
         }
         out.push(t);
         for i in 0..4 {
-            if let Some(n) = mesh.neighbour(t as usize, i) {
-                if seen.insert(n as u32) {
-                    stack.push(n as u32);
-                }
+            if let Some(n) = mesh.neighbour(t as usize, i)
+                && seen.insert(n as u32)
+            {
+                stack.push(n as u32);
             }
         }
     }
@@ -655,10 +653,10 @@ fn cells_meeting(mesh: &TetMesh, f: &[u32; 3]) -> Vec<u32> {
         }
         out.push(t);
         for i in 0..4 {
-            if let Some(n) = mesh.neighbour(t as usize, i) {
-                if seen.insert(n as u32) {
-                    stack.push(n as u32);
-                }
+            if let Some(n) = mesh.neighbour(t as usize, i)
+                && seen.insert(n as u32)
+            {
+                stack.push(n as u32);
             }
         }
     }
@@ -671,10 +669,10 @@ fn grow_region(mesh: &TetMesh, region: &[u32]) -> Vec<u32> {
     let mut out: Vec<u32> = region.to_vec();
     for &t in region {
         for i in 0..4 {
-            if let Some(n) = mesh.neighbour(t as usize, i) {
-                if !out.contains(&(n as u32)) {
-                    out.push(n as u32);
-                }
+            if let Some(n) = mesh.neighbour(t as usize, i)
+                && !out.contains(&(n as u32))
+            {
+                out.push(n as u32);
             }
         }
     }
@@ -699,10 +697,10 @@ fn piercing_edge(mesh: &TetMesh, f: &[u32; 3]) -> Option<(u32, u32)> {
     for i in 0..candidates.len() {
         let t = candidates[i];
         for k in 0..4 {
-            if let Some(n) = mesh.neighbour(t as usize, k) {
-                if seen.insert(n as u32) {
-                    candidates.push(n as u32);
-                }
+            if let Some(n) = mesh.neighbour(t as usize, k)
+                && seen.insert(n as u32)
+            {
+                candidates.push(n as u32);
             }
         }
     }

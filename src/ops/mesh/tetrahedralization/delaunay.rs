@@ -283,7 +283,7 @@ impl TetMesh {
         // it has to be one the region already presented.
         let unmatched = counts
             .iter()
-            .filter(|(key, &n)| n == 1 && !outside.contains_key(*key))
+            .filter(|(key, n)| **n == 1 && !outside.contains_key(*key))
             .count();
         if unmatched > 0 {
             // Faces the new cells do not present are a crack — unless the

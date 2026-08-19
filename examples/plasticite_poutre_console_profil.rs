@@ -322,16 +322,15 @@ fn main() -> Result<()> {
             // gratuitement en tête du tour suivant (pas d'évaluation gâchée).
             let mut chose_anderson = false;
             let mut next_u = None;
-            if !history.is_empty() {
-                if let Some(corr) =
+            if !history.is_empty()
+                && let Some(corr) =
                     tic(&T_ANDERSON, || anderson_step(&u, &g, &history, &free_mesh))?
-                {
-                    let u_acc = tic(&T_FIELDOPS, || (&pure_step - &corr))?;
-                    let (_, res_acc, _) = residual_at(&u_acc)?;
-                    if res_acc < cur_res {
-                        next_u = Some(u_acc);
-                        chose_anderson = true;
-                    }
+            {
+                let u_acc = tic(&T_FIELDOPS, || (&pure_step - &corr))?;
+                let (_, res_acc, _) = residual_at(&u_acc)?;
+                if res_acc < cur_res {
+                    next_u = Some(u_acc);
+                    chose_anderson = true;
                 }
             }
 

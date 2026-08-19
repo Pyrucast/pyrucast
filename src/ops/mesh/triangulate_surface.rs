@@ -127,13 +127,13 @@ pub fn triangulate_surface_cancellable(
             element_type
         )));
     }
-    if let Some(h) = target_size {
-        if h <= 0.0 || h.is_nan() {
-            return Err(PyrucastError::Message(format!(
-                "triangulate_surface: target_size must be > 0, got {}",
-                h
-            )));
-        }
+    if let Some(h) = target_size
+        && (h <= 0.0 || h.is_nan())
+    {
+        return Err(PyrucastError::Message(format!(
+            "triangulate_surface: target_size must be > 0, got {}",
+            h
+        )));
     }
     let parsed = contour::parse(contour, "triangulate_surface")?;
 
@@ -1824,15 +1824,15 @@ fn materialize(
     }
 
     let mut mesh = Mesh::empty();
-    if let Some(q) = quad_sub {
-        if q.cell_count() > 0 {
-            mesh.add_sub(Handle::new(q))?;
-        }
+    if let Some(q) = quad_sub
+        && q.cell_count() > 0
+    {
+        mesh.add_sub(Handle::new(q))?;
     }
-    if let Some(t) = tri_sub {
-        if t.cell_count() > 0 {
-            mesh.add_sub(Handle::new(t))?;
-        }
+    if let Some(t) = tri_sub
+        && t.cell_count() > 0
+    {
+        mesh.add_sub(Handle::new(t))?;
     }
     drop(kept_nodes);
     if mesh.is_empty() {

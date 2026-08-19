@@ -251,10 +251,10 @@ fn corner_indices(c: &Coords, chain: &[NodeId], cos_tol: f64) -> Result<Vec<usiz
         let prev = c.position(chain[(i + k - 1) % k])?;
         let cur = c.position(chain[i])?;
         let next = c.position(chain[(i + 1) % k])?;
-        if let Some(cos_turn) = turn_cosine(prev, cur, next) {
-            if cos_turn < cos_tol {
-                corners.push(i);
-            }
+        if let Some(cos_turn) = turn_cosine(prev, cur, next)
+            && cos_turn < cos_tol
+        {
+            corners.push(i);
         }
     }
     Ok(corners)

@@ -74,12 +74,12 @@ impl Band {
                 "value band: at least one bound (`ge`/`gt`/`le`/`lt`) must be given".into(),
             ));
         }
-        if let (Some(lo), Some(hi)) = (min, max) {
-            if lo > hi {
-                return Err(PyrucastError::Message(format!(
-                    "value band: lower bound ({lo}) is greater than upper bound ({hi})"
-                )));
-            }
+        if let (Some(lo), Some(hi)) = (min, max)
+            && lo > hi
+        {
+            return Err(PyrucastError::Message(format!(
+                "value band: lower bound ({lo}) is greater than upper bound ({hi})"
+            )));
         }
         Ok(Band {
             min,

@@ -143,13 +143,13 @@ fn insert_relation_value(
     g: f64,
     caller: &str,
 ) -> Result<()> {
-    if let Some(prev) = values.insert((multiplier_node, slot.to_string()), g) {
-        if prev != g {
-            return Err(PyrucastError::Message(format!(
-                "{caller}: conflicting values ({prev} and {g}) for the same relation \
+    if let Some(prev) = values.insert((multiplier_node, slot.to_string()), g)
+        && prev != g
+    {
+        return Err(PyrucastError::Message(format!(
+            "{caller}: conflicting values ({prev} and {g}) for the same relation \
                  (multiplier node {multiplier_node}, slot {slot})"
-            )));
-        }
+        )));
     }
     Ok(())
 }

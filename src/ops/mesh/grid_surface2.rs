@@ -178,12 +178,12 @@ pub fn grid_surface2_cancellable(
             "grid_surface2: element_type must be QUA4, QUA8 or QUA9, got {element_type}"
         )));
     }
-    if let Some(h) = target_size {
-        if h <= 0.0 || h.is_nan() {
-            return Err(PyrucastError::Message(format!(
-                "grid_surface2: target_size must be > 0, got {h}"
-            )));
-        }
+    if let Some(h) = target_size
+        && (h <= 0.0 || h.is_nan())
+    {
+        return Err(PyrucastError::Message(format!(
+            "grid_surface2: target_size must be > 0, got {h}"
+        )));
     }
     let parsed = contour::parse(contour, "grid_surface2")?;
     let mut fabrics = Vec::with_capacity(parsed.domains.len());
@@ -659,7 +659,7 @@ mod tests {
         // the regression to catch.
         let cracks = used
             .iter()
-            .filter(|(k, &v)| v == 1 && !on_contour.contains(k))
+            .filter(|(k, v)| **v == 1 && !on_contour.contains(k))
             .count();
         assert!(
             cracks <= 24,

@@ -827,10 +827,10 @@ fn build_groups(parsed: &Parsed, coords: Handle<Coords>) -> Result<Vec<(String, 
         }
 
         // Realign gmsh's mid-edge node order to pyrucast's where they differ.
-        if let Some(perm) = gmsh_node_permutation(el.element_type) {
-            if ids.len() == perm.len() {
-                ids = perm.iter().map(|&p| ids[p]).collect();
-            }
+        if let Some(perm) = gmsh_node_permutation(el.element_type)
+            && ids.len() == perm.len()
+        {
+            ids = perm.iter().map(|&p| ids[p]).collect();
         }
 
         for g in &el.groups {

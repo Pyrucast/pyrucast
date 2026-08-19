@@ -279,14 +279,14 @@ fn main() -> Result<()> {
             // gratuitement en tête du tour suivant (pas d'évaluation gâchée).
             let mut chose_anderson = false;
             let mut next_u = None;
-            if !history.is_empty() {
-                if let Some(corr) = anderson_step(&u, &g, &history, &free_mesh)? {
-                    let u_acc = (&pure_step - &corr)?;
-                    let (_, res_acc, _) = residual_at(&u_acc)?;
-                    if res_acc < cur_res {
-                        next_u = Some(u_acc);
-                        chose_anderson = true;
-                    }
+            if !history.is_empty()
+                && let Some(corr) = anderson_step(&u, &g, &history, &free_mesh)?
+            {
+                let u_acc = (&pure_step - &corr)?;
+                let (_, res_acc, _) = residual_at(&u_acc)?;
+                if res_acc < cur_res {
+                    next_u = Some(u_acc);
+                    chose_anderson = true;
                 }
             }
 

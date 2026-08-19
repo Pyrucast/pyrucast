@@ -162,12 +162,12 @@ pub fn pave_volume_cancellable(
                 .into(),
         ));
     }
-    if let Some(t) = thickness {
-        if t <= 0.0 || t.is_nan() {
-            return Err(PyrucastError::Message(format!(
-                "pave_volume: thickness must be > 0, got {t}"
-            )));
-        }
+    if let Some(t) = thickness
+        && (t <= 0.0 || t.is_nan())
+    {
+        return Err(PyrucastError::Message(format!(
+            "pave_volume: thickness must be > 0, got {t}"
+        )));
     }
     let coords = envelope.coords()?;
     let shell = Shell::extract(envelope, "pave_volume")?;

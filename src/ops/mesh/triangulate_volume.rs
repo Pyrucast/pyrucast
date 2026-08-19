@@ -260,12 +260,12 @@ pub fn triangulate_volume_cancellable(
     allow_surface_nodes: bool,
     cancel: &dyn Cancel,
 ) -> Result<Mesh> {
-    if let Some(h) = target_size {
-        if h.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {
-            return Err(PyrucastError::Message(format!(
-                "triangulate_volume: size must be > 0, got {h}"
-            )));
-        }
+    if let Some(h) = target_size
+        && h.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater)
+    {
+        return Err(PyrucastError::Message(format!(
+            "triangulate_volume: size must be > 0, got {h}"
+        )));
     }
 
     let mut env = Envelope::extract(envelope, cancel)?;

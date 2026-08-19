@@ -325,7 +325,7 @@ mod tests {
         qs.sort_by(|a, b| a.partial_cmp(b).unwrap());
         let mut boundary: Vec<(NodeId, NodeId)> = used
             .iter()
-            .filter(|(_, &v)| v == 1)
+            .filter(|(_, v)| **v == 1)
             .map(|(k, _)| *k)
             .collect();
         boundary.sort_unstable();

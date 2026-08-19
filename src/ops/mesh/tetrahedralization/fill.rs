@@ -162,11 +162,11 @@ pub fn delaunay_fill(
             if barrier.contains(&key(&mesh.face(t, i))) {
                 continue;
             }
-            if let Some(n) = mesh.neighbour(t, i) {
-                if !inside[n] {
-                    inside[n] = true;
-                    stack.push(n);
-                }
+            if let Some(n) = mesh.neighbour(t, i)
+                && !inside[n]
+            {
+                inside[n] = true;
+                stack.push(n);
             }
         }
     }

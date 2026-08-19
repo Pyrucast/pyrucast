@@ -313,10 +313,10 @@ fn rebuild_without(
     else {
         return Ok(None);
     };
-    if let Some(accept) = accept {
-        if !accept(mesh, &new) {
-            return Ok(None);
-        }
+    if let Some(accept) = accept
+        && !accept(mesh, &new)
+    {
+        return Ok(None);
     }
     // A filling the mesh will not take is declined, and declined without
     // having touched anything: the swap decides that before it mutates.
@@ -362,10 +362,10 @@ fn grow(mesh: &TetMesh, region: &[u32]) -> Vec<u32> {
     let mut out: Vec<u32> = region.to_vec();
     for &t in region {
         for i in 0..4 {
-            if let Some(n) = mesh.neighbour(t as usize, i) {
-                if !out.contains(&(n as u32)) {
-                    out.push(n as u32);
-                }
+            if let Some(n) = mesh.neighbour(t as usize, i)
+                && !out.contains(&(n as u32))
+            {
+                out.push(n as u32);
             }
         }
     }

@@ -483,10 +483,10 @@ fn solve_inner(
     // ── Step 3 — run the chosen active-set method ──────────────────────
     // The Schur path reuses one base factorization; it falls back to the
     // refactorizing path (Ok(None)) when the base is singular.
-    if options.active_set == ActiveSetMethod::SchurComplement {
-        if let Some(solution) = solve_schur(&state, &csc, &b_full, matrix, options, cancel)? {
-            return Ok(solution);
-        }
+    if options.active_set == ActiveSetMethod::SchurComplement
+        && let Some(solution) = solve_schur(&state, &csc, &b_full, matrix, options, cancel)?
+    {
+        return Ok(solution);
     }
     solve_refactorize(&state, &csc, &b_full, matrix, options, cancel)
 }
