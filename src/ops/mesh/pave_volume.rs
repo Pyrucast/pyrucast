@@ -81,6 +81,33 @@ const SMOOTH_SWEEPS: usize = 12;
 ///
 /// This is the uninterruptible convenience form; for a long mesh a caller may
 /// want to stop early, use [`pave_volume_cancellable`].
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let base: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut carre = SubMesh::new(coords.clone(), ElementType::QUA4);
+/// # carre.add_cell(&base.iter().map(|n| n.id()).collect::<Vec<_>>()).unwrap();
+/// # let cube = mesh::sweep_solid(&Mesh::from_submesh(carre),
+/// #     &mesh::translate(&Mesh::from_submesh({
+/// #         let mut c = SubMesh::new(coords.clone(), ElementType::QUA4);
+/// #         c.add_cell(&base.iter().map(|n| n.id()).collect::<Vec<_>>()).unwrap();
+/// #         c
+/// #     }), &[0.0, 0.0, 1.0]).unwrap(), 1).unwrap();
+/// # let enveloppe = mesh::convert(&mesh::skin(&cube, None).unwrap(),
+/// #                               ElementType::TRI3).unwrap();
+/// // Couche limite hexaédrique, raccord pyramidal, cœur tétraédrique :
+/// // trois types d'éléments dans le même maillage.
+/// let v = mesh::pave_volume(&enveloppe, 1, Some(0.2), Some(0.5))?;
+/// assert!(v.cell_count()? > 0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn pave_volume(
     envelope: &Mesh,
     layers: usize,
@@ -92,6 +119,35 @@ pub fn pave_volume(
 
 /// Like [`pave_volume`], but polls `cancel` while meshing the core so a long
 /// run can be stopped early (returning [`PyrucastError::Interrupted`]).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let base: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut carre = SubMesh::new(coords.clone(), ElementType::QUA4);
+/// # carre.add_cell(&base.iter().map(|n| n.id()).collect::<Vec<_>>()).unwrap();
+/// # let cube = mesh::sweep_solid(&Mesh::from_submesh(carre),
+/// #     &mesh::translate(&Mesh::from_submesh({
+/// #         let mut c = SubMesh::new(coords.clone(), ElementType::QUA4);
+/// #         c.add_cell(&base.iter().map(|n| n.id()).collect::<Vec<_>>()).unwrap();
+/// #         c
+/// #     }), &[0.0, 0.0, 1.0]).unwrap(), 1).unwrap();
+/// # let enveloppe = mesh::convert(&mesh::skin(&cube, None).unwrap(),
+/// #                               ElementType::TRI3).unwrap();
+/// # use std::sync::atomic::{AtomicBool, Ordering};
+/// // Le jeton est sondé aux points de contrôle du mailleur : armé d'avance,
+/// // l'appel s'arrête au premier d'entre eux.
+/// let stop = AtomicBool::new(true);
+/// assert!(mesh::pave_volume_cancellable(
+///     &enveloppe, 1, Some(0.2), Some(0.5), &stop).is_err());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn pave_volume_cancellable(
     envelope: &Mesh,
     layers: usize,

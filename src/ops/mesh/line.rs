@@ -13,6 +13,24 @@ use crate::error::{PyrucastError, Result};
 /// `n_elems - 1` intermediate corner nodes are created at evenly spaced
 /// positions. For `SEG3`, the result is then promoted to quadratic (one
 /// mid-edge node per element) via [`super::to_quadratic`].
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
+/// // Un segment discrétisé : n mailles, n+1 nœuds.
+/// let l = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[3.0, 0.0, 0.0]), 3, ElementType::SEG2)?;
+/// assert_eq!(l.cell_count()?, 3);
+/// // En quadratique, les nœuds milieux s'ajoutent.
+/// let q = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[3.0, 0.0, 0.0]), 3, ElementType::SEG3)?;
+/// assert_eq!(q.cell_count()?, 3);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn line(a: &Node, b: &Node, n_elems: usize, element_type: ElementType) -> Result<Mesh> {
     if !matches!(element_type, ElementType::SEG2 | ElementType::SEG3) {
         return Err(PyrucastError::Message(format!(

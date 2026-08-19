@@ -14,6 +14,26 @@ use std::collections::HashSet;
 /// increfed afresh by the new submeshes; `mesh` itself is left untouched.
 ///
 /// Errors if `mesh` has no submeshes (no Coords to attach to).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
+/// // Fusionne les zones de même type d'élément en une seule.
+/// let a = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[1.0, 0.0, 0.0]), 1, ElementType::SEG2)?;
+/// let b = mesh::line(&p(&[1.0, 0.0, 0.0]), &p(&[2.0, 0.0, 0.0]), 1, ElementType::SEG2)?;
+/// let deux = a.union(&b)?;
+/// assert_eq!(deux.len(), 2);
+/// let une = mesh::consolidate(&deux)?;
+/// assert_eq!(une.len(), 1);
+/// assert_eq!(une.cell_count()?, 2);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn consolidate(mesh: &Mesh) -> Result<Mesh> {
     let coords = mesh.coords()?;
     let mut result = Mesh::empty();

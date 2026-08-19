@@ -10,6 +10,29 @@ use crate::error::Result;
 /// QUA4 faces into HEX8 hexahedra. Both meshes must be single-submesh
 /// meshes of the same surface type, with the same number of cells and a
 /// consistent node correspondence, attached to the same `Coords`.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
+/// // Le pendant volumique : deux surfaces conformes cousues par des
+/// // hexaèdres ou des prismes, selon leur type.
+/// # let q = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]];
+/// # let n: Vec<Node> = q.iter().map(|x| p(x)).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::QUA4);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id(), n[3].id()])?;
+/// # let bas = Mesh::from_submesh(sm);
+/// let haut = mesh::translate(&bas, &[0.0, 0.0, 1.0])?;
+/// let v = mesh::sweep_solid(&bas, &haut, 2)?;
+/// assert_eq!(v.cell_count()?, 2);
+/// assert_eq!(v.element_types()?, vec![ElementType::HEX8]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn sweep_solid(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Mesh> {
     crate::ops::mesh::sweep_kernel::solid_between(mesh_a, mesh_b, n_layers)
 }

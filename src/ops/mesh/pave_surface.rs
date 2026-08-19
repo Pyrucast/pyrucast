@@ -73,6 +73,33 @@ use crate::ops::mesh::{contour, paving};
 ///
 /// This is the uninterruptible convenience form; for a long mesh a caller may
 /// want to stop early, use [`pave_surface_cancellable`].
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let cote = |a: &[f64], b: &[f64]| mesh::line(
+/// #     &Node::create_in(coords.clone(), a).unwrap(),
+/// #     &Node::create_in(coords.clone(), b).unwrap(), 2, ElementType::SEG2).unwrap();
+/// # let quatre = cote(&[0.0, 0.0], &[2.0, 0.0])
+/// #     .union(&cote(&[2.0, 0.0], &[2.0, 2.0])).unwrap()
+/// #     .union(&cote(&[2.0, 2.0], &[0.0, 2.0])).unwrap()
+/// #     .union(&cote(&[0.0, 2.0], &[0.0, 0.0])).unwrap();
+/// # mesh::merge_nodes(&quatre, 1e-6, true).unwrap();
+/// # let contour = mesh::consolidate(&quatre).unwrap();
+/// // Le pavage frontal : des quadrangles posés en rangées qui suivent le
+/// // contour, plutôt que des triangles appariés après coup.
+/// let m = mesh::pave_surface(&contour, ElementType::QUA4, Some(0.5), false)?;
+/// assert!(m.cell_count()? > 0);
+/// // `all_quad` exige que rien ne reste triangulaire — ce qui n'est
+/// // possible que si le contour a un nombre **pair** de segments.
+/// assert!(mesh::pave_surface(&contour, ElementType::QUA4, Some(0.5), true).is_ok());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn pave_surface(
     contour: &Mesh,
     element_type: ElementType,
@@ -84,6 +111,32 @@ pub fn pave_surface(
 
 /// Like [`pave_surface`], but polls `cancel` between rows so meshing can be
 /// stopped early (returning [`PyrucastError::Interrupted`]).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let cote = |a: &[f64], b: &[f64]| mesh::line(
+/// #     &Node::create_in(coords.clone(), a).unwrap(),
+/// #     &Node::create_in(coords.clone(), b).unwrap(), 2, ElementType::SEG2).unwrap();
+/// # let quatre = cote(&[0.0, 0.0], &[2.0, 0.0])
+/// #     .union(&cote(&[2.0, 0.0], &[2.0, 2.0])).unwrap()
+/// #     .union(&cote(&[2.0, 2.0], &[0.0, 2.0])).unwrap()
+/// #     .union(&cote(&[0.0, 2.0], &[0.0, 0.0])).unwrap();
+/// # mesh::merge_nodes(&quatre, 1e-6, true).unwrap();
+/// # let contour = mesh::consolidate(&quatre).unwrap();
+/// # use std::sync::atomic::{AtomicBool, Ordering};
+/// // Le jeton est sondé aux points de contrôle du mailleur : armé d'avance,
+/// // l'appel s'arrête au premier d'entre eux.
+/// let stop = AtomicBool::new(true);
+/// assert!(mesh::pave_surface_cancellable(
+///     &contour, ElementType::QUA4, Some(0.5), false, &stop).is_err());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn pave_surface_cancellable(
     contour: &Mesh,
     element_type: ElementType,

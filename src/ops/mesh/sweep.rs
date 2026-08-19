@@ -24,6 +24,24 @@ use crate::handle::Handle;
 ///
 /// QUA4 node order per element (counterclockwise, `mesh_a` side first):
 /// `[k][j]`, `[k][j+1]`, `[k+1][j+1]`, `[k+1][j]`.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
+/// // Deux lignes **conformes** cousues par des QUA4 : le maillage n'est
+/// // pas une extrusion, les deux bords pouvant différer.
+/// let a = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[1.0, 0.0, 0.0]), 2, ElementType::SEG2)?;
+/// let b = mesh::line(&p(&[0.0, 1.0, 0.0]), &p(&[2.0, 1.0, 0.0]), 2, ElementType::SEG2)?;
+/// let s = mesh::sweep(&a, &b, 1, ElementType::QUA4)?;
+/// assert_eq!(s.cell_count()?, 2);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn sweep(
     mesh_a: &Mesh,
     mesh_b: &Mesh,

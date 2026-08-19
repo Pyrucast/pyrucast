@@ -50,6 +50,26 @@ fn split_of(src: ElementType, target: ElementType) -> Result<&'static [&'static 
 /// colours). Errors on any submesh whose type cannot be converted to `target`
 /// (supported: identity, `QUA4 → TRI3`, `HEX8 → TET4`). `mesh` is left
 /// untouched.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
+/// // Un QUA4 se découpe en deux TRI3.
+/// # let q = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]];
+/// # let n: Vec<Node> = q.iter().map(|x| p(x)).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::QUA4);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id(), n[3].id()])?;
+/// let carre = Mesh::from_submesh(sm);
+/// let tri = mesh::convert(&carre, ElementType::TRI3)?;
+/// assert_eq!(tri.cell_count()?, 2);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn convert(mesh: &Mesh, target: ElementType) -> Result<Mesh> {
     let coords = mesh.coords()?;
 

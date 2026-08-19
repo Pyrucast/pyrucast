@@ -13,6 +13,22 @@ use crate::error::Result;
 ///
 /// Every node referenced by the result is increfed afresh by the new POI1
 /// submeshes; `mesh` itself is left untouched.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
+/// // Le nuage des nœuds **distincts** d'un maillage : deux mailles qui
+/// // partagent un nœud ne le comptent qu'une fois.
+/// let l = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[2.0, 0.0, 0.0]), 2, ElementType::SEG2)?;
+/// assert_eq!(mesh::to_poi1(&l)?.cell_count()?, 3);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn to_poi1(mesh: &Mesh) -> Result<Mesh> {
     let mut result = Mesh::empty();
     for sm_handle in mesh {

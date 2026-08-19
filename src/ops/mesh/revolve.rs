@@ -27,6 +27,23 @@ use crate::error::Result;
 /// - QUA4: `bot[0], bot[1], top[1], top[0]`
 /// - PENTA6: `bot[0..3], top[0..3]`
 /// - HEX8: `bot[0..4], top[0..4]`
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
+/// // Un demi-tour d'un segment autour de l'axe z : quatre QUA4.
+/// let l = mesh::line(&p(&[1.0, 0.0, 0.0]), &p(&[1.0, 0.0, 1.0]), 1, ElementType::SEG2)?;
+/// let s = mesh::revolve(&l, std::f64::consts::PI, 4, &[0.0, 0.0, 0.0],
+///                       Some(&[0.0, 0.0, 1.0]))?;
+/// assert_eq!(s.cell_count()?, 4);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn revolve(
     mesh: &Mesh,
     angle: f64,

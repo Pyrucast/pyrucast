@@ -15,6 +15,23 @@ use crate::error::Result;
 /// - QUA4: `bot[0], bot[1], top[1], top[0]`
 /// - PENTA6: `bot[0..3], top[0..3]`
 /// - HEX8: `bot[0..4], top[0..4]`
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
+/// // Un SEG2 extrudé devient un QUA4 : une couche, une maille.
+/// let l = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[1.0, 0.0, 0.0]), 1, ElementType::SEG2)?;
+/// let s = mesh::extrude(&l, &[0.0, 1.0, 0.0], 3)?;
+/// assert_eq!(s.cell_count()?, 3);
+/// assert_eq!(s.element_types()?, vec![ElementType::QUA4]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn extrude(mesh: &Mesh, direction: &[f64], n_layers: usize) -> Result<Mesh> {
     crate::ops::mesh::sweep_kernel::extrude(mesh, direction, n_layers)
 }

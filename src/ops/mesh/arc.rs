@@ -16,6 +16,23 @@ use crate::error::{PyrucastError, Result};
 /// `n_elems - 1` intermediate corner nodes are created at evenly spaced
 /// angles. For `SEG3`, the result is then promoted to quadratic (one
 /// mid-edge node per element) via [`super::to_quadratic`].
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
+/// // Un quart de cercle : `node_a` et `node_b` sont sur l'arc, `center`
+/// // au centre. Le rayon vient de la distance, non d'un argument.
+/// let a = mesh::arc(&p(&[1.0, 0.0, 0.0]), &p(&[0.0, 0.0, 0.0]),
+///                   &p(&[0.0, 1.0, 0.0]), 4, ElementType::SEG2)?;
+/// assert_eq!(a.cell_count()?, 4);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn arc(
     node_a: &Node,
     center: &Node,

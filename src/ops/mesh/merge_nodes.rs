@@ -62,6 +62,31 @@ use std::collections::HashMap;
 /// nodes were welded away, how many cells dropped, at which tolerance. A weld
 /// is a step you want to see in a build log: `tol` is a guess about the
 /// geometry, and this line is what tells you it guessed right.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
+/// // Deux lignes bout à bout mais aux nœuds **distincts** : la fusion les
+/// // recoud, et le nuage passe de quatre nœuds à trois.
+/// let a = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[1.0, 0.0, 0.0]), 1, ElementType::SEG2)?;
+/// let b = mesh::line(&p(&[1.0, 0.0, 0.0]), &p(&[2.0, 0.0, 0.0]), 1, ElementType::SEG2)?;
+/// let deux = a.union(&b)?;
+/// // `to_poi1` dédoublonne **par zone** : sur deux zones il compte encore
+/// // quatre nœuds. Consolider d'abord donne le vrai nuage.
+/// assert_eq!(mesh::to_poi1(&mesh::consolidate(&deux)?)?.cell_count()?, 4);
+/// let cousu = mesh::merge_nodes(&deux, 1e-6, false)?;
+/// assert_eq!(mesh::to_poi1(&mesh::consolidate(&cousu)?)?.cell_count()?, 3);
+/// // La structure est intacte : mêmes zones, mêmes mailles, dans le même
+/// // ordre — seul **à quel nœud** une maille se réfère a changé.
+/// assert_eq!(cousu.cell_count()?, deux.cell_count()?);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn merge_nodes(mesh: &Mesh, tol: f64, in_place: bool) -> Result<Mesh> {
     if tol < 0.0 {
         return Err(PyrucastError::Message(format!(

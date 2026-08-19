@@ -19,6 +19,23 @@ use crate::error::{PyrucastError, Result};
 ///
 /// The in-plane basis `(u, v)` is built by Gram-Schmidt against the
 /// least-aligned coordinate axis so that `(u, v, n̂)` is right-handed.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
+/// // Un cercle **fermé** : autant de nœuds que de mailles, le dernier
+/// // rejoignant le premier.
+/// let c = mesh::circle(&p(&[0.0, 0.0, 0.0]), &[0.0, 0.0, 1.0], 1.0, 8,
+///                      ElementType::SEG2)?;
+/// assert_eq!(c.cell_count()?, 8);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn circle(
     center: &Node,
     normal: &[f64],

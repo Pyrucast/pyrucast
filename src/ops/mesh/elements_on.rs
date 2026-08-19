@@ -28,6 +28,24 @@ use std::collections::HashSet;
 /// Both meshes must live on the **same `Coords`** (node ids are only
 /// meaningful within one) — otherwise an error is returned. An empty
 /// `points` (no referenced node) keeps nothing.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
+/// // Les mailles appuyées sur un nuage de nœuds. En mode **strict**, il
+/// // faut que *tous* les nœuds de la maille y soient.
+/// let l = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[2.0, 0.0, 0.0]), 2, ElementType::SEG2)?;
+/// let bout = mesh::poi1_from_nodes(&[l.node(0, 0, 0)?])?;
+/// assert_eq!(mesh::elements_on(&l, &bout, false)?.cell_count()?, 1);
+/// assert_eq!(mesh::elements_on(&l, &bout, true)?.cell_count()?, 0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn elements_on(mesh: &Mesh, points: &Mesh, strict: bool) -> Result<Mesh> {
     // Collect the allowed node set from `points`, checking Coords coherence.
     let mut allowed: HashSet<NodeId> = HashSet::new();

@@ -26,6 +26,31 @@ use crate::handle::Handle;
 /// so the nodes live exactly as long as the returned mesh. An empty input
 /// submesh yields an empty POI1 submesh (the count is preserved); `mesh`
 /// itself is left untouched.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
+/// // Un nœud neuf au centre de gravité de **chaque élément**, zone par
+/// // zone — autant de mailles POI1 que d'éléments en entrée.
+/// let l = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[2.0, 0.0, 0.0]), 2, ElementType::SEG2)?;
+/// let g = mesh::barycenter(&l)?;
+/// assert_eq!(g.cell_count()?, 2);
+/// assert_eq!(g.node(0, 0, 0)?.position()?, vec![0.5, 0.0, 0.0]);
+///
+/// // Sur une entrée POI1, le centroïde d'un point est le point : c'est la
+/// // façon canonique de se donner des nœuds colocalisés — des
+/// // multiplicateurs de Lagrange, par exemple.
+/// let nuage = mesh::poi1_from_nodes(&[p(&[3.0, 0.0, 0.0])])?;
+/// let mult = mesh::barycenter(&nuage)?;
+/// assert_eq!(mult.node(0, 0, 0)?.position()?, vec![3.0, 0.0, 0.0]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn barycenter(mesh: &Mesh) -> Result<Mesh> {
     let mut result = Mesh::empty();
     for sm_handle in mesh {

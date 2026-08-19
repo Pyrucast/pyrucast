@@ -51,6 +51,31 @@ const MIN_ANGLE_DEG: f64 = 20.0;
 ///
 /// This is the uninterruptible convenience form; for a long mesh a caller
 /// may want to stop early, use [`triangulate_surface_cancellable`].
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let cote = |a: &[f64], b: &[f64]| mesh::line(
+/// #     &Node::create_in(coords.clone(), a).unwrap(),
+/// #     &Node::create_in(coords.clone(), b).unwrap(), 2, ElementType::SEG2).unwrap();
+/// # let quatre = cote(&[0.0, 0.0], &[2.0, 0.0])
+/// #     .union(&cote(&[2.0, 0.0], &[2.0, 2.0])).unwrap()
+/// #     .union(&cote(&[2.0, 2.0], &[0.0, 2.0])).unwrap()
+/// #     .union(&cote(&[0.0, 2.0], &[0.0, 0.0])).unwrap();
+/// # mesh::merge_nodes(&quatre, 1e-6, true).unwrap();
+/// # let contour = mesh::consolidate(&quatre).unwrap();
+/// // Le mailleur par triangulation contrainte : le contour est **respecté
+/// // à l'arête près**, et la taille cible pilote le raffinement.
+/// let m = mesh::triangulate_surface(&contour, ElementType::TRI3, Some(0.5))?;
+/// assert!(m.cell_count()? > 0);
+/// assert_eq!(m.element_types()?, vec![ElementType::TRI3]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn triangulate_surface(
     contour: &Mesh,
     element_type: ElementType,
@@ -61,6 +86,35 @@ pub fn triangulate_surface(
 
 /// Like [`triangulate_surface`], but polls `cancel` periodically so meshing can be
 /// stopped early (returning [`PyrucastError::Interrupted`]).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let cote = |a: &[f64], b: &[f64]| mesh::line(
+/// #     &Node::create_in(coords.clone(), a).unwrap(),
+/// #     &Node::create_in(coords.clone(), b).unwrap(), 2, ElementType::SEG2).unwrap();
+/// # let quatre = cote(&[0.0, 0.0], &[2.0, 0.0])
+/// #     .union(&cote(&[2.0, 0.0], &[2.0, 2.0])).unwrap()
+/// #     .union(&cote(&[2.0, 2.0], &[0.0, 2.0])).unwrap()
+/// #     .union(&cote(&[0.0, 2.0], &[0.0, 0.0])).unwrap();
+/// # mesh::merge_nodes(&quatre, 1e-6, true).unwrap();
+/// # let contour = mesh::consolidate(&quatre).unwrap();
+/// # use std::sync::atomic::{AtomicBool, Ordering};
+/// // Le jeton est sondé aux points de contrôle du mailleur : armé d'avance,
+/// // l'appel s'arrête au premier d'entre eux.
+/// let stop = AtomicBool::new(true);
+/// assert!(mesh::triangulate_surface_cancellable(
+///     &contour, ElementType::TRI3, Some(0.5), &stop).is_err());
+/// stop.store(false, Ordering::Relaxed);
+/// assert!(mesh::triangulate_surface_cancellable(
+///     &contour, ElementType::TRI3, Some(0.5), &stop).is_ok());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn triangulate_surface_cancellable(
     contour: &Mesh,
     element_type: ElementType,

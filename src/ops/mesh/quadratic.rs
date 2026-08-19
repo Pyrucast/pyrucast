@@ -40,6 +40,23 @@ fn quadratic_of(et: ElementType) -> Result<(ElementType, &'static [[usize; 2]])>
 /// quadratic sibling. Corner nodes are re-used; mid-edge nodes are freshly
 /// created once per edge, at the midpoint, and shared. The input mesh is left
 /// untouched.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
+/// // Chaque arête gagne son nœud milieu : un SEG2 devient un SEG3.
+/// let l = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[2.0, 0.0, 0.0]), 2, ElementType::SEG2)?;
+/// let q = mesh::to_quadratic(&l)?;
+/// assert_eq!(q.element_types()?, vec![ElementType::SEG3]);
+/// assert_eq!(q.cell_count()?, 2);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn to_quadratic(mesh: &Mesh) -> Result<Mesh> {
     let coords = mesh.coords()?;
 

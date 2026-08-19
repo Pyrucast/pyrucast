@@ -68,6 +68,26 @@ fn edge_key(u: NodeId, v: NodeId) -> (NodeId, NodeId) {
 /// [`skin()`](fn@crate::ops::mesh::skin) for the boundary of a volume),
 /// or if the boundary is not a clean set of closed loops (an open or
 /// non-manifold edge).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
+/// // Le bord d'une surface : les arêtes portées par **une seule** maille,
+/// // chaînées en boucles fermées.
+/// # let q = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]];
+/// # let n: Vec<Node> = q.iter().map(|x| p(x)).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::QUA4);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id(), n[3].id()])?;
+/// let carre = Mesh::from_submesh(sm);
+/// assert_eq!(mesh::border(&carre, None)?.cell_count()?, 4);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn border(mesh: &Mesh, angle_deg: Option<f64>) -> Result<Mesh> {
     let coords = mesh.coords()?;
 

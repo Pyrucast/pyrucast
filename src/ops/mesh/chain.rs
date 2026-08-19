@@ -58,6 +58,22 @@ use std::collections::HashMap;
 /// rejected. Non-line submeshes (`POI1`, surfaces, volumes) are rejected too.
 /// The result mirrors `mesh` (same submeshes, types, colours, shared
 /// `Coords`); the input is untouched.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
+/// // Réordonne des segments épars en une ligne continue. Une ligne déjà
+/// // chaînée en ressort inchangée.
+/// let l = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[3.0, 0.0, 0.0]), 3, ElementType::SEG2)?;
+/// assert_eq!(mesh::chain(&l)?.cell_count()?, 3);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn chain(mesh: &Mesh) -> Result<Mesh> {
     let coords = mesh.coords()?;
     let mut result = Mesh::empty();

@@ -89,6 +89,31 @@ use crate::ops::mesh::{contour, paving};
 ///
 /// This is the uninterruptible convenience form; for a long mesh a caller may
 /// want to stop early, use [`grid_surface2_cancellable`].
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let cote = |a: &[f64], b: &[f64]| mesh::line(
+/// #     &Node::create_in(coords.clone(), a).unwrap(),
+/// #     &Node::create_in(coords.clone(), b).unwrap(), 2, ElementType::SEG2).unwrap();
+/// # let quatre = cote(&[0.0, 0.0], &[2.0, 0.0])
+/// #     .union(&cote(&[2.0, 0.0], &[2.0, 2.0])).unwrap()
+/// #     .union(&cote(&[2.0, 2.0], &[0.0, 2.0])).unwrap()
+/// #     .union(&cote(&[0.0, 2.0], &[0.0, 0.0])).unwrap();
+/// # mesh::merge_nodes(&quatre, 1e-6, true).unwrap();
+/// # let contour = mesh::consolidate(&quatre).unwrap();
+/// // La variante dont les lignes viennent **une par nœud du contour** et
+/// // dont les rangées ont le droit de plier : meilleure sur les formes
+/// // rectilinéaires, moins bonne sur les courbes.
+/// let m = mesh::grid_surface2(&contour, ElementType::QUA4, Some(0.5), 1, false)?;
+/// assert!(m.cell_count()? > 0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn grid_surface2(
     contour: &Mesh,
     element_type: ElementType,
@@ -108,6 +133,35 @@ pub fn grid_surface2(
 
 /// Like [`grid_surface2`], but polls `cancel` between rows so meshing can be
 /// stopped early (returning [`PyrucastError::Interrupted`]).
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let cote = |a: &[f64], b: &[f64]| mesh::line(
+/// #     &Node::create_in(coords.clone(), a).unwrap(),
+/// #     &Node::create_in(coords.clone(), b).unwrap(), 2, ElementType::SEG2).unwrap();
+/// # let quatre = cote(&[0.0, 0.0], &[2.0, 0.0])
+/// #     .union(&cote(&[2.0, 0.0], &[2.0, 2.0])).unwrap()
+/// #     .union(&cote(&[2.0, 2.0], &[0.0, 2.0])).unwrap()
+/// #     .union(&cote(&[0.0, 2.0], &[0.0, 0.0])).unwrap();
+/// # mesh::merge_nodes(&quatre, 1e-6, true).unwrap();
+/// # let contour = mesh::consolidate(&quatre).unwrap();
+/// # use std::sync::atomic::AtomicBool;
+/// // Le jeton est sondé aux **points de contrôle** du mailleur, non entre
+/// // deux instructions : un contour aussi court est pavé avant d'en
+/// // atteindre un, et l'appel aboutit même jeton armé. C'est la même
+/// // granularité que partout ailleurs — l'arrêt tombe à la frontière de
+/// // phase suivante, pas au milieu d'une.
+/// let stop = AtomicBool::new(false);
+/// assert!(mesh::grid_surface2_cancellable(
+///     &contour, ElementType::QUA4, Some(0.5), 1, false, &stop).is_ok());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn grid_surface2_cancellable(
     contour: &Mesh,
     element_type: ElementType,

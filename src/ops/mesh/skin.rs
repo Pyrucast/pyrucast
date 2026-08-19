@@ -110,6 +110,28 @@ fn facet_normal(c: &Coords, nodes: &[NodeId]) -> Result<[f64; 3]> {
 /// POI1 submeshes are ignored. Errors if the mesh has no volume cells, if it
 /// carries cells of a lower topological dimension, or if the coordinate space
 /// is not 3-D.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
+/// // La peau d'un volume : les faces portées par **une seule** maille.
+/// // Un hexaèdre isolé en a six.
+/// # let base = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]];
+/// # let n: Vec<Node> = (0..2)
+/// #     .flat_map(|k| base.iter().map(move |b| [b[0], b[1], k as f64]))
+/// #     .map(|x| p(&x)).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::HEX8);
+/// # sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>())?;
+/// let cube = Mesh::from_submesh(sm);
+/// assert_eq!(mesh::skin(&cube, None)?.cell_count()?, 6);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn skin(mesh: &Mesh, angle_deg: Option<f64>) -> Result<Mesh> {
     let angle = angle_deg.unwrap_or(DEFAULT_ANGLE_DEG);
     let cos_tol = angle.to_radians().cos();

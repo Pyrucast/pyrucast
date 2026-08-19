@@ -188,6 +188,34 @@ const DEGENERATE_SHAPE: f64 = 1e-4;
 ///
 /// This is the uninterruptible convenience form; for a long mesh a caller
 /// may want to stop early, use [`triangulate_volume_cancellable`].
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let base: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut carre = SubMesh::new(coords.clone(), ElementType::QUA4);
+/// # carre.add_cell(&base.iter().map(|n| n.id()).collect::<Vec<_>>()).unwrap();
+/// # let cube = mesh::sweep_solid(&Mesh::from_submesh(carre),
+/// #     &mesh::translate(&Mesh::from_submesh({
+/// #         let mut c = SubMesh::new(coords.clone(), ElementType::QUA4);
+/// #         c.add_cell(&base.iter().map(|n| n.id()).collect::<Vec<_>>()).unwrap();
+/// #         c
+/// #     }), &[0.0, 0.0, 1.0]).unwrap(), 1).unwrap();
+/// # let enveloppe = mesh::convert(&mesh::skin(&cube, None).unwrap(),
+/// #                               ElementType::TRI3).unwrap();
+/// // Delaunay sous contrainte d'enveloppe : la peau est **gelée**, et le
+/// // volume rempli de tétraèdres.
+/// let v = mesh::triangulate_volume(&enveloppe, Some(0.5), false)?;
+/// assert!(v.cell_count()? > 0);
+/// assert_eq!(v.element_types()?, vec![ElementType::TET4]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn triangulate_volume(
     envelope: &Mesh,
     target_size: Option<f64>,
@@ -197,6 +225,35 @@ pub fn triangulate_volume(
 }
 
 /// [`triangulate_volume`], stoppable through `cancel`.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh;
+/// # let coords = Handle::new(Coords::new(3).unwrap());
+/// # let base: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut carre = SubMesh::new(coords.clone(), ElementType::QUA4);
+/// # carre.add_cell(&base.iter().map(|n| n.id()).collect::<Vec<_>>()).unwrap();
+/// # let cube = mesh::sweep_solid(&Mesh::from_submesh(carre),
+/// #     &mesh::translate(&Mesh::from_submesh({
+/// #         let mut c = SubMesh::new(coords.clone(), ElementType::QUA4);
+/// #         c.add_cell(&base.iter().map(|n| n.id()).collect::<Vec<_>>()).unwrap();
+/// #         c
+/// #     }), &[0.0, 0.0, 1.0]).unwrap(), 1).unwrap();
+/// # let enveloppe = mesh::convert(&mesh::skin(&cube, None).unwrap(),
+/// #                               ElementType::TRI3).unwrap();
+/// # use std::sync::atomic::{AtomicBool, Ordering};
+/// // Le jeton est sondé aux points de contrôle du mailleur : armé d'avance,
+/// // l'appel s'arrête au premier d'entre eux.
+/// let stop = AtomicBool::new(true);
+/// assert!(mesh::triangulate_volume_cancellable(
+///     &enveloppe, Some(0.5), false, &stop).is_err());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn triangulate_volume_cancellable(
     envelope: &Mesh,
     target_size: Option<f64>,
