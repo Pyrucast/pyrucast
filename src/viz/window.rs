@@ -217,10 +217,10 @@ impl<'a, D: Drawable> App<'a, D> {
         self.width = w;
         self.height = h;
         self.pixel_buf = vec![255; (w * h * 3) as usize];
-        if let Some(surface) = self.surface.as_mut() {
-            if let (Some(nw), Some(nh)) = (NonZeroU32::new(w), NonZeroU32::new(h)) {
-                let _ = surface.resize(nw, nh);
-            }
+        if let Some(surface) = self.surface.as_mut()
+            && let (Some(nw), Some(nh)) = (NonZeroU32::new(w), NonZeroU32::new(h))
+        {
+            let _ = surface.resize(nw, nh);
         }
         if let Some(window) = &self.window {
             window.request_redraw();
@@ -325,43 +325,43 @@ impl<'a, D: Drawable> ApplicationHandler for App<'a, D> {
                 if state == ElementState::Pressed {
                     // If the press landed on the revolution toggle, switch
                     // between section and body instead of starting a drag.
-                    if let (true, Some((cx, cy))) = (self.can_revolve, self.cursor) {
-                        if overlay::click_hits_revolve_button(cx, cy) {
-                            self.toggle_revolve();
-                            if let Some(w) = &self.window {
-                                w.request_redraw();
-                            }
-                            return;
+                    if let (true, Some((cx, cy))) = (self.can_revolve, self.cursor)
+                        && overlay::click_hits_revolve_button(cx, cy)
+                    {
+                        self.toggle_revolve();
+                        if let Some(w) = &self.window {
+                            w.request_redraw();
                         }
+                        return;
                     }
                     // If the press landed on the field-component button,
                     // cycle the field instead of starting a drag.
-                    if let (Some(btn), Some((cx, cy))) = (self.field_button, self.cursor) {
-                        if overlay::click_hits_button(cx, cy, self.width) {
-                            btn.cycle();
-                            if let Some(w) = &self.window {
-                                w.request_redraw();
-                            }
-                            return;
+                    if let (Some(btn), Some((cx, cy))) = (self.field_button, self.cursor)
+                        && overlay::click_hits_button(cx, cy, self.width)
+                    {
+                        btn.cycle();
+                        if let Some(w) = &self.window {
+                            w.request_redraw();
                         }
+                        return;
                     }
                     // If the press landed on the frame slider, grab it
                     // (and start a slider drag) instead of rotating.
-                    if let (Some(fc), Some((cx, cy))) = (self.frame_control, self.cursor) {
-                        if let Some(k) = overlay::slider_frame_at(
+                    if let (Some(fc), Some((cx, cy))) = (self.frame_control, self.cursor)
+                        && let Some(k) = overlay::slider_frame_at(
                             cx,
                             cy,
                             self.width,
                             self.height,
                             fc.frame_count(),
-                        ) {
-                            fc.set_frame(k);
-                            self.sliding = true;
-                            if let Some(w) = &self.window {
-                                w.request_redraw();
-                            }
-                            return;
+                        )
+                    {
+                        fc.set_frame(k);
+                        self.sliding = true;
+                        if let Some(w) = &self.window {
+                            w.request_redraw();
                         }
+                        return;
                     }
                     self.dragging = true;
                 } else {
@@ -388,20 +388,19 @@ impl<'a, D: Drawable> ApplicationHandler for App<'a, D> {
                 let (x, y) = (position.x, position.y);
                 self.cursor = Some((x, y));
                 if self.sliding {
-                    if let Some(fc) = self.frame_control {
-                        if let Some(k) = overlay::slider_frame_at(
+                    if let Some(fc) = self.frame_control
+                        && let Some(k) = overlay::slider_frame_at(
                             x,
                             y,
                             self.width,
                             self.height,
                             fc.frame_count(),
-                        ) {
-                            if k != fc.current() {
-                                fc.set_frame(k);
-                                if let Some(w) = &self.window {
-                                    w.request_redraw();
-                                }
-                            }
+                        )
+                        && k != fc.current()
+                    {
+                        fc.set_frame(k);
+                        if let Some(w) = &self.window {
+                            w.request_redraw();
                         }
                     }
                     self.last_mouse = Some((x, y));
@@ -419,15 +418,15 @@ impl<'a, D: Drawable> ApplicationHandler for App<'a, D> {
                     self.last_mouse = Some((x, y));
                     return;
                 }
-                if self.dragging {
-                    if let Some((lx, ly)) = self.last_mouse {
-                        let dx = x - lx;
-                        let dy = y - ly;
-                        self.yaw -= dx * 0.4;
-                        self.pitch = (self.pitch + dy * 0.4).clamp(-89.9, 89.9);
-                        if let Some(w) = &self.window {
-                            w.request_redraw();
-                        }
+                if self.dragging
+                    && let Some((lx, ly)) = self.last_mouse
+                {
+                    let dx = x - lx;
+                    let dy = y - ly;
+                    self.yaw -= dx * 0.4;
+                    self.pitch = (self.pitch + dy * 0.4).clamp(-89.9, 89.9);
+                    if let Some(w) = &self.window {
+                        w.request_redraw();
                     }
                 }
                 self.last_mouse = Some((x, y));

@@ -183,14 +183,14 @@ fn submesh_primitives_impl(
     let et = sm.element_type();
     let npc = et.nodes_per_cell();
     let n_cells = pts.len().checked_div(npc).unwrap_or(0);
-    if let Some(colors) = colors_per_cell {
-        if colors.len() != n_cells {
-            return Err(crate::error::PyrucastError::Message(format!(
-                "submesh_primitives_with_colors: got {} colors for {} cells",
-                colors.len(),
-                n_cells
-            )));
-        }
+    if let Some(colors) = colors_per_cell
+        && colors.len() != n_cells
+    {
+        return Err(crate::error::PyrucastError::Message(format!(
+            "submesh_primitives_with_colors: got {} colors for {} cells",
+            colors.len(),
+            n_cells
+        )));
     }
     let cell_color = |i: usize| -> RgbColor {
         match colors_per_cell {
