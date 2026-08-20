@@ -53,8 +53,12 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+  # Publier sur crates.io est une porte à sens unique : on ne franchit pas avant
+  # de savoir que la sdist et les wheels se construisent. Sans cette dépendance,
+  # la 0.3.2 est partie sur crates.io pendant que la matrice échouait — PyPI ne
+  # l'a jamais reçue, et le numéro est brûlé.
   crates-io:
-    needs: check-version
+    needs: [check-version, sdist, wheels]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -97,10 +101,6 @@ jobs:
             target: x86_64-unknown-linux-gnu
             manylinux: '2014'
             name: linux-x86_64
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            manylinux: '2014'
-            name: linux-aarch64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             name: windows-x86_64
@@ -181,7 +181,7 @@ jobs:
           # `abi3` de la variable produirait des wheels cp3XX-cp3XX, valables sur
           # un seul interpréteur : ici, le job rougit.
           ls -1 dist/
-          [ "$(ls -1 dist/*.whl | wc -l)" = 4 ] || { echo "quatre wheels attendues" >&2; exit 1; }
+          [ "$(ls -1 dist/*.whl | wc -l)" = 3 ] || { echo "trois wheels attendues" >&2; exit 1; }
           [ "$(ls -1 dist/*.tar.gz | wc -l)" = 1 ] || { echo "une sdist attendue" >&2; exit 1; }
           for w in dist/*.whl; do
             case "$(basename "$w")" in
@@ -189,7 +189,7 @@ jobs:
               *) echo "$w n'est pas une wheel abi3-py39 : plancher Python non tenu" >&2; exit 1 ;;
             esac
           done
-          for tag in manylinux2014_x86_64 manylinux2014_aarch64 win_amd64 "${MACOS_PLATFORM_TAG}"; do
+          for tag in manylinux2014_x86_64 win_amd64 "${MACOS_PLATFORM_TAG}"; do
             ls dist/*"$tag"*.whl >/dev/null 2>&1 || { echo "aucune wheel $tag" >&2; exit 1; }
           done
 
@@ -256,7 +256,7 @@ jobs:
           {
             printf '**crates.io** [pyrucast %s](https://crates.io/crates/pyrucast/%s) · ' "$VERSION" "$VERSION"
             printf '**PyPI** [pyrucast %s](https://pypi.org/project/pyrucast/%s/)\n\n' "$PYPI_VERSION" "$PYPI_VERSION"
-            printf 'Wheels `cp39-abi3` (Python ≥ 3.9) pour Linux x86_64 et aarch64, Windows x86_64 et macOS universal2.\n'
+            printf 'Wheels `cp39-abi3` (Python ≥ 3.9) pour Linux x86_64, Windows x86_64 et macOS universal2.\n'
             printf 'La sdist se compile sans la visualisation : `pyrucast.__features__` dit ce que porte votre installation.\n\n'
             cat NOTES.md
           } > BODY.md

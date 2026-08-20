@@ -454,10 +454,17 @@ De là l'invariant qui rend la page `releases/` lisible :
 > compatibilité attendues.**
 
 Le dernier job constate au lieu de supposer : il interroge les deux registres
-jusqu'à les y trouver, et vérifie sur les noms de fichiers qu'il y a bien quatre
+jusqu'à les y trouver, et vérifie sur les noms de fichiers qu'il y a bien trois
 wheels `cp39-abi3` et une sdist. `cargo publish` comme l'action PyPI savent
 sauter une version déjà présente ; ce silence est utile pour rejouer un job, et
 dangereux partout ailleurs.
+
+L'ordre des jobs compte autant que l'attestation finale. **On construit tout
+avant de publier quoi que ce soit** : `crates-io` attend la sdist et les wheels,
+parce que `cargo publish` est une porte à sens unique et qu'un numéro ne se
+republie jamais. La 0.3.2 a servi de démonstration — elle est partie sur
+crates.io pendant qu'une cible de la matrice échouait, et PyPI ne l'a jamais
+reçue.
 
 ### Ce que porte chaque distribution
 
@@ -467,8 +474,14 @@ pas la même chose :
 
 | | Plateformes | Features compilées | Prérequis |
 |---|---|---|---|
-| **wheel** `cp39-abi3` | Linux x86_64 et aarch64 (manylinux2014), Windows x86_64, macOS universal2 | `extension-module`, `viz`, `viz-interactive` | aucun — Python ≥ 3.9 |
-| **sdist** `.tar.gz` | tout le reste (musl, Windows ARM, BSD…) | `extension-module` seul | rustup, et la compilation du crate |
+| **wheel** `cp39-abi3` | Linux x86_64 (manylinux2014), Windows x86_64, macOS universal2 | `extension-module`, `viz`, `viz-interactive` | aucun — Python ≥ 3.9 |
+| **sdist** `.tar.gz` | tout le reste (ARM, musl, BSD…) | `extension-module` seul | rustup, et la compilation du crate |
+
+Il n'y a pas de wheel Linux aarch64 : `viz` lie fontconfig et freetype, et
+`pkg-config` refuse par principe de fonctionner en cross-compilation. La
+construire supposerait d'émuler un conteneur aarch64 — trois minutes de
+compilation x86_64 en deviennent quinze à trente. À reprendre séparément, sans
+version en jeu.
 
 Une installation depuis la sdist n'a donc **pas la visualisation** :
 `mesh.plot()` n'existe pas. C'est assumé — compiler `viz` exigerait fontconfig
