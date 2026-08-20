@@ -890,6 +890,59 @@ mod tests {
         pts
     }
 
+    /// Edges carried by two triangles that both count them as their shortest
+    /// side — the pair `erase_thin_triangle_pairs` exists to rub out.
+    fn thin_triangle_pairs(mesh: &Mesh) -> usize {
+        let mut tris: Vec<[Point2; 3]> = Vec::new();
+        for si in 0..mesh.len() {
+            for cell in mesh.cells(si).unwrap() {
+                let nodes = cell.nodes().unwrap();
+                if nodes.len() != 3 {
+                    continue;
+                }
+                let mut t = [Point2::origin(); 3];
+                for (k, nd) in nodes.iter().enumerate() {
+                    let v = nd.position().unwrap();
+                    t[k] = Point2::new(v[0], v[1]);
+                }
+                tris.push(t);
+            }
+        }
+        /// A point by its exact bits, so it can key a map.
+        type Bits = (u64, u64);
+        let bits = |p: Point2| (p.x.to_bits(), p.y.to_bits());
+        let key = |a: Point2, b: Point2| {
+            let (x, y) = (bits(a), bits(b));
+            if x < y {
+                (x, y)
+            } else {
+                (y, x)
+            }
+        };
+        let mut owners: std::collections::HashMap<(Bits, Bits), Vec<usize>> = Default::default();
+        for (i, t) in tris.iter().enumerate() {
+            for k in 0..3 {
+                owners.entry(key(t[k], t[(k + 1) % 3])).or_default().push(i);
+            }
+        }
+        owners
+            .iter()
+            .filter(|(k, who)| {
+                if who.len() != 2 {
+                    return false;
+                }
+                let (a, b) = **k;
+                let pa = Point2::new(f64::from_bits(a.0), f64::from_bits(a.1));
+                let pb = Point2::new(f64::from_bits(b.0), f64::from_bits(b.1));
+                let len = (pb - pa).norm();
+                who.iter().all(|&i| {
+                    let t = tris[i];
+                    (0..3).all(|k| (t[(k + 1) % 3] - t[k]).norm() >= len)
+                })
+            })
+            .count()
+    }
+
     #[test]
     fn a_contour_finer_than_its_grid_still_comes_out_whole() {
         // The one thing the caller is asked for is a discretisation a grid can
@@ -925,6 +978,37 @@ mod tests {
         assert_eq!(r.non_conforming, 0);
         assert_eq!(r.inverted, 0);
         assert!(r.min_jacobian > 0.0, "jacobian {}", r.min_jacobian);
+    }
+
+    #[test]
+    fn two_flat_triangles_back_to_back_are_rubbed_out() {
+        // Paving leaves a triangle where it could not make a square, and the
+        // crack repair above leaves one more each time it collapses a corner.
+        // Two of them landing back to back across their **shortest** side are
+        // not a feature of the mesh but a scar: two flat cells filling what one
+        // edge's worth of disagreement was. Merging the two ends of that side
+        // removes both at once, and the quadrangles around close up on their
+        // own — this contour used to come out with three triangles, two of them
+        // such a pair, and comes out with one.
+        let h = 1.0;
+        let pts = crenellated(8.0, 5.0, 3, 1.0, 1.5, h, 1.5);
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let contour = loop_mesh(coords, &pts);
+        let mesh = grid_surface(
+            &contour,
+            ElementType::QUA4,
+            Some(h),
+            0,
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
+        let r = inspect(&mesh);
+        assert_eq!(thin_triangle_pairs(&mesh), 0);
+        assert_eq!(r.tris, 1);
+        assert_eq!(r.boundary, pts.len(), "holes: the mesh is not whole");
+        assert_eq!(r.non_conforming, 0);
+        assert_eq!(r.inverted, 0);
     }
 
     #[test]

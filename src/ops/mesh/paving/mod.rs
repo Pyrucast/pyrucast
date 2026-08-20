@@ -501,6 +501,7 @@ fn pave_inner(
     // wrong number of cells around it only spreads the error over its
     // neighbours, so the cleanup has to come first for the sweep to have
     // something worth polishing.
+    erase_thin_triangle_pairs(&mut fab);
     bury_dead_quads(&mut fab);
     cleanup::run(&fab.pts, &fab.movable, &mut fab.quads, &fab.tris);
     compact(&mut fab);
@@ -1228,20 +1229,23 @@ fn collapse_into(fab: &mut Fabric, keep: u32, drop: u32) -> bool {
     }
 
     // Triangles are not indexed by vertex, so they are swept for. One holding
-    // both vertices would flatten, and there is no triangle left to keep.
-    let mut tri_fate: Vec<(usize, [u32; 3])> = Vec::new();
+    // **both** vertices flattens onto a segment and goes: its two other edges
+    // land on each other, so the cells behind them become neighbours and the
+    // mesh stays whole — a triangle removed this way never leaves a crack.
+    let mut tri_fate: Vec<(usize, Option<[u32; 3]>)> = Vec::new();
     for (i, t) in fab.tris.iter().enumerate() {
         if !t.contains(&drop) {
             continue;
         }
         if t.contains(&keep) {
-            return false;
+            tri_fate.push((i, None));
+            continue;
         }
         let r = t.map(|c| if c == drop { keep } else { c });
         if !turns_right(r) {
             return false;
         }
-        tri_fate.push((i, r));
+        tri_fate.push((i, Some(r)));
     }
 
     // As in `merge_into`: no edge may come out with three cells on it. Only
@@ -1275,7 +1279,8 @@ fn collapse_into(fab: &mut Fabric, keep: u32, drop: u32) -> bool {
     }
     for (i, t) in fab.tris.iter().enumerate() {
         match tri_fate.iter().find(|&&(j, _)| j == i) {
-            Some(&(_, r)) => count(&r),
+            Some(&(_, Some(r))) => count(&r),
+            Some(&(_, None)) => {}
             None => count(t),
         }
     }
@@ -1298,11 +1303,92 @@ fn collapse_into(fab: &mut Fabric, keep: u32, drop: u32) -> bool {
             }
         }
     }
+    let mut gone: Vec<usize> = Vec::new();
     for (i, r) in tri_fate {
-        fab.tris[i] = r;
+        match r {
+            Some(r) => fab.tris[i] = r,
+            None => gone.push(i),
+        }
+    }
+    gone.sort_unstable_by(|a, b| b.cmp(a));
+    for i in gone {
+        fab.tris.swap_remove(i);
     }
     fab.incident[drop as usize].clear();
     true
+}
+
+/// How many rounds the thin-pair erasure sweeps for.
+const ERASE_ROUNDS: usize = 4;
+
+/// Rub out pairs of flat triangles joined by their short side.
+///
+/// Paving leaves a triangle where it could not make a square, and where two of
+/// them end up back to back across their **shortest** side the pair is not a
+/// mesh feature but a scar: two flat cells filling what one edge's worth of
+/// disagreement was. Merging the two ends of that side removes both at once —
+/// each triangle flattens onto a segment and its two other edges land on each
+/// other, so the quadrangles around close up on their own and the mesh stays
+/// whole.
+///
+/// Nothing is forced: the merge goes through [`collapse_into`], which refuses
+/// anything that would fold a cell over or put three of them on one edge, and
+/// a refused pair is simply left as it was.
+fn erase_thin_triangle_pairs(fab: &mut Fabric) -> usize {
+    let mut erased = 0;
+    for _ in 0..ERASE_ROUNDS {
+        let side = |t: [u32; 3], k: usize| {
+            (fab.pts[t[(k + 1) % 3] as usize] - fab.pts[t[k] as usize]).norm()
+        };
+        // Edges carried by exactly two triangles, each as the pair's own
+        // shortest side.
+        let mut shared: HashMap<(u32, u32), Vec<usize>> = HashMap::new();
+        for (i, t) in fab.tris.iter().enumerate() {
+            for k in 0..3 {
+                let (a, b) = (t[k], t[(k + 1) % 3]);
+                shared
+                    .entry(if a < b { (a, b) } else { (b, a) })
+                    .or_default()
+                    .push(i);
+            }
+        }
+        let mut targets: Vec<(f64, u32, u32)> = Vec::new();
+        for (&(a, b), owners) in &shared {
+            if owners.len() != 2 {
+                continue;
+            }
+            let len = (fab.pts[b as usize] - fab.pts[a as usize]).norm();
+            let shortest = owners.iter().all(|&i| {
+                let t = fab.tris[i];
+                (0..3).all(|k| side(t, k) >= len)
+            });
+            if shortest {
+                targets.push((len, a, b));
+            }
+        }
+        // Shortest first, so the flattest pair is the one that gets its way
+        // when two of them share a vertex.
+        targets.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        // One collapse per vertex per round: a vertex already merged away is
+        // no longer where the next pair thinks it is.
+        let mut spent = vec![false; fab.pts.len()];
+        let mut done = 0;
+        for (_, a, b) in targets {
+            if spent[a as usize] || spent[b as usize] {
+                continue;
+            }
+            if collapse_into(fab, a, b) || collapse_into(fab, b, a) {
+                spent[a as usize] = true;
+                spent[b as usize] = true;
+                done += 1;
+            }
+        }
+        erased += done;
+        if done == 0 {
+            break;
+        }
+    }
+    erased
 }
 
 /// The closest pair of front nodes that ought to be merged, if any.
