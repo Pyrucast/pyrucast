@@ -291,6 +291,9 @@ mod tests {
         area: f64,
         min_jacobian: f64,
         non_conforming: usize,
+        /// Edges carried by one cell only. A sound mesh has exactly the
+        /// contour's, so anything more is a hole in the middle of it.
+        boundary: usize,
         /// Cells enclosing a non-positive area — the ones `min_jacobian` cannot
         /// see, since it judges every cell after putting it the right way
         /// round.
@@ -304,6 +307,7 @@ mod tests {
             area: 0.0,
             min_jacobian: f64::INFINITY,
             non_conforming: 0,
+            boundary: 0,
             inverted: 0,
         };
         let mut edges: std::collections::HashMap<(NodeId, NodeId), usize> = Default::default();
@@ -351,6 +355,7 @@ mod tests {
             }
         }
         r.non_conforming = edges.values().filter(|&&v| v > 2).count();
+        r.boundary = edges.values().filter(|&&v| v == 1).count();
         r
     }
 
@@ -739,6 +744,64 @@ mod tests {
             assert_eq!(r.non_conforming, 0, "{sides} sides at h={h}");
             assert!(r.min_jacobian > 0.0, "{sides} sides at h={h}");
         }
+    }
+
+    #[test]
+    fn a_contour_finer_than_its_grid_still_comes_out_whole() {
+        // The one thing the caller is asked for is a discretisation a grid can
+        // meet, and this contour deliberately fails it: three notches put the
+        // grid's lines where they must go, and then the top side is cut finer
+        // than the rest, so the core's boundary ends up lying *along* the
+        // contour with different nodes on it. The band left for the front is
+        // then a lens of no width at all, and the front sews it shut by
+        // identifying the nodes that face each other across it.
+        //
+        // That works only while the two sides carry the same number of nodes.
+        // Where one carried a node too many the sewing stopped there, and what
+        // was left was a crack — three of them here — which the smoothing then
+        // pulled open into triangular holes in the middle of the mesh.
+        //
+        // A sound mesh has exactly one cell on each of the contour's segments
+        // and two on everything else, so the boundary count is the whole test.
+        let h = 1.0;
+        let (w, height, teeth) = (8.0, 5.0, 3usize);
+        let pitch = w / teeth as f64;
+        let mut corners = vec![(0.0, 0.0)];
+        for i in 0..teeth {
+            let x0 = pitch * i as f64 + 0.5 * (pitch - 1.0);
+            corners.extend([(x0, 0.0), (x0, 1.0), (x0 + 1.0, 1.0), (x0 + 1.0, 0.0)]);
+        }
+        corners.extend([(w, 0.0), (w, height), (0.0, height)]);
+
+        let mut pts: Vec<(f64, f64)> = Vec::new();
+        let cut = |a: (f64, f64), b: (f64, f64), step: f64, pts: &mut Vec<(f64, f64)>| {
+            let len = ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt();
+            let k = ((len / step).round() as usize).max(1);
+            for j in 0..k {
+                let t = j as f64 / k as f64;
+                pts.push((a.0 + t * (b.0 - a.0), a.1 + t * (b.1 - a.1)));
+            }
+        };
+        let n = corners.len();
+        for i in 0..n {
+            // Every side at the target size but the top one, cut at two
+            // thirds of it — the disagreement the grid cannot absorb.
+            let step = if corners[i].1 == height && corners[(i + 1) % n].1 == height {
+                h / 1.5
+            } else {
+                h
+            };
+            cut(corners[i], corners[(i + 1) % n], step, &mut pts);
+        }
+
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let contour = loop_mesh(coords, &pts);
+        let mesh = grid_surface(&contour, ElementType::QUA4, Some(h), 0, false).unwrap();
+        let r = inspect(&mesh);
+        assert_eq!(r.boundary, pts.len(), "holes: the mesh is not whole");
+        assert_eq!(r.non_conforming, 0);
+        assert_eq!(r.inverted, 0);
+        assert!(r.min_jacobian > 0.0, "jacobian {}", r.min_jacobian);
     }
 
     #[test]

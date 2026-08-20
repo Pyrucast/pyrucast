@@ -109,6 +109,10 @@ pub struct Fabric {
     /// welded is a crack in the mesh.
     pinned: Vec<bool>,
     pub quads: Vec<[u32; 4]>,
+    /// `true` for a quadrangle a collapse has retired. The slot stays, so
+    /// `incident` keeps indexing `quads` as it always did; the corpses are
+    /// swept once paving is over.
+    dead: Vec<bool>,
     pub tris: Vec<[u32; 3]>,
     /// Store identity of the contour nodes, in the order they occupy the first
     /// entries of `pts`. Shorter than `pts`: everything past it is new.
@@ -130,10 +134,38 @@ impl Fabric {
     fn push_quad(&mut self, q: [u32; 4]) {
         let i = self.quads.len() as u32;
         self.quads.push(q);
+        self.dead.push(false);
         for &c in &q {
             self.incident[c as usize].push(i);
         }
     }
+
+    /// Retire a quadrangle: it leaves every incidence list at once, so no
+    /// later step can reach it, and its slot is emptied by `bury_dead_quads`.
+    fn kill_quad(&mut self, qi: u32) {
+        self.dead[qi as usize] = true;
+        for c in self.quads[qi as usize] {
+            self.incident[c as usize].retain(|&x| x != qi);
+        }
+    }
+}
+
+/// Drop the quadrangles a collapse retired, once nothing indexes them any
+/// more. Called at the end of paving: until then the slots must stay put,
+/// because `incident` addresses `quads` by index.
+fn bury_dead_quads(fab: &mut Fabric) {
+    if !fab.dead.iter().any(|&d| d) {
+        return;
+    }
+    let mut kept = Vec::with_capacity(fab.quads.len());
+    for (i, q) in fab.quads.iter().enumerate() {
+        if !fab.dead[i] {
+            kept.push(*q);
+        }
+    }
+    fab.quads = kept;
+    fab.dead.clear();
+    fab.incident.clear();
 }
 
 /// Pave one domain: its outer loop, minus its holes.
@@ -204,6 +236,7 @@ fn pave_inner(
         movable: Vec::new(),
         pinned: Vec::new(),
         quads: Vec::new(),
+        dead: Vec::new(),
         tris: Vec::new(),
         contour_ids: Vec::new(),
         incident: Vec::new(),
@@ -336,6 +369,7 @@ fn pave_inner(
     // wrong number of cells around it only spreads the error over its
     // neighbours, so the cleanup has to come first for the sweep to have
     // something worth polishing.
+    bury_dead_quads(&mut fab);
     cleanup::run(&fab.pts, &fab.movable, &mut fab.quads, &fab.tris);
     compact(&mut fab);
 
@@ -895,8 +929,21 @@ fn unstick(
 ///
 /// Pairing the ends against each other instead, as the ring order suggests,
 /// is wrong: a flattened ring is a lens, and its two ends are the *thin* part.
-/// Whatever refuses to merge is left alone: the ring is retired either way,
-/// and a refused weld costs a crack, not correctness.
+///
+/// ## Identifying is not always enough
+///
+/// A lens is sewn shut by identification alone only when its two sides carry
+/// the *same number* of nodes. They often do not: a ring whose one side runs
+/// `A B C` against a plain `A C` on the other has a node too many, and no pair
+/// of vertices can be identified to get rid of it — `A` and `B` are two corners
+/// of the same quadrangle, and merging them would fold that quadrangle onto
+/// itself, which [`merge_into`] rightly refuses.
+///
+/// So the leftover node is **collapsed** instead: the quadrangle holding both
+/// gives up the corner and becomes a triangle. That is the only move available
+/// here, and it costs one square cell; leaving the ring open costs a crack —
+/// a hole in the mesh, which the smoothing then opens into a visible triangular
+/// gap. Correctness before shape, so the collapse wins.
 fn weld(fab: &mut Fabric, ring: &[u32]) {
     let mut verts: Vec<u32> = ring.to_vec();
     while verts.len() >= 4 {
@@ -920,6 +967,193 @@ fn weld(fab: &mut Fabric, ring: &[u32]) {
         }
         verts.remove(j);
     }
+    close_cracks(fab, verts);
+}
+
+/// Close whatever the identification pass left open in a retired ring.
+///
+/// Only edges that are genuinely open are touched — carried by one quadrangle
+/// and nothing else — and never a stretch of the caller's contour, whose outer
+/// side is *meant* to have nothing behind it. Everything else in the ring is
+/// already sound and is left exactly as it is.
+fn close_cracks(fab: &mut Fabric, mut verts: Vec<u32>) {
+    // Each turn of the loop removes one vertex, so the ring bounds the work.
+    for _ in 0..verts.len() {
+        let n = verts.len();
+        if n < 3 || !ring_has_a_crack(fab, &verts) {
+            return;
+        }
+        // The shortest pair goes first, adjacent ones included: after the
+        // identification pass it is precisely a ring *edge* that has to go.
+        let mut pairs: Vec<(f64, usize, usize)> = Vec::new();
+        for i in 0..n {
+            for j in (i + 1)..n {
+                let d = (fab.pts[verts[j] as usize] - fab.pts[verts[i] as usize]).norm();
+                pairs.push((d, i, j));
+            }
+        }
+        pairs.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        let done = pairs.iter().find_map(|&(_, i, j)| {
+            let (a, b) = (verts[i], verts[j]);
+            if collapse_into(fab, a, b) {
+                Some(j)
+            } else if collapse_into(fab, b, a) {
+                Some(i)
+            } else {
+                None
+            }
+        });
+        // Nothing admissible left: the ring keeps its crack rather than the
+        // mesh keeping a tangle.
+        let Some(gone) = done else { return };
+        verts.remove(gone);
+    }
+}
+
+/// Does the ring still have an edge with nothing on its far side?
+fn ring_has_a_crack(fab: &Fabric, verts: &[u32]) -> bool {
+    let n = verts.len();
+    (0..n).any(|i| {
+        let (a, b) = (verts[i], verts[(i + 1) % n]);
+        // A contour edge carries one quadrangle by right: outside it is the
+        // end of the domain, not a hole in it.
+        if fab.pinned[a as usize] && fab.pinned[b as usize] {
+            return false;
+        }
+        let quads = fab.incident[a as usize]
+            .iter()
+            .filter(|&&qi| fab.quads[qi as usize].contains(&b))
+            .count();
+        let tris = fab
+            .tris
+            .iter()
+            .filter(|t| t.contains(&a) && t.contains(&b))
+            .count();
+        quads + tris == 1
+    })
+}
+
+/// Identify `drop` into `keep`, letting a quadrangle that holds both give up a
+/// corner and live on as a triangle.
+///
+/// The same rewrite as [`merge_into`], with one case answered differently: a
+/// quadrangle holding both vertices is refused there and collapsed here. Only
+/// **adjacent** corners may collapse — merging two opposite ones would pinch
+/// the cell into a bowtie — and the triangle left over must turn the right way
+/// like any other cell.
+fn collapse_into(fab: &mut Fabric, keep: u32, drop: u32) -> bool {
+    if keep == drop || fab.pinned[drop as usize] {
+        return false;
+    }
+    let touching = fab.incident[drop as usize].clone();
+    let rewrite = |q: [u32; 4]| q.map(|c| if c == drop { keep } else { c });
+    let point = |v: u32| fab.pts[v as usize];
+    let turns_right = |t: [u32; 3]| geom::orient(point(t[0]), point(t[1]), point(t[2])) > 0.0;
+
+    // What each incident quadrangle becomes: `None` to collapse to a triangle.
+    let mut fate: Vec<(u32, Option<[u32; 4]>)> = Vec::with_capacity(touching.len());
+    for &qi in &touching {
+        let q = fab.quads[qi as usize];
+        let Some(d) = q.iter().position(|&c| c == drop) else {
+            continue;
+        };
+        match q.iter().position(|&c| c == keep) {
+            Some(k) => {
+                if (k + 2) % 4 == d {
+                    // Opposite corners: the collapse would be a bowtie.
+                    return false;
+                }
+                if !turns_right([q[(d + 1) % 4], q[(d + 2) % 4], q[(d + 3) % 4]]) {
+                    return false;
+                }
+                fate.push((qi, None));
+            }
+            None => {
+                let r = rewrite(q);
+                if !geom::quad_is_valid([point(r[0]), point(r[1]), point(r[2]), point(r[3])]) {
+                    return false;
+                }
+                fate.push((qi, Some(r)));
+            }
+        }
+    }
+
+    // Triangles are not indexed by vertex, so they are swept for. One holding
+    // both vertices would flatten, and there is no triangle left to keep.
+    let mut tri_fate: Vec<(usize, [u32; 3])> = Vec::new();
+    for (i, t) in fab.tris.iter().enumerate() {
+        if !t.contains(&drop) {
+            continue;
+        }
+        if t.contains(&keep) {
+            return false;
+        }
+        let r = t.map(|c| if c == drop { keep } else { c });
+        if !turns_right(r) {
+            return false;
+        }
+        tri_fate.push((i, r));
+    }
+
+    // As in `merge_into`: no edge may come out with three cells on it. Only
+    // edges reaching the surviving vertex can, so counting those is enough —
+    // over every cell the operation leaves behind, triangles included, since a
+    // collapse turns a diagonal into an edge.
+    let mut around: HashMap<u32, usize> = HashMap::new();
+    let mut count = |cell: &[u32]| {
+        let k = cell.len();
+        for t in 0..k {
+            if cell[t] == keep {
+                *around.entry(cell[(t + 1) % k]).or_insert(0) += 1;
+                *around.entry(cell[(t + k - 1) % k]).or_insert(0) += 1;
+            }
+        }
+    };
+    for &(qi, r) in &fate {
+        match r {
+            Some(r) => count(&r),
+            None => {
+                let q = fab.quads[qi as usize];
+                let d = q.iter().position(|&c| c == drop).unwrap();
+                count(&[q[(d + 1) % 4], q[(d + 2) % 4], q[(d + 3) % 4]]);
+            }
+        }
+    }
+    for &qi in fab.incident[keep as usize].iter() {
+        if !touching.contains(&qi) {
+            count(&fab.quads[qi as usize]);
+        }
+    }
+    for (i, t) in fab.tris.iter().enumerate() {
+        match tri_fate.iter().find(|&&(j, _)| j == i) {
+            Some(&(_, r)) => count(&r),
+            None => count(t),
+        }
+    }
+    if around.values().any(|&c| c > 2) {
+        return false;
+    }
+
+    for (qi, r) in fate {
+        match r {
+            Some(r) => {
+                fab.quads[qi as usize] = r;
+                fab.incident[keep as usize].push(qi);
+            }
+            None => {
+                let q = fab.quads[qi as usize];
+                let d = q.iter().position(|&c| c == drop).unwrap();
+                fab.tris
+                    .push([q[(d + 1) % 4], q[(d + 2) % 4], q[(d + 3) % 4]]);
+                fab.kill_quad(qi);
+            }
+        }
+    }
+    for (i, r) in tri_fate {
+        fab.tris[i] = r;
+    }
+    fab.incident[drop as usize].clear();
+    true
 }
 
 /// The closest pair of front nodes that ought to be merged, if any.
