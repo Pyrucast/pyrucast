@@ -2,7 +2,7 @@
 # pyrucast — passe le projet à une nouvelle version.
 #
 # 1. vérifie que tout est vert et SANS WARNING : `check_all.sh` en entier,
-#    plus les quatre passes de clippy qu'aucun bloc ne couvre ;
+#    plus `check_clippy.sh`, les quatre passes qu'aucun bloc ne couvre ;
 # 2. demande le nouveau numéro de version ;
 # 3. le reporte dans Cargo.toml — seule déclaration de version du projet,
 #    `pyproject.toml` la lisant de là via `dynamic = ["version"]` ;
@@ -38,18 +38,13 @@ $(git status --porcelain)"
 step "check_all (formatage, Rust, Python, exemples, documentation)"
 bash script/check_all.sh
 
-# Clippy, en revanche, n'appartient à aucun bloc : les quatre passes coûtent
-# trop cher pour la boucle quotidienne, et c'est ici qu'elles ont leur place.
-# Quatre jeux de features, parce qu'un avertissement peut n'exister que dans
-# l'un d'eux — le code derrière un `cfg` n'est compilé que s'il est demandé.
-step "cargo clippy (défaut) -D warnings"
-cargo clippy --all-targets -- -D warnings
-step "cargo clippy --features viz -D warnings"
-cargo clippy --all-targets --features viz -- -D warnings
-step "cargo clippy --features extension-module,viz -D warnings"
-cargo clippy --all-targets --features extension-module,viz -- -D warnings
-step "cargo clippy --features extension-module,viz,viz-interactive,abi3 -D warnings"
-cargo clippy --all-targets --features extension-module,viz,viz-interactive,abi3 -- -D warnings
+# Clippy, en revanche, n'appartient à aucun bloc de `check_all` : les quatre
+# passes coûtent trop cher pour la boucle quotidienne. Elles vivent dans leur
+# propre bloc, **appelé** ici comme il l'est par le job `verify` de la CI —
+# recopier les quatre lignes des deux côtés les ferait diverger au moment
+# précis où l'on pose un tag.
+step "check_clippy (quatre jeux de features)"
+bash script/check_clippy.sh
 
 echo
 echo "OK: tout est vert, sans warning."

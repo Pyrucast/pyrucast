@@ -200,7 +200,7 @@ Autour d'eux gravitent quelques utilitaires : `dev.sh` / `dev.ps1` (build
 minimal — module Python en release avec la visu interactive + stub, rien
 d'autre), `run_examples.sh` / `run_examples.ps1` (exemples et formation de bout
 en bout, appelés par `check_examples`), `set_new_version.sh` (passe de version :
-tout vérifier sans warning, reporter le numéro dans `Cargo.toml` — seule
+`check_all` puis `check_clippy`, reporter le numéro dans `Cargo.toml` — seule
 déclaration de version du projet —, commit + tag : il ne pousse rien),
 `scaling.sh` (mesure de montée en charge du parallélisme) et
 `generate-formation-figures.sh` (régénère les SVG de la formation, qui sont des
@@ -242,9 +242,10 @@ Et les totaux, dans le même régime :
 | `check_python` | liaison et tests Python | 64 s |
 | `check_examples` | exemples et formation | 80 s |
 | `check_doc` | rustdoc, garde-fous, book | 50 s |
+| `check_clippy` | quatre jeux de features, `-D warnings` | ~2 min |
 | **`check_quick`** | **formatage + Rust — la boucle de commit** | **~3 min** |
 | `check_all` | les cinq blocs | ~6 min |
-| `set_new_version` | `check_all` + les quatre clippy | ~8 min |
+| `set_new_version` | `check_all` + `check_clippy` | ~8 min |
 
 Deux remarques que ces chiffres appellent.
 
@@ -458,6 +459,34 @@ jusqu'à les y trouver, et vérifie sur les noms de fichiers qu'il y a bien troi
 wheels `cp39-abi3` et une sdist. `cargo publish` comme l'action PyPI savent
 sauter une version déjà présente ; ce silence est utile pour rejouer un job, et
 dangereux partout ailleurs.
+
+### Le tag est le seul point de contrôle
+
+Les push sur `master` ne sont **pas vérifiés** — assumé pour l'instant. La
+vérification se fait là où elle est irréversible : au tag. Le job `verify`
+précède tout le reste et lance exactement ce que `set_new_version.sh` lance en
+local, les cinq blocs de `check_all` puis `check_clippy`.
+
+Un bloc par étape nommée, et non `check_all.sh` en une fois : l'interface
+Actions montre alors laquelle rougit sans qu'il faille dérouler tout le journal.
+Ce sont les mêmes scripts, appelés un à un plutôt que par leur boucle — et une
+étape vérifie que la liste des cinq blocs de la CI est encore celle de
+`check_all.sh`, faute de quoi un sixième bloc ne serait jamais lancé au moment
+de publier.
+
+Un seul job, parce que l'ordre contraint : `doc_lint.py` importe `pyrucast`,
+donc `check_doc` exige que `check_python` ait construit le module.
+
+Le job reconstitue l'environnement de développement — toolchain Rust, en-têtes
+fontconfig et freetype, mdBook et son préprocesseur mermaid, un venv avec
+maturin, pytest et ruff. Compter 20 à 30 minutes à froid, 10 à 15 ensuite grâce
+au cache Cargo.
+
+`set_new_version.sh` garde malgré tout ses huit minutes : c'est l'échec
+**rapide**, avant que le tag existe. Découvrir la panne après coup obligerait à
+déplacer un tag, ou à brûler un numéro.
+
+### On construit tout avant de publier
 
 L'ordre des jobs compte autant que l'attestation finale. **On construit tout
 avant de publier quoi que ce soit** : `crates-io` attend la sdist et les wheels,
