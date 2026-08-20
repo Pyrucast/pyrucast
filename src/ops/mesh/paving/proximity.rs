@@ -85,9 +85,19 @@ impl EdgeGrid {
         // the domain-to-element-size ratio, which can be enormous. With
         // `cell ≥ √(area / n)` the grid holds at most about `n` cells however
         // fine the target size is.
-        let cell = hint.max((w * h / n as f64).sqrt()).max(1e-300);
-        let nx = ((w / cell).ceil() as usize + 1).min(n + 2);
-        let ny = ((h / cell).ceil() as usize + 1).min(n + 2);
+        //
+        // The area alone does not bound it: a **flat** set of segments — every
+        // point on one line, which is exactly what a collapsed front ring is —
+        // has no area at all, and `√0` would leave `cell` at the floor and
+        // `w / cell` past what a `usize` can hold. The saturated cast then
+        // wrapped `nx` round to zero, `ix` clamped against `nx - 1`, and the
+        // span it returned overflowed the bucket count into a `Vec` that grew
+        // until the process was killed. Bounding each side on its own keeps
+        // `w / cell` and `h / cell` at `n` whatever the extent is.
+        let side = w.max(h) / n as f64;
+        let cell = hint.max((w * h / n as f64).sqrt()).max(side).max(1e-300);
+        let nx = ((w / cell).ceil() as usize + 1).min(n + 2).max(1);
+        let ny = ((h / cell).ceil() as usize + 1).min(n + 2).max(1);
 
         let mut grid = EdgeGrid {
             lo,
@@ -268,6 +278,21 @@ mod tests {
             let a = pts[f.vertex(s) as usize];
             assert!(a.x > 0.0 && a.y > 0.0);
         }
+    }
+
+    #[test]
+    fn a_flat_ring_is_indexed_like_any_other() {
+        // A ring collapsed onto a line — which is what is left when two lines
+        // of front meet head-on — has no area, and sizing the cell from the
+        // area alone left it at the floor. `w / cell` then went past what a
+        // `usize` holds, the saturated cast wrapped the column count round to
+        // zero, and the span `cells_of` computed overflowed into a `Vec` that
+        // grew until the process was killed. The bounding box has to be
+        // measured side by side, not by its area.
+        let pts: Vec<Point2> = (0..24).map(|i| Point2::new(i as f64 * 0.25, 3.0)).collect();
+        let g = EdgeGrid::of_ring(&pts, 0.0);
+        assert!(g.nx * g.ny <= pts.len() + 4, "{} × {}", g.nx, g.ny);
+        assert!(!g.near_segment(pts[0], pts[5]).is_empty());
     }
 
     #[test]
