@@ -10,6 +10,8 @@ La visualisation des maillages est **optionnelle** : elle est gardée par des *f
 
 `viz-interactive` implique `viz`. Pour un environnement sans serveur d'affichage (CI headless, conteneur), on s'arrête à `viz` : tout l'export image fonctionne.
 
+> **Installé depuis PyPI ?** Les wheels publiées compilent `viz` et `viz-interactive` ; la sdist, sur laquelle `pip` retombe quand aucune wheel ne correspond à la plateforme, ne compile que le cœur de calcul — `mesh.plot()` n'y existe pas. `pyrucast.__features__` dit ce que porte l'installation en cours, et [« Ce que porte chaque distribution »](compilation.md#ce-que-porte-chaque-distribution) détaille les deux cas.
+
 ```sh
 # Bibliothèque de calcul pure (par défaut).
 cargo build

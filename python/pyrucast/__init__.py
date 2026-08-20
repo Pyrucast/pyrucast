@@ -47,7 +47,7 @@ from ._pyrucast import (
     save as save,
 )
 
-from ._pyrucast import __doc__, __version__  # noqa: F401
+from ._pyrucast import __doc__, __features__, __version__  # noqa: F401
 
 # ── Verbes rangés par thème (miroir de `src/ops/*`) ─────────────────────────
 from . import (

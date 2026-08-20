@@ -63,6 +63,32 @@ pub use error::{PyrucastError, Result};
 /// ```
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// Features réellement compilées dans ce binaire, dans un ordre stable.
+///
+/// La sdist publiée sur PyPI ne compile que `extension-module` : une installation
+/// depuis les sources n'a donc **pas** la visualisation, alors qu'elle porte le
+/// même numéro de version que les wheels. Cette constante rend la différence
+/// lisible sur la machine où elle se produit, plutôt que dans une page de
+/// documentation.
+///
+/// ```
+/// // `viz-interactive` implique `viz` — la liste ne peut pas dire le contraire.
+/// let f = pyrucast::FEATURES;
+/// assert!(!f.contains(&"viz-interactive") || f.contains(&"viz"));
+/// ```
+pub const FEATURES: &[&str] = &[
+    #[cfg(feature = "python-api")]
+    "python-api",
+    #[cfg(feature = "extension-module")]
+    "extension-module",
+    #[cfg(feature = "viz")]
+    "viz",
+    #[cfg(feature = "viz-interactive")]
+    "viz-interactive",
+    #[cfg(feature = "abi3")]
+    "abi3",
+];
+
 #[cfg(feature = "python-api")]
 use pyo3::prelude::*;
 
@@ -79,6 +105,9 @@ pyo3_stub_gen::define_stub_info_gatherer!(stub_info);
 #[pymodule]
 fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", VERSION)?;
+    // Un tuple, non une liste : ce que le binaire porte ne se modifie pas
+    // depuis Python.
+    m.add("__features__", pyo3::types::PyTuple::new(m.py(), FEATURES)?)?;
     m.add_function(wrap_pyfunction!(py::archive::save, m)?)?;
     m.add_function(wrap_pyfunction!(py::archive::load, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::solver::solve, m)?)?;
