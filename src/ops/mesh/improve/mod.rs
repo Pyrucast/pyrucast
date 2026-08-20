@@ -275,7 +275,15 @@ mod tests {
             sm.add_cell(&[ids[i], ids[(i + 1) % m]]).unwrap();
         }
         let contour = Mesh::from_submesh(sm);
-        grid_surface(&contour, ElementType::QUA4, Some(0.05), 0, false).unwrap()
+        grid_surface(
+            &contour,
+            ElementType::QUA4,
+            Some(0.05),
+            0,
+            false,
+            crate::ops::mesh::FrontRelax::Free,
+        )
+        .unwrap()
     }
 
     /// Cell count, triangle count, worst normalised Jacobian, the 1st

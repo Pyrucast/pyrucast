@@ -108,6 +108,7 @@ use crate::atoms::ElementType;
 use crate::containers::mesh::Mesh;
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::{Cancel, NoCancel};
+use crate::ops::mesh::paving::FrontRelax;
 use crate::ops::mesh::{contour, paving};
 
 /// Pave the interior of `contour` — one or more closed `SEG2` loops,
@@ -132,6 +133,11 @@ use crate::ops::mesh::{contour, paving};
 /// This is the uninterruptible convenience form; for a long mesh a caller may
 /// want to stop early, use [`grid_surface_cancellable`].
 ///
+///
+/// `relax` chooses what the front may do to itself between two rows — see
+/// [`FrontRelax`]. The default, [`FrontRelax::Free`], is the historical
+/// behaviour; [`FrontRelax::Along`] keeps the front's corners, which is what
+/// lets a rectilinear domain stay structured to its core.
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
@@ -151,7 +157,7 @@ use crate::ops::mesh::{contour, paving};
 /// # let contour = mesh::consolidate(&quatre).unwrap();
 /// // Cœur en grille orientée sur le contour, plus une bande frontale de
 /// // `band` rangées pour raccorder la grille au bord.
-/// let m = mesh::grid_surface(&contour, ElementType::QUA4, Some(0.5), 1, false)?;
+/// let m = mesh::grid_surface(&contour, ElementType::QUA4, Some(0.5), 1, false, mesh::FrontRelax::Free)?;
 /// assert!(m.cell_count()? > 0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -161,6 +167,7 @@ pub fn grid_surface(
     target_size: Option<f64>,
     band: usize,
     all_quad: bool,
+    relax: FrontRelax,
 ) -> Result<Mesh> {
     grid_surface_cancellable(
         contour,
@@ -168,6 +175,7 @@ pub fn grid_surface(
         target_size,
         band,
         all_quad,
+        relax,
         &NoCancel,
     )
 }
@@ -200,7 +208,7 @@ pub fn grid_surface(
 /// // phase suivante, pas au milieu d'une.
 /// let stop = AtomicBool::new(false);
 /// assert!(mesh::grid_surface_cancellable(
-///     &contour, ElementType::QUA4, Some(0.5), 1, false, &stop).is_ok());
+///     &contour, ElementType::QUA4, Some(0.5), 1, false, mesh::FrontRelax::Free, &stop).is_ok());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn grid_surface_cancellable(
@@ -209,6 +217,7 @@ pub fn grid_surface_cancellable(
     target_size: Option<f64>,
     band: usize,
     all_quad: bool,
+    relax: FrontRelax,
     cancel: &dyn Cancel,
 ) -> Result<Mesh> {
     if !matches!(
@@ -233,6 +242,7 @@ pub fn grid_surface_cancellable(
             d,
             target_size,
             all_quad,
+            relax,
             band,
             cancel,
             "grid_surface",
@@ -368,7 +378,15 @@ mod tests {
         let coords = Handle::new(Coords::new(2).unwrap());
         let corners = [(0.0, 0.0), (0.6, 0.0), (0.6, 0.3), (0.0, 0.3)];
         let contour = loop_mesh(coords, &on_grid(&corners, 0.02));
-        let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.02), 0, false).unwrap();
+        let mesh = grid_surface(
+            &contour,
+            ElementType::QUA4,
+            Some(0.02),
+            0,
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
         let r = inspect(&mesh);
         assert_eq!((r.quads, r.tris), (450, 0));
         assert_eq!(r.non_conforming, 0);
@@ -394,7 +412,15 @@ mod tests {
         let size = 2.0 * v / 4.0;
         let coords = Handle::new(Coords::new(2).unwrap());
         let contour = loop_mesh(coords, &on_grid(&corners, size));
-        let mesh = grid_surface(&contour, ElementType::QUA4, Some(size), 0, false).unwrap();
+        let mesh = grid_surface(
+            &contour,
+            ElementType::QUA4,
+            Some(size),
+            0,
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
         let r = inspect(&mesh);
         // 18 columns per step, twice the level in rows: 18·2·Σlevels.
         let want = 18 * 2 * levels.iter().sum::<f64>() as usize;
@@ -438,7 +464,15 @@ mod tests {
         let outer = loop_mesh(coords.clone(), &outer_pts);
         let hole = loop_mesh(coords, &hole_pts);
         let contour = outer.union(&hole).unwrap();
-        let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.1), 0, false).unwrap();
+        let mesh = grid_surface(
+            &contour,
+            ElementType::QUA4,
+            Some(0.1),
+            0,
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
 
         let mut used: std::collections::HashMap<(NodeId, NodeId), usize> = Default::default();
         for si in 0..mesh.len() {
@@ -493,7 +527,15 @@ mod tests {
             let coords = Handle::new(Coords::new(2).unwrap());
             let corners = spin(&[(0.0, 0.0), (0.6, 0.0), (0.6, 0.3), (0.0, 0.3)], deg);
             let contour = loop_mesh(coords, &on_grid(&corners, 0.02));
-            let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.02), 0, false).unwrap();
+            let mesh = grid_surface(
+                &contour,
+                ElementType::QUA4,
+                Some(0.02),
+                0,
+                false,
+                FrontRelax::Free,
+            )
+            .unwrap();
             let r = inspect(&mesh);
             assert_eq!((r.quads, r.tris), (450, 0), "at {deg}°");
             assert_eq!(r.non_conforming, 0, "at {deg}°");
@@ -521,7 +563,15 @@ mod tests {
         let size = 2.0 * v / 4.0;
         let coords = Handle::new(Coords::new(2).unwrap());
         let contour = loop_mesh(coords, &on_grid(&spin(&corners, 23.7), size));
-        let mesh = grid_surface(&contour, ElementType::QUA4, Some(size), 0, false).unwrap();
+        let mesh = grid_surface(
+            &contour,
+            ElementType::QUA4,
+            Some(size),
+            0,
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
         let r = inspect(&mesh);
         assert_eq!(
             (r.quads, r.tris),
@@ -550,7 +600,15 @@ mod tests {
         );
         let pts = on_grid(&corners, 0.1);
         let contour = loop_mesh(coords, &pts);
-        let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.1), 0, false).unwrap();
+        let mesh = grid_surface(
+            &contour,
+            ElementType::QUA4,
+            Some(0.1),
+            0,
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
 
         let mut used: std::collections::HashMap<(NodeId, NodeId), usize> = Default::default();
         for si in 0..mesh.len() {
@@ -595,7 +653,15 @@ mod tests {
                 .collect::<Vec<_>>(),
         );
         let contour = outer.union(&hole).unwrap();
-        let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.1), 0, false).unwrap();
+        let mesh = grid_surface(
+            &contour,
+            ElementType::QUA4,
+            Some(0.1),
+            0,
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
         let r = inspect(&mesh);
         assert_eq!(r.non_conforming, 0);
         assert_eq!(r.inverted, 0);
@@ -619,7 +685,15 @@ mod tests {
                 })
                 .collect::<Vec<_>>(),
         );
-        let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.1), 0, false).unwrap();
+        let mesh = grid_surface(
+            &contour,
+            ElementType::QUA4,
+            Some(0.1),
+            0,
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
         let r = inspect(&mesh);
         assert_eq!(r.non_conforming, 0);
         assert_eq!(r.inverted, 0);
@@ -647,7 +721,15 @@ mod tests {
             })
             .collect();
         let contour = loop_mesh(coords, &on_grid(&pts, 0.05));
-        let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.05), 0, false).unwrap();
+        let mesh = grid_surface(
+            &contour,
+            ElementType::QUA4,
+            Some(0.05),
+            0,
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
 
         let mut used: std::collections::HashMap<(NodeId, NodeId), usize> = Default::default();
         for si in 0..mesh.len() {
@@ -708,7 +790,15 @@ mod tests {
             })
             .collect();
         let contour = loop_mesh(coords, &on_grid(&corners, 0.2));
-        let mesh = grid_surface(&contour, ElementType::QUA4, Some(0.2), 0, false).unwrap();
+        let mesh = grid_surface(
+            &contour,
+            ElementType::QUA4,
+            Some(0.2),
+            0,
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
         let r = inspect(&mesh);
         assert_eq!(r.inverted, 0);
         assert_eq!(r.non_conforming, 0);
@@ -738,12 +828,66 @@ mod tests {
                 .collect();
             let coords = Handle::new(Coords::new(2).unwrap());
             let contour = loop_mesh(coords, &on_grid(&corners, h));
-            let mesh = grid_surface(&contour, ElementType::QUA4, Some(h), 0, false).unwrap();
+            let mesh = grid_surface(
+                &contour,
+                ElementType::QUA4,
+                Some(h),
+                0,
+                false,
+                FrontRelax::Free,
+            )
+            .unwrap();
             let r = inspect(&mesh);
             assert_eq!(r.inverted, 0, "{sides} sides at h={h}");
             assert_eq!(r.non_conforming, 0, "{sides} sides at h={h}");
             assert!(r.min_jacobian > 0.0, "{sides} sides at h={h}");
         }
+    }
+
+    /// A rectangle `width × height` with `teeth` notches cut up into its
+    /// base, every side broken into whole cells of `h` — but the top, cut
+    /// `fine` times finer, which is the disagreement a grid cannot absorb.
+    fn crenellated(
+        width: f64,
+        height: f64,
+        teeth: usize,
+        tooth_w: f64,
+        tooth_d: f64,
+        h: f64,
+        fine: f64,
+    ) -> Vec<(f64, f64)> {
+        let pitch = width / teeth as f64;
+        let mut corners = vec![(0.0, 0.0)];
+        for i in 0..teeth {
+            let x0 = pitch * i as f64 + 0.5 * (pitch - tooth_w);
+            corners.extend([
+                (x0, 0.0),
+                (x0, tooth_d),
+                (x0 + tooth_w, tooth_d),
+                (x0 + tooth_w, 0.0),
+            ]);
+        }
+        corners.extend([(width, 0.0), (width, height), (0.0, height)]);
+
+        let mut pts: Vec<(f64, f64)> = Vec::new();
+        let cut = |a: (f64, f64), b: (f64, f64), step: f64, pts: &mut Vec<(f64, f64)>| {
+            let len = ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt();
+            let k = ((len / step).round() as usize).max(1);
+            for j in 0..k {
+                let t = j as f64 / k as f64;
+                pts.push((a.0 + t * (b.0 - a.0), a.1 + t * (b.1 - a.1)));
+            }
+        };
+        let n = corners.len();
+        for i in 0..n {
+            let step = if corners[i].1 == height && corners[(i + 1) % n].1 == height {
+                h / fine
+            } else {
+                h
+            };
+            cut(corners[i], corners[(i + 1) % n], step, &mut pts);
+        }
+        pts
     }
 
     #[test]
@@ -764,39 +908,18 @@ mod tests {
         // A sound mesh has exactly one cell on each of the contour's segments
         // and two on everything else, so the boundary count is the whole test.
         let h = 1.0;
-        let (w, height, teeth) = (8.0, 5.0, 3usize);
-        let pitch = w / teeth as f64;
-        let mut corners = vec![(0.0, 0.0)];
-        for i in 0..teeth {
-            let x0 = pitch * i as f64 + 0.5 * (pitch - 1.0);
-            corners.extend([(x0, 0.0), (x0, 1.0), (x0 + 1.0, 1.0), (x0 + 1.0, 0.0)]);
-        }
-        corners.extend([(w, 0.0), (w, height), (0.0, height)]);
-
-        let mut pts: Vec<(f64, f64)> = Vec::new();
-        let cut = |a: (f64, f64), b: (f64, f64), step: f64, pts: &mut Vec<(f64, f64)>| {
-            let len = ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt();
-            let k = ((len / step).round() as usize).max(1);
-            for j in 0..k {
-                let t = j as f64 / k as f64;
-                pts.push((a.0 + t * (b.0 - a.0), a.1 + t * (b.1 - a.1)));
-            }
-        };
-        let n = corners.len();
-        for i in 0..n {
-            // Every side at the target size but the top one, cut at two
-            // thirds of it — the disagreement the grid cannot absorb.
-            let step = if corners[i].1 == height && corners[(i + 1) % n].1 == height {
-                h / 1.5
-            } else {
-                h
-            };
-            cut(corners[i], corners[(i + 1) % n], step, &mut pts);
-        }
-
+        let pts = crenellated(8.0, 5.0, 3, 1.0, 1.0, h, 1.5);
         let coords = Handle::new(Coords::new(2).unwrap());
         let contour = loop_mesh(coords, &pts);
-        let mesh = grid_surface(&contour, ElementType::QUA4, Some(h), 0, false).unwrap();
+        let mesh = grid_surface(
+            &contour,
+            ElementType::QUA4,
+            Some(h),
+            0,
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
         let r = inspect(&mesh);
         assert_eq!(r.boundary, pts.len(), "holes: the mesh is not whole");
         assert_eq!(r.non_conforming, 0);
@@ -817,7 +940,7 @@ mod tests {
         ] {
             let msg = format!(
                 "{}",
-                grid_surface(&contour, et, size, 0, false).unwrap_err()
+                grid_surface(&contour, et, size, 0, false, FrontRelax::Free).unwrap_err()
             );
             assert!(msg.starts_with("grid_surface:"), "{msg}");
         }

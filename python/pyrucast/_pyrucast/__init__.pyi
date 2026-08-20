@@ -449,29 +449,6 @@ class ElementField:
         r"""
         `field < x` → a 0/1 mask field (see `__ge__`).
         """
-    def unit(self) -> SubElementField:
-        r"""
-        The sole sub-object **view** of a unitary aggregate
-        (exactly one sub), else a clear error. Use it where the
-        single-zone case needs a sub method: `parent.unit().m(...)`.
-        More honest than `parent[0]` (which silently takes the
-        first of several) — see `CONVENTIONS.md`.
-        """
-    def add_sub(self, sub: SubElementField) -> None:
-        r"""
-        Append a sub-object **in place** (the handle is shared, not
-        deep-copied). The functional counterpart is `|`, which leaves
-        the operands untouched and returns a fresh aggregate.
-        """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
-        r"""
-        Print the full content (third display level) to stdout:
-        every sub-object's values/topology, beyond `repr`'s bounded
-        structure. Returns nothing.
-        """
-    def __len__(self) -> builtins.int: ...
     @typing.overload
     def __getitem__(self, key: int) -> SubElementField:
         r"""
@@ -508,6 +485,29 @@ class ElementField:
         `subfield | field` — the mirror of `field | subfield`, differing only
         in that the lone zone comes first.
         """
+    def unit(self) -> SubElementField:
+        r"""
+        The sole sub-object **view** of a unitary aggregate
+        (exactly one sub), else a clear error. Use it where the
+        single-zone case needs a sub method: `parent.unit().m(...)`.
+        More honest than `parent[0]` (which silently takes the
+        first of several) — see `CONVENTIONS.md`.
+        """
+    def add_sub(self, sub: SubElementField) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+        r"""
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
+        """
+    def __len__(self) -> builtins.int: ...
     def consolidate(self) -> ElementField:
         r"""
         Voir `pyrucast.element_field.consolidate`.
@@ -635,6 +635,7 @@ class Evolution:
         `revolve` / `revolve_angle` sweep an axisymmetric plot into its body
         of revolution — see `SubMesh.plot`.
         """
+    def __len__(self) -> builtins.int: ...
     @typing.overload
     def __getitem__(self, key: int) -> SubEvolution:
         r"""
@@ -680,7 +681,6 @@ class Evolution:
         every sub-object's values/topology, beyond `repr`'s bounded
         structure. Returns nothing.
         """
-    def __len__(self) -> builtins.int: ...
 
 @typing.final
 class FiniteElementSpace:
@@ -892,6 +892,28 @@ class Matrix:
         `factor` (lazy — no value is rewritten). **Not** finalized: call
         `finalize()` (or `assemble` for computed blocks) before solving.
         """
+    def unit(self) -> SubMatrix:
+        r"""
+        The sole sub-object **view** of a unitary aggregate
+        (exactly one sub), else a clear error. Use it where the
+        single-zone case needs a sub method: `parent.unit().m(...)`.
+        More honest than `parent[0]` (which silently takes the
+        first of several) — see `CONVENTIONS.md`.
+        """
+    def add_sub(self, sub: SubMatrix) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+        r"""
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
+        """
     def __len__(self) -> builtins.int: ...
     @typing.overload
     def __getitem__(self, key: int) -> SubMatrix:
@@ -915,28 +937,6 @@ class Matrix:
         r"""
         `sub_matrix | matrix` — the mirror of `matrix | sub_matrix`,
         differing only in that the lone block comes first.
-        """
-    def unit(self) -> SubMatrix:
-        r"""
-        The sole sub-object **view** of a unitary aggregate
-        (exactly one sub), else a clear error. Use it where the
-        single-zone case needs a sub method: `parent.unit().m(...)`.
-        More honest than `parent[0]` (which silently takes the
-        first of several) — see `CONVENTIONS.md`.
-        """
-    def add_sub(self, sub: SubMatrix) -> None:
-        r"""
-        Append a sub-object **in place** (the handle is shared, not
-        deep-copied). The functional counterpart is `|`, which leaves
-        the operands untouched and returns a fresh aggregate.
-        """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
-        r"""
-        Print the full content (third display level) to stdout:
-        every sub-object's values/topology, beyond `repr`'s bounded
-        structure. Returns nothing.
         """
     def lump(self) -> Matrix:
         r"""
@@ -1020,7 +1020,6 @@ class Mesh:
         `field`, `component`, `wireframe`, `revolve`, `revolve_angle` and
         `title`.
         """
-    def __len__(self) -> builtins.int: ...
     def unit(self) -> SubMesh:
         r"""
         The sole sub-object **view** of a unitary aggregate
@@ -1068,6 +1067,7 @@ class Mesh:
         `submesh | mesh` — the mirror of `mesh | submesh`, differing only in
         that the lone zone comes first.
         """
+    def __len__(self) -> builtins.int: ...
     def to_poi1(self) -> Mesh:
         r"""
         Voir `pyrucast.mesh.to_poi1`.
@@ -1204,7 +1204,7 @@ class Mesh:
         r"""
         Voir `pyrucast.mesh.triangulate_surface`.
         """
-    def pave_surface(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None, all_quad: builtins.bool = False) -> Mesh:
+    def pave_surface(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None, all_quad: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
         r"""
         Voir `pyrucast.mesh.pave_surface`.
         """
@@ -1220,11 +1220,11 @@ class Mesh:
         r"""
         Voir `pyrucast.mesh.merge_triangles`.
         """
-    def grid_surface(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, all_quad: builtins.bool = False) -> Mesh:
+    def grid_surface(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, all_quad: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
         r"""
         Voir `pyrucast.mesh.grid_surface`.
         """
-    def grid_surface2(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, all_quad: builtins.bool = False) -> Mesh:
+    def grid_surface2(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, all_quad: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
         r"""
         Voir `pyrucast.mesh.grid_surface2`.
         """
@@ -2046,28 +2046,6 @@ class NodeField:
         r"""
         `field < x` → a 0/1 mask field (see `__ge__`).
         """
-    def unit(self) -> SubNodeField:
-        r"""
-        The sole sub-object **view** of a unitary aggregate
-        (exactly one sub), else a clear error. Use it where the
-        single-zone case needs a sub method: `parent.unit().m(...)`.
-        More honest than `parent[0]` (which silently takes the
-        first of several) — see `CONVENTIONS.md`.
-        """
-    def add_sub(self, sub: SubNodeField) -> None:
-        r"""
-        Append a sub-object **in place** (the handle is shared, not
-        deep-copied). The functional counterpart is `|`, which leaves
-        the operands untouched and returns a fresh aggregate.
-        """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
-        r"""
-        Print the full content (third display level) to stdout:
-        every sub-object's values/topology, beyond `repr`'s bounded
-        structure. Returns nothing.
-        """
     @typing.overload
     def __getitem__(self, key: int) -> SubNodeField:
         r"""
@@ -2104,6 +2082,28 @@ class NodeField:
         in that the lone zone comes first.
         """
     def __len__(self) -> builtins.int: ...
+    def unit(self) -> SubNodeField:
+        r"""
+        The sole sub-object **view** of a unitary aggregate
+        (exactly one sub), else a clear error. Use it where the
+        single-zone case needs a sub method: `parent.unit().m(...)`.
+        More honest than `parent[0]` (which silently takes the
+        first of several) — see `CONVENTIONS.md`.
+        """
+    def add_sub(self, sub: SubNodeField) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+        r"""
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
+        """
     def gradient(self, fespace: FiniteElementSpace) -> ElementField:
         r"""
         Voir `pyrucast.element_field.gradient`.
@@ -3325,7 +3325,7 @@ def gradient(field: NodeField, fespace: FiniteElementSpace) -> ElementField:
     (`grad_T_x`, …). Feed the result to `integrate_behavior`.
     """
 
-def grid_surface(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, all_quad: builtins.bool = False) -> Mesh:
+def grid_surface(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, all_quad: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
     r"""
     Mesh the inside of a closed contour with a structured grid core and a
     frontal band — the regular-mesh companion of `pave_surface`.
@@ -3355,9 +3355,16 @@ def grid_surface(contour: Mesh, element_type: builtins.str, size: typing.Optiona
     is the useful value; raise it only for a contour the grid cannot meet, such
     as a curve, where giving the front a couple of cells to work in beats
     letting it fight for a sliver.
+    
+    `relax` chooses what the front may do to itself between two rows: `"free"`
+    (the default, and the historical behaviour), `"along"` — the smoothing kept
+    only along the front, which keeps its corners and with them the front's
+    ability to shed nodes as it contracts — or `"none"`. See `pave_surface`,
+    which shares the band with this operator and where the choice is spelled
+    out.
     """
 
-def grid_surface2(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, all_quad: builtins.bool = False) -> Mesh:
+def grid_surface2(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, all_quad: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
     r"""
     Mesh the inside of a closed contour with a structured grid core and a
     frontal band, taking the grid's lines **one per contour node**.
@@ -3389,7 +3396,7 @@ def grid_surface2(contour: Mesh, element_type: builtins.str, size: typing.Option
     not be used: nothing dictates a grid line over most of a curve. The book's
     *Mailler une géométrie* page puts all four surface meshers side by side.
     
-    `size` and `band` mean what they mean for `grid_surface`.
+    `size`, `band` and `relax` mean what they mean for `grid_surface`.
     """
 
 def integral(field: typing.Any, component: builtins.str, fespace: typing.Optional[FiniteElementSpace] = None) -> builtins.float:
@@ -3614,7 +3621,7 @@ def orient(mesh: Mesh) -> Mesh:
     a fresh mesh sharing the input's nodes.
     """
 
-def pave_surface(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None, all_quad: builtins.bool = False) -> Mesh:
+def pave_surface(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None, all_quad: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
     r"""
     Pave the inside of a closed contour with quadrangles, in rows walking
     inward from the boundary.
@@ -3643,6 +3650,26 @@ def pave_surface(contour: Mesh, element_type: builtins.str, size: typing.Optiona
     With `all_quad=False` (the default) an odd loop simply costs one triangle,
     returned in a separate TRI3 submesh, along with the few cells a distorted
     leftover polygon could not make square.
+    
+    `relax` chooses what the front is allowed to do to itself between two rows.
+    After each row the fresh chain is smoothed, which keeps the front from
+    kinking — and, being a Laplacian, rounds its corners off. That costs more
+    than it looks: a front sheds nodes only at its **corners**, so once they are
+    rounded away it keeps every node it has while its perimeter shrinks, and the
+    middle of the domain comes out finer than asked. A plain 20 × 20 square at
+    size 1 gives 600 cells instead of 400.
+    
+    - `"free"` (the default) — the historical behaviour: a node moves wherever
+      the smoothing points. The only mode that never lets the front kink.
+    - `"along"` — the same step, kept only **along** the front: the spacing is
+      evened out, the shape is not. The square then comes out as the 400 exact
+      squares anyone would draw.
+    - `"none"` — the front stays exactly where the row put it.
+    
+    There is no best answer, which is why it is a choice: `"along"` and
+    `"none"` win on anything with corners to keep and can kink on a curve, where
+    there is nothing to preserve and everything to straighten. A run that fails
+    to converge raises rather than grinding on.
     """
 
 def pave_volume(envelope: Mesh, layers: builtins.int = 1, thickness: typing.Optional[builtins.float] = None, size: typing.Optional[builtins.float] = None) -> Mesh:

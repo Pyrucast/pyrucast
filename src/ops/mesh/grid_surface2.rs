@@ -66,6 +66,7 @@ use crate::atoms::ElementType;
 use crate::containers::mesh::Mesh;
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::{Cancel, NoCancel};
+use crate::ops::mesh::paving::FrontRelax;
 use crate::ops::mesh::{contour, paving};
 
 /// Pave the interior of `contour` — one or more closed `SEG2` loops,
@@ -90,6 +91,11 @@ use crate::ops::mesh::{contour, paving};
 /// This is the uninterruptible convenience form; for a long mesh a caller may
 /// want to stop early, use [`grid_surface2_cancellable`].
 ///
+///
+/// `relax` chooses what the front may do to itself between two rows — see
+/// [`FrontRelax`]. The default, [`FrontRelax::Free`], is the historical
+/// behaviour; [`FrontRelax::Along`] keeps the front's corners, which is what
+/// lets a rectilinear domain stay structured to its core.
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
@@ -110,7 +116,7 @@ use crate::ops::mesh::{contour, paving};
 /// // La variante dont les lignes viennent **une par nœud du contour** et
 /// // dont les rangées ont le droit de plier : meilleure sur les formes
 /// // rectilinéaires, moins bonne sur les courbes.
-/// let m = mesh::grid_surface2(&contour, ElementType::QUA4, Some(0.5), 1, false)?;
+/// let m = mesh::grid_surface2(&contour, ElementType::QUA4, Some(0.5), 1, false, mesh::FrontRelax::Free)?;
 /// assert!(m.cell_count()? > 0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -120,6 +126,7 @@ pub fn grid_surface2(
     target_size: Option<f64>,
     band: usize,
     all_quad: bool,
+    relax: FrontRelax,
 ) -> Result<Mesh> {
     grid_surface2_cancellable(
         contour,
@@ -127,6 +134,7 @@ pub fn grid_surface2(
         target_size,
         band,
         all_quad,
+        relax,
         &NoCancel,
     )
 }
@@ -159,7 +167,7 @@ pub fn grid_surface2(
 /// // phase suivante, pas au milieu d'une.
 /// let stop = AtomicBool::new(false);
 /// assert!(mesh::grid_surface2_cancellable(
-///     &contour, ElementType::QUA4, Some(0.5), 1, false, &stop).is_ok());
+///     &contour, ElementType::QUA4, Some(0.5), 1, false, mesh::FrontRelax::Free, &stop).is_ok());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn grid_surface2_cancellable(
@@ -168,6 +176,7 @@ pub fn grid_surface2_cancellable(
     target_size: Option<f64>,
     band: usize,
     all_quad: bool,
+    relax: FrontRelax,
     cancel: &dyn Cancel,
 ) -> Result<Mesh> {
     if !matches!(
@@ -192,6 +201,7 @@ pub fn grid_surface2_cancellable(
             d,
             target_size,
             all_quad,
+            relax,
             band,
             cancel,
             "grid_surface2",
@@ -314,7 +324,15 @@ mod tests {
         let coords = Handle::new(Coords::new(2).unwrap());
         let corners = [(0.0, 0.0), (0.6, 0.0), (0.6, 0.3), (0.0, 0.3)];
         let contour = loop_mesh(coords, &on_grid(&corners, 0.02));
-        let mesh = grid_surface2(&contour, ElementType::QUA4, Some(0.02), 0, false).unwrap();
+        let mesh = grid_surface2(
+            &contour,
+            ElementType::QUA4,
+            Some(0.02),
+            0,
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
         let r = inspect(&mesh);
         assert_eq!((r.quads, r.tris), (450, 0));
         assert_eq!(r.non_conforming, 0);
@@ -340,7 +358,15 @@ mod tests {
         let size = 2.0 * v / 4.0;
         let coords = Handle::new(Coords::new(2).unwrap());
         let contour = loop_mesh(coords, &on_grid(&corners, size));
-        let mesh = grid_surface2(&contour, ElementType::QUA4, Some(size), 0, false).unwrap();
+        let mesh = grid_surface2(
+            &contour,
+            ElementType::QUA4,
+            Some(size),
+            0,
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
         let r = inspect(&mesh);
         // 18 columns per step, twice the level in rows: 18·2·Σlevels.
         let want = 18 * 2 * levels.iter().sum::<f64>() as usize;
@@ -384,7 +410,15 @@ mod tests {
         let outer = loop_mesh(coords.clone(), &outer_pts);
         let hole = loop_mesh(coords, &hole_pts);
         let contour = outer.union(&hole).unwrap();
-        let mesh = grid_surface2(&contour, ElementType::QUA4, Some(0.1), 0, false).unwrap();
+        let mesh = grid_surface2(
+            &contour,
+            ElementType::QUA4,
+            Some(0.1),
+            0,
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
 
         let mut used: std::collections::HashMap<(NodeId, NodeId), usize> = Default::default();
         for si in 0..mesh.len() {
@@ -439,7 +473,15 @@ mod tests {
             let coords = Handle::new(Coords::new(2).unwrap());
             let corners = spin(&[(0.0, 0.0), (0.6, 0.0), (0.6, 0.3), (0.0, 0.3)], deg);
             let contour = loop_mesh(coords, &on_grid(&corners, 0.02));
-            let mesh = grid_surface2(&contour, ElementType::QUA4, Some(0.02), 0, false).unwrap();
+            let mesh = grid_surface2(
+                &contour,
+                ElementType::QUA4,
+                Some(0.02),
+                0,
+                false,
+                FrontRelax::Free,
+            )
+            .unwrap();
             let r = inspect(&mesh);
             assert_eq!((r.quads, r.tris), (450, 0), "at {deg}°");
             assert_eq!(r.non_conforming, 0, "at {deg}°");
@@ -467,7 +509,15 @@ mod tests {
         let size = 2.0 * v / 4.0;
         let coords = Handle::new(Coords::new(2).unwrap());
         let contour = loop_mesh(coords, &on_grid(&spin(&corners, 23.7), size));
-        let mesh = grid_surface2(&contour, ElementType::QUA4, Some(size), 0, false).unwrap();
+        let mesh = grid_surface2(
+            &contour,
+            ElementType::QUA4,
+            Some(size),
+            0,
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
         let r = inspect(&mesh);
         assert_eq!(
             (r.quads, r.tris),
@@ -496,7 +546,15 @@ mod tests {
         );
         let pts = on_grid(&corners, 0.1);
         let contour = loop_mesh(coords, &pts);
-        let mesh = grid_surface2(&contour, ElementType::QUA4, Some(0.1), 0, false).unwrap();
+        let mesh = grid_surface2(
+            &contour,
+            ElementType::QUA4,
+            Some(0.1),
+            0,
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
 
         let mut used: std::collections::HashMap<(NodeId, NodeId), usize> = Default::default();
         for si in 0..mesh.len() {
@@ -541,7 +599,15 @@ mod tests {
                 .collect::<Vec<_>>(),
         );
         let contour = outer.union(&hole).unwrap();
-        let mesh = grid_surface2(&contour, ElementType::QUA4, Some(0.1), 0, false).unwrap();
+        let mesh = grid_surface2(
+            &contour,
+            ElementType::QUA4,
+            Some(0.1),
+            0,
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
         let r = inspect(&mesh);
         assert_eq!(r.non_conforming, 0);
         assert!(r.min_jacobian > 0.0, "jacobian {}", r.min_jacobian);
@@ -564,7 +630,15 @@ mod tests {
                 })
                 .collect::<Vec<_>>(),
         );
-        let mesh = grid_surface2(&contour, ElementType::QUA4, Some(0.1), 0, false).unwrap();
+        let mesh = grid_surface2(
+            &contour,
+            ElementType::QUA4,
+            Some(0.1),
+            0,
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
         let r = inspect(&mesh);
         assert_eq!(r.non_conforming, 0);
         assert!(r.min_jacobian > 0.0, "jacobian {}", r.min_jacobian);
@@ -595,7 +669,15 @@ mod tests {
         let pts = on_grid(&corners, 0.1);
         let before: Vec<(f64, f64)> = pts.clone();
         let contour = loop_mesh(coords.clone(), &pts);
-        let mesh = grid_surface2(&contour, ElementType::QUA4, Some(0.1), 0, false).unwrap();
+        let mesh = grid_surface2(
+            &contour,
+            ElementType::QUA4,
+            Some(0.1),
+            0,
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
 
         let r = inspect(&mesh);
         assert_eq!(r.tris, 0, "a bent row should not need a triangle");
@@ -632,7 +714,15 @@ mod tests {
             })
             .collect();
         let contour = loop_mesh(coords, &on_grid(&pts, 0.05));
-        let mesh = grid_surface2(&contour, ElementType::QUA4, Some(0.05), 0, false).unwrap();
+        let mesh = grid_surface2(
+            &contour,
+            ElementType::QUA4,
+            Some(0.05),
+            0,
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
 
         let mut used: std::collections::HashMap<(NodeId, NodeId), usize> = Default::default();
         for si in 0..mesh.len() {
@@ -696,7 +786,15 @@ mod tests {
         let contour = loop_mesh(coords, &on_grid(&corners, 0.05));
         let msg = format!(
             "{}",
-            grid_surface2(&contour, ElementType::QUA4, Some(0.05), 0, false).unwrap_err()
+            grid_surface2(
+                &contour,
+                ElementType::QUA4,
+                Some(0.05),
+                0,
+                false,
+                FrontRelax::Free
+            )
+            .unwrap_err()
         );
         assert!(msg.starts_with("grid_surface2:"), "{msg}");
         assert!(msg.contains("came out turned inside out or flat"), "{msg}");
@@ -715,7 +813,7 @@ mod tests {
         ] {
             let msg = format!(
                 "{}",
-                grid_surface2(&contour, et, size, 0, false).unwrap_err()
+                grid_surface2(&contour, et, size, 0, false, FrontRelax::Free).unwrap_err()
             );
             assert!(msg.starts_with("grid_surface2:"), "{msg}");
         }

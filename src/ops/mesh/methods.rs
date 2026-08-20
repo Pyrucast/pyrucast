@@ -75,8 +75,9 @@ impl Mesh {
         element_type: ElementType,
         target_size: Option<f64>,
         all_quad: bool,
+        relax: crate::ops::mesh::FrontRelax,
     ) -> Result<Mesh> {
-        crate::ops::mesh::pave_surface(self, element_type, target_size, all_quad)
+        crate::ops::mesh::pave_surface(self, element_type, target_size, all_quad, relax)
     }
 
     /// Voir [`mesh::pave_volume`](fn@crate::ops::mesh::pave_volume).

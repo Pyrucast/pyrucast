@@ -71,6 +71,7 @@ pub use merge_nodes::merge_nodes;
 pub use orient::{invert, orient};
 pub use pave_surface::{pave_surface, pave_surface_cancellable};
 pub use pave_volume::{pave_volume, pave_volume_cancellable};
+pub use paving::FrontRelax;
 pub use poi1_from_nodes::poi1_from_nodes;
 pub use points::{
     points_below_plane, points_in_cone, points_in_cylinder, points_in_sphere, points_in_torus,

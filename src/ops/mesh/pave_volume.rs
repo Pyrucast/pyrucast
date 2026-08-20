@@ -408,7 +408,14 @@ mod tests {
             ring = ring.union(&m).unwrap();
         }
         let contour = crate::ops::mesh::consolidate(&ring).unwrap();
-        let face = super::super::pave_surface(&contour, ElementType::QUA4, None, true).unwrap();
+        let face = super::super::pave_surface(
+            &contour,
+            ElementType::QUA4,
+            None,
+            true,
+            crate::ops::mesh::FrontRelax::Free,
+        )
+        .unwrap();
         let solid = crate::ops::mesh::extrude(&face, &[0.0, height, 0.0], ny).unwrap();
         crate::ops::mesh::skin(&solid, None).unwrap()
     }
@@ -447,7 +454,14 @@ mod tests {
             });
         }
         let contour = crate::ops::mesh::consolidate(&ring.unwrap()).unwrap();
-        let face = super::super::pave_surface(&contour, ElementType::QUA4, None, true).unwrap();
+        let face = super::super::pave_surface(
+            &contour,
+            ElementType::QUA4,
+            None,
+            true,
+            crate::ops::mesh::FrontRelax::Free,
+        )
+        .unwrap();
         let solid = crate::ops::mesh::extrude(&face, &[0.0, height, 0.0], layers).unwrap();
         crate::ops::mesh::skin(&solid, None).unwrap()
     }

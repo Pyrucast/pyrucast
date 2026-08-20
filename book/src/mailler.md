@@ -87,7 +87,7 @@ et `grid_surface2` se séparent nettement.
 | plaque à marche (0,53 ; 0,61) | mailles | 366 | 138 | 86 | **80** |
 | | pire | 0,481 | 0,187 | 0,405 | **0,963** |
 | L à cotes quelconques | mailles | 308 | 118 | 76 | **70** |
-| | pire | 0,459 | 0,401 | 0,448 | **0,979** |
+| | pire | 0,459 | 0,401 | 0,437 | **0,979** |
 | L étiré à 1,02 | mailles | 319 | 120 | 81 | **74** |
 | | pire | 0,477 | 0,396 | 0,307 | **0,606** |
 | L étiré à 1,10 | mailles | 336 | 123 | 80 | **74** |
@@ -118,7 +118,7 @@ la sensibilité d'un mailleur à la discrétisation du contour.
 
 | forme | | triangulate | pave | grid | grid2 |
 |---|---|---:|---:|---:|---:|
-| base coupée | mailles | 2 050 | 871 | 474 | **456** |
+| base coupée | mailles | 2 050 | 865 | 474 | **456** |
 | | pire | 0,412 | 0,327 | 0,382 | **0,916** |
 | base d'un seul tenant | mailles | 2 089 | 868 | 487 | **456** |
 | | pire | 0,419 | 0,326 | 0,287 | **0,651** |
@@ -142,8 +142,8 @@ Ici le classement s'inverse, et c'est le seul endroit où il le fait.
 |---|---|---:|---:|---:|---:|
 | maison | mailles | 1 723 | 621 | 477 | **454** |
 | | pire | 0,484 | **0,491** | 0,304 | 0,475 |
-| carré arrondi | mailles | 1 866 | 678 | 444 | **418** |
-| | pire | **0,474** | 0,360 | 0,222 | 0,406 |
+| carré arrondi | mailles | 1 866 | 678 | 443 | **420** |
+| | pire | **0,474** | 0,360 | 0,266 | 0,308 |
 | cercle R = 1 | mailles | 6 114 | 2 339 | **1 260** | 2 044 |
 | | pire | **0,424** | 0,031 | **0,288** | 0,005 |
 
@@ -192,6 +192,35 @@ En pratique :
   refuse par une erreur claire un contour dont la parité l'interdit ;
 - **triangles voulus** — `triangulate_surface`, seul à en produire par
   construction.
+
+### Le front peut garder ses angles : `relax`
+
+Les chiffres de `pave_surface` ci-dessus sont ceux du réglage par défaut. Entre
+deux rangées, le front est relaxé — c'est ce qui l'empêche de se plisser — et
+cette relaxation est un laplacien, qui **arrondit les angles**. Or un front ne
+perd des nœuds qu'à ses coins : une fois les coins arrondis, il garde tous ses
+nœuds pendant que son périmètre rétrécit, et le milieu du domaine sort plus fin
+que la taille demandée. Un carré 20 × 20 à la taille 1 sort à **600 mailles au
+lieu de 400**, les plus intérieures à 0,43 de l'aire visée.
+
+`relax="along"` garde le même déplacement mais **projeté sur le front** :
+l'écartement s'égalise encore, la forme n'est plus rabotée, et le carré sort
+comme les 400 carrés exacts qu'on dessinerait. `relax="none"` ne relaxe pas du
+tout. Aucun des trois ne gagne partout — sur une courbe, il n'y a pas d'angle à
+préserver et le front a tout à gagner à se redresser :
+
+| forme (taille 1) | `"free"` | `"along"` | `"none"` |
+|---|---:|---:|---:|
+| carré 20 × 20 | 600 mailles, pire 0,541 | **400, 1,000** | **400, 1,000** |
+| L | 374, 0,315 | 287, 0,449 | 290, **0,564** |
+| profil crénelé | 859, 0,240 | 620, **0,546** | **554**, 0,441 |
+| bande étroite 40 × 3 | 581, 0,650 | 557, **0,662** | 559, 0,564 |
+| cercle R = 10 | 569, 0,105 | 633, **0,257** | 639, 0,020 |
+
+Le détail du mécanisme est sur la page
+[Mailler](operateurs/maillage.md#relaxation-du-front--relax) des opérateurs. Les
+deux mailleurs en grille prennent le même réglage, qui n'y gouverne que la
+bande : la grille est posée droite quoi qu'il arrive.
 
 ### Deux limites connues
 

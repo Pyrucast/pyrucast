@@ -95,6 +95,105 @@ const FRONT_SWEEPS: usize = 4;
 /// Weight the front relaxation gives to a node's own position.
 const FRONT_RELAX: f64 = 0.5;
 
+/// What the front is allowed to do to itself between two rows.
+///
+/// After each row the freshly laid chain is relaxed, which is what keeps a
+/// front from kinking. The relaxation is a Laplacian, and a Laplacian rounds
+/// corners: a right-angled front becomes a rounded one in two or three rows.
+/// That costs more than it looks. A front sheds nodes only where its interior
+/// angle asks for fewer than two quadrangles — at its **corners** — so once
+/// they are rounded away it keeps every node it has while its perimeter
+/// shrinks, its spacing falls row after row, and the middle of the domain
+/// comes out finer than the target asked. A plain 20 × 20 square at size 1
+/// gives 600 cells instead of 400, the innermost of them at 0.43 of the wanted
+/// area.
+///
+/// Projecting the same step on the front cures that — a node may still slide
+/// to even out the spacing, it may no longer cut a corner — and the square
+/// then comes out as the 400 exact squares anyone would draw. It is not free:
+/// a front that cannot straighten itself across is a front that can kink, and
+/// on a shape with nothing to preserve there is nothing to gain either. So it
+/// is offered rather than imposed, and a run that fails to converge says so
+/// instead of grinding on.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh::{self, FrontRelax};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let cote = |a: &[f64], b: &[f64], n| mesh::line(
+/// #     &Node::create_in(coords.clone(), a).unwrap(),
+/// #     &Node::create_in(coords.clone(), b).unwrap(), n, ElementType::SEG2).unwrap();
+/// # let carre = cote(&[0.0, 0.0], &[20.0, 0.0], 20)
+/// #     .union(&cote(&[20.0, 0.0], &[20.0, 20.0], 20)).unwrap()
+/// #     .union(&cote(&[20.0, 20.0], &[0.0, 20.0], 20)).unwrap()
+/// #     .union(&cote(&[0.0, 20.0], &[0.0, 0.0], 20)).unwrap();
+/// # mesh::merge_nodes(&carre, 1e-6, true).unwrap();
+/// # let contour = mesh::consolidate(&carre).unwrap();
+/// // Un carré 20 × 20 à la taille 1 tient 400 mailles unitaires. La
+/// // relaxation libre arrondit les coins du front, qui cesse alors de
+/// // perdre des nœuds et paie le milieu du domaine ; projetée sur le
+/// // front, elle laisse le carré carré.
+/// let libre = mesh::pave_surface(&contour, ElementType::QUA4, Some(1.0), false,
+///     FrontRelax::Free)?;
+/// let le_long = mesh::pave_surface(&contour, ElementType::QUA4, Some(1.0), false,
+///     FrontRelax::Along)?;
+/// assert!(libre.cell_count()? > 500);
+/// assert_eq!(le_long.cell_count()?, 400);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FrontRelax {
+    /// Move a node wherever the Laplacian points. The historical behaviour,
+    /// and the only one that never kinks.
+    #[default]
+    Free,
+    /// Move it only **along** the front: the spacing is evened out, the shape
+    /// is left alone. Keeps a rectilinear domain structured to the core.
+    Along,
+    /// Leave the front exactly where the row put it.
+    Off,
+}
+
+impl FrontRelax {
+    /// Parse the name a caller gives — `"free"`, `"along"` or `"none"`.
+    ///
+    /// ```
+    /// use pyrucast::ops::mesh::FrontRelax;
+    /// assert_eq!(FrontRelax::from_name("along"), Some(FrontRelax::Along));
+    /// assert_eq!(FrontRelax::from_name("none"), Some(FrontRelax::Off));
+    /// // Rien n'est deviné : un nom inconnu n'est pas le défaut.
+    /// assert_eq!(FrontRelax::from_name("Along"), None);
+    /// ```
+    pub fn from_name(name: &str) -> Option<FrontRelax> {
+        match name {
+            "free" => Some(FrontRelax::Free),
+            "along" => Some(FrontRelax::Along),
+            "none" | "off" => Some(FrontRelax::Off),
+            _ => None,
+        }
+    }
+
+    /// The name [`from_name`](FrontRelax::from_name) reads back.
+    ///
+    /// ```
+    /// use pyrucast::ops::mesh::FrontRelax;
+    /// assert_eq!(FrontRelax::default().name(), "free");
+    /// for m in [FrontRelax::Free, FrontRelax::Along, FrontRelax::Off] {
+    ///     assert_eq!(FrontRelax::from_name(m.name()), Some(m));
+    /// }
+    /// ```
+    pub fn name(self) -> &'static str {
+        match self {
+            FrontRelax::Free => "free",
+            FrontRelax::Along => "along",
+            FrontRelax::Off => "none",
+        }
+    }
+}
+
 /// The mesh a paved domain produced, in the domain's local 2-D frame.
 pub struct Fabric {
     pub pts: Vec<Point2>,
@@ -178,10 +277,11 @@ pub fn pave(
     domain: &Domain,
     target: Option<f64>,
     all_quad: bool,
+    relax: FrontRelax,
     cancel: &dyn Cancel,
     op: &str,
 ) -> Result<Fabric> {
-    pave_inner(domain, target, all_quad, None, cancel, op)
+    pave_inner(domain, target, all_quad, relax, None, cancel, op)
 }
 
 /// Pave `domain` around a structured core: a tensor grid ([`grid`]) fills the
@@ -203,11 +303,20 @@ pub fn pave_grid(
     domain: &Domain,
     target: Option<f64>,
     all_quad: bool,
+    relax: FrontRelax,
     band: usize,
     cancel: &dyn Cancel,
     op: &str,
 ) -> Result<Fabric> {
-    pave_inner(domain, target, all_quad, Some((band, false)), cancel, op)
+    pave_inner(
+        domain,
+        target,
+        all_quad,
+        relax,
+        Some((band, false)),
+        cancel,
+        op,
+    )
 }
 
 /// Like [`pave_grid`], but with the core built by [`grid2`] — lines one per
@@ -216,17 +325,27 @@ pub fn pave_grid2(
     domain: &Domain,
     target: Option<f64>,
     all_quad: bool,
+    relax: FrontRelax,
     band: usize,
     cancel: &dyn Cancel,
     op: &str,
 ) -> Result<Fabric> {
-    pave_inner(domain, target, all_quad, Some((band, true)), cancel, op)
+    pave_inner(
+        domain,
+        target,
+        all_quad,
+        relax,
+        Some((band, true)),
+        cancel,
+        op,
+    )
 }
 
 fn pave_inner(
     domain: &Domain,
     target: Option<f64>,
     all_quad: bool,
+    relax: FrontRelax,
     band: Option<(usize, bool)>,
     cancel: &dyn Cancel,
     op: &str,
@@ -310,8 +429,11 @@ fn pave_inner(
     }
 
     // ── Advance ───────────────────────────────────────────────────────────
-    // Generous, but finite: a loop that stops making progress gets closed, so
-    // the cap only ever catches pathological input.
+    // Generous, but finite. Reaching it means the front stopped making
+    // progress and kept asking for more turns, which no input should do: the
+    // run is given up rather than papered over with a decomposition of
+    // whatever is left, since a mesh built out of that is not one anybody
+    // would have asked for and nothing downstream would say so.
     let cap = 64 * segments + 4096;
     let mut steps = 0usize;
     while let Some((rep, stalls)) = stack.pop() {
@@ -326,7 +448,17 @@ fn pave_inner(
             front.kill_loop(rep);
             continue;
         }
-        if n <= CLOSE_AT || steps > cap {
+        if steps > cap {
+            return Err(PyrucastError::Message(format!(
+                "{op}: the advancing front did not converge — it has taken {steps} turns on a \
+                 contour of {segments} segments and is still not done. This is what a front \
+                 that cannot settle looks like: try the default front relaxation \
+                 (relax = \"{}\"), a target size closer to the contour's own spacing, or a \
+                 contour discretised more evenly.",
+                FrontRelax::Free.name()
+            )));
+        }
+        if n <= CLOSE_AT {
             close_loop(&mut fab, &mut front, rep, target, op)?;
             continue;
         }
@@ -340,7 +472,7 @@ fn pave_inner(
             continue;
         }
 
-        match try_row(&mut fab, &mut front, rep, target, all_quad) {
+        match try_row(&mut fab, &mut front, rep, target, all_quad, relax) {
             // The row consumed the loop outright.
             Some(None) => {}
             Some(Some(new_rep)) => {
@@ -519,6 +651,7 @@ fn try_row(
     rep: u32,
     target: f64,
     all_quad: bool,
+    relax: FrontRelax,
 ) -> Option<Option<u32>> {
     let slots = front.loop_slots(rep);
     let n = slots.len();
@@ -568,7 +701,7 @@ fn try_row(
                 if keeps_orientation(&plan, was) && chain_is_free(front, fab, &grid, &plan) {
                     let out = commit(fab, front, rep, plan);
                     if let Some(new_rep) = out {
-                        relax_front(fab, front, new_rep);
+                        relax_front(fab, front, new_rep, relax);
                     }
                     return Some(out);
                 }
@@ -730,7 +863,10 @@ fn commit(fab: &mut Fabric, front: &mut Front, rep: u32, plan: RowPlan) -> Optio
 /// with the coarser one giving the better mesh on the circle above (0.211
 /// against 0.105 on the worst cell). Where a grid does the paving it is free:
 /// +0.7 % on a banded circle, +1.4 % on a plain grid, both inside the noise.
-fn relax_front(fab: &mut Fabric, front: &Front, rep: u32) {
+fn relax_front(fab: &mut Fabric, front: &Front, rep: u32, relax: FrontRelax) {
+    if relax == FrontRelax::Off {
+        return;
+    }
     let slots = front.loop_slots(rep);
     let n = slots.len();
     if n < 4 {
@@ -746,11 +882,24 @@ fn relax_front(fab: &mut Fabric, front: &Front, rep: u32) {
             if !fab.movable[v as usize] {
                 continue;
             }
-            let cand = Point2::from(
-                old[i].coords * FRONT_RELAX
-                    + (old[(i + n - 1) % n].coords + old[(i + 1) % n].coords)
-                        * ((1.0 - FRONT_RELAX) * 0.5),
-            );
+            let mid = Point2::from((old[(i + n - 1) % n].coords + old[(i + 1) % n].coords) * 0.5);
+            let step = (mid - old[i]) * (1.0 - FRONT_RELAX);
+            // `Along` keeps only what the step does *to the spacing*: the
+            // component across the front is what rounds a corner off, and
+            // that is the whole of what this mode gives up.
+            let cand = match relax {
+                FrontRelax::Free | FrontRelax::Off => old[i] + step,
+                FrontRelax::Along => {
+                    let t = old[(i + 1) % n] - old[(i + n - 1) % n];
+                    let nt = t.norm();
+                    if nt == 0.0 {
+                        old[i]
+                    } else {
+                        let t = t / nt;
+                        old[i] + t * step.dot(&t)
+                    }
+                }
+            };
             let keep = fab.pts[v as usize];
             fab.pts[v as usize] = cand;
             // Every quadrangle touching the node, not merely those of the row

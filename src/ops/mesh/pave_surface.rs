@@ -56,6 +56,7 @@ use crate::atoms::ElementType;
 use crate::containers::mesh::Mesh;
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::{Cancel, NoCancel};
+use crate::ops::mesh::paving::FrontRelax;
 use crate::ops::mesh::{contour, paving};
 
 /// Pave the interior of `contour` — one or more closed `SEG2` loops, counter-
@@ -74,6 +75,11 @@ use crate::ops::mesh::{contour, paving};
 /// This is the uninterruptible convenience form; for a long mesh a caller may
 /// want to stop early, use [`pave_surface_cancellable`].
 ///
+///
+/// `relax` chooses what the front may do to itself between two rows — see
+/// [`FrontRelax`]. The default, [`FrontRelax::Free`], is the historical
+/// behaviour; [`FrontRelax::Along`] keeps the front's corners, which is what
+/// lets a rectilinear domain stay structured to its core.
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
@@ -93,11 +99,11 @@ use crate::ops::mesh::{contour, paving};
 /// # let contour = mesh::consolidate(&quatre).unwrap();
 /// // Le pavage frontal : des quadrangles posés en rangées qui suivent le
 /// // contour, plutôt que des triangles appariés après coup.
-/// let m = mesh::pave_surface(&contour, ElementType::QUA4, Some(0.5), false)?;
+/// let m = mesh::pave_surface(&contour, ElementType::QUA4, Some(0.5), false, mesh::FrontRelax::Free)?;
 /// assert!(m.cell_count()? > 0);
 /// // `all_quad` exige que rien ne reste triangulaire — ce qui n'est
 /// // possible que si le contour a un nombre **pair** de segments.
-/// assert!(mesh::pave_surface(&contour, ElementType::QUA4, Some(0.5), true).is_ok());
+/// assert!(mesh::pave_surface(&contour, ElementType::QUA4, Some(0.5), true, mesh::FrontRelax::Free).is_ok());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn pave_surface(
@@ -105,8 +111,16 @@ pub fn pave_surface(
     element_type: ElementType,
     target_size: Option<f64>,
     all_quad: bool,
+    relax: FrontRelax,
 ) -> Result<Mesh> {
-    pave_surface_cancellable(contour, element_type, target_size, all_quad, &NoCancel)
+    pave_surface_cancellable(
+        contour,
+        element_type,
+        target_size,
+        all_quad,
+        relax,
+        &NoCancel,
+    )
 }
 
 /// Like [`pave_surface`], but polls `cancel` between rows so meshing can be
@@ -134,7 +148,7 @@ pub fn pave_surface(
 /// // l'appel s'arrête au premier d'entre eux.
 /// let stop = AtomicBool::new(true);
 /// assert!(mesh::pave_surface_cancellable(
-///     &contour, ElementType::QUA4, Some(0.5), false, &stop).is_err());
+///     &contour, ElementType::QUA4, Some(0.5), false, mesh::FrontRelax::Free, &stop).is_err());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn pave_surface_cancellable(
@@ -142,6 +156,7 @@ pub fn pave_surface_cancellable(
     element_type: ElementType,
     target_size: Option<f64>,
     all_quad: bool,
+    relax: FrontRelax,
     cancel: &dyn Cancel,
 ) -> Result<Mesh> {
     if !matches!(
@@ -167,6 +182,7 @@ pub fn pave_surface_cancellable(
             d,
             target_size,
             all_quad,
+            relax,
             cancel,
             "pave_surface",
         )?);
@@ -290,7 +306,14 @@ mod tests {
     fn a_square_is_paved_with_quadrangles_only() {
         let coords = Handle::new(Coords::new(2).unwrap());
         let contour = loop_mesh(coords, &rect_loop(1.0, 1.0, 8, 8));
-        let mesh = pave_surface(&contour, ElementType::QUA4, Some(0.125), false).unwrap();
+        let mesh = pave_surface(
+            &contour,
+            ElementType::QUA4,
+            Some(0.125),
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
         let r = inspect(&mesh);
         assert_eq!(r.tris, 0, "{} quads, {} tris", r.quads, r.tris);
         assert!((r.area - 1.0).abs() < 1e-9, "area {}", r.area);
@@ -304,7 +327,14 @@ mod tests {
         let outer = loop_mesh(coords.clone(), &rect_loop(3.0, 1.0, 30, 10));
         let hole = loop_mesh(coords, &circle_loop(2.25, 0.5, 0.35, 32, true));
         let contour = outer.union(&hole).unwrap();
-        let mesh = pave_surface(&contour, ElementType::QUA4, Some(0.1), false).unwrap();
+        let mesh = pave_surface(
+            &contour,
+            ElementType::QUA4,
+            Some(0.1),
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
         let r = inspect(&mesh);
         // Seaming discards one of two vertices, so the contour has to be
         // checked here too — this is the geometry where the outer front and
@@ -336,9 +366,88 @@ mod tests {
         let coords = Handle::new(Coords::new(2).unwrap());
         let contour = loop_mesh(coords, &rect_loop(1.0, 1.0, 20, 20));
         let flag = AtomicBool::new(true);
-        let err = pave_surface_cancellable(&contour, ElementType::QUA4, Some(0.02), false, &flag)
-            .unwrap_err();
+        let err = pave_surface_cancellable(
+            &contour,
+            ElementType::QUA4,
+            Some(0.02),
+            false,
+            FrontRelax::Free,
+            &flag,
+        )
+        .unwrap_err();
         assert!(matches!(err, PyrucastError::Interrupted));
+    }
+
+    #[test]
+    fn relaxing_the_front_along_itself_keeps_a_square_square() {
+        // What the relaxation costs, on the shape where the cost is exactly
+        // measurable. A 20 × 20 square at size 1 holds 400 unit cells and the
+        // paver ought to lay them: the front is square, its four corners are
+        // ends, and an end is what makes a row shed the eight nodes the
+        // perimeter loses. `Free` rounds those corners off in two rows, after
+        // which the front sheds nothing at all, keeps every node it has while
+        // its perimeter shrinks, and pays with 600 cells whose innermost are
+        // at 0.43 of the area asked. Kept along the front, the relaxation
+        // still evens the spacing out and no longer cuts a corner.
+        let (side, h) = (20.0, 1.0);
+        let n = (side / h) as usize;
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let contour = loop_mesh(coords, &rect_loop(side, side, n, n));
+
+        let free = pave_surface(
+            &contour,
+            ElementType::QUA4,
+            Some(h),
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
+        let along = pave_surface(
+            &contour,
+            ElementType::QUA4,
+            Some(h),
+            false,
+            FrontRelax::Along,
+        )
+        .unwrap();
+        assert!(
+            free.cell_count().unwrap() > 500,
+            "{}",
+            free.cell_count().unwrap()
+        );
+        assert_eq!(along.cell_count().unwrap(), 400);
+        // And every one of them a unit square, to the last digit the
+        // smoothing leaves.
+        for si in 0..along.len() {
+            for cell in along.cells(si).unwrap() {
+                let p: Vec<Point2> = cell
+                    .nodes()
+                    .unwrap()
+                    .iter()
+                    .map(|nd| {
+                        let v = nd.position().unwrap();
+                        Point2::new(v[0], v[1])
+                    })
+                    .collect();
+                assert_eq!(p.len(), 4);
+                let area = 0.5
+                    * (0..4)
+                        .map(|i| p[i].x * p[(i + 1) % 4].y - p[(i + 1) % 4].x * p[i].y)
+                        .sum::<f64>();
+                assert!((area.abs() - 1.0).abs() < 1e-9, "area {area}");
+            }
+        }
+    }
+
+    #[test]
+    fn an_unknown_relaxation_name_is_not_read_as_the_default() {
+        assert_eq!(FrontRelax::from_name("along"), Some(FrontRelax::Along));
+        assert_eq!(FrontRelax::from_name("none"), Some(FrontRelax::Off));
+        assert_eq!(FrontRelax::from_name("Along"), None);
+        assert_eq!(FrontRelax::from_name(""), None);
+        for m in [FrontRelax::Free, FrontRelax::Along, FrontRelax::Off] {
+            assert_eq!(FrontRelax::from_name(m.name()), Some(m));
+        }
     }
 
     #[test]
@@ -365,7 +474,14 @@ mod tests {
             pts.push((0.0, 2.0 - i as f64 * step));
         }
         let contour = loop_mesh(coords, &pts);
-        let mesh = pave_surface(&contour, ElementType::QUA4, Some(0.1), false).unwrap();
+        let mesh = pave_surface(
+            &contour,
+            ElementType::QUA4,
+            Some(0.1),
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
         let r = inspect(&mesh);
         assert_eq!(r.non_conforming, 0);
         assert!(r.min_quality > 0.0, "min quality {}", r.min_quality);
@@ -407,7 +523,14 @@ mod tests {
         }
 
         let contour = loop_mesh(coords, &pts);
-        let mesh = pave_surface(&contour, ElementType::QUA4, Some(size), false).unwrap();
+        let mesh = pave_surface(
+            &contour,
+            ElementType::QUA4,
+            Some(size),
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
         let r = inspect(&mesh);
         assert_eq!(r.non_conforming, 0);
         assert!(r.min_quality > 0.0, "min quality {}", r.min_quality);
@@ -428,7 +551,14 @@ mod tests {
         assert_eq!(pts.len() % 2, 1);
         let contour = loop_mesh(coords, &pts);
 
-        let err = pave_surface(&contour, ElementType::QUA4, Some(0.25), true).unwrap_err();
+        let err = pave_surface(
+            &contour,
+            ElementType::QUA4,
+            Some(0.25),
+            true,
+            FrontRelax::Free,
+        )
+        .unwrap_err();
         let msg = format!("{err}");
         assert!(msg.starts_with("pave_surface:"), "{msg}");
         assert!(
@@ -439,7 +569,16 @@ mod tests {
 
         // Left to itself the same contour meshes fine, paying the one
         // triangle that parity makes unavoidable.
-        let r = inspect(&pave_surface(&contour, ElementType::QUA4, Some(0.25), false).unwrap());
+        let r = inspect(
+            &pave_surface(
+                &contour,
+                ElementType::QUA4,
+                Some(0.25),
+                false,
+                FrontRelax::Free,
+            )
+            .unwrap(),
+        );
         assert!(r.tris <= 1, "odd parity costs at most one: {}", r.tris);
         assert_eq!(r.non_conforming, 0);
         assert!((r.area - 1.0).abs() < 2e-2, "area {}", r.area);
@@ -458,7 +597,14 @@ mod tests {
                 .map(|&n| (n, c.position(n).unwrap().to_vec()))
                 .collect()
         };
-        let mesh = pave_surface(&contour, ElementType::QUA4, Some(0.15), false).unwrap();
+        let mesh = pave_surface(
+            &contour,
+            ElementType::QUA4,
+            Some(0.15),
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
         let c = coords.read();
         for (id, coord) in &before {
             assert_eq!(
@@ -487,7 +633,14 @@ mod tests {
         let coords = Handle::new(Coords::new(2).unwrap());
         let pts = rect_loop(3.0, 1.0, 30, 10);
         let contour = loop_mesh(coords, &pts);
-        let mesh = pave_surface(&contour, ElementType::QUA4, Some(0.1), false).unwrap();
+        let mesh = pave_surface(
+            &contour,
+            ElementType::QUA4,
+            Some(0.1),
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
 
         let mut used: HashMap<(NodeId, NodeId), usize> = HashMap::new();
         for sm in &mesh {
@@ -537,7 +690,14 @@ mod tests {
             sm.add_cell(&[ids[i], ids[(i + 1) % n]]).unwrap();
         }
         let contour = Mesh::from_submesh(sm);
-        let mesh = pave_surface(&contour, ElementType::QUA4, Some(0.2), false).unwrap();
+        let mesh = pave_surface(
+            &contour,
+            ElementType::QUA4,
+            Some(0.2),
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
         let c = coords.read();
         for sm in &mesh {
             for &node in sm.read().connectivity() {
@@ -554,7 +714,7 @@ mod tests {
         let coords = Handle::new(Coords::new(2).unwrap());
         let contour = loop_mesh(coords, &rect_loop(1.0, 1.0, 4, 4));
         for (et, npc) in [(ElementType::QUA8, 8), (ElementType::QUA9, 9)] {
-            let mesh = pave_surface(&contour, et, Some(0.25), true).unwrap();
+            let mesh = pave_surface(&contour, et, Some(0.25), true, FrontRelax::Free).unwrap();
             assert_eq!(mesh.element_types().unwrap(), vec![et]);
             assert_eq!(mesh[0].read().element_type().nodes_per_cell(), npc);
         }
@@ -565,9 +725,23 @@ mod tests {
         let coords = Handle::new(Coords::new(2).unwrap());
         let contour = loop_mesh(coords.clone(), &rect_loop(1.0, 1.0, 4, 4));
         for err in [
-            pave_surface(&contour, ElementType::TRI3, None, false).unwrap_err(),
-            pave_surface(&contour, ElementType::QUA4, Some(0.0), false).unwrap_err(),
-            pave_surface(&contour, ElementType::QUA4, Some(-1.0), false).unwrap_err(),
+            pave_surface(&contour, ElementType::TRI3, None, false, FrontRelax::Free).unwrap_err(),
+            pave_surface(
+                &contour,
+                ElementType::QUA4,
+                Some(0.0),
+                false,
+                FrontRelax::Free,
+            )
+            .unwrap_err(),
+            pave_surface(
+                &contour,
+                ElementType::QUA4,
+                Some(-1.0),
+                false,
+                FrontRelax::Free,
+            )
+            .unwrap_err(),
         ] {
             assert!(
                 format!("{err}").starts_with("pave_surface:"),
@@ -581,8 +755,14 @@ mod tests {
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
         let d = Node::create_in(coords, &[0.0, 1.0]).unwrap();
         sm.add_cell(&[a.id(), b.id(), d.id()]).unwrap();
-        let err =
-            pave_surface(&Mesh::from_submesh(sm), ElementType::QUA4, None, false).unwrap_err();
+        let err = pave_surface(
+            &Mesh::from_submesh(sm),
+            ElementType::QUA4,
+            None,
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap_err();
         assert!(format!("{err}").starts_with("pave_surface:"), "{err}");
     }
 
@@ -590,7 +770,8 @@ mod tests {
     fn the_default_size_follows_the_contour_discretisation() {
         let coords = Handle::new(Coords::new(2).unwrap());
         let contour = loop_mesh(coords, &rect_loop(1.0, 1.0, 10, 10));
-        let mesh = pave_surface(&contour, ElementType::QUA4, None, false).unwrap();
+        let mesh =
+            pave_surface(&contour, ElementType::QUA4, None, false, FrontRelax::Free).unwrap();
         let r = inspect(&mesh);
         assert_eq!(r.non_conforming, 0);
         assert!((r.area - 1.0).abs() < 1e-9);
@@ -614,7 +795,14 @@ mod tests {
         let contour = outer.union(&hole).unwrap();
 
         let t0 = std::time::Instant::now();
-        let mesh = pave_surface(&contour, ElementType::QUA4, Some(0.00029), false).unwrap();
+        let mesh = pave_surface(
+            &contour,
+            ElementType::QUA4,
+            Some(0.00029),
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
         let dt = t0.elapsed();
 
         let c = mesh.coords().unwrap().read();
@@ -678,7 +866,14 @@ mod tests {
         let target = 0.0016;
 
         let t0 = std::time::Instant::now();
-        let mesh = pave_surface(&contour, ElementType::QUA4, Some(target), false).unwrap();
+        let mesh = pave_surface(
+            &contour,
+            ElementType::QUA4,
+            Some(target),
+            false,
+            FrontRelax::Free,
+        )
+        .unwrap();
         let dt = t0.elapsed();
 
         let c = mesh.coords().unwrap().read();

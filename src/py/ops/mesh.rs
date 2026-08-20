@@ -6,6 +6,7 @@
 
 use crate::atoms::ElementType;
 use crate::containers::mesh::Mesh;
+use crate::ops::mesh::FrontRelax;
 use crate::py::coords::PyCoords;
 use crate::py::element_field::{PyElementField, PySubElementField};
 use crate::py::mesh::PyMesh;
@@ -786,15 +787,36 @@ pub fn triangulate_surface(
 /// With `all_quad=False` (the default) an odd loop simply costs one triangle,
 /// returned in a separate TRI3 submesh, along with the few cells a distorted
 /// leftover polygon could not make square.
+///
+/// `relax` chooses what the front is allowed to do to itself between two rows.
+/// After each row the fresh chain is smoothed, which keeps the front from
+/// kinking — and, being a Laplacian, rounds its corners off. That costs more
+/// than it looks: a front sheds nodes only at its **corners**, so once they are
+/// rounded away it keeps every node it has while its perimeter shrinks, and the
+/// middle of the domain comes out finer than asked. A plain 20 × 20 square at
+/// size 1 gives 600 cells instead of 400.
+///
+/// - `"free"` (the default) — the historical behaviour: a node moves wherever
+///   the smoothing points. The only mode that never lets the front kink.
+/// - `"along"` — the same step, kept only **along** the front: the spacing is
+///   evened out, the shape is not. The square then comes out as the 400 exact
+///   squares anyone would draw.
+/// - `"none"` — the front stays exactly where the row put it.
+///
+/// There is no best answer, which is why it is a choice: `"along"` and
+/// `"none"` win on anything with corners to keep and can kink on a curve, where
+/// there is nothing to preserve and everything to straighten. A run that fails
+/// to converge raises rather than grinding on.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (contour, element_type, size=None, all_quad=false))]
+#[pyo3(signature = (contour, element_type, size=None, all_quad=false, relax=None))]
 pub fn pave_surface(
     py: Python<'_>,
     contour: PyRef<PyMesh>,
     element_type: &str,
     size: Option<f64>,
     all_quad: bool,
+    relax: Option<&str>,
 ) -> PyResult<PyMesh> {
     let et = ElementType::from_name(element_type)
         .ok_or_else(|| PyValueError::new_err(format!("unknown element type: {element_type}")))?;
@@ -804,6 +826,7 @@ pub fn pave_surface(
         et,
         size,
         all_quad,
+        parse_relax(relax)?,
         &PySignals(py),
     )?;
     Ok(PyMesh { inner: mesh })
@@ -874,6 +897,18 @@ pub fn merge_triangles(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: out })
 }
 
+/// Read the `relax` argument the three surface pavers share.
+fn parse_relax(name: Option<&str>) -> PyResult<FrontRelax> {
+    match name {
+        None => Ok(FrontRelax::Free),
+        Some(n) => FrontRelax::from_name(n).ok_or_else(|| {
+            PyValueError::new_err(format!(
+                "unknown front relaxation: {n} (expected \"free\", \"along\" or \"none\")"
+            ))
+        }),
+    }
+}
+
 /// Mesh the inside of a closed contour with a structured grid core and a
 /// frontal band — the regular-mesh companion of `pave_surface`.
 ///
@@ -902,9 +937,16 @@ pub fn merge_triangles(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
 /// is the useful value; raise it only for a contour the grid cannot meet, such
 /// as a curve, where giving the front a couple of cells to work in beats
 /// letting it fight for a sliver.
+///
+/// `relax` chooses what the front may do to itself between two rows: `"free"`
+/// (the default, and the historical behaviour), `"along"` — the smoothing kept
+/// only along the front, which keeps its corners and with them the front's
+/// ability to shed nodes as it contracts — or `"none"`. See `pave_surface`,
+/// which shares the band with this operator and where the choice is spelled
+/// out.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (contour, element_type, size=None, band=0, all_quad=false))]
+#[pyo3(signature = (contour, element_type, size=None, band=0, all_quad=false, relax=None))]
 pub fn grid_surface(
     py: Python<'_>,
     contour: PyRef<PyMesh>,
@@ -912,6 +954,7 @@ pub fn grid_surface(
     size: Option<f64>,
     band: usize,
     all_quad: bool,
+    relax: Option<&str>,
 ) -> PyResult<PyMesh> {
     let et = ElementType::from_name(element_type)
         .ok_or_else(|| PyValueError::new_err(format!("unknown element type: {element_type}")))?;
@@ -921,6 +964,7 @@ pub fn grid_surface(
         size,
         band,
         all_quad,
+        parse_relax(relax)?,
         &PySignals(py),
     )?;
     Ok(PyMesh { inner: mesh })
@@ -956,10 +1000,10 @@ pub fn grid_surface(
 /// not be used: nothing dictates a grid line over most of a curve. The book's
 /// *Mailler une géométrie* page puts all four surface meshers side by side.
 ///
-/// `size` and `band` mean what they mean for `grid_surface`.
+/// `size`, `band` and `relax` mean what they mean for `grid_surface`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (contour, element_type, size=None, band=0, all_quad=false))]
+#[pyo3(signature = (contour, element_type, size=None, band=0, all_quad=false, relax=None))]
 pub fn grid_surface2(
     py: Python<'_>,
     contour: PyRef<PyMesh>,
@@ -967,6 +1011,7 @@ pub fn grid_surface2(
     size: Option<f64>,
     band: usize,
     all_quad: bool,
+    relax: Option<&str>,
 ) -> PyResult<PyMesh> {
     let et = ElementType::from_name(element_type)
         .ok_or_else(|| PyValueError::new_err(format!("unknown element type: {element_type}")))?;
@@ -976,6 +1021,7 @@ pub fn grid_surface2(
         size,
         band,
         all_quad,
+        parse_relax(relax)?,
         &PySignals(py),
     )?;
     Ok(PyMesh { inner: mesh })
@@ -1460,15 +1506,16 @@ impl PyMesh {
     }
 
     /// Voir `pyrucast.mesh.pave_surface`.
-    #[pyo3(signature = (element_type, size=None, all_quad=false))]
+    #[pyo3(signature = (element_type, size=None, all_quad=false, relax=None))]
     fn pave_surface(
         slf: PyRef<'_, Self>,
         py: Python<'_>,
         element_type: &str,
         size: Option<f64>,
         all_quad: bool,
+        relax: Option<&str>,
     ) -> PyResult<PyMesh> {
-        super::mesh::pave_surface(py, slf, element_type, size, all_quad)
+        super::mesh::pave_surface(py, slf, element_type, size, all_quad, relax)
     }
 
     /// Voir `pyrucast.mesh.regularize`.
@@ -1493,7 +1540,7 @@ impl PyMesh {
     }
 
     /// Voir `pyrucast.mesh.grid_surface`.
-    #[pyo3(signature = (element_type, size=None, band=0, all_quad=false))]
+    #[pyo3(signature = (element_type, size=None, band=0, all_quad=false, relax=None))]
     fn grid_surface(
         slf: PyRef<'_, Self>,
         py: Python<'_>,
@@ -1501,12 +1548,13 @@ impl PyMesh {
         size: Option<f64>,
         band: usize,
         all_quad: bool,
+        relax: Option<&str>,
     ) -> PyResult<PyMesh> {
-        super::mesh::grid_surface(py, slf, element_type, size, band, all_quad)
+        super::mesh::grid_surface(py, slf, element_type, size, band, all_quad, relax)
     }
 
     /// Voir `pyrucast.mesh.grid_surface2`.
-    #[pyo3(signature = (element_type, size=None, band=0, all_quad=false))]
+    #[pyo3(signature = (element_type, size=None, band=0, all_quad=false, relax=None))]
     fn grid_surface2(
         slf: PyRef<'_, Self>,
         py: Python<'_>,
@@ -1514,8 +1562,9 @@ impl PyMesh {
         size: Option<f64>,
         band: usize,
         all_quad: bool,
+        relax: Option<&str>,
     ) -> PyResult<PyMesh> {
-        super::mesh::grid_surface2(py, slf, element_type, size, band, all_quad)
+        super::mesh::grid_surface2(py, slf, element_type, size, band, all_quad, relax)
     }
 
     /// Voir `pyrucast.mesh.pave_volume`.

@@ -25,9 +25,9 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `symmetry_line(mesh, a, b)` | **copie** symétrique par rapport à la **droite** passant par `a` et `b` (demi-tour en 3D) |
 | `symmetry_plane(mesh, a, b, c)` | **copie** symétrique par rapport au **plan** passant par trois points (3D) |
 | `triangulate_surface(contour, type, size=None)` | maille l'intérieur de contours **orientés** (CCW extérieur, CW trous) par **Delaunay contraint + raffinement Ruppert** (voir plus bas) |
-| `pave_surface(contour, type, size=None, all_quad=False)` | **pave** l'intérieur des mêmes contours **orientés** en `QUA4`/`QUA8`/`QUA9`, par **front avançant** en rangées parallèles au bord (voir plus bas) |
-| `grid_surface(contour, type, size=None, band=0, all_quad=False)` | maille les mêmes contours **orientés** par **cœur en grille** cartésienne et **bande frontale** au bord : sur une forme rectilinéaire, la grille régulière que le front ne sait pas produire (voir plus bas) |
-| `grid_surface2(contour, type, size=None, band=0, all_quad=False)` | même chose, mais les lignes viennent **une par nœud du contour** et les rangées ont le droit de plier : meilleur sur les formes rectilinéaires mal découpées, moins bon sur les courbes (voir plus bas) |
+| `pave_surface(contour, type, size=None, all_quad=False, relax="free")` | **pave** l'intérieur des mêmes contours **orientés** en `QUA4`/`QUA8`/`QUA9`, par **front avançant** en rangées parallèles au bord (voir plus bas) |
+| `grid_surface(contour, type, size=None, band=0, all_quad=False, relax="free")` | maille les mêmes contours **orientés** par **cœur en grille** cartésienne et **bande frontale** au bord : sur une forme rectilinéaire, la grille régulière que le front ne sait pas produire (voir plus bas) |
+| `grid_surface2(contour, type, size=None, band=0, all_quad=False, relax="free")` | même chose, mais les lignes viennent **une par nœud du contour** et les rangées ont le droit de plier : meilleur sur les formes rectilinéaires mal découpées, moins bon sur les courbes (voir plus bas) |
 | `pave_volume(envelope, layers=1, thickness=None, size=None)` | **compagnon 3D** de `pave_surface` : couche limite d'`HEX8`/`PENTA6` poussée vers l'intérieur, raccordée par des `PYRA5` à un cœur `TET4` (voir plus bas) |
 | `triangulate_volume(envelope, size=None, allow_surface_nodes=False)` | **compagnon 3D** de `triangulate_surface` : maille l'intérieur d'une **enveloppe TRI3 fermée** en `TET4` — Delaunay exact, récupération du bord, raffinement intérieur et chasse aux slivers (voir plus bas) |
 | `regularize(mesh, sweeps=20, angular=True, in_place=False)` | **lisse** un maillage de surface existant : déplace ses nœuds intérieurs pour améliorer ses mailles, sans toucher ni à la connectivité ni au bord (voir plus bas) |
@@ -414,9 +414,10 @@ géométriques réutilisables indépendamment du système `Mesh`
 
 ## Pavage frontal d'un contour fermé : `pave_surface`
 
-`pave_surface(contour, element_type, size=None, all_quad=False)` remplit le
-même contour que `triangulate_surface`, mais en **posant directement des
-quadrangles**, par rangées qui avancent depuis le bord vers l'intérieur. C'est
+`pave_surface(contour, element_type, size=None, all_quad=False, relax="free")`
+remplit le même contour que `triangulate_surface`, mais en **posant directement
+des quadrangles**, par rangées qui avancent depuis le bord vers l'intérieur.
+C'est
 la version quadrangle de l'opérateur Cast3M `SURF`.
 
 ### Pourquoi un second mailleur de surface
@@ -595,6 +596,51 @@ Avec `all_quad=True`, la parité devient une exigence sur l'entrée : discrétis
 chaque boucle de bord avec un nombre pair de segments, et le résultat est sans
 triangle.
 
+### Relaxation du front : `relax`
+
+Après chaque rangée, la chaîne fraîchement posée est **relaxée** — c'est ce qui
+empêche le front de se plisser. Cette relaxation est un laplacien, et un
+laplacien **arrondit les angles**. Cela coûte plus qu'il n'y paraît : un front
+ne perd des nœuds qu'aux endroits où son angle intérieur en demande moins de
+deux, c'est-à-dire à ses **coins**. Une fois les coins arrondis, il garde tous
+ses nœuds pendant que son périmètre rétrécit, son écartement se dégrade rangée
+après rangée, et le milieu du domaine sort plus fin que la taille demandée.
+
+Le carré 20 × 20 à la taille 1 le montre sans ambiguïté : il contient 400
+mailles unitaires, et le paveur devrait les poser. Ses quatre coins sont des
+*fins de rangée*, et c'est une fin de rangée qui fait perdre à la rangée les
+huit nœuds que le périmètre perd.
+
+| `relax` | mailles | pire maille | aire médiane |
+|---|---:|---:|---:|
+| `"free"` (défaut) | 600 | 0,541 | 0,62 |
+| `"along"` | **400** | **1,000** | **1,00** |
+| `"none"` | **400** | **1,000** | **1,00** |
+
+- **`"free"`** — le nœud va où le laplacien le pousse. C'est le comportement
+  historique, et le seul qui ne laisse jamais le front se plisser.
+- **`"along"`** — le même déplacement, **projeté sur le front** : l'écartement
+  s'égalise encore, la forme n'est plus rabotée.
+- **`"none"`** — le front reste exactement où la rangée l'a posé.
+
+Il n'y a pas de bonne réponse universelle, et c'est pourquoi c'est un choix.
+`"along"` et `"none"` gagnent sur tout ce qui a des angles à garder ; sur une
+courbe, il n'y a rien à préserver et tout à redresser. Mesuré à la taille 1 :
+
+| forme | `"free"` | `"along"` | `"none"` |
+|---|---:|---:|---:|
+| carré 20 × 20 | 600 mailles, pire 0,541 | **400, 1,000** | **400, 1,000** |
+| L | 374, 0,315 | 287, 0,449 | 290, **0,564** |
+| profil crénelé | 859, 0,240 | 620, **0,546** | **554**, 0,441 |
+| bande étroite 40 × 3 | 581, 0,650 | 557, **0,662** | 559, 0,564 |
+| cercle R = 10 | 569, **0,105** | 633, **0,257** | 639, 0,020 |
+
+Le cercle est le contre-exemple : `"none"` y tombe à 0,020, un front qui se
+plisse faute de pouvoir se redresser. **Sur une courbe, gardez `"free"`.**
+
+Un front qui n'arrive pas à converger ne s'obstine pas : le pavage s'arrête sur
+une erreur qui le dit, plutôt que de rendre un maillage fait de ce qui restait.
+
 ### Exemple Python
 
 ```python
@@ -717,10 +763,10 @@ et l'index spatial est reconstruit à chaque rangée pour ce prix-là.
 
 ## Cœur en grille, bande frontale : `grid_surface`
 
-`grid_surface(contour, element_type, size=None, band=0, all_quad=False)` prend
-la même entrée que `pave_surface`, rend la même chose, et tient la même
-promesse — **le contour est intouchable**. Seul l'intérieur est obtenu
-autrement.
+`grid_surface(contour, element_type, size=None, band=0, all_quad=False,
+relax="free")` prend la même entrée que `pave_surface`, rend la même chose, et
+tient la même promesse — **le contour est intouchable**. Seul l'intérieur est
+obtenu autrement.
 
 ### Pourquoi
 
@@ -852,6 +898,9 @@ Un tiers de mailles en moins pour une qualité parfaite. Sur un rectangle
 - **`band` vaut 0 et c'est la bonne valeur.** Le cœur recule déjà d'une maille
   partout où il ne rejoint pas le contour. Ne l'augmentez que pour éloigner
   volontairement l'interface du bord.
+- **`relax` gouverne la bande, pas le cœur** — la grille est posée droite quoi
+  qu'il arrive. Voir [la relaxation du front](#relaxation-du-front--relax) :
+  sur une bande épaisse et rectilinéaire, `"along"` la garde structurée.
 - **Pas de gradation, et c'est un choix.** La grille est uniforme par
   intervalle entre lignes. Un quadtree la graduerait — règle 2:1 et gabarits
   de transition — mais le résultat ne vaut pas ce qu'il coûte, et la raison
@@ -945,9 +994,9 @@ les points extrêmes du contour, qui sont ses points de tangence.
 
 ## Lignes par nœud, rangées pliées : `grid_surface2`
 
-`grid_surface2(contour, element_type, size=None, band=0, all_quad=False)` prend
-les mêmes contours, rend le même maillage, respecte le même contour intouchable
-que `grid_surface`. **Il ne le remplace pas** : la façon de poser la grille
+`grid_surface2(contour, element_type, size=None, band=0, all_quad=False,
+relax="free")` prend les mêmes contours, rend le même maillage, respecte le
+même contour intouchable que `grid_surface`. **Il ne le remplace pas** : la façon de poser la grille
 diffère, et aucune des deux ne gagne partout.
 
 ### La différence
@@ -986,13 +1035,13 @@ ratio* :
 |---|---|---|
 | rectangle, et toute forme pile sur la grille | **0,999** | **0,999** |
 | plaque à marche hors grille | 0,405 | **0,963** |
-| L à cotes quelconques | 0,448 | **0,979** |
+| L à cotes quelconques | 0,437 | **0,979** |
 | L dont les côtés découpent 5+6 contre 4+7 | 0,421 | **0,963** |
 | L dont les côtés diffèrent d'un nœud | 0,307 | **0,606** |
 | profil crénelé, base coupée sous chaque barre | 0,382 | **0,916** |
 | profil crénelé, base d'un seul tenant | 0,287 | **0,651** |
 | maison à toit à deux pentes | 0,304 | **0,475**, 1 triangle contre 11 |
-| carré à un angle arrondi | 0,222 | **0,406** |
+| carré à un angle arrondi | 0,266 | 0,308 |
 | cercle R = 1 | **0,288**, p5 **0,796** | **0,005 — à ne pas utiliser** |
 
 La comparaison des quatre mailleurs surfaciques, figures à l'appui, est sur la

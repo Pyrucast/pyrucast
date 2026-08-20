@@ -161,3 +161,40 @@ def test_pave_surface_rejects_a_non_positive_size():
     contour = _closed_loop(coords, _rect(1.0, 1.0, 4, 4))
     with pytest.raises(Exception, match="pave_surface"):
         pc.mesh.pave_surface(contour, "QUA4", size=0.0)
+
+
+def test_relax_along_keeps_a_square_square():
+    """`relax="along"` stops the front rounding its own corners away.
+
+    A 20 x 20 square at size 1 holds 400 unit cells. The default relaxation
+    rounds the front's four corners off in two rows, after which the front no
+    longer sheds a node as its perimeter shrinks and the middle comes out too
+    fine — 600 cells instead of 400. Kept along the front, the relaxation
+    still evens the spacing out and no longer cuts a corner.
+    """
+    coords = pc.Coords(2)
+    contour = _closed_loop(coords, _rect(20.0, 20.0, 20, 20))
+    free = pc.mesh.pave_surface(contour, "QUA4", 1.0)
+    along = pc.mesh.pave_surface(contour, "QUA4", 1.0, relax="along")
+    assert free.cell_count() > 500
+    assert along.cell_count() == 400
+    assert along.element_types() == ["QUA4"]
+
+
+def test_relax_none_is_accepted_and_an_unknown_name_is_not():
+    coords = pc.Coords(2)
+    contour = _closed_loop(coords, _rect(6.0, 4.0, 6, 4))
+    for mode in ("free", "along", "none"):
+        assert pc.mesh.pave_surface(contour, "QUA4", 1.0, relax=mode).cell_count() > 0
+    # The default is the historical behaviour, whether it is spelled out or not.
+    assert (
+        pc.mesh.pave_surface(contour, "QUA4", 1.0).cell_count()
+        == pc.mesh.pave_surface(contour, "QUA4", 1.0, relax="free").cell_count()
+    )
+    with pytest.raises(ValueError, match="unknown front relaxation"):
+        pc.mesh.pave_surface(contour, "QUA4", 1.0, relax="tangential")
+    # And the same argument on the two grid meshers.
+    for op in (pc.mesh.grid_surface, pc.mesh.grid_surface2):
+        assert op(contour, "QUA4", 1.0, relax="along").cell_count() > 0
+        with pytest.raises(ValueError, match="unknown front relaxation"):
+            op(contour, "QUA4", 1.0, relax="tangential")
