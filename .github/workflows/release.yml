@@ -18,6 +18,11 @@ on:
 
 env:
   MATURIN_FEATURES: extension-module,viz,viz-interactive,abi3
+  # Étiquette de compatibilité attendue sur la wheel macOS. Aucune valeur n'est
+  # imposée au compilateur — forcer MACOSX_DEPLOYMENT_TARGET risquerait de casser
+  # la moitié arm64, qui ne peut pas viser sous 11.0. On constate ce qui sort, et
+  # tout écart devient une décision à prendre plutôt qu'un glissement à subir.
+  MACOS_PLATFORM_TAG: macosx_10_12_universal2
 
 jobs:
   check-version:
@@ -33,6 +38,17 @@ jobs:
           file_version="$(sed -nE 's/^version = "(.*)"/\1/p' Cargo.toml | head -1)"
           if [ "$file_version" != "$version" ]; then
             echo "Cargo.toml annonce la version $file_version au tag $tag (attendu $version)" >&2
+            exit 1
+          fi
+          # Une seule source de vérité : pyproject délègue, il ne redéclare pas.
+          # Une version statique y gagnerait sur Cargo.toml chez maturin, et
+          # partirait seule sur PyPI — sans que rien ici ne la lise.
+          if ! grep -qE '^[[:space:]]*dynamic[[:space:]]*=.*"version"' pyproject.toml; then
+            echo 'pyproject.toml doit porter dynamic = ["version"] (version lue dans Cargo.toml)' >&2
+            exit 1
+          fi
+          if sed -n '/^\[project\]/,/^\[/p' pyproject.toml | grep -qE '^version[[:space:]]*='; then
+            echo 'pyproject.toml redéclare version : une seule déclaration, dans Cargo.toml' >&2
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -81,6 +97,10 @@ jobs:
             target: x86_64-unknown-linux-gnu
             manylinux: '2014'
             name: linux-x86_64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            manylinux: '2014'
+            name: linux-aarch64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             name: windows-x86_64
@@ -127,3 +147,125 @@ jobs:
         with:
           packages-dir: dist
           skip-existing: true
+
+  # Dernier job, et seul à dépendre des deux publications : son existence
+  # atteste que crates.io et PyPI portent la même version que ce tag, et que
+  # les artefacts joints portent les étiquettes de compatibilité attendues.
+  github-release:
+    needs: [check-version, crates-io, publish-pypi]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Récupérer les sources
+        uses: actions/checkout@v7
+        with:
+          # git-cliff lit l'historique et les tags : un clone superficiel ne lui
+          # montrerait qu'un seul commit.
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: sdist
+          path: dist
+          merge-multiple: true
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: wheel-*
+          path: dist
+          merge-multiple: true
+
+      - name: Vérifier les étiquettes de compatibilité
+        run: |
+          # Ce que MATURIN_FEATURES promet, personne ne le vérifiait. Retirer
+          # `abi3` de la variable produirait des wheels cp3XX-cp3XX, valables sur
+          # un seul interpréteur : ici, le job rougit.
+          ls -1 dist/
+          [ "$(ls -1 dist/*.whl | wc -l)" = 4 ] || { echo "quatre wheels attendues" >&2; exit 1; }
+          [ "$(ls -1 dist/*.tar.gz | wc -l)" = 1 ] || { echo "une sdist attendue" >&2; exit 1; }
+          for w in dist/*.whl; do
+            case "$(basename "$w")" in
+              *-cp39-abi3-*) ;;
+              *) echo "$w n'est pas une wheel abi3-py39 : plancher Python non tenu" >&2; exit 1 ;;
+            esac
+          done
+          for tag in manylinux2014_x86_64 manylinux2014_aarch64 win_amd64 "${MACOS_PLATFORM_TAG}"; do
+            ls dist/*"$tag"*.whl >/dev/null 2>&1 || { echo "aucune wheel $tag" >&2; exit 1; }
+          done
+
+      - name: Confronter les deux formes de la version
+        id: coherence
+        env:
+          VERSION: ${{ needs.check-version.outputs.version }}
+        run: |
+          # La forme PyPI ne se recalcule pas : elle se lit sur la sdist que
+          # maturin vient de produire, seule autorité sur la normalisation
+          # PEP 440 (`0.4.0-rc1` côté crate, `0.4.0rc1` côté wheel).
+          sdist="$(ls dist/pyrucast-*.tar.gz)"
+          pypi_version="$(basename "$sdist" .tar.gz)"
+          pypi_version="${pypi_version#pyrucast-}"
+          # Le tiret est en fin de classe : en tête, `tr` le lirait comme une
+          # option, échouerait, et rendrait deux chaînes vides — donc égales.
+          norm() { printf '%s' "$1" | tr -d '._-' | tr 'A-Z' 'a-z'; }
+          if [ "$(norm "$VERSION")" != "$(norm "$pypi_version")" ]; then
+            echo "le crate publie $VERSION et la wheel $pypi_version — formes non superposables" >&2
+            exit 1
+          fi
+          echo "pypi_version=$pypi_version" >> "$GITHUB_OUTPUT"
+
+      - name: Vérifier que les deux registres portent la version
+        env:
+          VERSION: ${{ needs.check-version.outputs.version }}
+          PYPI_VERSION: ${{ steps.coherence.outputs.pypi_version }}
+        run: |
+          # `cargo publish` et gh-action-pypi-publish savent tous deux sauter une
+          # version déjà présente. Ce silence est utile pour rejouer un job, et
+          # dangereux partout ailleurs : on constate, on ne suppose pas.
+          wait_for() {
+            for _ in $(seq 1 20); do
+              code="$(curl -s -A 'pyrucast-release-workflow' -o /dev/null -w '%{http_code}' "$2")"
+              [ "$code" = 200 ] && { echo "$1 : présent"; return 0; }
+              sleep 15
+            done
+            echo "$1 : absent après 5 minutes ($2)" >&2
+            return 1
+          }
+          wait_for "crates.io $VERSION" "https://crates.io/api/v1/crates/pyrucast/$VERSION"
+          wait_for "PyPI $PYPI_VERSION" "https://pypi.org/pypi/pyrucast/$PYPI_VERSION/json"
+
+      - name: Installer git-cliff
+        env:
+          GIT_CLIFF_VERSION: '2.13.1'
+        run: |
+          url="https://github.com/orhun/git-cliff/releases/download/v${GIT_CLIFF_VERSION}/git-cliff-${GIT_CLIFF_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          curl -sSL "$url" | tar -xz --strip-components=1 -C /usr/local/bin \
+            "git-cliff-${GIT_CLIFF_VERSION}/git-cliff"
+          git-cliff --version
+
+      - name: Rédiger le corps de la Release
+        env:
+          VERSION: ${{ needs.check-version.outputs.version }}
+          PYPI_VERSION: ${{ steps.coherence.outputs.pypi_version }}
+        run: |
+          # Le checkout est sur le tag poussé : « le tag courant » est exact, là
+          # où `--latest` dépendrait de l'ordre des tags dans le dépôt.
+          git-cliff --current --strip header -o NOTES.md
+          # Des notes vides signeraient un tag mal vu ou une config muette :
+          # mieux vaut un job rouge qu'une Release sans texte.
+          [ -s NOTES.md ] || { echo "notes de version vides" >&2; exit 1; }
+          {
+            printf '**crates.io** [pyrucast %s](https://crates.io/crates/pyrucast/%s) · ' "$VERSION" "$VERSION"
+            printf '**PyPI** [pyrucast %s](https://pypi.org/project/pyrucast/%s/)\n\n' "$PYPI_VERSION" "$PYPI_VERSION"
+            printf 'Wheels `cp39-abi3` (Python ≥ 3.9) pour Linux x86_64 et aarch64, Windows x86_64 et macOS universal2.\n'
+            printf 'La sdist se compile sans la visualisation : `pyrucast.__features__` dit ce que porte votre installation.\n\n'
+            cat NOTES.md
+          } > BODY.md
+          cat BODY.md
+
+      - name: Créer la Release GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/* \
+            --title "pyrucast v${{ needs.check-version.outputs.version }}" \
+            --notes-file BODY.md

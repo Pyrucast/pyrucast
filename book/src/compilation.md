@@ -9,7 +9,7 @@ documentation. Pour le **simple usage en Python** (quatre commandes), voir
 
 | Outil | Version | Rôle |
 |---|---|---|
-| Rust (via `rustup`) | stable récent, édition 2021 | Compilation du cœur |
+| Rust (via `rustup`) | ≥ 1.88 (`rust-version` du crate), édition 2024 | Compilation du cœur |
 | Python | ≥ 3.9 (3.13 testé) | API Python et `maturin` |
 | `ruff` | récent | Format du Python (`ruff format`), vérifié par `check_format` |
 | `mdbook` | ≥ 0.4 | Génération de cette documentation |
@@ -200,10 +200,11 @@ Autour d'eux gravitent quelques utilitaires : `dev.sh` / `dev.ps1` (build
 minimal — module Python en release avec la visu interactive + stub, rien
 d'autre), `run_examples.sh` / `run_examples.ps1` (exemples et formation de bout
 en bout, appelés par `check_examples`), `set_new_version.sh` (passe de version :
-tout vérifier sans warning, reporter le numéro dans `Cargo.toml` /
-`pyproject.toml`, commit + tag — il ne pousse rien), `scaling.sh` (mesure de
-montée en charge du parallélisme) et `generate-formation-figures.sh` (régénère
-les SVG de la formation, qui sont des artefacts commités).
+tout vérifier sans warning, reporter le numéro dans `Cargo.toml` — seule
+déclaration de version du projet —, commit + tag : il ne pousse rien),
+`scaling.sh` (mesure de montée en charge du parallélisme) et
+`generate-formation-figures.sh` (régénère les SVG de la formation, qui sont des
+artefacts commités).
 
 ### `script/check_*.sh` — vérifications, en bloc ou à la carte
 
@@ -383,6 +384,109 @@ Prérequis à configurer une fois côté GitHub (interface web) :
 
 Les runners GitHub sont hébergés et gratuits sur dépôt public — pas de runner
 à enregistrer soi-même, contrairement à Codeberg.
+
+## Journal des versions et publication
+
+Poser un tag `vX.Y.Z` déclenche `.github/workflows/release.yml`, qui publie le
+crate sur crates.io, les wheels et la sdist sur PyPI, puis crée la **Release
+GitHub** dont les notes sont écrites automatiquement à partir des messages de
+commit.
+
+### La convention de message de commit
+
+C'est la seule obligation que cette automatisation ajoute, et le projet la suit
+déjà partout. Un sujet s'écrit `type(portée): sujet`, avec un `!` avant le
+deux-points quand le changement casse l'API :
+
+| Préfixe | Section du journal |
+|---|---|
+| `type(portée)!:` — n'importe quel type suivi de `!` | Ruptures d'API, en tête |
+| `feat` | Nouveautés |
+| `fix` | Corrections |
+| `perf` | Performances |
+| `refactor` | Remaniements |
+| `docs` | Documentation |
+| `test` | Tests |
+| `build`, `ci`, `chore` | Compilation et outillage |
+| `style` | Style |
+| tout le reste | Divers |
+
+Le **sujet est repris tel quel** dans les notes : il est écrit une fois, au
+moment du commit, et jamais retouché ensuite. Le corps du message, lui, n'est
+jamais publié — il reste pour qui lit `git log`. Deux cas particuliers sont
+traités par la configuration : `chore: version X.Y.Z` est sauté, et les commits
+`docs(rustdoc)` sont repliés en une seule ligne comptée, sans quoi ils
+noieraient tout le reste.
+
+### git-cliff n'est pas un prérequis
+
+Le tri est fait par [git-cliff](https://git-cliff.org/), piloté par `cliff.toml`
+à la racine. **Rien à installer** : ni pour développer, ni pour publier. L'outil
+est téléchargé par le workflow, dans une version épinglée, comme mdBook l'est
+pour le book. Le tableau des prérequis en tête de page ne gagne donc aucune
+ligne.
+
+Pour relire les notes avant de poser le tag, si on le souhaite :
+
+```sh
+cargo install git-cliff
+git-cliff --unreleased --tag vX.Y.Z   # ce que la prochaine Release dira
+```
+
+Et si les notes publiées déplaisent, la Release s'édite dans l'interface
+GitHub : ni workflow à rejouer, ni tag à déplacer.
+
+### Une seule déclaration de version
+
+`Cargo.toml` porte la version, et lui seul. `pyproject.toml` la lit de là
+(`dynamic = ["version"]`), et `pyrucast.__version__` en vient déjà
+(`src/lib.rs`, `env!("CARGO_PKG_VERSION")`). Le crate, la wheel et le module
+importé descendent donc du même champ : ils ne *peuvent pas* diverger.
+
+Le workflow refuse de démarrer si `pyproject.toml` redéclarait une version — une
+version statique l'emporterait sur `Cargo.toml` chez maturin et partirait seule
+sur PyPI.
+
+De là l'invariant qui rend la page `releases/` lisible :
+
+> **La Release GitHub existe si et seulement si crates.io et PyPI portent
+> réellement cette version, et si les artefacts joints portent les étiquettes de
+> compatibilité attendues.**
+
+Le dernier job constate au lieu de supposer : il interroge les deux registres
+jusqu'à les y trouver, et vérifie sur les noms de fichiers qu'il y a bien quatre
+wheels `cp39-abi3` et une sdist. `cargo publish` comme l'action PyPI savent
+sauter une version déjà présente ; ce silence est utile pour rejouer un job, et
+dangereux partout ailleurs.
+
+### Ce que porte chaque distribution
+
+`pip install pyrucast` prend une wheel quand il en existe une pour la
+plateforme, et retombe sinon sur la sdist, qu'il compile. Les deux ne portent
+pas la même chose :
+
+| | Plateformes | Features compilées | Prérequis |
+|---|---|---|---|
+| **wheel** `cp39-abi3` | Linux x86_64 et aarch64 (manylinux2014), Windows x86_64, macOS universal2 | `extension-module`, `viz`, `viz-interactive` | aucun — Python ≥ 3.9 |
+| **sdist** `.tar.gz` | tout le reste (musl, Windows ARM, BSD…) | `extension-module` seul | rustup, et la compilation du crate |
+
+Une installation depuis la sdist n'a donc **pas la visualisation** :
+`mesh.plot()` n'existe pas. C'est assumé — compiler `viz` exigerait fontconfig
+et freetype sur la machine cible — mais ce n'est pas silencieux :
+
+{{#include ../../tests/python/test_smoke.py:features}}
+
+`__features__` liste ce que *ce* binaire porte : `('python-api',
+'extension-module', 'viz', 'viz-interactive', 'abi3')` sur une wheel publiée,
+`('python-api', 'extension-module')` depuis la sdist. Le test qui précède ne se
+contente pas de lire la liste — un second vérifie qu'elle **dit vrai** plutôt
+que d'être recopiée à la main : la présence de `viz` doit équivaloir à celle de
+`Mesh.plot`.
+
+> **Pré-versions.** Un tag `v0.4.0-rc1` reste possible, mais crates.io garderait
+> `0.4.0-rc1` là où PyPI normalise en `0.4.0rc1` : le workflow rapproche les deux
+> formes et refuse celles qu'il ne sait pas superposer. Il faudrait aussi élargir
+> la regex de `test_version_exposed`, qui n'accepte aujourd'hui que `X.Y.Z`.
 
 ## Dépannage rapide
 

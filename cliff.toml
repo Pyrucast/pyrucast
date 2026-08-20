@@ -1,0 +1,70 @@
+# Configuration git-cliff — journal des versions de Pyrucast.
+#
+# Aucun modèle de langage n'intervient : les sujets de commit sont recopiés tels
+# quels, seul le tri est automatique. Les commits `docs(rustdoc)` sont repliés en
+# une ligne comptée, sans quoi ils noieraient tout le reste.
+
+[changelog]
+header = """
+# Journal des versions
+
+"""
+body = """
+{% if version %}\
+## {{ version | trim_start_matches(pat="v") }} — {{ timestamp | date(format="%d/%m/%Y") }}
+{% else %}\
+## En cours
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim | upper_first }}
+{% set rustdoc = commits | filter(attribute="scope", value="rustdoc") | length %}\
+{% for commit in commits %}\
+{% if commit.scope == "rustdoc" %}{% continue %}{% endif %}\
+- {% if commit.scope %}**{{ commit.scope }}** — {% endif %}\
+{{ commit.message }} ([{{ commit.id | truncate(length=7, end="") }}]($REPO/commit/{{ commit.id }}))
+{% endfor %}\
+{% if rustdoc > 0 %}\
+- *{{ rustdoc }} commits `rustdoc` repliés — un exemple compilé par item public de l'API.*
+{% endif %}\
+{% endfor %}
+"""
+footer = ""
+trim = true
+postprocessors = [
+  { pattern = '\$REPO', replace = "https://github.com/Pyrucast/pyrucast" },
+]
+
+[git]
+conventional_commits = true
+filter_unconventional = false
+split_commits = false
+protect_breaking_commits = true
+filter_commits = false
+tag_pattern = "v[0-9].*"
+topo_order = false
+sort_commits = "oldest"
+
+commit_preprocessors = [
+  # Les fioritures de fin de message ne sont pas du journal.
+  { pattern = '(?s)\n+(Co-Authored-By|Claude-Session):.*', replace = "" },
+  # Un revert traîne le corps du commit annulé : on n'en garde que le sujet.
+  { pattern = '(?s)^(Revert ".*?")\n.*', replace = "$1" },
+]
+
+commit_parsers = [
+  # Le commit de bascule de version n'est pas une entrée de journal.
+  { message = "^chore: version", skip = true },
+  # Une rupture se lit avant tout le reste, quel que soit son type.
+  { message = '^[a-z]+(\(.+\))?!:', group = "<!-- 0 -->Ruptures d'API" },
+  { message = "^feat",     group = "<!-- 1 -->Nouveautés" },
+  { message = "^fix",      group = "<!-- 2 -->Corrections" },
+  { message = "^perf",     group = "<!-- 3 -->Performances" },
+  { message = "^refactor", group = "<!-- 4 -->Remaniements" },
+  { message = "^docs",     group = "<!-- 5 -->Documentation" },
+  { message = "^test",     group = "<!-- 6 -->Tests" },
+  { message = "^build",    group = "<!-- 7 -->Compilation et outillage" },
+  { message = "^ci",       group = "<!-- 7 -->Compilation et outillage" },
+  { message = "^chore",    group = "<!-- 7 -->Compilation et outillage" },
+  { message = "^style",    group = "<!-- 8 -->Style" },
+  { message = ".*",        group = "<!-- 9 -->Divers" },
+]
