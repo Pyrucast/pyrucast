@@ -4,7 +4,11 @@ build-backend = "maturin"
 
 [project]
 name = "pyrucast"
-version = "0.3.1"
+# La version n'est déclarée qu'une fois, dans Cargo.toml : maturin la lit là, et
+# `pyrucast.__version__` en vient déjà (`src/lib.rs`, env!("CARGO_PKG_VERSION")).
+# Deux déclarations laisseraient publier un crate et une wheel divergents sous le
+# même tag.
+dynamic = ["version"]
 description = "Finite-element library in Rust, inspired by cast3m, exposed to Python"
 readme = "README.md"
 requires-python = ">=3.9"

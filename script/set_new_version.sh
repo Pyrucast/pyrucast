@@ -4,7 +4,8 @@
 # 1. vérifie que tout est vert et SANS WARNING : `check_all.sh` en entier,
 #    plus les quatre passes de clippy qu'aucun bloc ne couvre ;
 # 2. demande le nouveau numéro de version ;
-# 3. le reporte dans Cargo.toml et pyproject.toml ;
+# 3. le reporte dans Cargo.toml — seule déclaration de version du projet,
+#    `pyproject.toml` la lisant de là via `dynamic = ["version"]` ;
 # 4. commit + tag annoté `vX.Y.Z` sur master.
 #
 # Ne pousse rien : `git push && git push origin vX.Y.Z` reste un geste manuel.
@@ -70,16 +71,20 @@ read -rp "Confirmer le passage de $current à $new_version sur master ? [o/N] " 
 [[ "$confirm" =~ ^[oO]$ ]] || die "annulé"
 
 # ── 3. Mise à jour des fichiers ─────────────────────────────────────────────
-step "Mise à jour de Cargo.toml et pyproject.toml"
+step "Mise à jour de Cargo.toml"
 sed -i -E "s/^version = \".*\"/version = \"$new_version\"/" Cargo.toml
-sed -i -E "s/^version = \".*\"/version = \"$new_version\"/" pyproject.toml
+# Un sed qui ne mord pas ne dit rien : sans cette relecture, l'écart ne se
+# découvrirait qu'en CI, au push du tag.
+written="$(sed -nE 's/^version = "(.*)"/\1/p' Cargo.toml | head -1)"
+[ "$written" = "$new_version" ] \
+    || die "Cargo.toml annonce $written après mise à jour (attendu $new_version)"
 
 step "cargo check (régénère Cargo.lock)"
 cargo check --quiet
 
 # ── 4. Commit + tag ──────────────────────────────────────────────────────────
 step "git commit + tag v$new_version"
-git add Cargo.toml pyproject.toml
+git add Cargo.toml
 git commit -m "chore: version $new_version"
 git tag -a "v$new_version" -m "pyrucast v$new_version"
 
