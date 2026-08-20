@@ -508,6 +508,20 @@ invariant n'est jamais supposé, il est **maintenu**.
    quand les deux nœuds lui appartiennent — c'est ainsi qu'une géométrie
    concave se divise — et *joint* deux boucles sinon — c'est ainsi qu'un trou
    est absorbé. Les trous n'ont donc aucun traitement particulier.
+
+   Identifier réécrit sur le survivant **toutes** les mailles qui utilisaient
+   l'autre nœud, triangles compris : un triangle resté accroché au nœud
+   abandonné pendant que ses voisins déménagent est une maille pendue à un
+   nœud que plus rien ne touche, soit trois fissures d'un coup. Et le
+   survivant peut être un nœud du contour — il doit l'être dès que l'autre en
+   est un, puisqu'un nœud du contour ne s'abandonne jamais. Deux coutures
+   successives peuvent alors poser les **deux bouts d'une même arête** sur
+   deux nœuds du contour qui en ont un troisième entre eux : cette arête
+   longe le bord en enjambant un nœud, et la lentille d'aire nulle qui reste
+   n'est refermable par aucune soudure, tous ses nœuds étant intouchables.
+   Elle est **recousue** : la maille qui porte la corde reprend en elle les
+   nœuds qu'elle a sautés. Elle ne grossit de rien, la lentille ne couvrant
+   rien, et le bord redevient entier.
 5. **Déblocage.** Une boucle qui n'avance plus est **coupée en deux** par une
    corde, et les deux moitiés reprennent le pavage.
 6. **Fermeture.** Une boucle réduite à six nœuds ou moins est remplie par

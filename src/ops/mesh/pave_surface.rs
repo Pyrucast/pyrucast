@@ -257,6 +257,9 @@ mod tests {
         area: f64,
         min_quality: f64,
         non_conforming: usize,
+        /// Edges carried by one cell only. A sound mesh has exactly the
+        /// contour's, so anything more is a hole in the middle of it.
+        boundary: usize,
     }
 
     fn inspect(mesh: &Mesh) -> Report {
@@ -273,6 +276,7 @@ mod tests {
             area: 0.0,
             min_quality: f64::INFINITY,
             non_conforming: 0,
+            boundary: 0,
         };
         let mut edges: HashMap<(NodeId, NodeId), usize> = HashMap::new();
         let mut bump = |a: NodeId, b: NodeId| {
@@ -299,6 +303,7 @@ mod tests {
             }
         }
         r.non_conforming = edges.values().filter(|&&v| v > 2).count();
+        r.boundary = edges.values().filter(|&&v| v == 1).count();
         r
     }
 
@@ -319,6 +324,110 @@ mod tests {
         assert!((r.area - 1.0).abs() < 1e-9, "area {}", r.area);
         assert_eq!(r.non_conforming, 0);
         assert!(r.min_quality > 0.0, "min quality {}", r.min_quality);
+    }
+
+    /// A closed loop of points, cut into whole cells.
+    type Loop = Vec<(f64, f64)>;
+
+    /// A rectangular frame: the outer wall, and a crenellated inner boundary
+    /// as a hole. The shape a box wall has, and where the front runs into
+    /// itself along a straight boundary.
+    fn crenellated_frame(
+        width: f64,
+        height: f64,
+        inset: f64,
+        teeth: usize,
+        tooth_w: f64,
+        tooth_d: f64,
+        h: f64,
+    ) -> (Loop, Loop) {
+        let cut = |corners: &[(f64, f64)]| {
+            let mut pts: Loop = Vec::new();
+            let n = corners.len();
+            for i in 0..n {
+                let (a, b) = (corners[i], corners[(i + 1) % n]);
+                let len = ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt();
+                let k = ((len / h).round() as usize).max(1);
+                for j in 0..k {
+                    let t = j as f64 / k as f64;
+                    pts.push((a.0 + t * (b.0 - a.0), a.1 + t * (b.1 - a.1)));
+                }
+            }
+            pts
+        };
+        let outer = cut(&[(0.0, 0.0), (width, 0.0), (width, height), (0.0, height)]);
+        let mut inner = vec![(inset, inset)];
+        let pitch = (width - 2.0 * inset) / teeth as f64;
+        for i in 0..teeth {
+            let x0 = inset + pitch * i as f64 + 0.5 * (pitch - tooth_w);
+            inner.extend([
+                (x0, inset),
+                (x0, inset - tooth_d),
+                (x0 + tooth_w, inset - tooth_d),
+                (x0 + tooth_w, inset),
+            ]);
+        }
+        inner.extend([
+            (width - inset, inset),
+            (width - inset, height - inset),
+            (inset, height - inset),
+        ]);
+        let mut inner = cut(&inner);
+        inner.reverse();
+        (outer, inner)
+    }
+
+    #[test]
+    fn a_seam_beside_a_leftover_triangle_does_not_crack_the_mesh() {
+        // Two ways the seam used to break the mesh, and the same shape shows
+        // both: a frame whose inner wall is crenellated, which is what a box
+        // wall looks like.
+        //
+        // A seam identifies two front vertices and rewrites onto the survivor
+        // every quadrangle that used the other — but not the **triangles**,
+        // which are not indexed by vertex. One left pointing at the discarded
+        // vertex is a cell hanging off a node nothing else touches: three
+        // cracks at once.
+        //
+        // And the survivor may be a contour node, which it must be whenever
+        // the other side is one. Two seams running one after the other can
+        // land the two ends of a single edge on two contour nodes that have a
+        // third between them; that edge then runs along the boundary skipping
+        // a node the contour has, and the lens left between them is a crack
+        // no weld can close, since every node of it is a contour node.
+        //
+        // A sound mesh carries one cell on each of the contour's segments and
+        // two on everything else, so the boundary count is the whole test.
+        //
+        // One frame per fault: the first used to lose a lens to a chord over
+        // the contour, the second a triangle to a seam beside it.
+        let h = 1.0;
+        for (w, height, inset, teeth, tw, td) in [
+            (16.0, 10.0, 3.0, 5, 1.4, 1.5),
+            (24.0, 14.0, 4.0, 6, 1.8, 1.5),
+        ] {
+            let (outer, inner) = crenellated_frame(w, height, inset, teeth, tw, td, h);
+            let coords = Handle::new(Coords::new(2).unwrap());
+            let contour = loop_mesh(coords.clone(), &outer)
+                .union(&loop_mesh(coords, &inner))
+                .unwrap();
+            let mesh = pave_surface(
+                &contour,
+                ElementType::QUA4,
+                Some(h),
+                false,
+                FrontRelax::Free,
+            )
+            .unwrap();
+            let r = inspect(&mesh);
+            assert_eq!(
+                r.boundary,
+                outer.len() + inner.len(),
+                "holes: the mesh of the {teeth}-toothed frame is not whole"
+            );
+            assert_eq!(r.non_conforming, 0);
+            assert!(r.min_quality > 0.0, "quality {}", r.min_quality);
+        }
     }
 
     #[test]

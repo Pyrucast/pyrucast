@@ -50,7 +50,7 @@ use front::Front;
 use geom::segments_cross;
 use proximity::EdgeGrid;
 use row::{Corner, RowPlan};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Loops of this size or smaller are closed rather than advanced.
 const CLOSE_AT: usize = 6;
@@ -216,6 +216,9 @@ pub struct Fabric {
     /// Store identity of the contour nodes, in the order they occupy the first
     /// entries of `pts`. Shorter than `pts`: everything past it is new.
     pub contour_ids: Vec<NodeId>,
+    /// The pairs of contour nodes the **contour** itself joins — what
+    /// [`splice_bypassed_chain`] measures a chord against.
+    contour_edges: HashSet<(u32, u32)>,
     /// Quadrangles touching each vertex — needed by the seam, which rewrites
     /// connectivity rather than adding geometry.
     incident: Vec<Vec<u32>>,
@@ -358,6 +361,7 @@ fn pave_inner(
         dead: Vec::new(),
         tris: Vec::new(),
         contour_ids: Vec::new(),
+        contour_edges: HashSet::new(),
         incident: Vec::new(),
     };
 
@@ -376,6 +380,11 @@ fn pave_inner(
             perimeter += (l.pts[(i + 1) % n] - l.pts[i]).norm();
         }
         segments += n;
+        for i in 0..n {
+            let (a, b) = (verts[i], verts[(i + 1) % n]);
+            fab.contour_edges
+                .insert(if a < b { (a, b) } else { (b, a) });
+        }
         loops.push(verts);
     }
     let target = match target {
@@ -1127,6 +1136,11 @@ fn weld(fab: &mut Fabric, ring: &[u32]) {
 /// side is *meant* to have nothing behind it. Everything else in the ring is
 /// already sound and is left exactly as it is.
 fn close_cracks(fab: &mut Fabric, mut verts: Vec<u32>) {
+    // A chord laid over the contour is repaired rather than sewn: the nodes it
+    // skipped go into the cell that skipped them.
+    if splice_bypassed_chain(fab, &verts) {
+        return;
+    }
     // Each turn of the loop removes one vertex, so the ring bounds the work.
     for _ in 0..verts.len() {
         let n = verts.len();
@@ -1183,6 +1197,12 @@ fn ring_has_a_crack(fab: &Fabric, verts: &[u32]) -> bool {
     })
 }
 
+/// Rewrite every reference to `loser`'s vertex into `winner`'s, if the result
+/// is a sound mesh.
+fn merge_into(fab: &mut Fabric, keep: u32, drop: u32) -> bool {
+    identify(fab, keep, drop, false)
+}
+
 /// Identify `drop` into `keep`, letting a quadrangle that holds both give up a
 /// corner and live on as a triangle.
 ///
@@ -1192,6 +1212,41 @@ fn ring_has_a_crack(fab: &Fabric, verts: &[u32]) -> bool {
 /// the cell into a bowtie — and the triangle left over must turn the right way
 /// like any other cell.
 fn collapse_into(fab: &mut Fabric, keep: u32, drop: u32) -> bool {
+    identify(fab, keep, drop, true)
+}
+
+/// Identify the vertex `drop` with the vertex `keep`, rewriting every cell
+/// that used it, if what comes out is a sound mesh.
+///
+/// The two are **identified**, not averaged into a third one. Averaging looks
+/// natural and quietly loses area: the cells already laid stay attached to the
+/// two original vertices, so the strip between them and the new front is never
+/// filled by anything. Rewriting every reference to one vertex into the other
+/// closes the front with no gap at all, at the cost of stretching the cells
+/// that used it — by less than the seam radius, and the smoothing pass takes
+/// it from there.
+///
+/// `may_collapse` says what to do with a **quadrangle holding both**: refuse
+/// the whole rewrite, or let that quadrangle give up a corner and live on as a
+/// triangle. The seam refuses; the weld, which has a crack to close and no
+/// other move left, collapses.
+///
+/// Triangles are rewritten alongside the quadrangles, and that is not a
+/// detail. A triangle left pointing at the discarded vertex while everything
+/// around it moved to the survivor is a cell hanging off a node nothing else
+/// touches — three cracks at once, which is what a seam beside a leftover
+/// triangle used to leave behind.
+///
+/// Returns `false` when the rewrite is not admissible, in which case the
+/// caller treats the loop as stalled rather than corrupting the mesh.
+fn identify(fab: &mut Fabric, keep: u32, drop: u32, may_collapse: bool) -> bool {
+    // The discarded position disappears from the mesh, so it must not be one
+    // of the caller's contour nodes — the survivor may well be. This is why
+    // both directions are worth trying: when one side is pinned, the other
+    // one goes.
+    // Note `pinned` and not `movable`: a grid core's node is held still, but
+    // it is ours and may be given up, which is what lets a slither between
+    // core and contour be welded shut instead of left as a crack.
     if keep == drop || fab.pinned[drop as usize] {
         return false;
     }
@@ -1208,6 +1263,8 @@ fn collapse_into(fab: &mut Fabric, keep: u32, drop: u32) -> bool {
             continue;
         };
         match q.iter().position(|&c| c == keep) {
+            // A quadrangle holding both would collapse onto itself.
+            Some(_) if !may_collapse => return false,
             Some(k) => {
                 if (k + 2) % 4 == d {
                     // Opposite corners: the collapse would be a bowtie.
@@ -1248,10 +1305,11 @@ fn collapse_into(fab: &mut Fabric, keep: u32, drop: u32) -> bool {
         tri_fate.push((i, Some(r)));
     }
 
-    // As in `merge_into`: no edge may come out with three cells on it. Only
-    // edges reaching the surviving vertex can, so counting those is enough —
-    // over every cell the operation leaves behind, triangles included, since a
-    // collapse turns a diagonal into an edge.
+    // Identifying two vertices can leave an edge with three cells on it, when
+    // both of them already had a neighbour in common. Only edges reaching the
+    // surviving vertex can, so counting those is enough — over every cell the
+    // operation leaves behind, triangles included, since a collapse turns a
+    // diagonal into an edge.
     let mut around: HashMap<u32, usize> = HashMap::new();
     let mut count = |cell: &[u32]| {
         let k = cell.len();
@@ -1490,6 +1548,176 @@ fn seam_is_clear(front: &Front, fab: &Fabric, grid: &EdgeGrid, a: u32, b: u32) -
     true
 }
 
+/// One cell of the fabric, told apart by what it is.
+#[derive(Clone, Copy)]
+enum Cell {
+    Quad(u32),
+    Tri(usize),
+}
+
+/// How many cells hold the edge `(a, b)`.
+fn cells_on(fab: &Fabric, a: u32, b: u32) -> usize {
+    fab.incident[a as usize]
+        .iter()
+        .filter(|&&qi| !fab.dead[qi as usize] && fab.quads[qi as usize].contains(&b))
+        .count()
+        + fab
+            .tris
+            .iter()
+            .filter(|t| t.contains(&a) && t.contains(&b))
+            .count()
+}
+
+/// The cell holding the edge `(a, b)`, when there is exactly one.
+fn sole_cell_on(fab: &Fabric, a: u32, b: u32) -> Option<Cell> {
+    let mut found = None;
+    let mut count = 0;
+    for &qi in &fab.incident[a as usize] {
+        if !fab.dead[qi as usize] && fab.quads[qi as usize].contains(&b) {
+            count += 1;
+            found = Some(Cell::Quad(qi));
+        }
+    }
+    for (i, t) in fab.tris.iter().enumerate() {
+        if t.contains(&a) && t.contains(&b) {
+            count += 1;
+            found = Some(Cell::Tri(i));
+        }
+    }
+    if count == 1 {
+        found
+    } else {
+        None
+    }
+}
+
+/// Close a ring whose contour side was **bypassed**, by giving the chord's
+/// cell the nodes it skipped.
+///
+/// A seam identifies two front vertices, and rewrites onto the survivor every
+/// quadrangle that used the other. The survivor may be a contour node — it
+/// must be, in fact, since a contour node is the one thing a merge may never
+/// give up. Two seams running one after the other can therefore land the
+/// **two ends of a single edge** on two contour nodes that have a third
+/// between them. That edge then runs along the boundary skipping a node the
+/// contour has, and what is left between them is a lens of no area at all,
+/// bounded by two contour segments and that edge.
+///
+/// Nothing downstream can close it: every node of it is a contour node, and
+/// the weld may not discard one. But it does not need discarding — the cell
+/// on the other side of the chord simply has to take the skipped nodes into
+/// itself. It grows by nothing, since the lens covers nothing, and the
+/// boundary comes back whole.
+///
+/// Returns `true` when it repaired something.
+fn splice_bypassed_chain(fab: &mut Fabric, ring: &[u32]) -> bool {
+    let n = ring.len();
+    if n < 3 {
+        return false;
+    }
+    for i in 0..n {
+        let (a, b) = (ring[i], ring[(i + 1) % n]);
+        // The chord carries exactly one cell — the one that will take the
+        // rest of the ring into itself.
+        let Some(cell) = sole_cell_on(fab, a, b) else {
+            continue;
+        };
+        // Every other edge of the ring gains a cell, and none of them may end
+        // up with more than it is allowed: two in the interior, one on the
+        // contour, whose far side is the end of the domain.
+        let chain: Vec<u32> = (1..n).map(|k| ring[(i + 1 + k) % n]).collect();
+        let room = |fab: &Fabric, u: u32, v: u32| {
+            if u == v {
+                return false;
+            }
+            let key = if u < v { (u, v) } else { (v, u) };
+            let cap = if fab.contour_edges.contains(&key) {
+                1
+            } else {
+                2
+            };
+            cells_on(fab, u, v) < cap
+        };
+        if !std::iter::once((b, chain[0]))
+            .chain(chain.windows(2).map(|w| (w[0], w[1])))
+            .all(|(u, v)| room(fab, u, v))
+        {
+            continue;
+        }
+        // The cell walks the chord the other way round than the ring does,
+        // whichever way that turns out to be.
+        let walk: Vec<u32> = match cell {
+            Cell::Quad(qi) => fab.quads[qi as usize].to_vec(),
+            Cell::Tri(ti) => fab.tris[ti].to_vec(),
+        };
+        let m = walk.len();
+        let Some(t) = (0..m).find(|&t| {
+            let (x, y) = (walk[t], walk[(t + 1) % m]);
+            (x == a && y == b) || (x == b && y == a)
+        }) else {
+            continue;
+        };
+        let x = walk[t];
+        // The ring's path from `x` to the other end that is not the chord.
+        let mut inner: Vec<u32> = if x == b {
+            chain[..chain.len() - 1].to_vec()
+        } else {
+            let mut v = chain[..chain.len() - 1].to_vec();
+            v.reverse();
+            v
+        };
+        if inner.is_empty() {
+            continue;
+        }
+        // The cell walked from `y` round to `x`, then the skipped nodes.
+        let mut poly: Vec<u32> = (0..m).map(|k| walk[(t + 1 + k) % m]).collect();
+        poly.append(&mut inner);
+        let pts: Vec<Point2> = poly.iter().map(|&v| fab.pts[v as usize]).collect();
+        if crate::ops::mesh::triangulation::signed_area(&pts) <= 0.0
+            || !geom::polygon_is_simple(&pts)
+        {
+            continue;
+        }
+        let filled = close::close(&fab.pts, &poly);
+        let at = |v: u32, added: &[Point2]| match (v as usize).checked_sub(fab.pts.len()) {
+            Some(k) => added[k],
+            None => fab.pts[v as usize],
+        };
+        let sound = filled.quads.iter().all(|q| {
+            geom::quad_is_valid([
+                at(q[0], &filled.added),
+                at(q[1], &filled.added),
+                at(q[2], &filled.added),
+                at(q[3], &filled.added),
+            ])
+        }) && filled.tris.iter().all(|t| {
+            geom::orient(
+                at(t[0], &filled.added),
+                at(t[1], &filled.added),
+                at(t[2], &filled.added),
+            ) > 0.0
+        });
+        if !sound {
+            continue;
+        }
+        for p in &filled.added {
+            fab.add(*p, true, false);
+        }
+        match cell {
+            Cell::Quad(qi) => fab.kill_quad(qi),
+            Cell::Tri(ti) => {
+                fab.tris.swap_remove(ti);
+            }
+        }
+        for q in filled.quads {
+            fab.push_quad(q);
+        }
+        fab.tris.extend(filled.tris);
+        return true;
+    }
+    false
+}
+
 /// Merge two front nodes and queue whatever loops come out of it.
 ///
 /// The two nodes are **identified**, not averaged into a third one. Averaging
@@ -1508,7 +1736,8 @@ fn seam(fab: &mut Fabric, front: &mut Front, a: u32, b: u32, stack: &mut Vec<(u3
     // contracting front sheds nodes: refuse too many and the front keeps every
     // node it started with while its edges shrink, until no row fits at all.
     for (x, y) in [(a, b), (b, a)] {
-        if merge_into(fab, front.vertex(x), front.vertex(y)) {
+        let (keep, drop) = (front.vertex(x), front.vertex(y));
+        if merge_into(fab, keep, drop) {
             let (m1, m2) = front.merge(a, b, front.vertex(x));
             stack.push((m1, 0));
             stack.push((m2, 0));
@@ -1516,66 +1745,4 @@ fn seam(fab: &mut Fabric, front: &mut Front, a: u32, b: u32, stack: &mut Vec<(u3
         }
     }
     false
-}
-
-/// Rewrite every reference to `loser`'s vertex into `winner`'s, if the result
-/// is a sound mesh. Positions are left exactly where they are: the vertex that
-/// survives keeps its own, so nothing already laid moves.
-fn merge_into(fab: &mut Fabric, keep: u32, drop: u32) -> bool {
-    if keep == drop {
-        return false;
-    }
-    // The discarded position disappears from the mesh, so it must not be one
-    // of the caller's contour nodes — the survivor may well be. This is why
-    // both directions are worth trying: when one side is pinned, the other
-    // one goes.
-    // Note `pinned` and not `movable`: a grid core's node is held still, but
-    // it is ours and may be given up, which is what lets a slither between
-    // core and contour be welded shut instead of left as a crack.
-    if fab.pinned[drop as usize] {
-        return false;
-    }
-    let touching = fab.incident[drop as usize].clone();
-    let rewrite = |q: [u32; 4]| q.map(|c| if c == drop { keep } else { c });
-
-    for &qi in &touching {
-        let q = fab.quads[qi as usize];
-        // A quadrangle holding both would collapse onto itself.
-        if q.contains(&keep) {
-            return false;
-        }
-        let q = rewrite(q);
-        if !geom::quad_is_valid([
-            fab.pts[q[0] as usize],
-            fab.pts[q[1] as usize],
-            fab.pts[q[2] as usize],
-            fab.pts[q[3] as usize],
-        ]) {
-            return false;
-        }
-    }
-
-    // Identifying two vertices can leave an edge with three cells on it, when
-    // both of them already had a neighbour in common. Only edges reaching the
-    // surviving vertex can be affected, so counting those is enough.
-    let mut around: HashMap<u32, usize> = HashMap::new();
-    for &qi in touching.iter().chain(&fab.incident[keep as usize]) {
-        let q = rewrite(fab.quads[qi as usize]);
-        for t in 0..4 {
-            if q[t] == keep {
-                *around.entry(q[(t + 1) % 4]).or_insert(0) += 1;
-                *around.entry(q[(t + 3) % 4]).or_insert(0) += 1;
-            }
-        }
-    }
-    if around.values().any(|&c| c > 2) {
-        return false;
-    }
-
-    for &qi in &touching {
-        fab.quads[qi as usize] = rewrite(fab.quads[qi as usize]);
-        fab.incident[keep as usize].push(qi);
-    }
-    fab.incident[drop as usize].clear();
-    true
 }
