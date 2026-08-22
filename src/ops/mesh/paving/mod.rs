@@ -353,6 +353,29 @@ fn pave_inner(
     cancel: &dyn Cancel,
     op: &str,
 ) -> Result<Fabric> {
+    // Every loop the contour seeds lays its **first** row before any of them
+    // lays a second.
+    //
+    // The worklist is a stack, so without this a loop that has just advanced
+    // is taken up again immediately and driven all the way in before any other
+    // one starts. On a domain with more than one boundary — a wall between an
+    // outer contour and a crenellated inner one, say — that means the last
+    // loop seeded sweeps the whole domain, and the outer contour only gets its
+    // first row once the other front is already half a cell away from it. That
+    // row is then squeezed into what is left: a lens of cells a fifth of the
+    // height asked for, laid flat against a boundary that should have carried
+    // the cleanest row of the mesh.
+    //
+    // Giving each boundary its row first costs nothing — the same rows are
+    // laid, in a different order — and puts the defect back where a frontal
+    // paver's defect belongs, on the line where two fronts meet.
+    //
+    // Only where the front works alone. With a grid core the band is not a
+    // contour but what the grid could not reach, its loops are cut by the core
+    // rather than by the geometry, and taking them in turn stops the paver
+    // converging at all: `grid_surface` on a plate with a round hole never
+    // finished.
+    let seed_first = band.is_none();
     let mut fab = Fabric {
         pts: Vec::new(),
         movable: Vec::new(),
@@ -425,13 +448,21 @@ fn pave_inner(
     };
 
     let mut front = Front::new();
+    // The loops still to advance. A **stack**, so a loop that has just been
+    // advanced is taken up again at once and driven inward until it stalls or
+    // dies — one front at a time, and the order matters more than it looks.
     let mut stack: Vec<(u32, u32)> = Vec::new();
+    // What the contour seeded, kept aside so each of its loops gets a row
+    // before any of them gets a second. See `seed_first`.
+    let mut seeded: std::collections::VecDeque<(u32, u32)> = Default::default();
     for (verts, frozen) in &seeds {
         if verts.len() < 3 {
             continue;
         }
         if *frozen {
             front.add_frozen_loop(verts);
+        } else if seed_first {
+            seeded.push_back((front.add_loop(verts), 0));
         } else {
             stack.push((front.add_loop(verts), 0));
         }
@@ -445,7 +476,7 @@ fn pave_inner(
     // would have asked for and nothing downstream would say so.
     let cap = 64 * segments + 4096;
     let mut steps = 0usize;
-    while let Some((rep, stalls)) = stack.pop() {
+    while let Some((rep, stalls)) = seeded.pop_front().or_else(|| stack.pop()) {
         if !front.is_alive(rep) {
             continue;
         }

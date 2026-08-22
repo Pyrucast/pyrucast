@@ -377,6 +377,91 @@ mod tests {
         (outer, inner)
     }
 
+    /// Area of every cell carrying one of `loop_pts`' segments, smallest
+    /// first — the layer the front laid straight onto that boundary.
+    fn wall_layer(mesh: &Mesh, loop_pts: &[(f64, f64)]) -> Vec<f64> {
+        let bits = |x: f64, y: f64| (x.to_bits(), y.to_bits());
+        let n = loop_pts.len();
+        let mut wall: std::collections::HashSet<((u64, u64), (u64, u64))> = Default::default();
+        for i in 0..n {
+            let (a, b) = (loop_pts[i], loop_pts[(i + 1) % n]);
+            let (x, y) = (bits(a.0, a.1), bits(b.0, b.1));
+            wall.insert(if x < y { (x, y) } else { (y, x) });
+        }
+        let coords = mesh.coords().unwrap();
+        let c = coords.read();
+        let mut out = Vec::new();
+        for sm in mesh {
+            let s = sm.read();
+            let npc = s.element_type().nodes_per_cell();
+            for cell in s.connectivity().chunks(npc) {
+                let p: Vec<Point2> = cell
+                    .iter()
+                    .map(|&id| {
+                        let v = c.position(id).unwrap();
+                        Point2::new(v[0], v[1])
+                    })
+                    .collect();
+                let touches = (0..npc).any(|i| {
+                    let (u, v) = (p[i], p[(i + 1) % npc]);
+                    let (x, y) = (bits(u.x, u.y), bits(v.x, v.y));
+                    wall.contains(&if x < y { (x, y) } else { (y, x) })
+                });
+                if touches {
+                    let a: f64 = (0..npc)
+                        .map(|i| p[i].x * p[(i + 1) % npc].y - p[(i + 1) % npc].x * p[i].y)
+                        .sum();
+                    out.push(0.5 * a.abs());
+                }
+            }
+        }
+        out.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        out
+    }
+
+    #[test]
+    fn every_boundary_gets_its_first_row_before_any_gets_a_second() {
+        // The worklist of loops still to advance is a stack, so a loop that
+        // has just been advanced is taken up again at once and driven all the
+        // way in. On a domain with more than one boundary that means the last
+        // loop seeded sweeps the whole thing, and the outer contour only gets
+        // its first row once the other front is already half a cell from it.
+        // That row is then squeezed into what is left — a lens of cells a
+        // fifth of the height asked for, laid flat against the boundary that
+        // should have carried the cleanest row of the mesh.
+        //
+        // Seeding first costs nothing: the same rows, in a different order.
+        // Measured on the wall of this frame, the smallest cell touching the
+        // outer contour went from a quarter of the target area to three
+        // quarters of it.
+        let h = 1.0;
+        for (w, height, inset, teeth, tw, td) in [
+            (16.0, 10.0, 3.0, 5, 1.4, 1.5),
+            (24.0, 14.0, 4.0, 6, 1.8, 1.5),
+        ] {
+            let (outer, inner) = crenellated_frame(w, height, inset, teeth, tw, td, h);
+            let coords = Handle::new(Coords::new(2).unwrap());
+            let contour = loop_mesh(coords.clone(), &outer)
+                .union(&loop_mesh(coords, &inner))
+                .unwrap();
+            let mesh = pave_surface(
+                &contour,
+                ElementType::QUA4,
+                Some(h),
+                false,
+                FrontRelax::Free,
+            )
+            .unwrap();
+            let layer = wall_layer(&mesh, &outer);
+            assert!(!layer.is_empty());
+            assert!(
+                layer[0] > 0.6 * h * h,
+                "the {teeth}-toothed frame has a cell of {:.3} h² on its outer wall",
+                layer[0] / (h * h)
+            );
+        }
+    }
+
     #[test]
     fn a_seam_beside_a_leftover_triangle_does_not_crack_the_mesh() {
         // Two ways the seam used to break the mesh, and the same shape shows
