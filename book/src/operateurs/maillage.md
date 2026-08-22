@@ -31,7 +31,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `pave_volume(envelope, layers=1, thickness=None, size=None)` | **compagnon 3D** de `pave_surface` : couche limite d'`HEX8`/`PENTA6` poussée vers l'intérieur, raccordée par des `PYRA5` à un cœur `TET4` (voir plus bas) |
 | `triangulate_volume(envelope, size=None, allow_surface_nodes=False)` | **compagnon 3D** de `triangulate_surface` : maille l'intérieur d'une **enveloppe TRI3 fermée** en `TET4` — Delaunay exact, récupération du bord, raffinement intérieur et chasse aux slivers (voir plus bas) |
 | `regularize(mesh, sweeps=20, angular=True, in_place=False)` | **lisse** un maillage de surface existant : déplace ses nœuds intérieurs pour améliorer ses mailles, sans toucher ni à la connectivité ni au bord (voir plus bas) |
-| `cleanup(mesh)` | **corrige la connectivité** d'un maillage de surface : doublets et valences fautives, par bascule de diagonale. Aucun nœud ne bouge (voir plus bas) |
+| `cleanup(mesh)` | **corrige la connectivité** d'un maillage de surface : doublets, valences fautives et triangles coincés, sans jamais bouger un nœud (voir plus bas) |
 | `merge_triangles(mesh)` | **retire les triangles** d'un maillage à dominante quadrangulaire, **par paires** — leur nombre a la parité du bord (voir plus bas) |
 | `border(mesh, angle_deg=None)` | le **bord** d'un maillage de surface (TRI3/QUA4) en boucles `SEG2` (une par sous-maillage) ; avec `angle_deg`, découpé en **arêtes** ouvertes aux coins (voir plus bas) |
 | `skin(mesh, angle_deg=None)` | la **peau** d'un maillage volumique (tout type, y compris `PYRA5` et les quadratiques) en faces de **même degré**, **une par face plane** du solide (voir plus bas) |
@@ -1051,11 +1051,11 @@ ratio* :
 | plaque à marche hors grille | 0,405 | **0,963** |
 | L à cotes quelconques | 0,437 | **0,979** |
 | L dont les côtés découpent 5+6 contre 4+7 | 0,421 | **0,963** |
-| L dont les côtés diffèrent d'un nœud | 0,307 | **0,606** |
+| L dont les côtés diffèrent d'un nœud | 0,351 | **0,606** |
 | profil crénelé, base coupée sous chaque barre | 0,382 | **0,916** |
-| profil crénelé, base d'un seul tenant | 0,287 | **0,651** |
-| maison à toit à deux pentes | 0,304 | **0,475**, 1 triangle contre 11 |
-| carré à un angle arrondi | 0,266 | 0,308 |
+| profil crénelé, base d'un seul tenant | 0,323 | **0,651** |
+| maison à toit à deux pentes | 0,420 | **0,548**, 1 triangle contre 11 |
+| carré à un angle arrondi | 0,244 | **0,400** |
 | cercle R = 1 | **0,288**, p5 **0,796** | **0,005 — à ne pas utiliser** |
 
 La comparaison des quatre mailleurs surfaciques, figures à l'appui, est sur la
@@ -1130,12 +1130,24 @@ laplacien la queue, et il fallait les deux. Le laplacien reste disponible —
 Un **doublet** est un nœud intérieur n'ayant que deux quadrangles autour de lui,
 qui partagent donc *deux* arêtes : le nœud est coincé dans un coin qu'aucun
 lissage n'ouvrira. Une **valence fautive** est un nœud intérieur qui veut quatre
-mailles et en a trois ou cinq.
+mailles et en a trois ou cinq. Un **triangle coincé** est un petit triangle
+entre deux quadrangles autour d'un nœud intérieur.
 
-Le seul geste est la bascule de diagonale : deux quadrangles partageant une
-arête forment un hexagone, qui se recoupe selon l'une de ses trois diagonales.
-Il ne change ni nœud ni bord, et n'est appliqué que s'il fait strictement
-baisser l'erreur de valence en laissant les deux mailles convexes.
+Deux gestes, purement topologiques :
+
+1. **Bascule de diagonale**, pour la valence : deux quadrangles partageant une
+   arête forment un hexagone, qui se recoupe selon l'une de ses trois
+   diagonales. Elle ne change ni nœud ni bord, et n'est appliquée que si elle
+   fait strictement baisser l'erreur de valence en laissant les deux mailles
+   convexes.
+2. **Absorption du nœud**, pour le triangle coincé. Ni le doublet — qui veut
+   deux mailles — ni la bascule — qui en veut deux quadrangulaires — ne
+   l'atteignent. Mais les trois mailles couvrent un **pentagone**, dont la
+   seule décomposition est un quadrangle et un triangle : le nœud est abandonné
+   et le pentagone recoupé selon celle de ses cinq diagonales qui laisse la
+   pire des deux mailles la meilleure. Deux mailles pour trois, et le triangle
+   qui en sort est tout le coin au lieu de la lamelle qui s'y trouvait. Le
+   geste est refusé s'il n'améliore pas ce qui était là.
 
 Sur un maillage frais sorti d'un paveur, il ne trouve **rien à faire** — le
 paveur passe la même main en fin de course. Son intérêt est ailleurs : un

@@ -6,10 +6,11 @@ use crate::containers::mesh::Mesh;
 use crate::error::Result;
 use crate::ops::mesh::paving::cleanup as pass;
 
-/// Fix the connectivity of `mesh`: remove its doublets and switch the
-/// diagonals that lower the valence error. No node moves.
+/// Fix the connectivity of `mesh`: remove its doublets, absorb the nodes a
+/// triangle and two quadrangles share, and switch the diagonals that lower the
+/// valence error. No node moves.
 ///
-/// Two defects are worth naming, and neither is geometry:
+/// Three defects are worth naming, and none is geometry:
 ///
 /// - a **doublet** — an interior node with only two quadrangles around it,
 ///   which therefore share *two* edges. The node sits in a wedge and both
@@ -20,17 +21,28 @@ use crate::ops::mesh::paving::cleanup as pass;
 ///   change that, because the angles around a node sum to 2π whatever the
 ///   positions.
 ///
-/// The only move is the diagonal switch: two quadrangles sharing an edge form
+/// - a **triangle wedged** between two quadrangles at an interior node. Three
+///   cells round a node are already one too few, and neither move below can
+///   reach this one. But the three cover a **pentagon**, whose only
+///   decomposition is one quadrangle and one triangle: the node is given up
+///   and the pentagon re-cut across whichever of its five diagonals leaves the
+///   worse of the two cells best. Two cells for three, and the triangle that
+///   comes out is the whole wedge instead of the sliver in it. The move is
+///   refused outright when it would not improve on what was there.
+///
+/// For the valence, the move is the diagonal switch: two quadrangles sharing an
+/// edge form
 /// a hexagon, which splits across any of its three diagonals, and switching
 /// moves one unit of valence from the two nodes on the old diagonal to the two
 /// on the new. It changes no node and no boundary, so it cannot make the mesh
 /// non-conforming, and it is applied only when it strictly lowers the total
 /// valence error and leaves both cells convex.
 ///
-/// Triangles are read for incidence and never touched — removing them is
-/// [`merge_triangles`](fn@super::merge_triangles::merge_triangles)'s job, and
-/// it is a different problem: their number has the parity of the boundary's
-/// edge count, so they only ever go in pairs.
+/// Triangles are otherwise read for incidence and never touched — removing
+/// them is [`merge_triangles`](fn@super::merge_triangles::merge_triangles)'s
+/// job, and it is a different problem: their number has the parity of the
+/// boundary's edge count, so they only ever go in pairs. The pentagon above
+/// changes a triangle's shape, never how many there are.
 ///
 /// The result is a fresh mesh over the caller's own nodes: the connectivity
 /// changed, the geometry did not.
@@ -64,6 +76,6 @@ use crate::ops::mesh::paving::cleanup as pass;
 /// ```
 pub fn cleanup(mesh: &Mesh) -> Result<Mesh> {
     let mut surf = Surface::read(mesh, "cleanup")?;
-    pass::run(&surf.pts, &surf.movable, &mut surf.quads, &surf.tris);
+    pass::run(&surf.pts, &surf.movable, &mut surf.quads, &mut surf.tris);
     surf.to_mesh_same_nodes("cleanup")
 }

@@ -84,14 +84,14 @@ et `grid_surface2` se séparent nettement.
 
 | forme | | triangulate | pave | grid | grid2 |
 |---|---|---:|---:|---:|---:|
-| plaque à marche (0,53 ; 0,61) | mailles | 366 | 138 | 86 | **80** |
+| plaque à marche (0,53 ; 0,61) | mailles | 366 | 136 | 86 | **80** |
 | | pire | 0,481 | 0,187 | 0,405 | **0,963** |
-| L à cotes quelconques | mailles | 308 | 118 | 76 | **70** |
-| | pire | 0,459 | 0,401 | 0,437 | **0,979** |
-| L étiré à 1,02 | mailles | 319 | 120 | 81 | **74** |
-| | pire | 0,477 | 0,396 | 0,307 | **0,606** |
-| L étiré à 1,10 | mailles | 336 | 123 | 80 | **74** |
-| | pire | 0,474 | 0,398 | 0,421 | **0,963** |
+| L à cotes quelconques | mailles | 308 | 117 | 76 | **70** |
+| | pire | 0,459 | 0,446 | 0,437 | **0,979** |
+| L étiré à 1,02 | mailles | 319 | 117 | 80 | **74** |
+| | pire | 0,477 | 0,551 | 0,351 | **0,606** |
+| L étiré à 1,10 | mailles | 336 | 122 | 80 | **74** |
+| | pire | 0,474 | 0,446 | 0,421 | **0,963** |
 
 `grid_surface` pose une ligne sur la coordonnée où repose chaque côté aligné,
 puis découpe entre deux lignes d'après le côté qui les enjambe : toutes ses
@@ -118,10 +118,10 @@ la sensibilité d'un mailleur à la discrétisation du contour.
 
 | forme | | triangulate | pave | grid | grid2 |
 |---|---|---:|---:|---:|---:|
-| base coupée | mailles | 2 050 | 865 | 474 | **456** |
-| | pire | 0,412 | 0,327 | 0,382 | **0,916** |
-| base d'un seul tenant | mailles | 2 089 | 868 | 487 | **456** |
-| | pire | 0,419 | 0,326 | 0,287 | **0,651** |
+| base coupée | mailles | 2 050 | 860 | 474 | **456** |
+| | pire | 0,412 | 0,366 | 0,382 | **0,916** |
+| base d'un seul tenant | mailles | 2 089 | 863 | 486 | **456** |
+| | pire | 0,419 | 0,337 | 0,323 | **0,651** |
 
 `grid_surface2` rend **exactement le même nombre de mailles dans les deux cas**.
 Les trois autres paient la base d'un seul tenant. C'est la propriété la plus
@@ -140,16 +140,17 @@ Ici le classement s'inverse, et c'est le seul endroit où il le fait.
 
 | forme | | triangulate | pave | grid | grid2 |
 |---|---|---:|---:|---:|---:|
-| maison | mailles | 1 723 | 621 | 477 | **454** |
-| | pire | 0,484 | **0,491** | 0,304 | 0,475 |
-| carré arrondi | mailles | 1 866 | 678 | 443 | **420** |
-| | pire | **0,474** | 0,360 | 0,266 | 0,308 |
+| maison | mailles | 1 723 | 620 | 470 | **453** |
+| | pire | 0,484 | 0,491 | 0,420 | **0,548** |
+| carré arrondi | mailles | 1 866 | 678 | 441 | **415** |
+| | pire | **0,474** | 0,360 | 0,244 | 0,400 |
 | cercle R = 1 | mailles | 6 114 | 2 339 | **1 260** | 2 044 |
 | | pire | **0,424** | 0,031 | **0,288** | 0,005 |
 
 Une grille ne peut pas suivre une oblique : elle la découpe en escalier, et tout
-ce qui s'en approche est rendu au paveur frontal. Sur la maison, le pavage
-épouse les deux pentes du toit et l'emporte d'un cheveu ; sur le cercle,
+ce qui s'en approche est rendu au paveur frontal. Sur la maison, où l'oblique
+ne fait que le toit, ce qui reste de rectilinéaire suffit encore à
+`grid_surface2` ; sur le cercle, qui n'a plus rien de droit,
 `triangulate_surface` est le meilleur des quatre.
 
 **Sur une forme sans direction dominante, `grid_surface2` n'est pas un
@@ -187,7 +188,8 @@ En pratique :
   commande, `grid_surface` s'il faut des quadrangles ; **jamais
   `grid_surface2`**, qui y perd son cœur ;
 - **forme franchement oblique** — `pave_surface`, dont les rangées épousent la
-  pente ;
+  pente ; mais tant qu'il reste des parois droites autour de l'oblique, les
+  mailleurs en grille tiennent — la maison en est l'exemple ;
 - **quadrangles obligatoires** — `pave_surface` accepte `all_quad=True` et
   refuse par une erreur claire un contour dont la parité l'interdit ;
 - **triangles voulus** — `triangulate_surface`, seul à en produire par
