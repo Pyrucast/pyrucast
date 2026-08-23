@@ -82,7 +82,7 @@ const FORMAT: u32 = 1;
 /// A type that can be a node of a saved graph.
 ///
 /// [`Portable`] supplies the byte contract — bincode, normalized little-endian,
-/// `usize` on 64 bits, identical on Linux and Windows. This trait adds the two
+/// `usize` by value as a variable-width integer, identical on Linux and Windows. This trait adds the two
 /// things serde cannot express: a **tag** so a record can be dispatched back to
 /// its type on reload, and a **hook** to rebuild what the file deliberately does
 /// not carry.

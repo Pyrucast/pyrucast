@@ -37,9 +37,14 @@ paste = "1"
 # so a pure-Rust build (the default `cargo build` / `cargo test`) links
 # neither pyo3 nor libpython. All `#[pyclass]`/`#[pyfunction]` code lives
 # behind `#[cfg(feature = "python-api")]`.
-pyo3 = { version = "0.28", features = ["multiple-pymethods"], optional = true }
+pyo3 = { version = "0.29", features = ["multiple-pymethods"], optional = true }
 serde = { version = "1", features = ["derive"] }
-bincode = "1.3"
+# Format binaire des archives (`save` / `load`). La 2.x demande la feature
+# `serde` : le cœur de bincode 2 a ses propres traits `Encode`/`Decode`, et
+# c'est ce pont qui laisse nos `#[derive(Serialize, Deserialize)]` continuer à
+# servir. Ne jamais viser la 3.0.0 : son `lib.rs` tient en un
+# `compile_error!("https://xkcd.com/2347/")`, c'est une publication inerte.
+bincode = { version = "2", features = ["serde"] }
 # Vector / matrix primitives used across geometry helpers, mesh
 # builders and the visualization layer. `serde-serialize` lets nalgebra
 # types travel through the Persist trait alongside our own structs.
@@ -65,7 +70,7 @@ flate2 = { version = "1", optional = true }
 # Stub-file generator: produces `pyrucast.pyi` so IDEs see signatures
 # + docstrings instead of `Any`. Activated by the `stub-gen` feature
 # and consumed by the `stub_gen` binary.
-pyo3-stub-gen = { version = "0.22", optional = true }
+pyo3-stub-gen = { version = "0.23", optional = true }
 # Per-slot locking of the global store. `arc_lock` provides the owned
 # ('static) guards behind `store::read` / `store::write`, which is what
 # lets operators hold data in place instead of copying it.
@@ -79,7 +84,7 @@ faer = "0.24.4"
 [dev-dependencies]
 # Benchmark harness (see `benches/parallel.rs`). Run with `cargo bench`; vary
 # `RAYON_NUM_THREADS` between runs to read the parallel speedup.
-criterion = "0.5"
+criterion = "0.8"
 
 [[bench]]
 name = "parallel"

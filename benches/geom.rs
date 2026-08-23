@@ -16,7 +16,9 @@
 //! is drowned by run-to-run noise: on this machine two runs of *identical* code
 //! differ by ±18 % at a few milliseconds and by ±20 % at a few tens.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
+// `black_box` vient de `std` depuis criterion 0.8, qui a déprécié le sien.
+use std::hint::black_box;
 
 use pyrucast::atoms::{ElementType, Node, NodeId};
 use pyrucast::containers::mesh::{Mesh, SubMesh};

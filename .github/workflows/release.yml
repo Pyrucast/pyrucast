@@ -107,15 +107,12 @@ jobs:
         # le PATH au moment du build. Versions épinglées, comme dans pages.yml.
         env:
           # Les deux versions vont ensemble et ne se choisissent pas séparément.
-          # `mdbook-mermaid` 0.17 a migré du crate `mdbook` vers
-          # `mdbook-preprocessor`, c'est-à-dire vers le protocole de mdBook 0.5 :
-          # appelé par un mdbook 0.4 il n'arrive plus à désérialiser ce qu'on lui
-          # envoie et meurt sur « Unable to parse the input ». 0.16.2 est la
-          # dernière à dépendre de `mdbook ^0.4.36`, et elle est construite
-          # contre 0.4.52 — d'où ce couple, qui ne laisse même pas
-          # l'avertissement de version.
-          MDBOOK_VERSION: '0.4.52'
-          MDBOOK_MERMAID_VERSION: '0.16.2'
+          # `mdbook-mermaid` 0.17 dépend de `mdbook-preprocessor`, c'est-à-dire
+          # du protocole de mdBook 0.5 ; la 0.16 dépend de `mdbook ^0.4.36`,
+          # celui de la 0.4. Un couple dépareillé meurt sur « Unable to parse
+          # the input » — c'est exactement ce qui a fait rougir ce job.
+          MDBOOK_VERSION: '0.5.4'
+          MDBOOK_MERMAID_VERSION: '0.17.1'
         run: |
           base=https://github.com/rust-lang/mdBook/releases/download
           curl -sSL "$base/v${MDBOOK_VERSION}/mdbook-v${MDBOOK_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \

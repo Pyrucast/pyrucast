@@ -4,8 +4,14 @@
 //! is **identical on Linux and Windows**:
 //!
 //! - normalized little-endian integers (independent of host endianness);
-//! - `usize` encoded on 64 bits (portable between 32/64-bit platforms);
+//! - `usize` encoded **by value**, as a variable-width integer, so it travels
+//!   between 32- and 64-bit platforms; a value too large for the reader's
+//!   `usize` is refused rather than silently truncated;
 //! - IEEE-754 `f64`.
+//!
+//! These are the guarantees of bincode's `standard()` configuration, which
+//! fixes the byte order in the *configuration* rather than inheriting the
+//! host's — a file written on Linux reads on Windows and back.
 //!
 //! No OS-dependent data (absolute paths, separators) ever ends up in the
 //! payload: slot identifiers are opaque.
@@ -47,10 +53,15 @@ where
     T: Serialize + DeserializeOwned,
 {
     fn to_bytes(&self) -> Result<Vec<u8>> {
-        bincode::serialize(self).map_err(|e| PyrucastError::Serialization(e.to_string()))
+        bincode::serde::encode_to_vec(self, bincode::config::standard())
+            .map_err(|e| PyrucastError::Serialization(e.to_string()))
     }
 
     fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        bincode::deserialize(bytes).map_err(|e| PyrucastError::Serialization(e.to_string()))
+        // `decode_from_slice` rend aussi le nombre d'octets lus ; un enregistrement
+        // porte sa propre longueur en amont, donc on n'en a pas l'usage ici.
+        bincode::serde::decode_from_slice(bytes, bincode::config::standard())
+            .map(|(value, _read)| value)
+            .map_err(|e| PyrucastError::Serialization(e.to_string()))
     }
 }
