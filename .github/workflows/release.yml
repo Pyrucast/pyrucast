@@ -101,8 +101,16 @@ jobs:
         # `check_doc` construit le book ; le préprocesseur mermaid doit être sur
         # le PATH au moment du build. Versions épinglées, comme dans pages.yml.
         env:
-          MDBOOK_VERSION: '0.4.48'
-          MDBOOK_MERMAID_VERSION: '0.17.1'
+          # Les deux versions vont ensemble et ne se choisissent pas séparément.
+          # `mdbook-mermaid` 0.17 a migré du crate `mdbook` vers
+          # `mdbook-preprocessor`, c'est-à-dire vers le protocole de mdBook 0.5 :
+          # appelé par un mdbook 0.4 il n'arrive plus à désérialiser ce qu'on lui
+          # envoie et meurt sur « Unable to parse the input ». 0.16.2 est la
+          # dernière à dépendre de `mdbook ^0.4.36`, et elle est construite
+          # contre 0.4.52 — d'où ce couple, qui ne laisse même pas
+          # l'avertissement de version.
+          MDBOOK_VERSION: '0.4.52'
+          MDBOOK_MERMAID_VERSION: '0.16.2'
         run: |
           base=https://github.com/rust-lang/mdBook/releases/download
           curl -sSL "$base/v${MDBOOK_VERSION}/mdbook-v${MDBOOK_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \

@@ -34,13 +34,22 @@ jobs:
       - name: Récupérer les sources
         uses: actions/checkout@v7
 
-      - name: Installer mdBook
+      - name: Installer mdBook et mdbook-mermaid
+        # `mdbook-mermaid` manquait ici, et son absence n'est qu'un
+        # avertissement : le book se publiait avec son diagramme laissé sous
+        # forme de bloc de code brut. Versions épinglées comme dans
+        # release.yml, où le commentaire explique pourquoi elles vont ensemble.
         env:
-          MDBOOK_VERSION: '0.4.48'
+          MDBOOK_VERSION: '0.4.52'
+          MDBOOK_MERMAID_VERSION: '0.16.2'
         run: |
-          url="https://github.com/rust-lang/mdBook/releases/download/v${MDBOOK_VERSION}/mdbook-v${MDBOOK_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
-          curl -sSL "$url" | tar -xz -C /usr/local/bin
-          mdbook --version
+          base=https://github.com/rust-lang/mdBook/releases/download
+          curl -sSL "$base/v${MDBOOK_VERSION}/mdbook-v${MDBOOK_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
+            | tar -xz -C /usr/local/bin
+          base=https://github.com/badboy/mdbook-mermaid/releases/download
+          curl -sSL "$base/v${MDBOOK_MERMAID_VERSION}/mdbook-mermaid-v${MDBOOK_MERMAID_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
+            | tar -xz -C /usr/local/bin
+          mdbook --version && mdbook-mermaid --version
 
       - name: Installer Rust
         uses: dtolnay/rust-toolchain@stable
