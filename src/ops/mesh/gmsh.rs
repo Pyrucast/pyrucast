@@ -962,9 +962,13 @@ impl TagIndex {
             .iter()
             .fold((first, first), |(lo, hi), &t| (lo.min(t), hi.max(t)));
         // `NodeId` is a `u32`, so a mesh past 4 G nodes cannot exist anyway;
-        // the row index shares that ceiling.
-        let span = max - min + 1;
-        if span <= 4 * tags.len() as u64 {
+        // the row index shares that ceiling. `checked_add` because the span of
+        // a garbage tag list can reach `u64::MAX`, and a panic is not the way
+        // to greet bad input — it hashes instead.
+        let span = (max - min).checked_add(1);
+        if let Some(span) = span
+            && span <= 4 * tags.len() as u64
+        {
             let mut rows = vec![u32::MAX; span as usize];
             for (row, &tag) in tags.iter().enumerate() {
                 rows[(tag - min) as usize] = row as u32;
@@ -997,6 +1001,21 @@ impl TagIndex {
 ///
 /// It mirrors one `(elementType, nodeTags)` pair of
 /// `gmsh.model.mesh.getElements()`, for one entity.
+///
+/// ```
+/// # use pyrucast::ops::mesh::GmshBlock;
+/// # use pyrucast::atoms::ElementType;
+/// // Deux triangles partageant une arête, dans le groupe physique « plaque ».
+/// let plaque = ["plaque".to_string()];
+/// let bloc = GmshBlock {
+///     element_type: 2, // le code gmsh de TRI3
+///     node_tags: &[1, 2, 3, 2, 4, 3],
+///     groups: &plaque,
+/// };
+/// // La connectivité est à plat : sa longueur dit le nombre de mailles.
+/// let npc = ElementType::TRI3.nodes_per_cell();
+/// assert_eq!(bloc.node_tags.len() / npc, 2);
+/// ```
 pub struct GmshBlock<'a> {
     /// gmsh's element-type code — `2` for a triangle, `4` for a tetrahedron, …
     /// See the table in the module documentation.
@@ -1716,10 +1735,13 @@ $EndElements
 
     // ─── In-memory front-end ─────────────────────────────────────────────
 
+    /// One zone, flattened: its element type and its raw connectivity.
+    type Zone = (ElementType, Vec<NodeId>);
+
     /// Everything a mesh *is*, flattened for comparison: the groups in order,
     /// and inside each the element type and raw connectivity of every zone.
     /// Two imports that agree on this agree cell for cell, node for node.
-    fn shape(groups: &[(String, Mesh)]) -> Vec<(String, Vec<(ElementType, Vec<NodeId>)>)> {
+    fn shape(groups: &[(String, Mesh)]) -> Vec<(String, Vec<Zone>)> {
         groups
             .iter()
             .map(|(name, mesh)| {
