@@ -62,7 +62,7 @@ pub use convert::convert;
 pub use elements_on::elements_on;
 pub use extrude::extrude;
 pub use from_live_nodes::from_live_nodes;
-pub use gmsh::{read_gmsh, read_gmsh_str};
+pub use gmsh::{from_gmsh_arrays, read_gmsh, read_gmsh_str, GmshBlock};
 pub use grid_surface::{grid_surface, grid_surface_cancellable};
 pub use grid_surface2::{grid_surface2, grid_surface2_cancellable};
 pub use improve::{cleanup, merge_triangles, regularize};

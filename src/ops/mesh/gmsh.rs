@@ -1,4 +1,5 @@
-//! Read a gmsh `.msh` mesh into pyrucast meshes.
+//! Bring a gmsh mesh into pyrucast — from a `.msh` file, or straight from
+//! the arrays a live gmsh session hands over.
 //!
 //! Supported on-disk formats: **MSH 2.2** and **MSH 4.1**, in both their
 //! **ASCII** (`$MeshFormat … 0 …`) and **binary** (`… 1 …`) variants. The
@@ -14,6 +15,7 @@
 //! | `4`  | `TET4` |
 //! | `5`  | `HEX8` |
 //! | `6`  | `PENTA6` |
+//! | `7`  | `PYRA5` |
 //! | `15` | `POI1` |
 //! | `8`  | `SEG3` |
 //! | `9`  | `TRI6` |
@@ -54,6 +56,22 @@
 //! which the first `coords.dim()` are taken (a 2-D `Coords` flattens the
 //! mesh onto its `xy` projection). The `Coords` may already hold geometry —
 //! the import is merged into it.
+//!
+//! # From a file, or from memory
+//!
+//! Two front-ends share one back-end. [`read_gmsh`] (and its `_str` / `_bytes`
+//! siblings) parses the on-disk format; [`from_gmsh_arrays`] takes the node
+//! table and the element blocks **already in memory**, in exactly the shape
+//! `gmsh.model.mesh.getNodes()` and `getElements()` return them — which is
+//! also pyrucast's own shape, since a [`SubMesh`] holds one element type and
+//! a flat connectivity. The Python layer builds on the latter: the pure-Python
+//! `pyrucast.mesh.from_gmsh(coords)` reads the current gmsh model and feeds it
+//! here, so a script can mesh in gmsh and compute in pyrucast without a file
+//! ever touching the disk.
+//!
+//! Both go through `GroupBuilder`, so the grouping, the node sharing and the
+//! quadratic reordering are the same code either way — a mesh read from a file
+//! and the same mesh taken from memory come out identical, cell for cell.
 
 use crate::aggregate::Aggregate;
 use crate::atoms::{ElementType, Node, NodeId};
@@ -789,6 +807,111 @@ fn parse_gmsh(buf: &[u8]) -> Result<Parsed> {
     }
 }
 
+// ─── Shared back-end: cells in, one `Mesh` per group out ─────────────────────
+
+/// The half of the import that neither front-end owns: it takes cells — each
+/// with its pyrucast element type, its node ids in **gmsh** order and the
+/// physical groups it belongs to — and lays them out as one [`Mesh`] per group,
+/// one [`SubMesh`] per element type inside a group.
+///
+/// Both `read_gmsh` (from a file) and [`from_gmsh_arrays`] (from memory) drive
+/// it, which is what makes them agree cell for cell. Only the way a node tag is
+/// turned into coordinates differs between them, and that is the caller's
+/// closure in [`GroupBuilder::node_of`].
+struct GroupBuilder {
+    coords: Handle<Coords>,
+    /// How many of gmsh's three coordinates to keep, from the `Coords` itself.
+    dim: usize,
+    /// gmsh node tag → materialized node. The `Node` is *kept* here so its
+    /// refcount survives until every submesh has taken its own.
+    node_map: HashMap<u64, Node>,
+    /// Group names in order of first appearance — the order of the result.
+    order: Vec<String>,
+    groups: HashMap<String, (Vec<ElementType>, HashMap<ElementType, SubMesh>)>,
+    /// One cell's connectivity, permuted. Reused across cells so the hot loop
+    /// allocates nothing.
+    scratch: Vec<NodeId>,
+}
+
+impl GroupBuilder {
+    fn new(coords: Handle<Coords>) -> Self {
+        let dim = coords.read().dim() as usize;
+        Self {
+            coords,
+            dim,
+            node_map: HashMap::new(),
+            order: Vec::new(),
+            groups: HashMap::new(),
+            scratch: Vec::new(),
+        }
+    }
+
+    /// Resolve a gmsh node tag to its pyrucast id, materializing the node at
+    /// its **first** appearance. `xyz` is only called then, so a front-end pays
+    /// for its coordinate lookup once per node rather than once per occurrence.
+    fn node_of(&mut self, tag: u64, xyz: impl FnOnce() -> Result<[f64; 3]>) -> Result<NodeId> {
+        if let Some(node) = self.node_map.get(&tag) {
+            return Ok(node.id());
+        }
+        let p = xyz()?;
+        let node = Node::create_in(self.coords.clone(), &p[..self.dim])?;
+        let id = node.id();
+        self.node_map.insert(tag, node);
+        Ok(id)
+    }
+
+    /// Add one cell to every group it belongs to. `ids` is in **gmsh** order;
+    /// the realignment to pyrucast's (VTK) order happens here, once, so no
+    /// front-end can forget it.
+    fn push_cell(&mut self, et: ElementType, ids: &[NodeId], names: &[String]) -> Result<()> {
+        self.scratch.clear();
+        match gmsh_node_permutation(et) {
+            Some(perm) if perm.len() == ids.len() => {
+                self.scratch.extend(perm.iter().map(|&p| ids[p]));
+            }
+            _ => self.scratch.extend_from_slice(ids),
+        }
+
+        // Disjoint field borrows: `order` is pushed to from inside the closure
+        // that `groups`' entry API runs, so the two cannot go through `self`.
+        let Self {
+            coords,
+            order,
+            groups,
+            scratch,
+            ..
+        } = self;
+        for g in names {
+            let entry = groups.entry(g.clone()).or_insert_with(|| {
+                order.push(g.clone());
+                (Vec::new(), HashMap::new())
+            });
+            if !entry.1.contains_key(&et) {
+                entry.0.push(et);
+                entry.1.insert(et, SubMesh::new(coords.clone(), et));
+            }
+            entry.1.get_mut(&et).unwrap().add_cell(scratch)?;
+        }
+        Ok(())
+    }
+
+    fn finish(self) -> Result<Vec<(String, Mesh)>> {
+        let Self {
+            order, mut groups, ..
+        } = self;
+        let mut out = Vec::with_capacity(order.len());
+        for name in order {
+            let (types, mut by_type) = groups.remove(&name).unwrap();
+            let mut mesh = Mesh::empty();
+            for et in types {
+                mesh.add_sub(Handle::new(by_type.remove(&et).unwrap()))?;
+            }
+            out.push((name, mesh));
+        }
+        Ok(out)
+    }
+}
+
 /// Build the per-group meshes from the parsed data into the **caller's**
 /// `coords`. The coordinate dimension is the one already carried by
 /// `coords`: gmsh always stores three coordinates per node, of which the
@@ -796,69 +919,187 @@ fn parse_gmsh(buf: &[u8]) -> Result<Parsed> {
 /// Groups come out in order of first appearance; within a group, submeshes
 /// are ordered by the first cell of each element type.
 fn build_groups(parsed: &Parsed, coords: Handle<Coords>) -> Result<Vec<(String, Mesh)>> {
-    let dim = coords.read().dim() as usize;
-
-    // Materialize each referenced node once, keeping the `Node` alive in the
-    // map so its refcount survives until every submesh has taken its own.
-    let mut node_map: HashMap<u64, Node> = HashMap::new();
-
-    // group name -> (element-type order, type -> submesh under construction).
-    let mut order: Vec<String> = Vec::new();
-    type Group = (Vec<ElementType>, HashMap<ElementType, SubMesh>);
-    let mut groups: HashMap<String, Group> = HashMap::new();
-
+    let mut builder = GroupBuilder::new(coords);
+    let mut ids: Vec<NodeId> = Vec::new();
     for el in &parsed.elements {
-        // Resolve (creating as needed) the pyrucast node id of every tag.
-        let mut ids: Vec<NodeId> = Vec::with_capacity(el.nodes.len());
+        ids.clear();
         for &tag in &el.nodes {
-            let id = match node_map.get(&tag) {
-                Some(node) => node.id(),
-                None => {
-                    let xyz = parsed.coords.get(&tag).ok_or_else(|| {
+            ids.push(builder.node_of(tag, || {
+                parsed
+                    .coords
+                    .get(&tag)
+                    .copied()
+                    .ok_or_else(|| err(format!("gmsh: element references unknown node {tag}")))
+            })?);
+        }
+        builder.push_cell(el.element_type, &ids, &el.groups)?;
+    }
+    builder.finish()
+}
+
+// ─── In-memory front-end ─────────────────────────────────────────────────────
+
+/// gmsh node tag → row in the coordinate array.
+///
+/// gmsh numbers its nodes `1..=n` after meshing, so a dense table is both
+/// smaller and faster than hashing. A model whose entities were deleted and
+/// re-created can leave holes; past a factor four of waste it hashes instead.
+enum TagIndex {
+    /// `rows[tag - min]`, with `u32::MAX` for a tag nothing occupies.
+    Dense {
+        min: u64,
+        rows: Vec<u32>,
+    },
+    Sparse(HashMap<u64, u32>),
+}
+
+impl TagIndex {
+    fn new(tags: &[u64]) -> Self {
+        let Some((&first, rest)) = tags.split_first() else {
+            return Self::Sparse(HashMap::new());
+        };
+        let (min, max) = rest
+            .iter()
+            .fold((first, first), |(lo, hi), &t| (lo.min(t), hi.max(t)));
+        // `NodeId` is a `u32`, so a mesh past 4 G nodes cannot exist anyway;
+        // the row index shares that ceiling.
+        let span = max - min + 1;
+        if span <= 4 * tags.len() as u64 {
+            let mut rows = vec![u32::MAX; span as usize];
+            for (row, &tag) in tags.iter().enumerate() {
+                rows[(tag - min) as usize] = row as u32;
+            }
+            Self::Dense { min, rows }
+        } else {
+            Self::Sparse(
+                tags.iter()
+                    .enumerate()
+                    .map(|(row, &tag)| (tag, row as u32))
+                    .collect(),
+            )
+        }
+    }
+
+    fn row(&self, tag: u64) -> Option<usize> {
+        match self {
+            Self::Dense { min, rows } => match rows.get(tag.checked_sub(*min)? as usize) {
+                Some(&r) if r != u32::MAX => Some(r as usize),
+                _ => None,
+            },
+            Self::Sparse(map) => map.get(&tag).map(|&r| r as usize),
+        }
+    }
+}
+
+/// One homogeneous block of elements, as a live gmsh session hands it over:
+/// a gmsh element-type code, the node tags **flat** (`nodes_per_cell` of them
+/// per element) and the physical groups the block belongs to.
+///
+/// It mirrors one `(elementType, nodeTags)` pair of
+/// `gmsh.model.mesh.getElements()`, for one entity.
+pub struct GmshBlock<'a> {
+    /// gmsh's element-type code — `2` for a triangle, `4` for a tetrahedron, …
+    /// See the table in the module documentation.
+    pub element_type: u32,
+    /// Flat connectivity: element `i` occupies `[i*npc, (i+1)*npc)`.
+    pub node_tags: &'a [u64],
+    /// Every physical-group name this block belongs to. An entity can carry
+    /// several, and then its cells land in each of them; an empty list is not
+    /// the same as no group — pass `<ungrouped>` for that, as the file
+    /// front-end does.
+    pub groups: &'a [String],
+}
+
+/// Convert a gmsh mesh **already in memory** — the node table and the element
+/// blocks — into one [`Mesh`] per physical group, adding the nodes to the
+/// **caller's** `coords`.
+///
+/// This is the in-memory twin of [`read_gmsh`], and obeys exactly its rules:
+/// the dimension of `coords` decides how many of gmsh's three coordinates are
+/// kept, every returned mesh shares that one `Coords`, only nodes actually
+/// referenced by a cell are materialized, and groups come out in order of first
+/// appearance. `node_coords` holds three values per entry of `node_tags`, in
+/// the same order.
+///
+/// Errors if a block's length is not a whole number of cells, if a cell names
+/// a node tag absent from `node_tags`, or if a gmsh element type has no
+/// pyrucast counterpart.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::mesh::{self, GmshBlock};
+/// // Ce que gmsh tend : les tags des nœuds, leurs trois coordonnées chacun,
+/// // et un bloc par type d'élément dont la connectivité est à plat.
+/// let tags = [1_u64, 2, 3, 4];
+/// let xyz = [
+///     0.0, 0.0, 0.0, //
+///     1.0, 0.0, 0.0, //
+///     0.0, 1.0, 0.0, //
+///     1.0, 1.0, 0.0,
+/// ];
+/// let plaque = ["plaque".to_string()];
+/// let blocs = [GmshBlock {
+///     element_type: 2, // TRI3
+///     node_tags: &[1, 2, 3, 2, 4, 3],
+///     groups: &plaque,
+/// }];
+///
+/// // Le `Coords` est 2-D : la troisième coordonnée de gmsh tombe.
+/// let coords = Handle::new(Coords::new(2)?);
+/// let regions = mesh::from_gmsh_arrays(coords.clone(), &tags, &xyz, &blocs)?;
+/// assert_eq!(regions.len(), 1);
+/// assert_eq!(regions[0].0, "plaque");
+/// assert_eq!(regions[0].1.cell_count()?, 2);
+/// assert_eq!(coords.read().node_count(), 4);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
+pub fn from_gmsh_arrays(
+    coords: Handle<Coords>,
+    node_tags: &[u64],
+    node_coords: &[f64],
+    blocks: &[GmshBlock<'_>],
+) -> Result<Vec<(String, Mesh)>> {
+    if node_coords.len() != 3 * node_tags.len() {
+        return Err(err(format!(
+            "gmsh: {} node tags call for {} coordinates (three each), got {}",
+            node_tags.len(),
+            3 * node_tags.len(),
+            node_coords.len()
+        )));
+    }
+    let index = TagIndex::new(node_tags);
+    let mut builder = GroupBuilder::new(coords);
+    let mut ids: Vec<NodeId> = Vec::new();
+
+    for block in blocks {
+        let et = element_type_from_gmsh(block.element_type)?;
+        let npc = et.nodes_per_cell();
+        if !block.node_tags.len().is_multiple_of(npc) {
+            return Err(err(format!(
+                "gmsh: a {et} block holds {} node tags, not a whole number of cells of {npc}",
+                block.node_tags.len()
+            )));
+        }
+        for cell in block.node_tags.chunks(npc) {
+            ids.clear();
+            for &tag in cell {
+                ids.push(builder.node_of(tag, || {
+                    let row = index.row(tag).ok_or_else(|| {
                         err(format!("gmsh: element references unknown node {tag}"))
                     })?;
-                    let node = Node::create_in(coords.clone(), &xyz[..dim])?;
-                    let id = node.id();
-                    node_map.insert(tag, node);
-                    id
-                }
-            };
-            ids.push(id);
-        }
-
-        // Realign gmsh's mid-edge node order to pyrucast's where they differ.
-        if let Some(perm) = gmsh_node_permutation(el.element_type)
-            && ids.len() == perm.len()
-        {
-            ids = perm.iter().map(|&p| ids[p]).collect();
-        }
-
-        for g in &el.groups {
-            let entry = groups.entry(g.clone()).or_insert_with(|| {
-                order.push(g.clone());
-                (Vec::new(), HashMap::new())
-            });
-            if !entry.1.contains_key(&el.element_type) {
-                entry.0.push(el.element_type);
-                entry.1.insert(
-                    el.element_type,
-                    SubMesh::new(coords.clone(), el.element_type),
-                );
+                    Ok([
+                        node_coords[3 * row],
+                        node_coords[3 * row + 1],
+                        node_coords[3 * row + 2],
+                    ])
+                })?);
             }
-            entry.1.get_mut(&el.element_type).unwrap().add_cell(&ids)?;
+            builder.push_cell(et, &ids, block.groups)?;
         }
     }
-
-    let mut out = Vec::with_capacity(order.len());
-    for name in order {
-        let (types, mut by_type) = groups.remove(&name).unwrap();
-        let mut mesh = Mesh::empty();
-        for et in types {
-            mesh.add_sub(Handle::new(by_type.remove(&et).unwrap()))?;
-        }
-        out.push((name, mesh));
-    }
-    Ok(out)
+    builder.finish()
 }
 
 /// Read a gmsh `.msh` file (ASCII or binary, MSH 2.2 or 4.1) into one
@@ -1471,6 +1712,195 @@ $EndElements
         // Same fixtures encoded big-endian; the marker drives detection.
         assert_square(&read_gmsh_bytes(coords(2), &square_v2_binary(false)).unwrap());
         assert_square(&read_gmsh_bytes(coords(2), &square_v4_binary(false)).unwrap());
+    }
+
+    // ─── In-memory front-end ─────────────────────────────────────────────
+
+    /// Everything a mesh *is*, flattened for comparison: the groups in order,
+    /// and inside each the element type and raw connectivity of every zone.
+    /// Two imports that agree on this agree cell for cell, node for node.
+    fn shape(groups: &[(String, Mesh)]) -> Vec<(String, Vec<(ElementType, Vec<NodeId>)>)> {
+        groups
+            .iter()
+            .map(|(name, mesh)| {
+                let zones = (0..mesh.len())
+                    .map(|i| {
+                        let handle = mesh.get(i).unwrap();
+                        let sub = handle.read();
+                        (sub.element_type(), sub.connectivity().to_vec())
+                    })
+                    .collect();
+                (name.clone(), zones)
+            })
+            .collect()
+    }
+
+    /// `SQUARE_V2` again, but as the arrays a live gmsh session hands over:
+    /// the node table, then one block per (entity, element type).
+    fn square_blocks() -> (Vec<u64>, Vec<f64>, Vec<String>, Vec<String>) {
+        let tags = vec![1_u64, 2, 3, 4];
+        #[rustfmt::skip]
+        let xyz = vec![
+            0.0, 0.0, 0.0,
+            1.0, 0.0, 0.0,
+            1.0, 1.0, 0.0,
+            0.0, 1.0, 0.0,
+        ];
+        (
+            tags,
+            xyz,
+            vec!["bottom".to_string()],
+            vec!["plate".to_string()],
+        )
+    }
+
+    #[test]
+    fn arrays_and_file_agree_cell_for_cell() {
+        // The blocks are given in the file's element order, so both paths meet
+        // the node tags in the same order and hand out the same `NodeId`s.
+        let (tags, xyz, bottom, plate) = square_blocks();
+        let blocks = [
+            GmshBlock {
+                element_type: 1, // SEG2
+                node_tags: &[1, 2],
+                groups: &bottom,
+            },
+            GmshBlock {
+                element_type: 2, // TRI3
+                node_tags: &[1, 2, 3, 1, 3, 4],
+                groups: &plate,
+            },
+        ];
+
+        let from_memory = from_gmsh_arrays(coords(2), &tags, &xyz, &blocks).unwrap();
+        let from_file = read_gmsh_str(coords(2), SQUARE_V2).unwrap();
+        assert_eq!(shape(&from_memory), shape(&from_file));
+    }
+
+    #[test]
+    fn arrays_share_one_coords_and_keep_only_used_nodes() {
+        let (mut tags, mut xyz, _, plate) = square_blocks();
+        // A fifth node nothing references: it must not land in the `Coords`.
+        tags.push(9);
+        xyz.extend_from_slice(&[5.0, 5.0, 0.0]);
+
+        let c = coords(2);
+        let blocks = [GmshBlock {
+            element_type: 2,
+            node_tags: &[1, 2, 3],
+            groups: &plate,
+        }];
+        let groups = from_gmsh_arrays(c.clone(), &tags, &xyz, &blocks).unwrap();
+        assert_eq!(c.read().node_count(), 3);
+        assert!(groups[0].1.coords().unwrap().same_object(&c));
+    }
+
+    #[test]
+    fn arrays_apply_the_quadratic_volume_permutation() {
+        // TET10: gmsh swaps the last two mid-edge nodes. Ten tags in gmsh
+        // order must come out in pyrucast's, i.e. `[.., 9, 8]` swapped back.
+        let tags: Vec<u64> = (1..=10).collect();
+        let xyz: Vec<f64> = (0..10).flat_map(|i| [i as f64, 0.0, 0.0]).collect();
+        let names = vec!["bloc".to_string()];
+        let blocks = [GmshBlock {
+            element_type: 11, // TET10
+            node_tags: &tags,
+            groups: &names,
+        }];
+
+        let groups = from_gmsh_arrays(coords(3), &tags, &xyz, &blocks).unwrap();
+        let handle = groups[0].1.get(0).unwrap();
+        let conn = handle.read().connectivity().to_vec();
+        let perm = gmsh_node_permutation(ElementType::TET10).unwrap();
+        let expected: Vec<NodeId> = perm.iter().map(|&p| NodeId(p as u32)).collect();
+        assert_eq!(conn, expected);
+    }
+
+    #[test]
+    fn arrays_place_a_block_in_each_of_its_groups() {
+        // An entity carrying two physical groups: its cells belong to both,
+        // exactly as MSH 4.1 allows.
+        let (tags, xyz, _, _) = square_blocks();
+        let names = vec!["plate".to_string(), "everything".to_string()];
+        let blocks = [GmshBlock {
+            element_type: 2,
+            node_tags: &[1, 2, 3],
+            groups: &names,
+        }];
+        let groups = from_gmsh_arrays(coords(2), &tags, &xyz, &blocks).unwrap();
+        let got: Vec<&str> = groups.iter().map(|(n, _)| n.as_str()).collect();
+        assert_eq!(got, vec!["plate", "everything"]);
+        // One cell, counted in both — the node is shared, not duplicated.
+        assert_eq!(groups[0].1.cell_count().unwrap(), 1);
+        assert_eq!(groups[1].1.cell_count().unwrap(), 1);
+    }
+
+    #[test]
+    fn arrays_read_sparse_tags() {
+        // Tags far apart: `TagIndex` hashes instead of tabulating, and the
+        // result must be the same.
+        let tags = vec![1_u64, 5_000_000, 9_000_000];
+        let xyz = vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0];
+        let names = vec!["plate".to_string()];
+        let blocks = [GmshBlock {
+            element_type: 2,
+            node_tags: &[1, 5_000_000, 9_000_000],
+            groups: &names,
+        }];
+        let groups = from_gmsh_arrays(coords(2), &tags, &xyz, &blocks).unwrap();
+        assert_eq!(groups[0].1.cell_count().unwrap(), 1);
+    }
+
+    #[test]
+    fn arrays_unknown_node_errors() {
+        let (tags, xyz, _, plate) = square_blocks();
+        let blocks = [GmshBlock {
+            element_type: 2,
+            node_tags: &[1, 2, 77],
+            groups: &plate,
+        }];
+        let e = from_gmsh_arrays(coords(2), &tags, &xyz, &blocks).unwrap_err();
+        assert!(matches!(e, PyrucastError::Message(m) if m.contains("unknown node 77")));
+    }
+
+    #[test]
+    fn arrays_ragged_block_errors() {
+        let (tags, xyz, _, plate) = square_blocks();
+        let blocks = [GmshBlock {
+            element_type: 2, // TRI3 wants a multiple of three
+            node_tags: &[1, 2, 3, 4],
+            groups: &plate,
+        }];
+        let e = from_gmsh_arrays(coords(2), &tags, &xyz, &blocks).unwrap_err();
+        assert!(matches!(e, PyrucastError::Message(m) if m.contains("whole number of cells")));
+    }
+
+    #[test]
+    fn arrays_unsupported_element_type_errors() {
+        let (tags, xyz, _, plate) = square_blocks();
+        let blocks = [GmshBlock {
+            element_type: 21, // TRI10, third order — pyrucast has no such type
+            node_tags: &[],
+            groups: &plate,
+        }];
+        let e = from_gmsh_arrays(coords(2), &tags, &xyz, &blocks).unwrap_err();
+        assert!(
+            matches!(e, PyrucastError::Message(m) if m.contains("unsupported element type 21"))
+        );
+    }
+
+    #[test]
+    fn arrays_coordinate_count_mismatch_errors() {
+        let (tags, _, _, plate) = square_blocks();
+        let blocks = [GmshBlock {
+            element_type: 2,
+            node_tags: &[1, 2, 3],
+            groups: &plate,
+        }];
+        // Two coordinates per node instead of three.
+        let flat = vec![0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0];
+        let e = from_gmsh_arrays(coords(2), &tags, &flat, &blocks).unwrap_err();
+        assert!(matches!(e, PyrucastError::Message(m) if m.contains("three each")));
     }
 
     #[test]
