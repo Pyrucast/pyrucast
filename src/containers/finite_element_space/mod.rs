@@ -2065,7 +2065,7 @@ mod tests {
 
         {
             let sub = fes.get(0).unwrap().read();
-            let s = format!("{}", &*sub);
+            let s = format!("{}", *sub);
             assert!(s.contains("SubFiniteElementSpace"));
             assert!(s.contains("TRI3"));
             assert!(s.contains("LAGRANGE1"));

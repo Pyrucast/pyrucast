@@ -37,8 +37,8 @@ fn une_erreur_se_lit_et_se_filtre() {
 fn debug_montre_la_structure_display_le_resume() {
     let coords = Handle::new(Coords::new(2).unwrap());
     let c = coords.read();
-    println!("{:?}", &*c); // vue structurelle (Debug)
-    println!("{}", &*c); // vue résumée (Display)
+    println!("{:?}", *c); // vue structurelle (Debug)
+    println!("{}", *c); // vue résumée (Display)
 }
 // ANCHOR_END: affichage
 

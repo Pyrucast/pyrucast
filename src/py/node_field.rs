@@ -218,11 +218,11 @@ impl PySubNodeField {
     }
 
     fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", &*self.handle.read()))
+        Ok(format!("{:?}", *self.handle.read()))
     }
 
     fn __str__(&self) -> PyResult<String> {
-        Ok(format!("{}", &*self.handle.read()))
+        Ok(format!("{}", *self.handle.read()))
     }
 }
 

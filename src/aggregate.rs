@@ -367,9 +367,9 @@ impl<S: Any + Send + Sync + std::fmt::Debug> std::fmt::Debug for DebugItem<'_, S
         // No fallback: holding the handle guarantees the object is there.
         let s = self.0.read();
         if f.alternate() {
-            write!(f, "{:#?}", &*s)
+            write!(f, "{:#?}", *s)
         } else {
-            write!(f, "{:?}", &*s)
+            write!(f, "{:?}", *s)
         }
     }
 }
