@@ -6,7 +6,7 @@
 
 use crate::atoms::ElementType;
 use crate::containers::mesh::Mesh;
-use crate::ops::mesh::FrontRelax;
+use crate::ops::mesh::{FrontRelax, GmshBlock};
 use crate::py::coords::PyCoords;
 use crate::py::element_field::{PyElementField, PySubElementField};
 use crate::py::mesh::PyMesh;
@@ -1111,6 +1111,86 @@ fn groups_to_dict<'py>(
         dict.set_item(name, Py::new(py, PyMesh { inner: mesh })?)?;
     }
     Ok(dict)
+}
+
+/// Build meshes from a gmsh mesh **already in memory** — the node table and
+/// the element blocks — instead of from a file.
+///
+/// This is the low-level operator behind `pyrucast.mesh.from_gmsh`, which is
+/// what you normally want: it asks the live gmsh model for these arrays
+/// itself. Call this one when you hold the arrays already, or when you want
+/// to choose exactly what to import.
+///
+/// - `node_tags` — gmsh's node tags, as `gmsh.model.mesh.getNodes()` returns
+///   them (first of the triple);
+/// - `node_coords` — three coordinates per tag, in the same order (second of
+///   the triple);
+/// - `blocks` — a sequence of `(element_type, node_tags, groups)`, one per
+///   homogeneous block: the gmsh type code (`2` for a triangle, `4` for a
+///   tetrahedron, …), that block's flat connectivity, and the physical-group
+///   names its cells belong to.
+///
+/// numpy arrays are read **without being copied**, through the buffer
+/// protocol; plain Python lists work too, at the cost of a conversion.
+///
+/// Same rules and same result as `read_gmsh`: a `dict` from group name to
+/// `Mesh`, all sharing the `coords` you pass, whose dimension decides how many
+/// of gmsh's three coordinates are kept. Raises if a block is not a whole
+/// number of cells, if a cell names a tag absent from `node_tags`, or if a
+/// gmsh element type has no pyrucast counterpart.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn from_gmsh_arrays<'py>(
+    py: Python<'py>,
+    coords: PyRef<PyCoords>,
+    node_tags: &Bound<'py, PyAny>,
+    node_coords: &Bound<'py, PyAny>,
+    blocks: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyDict>> {
+    // Unpack every block first, so the Python objects holding the buffers stay
+    // alive for as long as the slices that borrow from them.
+    let mut codes: Vec<u32> = Vec::new();
+    let mut tag_objects: Vec<Bound<'py, PyAny>> = Vec::new();
+    let mut names: Vec<Vec<String>> = Vec::new();
+    for (i, item) in blocks.try_iter()?.enumerate() {
+        let item = item?;
+        let unpack = |k: usize| {
+            item.get_item(k).map_err(|_| {
+                PyValueError::new_err(format!(
+                    "block {i}: expected a (element_type, node_tags, groups) triple"
+                ))
+            })
+        };
+        codes.push(unpack(0)?.extract()?);
+        tag_objects.push(unpack(1)?);
+        names.push(unpack(2)?.extract()?);
+    }
+
+    let tags = crate::py::arrays::borrow::<u64>(node_tags)?;
+    let xyz = crate::py::arrays::borrow::<f64>(node_coords)?;
+    let block_tags = tag_objects
+        .iter()
+        .map(crate::py::arrays::borrow::<u64>)
+        .collect::<PyResult<Vec<_>>>()?;
+
+    let blocks: Vec<GmshBlock<'_>> = codes
+        .iter()
+        .zip(&block_tags)
+        .zip(&names)
+        .map(|((&element_type, tags), groups)| GmshBlock {
+            element_type,
+            node_tags: tags.as_slice(),
+            groups,
+        })
+        .collect();
+
+    let groups = crate::ops::mesh::from_gmsh_arrays(
+        coords.handle.clone(),
+        tags.as_slice(),
+        xyz.as_slice(),
+        &blocks,
+    )?;
+    groups_to_dict(py, groups)
 }
 
 /// Read a gmsh `.msh` file (ASCII or binary, MSH 2.2 or 4.1) into a `dict`

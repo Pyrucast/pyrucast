@@ -6,6 +6,7 @@
 //! and concentrate the FFI surface in one place.
 
 pub mod archive;
+pub mod arrays;
 pub mod cell;
 pub mod coords;
 pub mod element;

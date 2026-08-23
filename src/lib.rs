@@ -159,6 +159,7 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::mesh::points_on_cone, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::points_in_torus, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::points_on_torus, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesh::from_gmsh_arrays, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::read_gmsh, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::read_gmsh_str, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::export::export_vtk, m)?)?;
