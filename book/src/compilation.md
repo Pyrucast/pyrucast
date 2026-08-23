@@ -9,7 +9,7 @@ documentation. Pour le **simple usage en Python** (quatre commandes), voir
 
 | Outil | Version | Rôle |
 |---|---|---|
-| Rust (via `rustup`) | ≥ 1.88 (`rust-version` du crate), édition 2024 | Compilation du cœur |
+| Rust (via `rustup`) | ≥ 1.89 (`rust-version` du crate), édition 2024 | Compilation du cœur |
 | Python | ≥ 3.11 (3.13 testé) | API Python et `maturin` |
 | `ruff` | récent | Format du Python (`ruff format`), vérifié par `check_format` |
 | `mdbook` | ≥ 0.4 | Génération de cette documentation |
