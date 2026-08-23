@@ -334,6 +334,11 @@ l'enveloppe est inachevée — une arête bloquée reste tributaire des bascules
 sinon de `allow_surface_nodes`. S'y ajoutent les mesures de qualité et leur
 suivi dans le temps.
 
+Côté **quadrangles**, l'état de l'art, la place qu'y tiennent `pave_surface`,
+`grid_surface` et `merge_triangles`, et six pistes chiffrées sont dans
+[MAILLAGE-QUADRANGULAIRE.md](MAILLAGE-QUADRANGULAIRE.md) — avec la liste de ce
+qui a été essayé puis écarté, à ne pas refaire.
+
 ## Évolutions mémoire (conditionnelles)
 
 Le modèle est volontairement minimal : un `Arc<RwLock<T>>` par objet, un
