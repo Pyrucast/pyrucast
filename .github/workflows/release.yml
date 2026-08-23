@@ -70,7 +70,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      # Épinglé, et non `@stable` : `check_clippy` tourne en `-D warnings`,
+      # donc un lint nouvellement ajouté par une sortie de Rust suffirait à
+      # faire rougir la publication sans qu'une ligne ait changé. `pages.yml`
+      # reste sur `@stable` : il ne fait que `cargo doc`, sans `-D warnings`,
+      # et un échec y serait cosmétique.
+      - uses: dtolnay/rust-toolchain@1.98.0
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
@@ -127,7 +132,15 @@ jobs:
           python3 -m venv .venv
           . ./.venv/bin/activate
           pip install --quiet --upgrade pip
-          pip install --quiet maturin pytest ruff gmsh
+          # `ruff` et `maturin` sont épinglés, les deux autres non, et la
+          # différence n'est pas arbitraire. `ruff format --check` compare
+          # au formatage d'une version précise : une sortie amont qui change
+          # une règle rougirait `check_format` sans qu'une ligne du projet ait
+          # bougé. `maturin` construit le module que tout le reste du job
+          # importe. `pytest` n'a pas de contrat de sortie, et `gmsh` doit
+          # rester libre — l'intérêt de `check_gmsh` est justement de tester
+          # l'interface contre le gmsh du jour.
+          pip install --quiet maturin==1.14.1 pytest ruff==0.16.4 gmsh
 
       - name: Les blocs de check_all sont bien les cinq attendus
         # Les étapes ci-dessous énumèrent les blocs une seconde fois. Cette
@@ -169,7 +182,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      # Épinglé, et non `@stable` : `check_clippy` tourne en `-D warnings`,
+      # donc un lint nouvellement ajouté par une sortie de Rust suffirait à
+      # faire rougir la publication sans qu'une ligne ait changé. `pages.yml`
+      # reste sur `@stable` : il ne fait que `cargo doc`, sans `-D warnings`,
+      # et un échec y serait cosmétique.
+      - uses: dtolnay/rust-toolchain@1.98.0
       - name: Vérifier si déjà publié
         id: check
         run: |
@@ -191,6 +209,11 @@ jobs:
       - name: Build sdist
         uses: PyO3/maturin-action@v1
         with:
+          # Sans cette ligne l'action prend `latest` : le maturin qui façonne
+          # les artefacts publiés — étiquettes de compatibilité et détection
+          # abi3 comprises — serait celui publié en dernier le jour du tag,
+          # écrit nulle part.
+          maturin-version: 'v1.14.1'
           command: sdist
           args: --out dist
       - uses: actions/upload-artifact@v7
@@ -229,6 +252,7 @@ jobs:
       - name: Build wheel
         uses: PyO3/maturin-action@v1
         with:
+          maturin-version: 'v1.14.1'  # cf. le job sdist
           target: ${{ matrix.target }}
           manylinux: ${{ matrix.manylinux || 'auto' }}
           # `--interpreter 3.11` vaut aussi pour Linux, où maturin tourne dans
