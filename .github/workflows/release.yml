@@ -77,6 +77,13 @@ jobs:
         with:
           key: verify
 
+      # `requires-python = ">=3.11"` : le venv du job doit le tenir. Le Python
+      # par défaut du runner convient aujourd'hui, mais rien ne le garantit —
+      # et un échec ici se lirait comme une régression du code.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
       - name: Dépendances système
         # `viz` lie fontconfig et freetype pour le rendu de texte (plotters,
         # sous-feature ttf). Sans elles, `check_rust` échoue à l'édition de liens.
@@ -202,12 +209,24 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
+      # L'interpréteur de compilation ne se laisse pas au hasard du runner.
+      # `pyo3-build-config` **refuse** de compiler quand le Python trouvé est
+      # plus ancien que le plancher abi3 (« cannot set a minimum Python version
+      # 3.11 higher than the interpreter version »). Avec `abi3-py39` cela
+      # n'arrivait jamais ; à 3.11, un runner qui expose encore un 3.9 ferait
+      # rougir ce job — au pire moment, celui de la publication.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
       - name: Build wheel
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
           manylinux: ${{ matrix.manylinux || 'auto' }}
-          args: --release --features ${{ env.MATURIN_FEATURES }} --out dist
+          # `--interpreter 3.11` vaut aussi pour Linux, où maturin tourne dans
+          # le conteneur manylinux : `setup-python` n'y entre pas, et l'image
+          # porte plusieurs CPython dont des antérieurs au plancher.
+          args: --release --features ${{ env.MATURIN_FEATURES }} --interpreter 3.11 --out dist
           # plotters (feature viz, sous-feature ttf) a besoin des en-têtes
           # fontconfig/freetype pour lier le rendu de texte.
           before-script-linux: |

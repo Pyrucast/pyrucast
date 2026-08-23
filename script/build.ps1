@@ -33,7 +33,7 @@ Write-Host "  cargo   : $(cargo --version)"
 
 $Py = $null
 foreach ($c in 'python', 'py') { if (Have $c) { $Py = $c; break } }
-if (-not $Py) { Die "python not found - install Python >= 3.9" }
+if (-not $Py) { Die "python not found - install Python >= 3.11" }
 Write-Host "  python  : $(& $Py --version)"
 
 # Virtual environment: create it if missing, then activate it (pyo3 and
