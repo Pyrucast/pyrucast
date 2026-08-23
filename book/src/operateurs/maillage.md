@@ -2220,3 +2220,78 @@ fichier déjà chargé en mémoire (utile pour les tests ou un `.msh` reçu sur
 le réseau). Côté Rust, `ops::mesh::read_gmsh(coords, path)` et
 `ops::mesh::read_gmsh_str(coords, text)` renvoient un
 `Vec<(String, Mesh)>` ordonné.
+
+## Déléguer le maillage à gmsh : `from_gmsh`
+
+Les mailleurs de pyrucast couvrent le cas courant ; les géométries difficiles,
+elles, se **délèguent**. On définit la géométrie et on maille dans gmsh — c'est
+son métier —, puis on appelle `from_gmsh` pour récupérer le résultat, **sans
+passer par un fichier** :
+
+```python
+{{#include ../../../tests/python/test_doc_gmsh.py:from_gmsh}}
+```
+
+pyrucast **lit** gmsh, il ne le pilote pas : aucune fonction pyrucast ne crée de
+géométrie ni ne lance de maillage. Le résultat est le même `dict[str, Mesh]` que
+`read_gmsh`, avec les mêmes règles — un `Mesh` par groupe physique, une zone par
+type d'élément, une seule `Coords` partagée dont la dimension décide combien des
+trois coordonnées de gmsh sont gardées, et `"<ungrouped>"` pour le reste.
+
+Les **surfaces et les points nommés** dans gmsh (`addPhysicalGroup(…, name=…)`)
+deviennent donc les clés du dictionnaire, et c'est sur elles qu'on pose ensuite
+les conditions aux limites. gmsh maille ses entités ponctuelles : un point nommé
+arrive comme un `Mesh` POI1.
+
+### Ce qui est copié, et ce qui ne l'est pas
+
+La chaîne a trois maillons, dont deux sont gratuits :
+
+| maillon | copie ? | pourquoi |
+|---|---|---|
+| gmsh → numpy | non | les tableaux que rend l'API gmsh sont des **vues** sur la mémoire de gmsh, libérées au ramasse-miettes du tableau |
+| numpy → pyrucast | non | lecture par le **protocole tampon** — d'où le plancher Python 3.11 du projet, `PyObject_GetBuffer` n'étant entré dans l'API limitée qu'à cette version |
+| construction du maillage | **oui, une passe** | les tags gmsh sont des entiers 64 bits éventuellement épars quand un `NodeId` est un indice ; gmsh donne toujours trois coordonnées ; les volumes quadratiques demandent la permutation ; et une `Coords` possède ses tableaux |
+
+Autrement dit : une vue jusqu'à la frontière Rust, puis **une seule passe**.
+Rien n'est jamais matérialisé élément par élément côté Python. Une fois l'appel
+rendu, pyrucast possède ses données — `gmsh.finalize()` ne les emporte pas.
+
+> Un objet sans tampon à prêter — une `list`, ce que gmsh rend quand numpy n'est
+> pas installé — est lu par la conversion ordinaire. Le résultat est le même,
+> au prix d'une copie de plus.
+
+### Restreindre l'import
+
+`dim` limite l'import à une dimension, `tag` à une seule entité de cette
+dimension (`from_gmsh(coords, dim=2, tag=1)`). La table des nœuds est lue en
+entier quoi qu'il arrive — une maille de surface s'appuie sur des nœuds classés
+sur ses courbes de bord — et seuls les nœuds **référencés** sont matérialisés.
+
+### L'opérateur en dessous : `from_gmsh_arrays`
+
+`from_gmsh` est la seule fonction de `pyrucast.mesh` écrite en Python : elle a
+besoin d'un interpréteur portant le module `gmsh`, ce que Rust ne peut pas
+avoir. Elle ne fait qu'aller chercher les tableaux et les passer à
+`from_gmsh_arrays`, l'opérateur Rust, utilisable directement quand on tient
+déjà les tableaux ou qu'on veut choisir exactement quoi importer :
+
+```python
+{{#include ../../../tests/python/test_doc_ops_maillage.py:from_gmsh_arrays}}
+```
+
+Un bloc est un triplet `(code gmsh, connectivité à plat, noms de groupes)` —
+la forme même de `gmsh.model.mesh.getElements()`, et déjà celle de pyrucast,
+puisqu'un sous-maillage porte un type d'élément et une connectivité à plat.
+Côté Rust, `ops::mesh::from_gmsh_arrays(coords, node_tags, node_coords, blocks)`
+prend des `GmshBlock` et rend le même `Vec<(String, Mesh)>` ordonné.
+
+Les deux voies, fichier et mémoire, partagent leur moteur : le regroupement, le
+partage des nœuds et la permutation des volumes quadratiques ne sont écrits
+qu'une fois. Un test compare maille pour maille ce que les deux rendent de la
+même géométrie.
+
+> Une nuance à connaître pour le contrôle croisé : `gmsh.write()` n'écrit par
+> défaut que les éléments portant un groupe physique, alors que `from_gmsh` voit
+> **tout** le modèle. Le `.msh` relu peut donc contenir moins que l'import
+> direct — la différence tient dans `"<ungrouped>"`.

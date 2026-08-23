@@ -238,6 +238,23 @@ miroir 1:1. Si une nouvelle op apparaît, elle suit la règle 1:1 par défaut ;
 masquer un constructeur `Sub*` est le **seul** écart permis, et il doit rester
 limité à ce cas.
 
+### L'autre sens : une op que Rust ne *peut pas* porter
+
+`pyrucast.mesh.from_gmsh` est la seule fonction libre à n'exister que côté
+Python. Ce n'est pas un choix de surface : elle lit le modèle d'une session
+**gmsh** vivante, donc elle exige un interpréteur CPython portant le module
+`gmsh`. Rust ne peut pas l'avoir — un `cargo test` en Rust pur ne lie même pas
+libpython.
+
+La dérogation reste étroite parce que la fonction **n'invente aucune
+opération** : elle va chercher les tableaux du modèle courant et les passe à
+`ops::mesh::from_gmsh_arrays`, l'opérateur Rust, qui, lui, est un miroir strict
+et porte tout le travail. Le critère à retenir pour un futur cas : une fonction
+Python-seule ne se justifie que si son *entrée* n'existe pas hors de
+l'interpréteur, et elle doit déléguer son algorithme à un opérateur Rust.
+Elle s'inscrit alors dans le `PYTHON_ONLY` de
+`tests/python/test_mirror_completeness.py`, avec sa raison.
+
 Le style visé côté Python est celui de **numpy / scipy** (et l'héritage
 **cast3m**) : des opérateurs **nommés** (`pyrucast.mesh.to_poi1(mesh)`,
 `pyrucast.matrix.stiffness(model, mat)`) plutôt que des chaînes de

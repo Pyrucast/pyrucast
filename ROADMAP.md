@@ -178,8 +178,9 @@ limite HEX8 + raccord PYRA5 + cœur TET4).
 Topologie et transformations : `skin`, `border`, `orient`, `consolidate`,
 `merge_nodes`, `to_quadratic`, `convert`, `to_poi1`, `translate`, `rotate`,
 symétries, sélections géométriques (sphère, plan, cylindre, cône, tore, ligne).
-Entrées/sorties : lecture **gmsh** (MSH 2.2 et 4.1, ASCII et binaire), export
-**VTK**.
+Entrées/sorties : lecture **gmsh** (MSH 2.2 et 4.1, ASCII et binaire), import
+**gmsh en mémoire** depuis une session vivante (sans fichier, sans copie des
+tableaux), export **VTK**.
 
 ## Champs et opérateurs
 

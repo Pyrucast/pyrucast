@@ -46,6 +46,7 @@ __all__ = [
     "export_vtk",
     "extrude",
     "flux",
+    "from_gmsh_arrays",
     "from_live_nodes",
     "geometric",
     "gradient",
@@ -3303,6 +3304,35 @@ def flux(fespace: SubFiniteElementSpace, density: typing.Any, component: builtin
     mesh as an area.
     """
 
+def from_gmsh_arrays(coords: Coords, node_tags: typing.Any, node_coords: typing.Any, blocks: typing.Any) -> dict:
+    r"""
+    Build meshes from a gmsh mesh **already in memory** — the node table and
+    the element blocks — instead of from a file.
+    
+    This is the low-level operator behind `pyrucast.mesh.from_gmsh`, which is
+    what you normally want: it asks the live gmsh model for these arrays
+    itself. Call this one when you hold the arrays already, or when you want
+    to choose exactly what to import.
+    
+    - `node_tags` — gmsh's node tags, as `gmsh.model.mesh.getNodes()` returns
+      them (first of the triple);
+    - `node_coords` — three coordinates per tag, in the same order (second of
+      the triple);
+    - `blocks` — a sequence of `(element_type, node_tags, groups)`, one per
+      homogeneous block: the gmsh type code (`2` for a triangle, `4` for a
+      tetrahedron, …), that block's flat connectivity, and the physical-group
+      names its cells belong to.
+    
+    numpy arrays are read **without being copied**, through the buffer
+    protocol; plain Python lists work too, at the cost of a conversion.
+    
+    Same rules and same result as `read_gmsh`: a `dict` from group name to
+    `Mesh`, all sharing the `coords` you pass, whose dimension decides how many
+    of gmsh's three coordinates are kept. Raises if a block is not a whole
+    number of cells, if a cell names a tag absent from `node_tags`, or if a
+    gmsh element type has no pyrucast counterpart.
+    """
+
 def from_live_nodes(coords: Coords) -> Mesh:
     r"""
     Build a points (POI1) mesh holding every live node of `coords`.
@@ -3391,7 +3421,7 @@ def grid_surface2(contour: Mesh, element_type: builtins.str, size: typing.Option
     where its vertices happened to fall. Measured worst cell, `grid_surface`
     then `grid_surface2`: plate with a step off the grid 0.405 / 0.963, L with
     arbitrary dimensions 0.437 / 0.979, crenellated profile with its base in one
-    run 0.287 / 0.651, house with a pitched roof 0.304 / 0.475. On a **circle**
+    run 0.323 / 0.651, house with a pitched roof 0.420 / 0.548. On a **circle**
     the order reverses hard — 0.288 against 0.005 — and `grid_surface2` should
     not be used: nothing dictates a grid line over most of a curve. The book's
     *Mailler une géométrie* page puts all four surface meshers side by side.

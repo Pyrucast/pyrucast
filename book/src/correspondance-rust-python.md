@@ -150,6 +150,8 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `merge_nodes(mesh: &Mesh, tol: f64, in_place: bool) -> Mesh` | `merge_nodes(mesh, tol, in_place=False) -> Mesh` |
 | `read_gmsh(coords: Handle<Coords>, path: &Path) -> Vec<(String, Mesh)>` | `read_gmsh(coords, path) -> dict[str, Mesh]` |
 | `read_gmsh_str(coords: Handle<Coords>, text: &str) -> Vec<(String, Mesh)>` | `read_gmsh_str(coords, text) -> dict[str, Mesh]` |
+| `from_gmsh_arrays(coords: Handle<Coords>, node_tags: &[u64], node_coords: &[f64], blocks: &[GmshBlock]) -> Vec<(String, Mesh)>` | `from_gmsh_arrays(coords, node_tags, node_coords, blocks) -> dict[str, Mesh]` |
+| — (exige l'interpréteur) | `from_gmsh(coords, *, dim=-1, tag=-1) -> dict[str, Mesh]` |
 | `consolidate(mesh: &Mesh) -> Mesh` | `consolidate(mesh) -> Mesh` |
 | `select_nodes(field: &NodeField, band: &Band, …) -> Mesh` / `select_cells(field: &ElementField, …) -> Mesh` | `select(field, ge=None, gt=None, le=None, lt=None, components=None) -> Mesh` (dispatch par type ; part d'un champ mais rend un maillage, d'où son rangement ici) |
 

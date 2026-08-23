@@ -746,3 +746,25 @@ assert plate.element_types() == ["TRI3"]
 assert plate.cell_count() == 2
 
 os.chdir(_CWD)
+
+
+# ANCHOR: from_gmsh_arrays
+# Le même carré, mais tel que gmsh le tend en mémoire : les tags des nœuds,
+# leurs trois coordonnées chacun, puis un bloc par type d'élément dont la
+# connectivité est à plat.
+tags = [1, 2, 3, 4]
+xyz = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0]
+blocs = [
+    (1, [1, 2], ["bottom"]),  # code 1 : SEG2
+    (2, [1, 2, 3, 1, 3, 4], ["plate"]),  # code 2 : TRI3
+]
+
+coords = pyrucast.Coords(dim=2)
+regions = pyrucast.mesh.from_gmsh_arrays(coords, tags, xyz, blocs)
+print(regions["plate"].element_types())  # ['TRI3']
+print(coords.node_count())  # 4 — un seul Coords pour les deux groupes
+# ANCHOR_END: from_gmsh_arrays
+
+assert regions["plate"].element_types() == ["TRI3"]
+assert regions["plate"].cell_count() == 2
+assert coords.node_count() == 4

@@ -243,9 +243,18 @@ Et les totaux, dans le même régime :
 | `check_examples` | exemples et formation | 80 s |
 | `check_doc` | rustdoc, garde-fous, book | 50 s |
 | `check_clippy` | quatre jeux de features, `-D warnings` | ~2 min |
+| `check_gmsh` | l'interface gmsh (exige `pip install gmsh`) | 5 s |
 | **`check_quick`** | **formatage + Rust — la boucle de commit** | **~3 min** |
 | `check_all` | les cinq blocs | ~6 min |
 | `set_new_version` | `check_all` + `check_clippy` | ~8 min |
+
+`check_gmsh` ne fait pas partie de `check_all`, pour la même raison que
+`check_clippy` n'en fait pas partie : on ne l'impose pas à la boucle
+quotidienne. Un développeur qui ne touche pas à l'import gmsh n'a donc pas à
+installer gmsh — les tests concernés se sautent proprement. On le lance en
+touchant à cette interface, et le job `verify` de la CI le lance toujours.
+Sous Linux, la roue `gmsh` embarque un `libgmsh` lié à OpenGL : il faut aussi
+les paquets système `libglu1-mesa` et `libopengl0`.
 
 Deux remarques que ces chiffres appellent.
 
