@@ -80,9 +80,15 @@ jobs:
       - name: Dépendances système
         # `viz` lie fontconfig et freetype pour le rendu de texte (plotters,
         # sous-feature ttf). Sans elles, `check_rust` échoue à l'édition de liens.
+        #
+        # La roue `gmsh` embarque son `libgmsh.so`, qui est lié à la pile
+        # OpenGL même quand on ne se sert que de son API : sans `libGLU.so.1`
+        # ni `libOpenGL.so.0`, le simple `import gmsh` de `check_gmsh` lève un
+        # `OSError` au chargement de la bibliothèque.
         run: |
           sudo apt-get update
-          sudo apt-get install -y libfontconfig1-dev libfreetype6-dev libexpat1-dev
+          sudo apt-get install -y libfontconfig1-dev libfreetype6-dev libexpat1-dev \
+                                  libglu1-mesa libopengl0
 
       - name: Installer mdBook et mdbook-mermaid
         # `check_doc` construit le book ; le préprocesseur mermaid doit être sur
@@ -106,7 +112,7 @@ jobs:
           python3 -m venv .venv
           . ./.venv/bin/activate
           pip install --quiet --upgrade pip
-          pip install --quiet maturin pytest ruff
+          pip install --quiet maturin pytest ruff gmsh
 
       - name: Les blocs de check_all sont bien les cinq attendus
         # Les étapes ci-dessous énumèrent les blocs une seconde fois. Cette
@@ -127,6 +133,11 @@ jobs:
         run: bash script/check_rust.sh
       - name: check_python
         run: bash script/check_python.sh
+      # Hors de `check_all.sh` — comme `check_clippy` : la passe normale ne doit
+      # pas exiger gmsh d'un développeur qui ne touche pas à cette interface.
+      # La CI, elle, l'exige. Après `check_python`, qui a construit le module.
+      - name: check_gmsh
+        run: bash script/check_gmsh.sh
       - name: check_examples
         run: bash script/check_examples.sh
       - name: check_doc
@@ -266,8 +277,8 @@ jobs:
           [ "$(ls -1 dist/*.tar.gz | wc -l)" = 1 ] || { echo "une sdist attendue" >&2; exit 1; }
           for w in dist/*.whl; do
             case "$(basename "$w")" in
-              *-cp39-abi3-*) ;;
-              *) echo "$w n'est pas une wheel abi3-py39 : plancher Python non tenu" >&2; exit 1 ;;
+              *-cp311-abi3-*) ;;
+              *) echo "$w n'est pas une wheel abi3-py311 : plancher Python non tenu" >&2; exit 1 ;;
             esac
           done
           for tag in manylinux2014_x86_64 win_amd64 "${MACOS_PLATFORM_TAG}"; do
@@ -337,7 +348,7 @@ jobs:
           {
             printf '**crates.io** [pyrucast %s](https://crates.io/crates/pyrucast/%s) · ' "$VERSION" "$VERSION"
             printf '**PyPI** [pyrucast %s](https://pypi.org/project/pyrucast/%s/)\n\n' "$PYPI_VERSION" "$PYPI_VERSION"
-            printf 'Wheels `cp39-abi3` (Python ≥ 3.9) pour Linux x86_64, Windows x86_64 et macOS universal2.\n'
+            printf 'Wheels `cp311-abi3` (Python ≥ 3.11) pour Linux x86_64, Windows x86_64 et macOS universal2.\n'
             printf 'La sdist se compile sans la visualisation : `pyrucast.__features__` dit ce que porte votre installation.\n\n'
             cat NOTES.md
           } > BODY.md

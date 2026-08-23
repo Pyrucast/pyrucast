@@ -30,7 +30,7 @@ echo "  cargo   : $(cargo --version)"
 
 PY=""
 for c in python3 python; do have "$c" && { PY="$c"; break; }; done
-[ -n "$PY" ] || die "python not found — install Python >= 3.9"
+[ -n "$PY" ] || die "python not found — install Python >= 3.11"
 echo "  python  : $("$PY" --version 2>&1)"
 # Linux note: pyo3 needs the Python headers (python3-dev / python3-devel).
 

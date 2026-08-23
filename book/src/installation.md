@@ -13,7 +13,7 @@ sur la librairie (tests Rust, doctests, génération de la documentation,
 ## Prérequis
 
 - **Rust** stable, installé via [`rustup`](https://rustup.rs).
-- **Python** ≥ 3.9 (pour l'API Python ; inutile en [Rust pur](compilation.md#usage-en-rust-pur)).
+- **Python** ≥ 3.11 (pour l'API Python ; inutile en [Rust pur](compilation.md#usage-en-rust-pur)).
 - **Linux uniquement** : les en-têtes Python — `python3-dev` (Debian/Ubuntu)
   ou `python3-devel` (Fedora/RHEL). `pyo3` en a besoin pour l'édition de
   liens ; sur Windows l'installateur officiel les inclut déjà.

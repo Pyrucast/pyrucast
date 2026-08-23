@@ -10,7 +10,7 @@ documentation. Pour le **simple usage en Python** (quatre commandes), voir
 | Outil | Version | Rôle |
 |---|---|---|
 | Rust (via `rustup`) | ≥ 1.88 (`rust-version` du crate), édition 2024 | Compilation du cœur |
-| Python | ≥ 3.9 (3.13 testé) | API Python et `maturin` |
+| Python | ≥ 3.11 (3.13 testé) | API Python et `maturin` |
 | `ruff` | récent | Format du Python (`ruff format`), vérifié par `check_format` |
 | `mdbook` | ≥ 0.4 | Génération de cette documentation |
 | `mdbook-mermaid` | ≥ 0.14 | Rendu des graphes (ex. [graphe des dépendances](developper/arborescence.md#graphe-des-dépendances-externes)) |
@@ -343,7 +343,7 @@ powershell -ExecutionPolicy Bypass -File .\script\build.ps1
 
 Il déroule, dans l'ordre :
 
-1. **Vérification des prérequis** — `cargo`, `python` (≥ 3.9), création/activation
+1. **Vérification des prérequis** — `cargo`, `python` (≥ 3.11), création/activation
    du venv, installation de `maturin` et `pytest`, installation de `mdbook` si
    absent (`cargo install mdbook`).
 2. **Compilation + tests** — `cargo build`, `cargo test` (unitaires +
@@ -456,7 +456,7 @@ De là l'invariant qui rend la page `releases/` lisible :
 
 Le dernier job constate au lieu de supposer : il interroge les deux registres
 jusqu'à les y trouver, et vérifie sur les noms de fichiers qu'il y a bien trois
-wheels `cp39-abi3` et une sdist. `cargo publish` comme l'action PyPI savent
+wheels `cp311-abi3` et une sdist. `cargo publish` comme l'action PyPI savent
 sauter une version déjà présente ; ce silence est utile pour rejouer un job, et
 dangereux partout ailleurs.
 
@@ -503,7 +503,7 @@ pas la même chose :
 
 | | Plateformes | Features compilées | Prérequis |
 |---|---|---|---|
-| **wheel** `cp39-abi3` | Linux x86_64 (manylinux2014), Windows x86_64, macOS universal2 | `extension-module`, `viz`, `viz-interactive` | aucun — Python ≥ 3.9 |
+| **wheel** `cp311-abi3` | Linux x86_64 (manylinux2014), Windows x86_64, macOS universal2 | `extension-module`, `viz`, `viz-interactive` | aucun — Python ≥ 3.11 |
 | **sdist** `.tar.gz` | tout le reste (ARM, musl, BSD…) | `extension-module` seul | rustup, et la compilation du crate |
 
 Il n'y a pas de wheel Linux aarch64 : `viz` lie fontconfig et freetype, et

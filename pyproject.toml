@@ -11,7 +11,7 @@ name = "pyrucast"
 dynamic = ["version"]
 description = "Finite-element library in Rust, inspired by cast3m, exposed to Python"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 license = "MPL-2.0"
 authors = [{ name = "Gauthier F" }]
 classifiers = [
@@ -46,7 +46,7 @@ module-name = "pyrucast._pyrucast"
 # suit les défauts (line-length = 88). `ruff format` met en forme les exemples
 # et la suite de tests Python ; `ruff format --check` garde le standard (cf.
 # script/check.sh).
-target-version = "py39"
+target-version = "py311"
 # Le stub de l'extension est généré par `stub_gen` (cargo) : le laisser hors de
 # ruff, sinon il dériverait à chaque régénération.
 extend-exclude = ["python/pyrucast/_pyrucast/__init__.pyi"]

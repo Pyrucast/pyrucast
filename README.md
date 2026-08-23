@@ -13,7 +13,7 @@ optionnelle : un build par défaut ne tire ni `pyo3` ni `libpython`).
 | Outil | Version | Installation |
 |---|---|---|
 | Rust | stable (édition 2021) | [`rustup`](https://rustup.rs) |
-| Python | ≥ 3.9 | *API Python uniquement* — inutile en Rust pur |
+| Python | ≥ 3.11 | *API Python uniquement* — inutile en Rust pur |
 | En-têtes Python | — | *API Python uniquement* — **Linux** : `python3-dev` (Debian/Ubuntu) ou `python3-devel` (Fedora/RHEL). Windows : inclus dans l'installateur officiel. |
 
 ## Usage en Rust pur (sans Python)
