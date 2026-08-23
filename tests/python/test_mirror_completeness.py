@@ -164,6 +164,12 @@ PYTHON_ONLY = {
     "export_vtk": "nom qualifié de `export::vtk::write`",
     "xtx": "primitive du trait `Field`, exposée en opérateur de réduction",
     "xty": "primitive du trait `Field`, exposée en opérateur de réduction",
+    # La seule entrée qui ne soit pas un simple renommage : `from_gmsh` a besoin
+    # d'un interpréteur CPython vivant portant le module `gmsh`, ce que Rust ne
+    # peut pas avoir. Elle n'invente d'ailleurs aucune opération — elle va
+    # chercher les tableaux du modèle courant et les passe à l'opérateur Rust
+    # `mesh::from_gmsh_arrays`, qui, lui, est un miroir strict.
+    "from_gmsh": "lit le modèle gmsh vivant : exige l'interpréteur, donc sans jumeau Rust",
 }
 
 

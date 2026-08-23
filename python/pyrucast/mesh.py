@@ -127,10 +127,6 @@ __all__ = [
 # même dictionnaire pour le même maillage, ce nom compris.
 _UNGROUPED = "<ungrouped>"
 
-# Code gmsh de l'élément ponctuel, pour les points nommés que gmsh ne maille
-# pas toujours (voir `_named_point_blocks`).
-_GMSH_POINT = 15
-
 
 def _import_gmsh():
     """Le module ``gmsh``, ou une erreur qui dit quoi faire."""
@@ -167,31 +163,6 @@ def _group_names(gmsh, dim):
     return names
 
 
-def _named_point_blocks(gmsh, dim):
-    """Blocs POI1 pour les groupes physiques de dimension 0 restés sans maille.
-
-    gmsh ne crée pas toujours d'élément ponctuel sur un point nommé. Le groupe
-    existe pourtant, et c'est souvent celui sur lequel on veut poser une
-    condition : on le récupère par ses nœuds. Un POI1 porte un nœud par maille,
-    donc la liste des tags *est* la connectivité — rien à faire côté Rust.
-
-    Réservé à la dimension 0 : ailleurs, ce repli transformerait silencieusement
-    une surface en nuage de points.
-    """
-    if dim not in (-1, 0):
-        return []
-    blocks = []
-    for gdim, gtag in gmsh.model.getPhysicalGroups(0):
-        entities = gmsh.model.getEntitiesForPhysicalGroup(gdim, gtag)
-        if any(len(gmsh.model.mesh.getElements(0, int(e))[0]) for e in entities):
-            continue  # gmsh a bien maillé ces points, la voie normale suffit
-        tags, _ = gmsh.model.mesh.getNodesForPhysicalGroup(gdim, gtag)
-        if len(tags):
-            name = gmsh.model.getPhysicalName(gdim, gtag) or f"physical {gtag}"
-            blocks.append((_GMSH_POINT, tags, [name]))
-    return blocks
-
-
 def from_gmsh(coords, *, dim=-1, tag=-1):
     """Récupère le maillage du modèle gmsh courant, un ``Mesh`` par groupe nommé.
 
@@ -208,8 +179,9 @@ def from_gmsh(coords, *, dim=-1, tag=-1):
     tout son maillage sous cette seule clé.
 
     Les surfaces et les points nommés dans gmsh (``addPhysicalGroup(..., name=)``)
-    deviennent les clés du dictionnaire. Un point nommé que gmsh n'a pas maillé
-    est quand même rendu, sous forme de nuage POI1 de ses nœuds.
+    deviennent les clés du dictionnaire. gmsh maille ses entités ponctuelles,
+    donc un point nommé arrive comme un ``Mesh`` POI1, prêt à porter une
+    condition aux limites.
 
     ``dim`` restreint l'import à une dimension (``-1``, le défaut : toutes), et
     ``tag`` à cette seule entité de dimension ``dim``. La table des nœuds est
@@ -237,6 +209,5 @@ def from_gmsh(coords, *, dim=-1, tag=-1):
         types, _, connectivity = gmsh.model.mesh.getElements(*key)
         for element_type, conn in zip(types, connectivity):
             blocks.append((int(element_type), conn, groups))
-    blocks.extend(_named_point_blocks(gmsh, dim))
 
     return from_gmsh_arrays(coords, node_tags, node_coords, blocks)

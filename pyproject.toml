@@ -57,4 +57,11 @@ testpaths = ["tests/python"]
 # module**, pour que l'extrait inclus s'affiche en colonne 0. Un exemple qui
 # casse est donc une erreur de collecte : sans cette option, elle
 # interromprait toute la session au lieu du seul fichier concerné.
-addopts = "--continue-on-collection-errors"
+# `-m "not gmsh"` : les tests de l'interface gmsh sortent de la passe normale.
+# Un développeur qui n'y touche pas n'a pas à installer gmsh ; `check_gmsh.sh`
+# les rattrape avec `pytest -m gmsh` (l'option de la ligne de commande
+# l'emporte sur celle-ci).
+addopts = "--continue-on-collection-errors -m \"not gmsh\""
+markers = [
+    "gmsh: exige le module gmsh installé — lancé par script/check_gmsh.sh",
+]
