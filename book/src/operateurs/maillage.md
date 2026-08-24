@@ -675,55 +675,29 @@ La qualité d'une maille est la **mean ratio** de son pire coin,
 1,000 à un rectangle 10:1, et laisse donc la garde du lissage écraser une
 maille tant qu'elle garde ses coins droits.
 
-Plaque 30 × 10 cm percée, contour à 224 segments, taille visée 1,6 mm,
-17 146 mailles (99,8 % de quadrangles) :
+Sur une plaque percée, le cœur du maillage est fait de rectangles à angle
+droit et de valence régulière — aucune maille inversée, angle médian à
+l'équerre, très large majorité de nœuds intérieurs à quatre mailles — ce qui
+est exactement ce qu'on demande à un maillage quadrangulaire.
 
-| indicateur | valeur |
-|---|---|
-| qualité — médiane | **0,826** |
-| qualité — moyenne / p5 / p1 / min | 0,835 / 0,65 / 0,39 / 0,003 |
-| mailles inversées | **0** |
-| mailles sous 0,5 | 2,02 % |
-| angle médian | **90,0°** |
-| angles sous 30° | 0,05 % |
-| nœuds intérieurs de valence 4 | **97,2 %** |
-| élancement médian | 1,89 |
-
-Autrement dit : le cœur du maillage est fait de rectangles à angle droit et de
-valence régulière, ce qui est exactement ce qu'on demande à un maillage
-quadrangulaire. La faiblesse résiduelle est l'**élancement** — les mailles sont
-d'équerre mais près de deux fois plus longues que larges — et c'est elle que la
-mean ratio fait apparaître là où le sinus la cachait : la médiane à 0,826 dit
-exactement ce que l'élancement de 1,89 dit, quand le jacobien normalisé
-affichait un 1,000 trompeur.
+La faiblesse résiduelle est l'**élancement** : les mailles sont d'équerre mais
+sensiblement plus longues que larges. C'est précisément ce que la mean ratio
+fait apparaître là où le sinus le cachait, puisqu'un rectangle 10:1 obtient un
+jacobien normalisé de 1,000 et une mean ratio bien inférieure. Les deux
+mesures disent la même chose de la forme ; une seule des deux la voit.
 
 ### Coût
 
-Plaque trouée de 30 × 10 cm percée d'un trou de rayon 3,5 cm, taille de maille
-0,29 mm, en `--release` :
-
-Plaque 30 × 10 cm percée, contour à 224 segments, `--release` :
-
-| taille visée | mailles | temps | débit | µs/maille |
-|---|---|---|---|---|
-| 4 mm | 2 382 | 0,04 s | 58 000 /s | 17,1 |
-| 1,6 mm | 17 146 | 0,28 s | 62 000 /s | 16,1 |
-| 0,4 mm | 57 984 | 1,55 s | 37 000 /s | 26,8 |
-| 0,2 mm | 1 138 336 | 22,5 s | 51 000 /s | 19,8 |
-
-Le coût est **linéaire** — de l'ordre de 20 µs par maille sur deux ordres de
-grandeur — tant que le front avance sans se coincer. Il double quand les blocages se
+Le coût est **essentiellement linéaire** en nombre de mailles, sur plusieurs
+ordres de grandeur, tant que le front avance sans se coincer : le front croît
+comme la racine du nombre de mailles, et l'index spatial est reconstruit à
+chaque rangée pour ce prix-là. Il augmente nettement quand les blocages se
 multiplient, la boucle repassant alors par les cordes de déblocage et les
 fermetures.
 
-Le temps se répartit en gros en trois tiers : la pose des rangées, le
-nettoyage topologique et le lissage final. À titre de comparaison sur la même
-géométrie à 1,6 mm, `triangulate_surface` produit 93 000 mailles/s en `QUA4`
-(mais 23 % de triangles) et 178 000 /s en `TRI3`.
-
-2,0 % des mailles ont une qualité inférieure à 0,5. Le coût est
-essentiellement linéaire : le front croît comme la racine du nombre de mailles,
-et l'index spatial est reconstruit à chaque rangée pour ce prix-là.
+Le temps se répartit en gros en trois tiers : la pose des rangées, le nettoyage
+topologique et le lissage final. `triangulate_surface` va plus vite sur la même
+géométrie, mais laisse une part notable de triangles en `QUA4`.
 
 ### Pièges
 
@@ -987,24 +961,15 @@ arête verticale passe exactement par elle, et `fill` subdivise chaque
 intervalle séparément, si bien que chaque ligne de forme est atteinte
 exactement. Il n'y a rien à gagner là où l'opérateur brille.
 
-La phase n'est donc libre que lorsque rien n'est épinglé — une courbe. Balayage
-de huit phases sur un cercle, la grille ancrée sur le coin de la boîte
-englobante étant la phase 0 :
+La phase n'est donc libre que lorsque rien n'est épinglé — une courbe. Un
+balayage de huit phases sur un cercle a été mesuré : **la phase actuelle gagne
+sur tous les critères** — le moins de mailles, le moins de triangles, et la
+seule à n'ouvrir aucune fissure.
 
-| phase | mailles | triangles | fissures |
-|---|---|---|---|
-| **0** | **1 260** | **24** | **0** |
-| 1/8 | 1 369 | 40 | 16 |
-| 1/4 | 1 326 | 35 | 21 |
-| 3/8 | 1 395 | 57 | 23 |
-| 1/2 | 1 326 | 41 | 15 |
-| 5/8 | 1 347 | 43 | 11 |
-| 3/4 | 1 336 | 39 | 21 |
-| 7/8 | 1 380 | 48 | 12 |
-
-La phase actuelle gagne sur tous les critères, et ce n'est pas un hasard :
-ancrer sur le coin de la boîte fait passer les lignes de grille exactement par
-les points extrêmes du contour, qui sont ses points de tangence.
+Ce n'est pas un hasard : ancrer sur le coin de la boîte englobante fait passer
+les lignes de grille exactement par les points extrêmes du contour, qui sont
+ses points de tangence. Une phase quelconque les manque, et chaque ligne
+manquée se paie en mailles de raccord.
 
 ## Lignes par nœud, rangées pliées : `grid_surface2`
 
