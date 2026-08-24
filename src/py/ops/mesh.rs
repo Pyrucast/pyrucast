@@ -898,6 +898,11 @@ pub fn regularize(
 ///   that ring, and the relaxation is kept along with it. A move that does not
 ///   improve the neighbourhood's worst cell is undone whole.
 ///
+/// - the **pair collapse**, for two interior nodes of valence three sharing an
+///   edge: neither can be given up alone without trading one irregular node
+///   for two, but together they carry four quadrangles bounded by a hexagon,
+///   which re-cuts into two. Two nodes and two cells go at once.
+///
 /// Triangles are read for incidence and reshaped, and they only ever leave two
 /// at a time — their number has the parity of the boundary's edge count, which
 /// nothing here may change. Turning a lone triangle into a quadrangle is

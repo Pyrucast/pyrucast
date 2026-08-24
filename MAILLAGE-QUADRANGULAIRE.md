@@ -258,7 +258,7 @@ le droit d'être, il porte la carte de tailles, et il ouvre le layout.
   autant que du code. C'est ce qui séparerait pyrucast de l'état de l'art plutôt
   que de l'état de l'art de 1991.
 
-### Piste 7 — L'effondrement d'une étoile à trois mailles — **FAITE**
+### Piste 7 — L'effondrement des étoiles pauvres — **FAITE**
 
 Un nœud intérieur qui n'a que **trois** mailles autour de lui peut être
 abandonné, et une maille avec lui. Kinney, *[CleanUp: Improving Quadrilateral
@@ -309,6 +309,26 @@ détails s'y sont révélés décisifs, chacun par une mesure :
   la pire du maillage. Sans lui on gagne treize irréguliers et on perd la
   garantie de non-régression sur la pire maille — l'échange est mauvais, une
   pire maille qui recule casse un calcul.
+
+**La paire 3-3, ajoutée ensuite.** Deux nœuds intérieurs de valence 3 reliés
+par une arête sont hors de portée du geste ci-dessus : abandonner l'un seul
+échange un irrégulier contre deux, et le pré-filtre le refuse. Ensemble ils ne
+portent que **quatre** quadrangles — leurs étoiles se recouvrent sur les deux
+mailles de l'arête commune — bordés par un **hexagone** dans les vingt-sept cas
+trouvés sur la boîte, sans exception. Deux nœuds et deux mailles partent d'un
+coup, pour un gain de valence de +2, jusqu'à +4 quand l'anneau porte un 5.
+Examinée **avant** le nœud seul, faute de quoi celui-ci prend l'un des deux et
+la paire n'a jamais sa chance.
+
+| | `grid_surface` | `pave_surface` |
+|---|---:|---:|
+| irréguliers | 185 → **164** | 739 → **703** |
+| erreur de valence | 194 → **164** | 754 → **718** |
+| valence 3 internes | 58 → **46** | 329 → **311** |
+| pire maille | 0,461 → 0,461 | 0,141 → **0,284** |
+
+Sur `grid_surface`, deux paires détectées font tomber douze nœuds de valence 3
+et non quatre : un effondrement en débloque d'autres par cascade.
 
 *Mesuré*, sortie brute des paveurs, avant → après :
 

@@ -179,5 +179,5 @@ Langage GIBIANE;ET;Et logique;Python natif (and)
 Langage GIBIANE;OU;Ou logique;Python natif (or)
 Langage GIBIANE;NON;Non logique;Python natif (not)
 Maillage - qualité;REGE;Régularise un maillage (lissage des nœuds);regularize
-Maillage - qualité;;Corrige la connectivité (doublets, valences, étoiles à trois mailles);cleanup
+Maillage - qualité;;Corrige la connectivité (doublets, valences, étoiles à trois mailles, paires 3-3);cleanup
 Maillage - qualité;;Retire les triangles d'un maillage quadrangulaire;merge_triangles

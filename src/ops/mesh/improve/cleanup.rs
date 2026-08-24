@@ -45,6 +45,15 @@ use crate::ops::mesh::paving::cleanup as pass;
 ///   nobody receives. A move that does not improve the worst cell of the
 ///   neighbourhood is undone whole, ring positions included.
 ///
+/// - **two** interior nodes of valence three sharing an edge. Neither can be
+///   given up alone: dropping either takes two of its neighbours from four to
+///   three, trading one irregular node for two, so the move above refuses it.
+///   Together they are a different proposition — their stars overlap along the
+///   shared edge, so the two of them carry **four** quadrangles, and those four
+///   are bounded by a hexagon, which re-cuts into two. Two nodes and two cells
+///   go at once, and the pair is looked at before the single node, being both
+///   the more specific pattern and the better bargain.
+///
 /// - a node with the **wrong valence** otherwise. The move is the diagonal
 ///   switch: two quadrangles sharing an edge form a hexagon, which splits
 ///   across any of its three diagonals, and switching moves one unit of

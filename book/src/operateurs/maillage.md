@@ -31,7 +31,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `pave_volume(envelope, layers=1, thickness=None, size=None)` | **compagnon 3D** de `pave_surface` : couche limite d'`HEX8`/`PENTA6` poussée vers l'intérieur, raccordée par des `PYRA5` à un cœur `TET4` (voir plus bas) |
 | `triangulate_volume(envelope, size=None, allow_surface_nodes=False)` | **compagnon 3D** de `triangulate_surface` : maille l'intérieur d'une **enveloppe TRI3 fermée** en `TET4` — Delaunay exact, récupération du bord, raffinement intérieur et chasse aux slivers (voir plus bas) |
 | `regularize(mesh, sweeps=20, angular=True, in_place=False)` | **lisse** un maillage de surface existant : déplace ses nœuds intérieurs pour améliorer ses mailles, sans toucher ni à la connectivité ni au bord (voir plus bas) |
-| `cleanup(mesh)` | **corrige la connectivité** d’un maillage de surface : doublets, valences fautives, et effondrement de l’étoile d’un nœud intérieur qui n’a que trois mailles (voir plus bas) |
+| `cleanup(mesh)` | **corrige la connectivité** d’un maillage de surface : doublets, valences fautives, effondrement de l’étoile d’un nœud intérieur qui n’a que trois mailles, et de la paire de tels nœuds reliés par une arête (voir plus bas) |
 | `merge_triangles(mesh)` | **retire les triangles** d'un maillage à dominante quadrangulaire, **par paires** — leur nombre a la parité du bord (voir plus bas) |
 | `border(mesh, angle_deg=None)` | le **bord** d'un maillage de surface (TRI3/QUA4) en boucles `SEG2` (une par sous-maillage) ; avec `angle_deg`, découpé en **arêtes** ouvertes aux coins (voir plus bas) |
 | `skin(mesh, angle_deg=None)` | la **peau** d'un maillage volumique (tout type, y compris `PYRA5` et les quadratiques) en faces de **même degré**, **une par face plane** du solide (voir plus bas) |
@@ -1099,8 +1099,8 @@ qui partagent donc *deux* arêtes : le nœud est coincé dans un coin qu'aucun
 lissage n'ouvrira. Une **valence fautive** est un nœud intérieur qui veut quatre
 mailles et en a trois ou cinq.
 
-Deux gestes. Le premier est purement topologique ; le second ne peut pas
-l'être, et c'est le cœur de l'affaire.
+Trois gestes. Le premier est purement topologique ; les deux autres ne peuvent
+pas l'être, et c'est le cœur de l'affaire.
 
 1. **Bascule de diagonale**, pour une valence trop forte : deux quadrangles
    partageant une arête forment un hexagone, qui se recoupe selon l'une de ses
@@ -1183,6 +1183,34 @@ jamais modifié.
 Les deux dernières lignes du tableau perdent un triangle chacune — deux d'un
 coup, donc la parité qui lie leur nombre aux arêtes de bord (voir
 `merge_triangles` ci-dessous) reste intacte.
+
+#### La paire de valence 3, que le geste précédent ne peut pas atteindre
+
+Deux nœuds intérieurs de valence 3 **reliés par une arête** forment un motif
+qu'aucun des gestes ci-dessus ne prend. Abandonner l'un des deux tout seul
+ferait tomber deux de ses voisins de quatre à trois : un nœud irrégulier échangé
+contre deux, et l'effondrement le refuse à juste titre.
+
+Pris ensemble, le calcul s'inverse. Leurs étoiles se recouvrent sur les deux
+mailles qui portent l'arête commune, si bien qu'à eux deux ils ne portent que
+**quatre** quadrangles — et ces quatre-là sont bordés par un **hexagone**, ce
+qui a été vérifié sur les vingt-sept paires trouvées sur une boîte crénelée,
+sans une exception. Un hexagone se recoupe en deux quadrangles : le geste
+abandonne donc **deux nœuds et deux mailles d'un coup**.
+
+L'arithmétique de valence le justifie : les quatre mailles offrent seize coins
+et les deux qui les remplacent en offrent huit ; la paire en emporte six avec
+elle, l'anneau en rend deux, et les deux erreurs de la paire sont annulées.
+Le gain est de **+2** sur une paire ordinaire et monte à **+4** quand l'anneau
+porte un nœud de valence 5 à dépenser.
+
+La paire est examinée **avant** le nœud seul : c'est le motif le plus
+spécifique et la meilleure affaire. Dans l'autre ordre, l'effondrement d'un
+nœud prend l'un des deux et la paire n'a jamais sa chance — mesuré.
+
+Comme tout geste qui supprime un nœud, il se juge après relaxation : la qualité
+mesurée juste après la découpe *baisse* (0,535 à 0,485 en médiane), et la lire
+là conduirait à refuser précisément les gestes qui paient.
 
 Sur un maillage frais sorti d'un paveur, `cleanup` ne trouve **rien à faire** —
 le paveur passe la même main en fin de course. Son intérêt est ailleurs : un
