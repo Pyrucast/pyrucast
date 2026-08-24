@@ -293,7 +293,7 @@ toujours moins bonne que l'étoile qu'elle remplace : le plancher de qualité de
 donc ce qu'il mesure est définitif.
 
 L'ordre retenu, qui est celui de gmsh : appliquer, **relaxer l'anneau**,
-mesurer, défaire entièrement si la pire maille du voisinage a baissé. Deux
+mesurer, défaire entièrement si la pire maille du voisinage a baissé. Trois
 détails s'y sont révélés décisifs, chacun par une mesure :
 
 - la relaxation doit être **gardée** avec le geste. Juger sur des positions
@@ -302,7 +302,13 @@ détails s'y sont révélés décisifs, chacun par une mesure :
   de pas qui retourne une maille). Un laplacien nu marche, près d'un coin
   concave, vers un point que le lisseur monotone n'atteindra jamais, et fait
   accepter le geste sur une promesse qui ne sera pas tenue : la maison tombait
-  à **0,055** de pire maille.
+  à **0,055** de pire maille ;
+- un **pré-filtre** garde l'entrée : rien n'est tenté si le geste n'apporte
+  ni valence ni forme. Le verdict après relaxation juge le *voisinage*, donc
+  localement, et ne voit pas qu'une maille médiocre ailleurs vient de devenir
+  la pire du maillage. Sans lui on gagne treize irréguliers et on perd la
+  garantie de non-régression sur la pire maille — l'échange est mauvais, une
+  pire maille qui recule casse un calcul.
 
 *Mesuré*, sortie brute des paveurs, avant → après :
 
@@ -350,6 +356,7 @@ retirés du dépôt.
 | Plancher de qualité **immédiat** sur l'effondrement d'une étoile (70 %, celui de `switch_diagonals`) | 53 gestes utiles sur 61 supprimés. Le geste retire un nœud : il ne se juge qu'après relaxation (piste 7) |
 | Relaxation d'essai **rendue** après le verdict | mesure un maillage que personne ne reçoit : carré arrondi `grid2` 0,468 en essai, 0,331 livré |
 | Relaxation d'essai en **laplacien nu**, sans garde de validité | promet une position que le lisseur monotone n'atteint pas : maison `grid_surface` pire maille **0,055** |
+| Effondrement **sans pré-filtre** : le verdict après relaxation pour seule condition | gagne sur tout ce qu'on visait — boîte 185 → **162** irréguliers, 58 → **45** nœuds de valence 3, 11 523 → 11 506 mailles, et `pave_surface` en profite aussi (maison 620 → 595) — mais la pire maille **recule sous le point de départ** : boîte 0,461 → 0,436 pour 0,456 au départ, maison `grid_surface` 0,420 → **0,346**. Le verdict est local et ne voit pas qu'une maille médiocre ailleurs est devenue la pire du maillage. Rendre le verdict global est un autre chantier |
 | Refuser la couture qui poserait une corde sur le contour | règle bien les trous, mais sur une bande crénelée le front se replie et **l'appel échoue** — perdre le maillage pour éviter une fissure d'aire nulle est un mauvais échange. Remplacé par la recouture de `41594a9` |
 
 Un point de méthode qui a servi plusieurs fois : **la relaxation du front et

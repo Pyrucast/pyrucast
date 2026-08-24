@@ -261,7 +261,11 @@ fn collapse_valence3(
     alive: &mut [bool],
     alive_tri: &mut [bool],
 ) -> usize {
-    let inc = incidence(quads, tris, alive, alive_tri, pts.len());
+    // Kept up to date as the pass goes: a collapse rewrites the cells round
+    // its ring, and the neighbourhood of every later candidate is read from
+    // here. Refusing to touch a ring an earlier collapse reached would be the
+    // cheap answer, and an expensive one — it costs more than half the moves.
+    let mut inc = incidence(quads, tris, alive, alive_tri, pts.len());
     let theta = interior_angles(pts, quads, tris, &inc);
     let val: Vec<i64> = inc.iter().map(|e| e.len() as i64).collect();
     let want: Vec<i64> = theta.iter().map(|&t| wanted(t) as i64).collect();
@@ -282,14 +286,6 @@ fn collapse_valence3(
         let Some(ring) = star_ring(v, &cells, quads, tris) else {
             continue;
         };
-        // A ring node an earlier collapse already touched has a stale entry in
-        // `inc`, and the neighbourhood is read from `inc`: a cell could then be
-        // relaxed without the guard ever looking at it. Every node a collapse
-        // touches is marked, so this one check is enough — and the round comes
-        // back with `inc` rebuilt.
-        if ring.iter().any(|&r| spent[r as usize]) {
-            continue;
-        }
         let p: Vec<Point2> = ring.iter().map(|&i| pts[i as usize]).collect();
         if !super::geom::polygon_is_simple(&p)
             || crate::ops::mesh::triangulation::signed_area(&p) <= 0.0
@@ -341,6 +337,18 @@ fn collapse_valence3(
         let Some((gain, worst, cut)) = best else {
             continue;
         };
+        // Nothing to gain, nothing to try. The trial below judges the
+        // *neighbourhood*, which is local by construction and cannot see that a
+        // cell already middling somewhere else has become the worst in the
+        // mesh; this asks first whether the move is worth anything at all, in
+        // valence or in shape, and most of what it turns away is worth nothing.
+        //
+        // It costs a few good moves — dropping it takes the boîte from 185
+        // irregular nodes to 162 — and buys the guarantee that the worst cell
+        // never goes backwards: without it that same mesh falls from 0,461 to
+        // 0,436, below the 0,456 it started at, and `grid_surface` on the
+        // house from 0,420 to 0,346. A worst cell that recedes is what breaks
+        // a computation; thirteen irregular nodes are not.
         if gain <= 0 && worst <= was {
             continue;
         }
@@ -418,9 +426,19 @@ fn collapse_valence3(
             continue;
         }
 
+        // The star's cells left the ring's incidence lists and the cut's
+        // joined them; `v` is out of the mesh altogether.
         for &r in &ring {
+            let l = &mut inc[r as usize];
+            l.retain(|e| !cells.contains(e));
+            for &e in &now {
+                if !l.contains(&e) && nodes_of(e, quads, tris).contains(&r) {
+                    l.push(e);
+                }
+            }
             spent[r as usize] = true;
         }
+        inc[v].clear();
         spent[v] = true;
         done += 1;
     }
@@ -1024,6 +1042,34 @@ mod tests {
         let mut got = quads[0];
         got.sort_unstable();
         assert_eq!(got, [0, 1, 2, 3], "the cell is the ring itself");
+    }
+
+    #[test]
+    fn three_triangles_round_a_node_become_one() {
+        // The fourth case, and the one the rule reaches without being told to:
+        // no quadrangle in sight, so `n = 2q + t` is 3 and the star's outline
+        // is a plain triangle. One cell replaces three, and two triangles
+        // leave together.
+        let ring: Vec<Point2> = (0..3)
+            .map(|i| {
+                let t = i as f64 / 3.0 * std::f64::consts::TAU;
+                Point2::new(t.cos(), t.sin())
+            })
+            .collect();
+        let mut pts = ring.clone();
+        pts.push(Point2::from((ring[0].coords + ring[1].coords) * 0.5 * 0.96));
+        let v = 3u32;
+        let movable = vec![false, false, false, true];
+        let mut quads: Vec<[u32; 4]> = Vec::new();
+        let mut tris = vec![[v, 0, 1], [v, 1, 2], [v, 2, 0]];
+
+        let report = run(&mut pts, &movable, &mut quads, &mut tris);
+        assert_eq!(report.absorbed, 1, "{report:?}");
+        assert!(quads.is_empty(), "no quadrangle may appear from nothing");
+        assert_eq!(tris.len(), 1, "one cell for three");
+        let mut got = tris[0];
+        got.sort_unstable();
+        assert_eq!(got, [0, 1, 2], "the cell is the ring itself");
     }
 
     #[test]

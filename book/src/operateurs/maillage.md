@@ -1200,6 +1200,14 @@ geste est gardé, la relaxation est gardée avec lui : juger sur des positions
 qu'on rejetterait ensuite reviendrait à mesurer un maillage que personne ne
 reçoit — c'est mesuré aussi, et cela coûtait une maille à 0,055 sur la maison.
 
+Un dernier garde-fou tient l'entrée : rien n'est tenté si le geste n'apporte
+**ni** valence **ni** forme. C'est que le verdict ci-dessus juge le *voisinage*,
+donc localement, et ne voit pas qu'une maille médiocre ailleurs vient de
+devenir la pire du maillage. Le retirer fait gagner quelques nœuds réguliers de
+plus et perdre la garantie de non-régression sur la pire maille — l'échange est
+mauvais : une pire maille qui recule casse un calcul, treize nœuds irréguliers
+de plus ne se voient nulle part.
+
 **Aucun nœud du contour ne bouge**, et aucun n'est abandonné : c'est la
 garantie qui tient, la même que pour les trois opérateurs, et celle avec
 laquelle raisonner. « Rien ne bouge du tout » n'en est pas une : `cleanup`
