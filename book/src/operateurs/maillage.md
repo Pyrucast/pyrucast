@@ -31,7 +31,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `pave_volume(envelope, layers=1, thickness=None, size=None)` | **compagnon 3D** de `pave_surface` : couche limite d'`HEX8`/`PENTA6` poussée vers l'intérieur, raccordée par des `PYRA5` à un cœur `TET4` (voir plus bas) |
 | `triangulate_volume(envelope, size=None, allow_surface_nodes=False)` | **compagnon 3D** de `triangulate_surface` : maille l'intérieur d'une **enveloppe TRI3 fermée** en `TET4` — Delaunay exact, récupération du bord, raffinement intérieur et chasse aux slivers (voir plus bas) |
 | `regularize(mesh, sweeps=20, angular=True, in_place=False)` | **lisse** un maillage de surface existant : déplace ses nœuds intérieurs pour améliorer ses mailles, sans toucher ni à la connectivité ni au bord (voir plus bas) |
-| `cleanup(mesh)` | **corrige la connectivité** d’un maillage de surface : doublets, valences fautives, effondrement de l’étoile d’un nœud intérieur qui n’a que trois mailles, et de la paire de tels nœuds reliés par une arête (voir plus bas) |
+| `cleanup(mesh)` | **corrige la connectivité** d’un maillage de surface : doublets, valences fautives, effondrement de l’étoile d’un nœud intérieur qui n’a que trois mailles, et de la paire de nœuds voisins qui en manquent (voir plus bas) |
 | `merge_triangles(mesh)` | **retire les triangles** d'un maillage à dominante quadrangulaire, **par paires** — leur nombre a la parité du bord (voir plus bas) |
 | `border(mesh, angle_deg=None)` | le **bord** d'un maillage de surface (TRI3/QUA4) en boucles `SEG2` (une par sous-maillage) ; avec `angle_deg`, découpé en **arêtes** ouvertes aux coins (voir plus bas) |
 | `skin(mesh, angle_deg=None)` | la **peau** d'un maillage volumique (tout type, y compris `PYRA5` et les quadratiques) en faces de **même degré**, **une par face plane** du solide (voir plus bas) |
@@ -1184,19 +1184,28 @@ Les deux dernières lignes du tableau perdent un triangle chacune — deux d'un
 coup, donc la parité qui lie leur nombre aux arêtes de bord (voir
 `merge_triangles` ci-dessous) reste intacte.
 
-#### La paire de valence 3, que le geste précédent ne peut pas atteindre
+#### La paire, que le geste précédent ne peut pas atteindre
 
-Deux nœuds intérieurs de valence 3 **reliés par une arête** forment un motif
-qu'aucun des gestes ci-dessus ne prend. Abandonner l'un des deux tout seul
-ferait tomber deux de ses voisins de quatre à trois : un nœud irrégulier échangé
-contre deux, et l'effondrement le refuse à juste titre.
+Deux nœuds intérieurs **reliés par une arête**, dont l'un au moins manque d'une
+maille, forment un motif qu'aucun des gestes ci-dessus ne prend. Abandonner
+l'un des deux tout seul ferait tomber deux de ses voisins de quatre à trois :
+un nœud irrégulier échangé contre deux, et l'effondrement le refuse à juste
+titre.
 
-Pris ensemble, le calcul s'inverse. Leurs étoiles se recouvrent sur les deux
-mailles qui portent l'arête commune, si bien qu'à eux deux ils ne portent que
-**quatre** quadrangles — et ces quatre-là sont bordés par un **hexagone**, ce
-qui a été vérifié sur les vingt-sept paires trouvées sur une boîte crénelée,
-sans une exception. Un hexagone se recoupe en deux quadrangles : le geste
-abandonne donc **deux nœuds et deux mailles d'un coup**.
+Pris ensemble, le calcul s'inverse. Leurs étoiles se recouvrent sur les mailles
+qui portent l'arête commune, si bien qu'à eux deux ils n'en portent que
+\( \mathrm{val}(a) + \mathrm{val}(b) - 2 \) — et la même identité
+\( 2q' + t' = n - 2 \) recoupe ce qui les borde :
+
+| \( \mathrm{val}(a), \mathrm{val}(b) \) | bord | avant | après | mailles |
+|---|---|---|---|---|
+| 3, 3 | hexagone | 4 quadrangles | 2 quadrangles | 4 → 2 |
+| 3, 4 | heptagone | 4 quadrangles, 1 triangle | 2 quadrangles, 1 triangle | 5 → 3 |
+
+Le geste abandonne donc **deux nœuds et deux mailles d'un coup**. Un triangle
+présent dans l'étoile est **repris**, jamais créé ni perdu : la parité qui lie
+leur nombre au bord interdit d'en faire apparaître un, et la redécoupe de
+l'heptagone réclame précisément celui qui était là.
 
 L'arithmétique de valence le justifie : les quatre mailles offrent seize coins
 et les deux qui les remplacent en offrent huit ; la paire en emporte six avec

@@ -320,15 +320,23 @@ coup, pour un gain de valence de +2, jusqu'à +4 quand l'anneau porte un 5.
 Examinée **avant** le nœud seul, faute de quoi celui-ci prend l'un des deux et
 la paire n'a jamais sa chance.
 
+Étendue ensuite aux paires **3-4**, dont l'étoile porte cinq mailles bordées
+par un **heptagone**, recoupé en deux quadrangles et un triangle — celui qui
+était déjà là, la parité interdisant d'en créer un.
+
 | | `grid_surface` | `pave_surface` |
 |---|---:|---:|
-| irréguliers | 185 → **164** | 739 → **703** |
-| erreur de valence | 194 → **164** | 754 → **718** |
-| valence 3 internes | 58 → **46** | 329 → **311** |
-| pire maille | 0,461 → 0,461 | 0,141 → **0,284** |
+| irréguliers | 185 → 164 → **104** | 739 → **703** → 708 |
+| erreur de valence | 194 → 164 → **104** | 754 → **718** → 714 |
+| valence 3 internes | 58 → 46 → **16** | 329 → **311** → 312 |
+| 1ᵉʳ centile | 0,706 → 0,714 → **0,824** | 0,625 → 0,633 → **0,641** |
+| pire maille | 0,461 → 0,461 → 0,437 | 0,141 → **0,284** → 0,284 |
 
-Sur `grid_surface`, deux paires détectées font tomber douze nœuds de valence 3
-et non quatre : un effondrement en débloque d'autres par cascade.
+*(colonnes : avant la paire, paire 3-3, puis 3-4.)* Sur `grid_surface`, deux
+paires 3-3 détectées font tomber douze nœuds de valence 3 et non quatre : un
+effondrement en débloque d'autres par cascade. Le cas 3-4 en enlève trente de
+plus, au prix de 0,019 sur la pire maille — arbitrage assumé, le premier
+centile gagnant 0,11 dans le même mouvement.
 
 *Mesuré*, sortie brute des paveurs, avant → après :
 

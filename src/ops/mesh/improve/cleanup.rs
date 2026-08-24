@@ -45,14 +45,23 @@ use crate::ops::mesh::paving::cleanup as pass;
 ///   nobody receives. A move that does not improve the worst cell of the
 ///   neighbourhood is undone whole, ring positions included.
 ///
-/// - **two** interior nodes of valence three sharing an edge. Neither can be
-///   given up alone: dropping either takes two of its neighbours from four to
-///   three, trading one irregular node for two, so the move above refuses it.
-///   Together they are a different proposition — their stars overlap along the
-///   shared edge, so the two of them carry **four** quadrangles, and those four
-///   are bounded by a hexagon, which re-cuts into two. Two nodes and two cells
-///   go at once, and the pair is looked at before the single node, being both
-///   the more specific pattern and the better bargain.
+/// - **two** interior nodes sharing an edge, at least one of them short of a
+///   cell. Neither can be given up alone: dropping either takes two of its
+///   neighbours from four to three, trading one irregular node for two, so the
+///   move above refuses it. Together they are a different proposition — their
+///   stars overlap along the shared edge, so the two of them carry
+///   `val(a) + val(b) - 2` cells, and the same `2q' + t' = n - 2` re-cuts what
+///   bounds them:
+///
+///   | `val(a), val(b)` | boundary | before | after | cells |
+///   |---|---|---|---|---|
+///   | 3, 3 | hexagon | 4 quadrangles | 2 quadrangles | 4 → 2 |
+///   | 3, 4 | heptagon | 4 quadrangles, 1 triangle | 2 of one, 1 of the other | 5 → 3 |
+///
+///   Two nodes and two cells go at once, and a triangle in the star is carried
+///   across rather than created — the parity forbids conjuring one. The pair is
+///   looked at before the single node, being both the more specific pattern and
+///   the better bargain.
 ///
 /// - a node with the **wrong valence** otherwise. The move is the diagonal
 ///   switch: two quadrangles sharing an edge form a hexagon, which splits

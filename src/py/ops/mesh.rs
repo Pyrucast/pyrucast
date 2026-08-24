@@ -898,10 +898,12 @@ pub fn regularize(
 ///   that ring, and the relaxation is kept along with it. A move that does not
 ///   improve the neighbourhood's worst cell is undone whole.
 ///
-/// - the **pair collapse**, for two interior nodes of valence three sharing an
-///   edge: neither can be given up alone without trading one irregular node
-///   for two, but together they carry four quadrangles bounded by a hexagon,
-///   which re-cuts into two. Two nodes and two cells go at once.
+/// - the **pair collapse**, for two interior nodes sharing an edge with at
+///   least one short of a cell: neither can be given up alone without trading
+///   one irregular node for two, but together they carry `val(a) + val(b) - 2`
+///   cells — a hexagon's worth at 3-3, a heptagon's at 3-4 — and both re-cut
+///   with two cells fewer. Two nodes and two cells go at once, and a triangle
+///   in the star is carried across rather than created.
 ///
 /// Triangles are read for incidence and reshaped, and they only ever leave two
 /// at a time — their number has the parity of the boundary's edge count, which

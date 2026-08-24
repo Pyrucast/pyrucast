@@ -17,11 +17,12 @@
 //!   cell fewer — see [`collapse_valence3`] for why, and for the four shapes
 //!   it takes — so the node is given up along with the cell its star can do
 //!   without.
-//! - two interior nodes of valence three **sharing an edge**. Neither can be
-//!   given up alone — dropping either takes two of its neighbours from four to
-//!   three, one irregular node traded for two — but together they carry four
-//!   quadrangles bounded by a hexagon, which re-cuts into two. See
-//!   [`collapse_pairs33`].
+//! - two interior nodes **sharing an edge**, one of them at least in want of a
+//!   cell. Neither can be given up alone — dropping either takes two of its
+//!   neighbours from four to three, one irregular node traded for two — but
+//!   together they carry `val(a) + val(b) - 2` cells, bounded by a hexagon at
+//!   3-3 and a heptagon at 3-4, and both re-cut with two cells fewer. See
+//!   [`collapse_pair`].
 //! - a node with the **wrong valence** otherwise. In a quadrangle mesh an
 //!   interior node wants four cells around it: with five, the corners average
 //!   72°, which no smoothing squares either.
@@ -54,8 +55,7 @@
 //! For a node that has three cells and no business having them, the move is
 //! the **collapse**: the star is thrown away and its boundary re-cut with a
 //! cell fewer. It comes in two sizes — the star of one node, and the star of a
-//! pair of such nodes sharing an edge, which sheds two nodes and two cells at
-//! once. Both are the only moves here that remove a node, and therefore the
+//! pair of adjacent nodes, which sheds two nodes and two cells at once. Both are the only moves here that remove a node, and therefore the
 //! only ones judged **after** a relaxation of the ring they just sewed — kept
 //! along with the move, undone whole with it. The pair goes first: it is the
 //! more specific pattern and the better bargain, and in the other order the
@@ -104,7 +104,7 @@ pub struct Report {
     pub switches: usize,
     /// Nodes given up by [`collapse_valence3`], one at a time.
     pub absorbed: usize,
-    /// Pairs given up by [`collapse_pairs33`], two nodes at a time.
+    /// Pairs given up by [`collapse_pair`], two nodes at a time.
     pub pairs: usize,
 }
 
@@ -143,7 +143,7 @@ pub fn run(
         // il fait mieux — deux nœuds et deux mailles d'un coup au lieu d'un et
         // d'un. Dans l'autre ordre, l'effondrement d'un nœud prend l'un des
         // deux et la paire n'a jamais sa chance.
-        report.pairs += collapse_pairs33(pts, movable, quads, tris, &mut alive, &alive_tri);
+        report.pairs += collapse_pair(pts, movable, quads, tris, &mut alive, &mut alive_tri);
         report.absorbed += collapse_valence3(pts, movable, quads, tris, &mut alive, &mut alive_tri);
         report.switches += switch_diagonals(pts, quads, tris, &mut alive, &alive_tri);
         if report.total() == before {
@@ -470,36 +470,45 @@ fn collapse_valence3(
     done
 }
 
-/// Give up **two** interior nodes of valence three that share an edge, along
-/// with two of the four quadrangles they carry between them.
+/// Give up **two** interior nodes sharing an edge, along with the cells their
+/// stars can do without.
 ///
-/// [`collapse_valence3`] works one node at a time, and cannot touch this
+/// [`collapse_valence3`] works one node at a time and cannot touch this
 /// configuration: giving up either node alone drops two of its neighbours from
 /// four to three, trading one irregular node for two, so the move is refused —
-/// rightly. Taken together the pair is a different proposition. Their stars
-/// overlap in the two quadrangles along the shared edge, so the two of them
-/// carry **four** quadrangles, and those four are bounded by a **hexagon** —
-/// measured on every one of the twenty-seven pairs found on a crenellated box,
-/// without an exception. A hexagon re-cuts into two quadrangles, so the move
-/// sheds two nodes and two cells at once.
+/// rightly. Taken together the pair is a different proposition.
 ///
-/// The valence arithmetic is what makes it worth doing: the four cells hold
-/// sixteen corners and the two that replace them hold eight, the pair takes six
-/// of those with it, so the ring gives up two — and each of the pair's own
-/// errors is cancelled outright. The gain is `+2` on a plain pair and up to
-/// `+4` when the ring carries a node of five to spend.
+/// Round two adjacent nodes the star holds `val(a) + val(b) - 2` cells, the
+/// ones carrying the shared edge counting for both. Its boundary follows, and
+/// so does the re-cut, by the same `2q' + t' = n - 2` that governs a single
+/// node's star:
+///
+/// | `val(a), val(b)` | star | boundary | after | cells |
+/// |---|---|---|---|---|
+/// | 3, 3 | 4 quadrangles | hexagon | 2 quadrangles | 4 → 2 |
+/// | 3, 4 | 4 quadrangles, 1 triangle | heptagon | 2 of one, 1 of the other | 5 → 3 |
+///
+/// The valence arithmetic is what makes it worth doing. On a 3-3 pair the four
+/// cells hold sixteen corners and the two replacing them hold eight; the pair
+/// takes six of those with it, the ring gives up two, and both of the pair's
+/// own errors are cancelled outright. The gain is `+2` on a plain pair and up
+/// to `+4` when the ring carries a node of five to spend.
+///
+/// A triangle in the star is carried across, never created and never lost:
+/// `T ≡ E_boundary (mod 2)` forbids conjuring one, and the re-cut of a heptagon
+/// wants exactly the one that was already there.
 ///
 /// Judged like every move that removes a node: applied, the ring relaxed, and
 /// undone whole unless the neighbourhood's worst cell comes out better. The
 /// quality *before* that relaxation falls — 0,535 to 0,485 in the median —
 /// which is exactly why it cannot be read there.
-fn collapse_pairs33(
+fn collapse_pair(
     pts: &mut [Point2],
     movable: &[bool],
     quads: &mut [[u32; 4]],
-    tris: &[[u32; 3]],
+    tris: &mut [[u32; 3]],
     alive: &mut [bool],
-    alive_tri: &[bool],
+    alive_tri: &mut [bool],
 ) -> usize {
     let inc = incidence(quads, tris, alive, alive_tri, pts.len());
     let theta = interior_angles(pts, quads, tris, &inc);
@@ -515,11 +524,15 @@ fn collapse_pairs33(
         }
         for k in 0..4 {
             let (a, b) = (q[k], q[(k + 1) % 4]);
-            let three = |v: u32| {
+            let poor = |v: u32| {
                 let v = v as usize;
-                movable[v] && val[v] == 3 && want[v] == 4
+                movable[v] && want[v] == 4 && (val[v] == 3 || val[v] == 4)
             };
-            if a < b && three(a) && three(b) {
+            // Au moins un des deux doit être en défaut, et la somme rester
+            // faible : à 6 l'étoile borde un hexagone, à 7 un heptagone, et
+            // au-delà la redécoupe n'économise plus rien.
+            let s = val[a as usize] + val[b as usize];
+            if a < b && poor(a) && poor(b) && (6..=7).contains(&s) && s.min(7) > 5 {
                 pairs.push((a, b));
             }
         }
@@ -533,27 +546,22 @@ fn collapse_pairs33(
         if spent[a as usize] || spent[b as usize] {
             continue;
         }
-        // Four quadrangles and nothing else: a triangle in the star would make
-        // the boundary something other than a hexagon.
-        let mut star: Vec<usize> = Vec::new();
-        let mut ok = true;
+        // L'étoile de la paire : `val(a) + val(b) - 2` cellules, celles qui
+        // portent l'arête `a–b` comptant pour les deux.
+        let mut star: Vec<u32> = Vec::new();
         for &e in inc[a as usize].iter().chain(inc[b as usize].iter()) {
-            if !e.is_multiple_of(2) {
-                ok = false;
-                break;
-            }
-            let i = (e / 2) as usize;
-            if alive[i] && !star.contains(&i) {
-                star.push(i);
+            if live(e, alive, alive_tri) && !star.contains(&e) {
+                star.push(e);
             }
         }
-        if !ok || star.len() != 4 {
+        star.sort_unstable();
+        if star.len() != (val[a as usize] + val[b as usize] - 2) as usize {
             continue;
         }
-        let Some(mut ring) = cells_ring(&star, quads) else {
+        let Some(mut ring) = cells_ring(&star, quads, tris) else {
             continue;
         };
-        if ring.len() != 6 {
+        if cut_count(ring.len()) == 0 {
             continue;
         }
         let mut p: Vec<Point2> = ring.iter().map(|&i| pts[i as usize]).collect();
@@ -569,19 +577,11 @@ fn collapse_pairs33(
 
         let was = star
             .iter()
-            .map(|&i| {
-                let q = quads[i];
-                quad_quality([
-                    pts[q[0] as usize],
-                    pts[q[1] as usize],
-                    pts[q[2] as usize],
-                    pts[q[3] as usize],
-                ])
-            })
+            .map(|&e| quality_of(e, pts, quads, tris))
             .fold(f64::INFINITY, f64::min);
         let mut had = vec![0i64; ring.len()];
-        for &i in &star {
-            for &x in &quads[i] {
+        for &e in &star {
+            for &x in nodes_of(e, quads, tris) {
                 if let Some(k) = ring.iter().position(|&r| r == x) {
                     had[k] += 1;
                 }
@@ -589,7 +589,7 @@ fn collapse_pairs33(
         }
 
         let mut best: Option<(i64, f64, Cut)> = None;
-        for c in 0..cut_count(6) {
+        for c in 0..cut_count(ring.len()) {
             let cut = cut_at(&ring, c);
             let worst = cut.worst_quality(pts);
             if worst <= 0.0 {
@@ -623,8 +623,7 @@ fn collapse_pairs33(
         let mut around: Vec<u32> = Vec::new();
         for &r in &ring {
             for &e in &inc[r as usize] {
-                let inside = e.is_multiple_of(2) && star.contains(&((e / 2) as usize));
-                if !inside && !around.contains(&e) && live(e, alive, alive_tri) {
+                if !star.contains(&e) && !around.contains(&e) && live(e, alive, alive_tri) {
                     around.push(e);
                 }
             }
@@ -635,16 +634,33 @@ fn collapse_pairs33(
             .chain(std::iter::once(was))
             .fold(f64::INFINITY, f64::min);
 
-        // Two of the four slots take the cut; the other two stay dead.
-        let was_q: Vec<(usize, [u32; 4])> = star.iter().map(|&i| (i, quads[i])).collect();
-        for &i in &star {
-            alive[i] = false;
+        // La découpe reprend les emplacements de l'étoile — elle y tient
+        // toujours, `2q' + t' = 2q + t - 2` laissant `q' ≤ q` et `t' ≤ t` — et
+        // ceux dont elle ne veut pas restent morts.
+        let (mut free_q, mut free_t) = (Vec::new(), Vec::new());
+        let (mut was_q, mut was_t) = (Vec::new(), Vec::new());
+        for &e in &star {
+            let i = (e / 2) as usize;
+            if e.is_multiple_of(2) {
+                was_q.push((i, quads[i]));
+                alive[i] = false;
+                free_q.push(i);
+            } else {
+                was_t.push((i, tris[i]));
+                alive_tri[i] = false;
+                free_t.push(i);
+            }
         }
         let mut now = around.clone();
-        for (q, &i) in cut.quads().iter().zip(star.iter()) {
+        for (q, &i) in cut.quads().iter().zip(free_q.iter()) {
             quads[i] = *q;
             alive[i] = true;
             now.push((i as u32) * 2);
+        }
+        for (t, &i) in cut.tris().iter().zip(free_t.iter()) {
+            tris[i] = *t;
+            alive_tri[i] = true;
+            now.push((i as u32) * 2 + 1);
         }
 
         let held: Vec<Point2> = ring.iter().map(|&r| pts[r as usize]).collect();
@@ -661,6 +677,10 @@ fn collapse_pairs33(
                 quads[i] = q;
                 alive[i] = true;
             }
+            for &(i, t) in &was_t {
+                tris[i] = t;
+                alive_tri[i] = true;
+            }
             continue;
         }
 
@@ -674,18 +694,19 @@ fn collapse_pairs33(
     done
 }
 
-/// The boundary of a group of quadrangles, walked once round.
+/// The boundary of a group of cells, walked once round.
 ///
 /// `None` when the edges do not chain into a single loop — a pinched node, or
 /// a group in pieces — neither of which can be re-cut. The walk starts at the
 /// lowest node and the edges are sorted, so the answer does not depend on the
 /// order the group came in.
-fn cells_ring(group: &[usize], quads: &[[u32; 4]]) -> Option<Vec<u32>> {
+fn cells_ring(group: &[u32], quads: &[[u32; 4]], tris: &[[u32; 3]]) -> Option<Vec<u32>> {
     let mut count: HashMap<(u32, u32), usize> = HashMap::new();
-    for &i in group {
-        let q = quads[i];
-        for k in 0..4 {
-            let (a, b) = (q[k], q[(k + 1) % 4]);
+    for &e in group {
+        let c = nodes_of(e, quads, tris);
+        let n = c.len();
+        for k in 0..n {
+            let (a, b) = (c[k], c[(k + 1) % n]);
             *count
                 .entry(if a < b { (a, b) } else { (b, a) })
                 .or_insert(0) += 1;
@@ -847,6 +868,7 @@ impl Cut {
 /// a different answer, and `0` for a ring this pass does not handle.
 fn cut_count(n: usize) -> usize {
     match n {
+        7 => 7, // where the two quadrangles are taken from
         6 => 3, // the three main diagonals
         5 => 5, // which corner the triangle is taken from
         3 | 4 => 1,
@@ -860,6 +882,13 @@ fn cut_at(ring: &[u32], c: usize) -> Cut {
     let at = |k: usize| ring[(k + c) % n];
     let none = [[0u32; 4]; 2];
     match n {
+        // Two quadrangles bitten off either side, and the triangle they leave
+        // between them: `2q' + t' = 7 - 2` allows nothing cheaper.
+        7 => Cut {
+            quads: [[at(0), at(1), at(2), at(3)], [at(3), at(4), at(5), at(6)]],
+            n_quads: 2,
+            tri: Some([at(6), at(0), at(3)]),
+        },
         6 => Cut {
             quads: [[at(0), at(1), at(2), at(3)], [at(3), at(4), at(5), at(0)]],
             n_quads: 2,
@@ -1396,6 +1425,61 @@ mod tests {
         let covered: f64 = quads
             .iter()
             .map(|q| area(&q.map(|i| pts[i as usize])))
+            .sum();
+        assert!((covered - area(&ring)).abs() < 1e-12, "{covered}");
+    }
+
+    #[test]
+    fn a_pair_whose_star_holds_a_triangle_sheds_two_cells_too() {
+        // La paire n'a pas à être 3-3, ni son étoile à être toute en
+        // quadrangles. Round two adjacent nodes the star holds
+        // `val(a) + val(b) - 2` cells, and the boundary follows: at 3 and 4,
+        // with one triangle among the five, that is a **heptagon** — and
+        // `2q' + t' = 7 - 2` re-cuts it into two quadrangles and one triangle.
+        //
+        // Five cells for three, and the triangle is carried across rather than
+        // created: the parity tying `T` to the boundary's edge count is exactly
+        // what forbids conjuring one, and exactly what this respects.
+        let ring: Vec<Point2> = [40.0f64, 92.0, 143.0, 194.0, 246.0, 297.0, 349.0]
+            .iter()
+            .map(|d| {
+                let t = d.to_radians();
+                Point2::new(t.cos(), t.sin())
+            })
+            .collect();
+        let mut pts = ring.clone();
+        pts.push(Point2::new(0.05, -0.10)); // 7 = a, trois mailles
+        pts.push(Point2::new(0.10, -0.50)); // 8 = b, quatre
+        let (a, b) = (7u32, 8u32);
+        let movable = vec![false, false, false, false, false, false, false, true, true];
+        // Deux mailles portent l'arête a–b, `a` en a une de plus — le triangle
+        // — et `b` deux.
+        let mut quads = vec![[a, b, 0, 1], [a, 2, 3, b], [b, 3, 4, 5], [b, 5, 6, 0]];
+        let mut tris = vec![[a, 1, 2]];
+
+        let inc = incidence(&quads, &tris, &[true; 4], &[true], pts.len());
+        assert_eq!(inc[a as usize].len(), 3, "a doit avoir trois mailles");
+        assert_eq!(inc[b as usize].len(), 4, "b doit en avoir quatre");
+
+        let report = run(&mut pts, &movable, &mut quads, &mut tris);
+        assert_eq!(report.pairs, 1, "{report:?}");
+        assert_eq!(quads.len() + tris.len(), 3, "cinq mailles pour trois");
+        assert_eq!(tris.len(), 1, "le triangle est repris, ni créé ni perdu");
+        assert!(
+            quads.iter().all(|q| !q.contains(&a) && !q.contains(&b))
+                && tris.iter().all(|t| !t.contains(&a) && !t.contains(&b)),
+            "les deux nœuds sont partis"
+        );
+        // Et l'heptagone est couvert exactement : le bord n'a pas bougé.
+        let area = |p: &[Point2]| {
+            0.5 * (0..p.len())
+                .map(|i| p[i].x * p[(i + 1) % p.len()].y - p[(i + 1) % p.len()].x * p[i].y)
+                .sum::<f64>()
+        };
+        let covered: f64 = quads
+            .iter()
+            .map(|q| area(&q.map(|i| pts[i as usize])))
+            .chain(tris.iter().map(|t| area(&t.map(|i| pts[i as usize]))))
             .sum();
         assert!((covered - area(&ring)).abs() < 1e-12, "{covered}");
     }
