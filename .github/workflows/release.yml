@@ -70,12 +70,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      # Épinglé, et non `@stable` : `check_clippy` tourne en `-D warnings`,
-      # donc un lint nouvellement ajouté par une sortie de Rust suffirait à
-      # faire rougir la publication sans qu'une ligne ait changé. `pages.yml`
-      # reste sur `@stable` : il ne fait que `cargo doc`, sans `-D warnings`,
-      # et un échec y serait cosmétique.
-      - uses: dtolnay/rust-toolchain@1.98.0
+      # `@stable`, délibérément non épinglé. Une version figée ici aurait été
+      # le seul endroit à décider de la toolchain, dans un fichier qu'on
+      # n'ouvre qu'en cas de panne : on s'y serait installé sans que rien ne
+      # rappelle d'en sortir. Le prix est connu et assumé — `check_clippy`
+      # tourne en `-D warnings`, donc un lint ajouté par une sortie de Rust
+      # peut bloquer une publication. Ce sont des corrections à faire de toute
+      # façon ; les rencontrer au moment du tag les rend seulement urgentes.
+      #
+      # Corollaire pour qui pousse : alignez votre toolchain sur le stable
+      # courant avant de poser un tag, sinon votre clippy voit moins que celui
+      # de la CI et vous corrigerez à l'aveugle.
+      - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
@@ -184,7 +190,7 @@ jobs:
       # faire rougir la publication sans qu'une ligne ait changé. `pages.yml`
       # reste sur `@stable` : il ne fait que `cargo doc`, sans `-D warnings`,
       # et un échec y serait cosmétique.
-      - uses: dtolnay/rust-toolchain@1.98.0
+      - uses: dtolnay/rust-toolchain@stable
       - name: Vérifier si déjà publié
         id: check
         run: |
