@@ -866,8 +866,12 @@ pub fn regularize(
     Ok(PyMesh { inner: out })
 }
 
-/// Fix the connectivity of a surface mesh: remove its doublets and switch the
-/// diagonals that lower the valence error. No node moves.
+/// Fix the connectivity of a surface mesh: remove its doublets, give up the
+/// nodes that have only three cells around them, and switch the diagonals that
+/// lower the valence error.
+///
+/// **No node of the contour ever moves**, and none is ever given up: the mesh
+/// keeps exactly the boundary it came with.
 ///
 /// A **doublet** is an interior node with only two quadrangles around it,
 /// which therefore share two edges; the node sits in a wedge no smoothing can
@@ -875,13 +879,33 @@ pub fn regularize(
 /// five, giving corners of 120° or 72° on average — and the angles around a
 /// node sum to 2π whatever the positions, so smoothing will never square them.
 ///
-/// The only move is the diagonal switch: two quadrangles sharing an edge form
-/// a hexagon, which splits across any of its three diagonals. It changes no
-/// node and no boundary, and is applied only when it strictly lowers the
-/// valence error and leaves both cells convex.
+/// Two moves answer that:
 ///
-/// Triangles are read for incidence and never touched — that is
+/// - the **diagonal switch**, for a node of valence five or more: two
+///   quadrangles sharing an edge form a hexagon, which splits across any of
+///   its three diagonals. It changes no node and no boundary, and is applied
+///   only when it strictly lowers the valence error and leaves both cells
+///   convex.
+/// - the **collapse**, for an interior node with only three cells: round a
+///   node carrying `q` quadrangles and `t` triangles the star is bounded by a
+///   polygon of `n = 2q + t` sides, and an `n`-gon decomposes with no interior
+///   node into `q'` quadrangles and `t'` triangles such that `2q' + t' = n - 2`
+///   — always a cell fewer than the star. So the node is given up along with
+///   that cell: 3 quadrangles become 2, and 1 quadrangle with 2 triangles
+///   becomes a single quadrangle. It is the only move that removes a node,
+///   changes how many cells there are, or moves anything: removing a node
+///   leaves the ring round it stretched, so the move is judged after relaxing
+///   that ring, and the relaxation is kept along with it. A move that does not
+///   improve the neighbourhood's worst cell is undone whole.
+///
+/// Triangles are read for incidence and reshaped, and they only ever leave two
+/// at a time — their number has the parity of the boundary's edge count, which
+/// nothing here may change. Turning a lone triangle into a quadrangle is
 /// `merge_triangles`'s job.
+///
+/// Your own nodes come back untouched apart from those on a ring a collapse
+/// relaxed, which are duplicated — the mesh you hand in is never modified. The
+/// result comes back wound the way it went in, clockwise or not.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn cleanup(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {

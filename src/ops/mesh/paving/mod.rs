@@ -543,7 +543,7 @@ fn pave_inner(
     // something worth polishing.
     erase_thin_triangle_pairs(&mut fab);
     bury_dead_quads(&mut fab);
-    cleanup::run(&fab.pts, &fab.movable, &mut fab.quads, &mut fab.tris);
+    cleanup::run(&mut fab.pts, &fab.movable, &mut fab.quads, &mut fab.tris);
     compact(&mut fab);
 
     let patch = smooth::Patch {

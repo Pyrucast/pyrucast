@@ -19,12 +19,39 @@
 //! node sum to 2π whatever the positions. That is why `cleanup` exists beside
 //! `regularize` rather than inside it.
 //!
+//! The line is not a wall. `cleanup`'s one move that *removes* a node leaves
+//! the ring round it stretched, and cannot be judged without relaxing that
+//! ring first; it does so, and keeps the relaxation when it keeps the move.
+//! What it does not do is smooth the rest of the mesh — that is still
+//! `regularize`'s job, and running `cleanup` first is what unlocks it.
+//!
+//! ## Which way the cells turn
+//!
+//! Every quality measure here is **signed**: a quadrangle read the wrong way
+//! round scores negative, which is how an inverted cell is told from a merely
+//! poor one. That signal is worth keeping — it is what stops smoothing from
+//! turning a cell inside out — so the winding is normalised instead of the
+//! measure being made blind to it. Each cell is stored counter-clockwise
+//! whatever the caller sent, and the result is wound back the way the mesh came
+//! in.
+//!
+//! It matters because a clockwise mesh is ordinary, not exotic: a paver hands
+//! back the winding of the contour it was given, so any domain meshed from an
+//! inverted outer loop comes out clockwise. Read as it stands, such a mesh
+//! scores negative everywhere and **every** pass here refuses to touch it —
+//! silently, since nothing about it is invalid.
+//!
 //! ## The boundary is never touched
 //!
 //! Every node on a boundary edge — an edge carried by exactly one cell — is
 //! pinned: it does not move, and nothing discards it. The mesh therefore keeps
 //! exactly the boundary it came with, which is the same promise the pavers
 //! make about the contour they were given.
+//!
+//! This is the guarantee that holds across all three operators, and the one to
+//! reason with. "Nothing moves at all" is *not* one of them: `cleanup` relaxes
+//! the ring of a node it gives up, because that move cannot be judged
+//! otherwise. What is pinned stays pinned either way.
 //!
 //! Boundary edges are counted here rather than obtained from
 //! [`border`](fn@crate::ops::mesh::border), which chains them into closed loops
@@ -64,6 +91,13 @@ pub(crate) struct Surface {
     /// Index → the caller's node, in the order the nodes were first met.
     ids: Vec<NodeId>,
     coords: Handle<Coords>,
+    /// The positions as they were read, so the passes that move nodes can be
+    /// told from the ones that only say they might.
+    pts0: Vec<Point2>,
+    /// `true` when the mesh came in wound clockwise. Every cell is stored
+    /// counter-clockwise whatever the caller sent, and this is what puts the
+    /// winding back on the way out.
+    clockwise: bool,
 }
 
 impl Surface {
@@ -86,7 +120,13 @@ impl Surface {
             movable: Vec::new(),
             ids: Vec::new(),
             coords: coords.clone(),
+            pts0: Vec::new(),
+            clockwise: false,
         };
+        // Which way the caller's cells turn. Counted rather than assumed: a
+        // mesh may hold both, and the majority is what the result is wound
+        // back to.
+        let (mut cw, mut ccw) = (0usize, 0usize);
         let guard = coords.read();
         let mut cells = 0usize;
         for sm in mesh {
@@ -120,6 +160,18 @@ impl Surface {
                         }
                     };
                 }
+                // Stored counter-clockwise, always: every quality measure
+                // below is signed, and a cell read the wrong way round scores
+                // negative — which reads as *inverted* and freezes the passes
+                // that are meant to improve it.
+                let ring: Vec<Point2> =
+                    local[..npc].iter().map(|&i| surf.pts[i as usize]).collect();
+                if crate::ops::mesh::triangulation::signed_area(&ring) < 0.0 {
+                    local[..npc].reverse();
+                    cw += 1;
+                } else {
+                    ccw += 1;
+                }
                 if npc == 3 {
                     surf.tris.push([local[0], local[1], local[2]]);
                 } else {
@@ -129,6 +181,8 @@ impl Surface {
             }
         }
         drop(guard);
+        surf.pts0 = surf.pts.clone();
+        surf.clockwise = cw > ccw;
         if cells == 0 {
             return Err(PyrucastError::Message(format!(
                 "{op}: mesh has no surface cells (TRI3/QUA4)"
@@ -186,18 +240,21 @@ impl Surface {
         mesh.subset(0..mesh.len())
     }
 
-    /// Build a fresh mesh: pinned nodes are shared, since they did not move,
-    /// and only the nodes that actually moved are duplicated.
+    /// Build a fresh mesh: only the nodes that actually moved are duplicated,
+    /// every other one being shared with the caller's mesh.
+    ///
+    /// Compared against the positions as read rather than against `movable`,
+    /// because a movable node is one a pass *may* move and most of them never
+    /// do — `cleanup` relaxes a handful of rings and leaves the rest of the
+    /// mesh exactly where it found it.
     pub(crate) fn to_mesh(&self, op: &str) -> Result<Mesh> {
         let mut ids = self.ids.clone();
-        let mut kept: Vec<Node> = Vec::new();
         for (i, id) in ids.iter_mut().enumerate() {
-            if !self.movable[i] {
+            if !self.movable[i] || self.pts[i] == self.pts0[i] {
                 continue;
             }
             let node = Node::create_in(self.coords.clone(), &[self.pts[i].x, self.pts[i].y])?;
             *id = node.id();
-            kept.push(node);
         }
         self.emit(&ids, op)
     }
@@ -214,14 +271,22 @@ impl Surface {
         if !self.quads.is_empty() {
             let mut sub = SubMesh::new(self.coords.clone(), ElementType::QUA4);
             for q in &self.quads {
-                sub.add_cell(&q.map(|v| ids[v as usize]))?;
+                let mut c = q.map(|v| ids[v as usize]);
+                if self.clockwise {
+                    c.reverse();
+                }
+                sub.add_cell(&c)?;
             }
             mesh.add_sub(Handle::new(sub))?;
         }
         if !self.tris.is_empty() {
             let mut sub = SubMesh::new(self.coords.clone(), ElementType::TRI3);
             for t in &self.tris {
-                sub.add_cell(&t.map(|v| ids[v as usize]))?;
+                let mut c = t.map(|v| ids[v as usize]);
+                if self.clockwise {
+                    c.reverse();
+                }
+                sub.add_cell(&c)?;
             }
             mesh.add_sub(Handle::new(sub))?;
         }
@@ -419,6 +484,136 @@ mod tests {
         );
         assert!(worst2 > 0.0, "a merge was forced through an invalid cell");
         assert_eq!(boundary, boundary2);
+    }
+
+    /// The same mesh with every cell read backwards.
+    fn wound_the_other_way(mesh: &Mesh) -> Mesh {
+        let coords = mesh.coords().unwrap();
+        let mut out = Mesh::empty();
+        for si in 0..mesh.len() {
+            let et = mesh.get(si).unwrap().read().element_type();
+            let mut sub = SubMesh::new(coords.clone(), et);
+            for cell in mesh.cells(si).unwrap() {
+                let mut ids: Vec<NodeId> = cell.nodes().unwrap().iter().map(|n| n.id()).collect();
+                ids.reverse();
+                sub.add_cell(&ids).unwrap();
+            }
+            out.add_sub(Handle::new(sub)).unwrap();
+        }
+        out
+    }
+
+    #[test]
+    fn cleanup_leaves_the_caller_s_own_nodes_alone_outside_the_rings_it_relaxes() {
+        // A collapse removes a node, so the ring it leaves is stretched until
+        // something relaxes it — which is why the move is judged *after* a
+        // trial relaxation, and why that relaxation is kept when the move is.
+        // `cleanup` therefore does move nodes, but only round the rings it
+        // collapsed: everywhere else the caller's own nodes come back
+        // untouched, not copies of them.
+        let mesh = paved_circle();
+        let mut before: Vec<(NodeId, [f64; 2])> = Vec::new();
+        for si in 0..mesh.len() {
+            for cell in mesh.cells(si).unwrap() {
+                for n in cell.nodes().unwrap() {
+                    let p = n.position().unwrap();
+                    before.push((n.id(), [p[0], p[1]]));
+                }
+            }
+        }
+        before.sort_by_key(|(id, _)| *id);
+        before.dedup_by_key(|(id, _)| *id);
+
+        let out = cleanup(&mesh).unwrap();
+        assert!(
+            look(&out).0 < look(&mesh).0,
+            "the fixture must give it work"
+        );
+
+        let (mut shared, mut fresh) = (0usize, 0usize);
+        for si in 0..out.len() {
+            for cell in out.cells(si).unwrap() {
+                for n in cell.nodes().unwrap() {
+                    match before.binary_search_by_key(&n.id(), |(id, _)| *id) {
+                        // A node it kept: the caller's own, at the very place
+                        // it was — bit for bit, not to within a tolerance.
+                        Ok(k) => {
+                            let p = n.position().unwrap();
+                            assert_eq!([p[0], p[1]], before[k].1, "a shared node moved");
+                            shared += 1;
+                        }
+                        Err(_) => fresh += 1,
+                    }
+                }
+            }
+        }
+        assert!(fresh > 0, "the rings it collapsed must have been relaxed");
+        assert!(
+            fresh * 20 < shared,
+            "only the collapsed rings may move: {fresh} fresh for {shared} shared"
+        );
+
+        // And the input mesh is untouched: relaxing is not done in place.
+        for (id, was) in &before {
+            let n = Node::acquire(mesh.coords().unwrap(), *id).unwrap();
+            let p = n.position().unwrap();
+            assert_eq!([p[0], p[1]], *was);
+        }
+    }
+
+    #[test]
+    fn a_clockwise_mesh_is_improved_just_as_much_as_a_counter_clockwise_one() {
+        // A paver hands back the winding of the contour it was given, so a
+        // domain meshed from an inverted outer loop comes out clockwise —
+        // ordinary, and valid. Read as it stands, every signed quality measure
+        // here scores it negative, which reads as *inverted*: the smoothing
+        // guard `after > 0.0` rejects every move and the passes freeze on a
+        // mesh with nothing wrong with it. Hence the winding is normalised on
+        // the way in and put back on the way out.
+        let mesh = paved_circle();
+        let flipped = wound_the_other_way(&mesh);
+        let (cells, tris, worst, p1, _) = look(&mesh);
+        let (cells_f, tris_f, worst_f, p1_f, _) = look(&flipped);
+        assert_eq!((cells, tris), (cells_f, tris_f), "the fixture must match");
+
+        let round = |m: &Mesh| {
+            let m = merge_triangles(m).unwrap();
+            let m = cleanup(&m).unwrap();
+            regularize(&m, 30, true, false).unwrap()
+        };
+        let (c1, t1, w1, q1, _) = look(&round(&mesh));
+        let (c2, t2, w2, q2, _) = look(&round(&flipped));
+
+        assert!(
+            w1 > worst && w2 > worst_f,
+            "both must improve the worst cell"
+        );
+        assert!(q1 > p1 && q2 > p1_f, "both must improve the 1st percentile");
+        assert_eq!((c1, t1), (c2, t2), "and reach the very same mesh");
+        assert!((w1 - w2).abs() < 1e-12, "{w1} vs {w2}");
+
+        // The result keeps the winding it came in with: the caller gets back
+        // the mesh they gave, not a silently re-oriented one.
+        let out = cleanup(&flipped).unwrap();
+        let (n_out, _, _, _, _) = look(&out);
+        let mut cw = 0usize;
+        for si in 0..out.len() {
+            for cell in out.cells(si).unwrap() {
+                let p: Vec<Point2> = cell
+                    .nodes()
+                    .unwrap()
+                    .iter()
+                    .map(|n| {
+                        let v = n.position().unwrap();
+                        Point2::new(v[0], v[1])
+                    })
+                    .collect();
+                if crate::ops::mesh::triangulation::signed_area(&p) < 0.0 {
+                    cw += 1;
+                }
+            }
+        }
+        assert_eq!(cw, n_out, "every cell must come back clockwise");
     }
 
     #[test]

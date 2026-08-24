@@ -31,7 +31,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `pave_volume(envelope, layers=1, thickness=None, size=None)` | **compagnon 3D** de `pave_surface` : couche limite d'`HEX8`/`PENTA6` poussée vers l'intérieur, raccordée par des `PYRA5` à un cœur `TET4` (voir plus bas) |
 | `triangulate_volume(envelope, size=None, allow_surface_nodes=False)` | **compagnon 3D** de `triangulate_surface` : maille l'intérieur d'une **enveloppe TRI3 fermée** en `TET4` — Delaunay exact, récupération du bord, raffinement intérieur et chasse aux slivers (voir plus bas) |
 | `regularize(mesh, sweeps=20, angular=True, in_place=False)` | **lisse** un maillage de surface existant : déplace ses nœuds intérieurs pour améliorer ses mailles, sans toucher ni à la connectivité ni au bord (voir plus bas) |
-| `cleanup(mesh)` | **corrige la connectivité** d'un maillage de surface : doublets, valences fautives et triangles coincés, sans jamais bouger un nœud (voir plus bas) |
+| `cleanup(mesh)` | **corrige la connectivité** d’un maillage de surface : doublets, valences fautives, et effondrement de l’étoile d’un nœud intérieur qui n’a que trois mailles (voir plus bas) |
 | `merge_triangles(mesh)` | **retire les triangles** d'un maillage à dominante quadrangulaire, **par paires** — leur nombre a la parité du bord (voir plus bas) |
 | `border(mesh, angle_deg=None)` | le **bord** d'un maillage de surface (TRI3/QUA4) en boucles `SEG2` (une par sous-maillage) ; avec `angle_deg`, découpé en **arêtes** ouvertes aux coins (voir plus bas) |
 | `skin(mesh, angle_deg=None)` | la **peau** d'un maillage volumique (tout type, y compris `PYRA5` et les quadratiques) en faces de **même degré**, **une par face plane** du solide (voir plus bas) |
@@ -1110,48 +1110,123 @@ celui des paveurs : **aucun nœud de bord ne bouge**, et une position n'est
 retenue que si toutes les mailles incidentes restent valides *et* que la pire
 qualité incidente ne baisse pas.
 
-**L'angulaire domine**, et c'est mesuré. Sur le cercle pavé (60 côtés, taille
-0,05, 1 260 mailles) après 60 balayages :
+**Les deux se valent désormais**, et c'est mesuré. Sur le cercle pavé
+(60 côtés, taille 0,05, 1 236 mailles) après 60 balayages :
 
 | | qualité min | p1 | p5 |
 |---|---|---|---|
-| brut | 0,308 | 0,643 | 0,826 |
-| laplacien | 0,703 | 0,741 | 0,871 |
-| angulaire | **0,761** | **0,770** | **0,881** |
+| brut | 0,366 | 0,471 | 0,800 |
+| laplacien | **0,806** | 0,807 | 0,863 |
+| angulaire | 0,781 | 0,807 | **0,865** |
 
-Elle gagne sur les trois, et les enchaîner n'apporte rien de plus. Ce n'était
-pas le cas avant que la retraite du front reçoive son plancher : sur le
-maillage plus irrégulier d'alors, l'angulaire menait le gros du maillage et le
-laplacien la queue, et il fallait les deux. Le laplacien reste disponible —
-`angular=False` — mais il n'y a plus de raison de le préférer.
+Les voilà à égalité au premier centile, le laplacien devant sur la pire maille
+et l'angulaire devant au cinquième centile. L'angulaire dominait franchement
+les trois colonnes tant que le maillage brut portait ses nœuds irréguliers :
+depuis que `cleanup` sait effondrer l'étoile d'un nœud à trois mailles, il en
+reste peu, et c'est précisément sur ceux-là que la règle angulaire prenait son
+avantage. Les enchaîner — angulaire puis laplacien — reste ce qui marche le
+mieux.
 
 ### `cleanup` — la topologie
 
 Un **doublet** est un nœud intérieur n'ayant que deux quadrangles autour de lui,
 qui partagent donc *deux* arêtes : le nœud est coincé dans un coin qu'aucun
 lissage n'ouvrira. Une **valence fautive** est un nœud intérieur qui veut quatre
-mailles et en a trois ou cinq. Un **triangle coincé** est un petit triangle
-entre deux quadrangles autour d'un nœud intérieur.
+mailles et en a trois ou cinq.
 
-Deux gestes, purement topologiques :
+Deux gestes. Le premier est purement topologique ; le second ne peut pas
+l'être, et c'est le cœur de l'affaire.
 
-1. **Bascule de diagonale**, pour la valence : deux quadrangles partageant une
-   arête forment un hexagone, qui se recoupe selon l'une de ses trois
-   diagonales. Elle ne change ni nœud ni bord, et n'est appliquée que si elle
-   fait strictement baisser l'erreur de valence en laissant les deux mailles
-   convexes.
-2. **Absorption du nœud**, pour le triangle coincé. Ni le doublet — qui veut
-   deux mailles — ni la bascule — qui en veut deux quadrangulaires — ne
-   l'atteignent. Mais les trois mailles couvrent un **pentagone**, dont la
-   seule décomposition est un quadrangle et un triangle : le nœud est abandonné
-   et le pentagone recoupé selon celle de ses cinq diagonales qui laisse la
-   pire des deux mailles la meilleure. Deux mailles pour trois, et le triangle
-   qui en sort est tout le coin au lieu de la lamelle qui s'y trouvait. Le
-   geste est refusé s'il n'améliore pas ce qui était là.
+1. **Bascule de diagonale**, pour une valence trop forte : deux quadrangles
+   partageant une arête forment un hexagone, qui se recoupe selon l'une de ses
+   trois diagonales. Elle ne change ni nœud ni bord, et n'est appliquée que si
+   elle fait strictement baisser l'erreur de valence en laissant les deux
+   mailles convexes.
+2. **Effondrement de l'étoile**, pour un nœud intérieur qui n'a que **trois**
+   mailles autour de lui. Ni le doublet — qui en veut deux — ni la bascule —
+   qui en veut deux quadrangulaires — ne l'atteignent.
 
-Sur un maillage frais sorti d'un paveur, il ne trouve **rien à faire** — le
-paveur passe la même main en fin de course. Son intérêt est ailleurs : un
+Le second geste tient tout entier dans une identité. Autour d'un nœud portant
+\( q \) quadrangles et \( t \) triangles, chaque quadrangle pose deux arêtes qui
+ne le touchent pas et chaque triangle en pose une : l'**étoile** du nœud est
+bordée par un polygone à
+
+\[ n = 2q + t \]
+
+côtés. Réciproquement, une décomposition d'un \( n \)-gone en \( q' \)
+quadrangles et \( t' \) triangles **sans nœud intérieur** vérifie
+
+\[ 2q' + t' = n - 2. \]
+
+Avec \( q + t = 3 \), les deux se combinent en \( 2q' + t' = 2q + t - 2 \) : la
+redécoupe existe toujours, et toujours avec **une maille de moins** que
+l'étoile qu'elle remplace.
+
+| \( q, t \) | bord de l'étoile | avant | après | mailles |
+|---|---|---|---|---|
+| 3, 0 | hexagone | 3 quadrangles | 2 quadrangles | 3 → 2 |
+| 2, 1 | pentagone | 2 quadrangles, 1 triangle | 1 de chaque | 3 → 2 |
+| 1, 2 | quadrangle | 1 quadrangle, 2 triangles | 1 quadrangle | 3 → 1 |
+| 0, 3 | triangle | 3 triangles | 1 triangle | 3 → 1 |
+
+Trois mailles autour d'un nœud intérieur, c'est une de trop quelles qu'elles
+soient : les coins font 120° en moyenne et aucun lissage ne les redressera,
+puisque les angles autour d'un nœud somment à 2π quelles que soient les
+positions. C'est le seul geste de `cleanup` qui **supprime un nœud**, le seul
+qui change le nombre de mailles, et le seul qui déplace quoi que ce soit. La
+coupe est prise selon celle des rotations qui laisse le maillage au mieux, et
+le geste s'applique si **l'un des deux** progresse : l'erreur de valence baisse
+strictement, ou la pire des nouvelles mailles bat la pire des anciennes. Il est
+refusé net si une maille sortirait retournée.
+
+#### Pourquoi il faut relaxer avant de juger
+
+Supprimer un nœud **étire mécaniquement** l'anneau qui restait autour : les six
+nœuds de l'hexagone ne bougent pas, et deux mailles s'y logent là où il y en
+avait trois. Mesurée sur-le-champ, la redécoupe paraît donc presque toujours
+plus mauvaise que l'étoile qu'elle remplace — alors qu'elle sera bonne dès que
+les nœuds auront été relâchés, ce qui arrive toujours : les paveurs lissent
+après chaque rangée, et `regularize` est l'étape suivante de l'appelant.
+
+C'est la différence de fond avec la bascule de diagonale, qui, elle, **ne
+déplace aucun nœud** : ce qu'elle mesure est définitif, et elle peut s'imposer
+un plancher de qualité immédiat (`QUALITY_FLOOR`, 70 % de ce qui était là) sans
+rien s'interdire d'utile. Le même plancher appliqué à l'effondrement supprime
+**53 gestes utiles sur 61** — mesuré.
+
+D'où l'ordre retenu : appliquer la découpe, **relaxer l'anneau**, mesurer, et
+défaire entièrement si la pire maille du voisinage a baissé. Et lorsque le
+geste est gardé, la relaxation est gardée avec lui : juger sur des positions
+qu'on rejetterait ensuite reviendrait à mesurer un maillage que personne ne
+reçoit — c'est mesuré aussi, et cela coûtait une maille à 0,055 sur la maison.
+
+**Aucun nœud du contour ne bouge**, et aucun n'est abandonné : c'est la
+garantie qui tient, la même que pour les trois opérateurs, et celle avec
+laquelle raisonner. « Rien ne bouge du tout » n'en est pas une : `cleanup`
+déplace les nœuds des anneaux qu'il a effondrés, et seulement ceux-là. Partout
+ailleurs il rend vos nœuds tels quels, et le maillage que vous lui donnez n'est
+jamais modifié.
+
+Les deux dernières lignes du tableau perdent un triangle chacune — deux d'un
+coup, donc la parité qui lie leur nombre aux arêtes de bord (voir
+`merge_triangles` ci-dessous) reste intacte.
+
+Sur un maillage frais sorti d'un paveur, `cleanup` ne trouve **rien à faire** —
+le paveur passe la même main en fin de course. Son intérêt est ailleurs : un
 maillage lu depuis gmsh, ou sorti de `merge_triangles`.
+
+#### Le sens de parcours n'a pas à vous préoccuper
+
+Toutes les mesures de qualité employées ici sont **signées** : une maille lue
+en sens horaire compte négatif, ce qui se lit comme *retournée*. C'est
+volontaire — c'est ce signe qui empêche le lissage de retourner une maille — et
+un maillage entièrement horaire n'a pourtant rien d'anormal : un paveur rend le
+sens du contour qu'on lui a donné, si bien qu'un domaine maillé depuis un
+contour extérieur inversé (`invert`) sort horaire.
+
+Les trois opérateurs remettent donc chaque maille en sens trigonométrique à la
+lecture et rendent le maillage dans le sens où il est entré. Rien à faire de
+votre côté, et `orient` n'est pas un préalable.
 
 ### `merge_triangles` — les triangles, par paires
 
@@ -1196,22 +1271,24 @@ déplacés.
 
 ### Ce que la chaîne donne
 
-Cercle pavé par `grid_surface`, 1 260 mailles dont 24 triangles :
+Cercle pavé par `grid_surface`, 1 236 mailles dont 8 triangles :
 
 | | mailles | triangles | qualité min | p1 | p5 |
 |---|---|---|---|---|---|
-| brut | 1 260 | 24 | 0,308 | 0,643 | 0,826 |
-| après la chaîne | 1 252 | **8** | **0,761** | **0,775** | **0,851** |
+| brut | 1 236 | 8 | 0,366 | 0,471 | 0,800 |
+| après la chaîne | 1 216 | **0** | **0,781** | **0,803** | **0,841** |
 
-Une passe de `merge_triangles` seule fait 24 → 8 sur ce cercle, et 42 → 16 sur
-une ellipse.
+Les triangles tombent à **zéro** — une seule passe de `merge_triangles` y
+suffit sur ce cercle — et le **pire** quadrangle passe de 0,366 à 0,781.
+**Chaque maillage intermédiaire reste valide**, et le tour répété converge au
+lieu de dériver.
 
-Les triangles tombent de 24 à 8, et surtout le **pire** quadrangle passe de
-0,308 à 0,761. **Chaque maillage intermédiaire reste valide**, et le tour
-répété converge au lieu de dériver.
-
-Sur le créneau grossier (271 mailles, 6 triangles) : 4 triangles, qualité
-minimale de 0,314 à 0,335 et premier centile de 0,335 à 0,455.
+Un point à connaître : la sortie brute a la queue basse plus mince qu'avant que
+`cleanup` sache effondrer une étoile à trois mailles — premier centile à 0,471
+contre 0,643. C'est le prix du geste, qui supprime un nœud et laisse ses voisins
+un peu étirés là où il passe, le temps que le lissage suivant les reprenne. Il
+est largement rendu : trois fois moins de triangles à la sortie du paveur, et
+aucun à l'arrivée.
 
 ## Couche limite hexaédrique : `pave_volume`
 

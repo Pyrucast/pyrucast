@@ -140,12 +140,12 @@ Ici le classement s'inverse, et c'est le seul endroit où il le fait.
 
 | forme | | triangulate | pave | grid | grid2 |
 |---|---|---:|---:|---:|---:|
-| maison | mailles | 1 723 | 620 | 470 | **453** |
+| maison | mailles | 1 723 | 620 | 460 | **450** |
 | | pire | 0,484 | 0,491 | 0,420 | **0,548** |
-| carré arrondi | mailles | 1 866 | 678 | 441 | **415** |
-| | pire | **0,474** | 0,360 | 0,244 | 0,400 |
-| cercle R = 1 | mailles | 6 114 | 2 339 | **1 260** | 2 044 |
-| | pire | **0,424** | 0,031 | **0,288** | 0,005 |
+| carré arrondi | mailles | 1 866 | 668 | 424 | **409** |
+| | pire | **0,474** | 0,360 | 0,340 | 0,371 |
+| cercle R = 1 | mailles | 6 114 | 2 339 | **1 236** | 2 044 |
+| | pire | **0,424** | 0,031 | **0,366** | 0,005 |
 
 Une grille ne peut pas suivre une oblique : elle la découpe en escalier, et tout
 ce qui s'en approche est rendu au paveur frontal. Sur la maison, où l'oblique

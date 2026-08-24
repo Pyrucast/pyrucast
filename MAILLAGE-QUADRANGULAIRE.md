@@ -4,8 +4,11 @@ Note de travail, **non arbitrée**. Elle dit où se situent les mailleurs
 quadrangulaires de pyrucast dans la littérature, ce qui les sépare de l'état de
 l'art, et les six pistes identifiées — avec, pour chacune, ce qui a été mesuré.
 
-État arrêté au **23 août 2026**. Compagnon de [ROADMAP.md](ROADMAP.md), section
+État arrêté au **24 août 2026**. Compagnon de [ROADMAP.md](ROADMAP.md), section
 *Qualité de maillage*.
+
+La **piste 7** a été ouverte et fermée le 24 août : elle est implémentée, et
+c'est le seul point de cette note qui ne soit plus une piste.
 
 ---
 
@@ -153,7 +156,7 @@ vivante : [quad-meshing-survey](https://github.com/Bigger-and-Stronger/quad-mesh
 | `pave_surface` | Paving 1991, + Q-Morph amélioré 2025 | **à jour sur cette branche** : les trois gestes de l'article 2025 sont ceux de `946677c` / `51afb9f` |
 | `grid_surface`, `grid_surface2` | Liang & Zhang 2010–2011 | même architecture (cœur + tampon) ; la **garantie d'angle** en moins |
 | `merge_triangles` (glouton : fusion + regroupement) | Blossom-Quad 2012 | **une génération de retard sur un problème identique** |
-| `cleanup` (doublets, valences, pentagone) | QuadQS : cavités + motifs guidés par les singularités | on répare localement à l'aveugle ; eux savent **où** un irrégulier a le droit d'être |
+| `cleanup` (doublets, valences, étoiles à trois mailles) | CleanUp 1997 ; QuadQS : cavités + motifs guidés par les singularités | **à jour sur le geste de base** (piste 7) ; reste qu'on répare à l'aveugle, quand eux savent **où** un irrégulier a le droit d'être |
 | taille : un scalaire par domaine | odeco intégrables, SGP 2026 | absent |
 | — | champ de croix, quantification, layout | absent, et c'est la colonne vertébrale du reste |
 
@@ -255,6 +258,80 @@ le droit d'être, il porte la carte de tailles, et il ouvre le layout.
   autant que du code. C'est ce qui séparerait pyrucast de l'état de l'art plutôt
   que de l'état de l'art de 1991.
 
+### Piste 7 — L'effondrement d'une étoile à trois mailles — **FAITE**
+
+Un nœud intérieur qui n'a que **trois** mailles autour de lui peut être
+abandonné, et une maille avec lui. Kinney, *[CleanUp: Improving Quadrilateral
+Finite Element Meshes](https://people.eecs.berkeley.edu/~jrs/meshpapers/Kinney.pdf)*,
+4ᵉ IMR (1997), cas `3-4+34+000` : « *all three quads around the center node are
+deleted and a fill_2 is used to fill the hole. Four irregular nodes are replaced
+with zero irregular nodes.* »
+
+`cleanup` en avait **un** des quatre cas, écrit comme un cas particulier
+(« pentagone », deux quadrangles et un triangle). L'identité qui les unifie :
+autour d'un nœud portant \( q \) quadrangles et \( t \) triangles, chaque
+quadrangle pose deux arêtes qui ne le touchent pas et chaque triangle une, donc
+l'étoile est bordée par un polygone à \( n = 2q + t \) côtés ; et une
+décomposition d'un \( n \)-gone sans nœud intérieur vérifie
+\( 2q' + t' = n - 2 \). Avec \( q + t = 3 \), la redécoupe existe toujours,
+et toujours avec une maille de moins.
+
+| \( q, t \) | bord | avant | après | mailles |
+|---|---|---|---|---|
+| 3, 0 | hexagone | 3 quadrangles | 2 quadrangles | 3 → 2 |
+| 2, 1 | pentagone | 2 quadrangles, 1 triangle | 1 de chaque | 3 → 2 |
+| 1, 2 | quadrangle | 1 quadrangle, 2 triangles | 1 quadrangle | 3 → 1 |
+| 0, 3 | triangle | 3 triangles | 1 triangle | 3 → 1 |
+
+**Le point qui a coûté trois essais** : le geste ne peut pas être jugé sur
+place. Il *supprime* un nœud, donc l'anneau restant est mécaniquement étiré
+jusqu'à ce que quelque chose le relâche — ce qui arrive toujours, les paveurs
+lissant après chaque rangée. Mesurée sur-le-champ, la redécoupe paraît presque
+toujours moins bonne que l'étoile qu'elle remplace : le plancher de qualité de
+`switch_diagonals` (70 %), appliqué tel quel, supprimait **53 gestes utiles sur
+61**. Or `switch_diagonals` peut se le permettre — il ne déplace aucun nœud,
+donc ce qu'il mesure est définitif.
+
+L'ordre retenu, qui est celui de gmsh : appliquer, **relaxer l'anneau**,
+mesurer, défaire entièrement si la pire maille du voisinage a baissé. Deux
+détails s'y sont révélés décisifs, chacun par une mesure :
+
+- la relaxation doit être **gardée** avec le geste. Juger sur des positions
+  qu'on rejette ensuite, c'est mesurer un maillage que personne ne reçoit ;
+- la relaxation d'essai doit porter **la même garde que le vrai lisseur** (pas
+  de pas qui retourne une maille). Un laplacien nu marche, près d'un coin
+  concave, vers un point que le lisseur monotone n'atteindra jamais, et fait
+  accepter le geste sur une promesse qui ne sera pas tenue : la maison tombait
+  à **0,055** de pire maille.
+
+*Mesuré*, sortie brute des paveurs, avant → après :
+
+| | mailles | pire | 1ᵉʳ c. | 5ᵉ c. | irréguliers | erreur de valence |
+|---|---:|---:|---:|---:|---:|---:|
+| boîte, `grid_surface` | 11 749 → **11 523** | 0,456 → **0,461** | 0,572 → **0,706** | 0,760 → **0,844** | 568 → **185** | 724 → **194** |
+| cercle, `grid_surface` | 1 260 → **1 236** | 0,288 → **0,366** | | | | |
+| maison, `grid_surface` | 470 → **460** | 0,420 → 0,420 | | | | |
+| carré arrondi, `grid` | 441 → **424** | 0,244 → **0,340** | | | | |
+| carré arrondi, `grid2` | 415 → **409** | 0,400 → 0,371 | | | | |
+
+Sur la boîte, les **274** nœuds intérieurs de valence 3 étaient *tous* entourés
+de trois quadrangles — le seul cas que `cleanup` ne savait pas traiter. Il en
+reste 58, et c'est le plancher : Poincaré–Hopf fixe le nombre d'irréguliers,
+seule leur position est négociable (§ 2.4).
+
+Le seul retrait est le carré arrondi en `grid_surface2`, 0,400 → 0,371.
+
+**Un bug indépendant, trouvé au passage.** Les mesures de qualité sont signées,
+et une maille lue en sens horaire compte négatif — ce qui se lit comme
+*retournée*. Un maillage entièrement horaire n'a pourtant rien d'anormal : un
+paveur rend le sens du contour qu'on lui a donné, si bien qu'un domaine maillé
+depuis un contour extérieur inversé sort horaire. Lu tel quel, **les trois
+opérateurs `improve` refusaient silencieusement de le toucher** : `regularize`
+ne déplaçait aucun nœud (déplacement maximal mesuré : `0.0`), `cleanup` ne
+trouvait rien, et `merge_triangles` laissait les 74 triangles de la boîte à 74
+— contre 64 une fois le maillage retourné. Corrigé dans `Surface::read`, qui
+normalise le sens à la lecture et le restitue à la sortie.
+
 ---
 
 ## 5. Ce qui a été essayé et écarté
@@ -270,6 +347,9 @@ retirés du dépôt.
 | Parcours FIFO **pour toutes** les boucles, y compris sous cœur en grille | `grid_surface` sur une plaque à trou rond **ne termine plus** (> 4 min contre 0,05 s) |
 | Forcer un front pair à **chaque** rangée | 65 triangles → **685**, pire maille 0,000 |
 | Idem, restreint aux dernières rangées avant fermeture (seuils 8 / 12 / 20 / 40) | aucun gain ; à 12, `grid_surface` refait des trous |
+| Plancher de qualité **immédiat** sur l'effondrement d'une étoile (70 %, celui de `switch_diagonals`) | 53 gestes utiles sur 61 supprimés. Le geste retire un nœud : il ne se juge qu'après relaxation (piste 7) |
+| Relaxation d'essai **rendue** après le verdict | mesure un maillage que personne ne reçoit : carré arrondi `grid2` 0,468 en essai, 0,331 livré |
+| Relaxation d'essai en **laplacien nu**, sans garde de validité | promet une position que le lisseur monotone n'atteint pas : maison `grid_surface` pire maille **0,055** |
 | Refuser la couture qui poserait une corde sur le contour | règle bien les trous, mais sur une bande crénelée le front se replie et **l'appel échoue** — perdre le maillage pour éviter une fissure d'aire nulle est un mauvais échange. Remplacé par la recouture de `41594a9` |
 
 Un point de méthode qui a servi plusieurs fois : **la relaxation du front et

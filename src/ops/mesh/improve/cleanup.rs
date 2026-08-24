@@ -1,14 +1,18 @@
 //! Topological cleanup of an existing surface mesh: changing who is next to
-//! whom, and never where a node sits.
+//! whom, and moving a node only where the change forces it.
 
 use super::Surface;
 use crate::containers::mesh::Mesh;
 use crate::error::Result;
 use crate::ops::mesh::paving::cleanup as pass;
 
-/// Fix the connectivity of `mesh`: remove its doublets, absorb the nodes a
-/// triangle and two quadrangles share, and switch the diagonals that lower the
-/// valence error. No node moves.
+/// Fix the connectivity of `mesh`: remove its doublets, give up the nodes that
+/// have only three cells around them, and switch the diagonals that lower the
+/// valence error.
+///
+/// **No node of the contour ever moves**, and none is ever given up: the mesh
+/// keeps exactly the boundary it came with. That is the guarantee to hold on
+/// to. Inside it, one move does relax the ring it has just sewn — see below.
 ///
 /// Three defects are worth naming, and none is geometry:
 ///
@@ -16,36 +20,48 @@ use crate::ops::mesh::paving::cleanup as pass;
 ///   which therefore share *two* edges. The node sits in a wedge and both
 ///   cells stay pinched however they are smoothed; merging the two into one
 ///   removes node and wedge together.
-/// - a node with the **wrong valence**. An interior node wants four cells: with
-///   three the corners average 120°, with five 72°, and no smoothing will
-///   change that, because the angles around a node sum to 2π whatever the
-///   positions.
 ///
-/// - a **triangle wedged** between two quadrangles at an interior node. Three
-///   cells round a node are already one too few, and neither move below can
-///   reach this one. But the three cover a **pentagon**, whose only
-///   decomposition is one quadrangle and one triangle: the node is given up
-///   and the pentagon re-cut across whichever of its five diagonals leaves the
-///   worse of the two cells best. Two cells for three, and the triangle that
-///   comes out is the whole wedge instead of the sliver in it. The move is
-///   refused outright when it would not improve on what was there.
+/// - an interior node with only **three cells** around it. Its corners average
+///   120° and no smoothing will square them, because the angles around a node
+///   sum to 2π whatever the positions. But the star of such a node can always
+///   be re-cut with a cell fewer, and the node given up with it: round a node
+///   carrying `q` quadrangles and `t` triangles, each quadrangle lays two edges
+///   that do not touch it and each triangle lays one, so the star is bounded by
+///   a polygon of `n = 2q + t` sides — and a decomposition of an `n`-gon with
+///   no interior node satisfies `2q' + t' = n - 2`.
 ///
-/// For the valence, the move is the diagonal switch: two quadrangles sharing an
-/// edge form
-/// a hexagon, which splits across any of its three diagonals, and switching
-/// moves one unit of valence from the two nodes on the old diagonal to the two
-/// on the new. It changes no node and no boundary, so it cannot make the mesh
-/// non-conforming, and it is applied only when it strictly lowers the total
-/// valence error and leaves both cells convex.
+///   | `q, t` | boundary | before | after | cells |
+///   |---|---|---|---|---|
+///   | 3, 0 | hexagon | 3 quadrangles | 2 quadrangles | 3 → 2 |
+///   | 2, 1 | pentagon | 2 quadrangles, 1 triangle | 1 of each | 3 → 2 |
+///   | 1, 2 | quadrangle | 1 quadrangle, 2 triangles | 1 quadrangle | 3 → 1 |
+///   | 0, 3 | triangle | 3 triangles | 1 triangle | 3 → 1 |
 ///
-/// Triangles are otherwise read for incidence and never touched — removing
-/// them is [`merge_triangles`](fn@super::merge_triangles::merge_triangles)'s
-/// job, and it is a different problem: their number has the parity of the
-/// boundary's edge count, so they only ever go in pairs. The pentagon above
-/// changes a triangle's shape, never how many there are.
+///   It is the only pass here that removes a node, the only one that changes
+///   how many cells there are, and the only one that moves anything. Removing
+///   a node leaves the ring round it stretched, so the move is judged **after**
+///   relaxing that ring — and the relaxation is kept along with the move,
+///   since a verdict on positions one then discards is a verdict on a mesh
+///   nobody receives. A move that does not improve the worst cell of the
+///   neighbourhood is undone whole, ring positions included.
 ///
-/// The result is a fresh mesh over the caller's own nodes: the connectivity
-/// changed, the geometry did not.
+/// - a node with the **wrong valence** otherwise. The move is the diagonal
+///   switch: two quadrangles sharing an edge form a hexagon, which splits
+///   across any of its three diagonals, and switching moves one unit of
+///   valence from the two nodes on the old diagonal to the two on the new. It
+///   changes no node and no boundary, so it cannot make the mesh
+///   non-conforming, and it is applied only when it strictly lowers the total
+///   valence error and leaves both cells convex.
+///
+/// The bottom two rows above shed a triangle each — two of them, so the parity
+/// tying their number to the boundary's edge count is untouched. Turning a
+/// lone triangle into a quadrangle is a different problem and
+/// [`merge_triangles`](fn@super::merge_triangles::merge_triangles)'s job.
+///
+/// The result is a fresh mesh sharing every node the caller had, save those on
+/// a ring a collapse relaxed, which are duplicated so the mesh handed in is
+/// left exactly as it was. It comes back wound the way it went in, clockwise
+/// or not.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -76,6 +92,11 @@ use crate::ops::mesh::paving::cleanup as pass;
 /// ```
 pub fn cleanup(mesh: &Mesh) -> Result<Mesh> {
     let mut surf = Surface::read(mesh, "cleanup")?;
-    pass::run(&surf.pts, &surf.movable, &mut surf.quads, &mut surf.tris);
-    surf.to_mesh_same_nodes("cleanup")
+    pass::run(
+        &mut surf.pts,
+        &surf.movable,
+        &mut surf.quads,
+        &mut surf.tris,
+    );
+    surf.to_mesh("cleanup")
 }

@@ -9,17 +9,17 @@
 //!   which therefore share *two* edges. Whatever smoothing does, the node sits
 //!   in a wedge and both cells stay pinched. Merging the two into one removes
 //!   the node and the wedge together.
-//! - a node with the **wrong valence**. In a quadrangle mesh an interior node
-//!   wants four cells around it: with three, the corners average 120°, with
-//!   five, 72°. Neither can be smoothed to a right angle, because the angles
-//!   around a node must sum to 2π whatever the positions.
-//! - a **triangle wedged** between two quadrangles at an interior node. Three
-//!   cells round a node are already one too few, and neither move above can
-//!   reach this one: the doublet rule wants two cells, the diagonal switch
-//!   wants two quadrangles. But the three cover a **pentagon**, whose only
-//!   decomposition is one quadrangle and one triangle — so the node is given
-//!   up and the pentagon re-cut. Two cells for three, and the triangle that
-//!   comes out is the whole wedge instead of the sliver in it.
+//! - an interior node with only **three cells** around it, whatever they are.
+//!   Its corners average 120°, and no smoothing will square them because the
+//!   angles round a node sum to 2π whatever the positions. Neither other move
+//!   here reaches it: the doublet rule wants two cells, the diagonal switch
+//!   wants two quadrangles. But the star of such a node always re-cuts with a
+//!   cell fewer — see [`collapse_valence3`] for why, and for the four shapes
+//!   it takes — so the node is given up along with the cell its star can do
+//!   without.
+//! - a node with the **wrong valence** otherwise. In a quadrangle mesh an
+//!   interior node wants four cells around it: with five, the corners average
+//!   72°, which no smoothing squares either.
 //!
 //! ## What a node ought to have
 //!
@@ -30,18 +30,39 @@
 //! giving three along a straight edge and two at a right-angled corner. One
 //! formula covers both, so no node needs to be special-cased as "boundary".
 //!
-//! ## The move
+//! ## The moves
 //!
-//! Two quadrangles sharing an edge form a hexagon, and a hexagon splits into
-//! two quadrangles across any of its three diagonals. Switching diagonal moves
-//! one unit of valence from the two nodes on the old diagonal to the two on
-//! the new one. That is the whole repertoire: it changes no node count and no
-//! boundary, so it cannot make the mesh non-conforming, and it is applied only
-//! when it strictly lowers the total valence error and leaves both cells
-//! convex.
+//! One of them moves nodes, the other does not, and the difference is not a
+//! detail: a switch leaves every node where smoothing put it, so what it
+//! measures is final, while a collapse *removes* a node and cannot help
+//! leaving the ring round it stretched. Judged on the spot, every collapse
+//! worth making looks like a mistake.
+//!
+//! For the valence, the move is the **diagonal switch**: two quadrangles
+//! sharing an edge form a hexagon, and a hexagon splits into two quadrangles
+//! across any of its three diagonals. Switching diagonal moves one unit of
+//! valence from the two nodes on the old diagonal to the two on the new one.
+//! It changes no node count and no boundary, so it cannot make the mesh
+//! non-conforming, and it is applied only when it strictly lowers the total
+//! valence error and leaves both cells convex.
+//!
+//! For a node that has three cells and no business having them, the move is
+//! the **collapse**: the star is thrown away and its boundary re-cut with a
+//! cell fewer. It is the only move here that removes a node, and therefore the
+//! only one judged **after** a relaxation of the ring it just sewed — kept
+//! along with the move, undone whole with it.
+//!
+//! ## Which way the cells turn
+//!
+//! Every quality measure below is signed, so a cell read clockwise scores
+//! negative and is taken for inverted. The pavers keep their fabric
+//! counter-clockwise throughout and check it on the way out, and the entry
+//! point for an outside mesh normalises the winding before handing it over —
+//! see [`Surface::read`](crate::ops::mesh::improve::Surface). Nothing here
+//! needs to ask.
 
 use super::geom::{quad_is_valid, quad_quality};
-use crate::atoms::Point2;
+use crate::atoms::{Point2, Vector2};
 use std::collections::HashMap;
 
 /// Passes over the mesh. Each one is a sweep of doublet removal followed by a
@@ -50,7 +71,21 @@ const ROUNDS: usize = 6;
 
 /// A switch must not drop the worse of the two cells below this share of what
 /// it was, so valence is never bought at the price of a sliver.
+///
+/// It applies to the switch and not to the collapse, because the two are not
+/// the same kind of move: a switch leaves every node exactly where smoothing
+/// put it, so what it measures is final, while a collapse *removes* a node and
+/// necessarily leaves the ring stretched until something relaxes it. Measuring
+/// a collapse straight away measures a state no caller ever sees; it is judged
+/// after a trial relaxation instead — see [`collapse_valence3`].
 const QUALITY_FLOOR: f64 = 0.7;
+
+/// Sweeps of the trial relaxation a collapse is judged after. The ring has at
+/// most six nodes, so this costs nothing and there is no reason to skimp.
+const TRIAL_SWEEPS: usize = 8;
+
+/// Under-relaxation of that trial, the pavers' own figure.
+const TRIAL_RELAX: f64 = 0.6;
 
 /// What the cleanup changed.
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -61,24 +96,31 @@ pub struct Report {
     pub absorbed: usize,
 }
 
-/// Clean up `quads` in place. `tris` are read for incidence but never
-/// modified — they are the few cells paving could not make square, and moving
-/// them around would not improve anything.
+/// Clean up `quads` and `tris` in place.
 ///
-/// Quadrangles that disappear are left as `None`; the caller compacts.
+/// Triangles are read for incidence, reshaped where a collapsed node leaves a
+/// better one behind, and dropped **two at a time** by the collapse of a node
+/// whose star holds two of them — which is the only count that keeps the
+/// parity tying `T` to the boundary's edge count. Turning a lone triangle into
+/// a quadrangle is [`merge_triangles`][mt]'s job, not this one.
+///
+/// Both lists come back compacted.
+///
+/// [mt]: fn@crate::ops::mesh::improve::merge_triangles::merge_triangles
 pub fn run(
-    pts: &[Point2],
+    pts: &mut [Point2],
     movable: &[bool],
     quads: &mut Vec<[u32; 4]>,
-    tris: &mut [[u32; 3]],
+    tris: &mut Vec<[u32; 3]>,
 ) -> Report {
     let mut report = Report::default();
     let mut alive = vec![true; quads.len()];
+    let mut alive_tri = vec![true; tris.len()];
     for _ in 0..ROUNDS {
         let before = (report.doublets, report.switches, report.absorbed);
-        report.doublets += remove_doublets(pts, movable, quads, tris, &mut alive);
-        report.absorbed += absorb_triangle_corners(pts, movable, quads, tris, &mut alive);
-        report.switches += switch_diagonals(pts, quads, tris, &mut alive);
+        report.doublets += remove_doublets(pts, movable, quads, tris, &mut alive, &alive_tri);
+        report.absorbed += collapse_valence3(pts, movable, quads, tris, &mut alive, &mut alive_tri);
+        report.switches += switch_diagonals(pts, quads, tris, &mut alive, &alive_tri);
         if (report.doublets, report.switches, report.absorbed) == before {
             break;
         }
@@ -90,12 +132,25 @@ pub fn run(
         }
     }
     *quads = kept;
+    let mut kept = Vec::with_capacity(tris.len());
+    for (i, t) in tris.iter().enumerate() {
+        if alive_tri[i] {
+            kept.push(*t);
+        }
+    }
+    *tris = kept;
     report
 }
 
 /// Cells around each node: `2 * index` for a live quadrangle, `2 * index + 1`
-/// for a triangle.
-fn incidence(quads: &[[u32; 4]], tris: &[[u32; 3]], alive: &[bool], n_pts: usize) -> Vec<Vec<u32>> {
+/// for a live triangle.
+fn incidence(
+    quads: &[[u32; 4]],
+    tris: &[[u32; 3]],
+    alive: &[bool],
+    alive_tri: &[bool],
+    n_pts: usize,
+) -> Vec<Vec<u32>> {
     let mut inc = vec![Vec::new(); n_pts];
     for (i, q) in quads.iter().enumerate() {
         if alive[i] {
@@ -105,8 +160,10 @@ fn incidence(quads: &[[u32; 4]], tris: &[[u32; 3]], alive: &[bool], n_pts: usize
         }
     }
     for (i, t) in tris.iter().enumerate() {
-        for &v in t {
-            inc[v as usize].push((i as u32) * 2 + 1);
+        if alive_tri[i] {
+            for &v in t {
+                inc[v as usize].push((i as u32) * 2 + 1);
+            }
         }
     }
     inc
@@ -162,76 +219,75 @@ fn wanted(theta: f64) -> usize {
     ((theta / std::f64::consts::FRAC_PI_2).round() as i64).clamp(1, 6) as usize
 }
 
-/// Absorb a node that carries a triangle and two quadrangles into the two
-/// cells it can make instead.
+/// Give up an interior node that has only three cells around it, along with
+/// the one cell its star can do without.
 ///
-/// A small triangle wedged between two quadrangles at an interior node is a
-/// defect nothing else here can reach: the doublet rule needs two cells, the
-/// diagonal switch works on quadrangle pairs, and both leave triangles alone.
-/// But three cells round a node are three cells too many — an interior node
-/// wants four — and the shape they cover is a **pentagon**, whose only
-/// decomposition is one quadrangle and one triangle.
+/// Round a node with `q` quadrangles and `t` triangles, each quadrangle lays
+/// two edges that do not touch the node and each triangle lays one: the star
+/// is bounded by a polygon of **`n = 2q + t`** sides. And a decomposition of
+/// an `n`-gon into `q'` quadrangles and `t'` triangles with no interior node
+/// satisfies `2q' + t' = n - 2`. Put the two together and the re-cut always
+/// exists, always with fewer cells than the star it replaces:
 ///
-/// So the node is given up and the pentagon re-cut. Two cells replace three,
-/// the triangle that comes out is the whole wedge rather than the sliver in
-/// it, and the node's valence problem goes with it. The cut is taken across
-/// whichever of the five diagonals leaves the worst of the two cells best, and
-/// the move is refused outright if that is not better than what was there —
-/// a pentagon can be too bent to improve on.
-fn absorb_triangle_corners(
-    pts: &[Point2],
+/// | `q, t` | boundary | before | after | cells |
+/// |---|---|---|---|---|
+/// | 3, 0 | hexagon | 3 quadrangles | 2 quadrangles | 3 → 2 |
+/// | 2, 1 | pentagon | 2 quadrangles, 1 triangle | 1 of each | 3 → 2 |
+/// | 1, 2 | quadrangle | 1 quadrangle, 2 triangles | 1 quadrangle | 3 → 1 |
+/// | 0, 3 | triangle | 3 triangles | 1 triangle | 3 → 1 |
+///
+/// Three cells round an interior node is one too few whatever they are — the
+/// corners average 120° and no smoothing will square them, since the angles
+/// round a node sum to 2π whatever the positions. Neither other move here can
+/// reach the defect: the doublet rule wants two cells and the diagonal switch
+/// wants two quadrangles. This one takes all four cases at once, and it is the
+/// only pass that removes a node.
+///
+/// The bottom two rows shed a triangle each time — two of them, so the parity
+/// that ties `T` to the boundary's edge count is untouched, and neither the
+/// count nor the boundary can drift.
+///
+/// The cut is taken across whichever rotation leaves the mesh best, and the
+/// move is applied when **either** the valence error strictly falls **or** the
+/// worst of the new cells beats the worst of the old — a node may be worth
+/// giving up for its shape alone, and an ill-placed one is worth giving up
+/// even when the shape barely moves. It is refused outright when a cell would
+/// come out inverted.
+fn collapse_valence3(
+    pts: &mut [Point2],
     movable: &[bool],
     quads: &mut [[u32; 4]],
     tris: &mut [[u32; 3]],
     alive: &mut [bool],
+    alive_tri: &mut [bool],
 ) -> usize {
-    let inc = incidence(quads, tris, alive, pts.len());
+    let inc = incidence(quads, tris, alive, alive_tri, pts.len());
+    let theta = interior_angles(pts, quads, tris, &inc);
+    let val: Vec<i64> = inc.iter().map(|e| e.len() as i64).collect();
+    let want: Vec<i64> = theta.iter().map(|&t| wanted(t) as i64).collect();
+
     let mut done = 0;
     let mut spent = vec![false; pts.len()];
     for v in 0..pts.len() {
         if !movable[v] || inc[v].len() != 3 || spent[v] {
             continue;
         }
-        let tri_at: Vec<u32> = inc[v]
+        let cells = inc[v].clone();
+        if cells
             .iter()
-            .copied()
-            .filter(|e| !e.is_multiple_of(2))
-            .collect();
-        let quad_at: Vec<u32> = inc[v]
-            .iter()
-            .copied()
-            .filter(|e| e.is_multiple_of(2))
-            .collect();
-        if tri_at.len() != 1 || quad_at.len() != 2 {
+            .any(|&e| !live(e, alive, alive_tri) || count_of(&cells, e) != 1)
+        {
             continue;
         }
-        let ti = (tri_at[0] / 2) as usize;
-        let (q1, q2) = ((quad_at[0] / 2) as usize, (quad_at[1] / 2) as usize);
-        if q1 == q2 || !alive[q1] || !alive[q2] {
-            continue;
-        }
-
-        // Each cell contributes the path round it that does **not** pass
-        // through `v`; chained, the three paths are the pentagon.
-        let t = tris[ti];
-        let k = t.iter().position(|&x| x as usize == v).unwrap();
-        let far_tri = [t[(k + 1) % 3], t[(k + 2) % 3]];
-        let far_quad = |q: [u32; 4]| {
-            let k = q.iter().position(|&x| x as usize == v).unwrap();
-            [q[(k + 1) % 4], q[(k + 2) % 4], q[(k + 3) % 4]]
-        };
-        let (fa, fb) = (far_quad(quads[q1]), far_quad(quads[q2]));
-        // The triangle ends where one quadrangle starts, and that one ends
-        // where the other starts. Anything else is not a fan round `v`.
-        let (first, second) = if far_tri[1] == fa[0] && fa[2] == fb[0] && fb[2] == far_tri[0] {
-            (fa, fb)
-        } else if far_tri[1] == fb[0] && fb[2] == fa[0] && fa[2] == far_tri[0] {
-            (fb, fa)
-        } else {
+        let Some(ring) = star_ring(v, &cells, quads, tris) else {
             continue;
         };
-        let ring = [far_tri[0], first[0], first[1], first[2], second[1]];
-        if ring.iter().collect::<std::collections::HashSet<_>>().len() != 5 {
+        // A ring node an earlier collapse already touched has a stale entry in
+        // `inc`, and the neighbourhood is read from `inc`: a cell could then be
+        // relaxed without the guard ever looking at it. Every node a collapse
+        // touches is marked, so this one check is enough — and the round comes
+        // back with `inc` rebuilt.
+        if ring.iter().any(|&r| spent[r as usize]) {
             continue;
         }
         let p: Vec<Point2> = ring.iter().map(|&i| pts[i as usize]).collect();
@@ -241,63 +297,127 @@ fn absorb_triangle_corners(
             continue;
         }
 
-        // What is there now, and what the best cut would give.
-        let was = quad_quality([
-            pts[quads[q1][0] as usize],
-            pts[quads[q1][1] as usize],
-            pts[quads[q1][2] as usize],
-            pts[quads[q1][3] as usize],
-        ])
-        .min(quad_quality([
-            pts[quads[q2][0] as usize],
-            pts[quads[q2][1] as usize],
-            pts[quads[q2][2] as usize],
-            pts[quads[q2][3] as usize],
-        ]))
-        .min(super::geom::tri_quality(
-            pts[t[0] as usize],
-            pts[t[1] as usize],
-            pts[t[2] as usize],
-        ));
-        let mut best: Option<(f64, [u32; 4], [u32; 3])> = None;
-        for c in 0..5 {
-            // The cut from `ring[c]`: a quadrangle over the next three, and a
-            // triangle over the last two.
-            let quad = [
-                ring[c],
-                ring[(c + 1) % 5],
-                ring[(c + 2) % 5],
-                ring[(c + 3) % 5],
-            ];
-            let tri = [ring[c], ring[(c + 3) % 5], ring[(c + 4) % 5]];
-            let qp = [
-                pts[quad[0] as usize],
-                pts[quad[1] as usize],
-                pts[quad[2] as usize],
-                pts[quad[3] as usize],
-            ];
-            let tp = [
-                pts[tri[0] as usize],
-                pts[tri[1] as usize],
-                pts[tri[2] as usize],
-            ];
-            if !quad_is_valid(qp) {
+        // What the star is worth now, and what it costs in valence.
+        let was = cells
+            .iter()
+            .map(|&e| quality_of(e, pts, quads, tris))
+            .fold(f64::INFINITY, f64::min);
+        let mut had = vec![0i64; ring.len()];
+        for &e in &cells {
+            for &x in nodes_of(e, quads, tris) {
+                if x as usize != v
+                    && let Some(k) = ring.iter().position(|&r| r == x)
+                {
+                    had[k] += 1;
+                }
+            }
+        }
+
+        let mut best: Option<(i64, f64, Cut)> = None;
+        for c in 0..cut_count(ring.len()) {
+            let cut = cut_at(&ring, c);
+            let worst = cut.worst_quality(pts);
+            if worst <= 0.0 {
                 continue;
             }
-            let score = quad_quality(qp).min(super::geom::tri_quality(tp[0], tp[1], tp[2]));
-            if score > 0.0 && best.is_none_or(|(b, _, _)| score > b) {
-                best = Some((score, quad, tri));
+            let mut gets = vec![0i64; ring.len()];
+            cut.for_each_node(|x| {
+                if let Some(k) = ring.iter().position(|&r| r == x) {
+                    gets[k] += 1;
+                }
+            });
+            // `v` goes, so its own error goes with it; every ring node moves by
+            // what it gains less what it had.
+            let mut gain = (val[v] - want[v]).pow(2);
+            for (k, &r) in ring.iter().enumerate() {
+                let r = r as usize;
+                let after = val[r] + gets[k] - had[k];
+                gain += (val[r] - want[r]).pow(2) - (after - want[r]).pow(2);
+            }
+            if best.is_none_or(|(bg, bq, _)| (gain, worst) > (bg, bq)) {
+                best = Some((gain, worst, cut));
             }
         }
-        let Some((score, quad, tri)) = best else {
+        let Some((gain, worst, cut)) = best else {
             continue;
         };
-        if score <= was {
+        if gain <= 0 && worst <= was {
             continue;
         }
-        quads[q1] = quad;
-        alive[q2] = false;
-        tris[ti] = tri;
+
+        // The cells beyond the star that the relaxation can still reach, and
+        // what the neighbourhood is worth as it stands.
+        let mut around: Vec<u32> = Vec::new();
+        for &r in &ring {
+            for &e in &inc[r as usize] {
+                if !cells.contains(&e) && !around.contains(&e) && live(e, alive, alive_tri) {
+                    around.push(e);
+                }
+            }
+        }
+        let worst_before = around
+            .iter()
+            .chain(cells.iter())
+            .map(|&e| quality_of(e, pts, quads, tris))
+            .fold(f64::INFINITY, f64::min);
+
+        // The star dies, and the cut moves into its slots. It always fits:
+        // `2q' + t' = 2q + t - 2` with `t' ≤ 1` leaves `q' ≤ q` and `t' ≤ t`
+        // in every one of the four cases, so nothing is ever added — the
+        // slots the cut does not want simply stay dead.
+        let (mut free_q, mut free_t) = (Vec::new(), Vec::new());
+        let (mut was_q, mut was_t) = (Vec::new(), Vec::new());
+        for &e in &cells {
+            let i = (e / 2) as usize;
+            if e.is_multiple_of(2) {
+                was_q.push((i, quads[i]));
+                alive[i] = false;
+                free_q.push(i);
+            } else {
+                was_t.push((i, tris[i]));
+                alive_tri[i] = false;
+                free_t.push(i);
+            }
+        }
+        let mut now = around.clone();
+        for (q, &i) in cut.quads().iter().zip(free_q.iter()) {
+            quads[i] = *q;
+            alive[i] = true;
+            now.push((i as u32) * 2);
+        }
+        for (t, &i) in cut.tris().iter().zip(free_t.iter()) {
+            tris[i] = *t;
+            alive_tri[i] = true;
+            now.push((i as u32) * 2 + 1);
+        }
+
+        // Judged on the mesh it becomes, not the one it leaves behind for an
+        // instant — and the relaxation that gets it there is *kept*, so what
+        // was measured is what the caller receives. Measuring positions one
+        // then throws away is measuring a mesh nobody gets: the move is taken
+        // on the strength of a relaxation that never happens, and the cell it
+        // was supposed to save stays poor.
+        let held: Vec<Point2> = ring.iter().map(|&r| pts[r as usize]).collect();
+        relax_ring(pts, movable, &ring, &now, quads, tris);
+        let worst_after = now
+            .iter()
+            .map(|&e| quality_of(e, pts, quads, tris))
+            .fold(f64::INFINITY, f64::min);
+        if worst_after < worst_before {
+            for (&r, &p) in ring.iter().zip(held.iter()) {
+                pts[r as usize] = p;
+            }
+            for &(i, q) in &was_q {
+                quads[i] = q;
+                alive[i] = true;
+            }
+            for &(i, t) in &was_t {
+                tris[i] = t;
+                alive_tri[i] = true;
+            }
+            continue;
+        }
+
         for &r in &ring {
             spent[r as usize] = true;
         }
@@ -307,6 +427,236 @@ fn absorb_triangle_corners(
     done
 }
 
+/// Relax the ring's movable nodes over the cells that now cover it.
+///
+/// A collapse *removes* a node, so the cells round it come out stretched and
+/// stay that way until something moves them — which something always does: the
+/// pavers smooth after every row, and `regularize` is the caller's next step.
+/// Measuring the move before that measures a state nobody ever receives, and
+/// refuses the very moves that pay off most.
+///
+/// So the ring is relaxed and the move judged on the result — and when the
+/// move is kept the relaxation is kept with it, since a verdict on positions
+/// one then discards is a verdict on a mesh nobody receives.
+///
+/// The sweep carries the pavers' own guard — a step is taken only if every
+/// cell round the node stays the right way round. Without it the trial is a
+/// bare Laplacian, which near a concave corner walks to a place the real
+/// smoother, monotone and guarded, will never reach: the trial then reports a
+/// move as good on the strength of a relaxation that does not happen, and the
+/// cell it was meant to save is left at whatever the collapse made of it.
+fn relax_ring(
+    pts: &mut [Point2],
+    movable: &[bool],
+    ring: &[u32],
+    patch: &[u32],
+    quads: &[[u32; 4]],
+    tris: &[[u32; 3]],
+) {
+    let mut neighbours: Vec<(u32, Vec<u32>)> = Vec::new();
+    for &r in ring {
+        if !movable[r as usize] {
+            continue;
+        }
+        let mut nb: Vec<u32> = Vec::new();
+        for &e in patch {
+            let c = nodes_of(e, quads, tris);
+            let n = c.len();
+            let Some(k) = c.iter().position(|&x| x == r) else {
+                continue;
+            };
+            for x in [c[(k + 1) % n], c[(k + n - 1) % n]] {
+                if !nb.contains(&x) {
+                    nb.push(x);
+                }
+            }
+        }
+        if !nb.is_empty() {
+            neighbours.push((r, nb));
+        }
+    }
+    for _ in 0..TRIAL_SWEEPS {
+        for (r, nb) in &neighbours {
+            let mut c = Vector2::zeros();
+            for &x in nb {
+                c += pts[x as usize].coords;
+            }
+            c /= nb.len() as f64;
+            let at = pts[*r as usize];
+            let cand = Point2::from(at.coords * (1.0 - TRIAL_RELAX) + c * TRIAL_RELAX);
+            pts[*r as usize] = cand;
+            if !patch_is_valid(pts, patch, *r, quads, tris) {
+                pts[*r as usize] = at;
+            }
+        }
+    }
+}
+
+/// Whether every cell of `patch` that uses `r` is still the right way round.
+fn patch_is_valid(
+    pts: &[Point2],
+    patch: &[u32],
+    r: u32,
+    quads: &[[u32; 4]],
+    tris: &[[u32; 3]],
+) -> bool {
+    patch.iter().all(|&e| {
+        let c = nodes_of(e, quads, tris);
+        !c.contains(&r) || quality_of(e, pts, quads, tris) > 0.0
+    })
+}
+
+/// A re-cut of a star's boundary ring: at most two quadrangles and one
+/// triangle, which is all `2q' + t' = n - 2` allows for `n ≤ 6`.
+#[derive(Clone, Copy)]
+struct Cut {
+    quads: [[u32; 4]; 2],
+    n_quads: usize,
+    tri: Option<[u32; 3]>,
+}
+
+impl Cut {
+    fn quads(&self) -> &[[u32; 4]] {
+        &self.quads[..self.n_quads]
+    }
+
+    fn tris(&self) -> &[[u32; 3]] {
+        self.tri.as_slice()
+    }
+
+    fn worst_quality(&self, pts: &[Point2]) -> f64 {
+        let at = |i: u32| pts[i as usize];
+        let mut worst = f64::INFINITY;
+        for q in self.quads() {
+            let p = [at(q[0]), at(q[1]), at(q[2]), at(q[3])];
+            if !quad_is_valid(p) {
+                return 0.0;
+            }
+            worst = worst.min(quad_quality(p));
+        }
+        for t in self.tris() {
+            worst = worst.min(super::geom::tri_quality(at(t[0]), at(t[1]), at(t[2])));
+        }
+        worst
+    }
+
+    fn for_each_node(&self, mut f: impl FnMut(u32)) {
+        for q in self.quads() {
+            q.iter().for_each(|&x| f(x));
+        }
+        for t in self.tris() {
+            t.iter().for_each(|&x| f(x));
+        }
+    }
+}
+
+/// How many distinct minimal cuts an `n`-gon has: one per rotation that gives
+/// a different answer, and `0` for a ring this pass does not handle.
+fn cut_count(n: usize) -> usize {
+    match n {
+        6 => 3, // the three main diagonals
+        5 => 5, // which corner the triangle is taken from
+        3 | 4 => 1,
+        _ => 0,
+    }
+}
+
+/// The `c`-th minimal cut of `ring`, read from `ring[c]` onwards.
+fn cut_at(ring: &[u32], c: usize) -> Cut {
+    let n = ring.len();
+    let at = |k: usize| ring[(k + c) % n];
+    let none = [[0u32; 4]; 2];
+    match n {
+        6 => Cut {
+            quads: [[at(0), at(1), at(2), at(3)], [at(3), at(4), at(5), at(0)]],
+            n_quads: 2,
+            tri: None,
+        },
+        5 => Cut {
+            quads: [[at(0), at(1), at(2), at(3)], [0; 4]],
+            n_quads: 1,
+            tri: Some([at(0), at(3), at(4)]),
+        },
+        4 => Cut {
+            quads: [[at(0), at(1), at(2), at(3)], [0; 4]],
+            n_quads: 1,
+            tri: None,
+        },
+        _ => Cut {
+            quads: none,
+            n_quads: 0,
+            tri: Some([at(0), at(1), at(2)]),
+        },
+    }
+}
+
+/// The polygon bounding `v`'s star, walked once round — or `None` when the
+/// cells do not chain into a fan, which is what a non-manifold node looks like
+/// from here.
+///
+/// Each cell contributes the path round it that does **not** pass through `v`,
+/// and the end of one is the start of the next.
+fn star_ring(v: usize, cells: &[u32], quads: &[[u32; 4]], tris: &[[u32; 3]]) -> Option<Vec<u32>> {
+    let path = |e: u32| -> Vec<u32> {
+        let c = nodes_of(e, quads, tris);
+        let n = c.len();
+        let k = c.iter().position(|&x| x as usize == v).unwrap();
+        (1..n).map(|j| c[(k + j) % n]).collect()
+    };
+    let mut left: Vec<Vec<u32>> = cells.iter().map(|&e| path(e)).collect();
+    let mut chain = vec![left.remove(0)];
+    while !left.is_empty() {
+        let tail = *chain.last()?.last()?;
+        let i = left.iter().position(|p| p[0] == tail)?;
+        chain.push(left.remove(i));
+    }
+    if *chain.last()?.last()? != chain[0][0] {
+        return None;
+    }
+    let mut ring = vec![chain[0][0]];
+    for p in &chain {
+        ring.extend_from_slice(&p[1..]);
+    }
+    ring.pop(); // the walk comes back to where it started
+    (ring.iter().collect::<std::collections::HashSet<_>>().len() == ring.len()).then_some(ring)
+}
+
+/// The nodes of the cell `e` refers to.
+fn nodes_of<'a>(e: u32, quads: &'a [[u32; 4]], tris: &'a [[u32; 3]]) -> &'a [u32] {
+    if e.is_multiple_of(2) {
+        &quads[(e / 2) as usize]
+    } else {
+        &tris[(e / 2) as usize]
+    }
+}
+
+/// The shape quality of the cell `e` refers to.
+fn quality_of(e: u32, pts: &[Point2], quads: &[[u32; 4]], tris: &[[u32; 3]]) -> f64 {
+    let at = |i: u32| pts[i as usize];
+    if e.is_multiple_of(2) {
+        let q = quads[(e / 2) as usize];
+        quad_quality([at(q[0]), at(q[1]), at(q[2]), at(q[3])])
+    } else {
+        let t = tris[(e / 2) as usize];
+        super::geom::tri_quality(at(t[0]), at(t[1]), at(t[2]))
+    }
+}
+
+/// Whether the cell `e` refers to is still in the mesh.
+fn live(e: u32, alive: &[bool], alive_tri: &[bool]) -> bool {
+    if e.is_multiple_of(2) {
+        alive[(e / 2) as usize]
+    } else {
+        alive_tri[(e / 2) as usize]
+    }
+}
+
+/// How many times `e` appears in `cells` — more than once means the same cell
+/// touches the node twice, which is not a fan.
+fn count_of(cells: &[u32], e: u32) -> usize {
+    cells.iter().filter(|&&x| x == e).count()
+}
+
 /// Merge the two quadrangles around every interior node that has only two.
 fn remove_doublets(
     pts: &[Point2],
@@ -314,8 +664,9 @@ fn remove_doublets(
     quads: &mut [[u32; 4]],
     tris: &[[u32; 3]],
     alive: &mut [bool],
+    alive_tri: &[bool],
 ) -> usize {
-    let inc = incidence(quads, tris, alive, pts.len());
+    let inc = incidence(quads, tris, alive, alive_tri, pts.len());
     let mut removed = 0;
     for v in 0..pts.len() {
         // A node the caller pinned is on the contour and must stay.
@@ -358,8 +709,9 @@ fn switch_diagonals(
     quads: &mut [[u32; 4]],
     tris: &[[u32; 3]],
     alive: &mut [bool],
+    alive_tri: &[bool],
 ) -> usize {
-    let inc = incidence(quads, tris, alive, pts.len());
+    let inc = incidence(quads, tris, alive, alive_tri, pts.len());
     let theta = interior_angles(pts, quads, tris, &inc);
     let mut val: Vec<i64> = inc.iter().map(|e| e.len() as i64).collect();
     let want: Vec<i64> = theta.iter().map(|&t| wanted(t) as i64).collect();
@@ -380,7 +732,10 @@ fn switch_diagonals(
     }
     // Triangle edges are off limits: re-splitting across one would need the
     // triangle rebuilt too.
-    for t in tris {
+    for (i, t) in tris.iter().enumerate() {
+        if !alive_tri[i] {
+            continue;
+        }
         for k in 0..3 {
             let (a, b) = (t[k], t[(k + 1) % 3]);
             shared
@@ -497,9 +852,9 @@ mod tests {
 
     #[test]
     fn a_clean_grid_is_left_alone() {
-        let (pts, movable, mut quads) = grid(4);
+        let (mut pts, movable, mut quads) = grid(4);
         let before = quads.clone();
-        let report = run(&pts, &movable, &mut quads, &mut []);
+        let report = run(&mut pts, &movable, &mut quads, &mut Vec::new());
         assert_eq!(report, Report::default(), "{report:?}");
         assert_eq!(quads, before);
     }
@@ -512,7 +867,7 @@ mod tests {
         assert_eq!(wanted(std::f64::consts::FRAC_PI_2), 1);
         // And a grid reads exactly that off its own geometry.
         let (pts, _, quads) = grid(4);
-        let inc = incidence(&quads, &[], &vec![true; quads.len()], pts.len());
+        let inc = incidence(&quads, &[], &vec![true; quads.len()], &[], pts.len());
         let theta = interior_angles(&pts, &quads, &[], &inc);
         let w = 5;
         assert_eq!(wanted(theta[w + 1]), 4, "interior");
@@ -535,7 +890,7 @@ mod tests {
         quads.push([centre[2], centre[3], centre[0], v]);
 
         let n_before = quads.len();
-        let report = run(&pts, &movable, &mut quads, &mut []);
+        let report = run(&mut pts, &movable, &mut quads, &mut Vec::new());
         assert_eq!(report.doublets, 1, "{report:?}");
         assert_eq!(quads.len(), n_before - 1);
         // The node is gone from the connectivity.
@@ -577,7 +932,7 @@ mod tests {
         let mut quads = vec![[v, 1, 2, 3], [v, 3, 4, 0]];
         let mut tris = vec![[v, 0, 1]];
 
-        let report = run(&pts, &movable, &mut quads, &mut tris);
+        let report = run(&mut pts, &movable, &mut quads, &mut tris);
         assert_eq!(report.absorbed, 1, "{report:?}");
         assert_eq!(quads.len(), 1);
         assert_eq!(tris.len(), 1);
@@ -595,9 +950,114 @@ mod tests {
         assert!((area(&q) + area(&t) - area(&ring)).abs() < 1e-12);
     }
 
+    /// The six points of a regular hexagon, counter-clockwise.
+    fn hexagon() -> Vec<Point2> {
+        (0..6)
+            .map(|i| {
+                let t = i as f64 / 6.0 * std::f64::consts::TAU;
+                Point2::new(t.cos(), t.sin())
+            })
+            .collect()
+    }
+
+    #[test]
+    fn three_quadrangles_round_a_node_become_two() {
+        // The case the pass was generalised for, and the one a paver leaves
+        // most of: no triangle in sight, three quadrangles fanned round one
+        // interior node. Their outline is a hexagon, a hexagon splits into two
+        // quadrangles across any of its three main diagonals, and the node
+        // goes with the third cell.
+        //
+        // The node is pushed hard against one side, which is what makes the
+        // three cells worse than the two that replace them.
+        let ring = hexagon();
+        let mut pts = ring.clone();
+        pts.push(Point2::from((ring[0].coords + ring[1].coords) * 0.5 * 0.92));
+        let v = 6u32;
+        let movable = vec![false, false, false, false, false, false, true];
+        let mut quads = vec![[v, 0, 1, 2], [v, 2, 3, 4], [v, 4, 5, 0]];
+        let mut tris: Vec<[u32; 3]> = Vec::new();
+
+        let report = run(&mut pts, &movable, &mut quads, &mut tris);
+        assert_eq!(report.absorbed, 1, "{report:?}");
+        assert_eq!(quads.len(), 2, "three cells for two");
+        assert!(tris.is_empty(), "no triangle may appear");
+        assert!(quads.iter().all(|q| !q.contains(&v)), "the node is gone");
+
+        // The two still cover the hexagon exactly, so the boundary is intact.
+        let area = |p: &[Point2]| {
+            0.5 * (0..p.len())
+                .map(|i| p[i].x * p[(i + 1) % p.len()].y - p[(i + 1) % p.len()].x * p[i].y)
+                .sum::<f64>()
+        };
+        let covered: f64 = quads
+            .iter()
+            .map(|q| area(&q.map(|i| pts[i as usize])))
+            .sum();
+        assert!((covered - area(&ring)).abs() < 1e-12, "{covered}");
+    }
+
+    #[test]
+    fn a_quadrangle_and_two_triangles_round_a_node_become_one_quadrangle() {
+        // The best of the four cases: the outline of the star is a
+        // *quadrangle*, so one cell replaces three and the two triangles leave
+        // together — which is the only count that keeps the parity tying `T`
+        // to the boundary's edge count.
+        let ring: Vec<Point2> = vec![
+            Point2::new(1.0, 0.0),
+            Point2::new(0.0, 1.0),
+            Point2::new(-1.0, 0.0),
+            Point2::new(0.0, -1.0),
+        ];
+        let mut pts = ring.clone();
+        pts.push(Point2::new(0.0, -0.4)); // the node, well off centre
+        let v = 4u32;
+        let movable = vec![false, false, false, false, true];
+        let mut quads = vec![[v, 0, 1, 2]];
+        let mut tris = vec![[v, 2, 3], [v, 3, 0]];
+
+        let report = run(&mut pts, &movable, &mut quads, &mut tris);
+        assert_eq!(report.absorbed, 1, "{report:?}");
+        assert_eq!(quads.len(), 1, "one cell for three");
+        assert_eq!(tris.len(), 0, "both triangles go, and they go together");
+        assert!(!quads[0].contains(&v), "the node is gone");
+        let mut got = quads[0];
+        got.sort_unstable();
+        assert_eq!(got, [0, 1, 2, 3], "the cell is the ring itself");
+    }
+
+    #[test]
+    fn the_ring_of_a_star_has_2q_plus_t_sides() {
+        // The identity the whole pass rests on: a quadrangle lays two edges
+        // that do not touch the node, a triangle lays one.
+        // Cells are referred to as `2 * index` for a quadrangle and
+        // `2 * index + 1` for a triangle, which is what the numbers below are.
+        let v = 9usize;
+        let q3 = [[9u32, 0, 1, 2], [9, 2, 3, 4], [9, 4, 5, 0]];
+        let ring = star_ring(v, &[0, 2, 4], &q3, &[]).expect("three quadrangles");
+        assert_eq!(ring.len(), 6, "3 quadrangles → hexagon");
+
+        let q2 = [[9u32, 0, 1, 2], [9, 2, 3, 4]];
+        let t1 = [[9u32, 4, 0]];
+        let ring = star_ring(v, &[0, 2, 1], &q2, &t1).expect("two quadrangles, one triangle");
+        assert_eq!(ring.len(), 5, "2 quadrangles + 1 triangle → pentagon");
+
+        let q1 = [[9u32, 0, 1, 2]];
+        let t2 = [[9u32, 2, 3], [9, 3, 0]];
+        let ring = star_ring(v, &[0, 1, 3], &q1, &t2).expect("one quadrangle, two triangles");
+        assert_eq!(ring.len(), 4, "1 quadrangle + 2 triangles → quadrangle");
+
+        let t3 = [[9u32, 0, 1], [9, 1, 2], [9, 2, 0]];
+        let ring = star_ring(v, &[1, 3, 5], &[], &t3).expect("three triangles");
+        assert_eq!(ring.len(), 3, "3 triangles → triangle");
+
+        // And a fan that does not close is refused rather than guessed at.
+        assert!(star_ring(v, &[0, 2, 0], &q3, &[]).is_none());
+    }
+
     #[test]
     fn a_switch_lowers_the_valence_error_and_keeps_the_mesh_conforming() {
-        let (pts, movable, mut quads) = grid(4);
+        let (mut pts, movable, mut quads) = grid(4);
         // Cells 5 and 6 of a 4×4 grid are [6, 7, 12, 11] and [7, 8, 13, 12],
         // sharing the edge (7, 12). Re-split their union across a corner
         // diagonal instead: nodes 7 and 12 drop to valence 3, nodes 8 and 11
@@ -607,11 +1067,11 @@ mod tests {
         quads[5] = [8, 13, 12, 11];
         quads[6] = [11, 6, 7, 8];
 
-        let report = run(&pts, &movable, &mut quads, &mut []);
+        let report = run(&mut pts, &movable, &mut quads, &mut Vec::new());
         assert!(report.switches >= 1, "{report:?}");
 
         // The grid is back: every interior node has four cells again.
-        let inc = incidence(&quads, &[], &vec![true; quads.len()], pts.len());
+        let inc = incidence(&quads, &[], &vec![true; quads.len()], &[], pts.len());
         for v in [7usize, 12, 8, 11] {
             assert_eq!(inc[v].len(), 4, "node {v} still has {}", inc[v].len());
         }
