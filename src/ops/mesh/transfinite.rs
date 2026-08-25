@@ -36,6 +36,7 @@ use crate::handle::Handle;
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::models::MatrixKind;
 /// # use pyrucast::ops::{element_field, matrix, mesh, scatter};
+/// # use pyrucast::ops::model;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -43,7 +44,7 @@ use crate::handle::Handle;
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-/// # let modele = Model::heat_conduction(&fes).unwrap();
+/// # let modele = model::heat_conduction(&fes).unwrap();
 /// # let materiaux = element_field::material_field(&modele,
 /// #     &[("k", 1.0), ("rho", 2.0), ("cp", 3.0)]).unwrap();
 /// // Quatre côtés **chaînés bout à bout** — la fin de l'un est le début du

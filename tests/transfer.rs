@@ -34,6 +34,7 @@ use pyrucast::handle::Handle;
 use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::models::Physics;
 use pyrucast::ops::mesh;
+use pyrucast::ops::model;
 use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
@@ -92,7 +93,7 @@ fn each_direction_carries_its_own_stiffness() -> Result<()> {
     // different stiffnesses; the left edge is held.
     let right = edge_fespace(&grid, &coords, n, idx)?;
     let mut model =
-        Model::elasticity(&fes, ElasticityModel::PlaneStress)?.union(&Model::boundary_transfer(
+        model::elasticity(&fes, ElasticityModel::PlaneStress)?.union(&model::boundary_transfer(
             &right,
             vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
             Physics::Mechanical,
@@ -189,7 +190,7 @@ fn edge_fespace(
 fn clamp(nodes: &[Node], var: &str, dual: &str) -> Result<Model> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
     let multiplier = mesh::barycenter(&imposed)?;
-    Model::dirichlet(
+    model::dirichlet(
         var.into(),
         dual.into(),
         &imposed,
@@ -209,7 +210,7 @@ fn free_face_displacement(n: usize, h: f64) -> Result<f64> {
     let right = edge_fespace(&grid, &coords, n, idx)?;
 
     let mut model =
-        Model::elasticity(&fes, ElasticityModel::PlaneStress)?.union(&Model::boundary_transfer(
+        model::elasticity(&fes, ElasticityModel::PlaneStress)?.union(&model::boundary_transfer(
             &right,
             vec![("u_x".into(), "f_x".into())],
             Physics::Mechanical,

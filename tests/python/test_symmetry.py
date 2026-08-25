@@ -62,7 +62,7 @@ _ORTHO = [
 
 def test_orthotropic_material_contract_is_declared():
     _c, _n, fes = _unit_quad()
-    model = pyrucast.Model.elasticity(fes, "plane_stress", symmetry="orthotropic")
+    model = pyrucast.model.elasticity(fes, "plane_stress", symmetry="orthotropic")
     required = model[0].material_components()
     for name in ("E_1", "E_2", "nu_12", "G_12", "V1X", "V1Y"):
         assert name in required, f"{name} missing from {required}"
@@ -74,7 +74,7 @@ def test_orthotropic_material_contract_is_declared():
 
 def test_orthotropic_stress_is_stiffer_along_the_first_axis():
     c, nodes, fes = _unit_quad()
-    model = pyrucast.Model.elasticity(fes, "plane_stress", symmetry="orthotropic")
+    model = pyrucast.model.elasticity(fes, "plane_stress", symmetry="orthotropic")
     materials = pyrucast.element_field.material_field(model, _ORTHO)
     sub = _stress(model, materials, c, nodes, fes, 1e-3)
     # Uniaxial strain along x with the stiff axis along x: σ_xx must exceed what
@@ -93,7 +93,7 @@ def test_orthotropy_with_equal_constants_matches_isotropy_at_any_angle():
     g = e / (2.0 * (1.0 + nu))
 
     c, nodes, fes = _unit_quad()
-    iso_model = pyrucast.Model.elasticity(fes, "plane_stress")
+    iso_model = pyrucast.model.elasticity(fes, "plane_stress")
     iso_mat = pyrucast.element_field.material_field(iso_model, [("E", e), ("nu", nu)])
     iso = _stress(iso_model, iso_mat, c, nodes, fes, 1e-3)
     expected = {
@@ -103,7 +103,7 @@ def test_orthotropy_with_equal_constants_matches_isotropy_at_any_angle():
     for angle_deg in (0.0, 30.0, 90.0, 137.0):
         a = math.radians(angle_deg)
         c2, nodes2, fes2 = _unit_quad()
-        model = pyrucast.Model.elasticity(fes2, "plane_stress", symmetry="orthotropic")
+        model = pyrucast.model.elasticity(fes2, "plane_stress", symmetry="orthotropic")
         materials = pyrucast.element_field.material_field(
             model,
             [
@@ -129,7 +129,7 @@ def test_orthotropy_with_equal_constants_matches_isotropy_at_any_angle():
 def test_unknown_symmetry_is_rejected():
     _c, _n, fes = _unit_quad()
     try:
-        pyrucast.Model.elasticity(fes, "plane_stress", symmetry="cubic")
+        pyrucast.model.elasticity(fes, "plane_stress", symmetry="cubic")
     except ValueError as exc:
         assert "cubic" in str(exc)
         assert "orthotropic" in str(exc)
@@ -139,7 +139,7 @@ def test_unknown_symmetry_is_rejected():
 
 def test_orthotropic_conduction_carries_its_axes():
     _c, _n, fes = _unit_quad()
-    model = pyrucast.Model.heat_conduction(fes, symmetry="orthotropic")
+    model = pyrucast.model.heat_conduction(fes, symmetry="orthotropic")
     required = model[0].material_components()
     for name in ("k_1", "k_2", "k_3", "V1X", "V1Y"):
         assert name in required, f"{name} missing from {required}"
@@ -148,7 +148,7 @@ def test_orthotropic_conduction_carries_its_axes():
 
 def test_anisotropic_conduction_takes_the_full_tensor():
     _c, _n, fes = _unit_quad()
-    model = pyrucast.Model.heat_conduction(fes, symmetry="anisotropic")
+    model = pyrucast.model.heat_conduction(fes, symmetry="anisotropic")
     required = model[0].material_components()
     for name in ("k_11", "k_12", "k_22", "k_33"):
         assert name in required, f"{name} missing from {required}"
@@ -157,8 +157,8 @@ def test_anisotropic_conduction_takes_the_full_tensor():
 def test_isotropic_stays_the_default():
     """Adding the symmetry axis must not have changed any existing call."""
     _c, _n, fes = _unit_quad()
-    assert pyrucast.Model.elasticity(fes, "plane_stress")[0].material_components() == [
+    assert pyrucast.model.elasticity(fes, "plane_stress")[0].material_components() == [
         "E",
         "nu",
     ]
-    assert pyrucast.Model.heat_conduction(fes)[0].material_components() == ["k"]
+    assert pyrucast.model.heat_conduction(fes)[0].material_components() == ["k"]

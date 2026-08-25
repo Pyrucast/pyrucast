@@ -9,7 +9,7 @@ Python). Elle matérialise la règle de [Conventions](conventions.md) :
 - une fonction libre `ops::<module>::f` est exposée dans le **sous-module de
   même nom** : `pyrucast.<module>.f`. Le module Rust porte le nom du
   **conteneur produit** (`mesh`, `node_field`, `element_field`, `matrix`,
-  `coords`), ou de l'activité quand il ne produit aucun conteneur
+  `model`, `coords`), ou de l'activité quand il ne produit aucun conteneur
   (`measure`, `geom`, `export`) ; `solver` est l'exception nommée. Le miroir
   est sans exception : aucune fonction libre ne vit au top-level ;
 - une surcharge d'opérateur Rust devient un dunder Python (`Add` →
@@ -86,8 +86,9 @@ Les sous-objets `Sub*` (`SubMesh`, `SubFiniteElementSpace`, `SubElementField`,
 `SubMatrix`, `SubModel`) ne se **construisent pas** directement côté Python :
 ce sont des **vues** obtenues par indexation de leur parent (`parent[i]`). On
 construit toujours au niveau parent — `Mesh(coords, type)`,
-`FiniteElementSpace(mesh)`, `ElementField(fes, comps)`,
-`Model.heat_conduction(fes)`, `Matrix.block(...)` — et on compose plusieurs
+`FiniteElementSpace(mesh)`, `ElementField(fes, comps)`, `Matrix.block(...)` —
+ou par l'opérateur qui rend ce parent (`model.heat_conduction(fes)`), et on
+compose plusieurs
 zones avec `|` (union — Rust : `union`). Voir la règle « Agrégats : un ou
 plusieurs » de `CONVENTIONS.md`.
 
@@ -223,6 +224,45 @@ produit » ne désigne donc pas *un* module, et ils se rangent par domaine.
 > `+`, `-`, `*`, `/`, `**` (cf. [Opérateurs](#opérateurs-dunders--traits-rust)).
 > Ni l'une ni l'autre n'est une fonction `ops` — `merge(a, b)` est juste un
 > alias nommé de `a | b`.
+
+### `ops::model` — déclaration des physiques
+
+Chaque opérateur rend un `Model` couvrant **tout** le support reçu (une zone
+par sous-espace) ; on compose les physiques hétérogènes avec `|`. Aucun n'a de
+forme méthode : le premier argument est le support que le modèle recouvre, pas
+un sujet qu'on transforme.
+
+| Rust (`ops::model::…`) | Python (`pyrucast.model.…`) |
+|---|---|
+| `heat_conduction(fes: &FiniteElementSpace) -> Model` | `heat_conduction(fespace, symmetry=None) -> Model` |
+| `heat_conduction_with_symmetry(fes, symmetry: MaterialSymmetry) -> Model` | *idem, via `symmetry=`* |
+| `fick(fes: &FiniteElementSpace, species: &str) -> Model` | `fick(fespace, species, symmetry=None) -> Model` |
+| `fick_with_symmetry(fes, symmetry: MaterialSymmetry, species: &str) -> Model` | *idem, via `symmetry=`* |
+| `radiation(fes: &FiniteElementSpace) -> Model` | `radiation(fespace) -> Model` |
+| `boundary_transfer(fes, components: Vec<(String, String)>, physics: Physics) -> Model` | `boundary_transfer(fespace, components, physics) -> Model` |
+| `interface_transfer(side_a, side_b, components, physics: Physics, tol: f64) -> Model` | `interface_transfer(side_a, side_b, components, physics, tol=None) -> Model` |
+| `follower_pressure(fes: &FiniteElementSpace) -> Model` | `follower_pressure(fespace) -> Model` |
+| `truss(fes: &FiniteElementSpace) -> Model` | `truss(fespace) -> Model` |
+| `elasticity(fes, model: ElasticityModel) -> Model` | `elasticity(fespace, model, symmetry=None) -> Model` |
+| `elasticity_with_symmetry(fes, model, symmetry: MaterialSymmetry) -> Model` | *idem, via `symmetry=`* |
+| `plasticity_perfect(fes, model: ElasticityModel) -> Model` | `plasticity_perfect(fespace, model) -> Model` |
+| `plasticity_with_law(fes, model, law: PlasticLaw) -> Model` | une fonction par loi : `plasticity_isotropic`, `drucker_prager`, `ottosen`, `creep_norton`, `creep_blackburn`, `creep_lemaitre`, `viscoplasticity_chaboche`, `viscoplasticity_lemaitre_chaboche`, `gurson` — toutes `(fespace, model) -> Model` |
+| `mazars(fes, model: ElasticityModel) -> Model` | `mazars(fespace, model) -> Model` |
+| `damage_with_law(fes, model, law: DamageLaw) -> Model` | une fonction par loi : `damage_tc`, `damage_sic_sic` — `(fespace, model) -> Model` |
+| `bernoulli(fes: &FiniteElementSpace) -> Model` | `bernoulli(fespace) -> Model` |
+| `timoshenko(fes: &FiniteElementSpace) -> Model` | `timoshenko(fespace) -> Model` |
+| `shell(fes, model: ShellModel) -> Model` | `shell(fespace, model) -> Model` |
+| `dirichlet(imposed_variable, target_dual, imposed_mesh, multiplier_mesh, multiplier, imposed_value, sense: RelationSense) -> Model` | `dirichlet(imposed_variable, target_dual, imposed_mesh, multiplier_mesh, multiplier=None, imposed_value=None, sense=None) -> Model` |
+| `mpc(terms: Vec<MpcTerm>, multiplier_mesh, multiplier, imposed_value, sense) -> Model` | `mpc(terms, multiplier_mesh, multiplier=None, imposed_value=None, sense=None) -> Model` |
+| `embedded(immersed, host, components, multipliers, imposed_values, tol) -> Model` | `embedded(immersed, host, components, multipliers=None, imposed_values=None, tol=None) -> Model` |
+| `contact(slave, master, components, multiplier, imposed_value) -> Model` | `contact(slave, master, components, multiplier=None, imposed_value=None) -> Model` |
+
+**Les deux plis du catalogue.** Rust nomme la symétrie et la loi par une
+**enum** (`MaterialSymmetry`, `PlasticLaw`, `DamageLaw`) ; Python n'expose pas
+ces enums, et replie donc la symétrie en mot-clé `symmetry=` et déplie les lois
+en une fonction chacune. Le catalogue est le même des deux côtés — les
+dérogations correspondantes sont enregistrées, avec leur raison, dans
+`tests/python/test_mirror_completeness.py`.
 
 ### `ops::matrix` — assemblage des matrices
 

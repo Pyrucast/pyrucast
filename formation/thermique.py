@@ -139,12 +139,12 @@ def main() -> None:
     # FR — Le modèle porte « T » (primal) et « q » (dual) sur tout le volume.
     # EN — The model carries "T" (primal) and "q" (dual) over the whole volume.
     fes = pc.FiniteElementSpace(volume)
-    modele = pc.Model.heat_conduction(fes)
+    modele = pc.model.heat_conduction(fes)
 
     # FR — Dirichlet : le support bloqué, et un jumeau pour les multiplicateurs.
     # EN — Dirichlet: the constrained support, and a twin for the multipliers.
     multiplicateur_T = pc.mesh.translate(alesage, [0.0, 0.0, 0.0])
-    modele = modele | pc.Model.dirichlet("T", "q", alesage, multiplicateur_T)
+    modele = modele | pc.model.dirichlet("T", "q", alesage, multiplicateur_T)
 
     # FR — La conduction ne réclame qu'un coefficient, « k ».
     # EN — Conduction asks for a single coefficient, "k".
@@ -211,10 +211,10 @@ def main() -> None:
     # FR — La convection s'ajoute dans la matrice : `|` sur les mêmes ddl.
     # EN — Convection adds into the matrix: `|` on the very same dofs.
     basse_fes = pc.FiniteElementSpace(face_basse)
-    modele = pc.Model.heat_conduction(fes) | pc.Model.boundary_transfer(
+    modele = pc.model.heat_conduction(fes) | pc.model.boundary_transfer(
         basse_fes, [("T", "q")], "thermal"
     )
-    modele = modele | pc.Model.dirichlet("T", "q", alesage, multiplicateur_T)
+    modele = modele | pc.model.dirichlet("T", "q", alesage, multiplicateur_T)
 
     # FR — Un seul champ matériau : « k » pour la conduction, « h » pour le film.
     # EN — A single material field: "k" for conduction, "h" for the film.

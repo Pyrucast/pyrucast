@@ -24,7 +24,7 @@ def _unit_quad():
 def test_consistent_mass_of_unit_quad():
     rho = 2.0
     fes, n = _unit_quad()
-    model = pyrucast.Model.elasticity(fes, "plane_stress")
+    model = pyrucast.model.elasticity(fes, "plane_stress")
     materials = pyrucast.element_field.material_field(
         model, [("E", 1.0), ("nu", 0.3), ("rho", rho)]
     )
@@ -41,7 +41,7 @@ def test_consistent_mass_of_unit_quad():
 def test_heat_capacity_of_unit_quad():
     rho, cp = 3.0, 5.0
     fes, n = _unit_quad()
-    model = pyrucast.Model.heat_conduction(fes)
+    model = pyrucast.model.heat_conduction(fes)
     materials = pyrucast.element_field.material_field(
         model, [("k", 1.0), ("rho", rho), ("cp", cp)]
     )
@@ -56,7 +56,7 @@ def test_heat_capacity_of_unit_quad():
 def test_lumped_mass_is_diagonal():
     rho = 2.0
     fes, n = _unit_quad()
-    model = pyrucast.Model.elasticity(fes, "plane_stress")
+    model = pyrucast.model.elasticity(fes, "plane_stress")
     materials = pyrucast.element_field.material_field(
         model, [("E", 1.0), ("nu", 0.3), ("rho", rho)]
     )
@@ -71,7 +71,7 @@ def test_lumped_mass_is_diagonal():
 
 def test_mass_requires_density():
     fes, _ = _unit_quad()
-    model = pyrucast.Model.elasticity(fes, "plane_stress")
+    model = pyrucast.model.elasticity(fes, "plane_stress")
     materials = pyrucast.element_field.material_field(model, [("E", 1.0), ("nu", 0.3)])
     try:
         pyrucast.matrix.mass(model, materials)

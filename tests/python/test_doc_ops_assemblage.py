@@ -27,7 +27,7 @@ def _modele_thermique():
 
     imposed = pyrucast.mesh.poi1_from_nodes([noeuds[0]])
     multiplier = pyrucast.mesh.barycenter(imposed)
-    model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.dirichlet(
+    model = pyrucast.model.heat_conduction(fes) | pyrucast.model.dirichlet(
         "T", "q", imposed, multiplier
     )
     return model, fes, multiplier, noeuds
@@ -40,7 +40,7 @@ def _modele_mecanique():
     mesh = pyrucast.Mesh(c, "QUA4")
     mesh.unit().add_cell(n)
     fes = pyrucast.FiniteElementSpace(mesh)
-    model = pyrucast.Model.elasticity(fes, "plane_stress")
+    model = pyrucast.model.elasticity(fes, "plane_stress")
     return model, fes, mesh, n
 
 
@@ -139,7 +139,7 @@ assert Kg.n_rows() == Kg.n_cols()
 # ── tangent ────────────────────────────────────────────────
 
 _, fes, _, noeuds = _modele_mecanique()
-model = pyrucast.Model.plasticity_perfect(fes, "plane_strain")
+model = pyrucast.model.plasticity_perfect(fes, "plane_strain")
 materials = pyrucast.element_field.material_field(
     model, [("E", 70_000.0), ("nu", 0.3), ("sigma_y", 200.0)]
 )

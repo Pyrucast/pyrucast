@@ -72,7 +72,7 @@ prev_state = None
 # ANCHOR: plasticite_parfaite
 import pyrucast
 
-model = pyrucast.Model.plasticity_perfect(fes, "plane_stress")
+model = pyrucast.model.plasticity_perfect(fes, "plane_stress")
 materials = pyrucast.element_field.material_field(
     model, [("E", 210_000.0), ("nu", 0.3), ("sigma_y", 250.0)]
 )
@@ -96,7 +96,7 @@ assert p >= 0.0
 
 fes, u, _ = _cube_3d()
 # ANCHOR: drucker_prager
-model = pyrucast.Model.drucker_prager(fes, "solid")
+model = pyrucast.model.drucker_prager(fes, "solid")
 materials = pyrucast.element_field.material_field(
     model,
     [("E", 20_000.0), ("nu", 0.2), ("friction", 0.3), ("k", 30.0), ("psi", 0.1)],
@@ -114,7 +114,7 @@ assert k_t.n_rows() == k_t.n_cols()
 
 fes, u, _ = _cube_3d()
 # ANCHOR: creep_norton
-model = pyrucast.Model.creep_norton(fes, "solid")
+model = pyrucast.model.creep_norton(fes, "solid")
 materials = pyrucast.element_field.material_field(
     model, [("E", 150_000.0), ("nu", 0.3), ("K", 400.0), ("n", 5.0)]
 )
@@ -140,7 +140,7 @@ prev_state = None
 # ANCHOR: mazars
 import pyrucast
 
-model = pyrucast.Model.mazars(fes, "plane_stress")
+model = pyrucast.model.mazars(fes, "plane_stress")
 materials = pyrucast.element_field.material_field(
     model,
     [
@@ -171,7 +171,7 @@ assert kappa >= 0.0
 
 fes, u, _ = _cube_3d()
 # ANCHOR: damage_tc
-model = pyrucast.Model.damage_tc(fes, "solid")
+model = pyrucast.model.damage_tc(fes, "solid")
 materials = pyrucast.element_field.material_field(
     model,
     [
@@ -197,7 +197,7 @@ assert len(state) == 1
 maillage, _ = _poutre_1d(1)
 # ANCHOR: bernoulli_1d
 fes = pyrucast.FiniteElementSpace(maillage, interpolation="HERMITE3")
-poutre = pyrucast.Model.bernoulli(fes)  # 1-D ⇒ flexion pure
+poutre = pyrucast.model.bernoulli(fes)  # 1-D ⇒ flexion pure
 # ANCHOR_END: bernoulli_1d
 assert len(poutre) == 1
 
@@ -206,7 +206,7 @@ assert len(poutre) == 1
 maillage, _ = _poutre_1d(2)
 fes = pyrucast.FiniteElementSpace(maillage, interpolation="HERMITE3")
 # ANCHOR: bernoulli_portique
-model = pyrucast.Model.bernoulli(fes)  # Coords 2-D ⇒ portique plan
+model = pyrucast.model.bernoulli(fes)  # Coords 2-D ⇒ portique plan
 materials = pyrucast.element_field.material_field(
     model, [("E", 210_000.0), ("A", 1e-2), ("I", 1e-4)]
 )
@@ -219,7 +219,7 @@ assert k.n_rows() == k.n_cols()
 maillage, _ = _poutre_1d(2)
 # ANCHOR: timoshenko
 fes = pyrucast.FiniteElementSpace(maillage, interpolation="MODEL_EMBEDDED")
-poutre = pyrucast.Model.timoshenko(fes)
+poutre = pyrucast.model.timoshenko(fes)
 # ANCHOR_END: timoshenko
 assert len(poutre) == 1
 
@@ -237,7 +237,7 @@ maillage = pyrucast.Mesh(c, "QUA4")
 maillage.unit().add_cell(n)
 fes = pyrucast.FiniteElementSpace(maillage)
 # ANCHOR: coques
-model = pyrucast.Model.shell(fes, "thick")  # ou "kirchhoff"
+model = pyrucast.model.shell(fes, "thick")  # ou "kirchhoff"
 materials = pyrucast.element_field.material_field(
     model, [("E", 210_000.0), ("nu", 0.3), ("h", 0.01)]
 )
@@ -257,7 +257,7 @@ maillage_de_bord.unit().add_cell(n)
 u = pyrucast.NodeField(pyrucast.mesh.poi1_from_nodes(n), ["u_x", "u_y"])
 # ANCHOR: pression_suiveuse
 bord = pyrucast.FiniteElementSpace(maillage_de_bord)
-charge = pyrucast.Model.follower_pressure(bord)
+charge = pyrucast.model.follower_pressure(bord)
 materials = pyrucast.element_field.material_field(charge, [("p", 1.0e5)])
 
 # À chaque itération : la direction se recalcule depuis le déplacement courant.

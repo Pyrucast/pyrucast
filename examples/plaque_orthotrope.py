@@ -67,7 +67,7 @@ def rouleau(c, noeuds, variable, dual):
     for n in noeuds:
         imposed.unit().add_cell([n])
     multiplier = pyrucast.mesh.barycenter(imposed)
-    return pyrucast.Model.dirichlet(variable, dual, imposed, multiplier)
+    return pyrucast.model.dirichlet(variable, dual, imposed, multiplier)
 
 
 def resoudre(angle_deg):
@@ -75,7 +75,7 @@ def resoudre(angle_deg):
     c, grid, fes = maillage()
 
     # Élasticité orthotrope + les deux appuis.
-    model = pyrucast.Model.elasticity(fes, "plane_stress", symmetry="orthotropic")
+    model = pyrucast.model.elasticity(fes, "plane_stress", symmetry="orthotropic")
     model = model | rouleau(c, [grid[j][0] for j in range(N + 1)], "u_x", "f_x")
     model = model | rouleau(c, [grid[0][i] for i in range(N + 1)], "u_y", "f_y")
 

@@ -56,6 +56,7 @@ const AXES: [&str; 3] = ["x", "y", "z"];
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::models::elasticity::ElasticityModel;
 /// # use pyrucast::ops::{element_field, geom, mesh, node_field};
+/// # use pyrucast::ops::model;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -67,7 +68,7 @@ const AXES: [&str; 3] = ["x", "y", "z"];
 /// # let support = mesh::poi1_from_nodes(&n).unwrap();
 /// // La forme qui passe par le **modèle** : chaque sous-modèle y apporte
 /// // son propre opérateur, une barre n'ayant pas le Bᵀ d'un continuum.
-/// # let modele = Model::elasticity(&fes, ElasticityModel::PlaneStress)?;
+/// # let modele = model::elasticity(&fes, ElasticityModel::PlaneStress)?;
 /// # let mut s = ElementField::new(&fes,
 /// #     vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_xy".into()])?;
 /// # s.get(0)?.write().set_uniform("sigma_xx", 100.0)?;

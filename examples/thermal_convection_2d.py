@@ -22,7 +22,7 @@ tout le flux injecté ``Q`` ressortant par convection en x = 1
 
 Mise en donnée de la convection
 -------------------------------
-Le modèle ``Model.boundary_transfer`` fournit la **matrice de film** (variables
+Le modèle ``model.boundary_transfer`` fournit la **matrice de film** (variables
 ``T``/``q`` partagées avec la conduction ⇒ couplage direct). La part externe
 ``h·T_ext·∫N_i dΓ`` est un **second membre**, bâti avec le même opérateur
 ``flux`` que la source (densité ``h·T_ext``) — aucune normale n'est requise.
@@ -73,7 +73,7 @@ def main() -> None:
         right_edge.unit().add_cell([grid[idx(N, j)], grid[idx(N, j + 1)]])
     right_fes = pyrucast.FiniteElementSpace(right_edge)
 
-    model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.boundary_transfer(
+    model = pyrucast.model.heat_conduction(fes) | pyrucast.model.boundary_transfer(
         right_fes, [("T", "q")], "thermal"
     )
 

@@ -37,7 +37,7 @@ E, I, G, A_S, L, P = 1.0, 1.0, 30.0, 1.0, 1.0, 1.0
 def _clamp(node, var, dual):
     imposed = pyrucast.mesh.poi1_from_nodes([node])
     multiplier = pyrucast.mesh.barycenter(imposed)
-    return pyrucast.Model.dirichlet(var, dual, imposed, multiplier)
+    return pyrucast.model.dirichlet(var, dual, imposed, multiplier)
 
 
 def tip_deflection(n_elems: int) -> float:
@@ -49,7 +49,7 @@ def tip_deflection(n_elems: int) -> float:
     # donc du matériau, et se calcule maille par maille.
     fes = pyrucast.FiniteElementSpace(mesh, interpolation="MODEL_EMBEDDED")
 
-    model = pyrucast.Model.timoshenko(fes)
+    model = pyrucast.model.timoshenko(fes)
     model = model | _clamp(base, "w", "f_w")
     model = model | _clamp(base, "theta", "m_theta")
 

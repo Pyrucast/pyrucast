@@ -18,9 +18,9 @@ matériau, ni loi de comportement ; elle ne mute jamais le `Coords`.
 
 C'est aussi la réponse au cas laissé ouvert par la MPC : des **coefficients qui
 varient par nœud** (ici les `Nᵢ(ξ_p)`, différents à chaque nœud immergé), qu'une
-`Model.mpc` à coefficients scalaires ne sait pas exprimer de façon compacte.
+`model.mpc` à coefficients scalaires ne sait pas exprimer de façon compacte.
 
-Implémentation : `src/models/embedded.rs` ; constructeur `Model::embedded(…)`.
+Implémentation : `src/models/embedded.rs` ; opérateur `ops::model::embedded(…)`.
 
 ## Localisation à la construction
 
@@ -51,7 +51,7 @@ chacune portant sa propre paire de variables (toutes **surchargeables**) :
 Signature complète :
 
 ```text
-Model.embedded(immersed, host, components,
+model.embedded(immersed, host, components,
                multipliers=None, imposed_values=None, tol=None)
 # components : liste de (variable, target_dual), p.ex. [("u_x","f_x"), ("u_y","f_y")]
 ```

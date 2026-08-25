@@ -23,7 +23,7 @@ def _unit_quad():
 def test_geometric_stiffness_uniaxial():
     sig = 3.0
     fes, n = _unit_quad()
-    model = pyrucast.Model.elasticity(fes, "plane_stress")
+    model = pyrucast.model.elasticity(fes, "plane_stress")
     materials = pyrucast.element_field.material_field(model, [("E", 1.0), ("nu", 0.3)])
 
     stress = pyrucast.ElementField(fes, ["sigma_xx", "sigma_yy", "sigma_xy"])

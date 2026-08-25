@@ -1,4 +1,4 @@
-"""Python tests for node-to-surface contact (`Model.contact`) solved by the
+"""Python tests for node-to-surface contact (`model.contact`) solved by the
 active-set operator `solve_unilateral`.
 
 Patch test: two elastic blocks stacked in `y` with an initial gap, every `u_x`
@@ -40,7 +40,7 @@ def _block(c, mesh, y0):
 def _clamp(nodes, var, dual):
     imposed = pyrucast.mesh.poi1_from_nodes(nodes)
     mult = pyrucast.mesh.barycenter(imposed)
-    return pyrucast.Model.dirichlet(var, dual, imposed, mult)
+    return pyrucast.model.dirichlet(var, dual, imposed, mult)
 
 
 def _two_blocks():
@@ -58,9 +58,9 @@ def _two_blocks():
         master.unit().add_cell([bottom[idx(i + 1, N)], bottom[idx(i, N)]])
     # Slave: bottom edge nodes of the top block.
     slave = pyrucast.mesh.poi1_from_nodes([top[idx(i, 0)] for i in range(N + 1)])
-    contact = pyrucast.Model.contact(slave, master, [("u_x", "f_x"), ("u_y", "f_y")])
+    contact = pyrucast.model.contact(slave, master, [("u_x", "f_x"), ("u_y", "f_y")])
 
-    model = pyrucast.Model.elasticity(fes, "plane_stress")
+    model = pyrucast.model.elasticity(fes, "plane_stress")
     model = model | _clamp(bottom + top, "u_x", "f_x")
     model = model | _clamp([bottom[idx(i, 0)] for i in range(N + 1)], "u_y", "f_y")
     model = model | contact
@@ -134,7 +134,7 @@ def test_contact_gaps_requires_a_contact():
     mesh = pyrucast.Mesh(c, "QUA4")
     _block(c, mesh, 0.0)
     fes = pyrucast.FiniteElementSpace(mesh)
-    model = pyrucast.Model.elasticity(fes, "plane_stress")
+    model = pyrucast.model.elasticity(fes, "plane_stress")
     with pytest.raises(Exception, match="contact"):
         model.contact_gaps()
 
@@ -149,4 +149,4 @@ def test_components_must_match_dimension():
     master.unit().add_cell([a, b])
     slave = pyrucast.mesh.poi1_from_nodes([s])
     with pytest.raises(Exception, match="component"):
-        pyrucast.Model.contact(slave, master, [("u_y", "f_y")])
+        pyrucast.model.contact(slave, master, [("u_y", "f_y")])

@@ -50,7 +50,7 @@ n'implémente que celui qui la concerne) :
 
 ## Les étapes
 
-Ajouter une physique se réduit à **quatre** gestes :
+Ajouter une physique se réduit à **cinq** gestes :
 
 1. **`src/models/<ma_physique>.rs`** (nouveau) — une struct portant ses
    supports + un `impl SubModelKind` + un constructeur `new(...)` faisant le
@@ -61,12 +61,24 @@ Ajouter une physique se réduit à **quatre** gestes :
    `Clone` si ses champs le permettent).
 2. **`src/models/mod.rs`** — `pub mod <ma_physique>;`.
 3. **`src/containers/model.rs`** — **une** variante dans `enum SubModel` et
-   **une** ligne dans `SubModel::as_kind()`. Plus le constructeur public
-   `Model::<ma_physique>(...)` (l'API parent).
-4. **`src/py/model.rs`** — un `#[classmethod]` `PyModel::<ma_physique>(...)`.
-   Étant dans `#[pymethods]`, aucun enregistrement n'est nécessaire ; et
-   `Model` étant un **conteneur**, il est déjà ré-exporté au top-level du
-   paquet Python — rien à toucher dans `python/pyrucast/`.
+   **une** ligne dans `SubModel::as_kind()`. Plus le constructeur
+   `SubModel::<ma_physique>(...)`, la primitive à une zone.
+4. **`src/ops/model/<ma_physique>.rs`** (nouveau) — l'opérateur parent
+   `pub fn <ma_physique>(fes: &FiniteElementSpace, …) -> Result<Model>`, qui
+   balaie les sous-espaces et rend un `Model` couvrant tout le support ; plus
+   son `pub mod` / `pub use` dans `src/ops/model/mod.rs`.
+5. **`src/py/ops/model.rs`** — un `#[pyfunction]` `<ma_physique>(...)`, son
+   `m.add_function(...)` dans le `#[pymodule]` de `src/lib.rs` (le module
+   `_pyrucast` est plat), et sa ligne dans `python/pyrucast/model.py`
+   (import ré-exporté **et** `__all__`).
+
+Le geste 5 est **vérifié** : `tests/python/test_mirror_completeness.py`
+réclame le binding Python de toute fonction d'`ops::model`, et échoue si on
+l'oublie. Rien à déclarer en revanche du côté de
+`tests/python/test_method_exposure.py` : la dérogation y porte sur le **module
+entier** (`NO_METHOD_MODULES`), parce que la raison vaut par construction pour
+toute physique — le premier argument est le support que le modèle recouvre, pas
+un sujet qu'on transforme.
 
 Tout le reste est générique et **ne change pas**.
 

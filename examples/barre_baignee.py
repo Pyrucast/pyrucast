@@ -3,7 +3,7 @@
 Un cube HEX8 en conduction thermique, ses huit coins fixés à un champ linéaire
 `T(x) = 1 + 2x + 3y + 4z` — que l'interpolation trilinéaire du HEX8 reproduit
 exactement à l'intérieur. Un nœud immergé au cœur du cube est lié à l'hôte par
-une contrainte `Model.embedded` : sa température résolue égale l'interpolation de
+une contrainte `model.embedded` : sa température résolue égale l'interpolation de
 l'hôte au même point, sans que les deux maillages partagent de nœud.
 
 Lancer : `python examples/barre_baignee.py` (après `maturin develop`).
@@ -35,17 +35,17 @@ def main():
     host = pyrucast.Mesh(c, "HEX8")
     host.unit().add_cell(corner_nodes)
     fes = pyrucast.FiniteElementSpace(host)
-    base = pyrucast.Model.heat_conduction(fes)
+    base = pyrucast.model.heat_conduction(fes)
 
     # Coins fixés au champ linéaire (Dirichlet).
     corner_mesh = pyrucast.mesh.poi1_from_nodes(corner_nodes)
     corner_mult = pyrucast.mesh.barycenter(corner_mesh)
-    dirichlet = pyrucast.Model.dirichlet("T", "q", corner_mesh, corner_mult)
+    dirichlet = pyrucast.model.dirichlet("T", "q", corner_mesh, corner_mult)
 
     # Nœud immergé au cœur du cube, lié à l'hôte.
     p = c.add_node([0.3, 0.6, 0.2])
     bar = pyrucast.mesh.poi1_from_nodes([p])
-    embedded = pyrucast.Model.embedded(bar, host, [("T", "q")])
+    embedded = pyrucast.model.embedded(bar, host, [("T", "q")])
 
     model = base | dirichlet | embedded
     materials = pyrucast.element_field.material_field(model, [("k", 1.0)])

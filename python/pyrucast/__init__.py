@@ -9,8 +9,9 @@ Package *mixed Rust/Python*. L'extension compilée est le sous-module privé
 - les **verbes** (`ops::<module>::f`) vivent dans le sous-module portant le
   nom du conteneur qu'ils **produisent** : `pyrucast.mesh.triangulate_surface`,
   `pyrucast.element_field.gradient`, `pyrucast.matrix.stiffness`,
-  `pyrucast.node_field.divergence`. Ceux qui ne produisent aucun conteneur
-  sont rangés par activité : `pyrucast.measure.integral`,
+  `pyrucast.node_field.divergence`, `pyrucast.model.heat_conduction`.
+  Ceux qui ne produisent aucun conteneur sont rangés par activité :
+  `pyrucast.measure.integral`,
   `pyrucast.export.export_vtk`. `pyrucast.solver.solve` est l'exception
   unique et assumée — il produit un champ nodal mais se cherche par son nom ;
 - `pyrucast.save` / `pyrucast.load` restent au top-level : ils ne produisent
@@ -58,6 +59,7 @@ from . import (
     matrix as matrix,
     measure as measure,
     mesh as mesh,
+    model as model,
     node_field as node_field,
     solver as solver,
 )
@@ -96,6 +98,7 @@ __all__ = [
     "matrix",
     "measure",
     "mesh",
+    "model",
     "node_field",
     "solver",
     # couche haut niveau

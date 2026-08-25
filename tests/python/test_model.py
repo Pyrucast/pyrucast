@@ -19,11 +19,11 @@ def _seg2_heat_model(length=1.0, k=1.0, dirichlet_left=False):
     materials = pyrucast.ElementField(fes, ["k"])
     materials[0].set_uniform("k", k)
 
-    model = pyrucast.Model.heat_conduction(fes)
+    model = pyrucast.model.heat_conduction(fes)
     if dirichlet_left:
         imposed = pyrucast.mesh.poi1_from_nodes([a])
         multiplier = pyrucast.mesh.barycenter(imposed)
-        model = model | pyrucast.Model.dirichlet("T", "q", imposed, multiplier)
+        model = model | pyrucast.model.dirichlet("T", "q", imposed, multiplier)
     return c, mesh, fes, sub, materials, model, a, b
 
 
@@ -73,7 +73,7 @@ def test_two_seg2_assembly_is_tridiagonal():
     materials = pyrucast.ElementField(fes, ["k"])
     materials[0].set_uniform("k", 1.0)
 
-    model = pyrucast.Model.heat_conduction(fes)
+    model = pyrucast.model.heat_conduction(fes)
     K = pyrucast.matrix.stiffness(model, materials)
     assert K.n_rows() == 3
     assert K.n_cols() == 3
@@ -122,7 +122,7 @@ def test_dirichlet_empty_constraint_mesh_rejected():
     c = pyrucast.Coords(1)
     empty = pyrucast.Mesh(c, "POI1")  # one POI1 submesh, zero cells
     try:
-        pyrucast.Model.dirichlet("T", "q", empty, empty)
+        pyrucast.model.dirichlet("T", "q", empty, empty)
     except (RuntimeError, ValueError):
         pass
     else:
@@ -212,7 +212,7 @@ def test_fespace_one_to_one_no_dedup():
     mesh.unit().add_cell([n[0], n[1], n[3], n[2]])
     fes = pyrucast.FiniteElementSpace(mesh)
 
-    model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.elasticity(
+    model = pyrucast.model.heat_conduction(fes) | pyrucast.model.elasticity(
         fes, "plane_stress"
     )
     assert len(model) == 2
@@ -228,7 +228,7 @@ def test_fespace_errors_without_domain_submodel():
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     imposed = pyrucast.mesh.poi1_from_nodes([a])
-    only_constraint = pyrucast.Model.dirichlet(
+    only_constraint = pyrucast.model.dirichlet(
         "T", "q", imposed, pyrucast.mesh.barycenter(imposed)
     )
     try:

@@ -158,7 +158,7 @@ blocage et y a répondu de la même manière ; elle a depuis été remplacée pa
 coque épaisse est donc aujourd'hui le seul élément multi-quadrature du code : le
 patron reste général, son utilisateur ne l'est plus.
 
-Et le second sous-espace n'est **pas** un argument de `Model.shell` : rien en lui
+Et le second sous-espace n'est **pas** un argument de `model.shell` : rien en lui
 n'appartient à l'appelant (même sous-maillage, même interpolation, seule la
 quadrature change), et `element_matrix` lit les deux `CellGeom` comme *une seule*
 maille — un invariant qu'il vaut mieux établir par construction que valider après

@@ -6,7 +6,7 @@ import pyrucast
 def _clamp(node, var, dual):
     imposed = pyrucast.mesh.poi1_from_nodes([node])
     multiplier = pyrucast.mesh.barycenter(imposed)
-    return pyrucast.Model.dirichlet(var, dual, imposed, multiplier)
+    return pyrucast.model.dirichlet(var, dual, imposed, multiplier)
 
 
 def test_cantilever_converges_without_locking():
@@ -20,7 +20,7 @@ def test_cantilever_converges_without_locking():
         mesh.unit().add_cell([nodes[i], nodes[i + 1]])
     fes = pyrucast.FiniteElementSpace(mesh, interpolation="MODEL_EMBEDDED")
 
-    model = pyrucast.Model.timoshenko(fes)
+    model = pyrucast.model.timoshenko(fes)
     model = model | _clamp(nodes[0], "w", "f_w")
     model = model | _clamp(nodes[0], "theta", "m_theta")
 
@@ -52,7 +52,7 @@ def test_section_forces_cantilever():
         mesh.unit().add_cell([nodes[i], nodes[i + 1]])
     fes = pyrucast.FiniteElementSpace(mesh, interpolation="MODEL_EMBEDDED")
 
-    model = pyrucast.Model.timoshenko(fes)
+    model = pyrucast.model.timoshenko(fes)
     model = model | _clamp(nodes[0], "w", "f_w")
     model = model | _clamp(nodes[0], "theta", "m_theta")
     materials = pyrucast.element_field.material_field(
@@ -82,6 +82,6 @@ def test_timoshenko_vars():
     mesh = pyrucast.Mesh(c, "SEG2")
     mesh.unit().add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh, interpolation="MODEL_EMBEDDED")
-    model = pyrucast.Model.timoshenko(fes)
+    model = pyrucast.model.timoshenko(fes)
     assert model.primal_vars() == ["w", "theta"]
     assert model.dual_vars() == ["f_w", "m_theta"]

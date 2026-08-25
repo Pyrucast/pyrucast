@@ -1,6 +1,6 @@
 """Formation débutant — 6. Compléments : éléments structuraux + export.
 
-Barre en traction (élément `SEG2`, `Model.truss`) — l'équivalent pyrucast
+Barre en traction (élément `SEG2`, `model.truss`) — l'équivalent pyrucast
 des éléments `BARR`/`POUT` de Cast3M évoqués dans les compléments de la
 formation. Le résultat est comparé à la solution analytique puis exporté
 au format VTK (lisible par ParaView), l'équivalent du `SORT 'VTK'` de
@@ -23,7 +23,7 @@ E, A, L, F = 210.0e9, 1.0e-4, 2.0, 1000.0
 def encastrement(node, var, dual):
     imposed = pc.mesh.poi1_from_nodes([node])
     multiplier = pc.mesh.barycenter(imposed)
-    return pc.Model.dirichlet(var, dual, imposed, multiplier)
+    return pc.model.dirichlet(var, dual, imposed, multiplier)
 
 
 def main() -> None:
@@ -34,7 +34,7 @@ def main() -> None:
     mesh = pc.mesh.line(n0, n1, 1)
     fes = pc.FiniteElementSpace(mesh)
 
-    modele = pc.Model.truss(fes)
+    modele = pc.model.truss(fes)
     modele = modele | encastrement(n0, "u_x", "f_x")
     modele = modele | encastrement(n0, "u_y", "f_y")
     modele = modele | encastrement(n1, "u_y", "f_y")  # pas de raideur transversale

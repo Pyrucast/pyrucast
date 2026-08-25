@@ -90,7 +90,7 @@ assert chauds[0][n[2], "T"] == 1.0
 
 _, mesh, fes, n = _plaque()
 solution = _champ_nodal(mesh, n, ["u_x", "u_y"], [[0.1, 0.2]] * 6)
-model = pyrucast.Model.elasticity(fes, "plane_stress")
+model = pyrucast.model.elasticity(fes, "plane_stress")
 # ANCHOR: filter_rename
 # Retire les multiplicateurs de Lagrange d'un résultat de solve.
 u = solution.filter_components(model.primal_vars())

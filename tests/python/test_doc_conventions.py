@@ -31,7 +31,7 @@ a = pyrucast.NodeField(_support, ["v"])
 b = pyrucast.NodeField(pyrucast.mesh.poi1_from_nodes(_n[:2]), ["w"])
 _imposed = pyrucast.mesh.poi1_from_nodes([_n[0]])
 _mult = pyrucast.mesh.barycenter(_imposed)
-model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.dirichlet(
+model = pyrucast.model.heat_conduction(fes) | pyrucast.model.dirichlet(
     "T", "q", _imposed, _mult
 )
 materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
@@ -146,14 +146,14 @@ def _modele_thermomecanique():
 
     def bloquer(noeuds, var, dual):
         imposed = pc.mesh.poi1_from_nodes(noeuds)
-        return pc.Model.dirichlet(var, dual, imposed, pc.mesh.barycenter(imposed))
+        return pc.model.dirichlet(var, dual, imposed, pc.mesh.barycenter(imposed))
 
     th_imposed = pc.mesh.poi1_from_nodes(gauche + droite)
     th_mult = pc.mesh.translate(th_imposed, [0.0, 0.0])
     model = (
-        pc.Model.heat_conduction(fes)
-        | pc.Model.elasticity(fes, "plane_stress")
-        | pc.Model.dirichlet("T", "q", th_imposed, th_mult)
+        pc.model.heat_conduction(fes)
+        | pc.model.elasticity(fes, "plane_stress")
+        | pc.model.dirichlet("T", "q", th_imposed, th_mult)
         | bloquer(gauche, "u_x", "f_x")
         | bloquer(bas, "u_y", "f_y")
     )

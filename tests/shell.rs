@@ -37,6 +37,7 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::shell::ShellModel;
 use pyrucast::ops::mesh;
+use pyrucast::ops::model;
 use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
@@ -206,7 +207,7 @@ fn membrane_stretch(formulation: ShellModel) -> Result<()> {
     let (grid, fes, coords, n) = plate(4, ElementType::QUA4)?;
     let idx = |i: usize, j: usize| j * (n + 1) + i;
 
-    let mut model = Model::shell(&fes, formulation)?;
+    let mut model = model::shell(&fes, formulation)?;
     // Roller on the x = 0 edge (u_x), one point pinned in y and z, and every
     // rotation held: a pure membrane state.
     let left: Vec<Node> = (0..=n).map(|j| grid[idx(0, j)].clone()).collect();
@@ -262,7 +263,7 @@ fn a_rigid_drilling_rotation_costs_no_energy() -> Result<()> {
 fn rigid_drilling(formulation: ShellModel) -> Result<()> {
     let h = 0.02;
     let (grid, fes, _coords, n) = plate(2, ElementType::QUA4)?;
-    let model = Model::shell(&fes, formulation)?;
+    let model = model::shell(&fes, formulation)?;
     let materials =
         pyrucast::ops::element_field::material_field(&model, &[("E", E), ("nu", NU), ("h", h)])?;
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
@@ -316,7 +317,7 @@ fn a_rigid_tilt_of_the_plate_costs_no_energy() -> Result<()> {
     for formulation in [ShellModel::Thick, ShellModel::Kirchhoff] {
         for element in [ElementType::QUA4, ElementType::TRI3] {
             let (grid, fes, _coords, _) = plate(2, element)?;
-            let model = Model::shell(&fes, formulation)?;
+            let model = model::shell(&fes, formulation)?;
             let materials = pyrucast::ops::element_field::material_field(
                 &model,
                 &[("E", E), ("nu", NU), ("h", h)],
@@ -438,7 +439,7 @@ fn plate(
 fn clamp(nodes: &[Node], var: &str, dual: &str) -> Result<Model> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
     let multiplier = mesh::barycenter(&imposed)?;
-    Model::dirichlet(
+    model::dirichlet(
         var.into(),
         dual.into(),
         &imposed,
@@ -460,7 +461,7 @@ fn central_deflection(
     let (grid, fes, coords, _) = plate(n, element)?;
     let idx = |i: usize, j: usize| j * (n + 1) + i;
 
-    let mut model = Model::shell(&fes, formulation)?;
+    let mut model = model::shell(&fes, formulation)?;
     // Clamped all round: every DOF held on the boundary.
     let mut boundary = Vec::new();
     for j in 0..=n {

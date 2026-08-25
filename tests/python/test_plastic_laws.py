@@ -61,13 +61,13 @@ def test_each_law_declares_its_own_material():
         "ottosen": ["E", "nu", "a", "b", "k_1", "k_2", "sigma_c"],
     }
     for name, expected in contracts.items():
-        model = getattr(pyrucast.Model, name)(fes, "solid")
+        model = getattr(pyrucast.model, name)(fes, "solid")
         assert model[0].material_components() == expected, name
 
 
 def test_isotropic_hardening_satisfies_consistency():
     c, nodes, corners, fes = _cube()
-    model = pyrucast.Model.plasticity_isotropic(fes, "solid")
+    model = pyrucast.model.plasticity_isotropic(fes, "solid")
     materials = pyrucast.element_field.material_field(
         model, [("E", 70_000.0), ("nu", 0.3), ("sigma_y", 200.0), ("H", 5_000.0)]
     )
@@ -79,7 +79,7 @@ def test_isotropic_hardening_satisfies_consistency():
 
 def test_drucker_prager_lands_on_its_cone():
     c, nodes, corners, fes = _cube()
-    model = pyrucast.Model.drucker_prager(fes, "solid")
+    model = pyrucast.model.drucker_prager(fes, "solid")
     materials = pyrucast.element_field.material_field(
         model,
         [("E", 20_000.0), ("nu", 0.2), ("friction", 0.3), ("k", 30.0), ("psi", 0.1)],
@@ -92,7 +92,7 @@ def test_drucker_prager_lands_on_its_cone():
 
 def test_ottosen_is_far_weaker_in_tension_than_compression():
     c, nodes, corners, fes = _cube()
-    model = pyrucast.Model.ottosen(fes, "solid")
+    model = pyrucast.model.ottosen(fes, "solid")
     materials = pyrucast.element_field.material_field(
         model,
         [
@@ -116,7 +116,7 @@ def test_ottosen_is_far_weaker_in_tension_than_compression():
 def test_the_perfect_law_kept_its_behaviour_under_its_new_name():
     """`plasticity` became `plasticity_perfect`; only the name changed."""
     c, nodes, corners, fes = _cube()
-    model = pyrucast.Model.plasticity_perfect(fes, "solid")
+    model = pyrucast.model.plasticity_perfect(fes, "solid")
     materials = pyrucast.element_field.material_field(
         model, [("E", 70_000.0), ("nu", 0.3), ("sigma_y", 200.0)]
     )

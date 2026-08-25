@@ -102,7 +102,7 @@ assert pyrucast.load("m.pyr")["maillage"].cell_count() == mesh.cell_count()
 
 _imposed = pyrucast.mesh.poi1_from_nodes([_n[0]])
 _mult = pyrucast.mesh.barycenter(_imposed)
-modele = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.dirichlet(
+modele = pyrucast.model.heat_conduction(fes) | pyrucast.model.dirichlet(
     "T", "q", _imposed, _mult
 )
 materiaux = pyrucast.element_field.material_field(modele, [("k", 1.0)])

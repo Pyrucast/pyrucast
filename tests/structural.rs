@@ -9,6 +9,7 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
+use pyrucast::ops::model;
 use pyrucast::Result;
 
 /// A single SEG2 bar from the origin to `(dx, dy)`, with its FE space + two nodes.
@@ -35,7 +36,7 @@ fn truss_consistent_mass_matches_closed_form() -> Result<()> {
     const RHO: f64 = 2.0;
     const AREA: f64 = 3.0;
     let (fes, a, b, len) = bar_2d(3.0, 4.0)?; // L = 5
-    let model = Model::truss(&fes)?;
+    let model = model::truss(&fes)?;
     let materials = pyrucast::ops::element_field::material_field(
         &model,
         &[("E", 1.0), ("A", AREA), ("rho", RHO)],
@@ -63,7 +64,7 @@ fn truss_consistent_mass_matches_closed_form() -> Result<()> {
 fn truss_geometric_stiffens_transverse_only() -> Result<()> {
     const N: f64 = 7.0;
     let (fes, a, b, _l) = bar_2d(1.0, 0.0)?; // axis = x, L = 1
-    let model = Model::truss(&fes)?;
+    let model = model::truss(&fes)?;
     let materials =
         pyrucast::ops::element_field::material_field(&model, &[("E", 1.0), ("A", 1.0)])?;
     let state = axial_force(&fes, N)?;
@@ -82,7 +83,7 @@ fn truss_geometric_stiffens_transverse_only() -> Result<()> {
 fn truss_geometric_inclined_transverse_projector() -> Result<()> {
     const N: f64 = 5.0;
     let (fes, a, _b, len) = bar_2d(3.0, 4.0)?; // c = (0.6, 0.8)
-    let model = Model::truss(&fes)?;
+    let model = model::truss(&fes)?;
     let materials =
         pyrucast::ops::element_field::material_field(&model, &[("E", 1.0), ("A", 1.0)])?;
     let state = axial_force(&fes, N)?;
@@ -101,7 +102,7 @@ fn truss_geometric_inclined_transverse_projector() -> Result<()> {
 #[test]
 fn truss_mass_requires_density() -> Result<()> {
     let (fes, _a, _b, _l) = bar_2d(1.0, 0.0)?;
-    let model = Model::truss(&fes)?;
+    let model = model::truss(&fes)?;
     let materials =
         pyrucast::ops::element_field::material_field(&model, &[("E", 1.0), ("A", 1.0)])?;
     assert!(pyrucast::ops::matrix::mass(&model, &materials).is_err());
@@ -117,7 +118,7 @@ fn frame_consistent_mass_matches_closed_form() -> Result<()> {
     const I: f64 = 0.5;
     const L: f64 = 2.0;
     let (fes, a, b, len) = bar_2d(L, 0.0)?; // horizontal ⇒ T = identity
-    let model = Model::timoshenko(&fes)?;
+    let model = model::timoshenko(&fes)?;
     let materials = pyrucast::ops::element_field::material_field(
         &model,
         &[
@@ -165,7 +166,7 @@ fn frame_geometric_stiffens_transverse_only() -> Result<()> {
     const N: f64 = 9.0;
     const L: f64 = 3.0;
     let (fes, a, b, len) = bar_2d(L, 0.0)?; // horizontal ⇒ transverse is u_y
-    let model = Model::timoshenko(&fes)?;
+    let model = model::timoshenko(&fes)?;
     let materials = pyrucast::ops::element_field::material_field(
         &model,
         &[("E", 1.0), ("A", 1.0), ("I", 1.0), ("G", 1.0), ("A_s", 1.0)],
@@ -199,7 +200,7 @@ fn timoshenko_consistent_mass_matches_closed_form() -> Result<()> {
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     mesh.add_cell(&[a.id(), b.id()])?;
     let fes = FiniteElementSpace::new(&mesh, Interpolation::ModelEmbedded)?;
-    let model = Model::timoshenko(&fes)?;
+    let model = model::timoshenko(&fes)?;
     let materials = pyrucast::ops::element_field::material_field(
         &model,
         &[
@@ -279,7 +280,7 @@ fn frame3d_consistent_mass_matches_closed_form() -> Result<()> {
     const IZ: f64 = 0.7;
     const L: f64 = 2.0;
     let (fes, a, b) = bar_3d(L)?; // along x ⇒ local axes = global ⇒ T = identity
-    let model = Model::timoshenko(&fes)?;
+    let model = model::timoshenko(&fes)?;
     let materials = frame3d_materials(&model, IY, IZ, AREA, RHO)?;
 
     let m = pyrucast::ops::matrix::mass(&model, &materials)?;
@@ -314,7 +315,7 @@ fn frame3d_geometric_stiffens_both_transverse() -> Result<()> {
     const N: f64 = 8.0;
     const L: f64 = 4.0;
     let (fes, a, b) = bar_3d(L)?;
-    let model = Model::timoshenko(&fes)?;
+    let model = model::timoshenko(&fes)?;
     let materials = frame3d_materials(&model, 1.0, 1.0, 1.0, 1.0)?;
     let sub = SubElementField::from_uniform_per_component(fes.get(0)?, vec!["N".into()], &[N])?;
     let mut state = ElementField::empty();

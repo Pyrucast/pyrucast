@@ -33,6 +33,18 @@ une **fonction libre** d'un module `ops/` est figée dans le fichier
   (`ops::node_field::restrict(field, mesh)`, `ops::matrix::stiffness(model,
   mat)`, `ops::mesh::consolidate(mesh)`).
 
+Un **constructeur nommé** échappe aux deux : il fabrique son propre type, il
+reste donc sur le type (`FiniteElementSpace.lagrange1(mesh)`,
+`Matrix.block(...)`). Mais l'exception s'arrête au **pluriel** : une famille
+qui grossit — le catalogue de physiques d'un `Model`, 28 entrées — se range
+comme toute famille d'opérateurs, dans le module du conteneur produit. Deux
+raisons, l'une de principe, l'autre très concrète : en Python une
+`classmethod` s'atteint aussi depuis une **instance**, si bien que
+`m.heat_conduction(fes)` s'exécute en jetant `m` en silence, et
+l'auto-complétion d'un objet se remplit de verbes qui ne s'adressent pas à
+lui. D'où `pyrucast.model.heat_conduction(fes)` et
+non `Model.heat_conduction(fes)` (rupture du 2026-08-25).
+
 ## Où vit une fonction libre : le conteneur produit
 
 **Un module d'`ops/` rassemble les opérateurs qui produisent le même
@@ -46,6 +58,7 @@ dans `element_field`, à côté de `deformation` — pas dans `node_field`.
 | `node_field` | un `NodeField` (dérivations, assemblage nodal) |
 | `element_field` | un `ElementField` (cinématique, matériaux, comportement) |
 | `matrix` | une `Matrix` (les assembleurs) |
+| `model` | un `Model` (les déclarations de physique) |
 | `coords` | écrit dans le magasin (`set`, `displace`) |
 
 Ceux qui ne produisent **aucun** conteneur échappent à la règle par

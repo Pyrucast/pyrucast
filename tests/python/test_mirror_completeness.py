@@ -29,7 +29,7 @@ OPS = ROOT / "src" / "ops"
 # Modules Rust dont les fonctions n'ont pas (encore) de sous-module Python.
 NO_PYTHON_MODULE = {
     # Exception assumée : `locate_points` et `project_points` sont les
-    # primitives géométriques sous `Model.embedded` et `Model.contact`.
+    # primitives géométriques sous `model.embedded` et `model.contact`.
     # L'utilisateur Python obtient leur résultat sous forme de contrainte
     # assemblable, ce qui est le niveau utile ; les exposer suppose de décider
     # comment traduire `Location` et `Projection`, ce qui reste à trancher.
@@ -61,6 +61,16 @@ RUST_ONLY = {
     "vtk_mesh_string": "variante « vers une chaîne », non exposée",
     "vtk_node_field_string": "variante « vers une chaîne », non exposée",
     "vtk_element_field_string": "variante « vers une chaîne », non exposée",
+    # Les variantes `*_with_symmetry` / `*_with_law` de `ops::model` : Rust passe
+    # une enum (`MaterialSymmetry`, `PlasticLaw`, `DamageLaw`), Python n'expose
+    # pas ces enums. Le pli est différent des deux côtés — un mot-clé `symmetry=`
+    # pour la symétrie, une fonction par loi pour les lois (voir PYTHON_ONLY) —
+    # mais aucune opération ne manque.
+    "heat_conduction_with_symmetry": "replié dans `model.heat_conduction(fes, symmetry=…)`",
+    "fick_with_symmetry": "replié dans `model.fick(fes, espèce, symmetry=…)`",
+    "elasticity_with_symmetry": "replié dans `model.elasticity(fes, model, symmetry=…)`",
+    "plasticity_with_law": "déplié en une fonction Python par loi (`drucker_prager`, `creep_norton`…)",
+    "damage_with_law": "déplié en une fonction Python par loi (`damage_tc`, `gurson`…)",
     "select_cells": "dispatch par type dans `mesh.select`",
     "select_nodes": "dispatch par type dans `mesh.select`",
     "integral_element": "dispatch par type dans `measure.integral`",
@@ -162,6 +172,20 @@ PYTHON_ONLY = {
     "solve_eliminate": "nom qualifié de `solver::eliminate::solve`",
     "solve_unilateral": "nom qualifié de `solver::unilateral::solve`",
     "export_vtk": "nom qualifié de `export::vtk::write`",
+    # Les lois de `ops::model` : Rust les nomme par une valeur d'enum passée à
+    # `plasticity_with_law` / `damage_with_law`, Python par une fonction chacune,
+    # faute d'enum exposée. Même catalogue, plié différemment.
+    "plasticity_isotropic": "`plasticity_with_law(…, PlasticLaw::Isotropic)`",
+    "drucker_prager": "`plasticity_with_law(…, PlasticLaw::DruckerPrager)`",
+    "ottosen": "`plasticity_with_law(…, PlasticLaw::Ottosen)`",
+    "creep_norton": "`plasticity_with_law(…, PlasticLaw::CreepNorton)`",
+    "creep_blackburn": "`plasticity_with_law(…, PlasticLaw::CreepBlackburn)`",
+    "creep_lemaitre": "`plasticity_with_law(…, PlasticLaw::CreepLemaitre)`",
+    "viscoplasticity_chaboche": "`plasticity_with_law(…, PlasticLaw::ViscoplasticChaboche)`",
+    "viscoplasticity_lemaitre_chaboche": "`plasticity_with_law(…, PlasticLaw::ViscoplasticLemaitreChaboche)`",
+    "gurson": "`plasticity_with_law(…, PlasticLaw::Gurson)`",
+    "damage_tc": "`damage_with_law(…, DamageLaw::DamageTc)`",
+    "damage_sic_sic": "`damage_with_law(…, DamageLaw::SicSic)`",
     "xtx": "primitive du trait `Field`, exposée en opérateur de réduction",
     "xty": "primitive du trait `Field`, exposée en opérateur de réduction",
     # La seule entrée qui ne soit pas un simple renommage : `from_gmsh` a besoin

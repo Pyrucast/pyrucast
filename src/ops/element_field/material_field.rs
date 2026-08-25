@@ -26,6 +26,7 @@ use crate::handle::Handle;
 /// # use pyrucast::models::elasticity::ElasticityModel;
 /// # use pyrucast::models::RelationSense;
 /// # use pyrucast::ops::{element_field, mesh};
+/// # use pyrucast::ops::model;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -34,7 +35,7 @@ use crate::handle::Handle;
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// let meca = Model::elasticity(&fes, ElasticityModel::PlaneStress)?;
+/// let meca = model::elasticity(&fes, ElasticityModel::PlaneStress)?;
 /// // Les composantes **requises** doivent toutes être là ; les
 /// // **facultatives** — `alpha`, la dilatation — ne sont gardées que si on
 /// // les donne, et à la suite. Le reste est écarté.
@@ -47,7 +48,7 @@ use crate::handle::Handle;
 /// assert!(element_field::sub_material_field(
 ///     &meca.get(0)?.read(), &[("E", 210e3)]).is_err());
 /// // Une contrainte n'a pas de matière à recevoir.
-/// let appui = Model::dirichlet("T".into(), "q".into(), &impose, &mult,
+/// let appui = model::dirichlet("T".into(), "q".into(), &impose, &mult,
 ///                              None, None, RelationSense::Equality)?;
 /// assert!(element_field::sub_material_field(
 ///     &appui.get(0)?.read(), &[]).is_err());
@@ -114,6 +115,7 @@ pub fn sub_material_field(
 /// # use pyrucast::models::elasticity::ElasticityModel;
 /// # use pyrucast::models::RelationSense;
 /// # use pyrucast::ops::{element_field, mesh};
+/// # use pyrucast::ops::model;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -124,8 +126,8 @@ pub fn sub_material_field(
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// // Les mêmes valeurs pour **tous** les sous-modèles qui demandent de la
 /// // matière ; ceux qui n'en veulent pas sont sautés sans erreur.
-/// let modele = Model::heat_conduction(&fes)?.union(
-///     &Model::dirichlet("T".into(), "q".into(), &impose, &mult,
+/// let modele = model::heat_conduction(&fes)?.union(
+///     &model::dirichlet("T".into(), "q".into(), &impose, &mult,
 ///                       None, None, RelationSense::Equality)?)?;
 /// assert_eq!(modele.len(), 2);
 /// let mat = element_field::material_field(&modele, &[("k", 1.0)])?;
@@ -171,6 +173,7 @@ pub fn material_field(
 /// # use pyrucast::models::elasticity::ElasticityModel;
 /// # use pyrucast::models::RelationSense;
 /// # use pyrucast::ops::{element_field, mesh};
+/// # use pyrucast::ops::model;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -181,8 +184,8 @@ pub fn material_field(
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// // Une liste **par sous-modèle**, quand deux physiques cohabitent et
 /// // n'attendent pas les mêmes constantes.
-/// let modele = Model::heat_conduction(&fes)?
-///     .union(&Model::elasticity(&fes, ElasticityModel::PlaneStress)?)?;
+/// let modele = model::heat_conduction(&fes)?
+///     .union(&model::elasticity(&fes, ElasticityModel::PlaneStress)?)?;
 /// let mat = element_field::material_field_per_sub_model(
 ///     &modele, &[&[("k", 1.0)], &[("E", 210e3), ("nu", 0.3)]])?;
 /// assert_eq!(mat.len(), 2);

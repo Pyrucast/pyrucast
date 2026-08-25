@@ -39,7 +39,7 @@ def _annulus(r0, r1, h, nr, nz):
 def _clamp(nodes, var, dual):
     imposed = pyrucast.mesh.poi1_from_nodes(nodes)
     multiplier = pyrucast.mesh.barycenter(imposed)
-    return pyrucast.Model.dirichlet(var, dual, imposed, multiplier)
+    return pyrucast.model.dirichlet(var, dual, imposed, multiplier)
 
 
 def test_coords_declare_the_revolution_frame():
@@ -75,7 +75,7 @@ def test_lame_thick_cylinder_under_internal_pressure():
 
     # Plane strain: u_z = 0 on both z faces.
     ends = [grid[idx(i, j)] for i in range(NR + 1) for j in (0, NZ)]
-    model = pyrucast.Model.elasticity(fes, "axisymmetric")
+    model = pyrucast.model.elasticity(fes, "axisymmetric")
     model = model | _clamp(ends, "u_y", "f_y")
     materials = pyrucast.element_field.material_field(model, [("E", E), ("nu", NU)])
 
@@ -106,7 +106,7 @@ def test_model_and_geometry_must_agree():
     _c, _grid, _mesh, axi, _idx = _annulus(1.0, 2.0, 1.0, 1, 1)
     for bad in ("plane_strain", "plane_stress"):
         try:
-            pyrucast.Model.elasticity(axi, bad)
+            pyrucast.model.elasticity(axi, bad)
         except (ValueError, RuntimeError):
             pass
         else:
@@ -117,7 +117,7 @@ def test_model_and_geometry_must_agree():
     plane = pyrucast.Mesh(c, "TRI3")
     plane.unit().add_cell([a, b, d])
     try:
-        pyrucast.Model.elasticity(pyrucast.FiniteElementSpace(plane), "axisymmetric")
+        pyrucast.model.elasticity(pyrucast.FiniteElementSpace(plane), "axisymmetric")
     except (ValueError, RuntimeError):
         pass
     else:

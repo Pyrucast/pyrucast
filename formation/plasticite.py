@@ -7,7 +7,7 @@ formation) : ``pyrucast.thermomechanics.step_by_step`` orchestre la boucle
 sur les pas de charge et, à chaque pas, un Newton **modifié** (rigidité
 élastique, accéléré par l'accélération d'Anderson).
 
-Il suffit de remplacer ``Model.elasticity`` par ``Model.plasticity`` dans
+Il suffit de remplacer ``model.elasticity`` par ``Model.plasticity`` dans
 `formation/mecanique.py` pour obtenir ce script — le même appel
 ``step_by_step`` gère la boucle non linéaire.
 
@@ -83,9 +83,9 @@ def main() -> None:
     encastrement = pc.mesh.to_poi1(bord_gauche)
     multiplicateur = pc.mesh.translate(encastrement, [0.0, 0.0])
 
-    modele = pc.Model.plasticity_perfect(fes, "plane_stress")
-    modele = modele | pc.Model.dirichlet("u_x", "f_x", encastrement, multiplicateur)
-    modele = modele | pc.Model.dirichlet("u_y", "f_y", encastrement, multiplicateur)
+    modele = pc.model.plasticity_perfect(fes, "plane_stress")
+    modele = modele | pc.model.dirichlet("u_x", "f_x", encastrement, multiplicateur)
+    modele = modele | pc.model.dirichlet("u_y", "f_y", encastrement, multiplicateur)
     materiaux = pc.element_field.material_field(
         modele, [("E", E), ("nu", NU), ("sigma_y", SIGMA_Y)]
     )

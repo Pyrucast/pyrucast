@@ -31,6 +31,7 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::ops::mesh;
+use pyrucast::ops::model;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
 
@@ -49,11 +50,11 @@ fn a_cantilever_under_a_tip_load_matches_its_closed_form() -> Result<()> {
     let fes = FiniteElementSpace::new(&mesh, Interpolation::Hermite3)?;
 
     // Clamped at A: both the deflection and the rotation are held.
-    let mut model = Model::bernoulli(&fes)?;
+    let mut model = model::bernoulli(&fes)?;
     for (var, dual) in [("w", "f_w"), ("theta", "m_theta")] {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a))?);
         let multiplier = mesh::barycenter(&imposed)?;
-        model = model.union(&Model::dirichlet(
+        model = model.union(&model::dirichlet(
             var.into(),
             dual.into(),
             &imposed,
@@ -128,11 +129,11 @@ fn a_plane_frame_carries_axial_and_bending_independently() -> Result<()> {
     mesh.add_cell(&[a.id(), b.id()])?;
     let fes = FiniteElementSpace::new(&mesh, Interpolation::Hermite3)?;
 
-    let mut model = Model::bernoulli(&fes)?;
+    let mut model = model::bernoulli(&fes)?;
     for (var, dual) in [("u_x", "f_x"), ("u_y", "f_y"), ("r_z", "m_z")] {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a))?);
         let multiplier = mesh::barycenter(&imposed)?;
-        model = model.union(&Model::dirichlet(
+        model = model.union(&model::dirichlet(
             var.into(),
             dual.into(),
             &imposed,
@@ -175,7 +176,7 @@ fn a_space_frame_twists_by_its_closed_form() -> Result<()> {
     mesh.add_cell(&[a.id(), b.id()])?;
     let fes = FiniteElementSpace::new(&mesh, Interpolation::Hermite3)?;
 
-    let mut model = Model::bernoulli(&fes)?;
+    let mut model = model::bernoulli(&fes)?;
     for (var, dual) in [
         ("u_x", "f_x"),
         ("u_y", "f_y"),
@@ -186,7 +187,7 @@ fn a_space_frame_twists_by_its_closed_form() -> Result<()> {
     ] {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a))?);
         let multiplier = mesh::barycenter(&imposed)?;
-        model = model.union(&Model::dirichlet(
+        model = model.union(&model::dirichlet(
             var.into(),
             dual.into(),
             &imposed,
@@ -257,7 +258,7 @@ fn bernoulli_and_timoshenko_differ_only_for_a_stocky_beam() -> Result<()> {
                 let imposed =
                     Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a))?);
                 let multiplier = mesh::barycenter(&imposed)?;
-                m = m.union(&Model::dirichlet(
+                m = m.union(&model::dirichlet(
                     var.into(),
                     dual.into(),
                     &imposed,
@@ -274,12 +275,12 @@ fn bernoulli_and_timoshenko_differ_only_for_a_stocky_beam() -> Result<()> {
         rhs.set_value(b.id(), "f_w", P)?;
         let rhs = NodeField::from_sub(rhs);
 
-        let bern = clamp(Model::bernoulli(&fes_bern)?)?;
+        let bern = clamp(model::bernoulli(&fes_bern)?)?;
         let bern_mat = pyrucast::ops::element_field::material_field(&bern, &[("E", E), ("I", I)])?;
         let w_bern = solve(&pyrucast::ops::matrix::stiffness(&bern, &bern_mat)?, &rhs)?
             .value(b.id(), "w")?;
 
-        let timo = clamp(Model::timoshenko(&fes)?)?;
+        let timo = clamp(model::timoshenko(&fes)?)?;
         let timo_mat = pyrucast::ops::element_field::material_field(
             &timo,
             &[("E", E), ("I", I), ("G", G), ("A_s", shear_area)],
@@ -323,11 +324,11 @@ fn beam_1d() -> Result<(
 }
 
 fn clamped_1d(a: &Node, fes: &FiniteElementSpace) -> Result<Model> {
-    let mut model = Model::bernoulli(fes)?;
+    let mut model = model::bernoulli(fes)?;
     for (var, dual) in [("w", "f_w"), ("theta", "m_theta")] {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(a))?);
         let multiplier = mesh::barycenter(&imposed)?;
-        model = model.union(&Model::dirichlet(
+        model = model.union(&model::dirichlet(
             var.into(),
             dual.into(),
             &imposed,
@@ -399,7 +400,7 @@ fn a_bernoulli_beam_has_a_consistent_mass() -> Result<()> {
 
     // 1-D.
     let (a, b, fes, _c) = beam_1d()?;
-    let model = Model::bernoulli(&fes)?;
+    let model = model::bernoulli(&fes)?;
     let mat = pyrucast::ops::element_field::material_field(
         &model,
         &[("E", E), ("I", I), ("A", AREA), ("rho", RHO)],
@@ -425,7 +426,7 @@ fn a_bernoulli_beam_has_a_consistent_mass() -> Result<()> {
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     mesh.add_cell(&[a2.id(), b2.id()])?;
     let fes2 = FiniteElementSpace::new(&mesh, Interpolation::Hermite3)?;
-    let model2 = Model::bernoulli(&fes2)?;
+    let model2 = model::bernoulli(&fes2)?;
     let mat2 = pyrucast::ops::element_field::material_field(
         &model2,
         &[("E", E), ("A", AREA), ("I", I), ("rho", RHO)],
@@ -454,7 +455,7 @@ fn a_bernoulli_beam_has_a_consistent_mass() -> Result<()> {
 #[test]
 fn only_an_axial_configuration_can_buckle() -> Result<()> {
     let (_a, _b, fes, _c) = beam_1d()?;
-    let model = Model::bernoulli(&fes)?;
+    let model = model::bernoulli(&fes)?;
     let mat = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("I", I)])?;
     let sub = pyrucast::containers::element_field::SubElementField::from_uniform_per_component(
         fes.get(0)?,
@@ -477,7 +478,7 @@ fn only_an_axial_configuration_can_buckle() -> Result<()> {
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     mesh.add_cell(&[a2.id(), b2.id()])?;
     let fes2 = FiniteElementSpace::new(&mesh, Interpolation::Hermite3)?;
-    let model2 = Model::bernoulli(&fes2)?;
+    let model2 = model::bernoulli(&fes2)?;
     let mat2 =
         pyrucast::ops::element_field::material_field(&model2, &[("E", E), ("A", 1.0), ("I", I)])?;
     let sub2 = pyrucast::containers::element_field::SubElementField::from_uniform_per_component(

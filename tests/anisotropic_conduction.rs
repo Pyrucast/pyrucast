@@ -34,6 +34,7 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::ops::mesh;
+use pyrucast::ops::model;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
 
@@ -192,7 +193,7 @@ fn patch_model(
     symmetry: MaterialSymmetry,
 ) -> Result<(Model, Vec<(pyrucast::atoms::NodeId, f64)>)> {
     let h = 1.0 / N as f64;
-    let mut model = Model::heat_conduction_with_symmetry(fes, symmetry)?;
+    let mut model = model::heat_conduction_with_symmetry(fes, symmetry)?;
     let mut multipliers = Vec::new();
     for j in 0..=N {
         for i in 0..=N {
@@ -204,7 +205,7 @@ fn patch_model(
                 Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&node))?);
             let multiplier = mesh::barycenter(&imposed)?;
             multipliers.push((multiplier.node(0, 0, 0)?.id(), i as f64 * h));
-            model = model.union(&Model::dirichlet(
+            model = model.union(&model::dirichlet(
                 "T".into(),
                 "q".into(),
                 &imposed,

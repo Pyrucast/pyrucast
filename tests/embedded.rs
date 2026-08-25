@@ -20,6 +20,7 @@ use pyrucast::handle::Handle;
 use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::ops::matrix::stiffness;
 use pyrucast::ops::mesh::barycenter;
+use pyrucast::ops::model;
 use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
@@ -168,7 +169,7 @@ fn immersed_node_follows_host_displacement_field() -> Result<()> {
         let picked: Vec<Node> = ids.iter().map(|&i| nodes[i].clone()).collect();
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(&picked)?);
         let mult = barycenter(&imposed)?;
-        Model::dirichlet(
+        model::dirichlet(
             var.into(),
             dual.into(),
             &imposed,
@@ -178,7 +179,7 @@ fn immersed_node_follows_host_displacement_field() -> Result<()> {
             Default::default(),
         )
     };
-    let mut model = Model::elasticity(&fes, ElasticityModel::Solid)?;
+    let mut model = model::elasticity(&fes, ElasticityModel::Solid)?;
     model = model.union(&clamp(&[0, 3, 4, 7], "u_x", "f_x")?)?;
     model = model.union(&clamp(&[0, 1, 4, 5], "u_y", "f_y")?)?;
     model = model.union(&clamp(&[0, 1, 2, 3], "u_z", "f_z")?)?;
@@ -187,7 +188,7 @@ fn immersed_node_follows_host_displacement_field() -> Result<()> {
     let pc = [0.4, 0.7, 0.2];
     let p = Node::create_in(coords.clone(), &pc)?;
     let bar = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&p))?);
-    model = model.union(&Model::embedded(
+    model = model.union(&model::embedded(
         &bar,
         &host,
         vec![
@@ -259,7 +260,7 @@ fn embedded_per_component_offset() -> Result<()> {
         let picked: Vec<Node> = ids.iter().map(|&i| nodes[i].clone()).collect();
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(&picked)?);
         let mult = barycenter(&imposed)?;
-        Model::dirichlet(
+        model::dirichlet(
             var.into(),
             dual.into(),
             &imposed,
@@ -269,7 +270,7 @@ fn embedded_per_component_offset() -> Result<()> {
             Default::default(),
         )
     };
-    let mut model = Model::elasticity(&fes, ElasticityModel::Solid)?;
+    let mut model = model::elasticity(&fes, ElasticityModel::Solid)?;
     model = model.union(&clamp(&[0, 3, 4, 7], "u_x", "f_x")?)?;
     model = model.union(&clamp(&[0, 1, 4, 5], "u_y", "f_y")?)?;
     model = model.union(&clamp(&[0, 1, 2, 3], "u_z", "f_z")?)?;

@@ -15,7 +15,7 @@ la loi qui transforme une déformation en contrainte dégradée.
 | `damage_sic_sic` | `d_1, d_2, d_3` | composite tissé, endommagement **orthotrope** |
 
 S'y ajoute, du côté plastique, la **plasticité poreuse** de Gurson
-(`Model.gurson`), où l'endommagement est une porosité qui rétrécit la surface de
+(`model.gurson`), où l'endommagement est une porosité qui rétrécit la surface de
 charge — voir plus bas.
 
 ## Équations continues résolues

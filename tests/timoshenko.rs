@@ -20,6 +20,7 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::ops::mesh;
+use pyrucast::ops::model;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
 
@@ -49,7 +50,7 @@ fn timoshenko_cantilever_converges_without_locking() -> Result<()> {
     let clamp = |node: &Node, var: &str, dual: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);
         let multiplier = mesh::barycenter(&imposed)?;
-        Model::dirichlet(
+        model::dirichlet(
             var.into(),
             dual.into(),
             &imposed,
@@ -59,7 +60,7 @@ fn timoshenko_cantilever_converges_without_locking() -> Result<()> {
             Default::default(),
         )
     };
-    let mut model = Model::timoshenko(&fes)?;
+    let mut model = model::timoshenko(&fes)?;
     model = model.union(&clamp(&nodes[0], "w", "f_w")?)?;
     model = model.union(&clamp(&nodes[0], "theta", "m_theta")?)?;
 
@@ -122,7 +123,7 @@ fn timoshenko_section_forces_cantilever() -> Result<()> {
     let clamp = |node: &Node, var: &str, dual: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);
         let multiplier = mesh::barycenter(&imposed)?;
-        Model::dirichlet(
+        model::dirichlet(
             var.into(),
             dual.into(),
             &imposed,
@@ -132,7 +133,7 @@ fn timoshenko_section_forces_cantilever() -> Result<()> {
             Default::default(),
         )
     };
-    let mut model = Model::timoshenko(&fes)?;
+    let mut model = model::timoshenko(&fes)?;
     model = model.union(&clamp(&nodes[0], "w", "f_w")?)?;
     model = model.union(&clamp(&nodes[0], "theta", "m_theta")?)?;
     let materials = pyrucast::ops::element_field::material_field(

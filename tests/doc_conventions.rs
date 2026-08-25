@@ -9,10 +9,10 @@ use pyrucast::aggregate::Aggregate;
 use pyrucast::atoms::{ElementType, Node};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
-use pyrucast::containers::model::Model;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::{Physics, RelationSense};
+use pyrucast::ops::model;
 use pyrucast::ops::{element_field, matrix, mesh};
 use pyrucast::Result;
 
@@ -75,12 +75,12 @@ fn un_modele_se_declare_et_s_assemble() -> Result<()> {
     // + Dirichlet à gauche. Constructeurs au niveau parent (balaient les
     // sous-espaces de `fes`), composés par `union` — on ne construit jamais
     // de `SubModel` à la main (cf. CONVENTIONS.md).
-    let hc = Model::heat_conduction(&fes)?;
+    let hc = model::heat_conduction(&fes)?;
     // Maillage des nœuds imposés + support des multiplicateurs (barycenter
     // colocalise des nœuds neufs). Le modèle ne crée aucun nœud lui-même.
     let imposed = mesh::poi1_from_nodes(std::slice::from_ref(&a))?;
     let multiplier = mesh::barycenter(&imposed)?;
-    let dir = Model::dirichlet(
+    let dir = model::dirichlet(
         "T".into(),
         "q".into(),
         &imposed,
@@ -109,7 +109,7 @@ fn filtrer_un_modele_et_sa_matrice_par_nature() -> Result<()> {
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
     mesh.add_cell(&[a.id(), b.id()])?;
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
-    let model = Model::heat_conduction(&fes)?;
+    let model = model::heat_conduction(&fes)?;
     let materials = element_field::material_field(&model, &[("k", 1.0)])?;
     let k = matrix::stiffness(&model, &materials)?;
 

@@ -24,7 +24,7 @@ NX, NY, L, H = 4, 2, 4.0, 1.0
 def _clamp(nodes, var, dual):
     imposed = pc.mesh.poi1_from_nodes(nodes)
     multiplier = pc.mesh.barycenter(imposed)
-    return pc.Model.dirichlet(var, dual, imposed, multiplier)
+    return pc.model.dirichlet(var, dual, imposed, multiplier)
 
 
 def _bar():
@@ -61,14 +61,14 @@ def test_step_by_step_free_thermal_expansion():
     th_nodes = left + right
     th_imposed = pc.mesh.poi1_from_nodes(th_nodes)
     th_mult = pc.mesh.translate(th_imposed, [0.0, 0.0])
-    thermal_dir = pc.Model.dirichlet("T", "q", th_imposed, th_mult)
+    thermal_dir = pc.model.dirichlet("T", "q", th_imposed, th_mult)
 
     # Modèle complet : conduction + élasticité (contraintes planes) + Dirichlet.
     # Mécanique : appuis simples (u_x=0 à gauche, u_y=0 en bas, valeur 0 ⇒ pas de
     # charge) ⇒ dilatation libre.
     model = (
-        pc.Model.heat_conduction(fes)
-        | pc.Model.elasticity(fes, "plane_stress")
+        pc.model.heat_conduction(fes)
+        | pc.model.elasticity(fes, "plane_stress")
         | thermal_dir
         | _clamp(left, "u_x", "f_x")
         | _clamp(bottom, "u_y", "f_y")
@@ -153,9 +153,9 @@ def test_step_by_step_returns_history_per_time():
     )
     th_mult = pc.mesh.translate(th_imposed, [0.0, 0.0])
     model = (
-        pc.Model.heat_conduction(fes)
-        | pc.Model.elasticity(fes, "plane_stress")
-        | pc.Model.dirichlet("T", "q", th_imposed, th_mult)
+        pc.model.heat_conduction(fes)
+        | pc.model.elasticity(fes, "plane_stress")
+        | pc.model.dirichlet("T", "q", th_imposed, th_mult)
         | _clamp(left, "u_x", "f_x")
         | _clamp(bottom, "u_y", "f_y")
     )

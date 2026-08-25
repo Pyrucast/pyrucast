@@ -8,7 +8,7 @@ import pyrucast
 
 def _two_zone_model():
     """Build a 3-node 2-SEG2 mesh, FE space and a model with:
-      - HC over both zones via Model.heat_conduction(fes), spanning
+      - HC over both zones via model.heat_conduction(fes), spanning
         subspace 0 (zone A) and subspace 1 (zone B);
       - a Dirichlet constraint on the leftmost node, composed with `|`.
     Sub-model order: [HC_A (model[0]), HC_B (model[1]), Dirichlet (model[2])].
@@ -25,7 +25,7 @@ def _two_zone_model():
 
     imposed = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     multiplier = pyrucast.mesh.barycenter(imposed)
-    model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.dirichlet(
+    model = pyrucast.model.heat_conduction(fes) | pyrucast.model.dirichlet(
         "T", "q", imposed, multiplier
     )
     return c, nodes, fes, model
@@ -41,7 +41,7 @@ def test_sub_model_build_material_field_uniform_value():
     mesh = pyrucast.Mesh(c, "SEG2")
     mesh.unit().add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh)
-    hc = pyrucast.Model.heat_conduction(fes)[0]
+    hc = pyrucast.model.heat_conduction(fes)[0]
 
     sub = pyrucast.element_field.sub_material_field(hc, [("k", 2.5)])
     # Pre-filled uniformly at every (cell, gauss).
@@ -54,7 +54,7 @@ def test_sub_model_build_material_field_errors_on_dirichlet():
     a = c.add_node([0.0])
     imposed = pyrucast.mesh.poi1_from_nodes([a])
     multiplier = pyrucast.mesh.barycenter(imposed)
-    dir_sub = pyrucast.Model.dirichlet("T", "q", imposed, multiplier)[0]
+    dir_sub = pyrucast.model.dirichlet("T", "q", imposed, multiplier)[0]
     with pytest.raises(RuntimeError):
         pyrucast.element_field.sub_material_field(dir_sub, [("k", 1.0)])
 
@@ -66,7 +66,7 @@ def test_sub_model_build_material_field_errors_on_empty_list():
     mesh = pyrucast.Mesh(c, "SEG2")
     mesh.unit().add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh)
-    hc = pyrucast.Model.heat_conduction(fes)[0]
+    hc = pyrucast.model.heat_conduction(fes)[0]
     with pytest.raises(RuntimeError):
         pyrucast.element_field.sub_material_field(hc, [])
 
@@ -135,12 +135,12 @@ def test_sub_model_material_components_lists_required_components():
     mesh = pyrucast.Mesh(c, "SEG2")
     mesh.unit().add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh)
-    hc = pyrucast.Model.heat_conduction(fes)[0]
+    hc = pyrucast.model.heat_conduction(fes)[0]
     assert hc.material_components() == ["k"]
 
     imposed = pyrucast.mesh.poi1_from_nodes([a])
     multiplier = pyrucast.mesh.barycenter(imposed)
-    dir_sub = pyrucast.Model.dirichlet("T", "q", imposed, multiplier)[0]
+    dir_sub = pyrucast.model.dirichlet("T", "q", imposed, multiplier)[0]
     assert dir_sub.material_components() is None
 
 
@@ -151,7 +151,7 @@ def test_sub_model_build_material_field_filters_extras_and_errors_on_missing():
     mesh = pyrucast.Mesh(c, "SEG2")
     mesh.unit().add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh)
-    hc = pyrucast.Model.heat_conduction(fes)[0]
+    hc = pyrucast.model.heat_conduction(fes)[0]
 
     # Unknown extras are dropped silently; the required "k" and the optional
     # heat-capacity components ("rho", "cp") survive when supplied.

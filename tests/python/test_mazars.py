@@ -42,7 +42,7 @@ _PARAMS = [
 
 def test_mazars_undamaged_below_threshold():
     c, nodes, fes = _unit_quad()
-    model = pyrucast.Model.mazars(fes, "plane_stress")
+    model = pyrucast.model.mazars(fes, "plane_stress")
     materials = pyrucast.element_field.material_field(model, _PARAMS)
 
     u = _uniform_strain(c, nodes, 1e-5)  # < eps_d0
@@ -57,7 +57,7 @@ def test_mazars_undamaged_below_threshold():
 
 def test_mazars_damages_in_tension():
     c, nodes, fes = _unit_quad()
-    model = pyrucast.Model.mazars(fes, "plane_stress")
+    model = pyrucast.model.mazars(fes, "plane_stress")
     materials = pyrucast.element_field.material_field(model, _PARAMS)
 
     u = _uniform_strain(c, nodes, 5e-4)  # > eps_d0
@@ -74,7 +74,7 @@ def test_mazars_rejects_inconsistent_model():
     _c, _n, fes = _unit_quad()
     for bad in ("solid", "nonsense"):
         try:
-            pyrucast.Model.mazars(fes, bad)
+            pyrucast.model.mazars(fes, bad)
         except (ValueError, RuntimeError):
             pass
         else:

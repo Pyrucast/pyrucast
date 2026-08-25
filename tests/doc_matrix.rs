@@ -16,6 +16,7 @@ use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::{Physics, RelationSense};
+use pyrucast::ops::model;
 use pyrucast::ops::{element_field, matrix, mesh, solver};
 use pyrucast::Result;
 
@@ -40,7 +41,7 @@ fn barre() -> Result<(
     let imposed = mesh::poi1_from_nodes(std::slice::from_ref(&n[0]))?;
     let mult = mesh::barycenter(&imposed)?;
     let mult_node = mult.node(0, 0, 0)?;
-    let model = Model::heat_conduction(&fes)?.union(&Model::dirichlet(
+    let model = model::heat_conduction(&fes)?.union(&model::dirichlet(
         "T".into(),
         "q".into(),
         &imposed,

@@ -87,11 +87,11 @@ def resoudre_thermique(plaque, trou):
     reconstruire un cercle séparé, qui donnerait des nœuds disjoints du
     maillage réel et un Dirichlet sans effet sur la solution."""
     fes = pc.FiniteElementSpace(plaque)
-    modele_th = pc.Model.heat_conduction(fes)
+    modele_th = pc.model.heat_conduction(fes)
 
     trou_poi1 = pc.mesh.to_poi1(trou)
     multiplicateur = pc.mesh.translate(trou_poi1, [0.0, 0.0])
-    modele_th = modele_th | pc.Model.dirichlet("T", "q", trou_poi1, multiplicateur)
+    modele_th = modele_th | pc.model.dirichlet("T", "q", trou_poi1, multiplicateur)
 
     materiaux_th = pc.element_field.material_field(modele_th, [("k", K_COND)])
     temperature_imposee = pc.NodeField(multiplicateur, ["imposed_T"])
@@ -110,9 +110,9 @@ def main() -> None:
     encastrement = pc.mesh.to_poi1(gauche)
     multiplicateur = pc.mesh.translate(encastrement, [0.0, 0.0])
 
-    modele = pc.Model.elasticity(fes, "plane_stress")
-    modele = modele | pc.Model.dirichlet("u_x", "f_x", encastrement, multiplicateur)
-    modele = modele | pc.Model.dirichlet("u_y", "f_y", encastrement, multiplicateur)
+    modele = pc.model.elasticity(fes, "plane_stress")
+    modele = modele | pc.model.dirichlet("u_x", "f_x", encastrement, multiplicateur)
+    modele = modele | pc.model.dirichlet("u_y", "f_y", encastrement, multiplicateur)
     materiaux = pc.element_field.material_field(
         modele, [("E", E), ("nu", NU), ("alpha", ALPHA)]
     )

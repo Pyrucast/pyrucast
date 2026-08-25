@@ -55,13 +55,14 @@ use crate::handle::Handle;
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::models::elasticity::ElasticityModel;
 /// # use pyrucast::ops::element_field;
+/// # use pyrucast::ops::model;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// # let modele = Model::elasticity(&fes, ElasticityModel::PlaneStress).unwrap();
+/// # let modele = model::elasticity(&fes, ElasticityModel::PlaneStress).unwrap();
 /// # let materiaux = element_field::material_field(&modele,
 /// #     &[("E", 210e3), ("nu", 0.3)]).unwrap();
 /// // La loi de comportement, intégrée point de Gauss par point de Gauss :

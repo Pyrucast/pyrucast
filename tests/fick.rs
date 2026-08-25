@@ -26,13 +26,13 @@ use pyrucast::aggregate::Aggregate;
 use pyrucast::atoms::{ElementType, Node};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
-use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::fick::{dual_var, primal_var};
 use pyrucast::models::Physics;
 use pyrucast::ops::mesh;
+use pyrucast::ops::model;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
 
@@ -65,8 +65,8 @@ fn fick_line_recovers_the_linear_profile() -> Result<()> {
     let multiplier = mesh::barycenter(&imposed)?;
     let mult = multiplier.node(0, 0, 0)?.id();
 
-    let diffusion = Model::fick(&fes, SPECIES)?;
-    let dirichlet = Model::dirichlet(
+    let diffusion = model::fick(&fes, SPECIES)?;
+    let dirichlet = model::dirichlet(
         primal_var(SPECIES),
         dual_var(SPECIES),
         &imposed,
@@ -142,7 +142,7 @@ fn diffusion_and_conduction_coexist_and_filter_apart() -> Result<()> {
     }
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
 
-    let model = Model::fick(&fes, SPECIES)?.union(&Model::heat_conduction(&fes)?)?;
+    let model = model::fick(&fes, SPECIES)?.union(&model::heat_conduction(&fes)?)?;
     assert_eq!(model.len(), 2);
 
     // One material field carrying both zones; each physics picks its own.

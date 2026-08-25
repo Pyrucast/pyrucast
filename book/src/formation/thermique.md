@@ -50,9 +50,9 @@ Chaque terme correspond à un objet du script :
 
 | Terme | pyrucast |
 |---|---|
-| \\( \int_V [B]^T \lambda [B] \\, dV \\) | `Model.heat_conduction(fes)`, assemblé par `pc.matrix.stiffness` |
-| \\( \int_{\partial V\_\phi} h [N]^T [N] \\, dS \\) | `Model.boundary_transfer(fes, [("T", "q")], "thermal")`, **dans la même matrice** |
-| \\( T = T\_{\text{imp}} \\) | `Model.dirichlet("T", "q", ...)` (multiplicateurs de Lagrange) |
+| \\( \int_V [B]^T \lambda [B] \\, dV \\) | `model.heat_conduction(fes)`, assemblé par `pc.matrix.stiffness` |
+| \\( \int_{\partial V\_\phi} h [N]^T [N] \\, dS \\) | `model.boundary_transfer(fes, [("T", "q")], "thermal")`, **dans la même matrice** |
+| \\( T = T\_{\text{imp}} \\) | `model.dirichlet("T", "q", ...)` (multiplicateurs de Lagrange) |
 | \\( \int_{\partial V\_\phi} [N]^T \phi\_{\text{imp}} \\, dS \\) | `pc.node_field.flux(fes, φ, "q")` sur des `QUA4` |
 | \\( \int_{\partial V\_\phi} [N]^T h\\,T\_f \\, dS \\) | `pc.node_field.flux(fes, h·T_ext, "q")` sur des `QUA4` |
 | \\( \int_V [N]^T q \\, dV \\) | `pc.node_field.flux(fes, q, "q")` sur des `HEX8` |
@@ -131,7 +131,7 @@ sont des nœuds de bord par définition, et `points_on_cylinder` y trouve les
 mêmes 120 nœuds que sur la peau.
 
 **Un `points_*` renvoie déjà un maillage `POI1`.** Le résultat est utilisable
-tel quel comme support d'un `Model.dirichlet`, sans passer par
+tel quel comme support d'un `model.dirichlet`, sans passer par
 `pyrucast.mesh.to_poi1`. Seul `mesh.consolidate` reste nécessaire, pour écarter le
 sous-maillage **vide** que laisse la partie du volume qui ne touche pas le trou
 (le volume en compte deux : la grille et la couronne).
@@ -167,7 +167,7 @@ se lit comme le croquis des conditions aux limites, sans annotation manuelle.
 {{#include ../../../formation/thermique.py:modele_conduction}}
 ```
 
-`Model.heat_conduction` déclare le couple de degrés de liberté « T » (primal)
+`model.heat_conduction` déclare le couple de degrés de liberté « T » (primal)
 et « q » (dual) sur tout le volume et porte le terme
 \\( \int_V [B]^T \lambda [B] \\, dV \\) ; `pc.matrix.stiffness` l'intègre
 réellement, avec le \\( \lambda \\) lu dans le champ matériau sous le nom
@@ -181,7 +181,7 @@ système résolu n'est plus \\( [K]\\{T\\} = \\{P\\} \\) mais
    \begin{Bmatrix} P \\\\ T\_{\text{imp}} \end{Bmatrix} \\]
 
 où \\( C \\) est la relation \\( T = T\_{\text{imp}} \\) sur les nœuds de
-l'alésage. D'où les **deux** maillages `POI1` donnés à `Model.dirichlet` : le
+l'alésage. D'où les **deux** maillages `POI1` donnés à `model.dirichlet` : le
 support bloqué (l'alésage, tel que `points_on_cylinder` l'a renvoyé) et un
 jumeau qui porte les inconnues \\( \lambda \\), obtenu par copie translatée de
 zéro — deux jeux de nœuds distincts, donc deux jeux d'inconnues. La solution
@@ -277,7 +277,7 @@ La convection est la seule des quatre sollicitations à toucher **les deux**
 membres du système, parce que \\( \phi \cdot n = h\\,(T - T\_f) \\) dépend de
 l'inconnue. Sa part en \\( T \\) donne \\( \int h\\,[N]^T[N] \\, dS \\), qui
 s'ajoute **dans** la matrice : ce n'est pas un système séparé, d'où le
-`Model.boundary_transfer(basse_fes, [("T", "q")], "thermal")` réuni au modèle de
+`model.boundary_transfer(basse_fes, [("T", "q")], "thermal")` réuni au modèle de
 conduction par `|`, sur les
 mêmes degrés de liberté « T » et « q ». Le blocage de l'étape 1 est repris tel
 quel, avec les mêmes deux maillages `POI1`.

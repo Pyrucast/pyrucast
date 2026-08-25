@@ -40,19 +40,19 @@ def main():
     materials = pyrucast.ElementField(fes, ["k"])
     materials[0].set_uniform("k", 1.0)
 
-    base = pyrucast.Model.heat_conduction(fes)
+    base = pyrucast.model.heat_conduction(fes)
     dual = base.dual_of("T")  # "q"
 
     # Dirichlet T(0) = 0.
     imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mult0 = pyrucast.mesh.barycenter(imposed0)
-    dirichlet = pyrucast.Model.dirichlet("T", dual, imposed0, mult0)
+    dirichlet = pyrucast.model.dirichlet("T", dual, imposed0, mult0)
 
     # MPC 1·T(node_last) − 1·T(node_0) = 1.
     mesh_last = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
     mesh_first = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mult_mpc = pyrucast.mesh.barycenter(mesh_last)
-    mpc = pyrucast.Model.mpc(
+    mpc = pyrucast.model.mpc(
         [(mesh_last, "T", dual, 1.0), (mesh_first, "T", dual, -1.0)],
         mult_mpc,
     )

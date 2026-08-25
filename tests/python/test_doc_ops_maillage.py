@@ -504,8 +504,8 @@ gauche = pyrucast.mesh.points_on_plane(plaque, [0.0, 0.0], [1.0, 0.0])
 conge = pyrucast.mesh.points_in_sphere(plaque, [1.0, 1.0], 0.2)
 
 # La sélection sert directement de support imposé à un Dirichlet — le nuage
-# POI1 est ce que `Model.dirichlet` attend (cf. Contraintes / Dirichlet).
-blocage = pyrucast.Model.dirichlet("UX", "RX", gauche, pyrucast.mesh.barycenter(gauche))
+# POI1 est ce que `model.dirichlet` attend (cf. Contraintes / Dirichlet).
+blocage = pyrucast.model.dirichlet("UX", "RX", gauche, pyrucast.mesh.barycenter(gauche))
 
 # La sortie POI1 est un maillage ordinaire : elle se rebranche sur les autres
 # opérateurs, ici pour remonter aux éléments portés par la sélection.

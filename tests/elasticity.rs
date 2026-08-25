@@ -22,6 +22,7 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::ops::mesh;
+use pyrucast::ops::model;
 use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
@@ -63,7 +64,7 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
     let roller = |nodes: &[Node], var: &str, dual: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
         let multiplier = mesh::barycenter(&imposed)?;
-        Model::dirichlet(
+        model::dirichlet(
             var.into(),
             dual.into(),
             &imposed,
@@ -75,7 +76,7 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
     };
     let left: Vec<Node> = (0..=N).map(|j| grid[idx(0, j)].clone()).collect();
     let bottom: Vec<Node> = (0..=N).map(|i| grid[idx(i, 0)].clone()).collect();
-    let mut model = Model::elasticity(&fes, ElasticityModel::PlaneStress)?;
+    let mut model = model::elasticity(&fes, ElasticityModel::PlaneStress)?;
     model = model.union(&roller(&left, "u_x", "f_x")?)?;
     model = model.union(&roller(&bottom, "u_y", "f_y")?)?;
 
@@ -115,7 +116,7 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
 fn clamp(nodes: &[Node], var: &str, dual: &str) -> Result<Model> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
     let multiplier = mesh::barycenter(&imposed)?;
-    Model::dirichlet(
+    model::dirichlet(
         var.into(),
         dual.into(),
         &imposed,
@@ -155,7 +156,7 @@ fn elasticity_unit_cube_uniaxial_tension() -> Result<()> {
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
 
     let pick = |ids: &[usize]| ids.iter().map(|&i| nodes[i].clone()).collect::<Vec<_>>();
-    let mut model = Model::elasticity(&fes, ElasticityModel::Solid)?;
+    let mut model = model::elasticity(&fes, ElasticityModel::Solid)?;
     model = model.union(&clamp(&pick(&[0, 3, 4, 7]), "u_x", "f_x")?)?; // x = 0 face
     model = model.union(&clamp(&pick(&[0, 1, 4, 5]), "u_y", "f_y")?)?; // y = 0 face
     model = model.union(&clamp(&pick(&[0, 1, 2, 3]), "u_z", "f_z")?)?; // z = 0 face

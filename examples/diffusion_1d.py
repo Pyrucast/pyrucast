@@ -61,7 +61,7 @@ def profil_stationnaire() -> None:
     multiplier = pyrucast.mesh.barycenter(imposed)
     mult = multiplier.node(0, 0, 0)
 
-    model = pyrucast.Model.fick(fes, SPECIES) | pyrucast.Model.dirichlet(
+    model = pyrucast.model.fick(fes, SPECIES) | pyrucast.model.dirichlet(
         f"c_{SPECIES}", f"j_{SPECIES}", imposed, multiplier
     )
     materials = pyrucast.element_field.material_field(model, [(f"D_{SPECIES}", D)])
@@ -99,7 +99,7 @@ def profil_stationnaire() -> None:
 def couplage_avec_la_thermique() -> None:
     """Diffusion et conduction sur le même maillage : deux physiques distinctes."""
     _c, _nodes, fes, _h = ligne(3)
-    model = pyrucast.Model.fick(fes, SPECIES) | pyrucast.Model.heat_conduction(fes)
+    model = pyrucast.model.fick(fes, SPECIES) | pyrucast.model.heat_conduction(fes)
 
     # Un seul champ matériau porte les deux jeux : l'assembleur résout chaque
     # zone par les composantes que sa physique exige (`D` ici, `k` là).

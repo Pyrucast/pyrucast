@@ -85,8 +85,8 @@ type NamedDof = (NodeId, String);
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let modele = Model::heat_conduction(&fes).unwrap()
-/// #     .union(&Model::dirichlet("T".into(), "q".into(), &impose, &mult,
+/// # let modele = model::heat_conduction(&fes).unwrap()
+/// #     .union(&model::dirichlet("T".into(), "q".into(), &impose, &mult,
 /// #                              None, None, RelationSense::GreaterEqual).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
@@ -94,6 +94,7 @@ type NamedDof = (NodeId, String);
 /// #                                      vec!["imposed_T".into()]).unwrap();
 /// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
 /// # use pyrucast::ops::solver::unilateral::{ActiveSetMethod, UnilateralOptions};
+/// # use pyrucast::ops::model;
 /// // Les deux variantes parcourent la **même** trajectoire de statuts et
 /// // convergent au même résultat ; seule diffère la façon de factoriser.
 /// let lire = |o| {
@@ -149,8 +150,8 @@ pub enum ActiveSetMethod {
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let modele = Model::heat_conduction(&fes).unwrap()
-/// #     .union(&Model::dirichlet("T".into(), "q".into(), &impose, &mult,
+/// # let modele = model::heat_conduction(&fes).unwrap()
+/// #     .union(&model::dirichlet("T".into(), "q".into(), &impose, &mult,
 /// #                              None, None, RelationSense::GreaterEqual).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
@@ -158,6 +159,7 @@ pub enum ActiveSetMethod {
 /// #                                      vec!["imposed_T".into()]).unwrap();
 /// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
 /// # use pyrucast::ops::solver::unilateral::UnilateralOptions;
+/// # use pyrucast::ops::model;
 /// // Par défaut : complément de Schur, cache actif, et une tolérance de
 /// // complémentarité qui porte **à la fois** sur le signe du multiplicateur
 /// // et sur celui du jeu.
@@ -267,6 +269,7 @@ struct ActiveSetState {
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::models::RelationSense;
 /// # use pyrucast::ops::{element_field, matrix, mesh, solver};
+/// # use pyrucast::ops::model;
 /// # let coords = Handle::new(Coords::new(1).unwrap());
 /// # let n: Vec<Node> = (0..3)
 /// #     .map(|i| Node::create_in(coords.clone(), &[i as f64 / 2.0]).unwrap())
@@ -276,8 +279,8 @@ struct ActiveSetState {
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let modele = Model::heat_conduction(&fes).unwrap()
-/// #     .union(&Model::dirichlet("T".into(), "q".into(), &impose, &mult,
+/// # let modele = model::heat_conduction(&fes).unwrap()
+/// #     .union(&model::dirichlet("T".into(), "q".into(), &impose, &mult,
 /// #                              None, None, RelationSense::GreaterEqual).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
@@ -319,8 +322,8 @@ pub fn solve(matrix: &Matrix, model: &Model, rhs: &NodeField) -> Result<NodeFiel
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let modele = Model::heat_conduction(&fes).unwrap()
-/// #     .union(&Model::dirichlet("T".into(), "q".into(), &impose, &mult,
+/// # let modele = model::heat_conduction(&fes).unwrap()
+/// #     .union(&model::dirichlet("T".into(), "q".into(), &impose, &mult,
 /// #                              None, None, RelationSense::GreaterEqual).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
@@ -328,6 +331,7 @@ pub fn solve(matrix: &Matrix, model: &Model, rhs: &NodeField) -> Result<NodeFiel
 /// #                                      vec!["imposed_T".into()]).unwrap();
 /// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
 /// # use pyrucast::ops::solver::unilateral::UnilateralOptions;
+/// # use pyrucast::ops::model;
 /// let u = solver::unilateral::solve_with_options(
 ///     &k, &modele, &charge, &UnilateralOptions::default())?;
 /// assert!(u.node_count()? > 0);
@@ -368,8 +372,8 @@ pub fn solve_with_options(
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let modele = Model::heat_conduction(&fes).unwrap()
-/// #     .union(&Model::dirichlet("T".into(), "q".into(), &impose, &mult,
+/// # let modele = model::heat_conduction(&fes).unwrap()
+/// #     .union(&model::dirichlet("T".into(), "q".into(), &impose, &mult,
 /// #                              None, None, RelationSense::GreaterEqual).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
@@ -377,6 +381,7 @@ pub fn solve_with_options(
 /// #                                      vec!["imposed_T".into()]).unwrap();
 /// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
 /// # use std::sync::atomic::{AtomicBool, Ordering};
+/// # use pyrucast::ops::model;
 /// let stop = AtomicBool::new(false);
 /// assert!(solver::unilateral::solve_cancellable(&k, &modele, &charge, &stop).is_ok());
 /// stop.store(true, Ordering::Relaxed);
@@ -416,8 +421,8 @@ pub fn solve_cancellable(
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let modele = Model::heat_conduction(&fes).unwrap()
-/// #     .union(&Model::dirichlet("T".into(), "q".into(), &impose, &mult,
+/// # let modele = model::heat_conduction(&fes).unwrap()
+/// #     .union(&model::dirichlet("T".into(), "q".into(), &impose, &mult,
 /// #                              None, None, RelationSense::GreaterEqual).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
@@ -426,6 +431,7 @@ pub fn solve_cancellable(
 /// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
 /// # use pyrucast::ops::solver::unilateral::UnilateralOptions;
 /// # use std::sync::atomic::AtomicBool;
+/// # use pyrucast::ops::model;
 /// let stop = AtomicBool::new(false);
 /// let u = solver::unilateral::solve_cancellable_with_options(
 ///     &k, &modele, &charge, &UnilateralOptions::default(), &stop)?;

@@ -174,7 +174,7 @@ def test_une_etude_complete(tmp_path):
     impose = pyrucast.Mesh(c, "POI1")
     impose.unit().add_cell([nodes[-1]])
     mult = pyrucast.mesh.barycenter(impose)
-    modele = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.dirichlet(
+    modele = pyrucast.model.heat_conduction(fes) | pyrucast.model.dirichlet(
         "T", "q", impose, mult
     )
     materiaux = pyrucast.element_field.material_field(modele, [("k", 1.0)])

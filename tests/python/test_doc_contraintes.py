@@ -39,7 +39,7 @@ def _support_et_multiplicateur(noeud):
 _, _, fes, noeuds = _barre_elastique()
 imposed, mult = _support_et_multiplicateur(noeuds[-1])
 # ANCHOR: butee
-butee = pyrucast.Model.dirichlet("u_y", "f_y", imposed, mult, sense=">=")
+butee = pyrucast.model.dirichlet("u_y", "f_y", imposed, mult, sense=">=")
 # ANCHOR_END: butee
 assert len(butee) == 1
 
@@ -50,9 +50,9 @@ _, _, fes, noeuds = _barre_elastique(dim=1)
 # les deux, un modèle qui ne tient que par sa butée ne converge pas.
 gauche, mult_g = _support_et_multiplicateur(noeuds[0])
 droite, mult_d = _support_et_multiplicateur(noeuds[-1])
-encastrement = pyrucast.Model.dirichlet("u_x", "f_x", gauche, mult_g)
-butee = pyrucast.Model.dirichlet("u_x", "f_x", droite, mult_d, sense=">=")
-model = pyrucast.Model.truss(fes) | encastrement | butee
+encastrement = pyrucast.model.dirichlet("u_x", "f_x", gauche, mult_g)
+butee = pyrucast.model.dirichlet("u_x", "f_x", droite, mult_d, sense=">=")
+model = pyrucast.model.truss(fes) | encastrement | butee
 materials = pyrucast.element_field.material_field(
     model, [("E", 210_000.0), ("A", 1e-2)]
 )
@@ -76,10 +76,10 @@ assert solution.node_count() > 0
 
 _, _, fes, noeuds = _barre_elastique()
 imposed, mult = _support_et_multiplicateur(noeuds[0])
-dual = pyrucast.Model.heat_conduction(fes).dual_of("T")
-dirichlet = pyrucast.Model.dirichlet("T", dual, imposed, mult)
+dual = pyrucast.model.heat_conduction(fes).dual_of("T")
+dirichlet = pyrucast.model.dirichlet("T", dual, imposed, mult)
 autre = pyrucast.mesh.poi1_from_nodes([noeuds[-1]])
-mpc = pyrucast.Model.mpc(
+mpc = pyrucast.model.mpc(
     [(autre, "T", dual, 1.0), (imposed, "T", dual, -1.0)],
     pyrucast.mesh.barycenter(autre),
 )
@@ -96,8 +96,8 @@ assert rhs.node_count() > 0
 _, _, fes, noeuds = _barre_elastique()
 imposed, _ = _support_et_multiplicateur(noeuds[0])
 autre = pyrucast.mesh.poi1_from_nodes([noeuds[-1]])
-dual = pyrucast.Model.heat_conduction(fes).dual_of("T")
-mpc = pyrucast.Model.mpc(
+dual = pyrucast.model.heat_conduction(fes).dual_of("T")
+mpc = pyrucast.model.mpc(
     [(autre, "T", dual, 1.0), (imposed, "T", dual, -1.0)],
     pyrucast.mesh.barycenter(autre),
 )
@@ -143,7 +143,7 @@ def _deux_blocs(N=2):
 
 def _bloquer(noeuds, var, dual):
     imposed = pyrucast.mesh.poi1_from_nodes(noeuds)
-    return pyrucast.Model.dirichlet(
+    return pyrucast.model.dirichlet(
         var, dual, imposed, pyrucast.mesh.barycenter(imposed)
     )
 
@@ -154,7 +154,7 @@ c, bas, haut, bottom, top, idx, N = _deux_blocs()
 fes = pyrucast.FiniteElementSpace(bas | haut)
 # Bloquer u_x partout et u_y sous le bloc bas : sans ces appuis le système
 # est libre en translation et l'ensemble actif se met à cycler.
-elasticite = pyrucast.Model.elasticity(fes, "plane_stress")
+elasticite = pyrucast.model.elasticity(fes, "plane_stress")
 appuis = _bloquer(bottom + top, "u_x", "f_x") | _bloquer(
     [bottom[idx(i, 0)] for i in range(N + 1)], "u_y", "f_y"
 )
@@ -171,7 +171,7 @@ for i in reversed(range(N)):
 # Esclave : nœuds du bord inférieur du bloc haut.
 slave = pyrucast.mesh.poi1_from_nodes([top[idx(i, 0)] for i in range(N + 1)])
 
-contact = pyrucast.Model.contact(slave, master, [("u_x", "f_x"), ("u_y", "f_y")])
+contact = pyrucast.model.contact(slave, master, [("u_x", "f_x"), ("u_y", "f_y")])
 model = elasticite | appuis | contact
 materials = pyrucast.element_field.material_field(model, [("E", 210.0), ("nu", 0.0)])
 
@@ -212,13 +212,13 @@ imposed_left = pyrucast.mesh.poi1_from_nodes([nodes[0]])
 imposed_right = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
 mult_mesh_left = pyrucast.mesh.barycenter(imposed_left)
 mult_mesh_right = pyrucast.mesh.barycenter(imposed_right)
-left = pyrucast.Model.dirichlet("T", "q", imposed_left, mult_mesh_left)
-right = pyrucast.Model.dirichlet("T", "q", imposed_right, mult_mesh_right)
+left = pyrucast.model.dirichlet("T", "q", imposed_left, mult_mesh_left)
+right = pyrucast.model.dirichlet("T", "q", imposed_right, mult_mesh_right)
 mult_left = mult_mesh_left.node(0, 0, 0)
 mult_right = mult_mesh_right.node(0, 0, 0)
 
 # 3) Modèle complet : conduction + les deux Dirichlet.
-model = pyrucast.Model.heat_conduction(fes) | left | right
+model = pyrucast.model.heat_conduction(fes) | left | right
 materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
 
 # 4) Chargement : le helper `constraint_rhs` désigne chaque contrainte par son
@@ -246,19 +246,19 @@ for i in range(4):
     mesh.unit().add_cell([nodes[i], nodes[i + 1]])
 fes = pyrucast.FiniteElementSpace(mesh)
 
-base = pyrucast.Model.heat_conduction(fes)
+base = pyrucast.model.heat_conduction(fes)
 dual = base.dual_of("T")  # "q"
 
 # Dirichlet T(0) = 0.
 imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
 mult0 = pyrucast.mesh.barycenter(imposed0)
-dirichlet = pyrucast.Model.dirichlet("T", dual, imposed0, mult0)
+dirichlet = pyrucast.model.dirichlet("T", dual, imposed0, mult0)
 
 # MPC 1·T(dernier) − 1·T(0) = 1.
 mesh_last = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
 mesh_first = pyrucast.mesh.poi1_from_nodes([nodes[0]])
 mult_mpc = pyrucast.mesh.barycenter(mesh_last)
-mpc = pyrucast.Model.mpc(
+mpc = pyrucast.model.mpc(
     [(mesh_last, "T", dual, 1.0), (mesh_first, "T", dual, -1.0)],
     mult_mpc,
 )
@@ -302,17 +302,17 @@ corner_nodes = [c.add_node(x) for x in corners]
 host = pyrucast.Mesh(c, "HEX8")
 host.unit().add_cell(corner_nodes)
 fes = pyrucast.FiniteElementSpace(host)
-base = pyrucast.Model.heat_conduction(fes)
+base = pyrucast.model.heat_conduction(fes)
 
 # Coins fixés au champ linéaire (Dirichlet).
 corner_mesh = pyrucast.mesh.poi1_from_nodes(corner_nodes)
 corner_mult = pyrucast.mesh.barycenter(corner_mesh)
-dirichlet = pyrucast.Model.dirichlet("T", "q", corner_mesh, corner_mult)
+dirichlet = pyrucast.model.dirichlet("T", "q", corner_mesh, corner_mult)
 
 # Nœud immergé, lié à l'hôte.
 p = c.add_node([0.3, 0.6, 0.2])
 bar = pyrucast.mesh.poi1_from_nodes([p])
-embedded = pyrucast.Model.embedded(bar, host, [("T", "q")])
+embedded = pyrucast.model.embedded(bar, host, [("T", "q")])
 emb_mult = embedded.multiplier_mesh().node(0, 0, 0)
 
 model = base | dirichlet | embedded

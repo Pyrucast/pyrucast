@@ -19,6 +19,10 @@
 //! ├── primal_vars(): Vec<String>      # union over sub-models — columns
 //! └── dual_vars():   Vec<String>      # union over sub-models — rows
 //!
+//! ops::model (operators, not Model methods) — declares the physics
+//! ├── heat_conduction(fes) -> Model          # one sub-model per subspace
+//! └── dirichlet(...)       -> Model          # composed with `union` / `|`
+//!
 //! ops::matrix (operators, not Model methods)
 //! ├── stiffness(model, materials) -> Matrix   # rows: dual × cols: primal
 //! └── mass(model)                 -> Matrix   # same DOF layout, may be empty
@@ -872,7 +876,7 @@ impl SubModel {
         Self::plasticity_with_law(fespace, model, plastic::PlasticLaw::Perfect)
     }
 
-    /// Elastoplasticity with an explicit yield law — the general constructor.
+    /// Elastoplasticity with an explicit yield law — the general form.
     /// The material each law needs is declared by
     /// [`PlasticLaw::material_components`](plastic::PlasticLaw::material_components).
     ///
@@ -2010,6 +2014,7 @@ impl crate::dump::Dump for SubModel {
 /// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::models::{Physics, RelationSense};
 /// # use pyrucast::ops::mesh;
+/// # use pyrucast::ops::model;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -2022,8 +2027,8 @@ impl crate::dump::Dump for SubModel {
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// // Un modèle se **compose** : la physique, puis les appuis. Chaque
 /// // sous-modèle garde sa nature, ce qui permet de les retrouver ensuite.
-/// let m = Model::heat_conduction(&fes)?.union(
-///     &Model::dirichlet("T".into(), "q".into(), &impose, &mult,
+/// let m = model::heat_conduction(&fes)?.union(
+///     &model::dirichlet("T".into(), "q".into(), &impose, &mult,
 ///                       None, None, RelationSense::Equality)?)?;
 /// assert_eq!(m.len(), 2);
 /// assert_eq!(m.filter(Physics::Thermal)?.len(), 1);
@@ -2074,1009 +2079,6 @@ impl Model {
 }
 
 impl Model {
-    /// Heat-conduction `Model` spanning **every** subspace of `fes` — one
-    /// [`SubModel::HeatConduction`] sub-model per [`SubFiniteElementSpace`].
-    ///
-    /// This is the parent-level named constructor (see `CONVENTIONS.md`):
-    /// it consumes the FE-space *parent* and returns a `Model`, so the
-    /// caller never builds a `SubModel` by hand. A single-subspace `fes`
-    /// yields the unit case; several subspaces yield one zone each.
-    /// Compose heterogeneous physics with `union` (Python `|`), e.g.
-    /// `Model::heat_conduction(&fes)?.union(&Model::dirichlet(...)?)?`.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::{Model, SubModel};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::models::{Physics, RelationSense};
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let maillage = Mesh::from_submesh(sm);
-    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// // Un sous-modèle par sous-espace : le modèle couvre **tout** l'espace EF.
-    /// let m = Model::heat_conduction(&fes)?;
-    /// assert_eq!(m.len(), fes.len());
-    /// assert_eq!(m.primal_vars()?, vec!["T".to_string()]);
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn heat_conduction(fes: &FiniteElementSpace) -> Result<Self> {
-        Self::heat_conduction_with_symmetry(fes, MaterialSymmetry::Isotropic)
-    }
-
-    /// Heat-conduction `Model` spanning **every** subspace of `fes`, with an
-    /// explicit material symmetry. Parent-level named constructor; the
-    /// conductivity (`k`, or `k_1…` / `k_11…` plus the material axes) is supplied
-    /// at assembly time.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::{Model, SubModel};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::models::{Physics, RelationSense};
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let maillage = Mesh::from_submesh(sm);
-    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// let m = Model::heat_conduction_with_symmetry(&fes, MaterialSymmetry::Orthotropic)?;
-    /// assert_eq!(m.len(), fes.len());
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn heat_conduction_with_symmetry(
-        fes: &FiniteElementSpace,
-        symmetry: MaterialSymmetry,
-    ) -> Result<Self> {
-        let mut model = Self::empty();
-        for sub in fes {
-            model.add_sub(Handle::new(SubModel::heat_conduction_with_symmetry(
-                sub.clone(),
-                symmetry,
-            )?))?;
-        }
-        Ok(model)
-    }
-
-    /// Fickian-diffusion `Model` spanning **every** subspace of `fes`,
-    /// **isotropic**. Parent-level named constructor; the diffusivity is
-    /// supplied at assembly time.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::{Model, SubModel};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::models::{Physics, RelationSense};
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let maillage = Mesh::from_submesh(sm);
-    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// let m = Model::fick(&fes, "H2")?;
-    /// assert_eq!(m.primal_vars()?, vec!["c_H2".to_string()]);
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn fick(fes: &FiniteElementSpace, species: &str) -> Result<Self> {
-        Self::fick_with_symmetry(fes, MaterialSymmetry::Isotropic, species)
-    }
-
-    /// Fickian-diffusion `Model` spanning **every** subspace of `fes`, with an
-    /// explicit material symmetry (the same for all). The diffusivity (`D`, or
-    /// `D_1…` / `D_11…` plus the material axes) is supplied at assembly time.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::{Model, SubModel};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::models::{Physics, RelationSense};
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let maillage = Mesh::from_submesh(sm);
-    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// let m = Model::fick_with_symmetry(&fes, MaterialSymmetry::Orthotropic, "H2")?;
-    /// assert_eq!(m.dual_vars()?, vec!["j_H2".to_string()]);
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn fick_with_symmetry(
-        fes: &FiniteElementSpace,
-        symmetry: MaterialSymmetry,
-        species: &str,
-    ) -> Result<Self> {
-        let mut model = Self::empty();
-        for sub in fes {
-            model.add_sub(Handle::new(SubModel::fick_with_symmetry(
-                sub.clone(),
-                symmetry,
-                species,
-            )?))?;
-        }
-        Ok(model)
-    }
-
-    /// Radiation-to-infinity `Model` spanning **every** subspace of a *boundary*
-    /// `fes`. Parent-level named constructor; the emissivity and far-field
-    /// temperature are supplied at assembly time.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::{Model, SubModel};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::models::{Physics, RelationSense};
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let maillage = Mesh::from_submesh(sm);
-    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// // Le rayonnement s'unione à la conduction : mêmes DDL, donc mêmes blocs.
-    /// let m = Model::heat_conduction(&fes)?.union(&Model::radiation(&fes)?)?;
-    /// assert_eq!(m.primal_vars()?, vec!["T".to_string()]);
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn radiation(fes: &FiniteElementSpace) -> Result<Self> {
-        let mut model = Self::empty();
-        for sub in fes {
-            model.add_sub(Handle::new(SubModel::radiation(sub.clone())?))?;
-        }
-        Ok(model)
-    }
-
-    /// Euler-Bernoulli beam `Model` spanning **every** subspace of `fes`.
-    /// Parent-level named constructor; material is supplied at assembly time.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::{Model, SubModel};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::models::{Physics, RelationSense};
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let maillage = Mesh::from_submesh(sm);
-    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// # use pyrucast::atoms::Interpolation;
-    /// # let mut b = SubMesh::new(coords.clone(), ElementType::SEG2);
-    /// # b.add_cell(&[n[0].id(), n[1].id()])?;
-    /// let poutres = FiniteElementSpace::new(&Mesh::from_submesh(b), Interpolation::Hermite3)?;
-    /// let m = Model::bernoulli(&poutres)?;
-    /// assert_eq!(m.len(), 1);
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn bernoulli(fes: &FiniteElementSpace) -> Result<Self> {
-        let mut out = Self::empty();
-        for sub in fes {
-            out.add_sub(Handle::new(SubModel::bernoulli(sub.clone())?))?;
-        }
-        Ok(out)
-    }
-
-    /// Shell `Model` spanning **every** subspace of a *surface* `fes`.
-    /// Parent-level named constructor; material is supplied at assembly time.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::Model;
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::shell::ShellModel;
-    /// # let coords = Handle::new(Coords::new(3).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
-    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
-    /// let m = Model::shell(&fes, ShellModel::Thick)?;
-    /// assert_eq!(m.len(), fes.len());
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn shell(fes: &FiniteElementSpace, model: shell::ShellModel) -> Result<Self> {
-        let mut out = Self::empty();
-        for sub in fes {
-            out.add_sub(Handle::new(SubModel::shell(sub.clone(), model)?))?;
-        }
-        Ok(out)
-    }
-
-    /// Follower-pressure `Model` spanning **every** subspace of a *boundary*
-    /// `fes`. Parent-level named constructor; `p` is supplied at assembly time.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::{Model, SubModel};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::models::{Physics, RelationSense};
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let maillage = Mesh::from_submesh(sm);
-    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// # let mut bord = SubMesh::new(coords.clone(), ElementType::SEG2);
-    /// # bord.add_cell(&[n[0].id(), n[1].id()])?;
-    /// # let fes_bord = FiniteElementSpace::lagrange1(&Mesh::from_submesh(bord))?;
-    /// let m = Model::follower_pressure(&fes_bord)?;
-    /// assert_eq!(m.len(), 1);
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn follower_pressure(fes: &FiniteElementSpace) -> Result<Self> {
-        let mut model = Self::empty();
-        for sub in fes {
-            model.add_sub(Handle::new(SubModel::follower_pressure(sub.clone())?))?;
-        }
-        Ok(model)
-    }
-
-    /// Interface-exchange `Model` between two conforming boundary FE spaces —
-    /// one [`SubModel::InterfaceTransfer`] per subspace pair, taken in order.
-    /// Parent-level named constructor; the coefficients `h_<primal>` are
-    /// supplied at assembly time.
-    ///
-    /// The two spaces must hold the **same number** of subspaces: an interface
-    /// pairs zone with zone, and a mismatch is a modelling error, not something
-    /// to resolve by convention.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::{Model, SubModel};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::models::{Physics, RelationSense};
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let maillage = Mesh::from_submesh(sm);
-    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// # let mut bord = SubMesh::new(coords.clone(), ElementType::SEG2);
-    /// # bord.add_cell(&[n[0].id(), n[1].id()])?;
-    /// # let fes_bord = FiniteElementSpace::lagrange1(&Mesh::from_submesh(bord))?;
-    /// let m = Model::interface_transfer(
-    ///     &fes_bord, &fes_bord, vec![("T".into(), "q".into())], Physics::Thermal, 1e-6)?;
-    /// assert_eq!(m.len(), 1);
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn interface_transfer(
-        side_a: &FiniteElementSpace,
-        side_b: &FiniteElementSpace,
-        components: Vec<(String, String)>,
-        physics: Physics,
-        tol: f64,
-    ) -> Result<Self> {
-        if side_a.len() != side_b.len() {
-            return Err(PyrucastError::Message(format!(
-                "interface_transfer: the two sides must hold the same number of FE subspaces \
-                 — {} facing {}",
-                side_a.len(),
-                side_b.len()
-            )));
-        }
-        let mut model = Self::empty();
-        for (a, b) in side_a.into_iter().zip(side_b) {
-            model.add_sub(Handle::new(SubModel::interface_transfer(
-                a.clone(),
-                b.clone(),
-                components.clone(),
-                physics,
-                tol,
-            )?))?;
-        }
-        Ok(model)
-    }
-
-    /// Surface exchange `Model` spanning **every** subspace of a *boundary*
-    /// `fes` — one [`SubModel::BoundaryTransfer`] per
-    /// [`SubFiniteElementSpace`]. Parent-level named constructor; the
-    /// coefficients `h_<primal>` are supplied at assembly time. Couples into the
-    /// bulk physics whose DOFs it names:
-    ///
-    /// ```text
-    /// Model::heat_conduction(&bulk)?.union(
-    ///     &Model::boundary_transfer(&skin, vec![("T".into(), "q".into())], Physics::Thermal)?)?
-    /// ```
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::{Model, SubModel};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::models::{Physics, RelationSense};
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let maillage = Mesh::from_submesh(sm);
-    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// # let mut bord = SubMesh::new(coords.clone(), ElementType::SEG2);
-    /// # bord.add_cell(&[n[0].id(), n[1].id()])?;
-    /// # let fes_bord = FiniteElementSpace::lagrange1(&Mesh::from_submesh(bord))?;
-    /// let m = Model::boundary_transfer(
-    ///     &fes_bord, vec![("T".into(), "q".into())], Physics::Thermal)?;
-    /// assert_eq!(m.primal_vars()?, vec!["T".to_string()]);
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn boundary_transfer(
-        fes: &FiniteElementSpace,
-        components: Vec<(String, String)>,
-        physics: Physics,
-    ) -> Result<Self> {
-        let mut model = Self::empty();
-        for sub in fes {
-            model.add_sub(Handle::new(SubModel::boundary_transfer(
-                sub.clone(),
-                components.clone(),
-                physics,
-            )?))?;
-        }
-        Ok(model)
-    }
-
-    /// Truss / bar `Model` spanning **every** subspace of `fes` — one
-    /// [`SubModel::Truss`] per [`SubFiniteElementSpace`]. Parent-level named
-    /// constructor; material (`E`, `A`) is supplied at assembly time.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::{Model, SubModel};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::models::{Physics, RelationSense};
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let maillage = Mesh::from_submesh(sm);
-    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// # let mut b = SubMesh::new(coords.clone(), ElementType::SEG2);
-    /// # b.add_cell(&[n[0].id(), n[1].id()])?;
-    /// # let barres = FiniteElementSpace::lagrange1(&Mesh::from_submesh(b))?;
-    /// let m = Model::truss(&barres)?;
-    /// assert_eq!(m.primal_vars()?, vec!["u_x".to_string(), "u_y".to_string()]);
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn truss(fes: &FiniteElementSpace) -> Result<Self> {
-        let mut model = Self::empty();
-        for sub in fes {
-            model.add_sub(Handle::new(SubModel::truss(sub.clone())?))?;
-        }
-        Ok(model)
-    }
-
-    /// Linear-elasticity `Model` spanning **every** subspace of `fes` (same
-    /// 2-D/3-D `model` for all). Parent-level named constructor; material
-    /// (`E`, `nu`) is supplied at assembly time.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::{Model, SubModel};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::models::{Physics, RelationSense};
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let maillage = Mesh::from_submesh(sm);
-    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// let m = Model::elasticity(&fes, ElasticityModel::PlaneStress)?;
-    /// assert_eq!(m.dual_vars()?, vec!["f_x".to_string(), "f_y".to_string()]);
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn elasticity(fes: &FiniteElementSpace, model: ElasticityModel) -> Result<Self> {
-        Self::elasticity_with_symmetry(fes, model, MaterialSymmetry::Isotropic)
-    }
-
-    /// Linear-elasticity `Model` spanning **every** subspace of `fes`, with an
-    /// explicit material symmetry. Parent-level named constructor; the elastic
-    /// constants and, for an oriented material, its axes are supplied at assembly
-    /// time.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::{Model, SubModel};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::models::{Physics, RelationSense};
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let maillage = Mesh::from_submesh(sm);
-    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// let m = Model::elasticity_with_symmetry(
-    ///     &fes, ElasticityModel::PlaneStress, MaterialSymmetry::Orthotropic)?;
-    /// assert_eq!(m.len(), fes.len());
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn elasticity_with_symmetry(
-        fes: &FiniteElementSpace,
-        model: ElasticityModel,
-        symmetry: MaterialSymmetry,
-    ) -> Result<Self> {
-        let mut out = Self::empty();
-        for sub in fes {
-            out.add_sub(Handle::new(SubModel::elasticity_with_symmetry(
-                sub.clone(),
-                model,
-                symmetry,
-            )?))?;
-        }
-        Ok(out)
-    }
-
-    /// **Perfect** von Mises plasticity `Model` spanning **every** subspace of `fes` (same
-    /// 2-D/3-D `model` for all). Parent-level named constructor; material
-    /// (`E`, `nu`, `sigma_y`) is supplied at assembly / integration time.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::{Model, SubModel};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::models::{Physics, RelationSense};
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let maillage = Mesh::from_submesh(sm);
-    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// let m = Model::plasticity_perfect(&fes, ElasticityModel::PlaneStrain)?;
-    /// assert_eq!(m.primal_vars()?, vec!["u_x".to_string(), "u_y".to_string()]);
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn plasticity_perfect(fes: &FiniteElementSpace, model: ElasticityModel) -> Result<Self> {
-        Self::plasticity_with_law(fes, model, plastic::PlasticLaw::Perfect)
-    }
-
-    /// Elastoplastic `Model` spanning **every** subspace of `fes`, with an
-    /// explicit yield law (von Mises perfect or hardening, Drucker-Prager,
-    /// Ottosen). Parent-level named constructor; the material each law needs is
-    /// supplied at assembly / integration time.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::{Model, SubModel};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::models::{Physics, RelationSense};
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let maillage = Mesh::from_submesh(sm);
-    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// # use pyrucast::models::plastic::PlasticLaw;
-    /// let m = Model::plasticity_with_law(
-    ///     &fes, ElasticityModel::PlaneStrain, PlasticLaw::Perfect)?;
-    /// assert_eq!(m.len(), fes.len());
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn plasticity_with_law(
-        fes: &FiniteElementSpace,
-        model: ElasticityModel,
-        law: plastic::PlasticLaw,
-    ) -> Result<Self> {
-        let mut out = Self::empty();
-        for sub in fes {
-            out.add_sub(Handle::new(SubModel::plasticity_with_law(
-                sub.clone(),
-                model,
-                law,
-            )?))?;
-        }
-        Ok(out)
-    }
-
-    /// Mazars-damage `Model` spanning **every** subspace of `fes` (same 2-D/3-D
-    /// `model` for all). Parent-level named constructor; material
-    /// (`E`, `nu`, `eps_d0`, `A_t`, `B_t`, `A_c`, `B_c`) is supplied at assembly
-    /// / integration time.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::{Model, SubModel};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::models::{Physics, RelationSense};
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let maillage = Mesh::from_submesh(sm);
-    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// let m = Model::mazars(&fes, ElasticityModel::PlaneStress)?;
-    /// assert_eq!(m.len(), fes.len());
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn mazars(fes: &FiniteElementSpace, model: ElasticityModel) -> Result<Self> {
-        Self::damage_with_law(fes, model, damage::DamageLaw::Mazars)
-    }
-
-    /// Damage `Model` spanning **every** subspace of `fes`, with an explicit
-    /// law. Parent-level named constructor; the material each law needs is
-    /// supplied at assembly / integration time.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::{Model, SubModel};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::models::{Physics, RelationSense};
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let maillage = Mesh::from_submesh(sm);
-    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// # use pyrucast::models::damage::DamageLaw;
-    /// let m = Model::damage_with_law(&fes, ElasticityModel::PlaneStress, DamageLaw::Mazars)?;
-    /// assert_eq!(m.len(), fes.len());
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn damage_with_law(
-        fes: &FiniteElementSpace,
-        model: ElasticityModel,
-        law: damage::DamageLaw,
-    ) -> Result<Self> {
-        let mut out = Self::empty();
-        for sub in fes {
-            out.add_sub(Handle::new(SubModel::damage_with_law(
-                sub.clone(),
-                model,
-                law,
-            )?))?;
-        }
-        Ok(out)
-    }
-
-    /// Timoshenko-beam `Model` spanning **every** subspace of `fes`.
-    /// Parent-level named constructor; material (`E`, `I`, `G`, `A_s`) is
-    /// supplied at assembly time.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::{Model, SubModel};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::models::{Physics, RelationSense};
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let maillage = Mesh::from_submesh(sm);
-    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// # use pyrucast::atoms::Interpolation;
-    /// # let mut b = SubMesh::new(coords.clone(), ElementType::SEG2);
-    /// # b.add_cell(&[n[0].id(), n[1].id()])?;
-    /// let poutres =
-    ///     FiniteElementSpace::new(&Mesh::from_submesh(b), Interpolation::ModelEmbedded)?;
-    /// let m = Model::timoshenko(&poutres)?;
-    /// assert_eq!(m.len(), 1);
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn timoshenko(fes: &FiniteElementSpace) -> Result<Self> {
-        let mut out = Self::empty();
-        for sub in fes {
-            out.add_sub(Handle::new(SubModel::timoshenko(sub.clone())?))?;
-        }
-        Ok(out)
-    }
-
-    /// Dirichlet `Model` (a single sub-model) constraining `imposed_variable`
-    /// on the nodes of `imposed_mesh` via Lagrange multipliers carried by
-    /// `multiplier_mesh`. Parent-level named constructor — see
-    /// [`SubModel::dirichlet`] for the semantics of the four variable names
-    /// and the two meshes.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::{Model, SubModel};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::models::{Physics, RelationSense};
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let maillage = Mesh::from_submesh(sm);
-    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// // Le modèle complet d'un problème thermique : la physique, puis l'appui.
-    /// let m = Model::heat_conduction(&fes)?.union(
-    ///     &Model::dirichlet("T".into(), "q".into(), &impose, &mult,
-    ///                       None, None, RelationSense::Equality)?)?;
-    /// assert_eq!(m.len(), 2);
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    #[allow(clippy::too_many_arguments)]
-    pub fn dirichlet(
-        imposed_variable: String,
-        target_dual: String,
-        imposed_mesh: &Mesh,
-        multiplier_mesh: &Mesh,
-        multiplier: Option<String>,
-        imposed_value: Option<String>,
-        sense: RelationSense,
-    ) -> Result<Self> {
-        let mut model = Self::empty();
-        model.add_sub(Handle::new(SubModel::dirichlet(
-            imposed_variable,
-            target_dual,
-            imposed_mesh,
-            multiplier_mesh,
-            multiplier,
-            imposed_value,
-            sense,
-        )?))?;
-        Ok(model)
-    }
-
-    /// Multi-point constraint `Model` (a single sub-model) imposing a linear
-    /// relation per relation via Lagrange multipliers. Parent-level named
-    /// constructor — see [`SubModel::mpc`] and [`mpc::Mpc::new`] for the
-    /// mesh-per-term layout and the two variable names.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::{Model, SubModel};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::models::{Physics, RelationSense};
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let maillage = Mesh::from_submesh(sm);
-    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// # use pyrucast::models::mpc::MpcTerm;
-    /// # let a = mesh::poi1_from_nodes(&n[..1])?;
-    /// # let b = mesh::poi1_from_nodes(&n[1..2])?;
-    /// let m = Model::mpc(
-    ///     vec![MpcTerm::new(&a, "T".into(), "q".into(), 1.0)?,
-    ///          MpcTerm::new(&b, "T".into(), "q".into(), -1.0)?],
-    ///     &mult, None, None, RelationSense::Equality)?;
-    /// assert_eq!(m.len(), 1);
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn mpc(
-        terms: Vec<mpc::MpcTerm>,
-        multiplier_mesh: &Mesh,
-        multiplier: Option<String>,
-        imposed_value: Option<String>,
-        sense: RelationSense,
-    ) -> Result<Self> {
-        let mut model = Self::empty();
-        model.add_sub(Handle::new(SubModel::mpc(
-            terms,
-            multiplier_mesh,
-            multiplier,
-            imposed_value,
-            sense,
-        )?))?;
-        Ok(model)
-    }
-
-    /// Embedded (immersed) constraint `Model` (a single sub-model) tying each
-    /// node of `immersed` to the interpolation of `host` at that node, for every
-    /// `(variable, target_dual)` in `components`. Parent-level named constructor
-    /// — see [`SubModel::embedded`] and [`embedded::Embedded::new`] for the
-    /// coupling weights, the per-component variable names and the errors.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::{Model, SubModel};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::models::{Physics, RelationSense};
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let maillage = Mesh::from_submesh(sm);
-    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// # let mut barre = SubMesh::new(coords.clone(), ElementType::SEG2);
-    /// # let p: Vec<_> = [[0.25, 0.25], [0.5, 0.25]].iter()
-    /// #     .map(|q| Node::create_in(coords.clone(), q).unwrap()).collect();
-    /// # barre.add_cell(&[p[0].id(), p[1].id()])?;
-    /// # let immergee = Mesh::from_submesh(barre);
-    /// let m = Model::embedded(
-    ///     &immergee, &maillage,
-    ///     vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
-    ///     None, None, None)?;
-    /// assert_eq!(m.len(), 1);
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    #[allow(clippy::too_many_arguments)]
-    pub fn embedded(
-        immersed: &Mesh,
-        host: &Mesh,
-        components: Vec<(String, String)>,
-        multipliers: Option<Vec<String>>,
-        imposed_values: Option<Vec<String>>,
-        tol: Option<f64>,
-    ) -> Result<Self> {
-        let mut model = Self::empty();
-        model.add_sub(Handle::new(SubModel::embedded(
-            immersed,
-            host,
-            components,
-            multipliers,
-            imposed_values,
-            tol,
-        )?))?;
-        Ok(model)
-    }
-
-    /// Node-to-surface contact `Model` (a single sub-model) preventing the
-    /// nodes of `slave` from penetrating the oriented `master` surface.
-    /// Parent-level named constructor — see [`SubModel::contact`] and
-    /// [`contact::Contact::new`] for the pairing, the normal coupling and the
-    /// errors. Solve with [`unilateral`](crate::ops::solver::unilateral).
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::{Model, SubModel};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::models::{Physics, RelationSense};
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let maillage = Mesh::from_submesh(sm);
-    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// # let mut maitre = SubMesh::new(coords.clone(), ElementType::SEG2);
-    /// # maitre.add_cell(&[n[0].id(), n[1].id()])?;
-    /// # let master = Mesh::from_submesh(maitre);
-    /// # let slave = mesh::poi1_from_nodes(&n[2..3])?;
-    /// let m = Model::contact(
-    ///     &slave, &master,
-    ///     vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
-    ///     None, None)?;
-    /// assert_eq!(m.len(), 1);
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn contact(
-        slave: &Mesh,
-        master: &Mesh,
-        components: Vec<(String, String)>,
-        multiplier: Option<String>,
-        imposed_value: Option<String>,
-    ) -> Result<Self> {
-        let mut model = Self::empty();
-        model.add_sub(Handle::new(SubModel::contact(
-            slave,
-            master,
-            components,
-            multiplier,
-            imposed_value,
-        )?))?;
-        Ok(model)
-    }
-
     /// The contact right-hand side `−g₀`: a [`NodeField`] carrying, at each
     /// contact multiplier node's `imposed_value` slot, minus the initial signed
     /// gap of its relation — the load a contact model needs so that
@@ -3097,6 +2099,7 @@ impl Model {
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -3111,14 +2114,14 @@ impl Model {
     /// # maitre.add_cell(&[n[0].id(), n[1].id()])?;
     /// # let master = Mesh::from_submesh(maitre);
     /// # let slave = mesh::poi1_from_nodes(&n[2..3])?;
-    /// let contact = Model::contact(
+    /// let contact = model::contact(
     ///     &slave, &master,
     ///     vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
     ///     None, None)?;
     /// // Le second membre −g₀ du contact, prêt à unioner au chargement.
     /// assert_eq!(contact.contact_gaps()?.node_count()?, 1);
     /// // Sur un modèle sans contact, la question n'a pas de réponse.
-    /// assert!(Model::heat_conduction(&fes)?.contact_gaps().is_err());
+    /// assert!(model::heat_conduction(&fes)?.contact_gaps().is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn contact_gaps(&self) -> Result<NodeField> {
@@ -3154,7 +2157,7 @@ impl Model {
     /// POI1 [`Mesh`] of every constraint multiplier node across the model
     /// (shares the multiplier submeshes — zero-copy). Empty for a model with no
     /// constraint. The handle to the multipliers of a constraint that minted
-    /// them itself (e.g. [`embedded`](Self::embedded), whose multiplier mesh is
+    /// them itself (e.g. [`embedded`](crate::ops::model::embedded()), whose multiplier mesh is
     /// internal): read the nodes or build the load field on it.
     ///
     /// ```
@@ -3169,6 +2172,7 @@ impl Model {
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -3179,8 +2183,8 @@ impl Model {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// let m = Model::heat_conduction(&fes)?.union(
-    ///     &Model::dirichlet("T".into(), "q".into(), &impose, &mult,
+    /// let m = model::heat_conduction(&fes)?.union(
+    ///     &model::dirichlet("T".into(), "q".into(), &impose, &mult,
     ///                       None, None, RelationSense::Equality)?)?;
     /// // Les multiplicateurs de **toutes** les contraintes du modèle, partagés.
     /// assert!(m.multiplier_mesh()?.node(0, 0, 0).is_ok());
@@ -3215,6 +2219,7 @@ impl Model {
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -3225,7 +2230,7 @@ impl Model {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// let m = Model::elasticity(&fes, ElasticityModel::PlaneStress)?;
+    /// let m = model::elasticity(&fes, ElasticityModel::PlaneStress)?;
     /// // Le dual conjugué, cherché sur l'ensemble des sous-modèles.
     /// assert_eq!(m.dual_of("u_y")?, Some("f_y".into()));
     /// assert_eq!(m.dual_of("T")?, None);
@@ -3242,8 +2247,8 @@ impl Model {
 
     /// Build the constraint load (right-hand side) from `(constrained_node, g)`
     /// pairs — the model-level entry point of the mise-en-donnée helper. The
-    /// model must hold **exactly one** constraint sub-model (as returned by the
-    /// `dirichlet` / `mpc` constructors); it delegates to
+    /// model must hold **exactly one** constraint sub-model (as returned by
+    /// `model::dirichlet` / `model::mpc`); it delegates to
     /// [`SubModel::constraint_rhs`], whose doc describes the node keying and the
     /// returned field.
     ///
@@ -3270,8 +2275,9 @@ impl Model {
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # use pyrucast::containers::field::SubField;
-    /// let m = Model::heat_conduction(&fes)?.union(
-    ///     &Model::dirichlet("T".into(), "q".into(), &impose, &mult,
+    /// # use pyrucast::ops::model;
+    /// let m = model::heat_conduction(&fes)?.union(
+    ///     &model::dirichlet("T".into(), "q".into(), &impose, &mult,
     ///                       None, None, RelationSense::Equality)?)?;
     /// // Le chargement de contrainte du modèle entier, à unioner au chargement.
     /// let rhs = m.constraint_rhs(&[(n[0].id(), 100.0)])?;
@@ -3299,6 +2305,7 @@ impl Model {
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -3309,7 +2316,7 @@ impl Model {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// let m = Model::dirichlet("T".into(), "q".into(), &impose, &mult,
+    /// let m = model::dirichlet("T".into(), "q".into(), &impose, &mult,
     ///                          None, None, RelationSense::Equality)?;
     /// // Les indices courent sur les relations, contrainte par contrainte.
     /// assert!(m.constraint_rhs_by_index(&[(0, 100.0)]).is_ok());
@@ -3358,6 +2365,7 @@ impl Model {
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -3369,8 +2377,8 @@ impl Model {
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// // L'union des primales de tous les sous-modèles, dédupliquée.
-    /// let m = Model::heat_conduction(&fes)?
-    ///     .union(&Model::elasticity(&fes, ElasticityModel::PlaneStress)?)?;
+    /// let m = model::heat_conduction(&fes)?
+    ///     .union(&model::elasticity(&fes, ElasticityModel::PlaneStress)?)?;
     /// assert_eq!(m.primal_vars()?,
     ///            vec!["T".to_string(), "u_x".to_string(), "u_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -3399,6 +2407,7 @@ impl Model {
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -3409,8 +2418,8 @@ impl Model {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// let m = Model::heat_conduction(&fes)?
-    ///     .union(&Model::elasticity(&fes, ElasticityModel::PlaneStress)?)?;
+    /// let m = model::heat_conduction(&fes)?
+    ///     .union(&model::elasticity(&fes, ElasticityModel::PlaneStress)?)?;
     /// assert_eq!(m.dual_vars()?,
     ///            vec!["q".to_string(), "f_x".to_string(), "f_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -3427,8 +2436,9 @@ impl Model {
     /// behaviour subspace of each domain sub-model (constraints, which have
     /// none, are skipped), in order — **one subspace per domain sub-model**, a
     /// 1-to-1 correspondence (no deduplication). Subspace handles are **shared**,
-    /// not copied. This is the exact inverse of the per-subspace constructors
-    /// (`Model::elasticity(fes)` and friends build one sub-model per subspace).
+    /// not copied. This is the exact inverse of the per-subspace operators of
+    /// [`crate::ops::model`] (`model::elasticity(fes)` and friends build one
+    /// sub-model per subspace).
     /// Errors if the model has no domain sub-model (nothing to integrate on).
     /// Combined with [`FiniteElementSpace::mesh`], lets a caller recover the FE
     /// space (and mesh) from the model alone; a single sub-model's own subspace
@@ -3446,6 +2456,7 @@ impl Model {
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -3458,7 +2469,7 @@ impl Model {
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// // L'espace EF est **déduit** du modèle : c'est ce qui permet aux
     /// // opérateurs d'assemblage de ne recevoir que le modèle.
-    /// let m = Model::heat_conduction(&fes)?;
+    /// let m = model::heat_conduction(&fes)?;
     /// assert_eq!(m.fespace()?.len(), fes.len());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -3498,6 +2509,7 @@ impl Model {
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -3508,8 +2520,8 @@ impl Model {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// let m = Model::heat_conduction(&fes)?
-    ///     .union(&Model::elasticity(&fes, ElasticityModel::PlaneStress)?)?;
+    /// let m = model::heat_conduction(&fes)?
+    ///     .union(&model::elasticity(&fes, ElasticityModel::PlaneStress)?)?;
     /// // Extraire une physique du modèle multi-physique — les sous-modèles
     /// // sont **partagés**, pas copiés.
     /// assert_eq!(m.filter(Physics::Thermal)?.primal_vars()?, vec!["T".to_string()]);
@@ -3565,6 +2577,7 @@ mod tests {
     use crate::coords::Coords;
     use crate::handle::Handle;
     use crate::models::owned_components;
+    use crate::ops::model;
 
     /// Returns `(coords, a_id, b_id, model, materials)`.
     fn build_seg2_heat_model(
@@ -3880,11 +2893,11 @@ mod tests {
         assert_eq!(m.n_cols().unwrap(), 0);
     }
 
-    /// Parent-level `Model::heat_conduction(&fes)` builds one sub-model per
+    /// Parent-level `model::heat_conduction(&fes)` builds one sub-model per
     /// subspace and matches the hand-rolled `SubModel` + `add_sub` path, and
     /// `union` composes it with a Dirichlet `Model`.
     #[test]
-    fn parent_constructors_span_subspaces_and_compose() {
+    fn parent_operators_span_subspaces_and_compose() {
         let coords = Handle::new(Coords::new(1).unwrap());
         let n0 = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let n1 = Node::create_in(coords.clone(), &[1.0]).unwrap();
@@ -3907,7 +2920,7 @@ mod tests {
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 
         // One HeatConduction sub-model per subspace.
-        let hc = Model::heat_conduction(&fes).unwrap();
+        let hc = model::heat_conduction(&fes).unwrap();
         assert_eq!(hc.len(), 2);
         assert_eq!(hc.primal_vars().unwrap(), vec!["T".to_string()]);
         assert_eq!(hc.dual_vars().unwrap(), vec!["q".to_string()]);
@@ -3915,7 +2928,7 @@ mod tests {
         // Compose with a Dirichlet model via `union` (Python `|`).
         let imp = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&n0)).unwrap());
         let mlt = crate::ops::mesh::barycenter(&imp).unwrap();
-        let dir = Model::dirichlet(
+        let dir = model::dirichlet(
             "T".into(),
             "q".into(),
             &imp,
@@ -3943,7 +2956,7 @@ mod tests {
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        let model = Model::heat_conduction(&fes).unwrap();
+        let model = model::heat_conduction(&fes).unwrap();
         assert_eq!(model.len(), 1);
     }
 
@@ -4086,7 +3099,7 @@ mod tests {
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
         let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
-        let dirichlet = Model::dirichlet(
+        let dirichlet = model::dirichlet(
             "T".into(),
             "q".into(),
             &imposed,
@@ -4120,7 +3133,7 @@ mod tests {
             crate::models::mpc::MpcTerm::new(&mesh_b, "T".into(), "q".into(), 1.0).unwrap(),
             crate::models::mpc::MpcTerm::new(&mesh_a, "T".into(), "q".into(), -1.0).unwrap(),
         ];
-        let model = Model::mpc(terms, &mult, None, None, Default::default()).unwrap();
+        let model = model::mpc(terms, &mult, None, None, Default::default()).unwrap();
         let mult_id = mult.node(0, 0, 0).unwrap().id();
 
         let rhs = model.constraint_rhs(&[(b.id(), 2.5)]).unwrap();
@@ -4166,7 +3179,7 @@ mod tests {
             crate::models::mpc::MpcTerm::new(&t1_mesh, "T".into(), "q".into(), 1.0).unwrap(),
             crate::models::mpc::MpcTerm::new(&t2_mesh, "T".into(), "q".into(), -1.0).unwrap(),
         ];
-        let model = Model::mpc(terms, &mult, None, None, Default::default()).unwrap();
+        let model = model::mpc(terms, &mult, None, None, Default::default()).unwrap();
 
         // `a` keys both relations → ambiguous.
         assert!(model.constraint_rhs(&[(a.id(), 1.0)]).is_err());
@@ -4190,7 +3203,7 @@ mod tests {
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
         let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
-        let dirichlet = Model::dirichlet(
+        let dirichlet = model::dirichlet(
             "T".into(),
             "q".into(),
             &imposed,

@@ -20,6 +20,7 @@
 //! `CellGeom::det_j_w` and nothing else.
 
 use criterion::{criterion_group, criterion_main, Criterion};
+use pyrucast::ops::model;
 // `black_box` vient de `std` depuis criterion 0.8, qui a déprécié le sien.
 use std::hint::black_box;
 
@@ -106,7 +107,7 @@ fn elasticity_grid_with(n: usize, model_kind: ElasticityModel) -> Grid {
         }
     }
     let fespace = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    let model = Model::elasticity(&fespace, model_kind).unwrap();
+    let model = model::elasticity(&fespace, model_kind).unwrap();
     let materials = material_field(&model, &[("E", 210e9), ("nu", 0.3)]).unwrap();
 
     // A smooth displacement field u = (0.01·x, −0.005·y) → constant strain.

@@ -18,5 +18,6 @@ pub mod field;
 pub mod matrix;
 pub mod measure;
 pub mod mesh;
+pub mod model;
 pub mod node_field;
 pub mod solver;

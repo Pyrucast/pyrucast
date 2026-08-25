@@ -33,6 +33,7 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::Physics;
 use pyrucast::ops::mesh;
+use pyrucast::ops::model;
 use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
@@ -140,7 +141,7 @@ fn a_non_conforming_interface_is_rejected() -> Result<()> {
     let (a0, a1) = (node(1.0, 0.0)?, node(1.0, 1.0)?);
     // The facing edge sits at x = 1.5: the two sides do not describe one surface.
     let (b0, b1) = (node(1.5, 0.0)?, node(1.5, 1.0)?);
-    let err = Model::interface_transfer(
+    let err = model::interface_transfer(
         &edge(&a0, &a1)?,
         &edge(&b0, &b1)?,
         vec![(format!("c_{SPECIES}"), format!("j_{SPECIES}"))],
@@ -205,16 +206,16 @@ fn two_square_model(h: f64) -> Result<(Geometry, Model, ElementField)> {
     ])?);
     let multiplier = mesh::barycenter(&imposed)?;
 
-    let model = Model::fick(&square(&left)?, SPECIES)?
-        .union(&Model::fick(&square(&right)?, SPECIES)?)?
-        .union(&Model::interface_transfer(
+    let model = model::fick(&square(&left)?, SPECIES)?
+        .union(&model::fick(&square(&right)?, SPECIES)?)?
+        .union(&model::interface_transfer(
             &face_left,
             &face_right,
             vec![(format!("c_{SPECIES}"), format!("j_{SPECIES}"))],
             Physics::Diffusion,
             1e-9,
         )?)?
-        .union(&Model::dirichlet(
+        .union(&model::dirichlet(
             format!("c_{SPECIES}"),
             format!("j_{SPECIES}"),
             &imposed,

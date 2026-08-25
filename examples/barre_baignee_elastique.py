@@ -4,7 +4,7 @@ Le cas qui motive le baignage : un nœud immergé suit les **déplacements** de
 l'interpolation volumique, en x, y **et** z. Un cube HEX8 en traction uniaxiale
 (élasticité 3-D) a le champ linéaire `u_x = (S/E)x`, `u_y = −(νS/E)y`,
 `u_z = −(νS/E)z` ; un nœud immergé au cœur, lié à l'hôte par
-`Model.embedded(..., [("u_x","f_x"), ("u_y","f_y"), ("u_z","f_z")])`, retrouve ce
+`model.embedded(..., [("u_x","f_x"), ("u_y","f_y"), ("u_z","f_z")])`, retrouve ce
 champ à sa position — sans que la barre et le volume partagent de nœud.
 
 Lancer : `python examples/barre_baignee_elastique.py` (après `maturin develop`).
@@ -36,14 +36,14 @@ def main():
     host = pyrucast.Mesh(c, "HEX8")
     host.unit().add_cell(nodes)
     fes = pyrucast.FiniteElementSpace(host)
-    model = pyrucast.Model.elasticity(fes, "solid")
+    model = pyrucast.model.elasticity(fes, "solid")
 
     # Appuis de symétrie sur les trois faces passant par l'origine.
     def clamp(ids, var, dual):
         picked = [nodes[i] for i in ids]
         imposed = pyrucast.mesh.poi1_from_nodes(picked)
         mult = pyrucast.mesh.barycenter(imposed)
-        return pyrucast.Model.dirichlet(var, dual, imposed, mult)
+        return pyrucast.model.dirichlet(var, dual, imposed, mult)
 
     model = model | clamp([0, 3, 4, 7], "u_x", "f_x")  # face x = 0
     model = model | clamp([0, 1, 4, 5], "u_y", "f_y")  # face y = 0
@@ -53,7 +53,7 @@ def main():
     pc = [0.4, 0.7, 0.2]
     p = c.add_node(pc)
     bar = pyrucast.mesh.poi1_from_nodes([p])
-    embedded = pyrucast.Model.embedded(
+    embedded = pyrucast.model.embedded(
         bar,
         host,
         [("u_x", "f_x"), ("u_y", "f_y"), ("u_z", "f_z")],

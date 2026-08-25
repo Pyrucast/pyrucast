@@ -17,7 +17,7 @@ normale. Le modèle se résout avec
 [`solve_unilateral`](../operateurs/solveur.md) ; le multiplicateur `λ ≤ 0`
 porte la réaction de contact (`λ = 0` quand la paire est décollée).
 
-Implémentation : `src/models/contact.rs` ; constructeur `Model::contact(…)`.
+Implémentation : `src/models/contact.rs` ; opérateur `ops::model::contact(…)`.
 
 ## Appariement à la construction (petits glissements)
 
@@ -53,7 +53,7 @@ Toutes les relations partagent la paire de variables du sous-modèle
 Signature complète :
 
 ```text
-Model.contact(slave, master, components, multiplier=None, imposed_value=None)
+model.contact(slave, master, components, multiplier=None, imposed_value=None)
 # components : une paire (variable, target_dual) PAR dimension d'espace,
 #              dans l'ordre ambiant, p.ex. [("u_x","f_x"), ("u_y","f_y")]
 ```

@@ -34,7 +34,7 @@ def _two_squares():
 
 def test_interface_declares_its_variables_and_material():
     _c, left, right, _square, edge = _two_squares()
-    model = pyrucast.Model.interface_transfer(
+    model = pyrucast.model.interface_transfer(
         edge(left[1], left[2]),
         edge(right[0], right[3]),
         [("c_H2", "j_H2")],
@@ -48,7 +48,7 @@ def test_interface_declares_its_variables_and_material():
 
 def test_thermal_variant_is_a_contact_resistance():
     _c, left, right, _square, edge = _two_squares()
-    model = pyrucast.Model.interface_transfer(
+    model = pyrucast.model.interface_transfer(
         edge(left[1], left[2]), edge(right[0], right[3]), [("T", "q")], "thermal"
     )
     assert model[0].primal_vars() == ["T"]
@@ -65,7 +65,7 @@ def test_a_mechanical_joint_transfers_several_quantities_at_once():
     of finite stiffness — one coefficient per direction, and no new physics.
     """
     _c, left, right, _square, edge = _two_squares()
-    model = pyrucast.Model.interface_transfer(
+    model = pyrucast.model.interface_transfer(
         edge(left[1], left[2]),
         edge(right[0], right[3]),
         [("u_x", "f_x"), ("u_y", "f_y")],
@@ -90,7 +90,7 @@ def test_a_non_conforming_interface_is_rejected():
     # A construction-time modelling error surfaces as `RuntimeError`; only the
     # tag parsing (a bad argument) is a `ValueError`.
     try:
-        pyrucast.Model.interface_transfer(
+        pyrucast.model.interface_transfer(
             edge(a), edge(b), [("c_H2", "j_H2")], "diffusion"
         )
     except RuntimeError as exc:
@@ -102,7 +102,7 @@ def test_a_non_conforming_interface_is_rejected():
 def test_an_unknown_physics_is_rejected():
     _c, left, right, _square, edge = _two_squares()
     try:
-        pyrucast.Model.interface_transfer(
+        pyrucast.model.interface_transfer(
             edge(left[1], left[2]),
             edge(right[0], right[3]),
             [("c_H2", "j_H2")],
@@ -118,7 +118,7 @@ def test_transferring_nothing_is_rejected():
     """A law that transfers nothing has no matrix and no coefficient."""
     _c, left, right, _square, edge = _two_squares()
     try:
-        pyrucast.Model.interface_transfer(
+        pyrucast.model.interface_transfer(
             edge(left[1], left[2]), edge(right[0], right[3]), [], "diffusion"
         )
     except RuntimeError as exc:
@@ -138,15 +138,15 @@ def test_the_field_jumps_by_q_over_h():
     multiplier = pyrucast.mesh.barycenter(imposed)
 
     model = (
-        pyrucast.Model.fick(square(left), "H2")
-        | pyrucast.Model.fick(square(right), "H2")
-        | pyrucast.Model.interface_transfer(
+        pyrucast.model.fick(square(left), "H2")
+        | pyrucast.model.fick(square(right), "H2")
+        | pyrucast.model.interface_transfer(
             edge(left[1], left[2]),
             edge(right[0], right[3]),
             [("c_H2", "j_H2")],
             "diffusion",
         )
-        | pyrucast.Model.dirichlet("c_H2", "j_H2", imposed, multiplier)
+        | pyrucast.model.dirichlet("c_H2", "j_H2", imposed, multiplier)
     )
     materials = pyrucast.element_field.material_field(
         model, [("D_H2", d), ("h_c_H2", h)]

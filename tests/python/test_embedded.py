@@ -1,4 +1,4 @@
-"""Python tests for the embedded (immersed) constraint (`Model.embedded`).
+"""Python tests for the embedded (immersed) constraint (`model.embedded`).
 
 An embedded constraint ties each node of an immersed mesh to the interpolation
 of a host mesh at that node, via Lagrange multipliers — a bar « baignée » in a
@@ -37,17 +37,17 @@ def test_immersed_node_follows_host_interpolation():
     fes = pyrucast.FiniteElementSpace(host)
     materials = pyrucast.ElementField(fes, ["k"])
     materials[0].set_uniform("k", 1.0)
-    base = pyrucast.Model.heat_conduction(fes)
+    base = pyrucast.model.heat_conduction(fes)
 
     # Dirichlet pinning all eight corners to the linear field.
     corner_mesh = pyrucast.mesh.poi1_from_nodes(corners)
     corner_mult = pyrucast.mesh.barycenter(corner_mesh)
-    dirichlet = pyrucast.Model.dirichlet("T", "q", corner_mesh, corner_mult)
+    dirichlet = pyrucast.model.dirichlet("T", "q", corner_mesh, corner_mult)
 
     # Immersed node inside the cube, tied to the host.
     p = c.add_node([0.3, 0.6, 0.2])
     bar = pyrucast.mesh.poi1_from_nodes([p])
-    embedded = pyrucast.Model.embedded(bar, host, [("T", "q")])
+    embedded = pyrucast.model.embedded(bar, host, [("T", "q")])
     emb_mult = embedded.multiplier_mesh().node(0, 0, 0)
 
     model = base | dirichlet | embedded
@@ -80,7 +80,7 @@ def test_node_outside_host_is_rejected():
     outside = c.add_node([5.0, 5.0, 5.0])
     bar = pyrucast.mesh.poi1_from_nodes([outside])
     try:
-        pyrucast.Model.embedded(bar, host, [("T", "q")])
+        pyrucast.model.embedded(bar, host, [("T", "q")])
         assert False, "expected an error for a node outside the host"
     except Exception:
         pass

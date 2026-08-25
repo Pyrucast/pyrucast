@@ -7,7 +7,7 @@ def _clamp(nodes, var, dual):
     """Homogeneous Dirichlet (u = 0) on `var` over `nodes`."""
     imposed = pyrucast.mesh.poi1_from_nodes(nodes)
     multiplier = pyrucast.mesh.barycenter(imposed)
-    return pyrucast.Model.dirichlet(var, dual, imposed, multiplier)
+    return pyrucast.model.dirichlet(var, dual, imposed, multiplier)
 
 
 def test_plane_stress_uniaxial_tension():
@@ -35,7 +35,7 @@ def test_plane_stress_uniaxial_tension():
 
     left = [grid[idx(0, j)] for j in range(N + 1)]
     bottom = [grid[idx(i, 0)] for i in range(N + 1)]
-    model = pyrucast.Model.elasticity(fes, "plane_stress")
+    model = pyrucast.model.elasticity(fes, "plane_stress")
     model = model | _clamp(left, "u_x", "f_x")
     model = model | _clamp(bottom, "u_y", "f_y")
 
@@ -70,7 +70,7 @@ def test_elasticity_rejects_inconsistent_model():
     # 2-D space cannot be "solid", and "nonsense" is not a model.
     for bad in ("solid", "nonsense"):
         try:
-            pyrucast.Model.elasticity(fes, bad)
+            pyrucast.model.elasticity(fes, bad)
         except (ValueError, RuntimeError):
             pass
         else:

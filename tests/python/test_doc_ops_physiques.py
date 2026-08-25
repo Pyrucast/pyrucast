@@ -32,7 +32,7 @@ def _modele_dirichlet(fes, noeud):
     """Conduction + une température imposée, et le nœud-multiplicateur."""
     imposed = pyrucast.mesh.poi1_from_nodes([noeud])
     mult = pyrucast.mesh.barycenter(imposed)
-    model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.dirichlet(
+    model = pyrucast.model.heat_conduction(fes) | pyrucast.model.dirichlet(
         "T", "q", imposed, mult
     )
     return model, mult, mult.node(0, 0, 0)
@@ -96,7 +96,7 @@ _, _, fes, noeuds = _barre_thermique()
 imposed = pyrucast.mesh.poi1_from_nodes([noeuds[0]])
 mult = pyrucast.mesh.barycenter(imposed)
 mult_node = mult.node(0, 0, 0)
-model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.dirichlet(
+model = pyrucast.model.heat_conduction(fes) | pyrucast.model.dirichlet(
     "T", "q", imposed, mult, sense=">="
 )
 materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
@@ -117,7 +117,7 @@ assert abs(solution.value(noeuds[0], "T") - sol2.value(noeuds[0], "T")) < 1e-9
 # ── boucle pas a pas ───────────────────────────────────────
 
 _, _, fes, n = _plaque_2d()
-model = pyrucast.Model.plasticity_perfect(fes, "plane_stress")
+model = pyrucast.model.plasticity_perfect(fes, "plane_stress")
 materials = pyrucast.element_field.material_field(
     model, [("E", 210_000.0), ("nu", 0.3), ("sigma_y", 250.0)]
 )
@@ -138,7 +138,7 @@ assert len(state) == 1
 
 _, mesh, _, noeuds = _barre_thermique(dim=2)
 fes = pyrucast.FiniteElementSpace(mesh, interpolation="MODEL_EMBEDDED")
-model = pyrucast.Model.timoshenko(fes)
+model = pyrucast.model.timoshenko(fes)
 materials = pyrucast.element_field.material_field(
     model,
     [("E", 210_000.0), ("G", 80_000.0), ("A", 1e-2), ("I", 1e-4), ("A_s", 8e-3)],
@@ -157,7 +157,7 @@ assert len(forces) == 1
 # ── forces internes ────────────────────────────────────────
 
 _, _, fes, n = _plaque_2d()
-model = pyrucast.Model.elasticity(fes, "plane_stress")
+model = pyrucast.model.elasticity(fes, "plane_stress")
 materials = pyrucast.element_field.material_field(model, [("E", 210.0), ("nu", 0.3)])
 support = pyrucast.mesh.poi1_from_nodes(n)
 solution = pyrucast.NodeField(support, ["u_x", "u_y"])
@@ -178,8 +178,8 @@ def _deux_modeles():
     """Un modèle thermique et un modèle élastique, montés hors de l'ancre."""
     _, _, fes, _ = _plaque_2d()
     return (
-        pyrucast.Model.heat_conduction(fes),
-        pyrucast.Model.elasticity(fes, "plane_stress"),
+        pyrucast.model.heat_conduction(fes),
+        pyrucast.model.elasticity(fes, "plane_stress"),
     )
 
 
@@ -210,7 +210,7 @@ import math
 _, _, fes, _ = _plaque_2d()
 cos_a, sin_a = math.cos(0.3), math.sin(0.3)
 # ANCHOR: orthotrope
-model = pyrucast.Model.heat_conduction(fes, symmetry="orthotropic")
+model = pyrucast.model.heat_conduction(fes, symmetry="orthotropic")
 materials = pyrucast.element_field.material_field(
     model,
     [("k_1", 12.0), ("k_2", 3.0), ("k_3", 12.0), ("V1X", cos_a), ("V1Y", sin_a)],
@@ -222,7 +222,7 @@ assert len(materials) == 1
 
 _, _, bord_fes, _ = _barre_thermique()
 # ANCHOR: boundary_transfer
-pyrucast.Model.boundary_transfer(bord_fes, [("T", "q")], "thermal")
+pyrucast.model.boundary_transfer(bord_fes, [("T", "q")], "thermal")
 # ANCHOR_END: boundary_transfer
 
 # ── Diffusion ───────────────────────────────────────────────────────────────
@@ -232,7 +232,7 @@ pyrucast.Model.boundary_transfer(bord_fes, [("T", "q")], "thermal")
 
 _, _, fes, _ = _plaque_2d()
 # ANCHOR: fick
-model = pyrucast.Model.fick(fes, "H2") | pyrucast.Model.heat_conduction(fes)
+model = pyrucast.model.fick(fes, "H2") | pyrucast.model.heat_conduction(fes)
 materials = pyrucast.element_field.material_field(model, [("D_H2", 2.0), ("k", 5.0)])
 k = pyrucast.matrix.stiffness(model, materials)
 
@@ -255,7 +255,7 @@ def _plaque_et_bord():
 
 volume, bord, _, _ = _plaque_et_bord()
 # ANCHOR: radiation
-model = pyrucast.Model.heat_conduction(volume) | pyrucast.Model.radiation(bord)
+model = pyrucast.model.heat_conduction(volume) | pyrucast.model.radiation(bord)
 materials = pyrucast.element_field.material_field(
     model, [("k", 20.0), ("emis", 0.8), ("T_inf", 300.0)]
 )
@@ -287,9 +287,9 @@ def _deux_corps_en_vis_a_vis():
 gauche, droite, face_gauche, face_droite = _deux_corps_en_vis_a_vis()
 # ANCHOR: interface_transfer
 model = (
-    pyrucast.Model.fick(gauche, "H2")
-    | pyrucast.Model.fick(droite, "H2")
-    | pyrucast.Model.interface_transfer(
+    pyrucast.model.fick(gauche, "H2")
+    | pyrucast.model.fick(droite, "H2")
+    | pyrucast.model.interface_transfer(
         face_gauche, face_droite, [("c_H2", "j_H2")], "diffusion"
     )
 )
@@ -306,18 +306,18 @@ _, _, face_gauche, face_droite = _deux_corps_en_vis_a_vis()
 semelle = peau
 # ANCHOR: echanges
 # Film thermique : entre dans la raideur d'une conduction.
-model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.boundary_transfer(
+model = pyrucast.model.heat_conduction(fes) | pyrucast.model.boundary_transfer(
     peau, [("T", "q")], "thermal"
 )
 materials = pyrucast.element_field.material_field(model, [("k", 5.0), ("h_T", 12.0)])
 
 # Résistance de contact entre deux maillages.
-joint = pyrucast.Model.interface_transfer(
+joint = pyrucast.model.interface_transfer(
     face_gauche, face_droite, [("T", "q")], "thermal"
 )
 
 # Fondation élastique : la même loi, sur des déplacements.
-appui = pyrucast.Model.boundary_transfer(
+appui = pyrucast.model.boundary_transfer(
     semelle, [("u_x", "f_x"), ("u_y", "f_y")], "mechanical"
 )
 # ANCHOR_END: echanges

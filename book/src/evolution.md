@@ -95,7 +95,7 @@ La politique stockée peut être **surchargée à l'appel** :
 ## Construction
 
 Deux voies, le constructeur haut niveau n'étant que du sucre au-dessus du
-primitif bas niveau (motif `Model.heat_conduction(fes)` / `SubModel` + `|`) :
+primitif bas niveau (motif `model.heat_conduction(fes)` / `SubModel` + `|`) :
 
 - **temps-major (haut niveau)** — `Evolution([(t0, champ0), (t1, champ1), …])`
   avec un `NodeField` / `ElementField` / flottant **complet** par pas ; les

@@ -19,6 +19,7 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::ops::mesh;
+use pyrucast::ops::model;
 use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::unilateral;
 use pyrucast::Result;
@@ -60,7 +61,7 @@ fn block(coords: &Handle<Coords>, y0: f64) -> Result<(Vec<Node>, SubMesh)> {
 fn clamp(nodes: &[Node], var: &str, dual: &str) -> Result<Model> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
     let multiplier = mesh::barycenter(&imposed)?;
-    Model::dirichlet(
+    model::dirichlet(
         var.into(),
         dual.into(),
         &imposed,
@@ -103,7 +104,7 @@ fn two_blocks() -> Result<TwoBlocks> {
     let slave_nodes_v: Vec<Node> = (0..=N).map(|i| top[idx(i, 0)].clone()).collect();
     let slave = Mesh::from_submesh(SubMesh::poi1_from_nodes(&slave_nodes_v)?);
 
-    let contact = Model::contact(
+    let contact = model::contact(
         &slave,
         &master,
         vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
@@ -115,7 +116,7 @@ fn two_blocks() -> Result<TwoBlocks> {
     let all_nodes: Vec<Node> = bottom.iter().chain(top.iter()).cloned().collect();
     let bottom_edge: Vec<Node> = (0..=N).map(|i| bottom[idx(i, 0)].clone()).collect();
 
-    let mut model = Model::elasticity(&fes, ElasticityModel::PlaneStress)?;
+    let mut model = model::elasticity(&fes, ElasticityModel::PlaneStress)?;
     model = model.union(&clamp(&all_nodes, "u_x", "f_x")?)?;
     model = model.union(&clamp(&bottom_edge, "u_y", "f_y")?)?;
     model = model.union(&contact)?;
@@ -298,7 +299,7 @@ fn contact_3d_two_cubes() -> Result<()> {
     let slave_nodes: Vec<Node> = top[0..4].to_vec();
     let slave = Mesh::from_submesh(SubMesh::poi1_from_nodes(&slave_nodes)?);
 
-    let contact = Model::contact(
+    let contact = model::contact(
         &slave,
         &master,
         vec![
@@ -312,7 +313,7 @@ fn contact_3d_two_cubes() -> Result<()> {
 
     // Uniaxial column: u_x = u_y = 0 everywhere, u_z = 0 at the base.
     let all_nodes: Vec<Node> = bottom.iter().chain(top.iter()).cloned().collect();
-    let mut model = Model::elasticity(&fes, ElasticityModel::Solid)?;
+    let mut model = model::elasticity(&fes, ElasticityModel::Solid)?;
     model = model.union(&clamp(&all_nodes, "u_x", "f_x")?)?;
     model = model.union(&clamp(&all_nodes, "u_y", "f_y")?)?;
     model = model.union(&clamp(&bottom[0..4], "u_z", "f_z")?)?;

@@ -34,7 +34,7 @@ L, PY, PZ, MX, N = 1.0, 1.0, 1.0, 1.0, 2
 def _clamp(node, var, dual):
     imposed = pyrucast.mesh.poi1_from_nodes([node])
     multiplier = pyrucast.mesh.barycenter(imposed)
-    return pyrucast.Model.dirichlet(var, dual, imposed, multiplier)
+    return pyrucast.model.dirichlet(var, dual, imposed, multiplier)
 
 
 def main() -> None:
@@ -44,7 +44,7 @@ def main() -> None:
     mesh = pyrucast.mesh.line(base, tip, N)  # console le long de X (`line`)
     fes = pyrucast.FiniteElementSpace(mesh, interpolation="MODEL_EMBEDDED")
 
-    model = pyrucast.Model.timoshenko(fes)
+    model = pyrucast.model.timoshenko(fes)
     for var, dual in (
         ("u_x", "f_x"),
         ("u_y", "f_y"),

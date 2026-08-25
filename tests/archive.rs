@@ -14,6 +14,7 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::error::Result;
 use pyrucast::handle::Handle;
+use pyrucast::ops::model;
 
 fn tmp(name: &str) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!("pyrucast_archive_{}", std::process::id()));
@@ -341,7 +342,6 @@ fn a_handle_alone_cannot_be_serialized() -> Result<()> {
 #[test]
 fn a_whole_study_makes_the_round_trip() -> Result<()> {
     use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    use pyrucast::containers::model::Model;
     use pyrucast::ops::solver::lu::solve;
 
     const K: f64 = 1.0;
@@ -365,7 +365,7 @@ fn a_whole_study_makes_the_round_trip() -> Result<()> {
     ))?);
     let multiplier = pyrucast::ops::mesh::barycenter(&imposed)?;
     let mult = multiplier.node(0, 0, 0)?.id();
-    let model = Model::heat_conduction(&fes)?.union(&Model::dirichlet(
+    let model = model::heat_conduction(&fes)?.union(&model::dirichlet(
         "T".into(),
         "q".into(),
         &imposed,

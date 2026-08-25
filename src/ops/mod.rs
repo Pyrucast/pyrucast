@@ -10,6 +10,7 @@
 //! `interp_to_gauss`, not in [`mesh`] nor in [`node_field`].
 //!
 //! - [`mesh`] — meshers, transforms, selections: everything yielding a `Mesh`.
+//! - [`model`] — the physics declarations: everything yielding a `Model`.
 //! - [`node_field`] — nodal derivations and nodal assembly.
 //! - [`element_field`] — kinematics, material data, constitutive law.
 //! - [`matrix`] — the assemblers proper (`stiffness`, `mass`, `tangent`, …).
@@ -48,10 +49,12 @@
 //! [`node_field::consolidate`](fn@node_field::consolidate) and [`element_field::consolidate`](fn@element_field::consolidate), rather
 //! than three suffixed functions in one place.
 //!
-//! Nothing here produces a `Model`, a `FiniteElementSpace` or an
-//! `Evolution`, and that is not an oversight: those are **declared**
-//! through named constructors on the type itself, never built by
-//! transformation.
+//! Nothing here produces a `FiniteElementSpace` or an `Evolution`, and that
+//! is not an oversight: those are **declared** through named constructors on
+//! the type itself, never built by transformation. A `Model` is not in that
+//! company: its declarations form a *catalogue* of physics — two dozen of
+//! them and growing — which is a module's job, not a type's surface. They
+//! live in [`model`], filed by product like every other operator.
 
 pub mod coords;
 pub mod element_field;
@@ -61,6 +64,7 @@ pub mod geom;
 pub mod matrix;
 pub mod measure;
 pub mod mesh;
+pub mod model;
 pub mod node_field;
 pub mod solver;
 

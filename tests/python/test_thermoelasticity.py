@@ -19,7 +19,7 @@ NX, NY, L, H = 4, 2, 4.0, 1.0
 def _clamp(nodes, var, dual):
     imposed = pyrucast.mesh.poi1_from_nodes(nodes)
     multiplier = pyrucast.mesh.barycenter(imposed)
-    return pyrucast.Model.dirichlet(var, dual, imposed, multiplier)
+    return pyrucast.model.dirichlet(var, dual, imposed, multiplier)
 
 
 def _bar():
@@ -83,7 +83,7 @@ def test_fully_constrained_bar_thermal_stress():
     right = [grid[idx(NX, j)] for j in range(NY + 1)]
     bottom = [grid[idx(i, 0)] for i in range(NX + 1)]
 
-    model = pyrucast.Model.elasticity(fes, "plane_stress")
+    model = pyrucast.model.elasticity(fes, "plane_stress")
     model = model | _clamp(left, "u_x", "f_x")
     model = model | _clamp(right, "u_x", "f_x")
     model = model | _clamp(bottom, "u_y", "f_y")
@@ -120,7 +120,7 @@ def test_free_bar_expands_without_stress():
     left = [grid[idx(0, j)] for j in range(NY + 1)]
     bottom = [grid[idx(i, 0)] for i in range(NX + 1)]
 
-    model = pyrucast.Model.elasticity(fes, "plane_stress")
+    model = pyrucast.model.elasticity(fes, "plane_stress")
     model = model | _clamp(left, "u_x", "f_x")
     model = model | _clamp(bottom, "u_y", "f_y")
 

@@ -39,7 +39,7 @@ impl PyCoords {
     /// necessarily 2, so it takes no argument.
     ///
     /// Every FE space built on it integrates over the full ring; mechanics adds
-    /// the hoop strain through `Model.elasticity(fes, "axisymmetric")`.
+    /// the hoop strain through `model.elasticity(fes, "axisymmetric")`.
     #[classmethod]
     fn axisymmetric(_cls: &pyo3::Bound<'_, pyo3::types::PyType>) -> PyResult<Self> {
         Ok(Self {

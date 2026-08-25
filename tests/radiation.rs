@@ -32,6 +32,7 @@ use pyrucast::handle::Handle;
 use pyrucast::models::radiation::STEFAN_BOLTZMANN;
 use pyrucast::models::Physics;
 use pyrucast::ops::element_field;
+use pyrucast::ops::model;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
 
@@ -161,7 +162,7 @@ fn a_slab_settles_at_the_imposed_temperature() -> Result<()> {
     // every DOF of the boundary, so the linearised operator suffices to solve.
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(&fixture.edge)?);
     let multiplier = pyrucast::ops::mesh::barycenter(&imposed)?;
-    let model = fixture.radiation.union(&Model::dirichlet(
+    let model = fixture.radiation.union(&model::dirichlet(
         "T".into(),
         "q".into(),
         &imposed,
@@ -222,14 +223,14 @@ fn radiating_square() -> Result<(Fixture, ElementField)> {
 
     let mut square = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
     square.add_cell(&corners.iter().map(|n| n.id()).collect::<Vec<_>>())?;
-    let bulk = Model::heat_conduction(&FiniteElementSpace::lagrange1(&square)?)?;
+    let bulk = model::heat_conduction(&FiniteElementSpace::lagrange1(&square)?)?;
 
     // The radiating edge x = 0, of unit length.
     let edge = vec![corners[0].clone(), corners[3].clone()];
     let mut boundary = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
     boundary.add_cell(&[edge[0].id(), edge[1].id()])?;
     let boundary_fes = FiniteElementSpace::lagrange1(&boundary)?;
-    let radiation = Model::radiation(&boundary_fes)?;
+    let radiation = model::radiation(&boundary_fes)?;
 
     let materials = element_field::material_field(&radiation, &[("emis", EMIS), ("T_inf", T_INF)])?;
     Ok((

@@ -106,5 +106,5 @@ En sortie, `data["results"]` est une liste (un élément par instant) :
 
 Démonstration complète (plaque chauffée, dilatation libre, contrôle analytique
 `u = α·ΔT·x`) : `examples/thermomecanique_pas_a_pas.py`. Passer de
-`Model.elasticity` à `Model.plasticity_perfect` suffit pour une mécanique
+`model.elasticity` à `model.plasticity_perfect` suffit pour une mécanique
 élasto-plastique — le même appel gère la boucle non linéaire.

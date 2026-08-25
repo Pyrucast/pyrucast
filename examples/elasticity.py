@@ -28,7 +28,7 @@ E, NU, S, N = 210.0, 0.3, 2.0, 2
 def _clamp(nodes, var, dual):
     imposed = pyrucast.mesh.poi1_from_nodes(nodes)
     multiplier = pyrucast.mesh.barycenter(imposed)
-    return pyrucast.Model.dirichlet(var, dual, imposed, multiplier)
+    return pyrucast.model.dirichlet(var, dual, imposed, multiplier)
 
 
 def main() -> None:
@@ -57,7 +57,7 @@ def main() -> None:
 
     left = [grid[idx(0, j)] for j in range(N + 1)]
     bottom = [grid[idx(i, 0)] for i in range(N + 1)]
-    model = pyrucast.Model.elasticity(fes, "plane_stress")
+    model = pyrucast.model.elasticity(fes, "plane_stress")
     model = model | _clamp(left, "u_x", "f_x")
     model = model | _clamp(bottom, "u_y", "f_y")
 

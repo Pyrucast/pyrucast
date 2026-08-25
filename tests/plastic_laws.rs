@@ -32,6 +32,7 @@ use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::models::plastic::PlasticLaw;
 use pyrucast::ops::element_field::{behavior::integrate, deformation, material_field};
 use pyrucast::ops::matrix::tangent;
+use pyrucast::ops::model;
 use pyrucast::ops::node_field::internal_forces;
 use pyrucast::Result;
 
@@ -351,7 +352,7 @@ impl Cube {
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::HEX8));
         mesh.add_cell(&nodes.iter().map(|n| n.id()).collect::<Vec<_>>())?;
         let fes = FiniteElementSpace::lagrange1(&mesh)?;
-        let model = Model::plasticity_with_law(&fes, ElasticityModel::Solid, law)?;
+        let model = model::plasticity_with_law(&fes, ElasticityModel::Solid, law)?;
         let materials = material_field(&model, material)?;
         Ok(Self {
             nodes,

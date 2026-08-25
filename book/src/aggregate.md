@@ -67,8 +67,9 @@ Côté **Rust**, le trait `Aggregate` fournit les mêmes : `len`, `is_empty`,
 
 Un `Sub…` obtenu par `agg[i]` est une **vue** : on ne le construit pas
 directement côté Python. On construit toujours au **niveau parent**
-(`Mesh(coords, type)`, `FiniteElementSpace(mesh)`, `ElementField(fes, comps)`,
-`Model.heat_conduction(fes)`…) puis on indexe pour atteindre une zone.
+(`Mesh(coords, type)`, `FiniteElementSpace(mesh)`, `ElementField(fes, comps)`)
+ou par un opérateur qui rend un parent (`model.heat_conduction(fes)`…), puis on
+indexe pour atteindre une zone.
 
 ## Composition : l'union `|`
 

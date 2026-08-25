@@ -16,6 +16,7 @@
 //! with speedup/efficiency relative to the 1-thread run. Build in **release**
 //! (`--release`) — a debug build's numbers are meaningless.
 
+use pyrucast::ops::model;
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 
@@ -55,7 +56,7 @@ fn build(n: usize) -> (Model, ElementField, ElementField) {
         }
     }
     let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    let model = Model::elasticity(&fes, ElasticityModel::PlaneStress).unwrap();
+    let model = model::elasticity(&fes, ElasticityModel::PlaneStress).unwrap();
     let materials = material_field(&model, &[("E", 210e9), ("nu", 0.3)]).unwrap();
 
     let support = Handle::new(SubMesh::poi1_from_node_ids(coords.clone(), &ids).unwrap());

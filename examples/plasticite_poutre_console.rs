@@ -63,7 +63,6 @@ use pyrucast::containers::evolution::{
 };
 use pyrucast::containers::field::{Field, SubField};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
-use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
@@ -75,6 +74,7 @@ use pyrucast::ops::element_field::material_field;
 use pyrucast::ops::matrix::stiffness;
 use pyrucast::ops::mesh::select_nodes;
 use pyrucast::ops::mesh::{line, sweep, to_poi1, translate};
+use pyrucast::ops::model;
 use pyrucast::ops::node_field::internal_forces;
 use pyrucast::ops::node_field::{flux, FluxDensity};
 use pyrucast::ops::node_field::{positions, restrict, restrict_like};
@@ -143,9 +143,9 @@ fn main() -> Result<()> {
 
     // ── Modèle : plasticité (contraintes planes) + encastrement (Dirichlet) ──
     println!("▸ Modèle : plasticité J2 (contraintes planes) + encastrement…");
-    let mut model = Model::plasticity_perfect(&fes, ElasticityModel::PlaneStress)?;
+    let mut model = model::plasticity_perfect(&fes, ElasticityModel::PlaneStress)?;
 
-    model = model.union(&Model::dirichlet(
+    model = model.union(&model::dirichlet(
         "u_x".into(),
         "f_x".into(),
         &imposed_mesh,
@@ -154,7 +154,7 @@ fn main() -> Result<()> {
         None,
         Default::default(),
     )?)?;
-    model = model.union(&Model::dirichlet(
+    model = model.union(&model::dirichlet(
         "u_y".into(),
         "f_y".into(),
         &imposed_mesh,

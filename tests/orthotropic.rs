@@ -33,6 +33,7 @@ use pyrucast::handle::Handle;
 use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::ops::mesh;
+use pyrucast::ops::model;
 use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
@@ -274,7 +275,7 @@ fn clamped_model(
     let roller = |nodes: &[Node], var: &str, dual: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
         let multiplier = mesh::barycenter(&imposed)?;
-        Model::dirichlet(
+        model::dirichlet(
             var.into(),
             dual.into(),
             &imposed,
@@ -286,7 +287,7 @@ fn clamped_model(
     };
     let left: Vec<Node> = (0..=N).map(|j| grid[idx(0, j)].clone()).collect();
     let bottom: Vec<Node> = (0..=N).map(|i| grid[idx(i, 0)].clone()).collect();
-    let mut model = Model::elasticity_with_symmetry(fes, ElasticityModel::PlaneStress, symmetry)?;
+    let mut model = model::elasticity_with_symmetry(fes, ElasticityModel::PlaneStress, symmetry)?;
     model = model.union(&roller(&left, "u_x", "f_x")?)?;
     model = model.union(&roller(&bottom, "u_y", "f_y")?)?;
     Ok(model)

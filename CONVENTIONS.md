@@ -65,12 +65,21 @@ conteneur.
   des `impl` de trait sur le conteneur, jamais des fonctions `ops::`. C'est
   la forme idiomatique dans les deux langages. L'arithmétique field+scalaire
   et field+field passe par là (`a + b`), pas par une `ops::field::add`.
-- **Constructeurs nommés** (`from_poi1`, `lagrange1`, `heat_conduction`,
-  `dirichlet`) : fonctions associées / `classmethod`. Elles fabriquent
+- **Constructeurs nommés** (`from_poi1`, `lagrange1`, `with_choices`,
+  `block`) : fonctions associées / `classmethod`. Elles fabriquent
   *leur propre* type → elles restent sur le type. Quand ce type est un
   **agrégat** (`Mesh`, `FiniteElementSpace`, `Model`, `ElementField`), le
   constructeur vit au niveau du **parent** et renvoie un parent — voir
   « Agrégats : un ou plusieurs, de manière transparente » ci-dessous.
+  **Limite de l'exception : un catalogue n'est pas un constructeur.** Un type
+  qui en accumule des dizaines les rend visibles sur chacune de ses instances
+  — en Python une `classmethod` s'atteint aussi depuis un objet, et
+  `m.heat_conduction(fes)` s'exécute en jetant `m` en silence. Passé le
+  pluriel, la famille se range comme toute famille d'opérateurs, dans le
+  module du conteneur produit : les physiques — 22 fonctions Rust, 28 entrées
+  Python (les lois se déplient) — sont `ops::model::*` / `pyrucast.model.*`,
+  pas des `Model::*`. Un type garde un ou deux constructeurs nommés, pas un
+  catalogue.
 
 ## Où vit une fonction libre : le conteneur produit
 
@@ -136,10 +145,17 @@ répartit selon le type reçu. Même situation pour `integral` /
 
 ### Ce qui ne se construit pas
 
-Rien dans `ops/` ne produit un `Model`, un `FiniteElementSpace` ou une
-`Evolution`, et ce n'est pas un oubli : ces conteneurs se **déclarent** par
-constructeur nommé sur le type lui-même, ils ne se fabriquent pas par
-transformation.
+Rien dans `ops/` ne produit un `FiniteElementSpace` ni une `Evolution`, et
+ce n'est pas un oubli : ces conteneurs se **déclarent** par constructeur nommé
+sur le type lui-même, ils ne se fabriquent pas par transformation.
+
+Le `Model` a quitté cette compagnie le 2026-08-25. Ses déclarations de
+physique forment un **catalogue** — 28 entrées, et il grossit à chaque
+physique ajoutée — ce qui est le travail d'un module, pas la surface d'un
+type : elles vivent dans `ops::model` (`pyrucast.model.heat_conduction(fes)`),
+rangées par produit comme tout le reste. Déclarer plutôt que calculer ne
+suffit donc pas à rester sur le type ; encore faut-il que la famille tienne
+en un ou deux noms.
 
 ## Le verbe exposé aussi en méthode
 
@@ -329,12 +345,12 @@ Trois conséquences mécaniques :
    zones → agrégat à N zones. C'est *là* qu'est la transparence « 1 ou
    plusieurs ». Précédents déjà en place : `FiniteElementSpace(mesh)`
    fabrique un sous-espace par sous-maillage ; `Mesh(config, element_type)`
-   crée un maillage à un sous-maillage. Cible : `Model::heat_conduction(&fes)`
+   crée un maillage à un sous-maillage. Cible : `model::heat_conduction(&fes)`
    crée une zone par sous-espace.
 
 2. **Composer = union (`|` Python, `union` Rust), jamais `add_sub` à la
    main.** Pour assembler des physiques / zones hétérogènes, on unit des
-   parents : Python `Model.heat_conduction(fes) | Model.dirichlet(...)`,
+   parents : Python `model.heat_conduction(fes) | model.dirichlet(...)`,
    Rust `model.union(&dirichlet)?`. L'union clone les `Handle` (bump de
    refcount, pas de copie profonde) et **déduplique par handle**, donc les
    sous-objets sont **partagés** entre parents. `add_sub` (une zone) et
@@ -372,8 +388,9 @@ accepte le **parent** et déballe son unique sous-objet via `Aggregate::unit`
 l'utilisateur de fournir le `Sub*` lui-même.
 
 Ce qui est **projeté mécaniquement** vers Python (miroir 1:1) : le
-constructeur nommé du parent (Rust `Model::heat_conduction` → `classmethod`
-Python), l'union (`union` → `__or__`), l'indexation → `__getitem__`. La seule
+constructeur nommé du parent (Rust `FiniteElementSpace::lagrange1` →
+`classmethod` Python), l'union (`union` → `__or__`), l'indexation →
+`__getitem__`. La seule
 asymétrie est la **non-exposition** des constructeurs `Sub*` côté Python (et
 la coercition parent→sub unitaire qui l'accompagne) — l'exception décrite
 plus haut. La règle s'applique uniformément aux quatre agrégats et a vocation
@@ -428,6 +445,7 @@ plus haut, sans exception.
 | écriture dans le magasin | `ops::coords::*` | `pyrucast.coords.set`, `pyrucast.coords.displace` |
 | champ → **même** champ (polymorphe) | `ops::field::*` | `pyrucast.field.mask`, `pyrucast.field.sqrt`, `pyrucast.field.filter_components` |
 | écriture d'un format externe | `ops::export::*` | `pyrucast.export.export_vtk` |
+| déclaration d'une physique | `ops::model::*` | `pyrucast.model.heat_conduction`, `pyrucast.model.dirichlet` |
 | assemblage `Model` → `Matrix` | `ops::matrix::*` | `pyrucast.matrix.stiffness`, `pyrucast.matrix.mass` |
 | résolution `A·x = b` | `ops::solver::*` | `pyrucast.solver.solve` |
 | arithmétique (`+ - * /`, indexation) | `impl` d'opérateur | dunder |
@@ -435,8 +453,8 @@ plus haut, sans exception.
 | verbe éligible aux trois conditions | fonction libre **et** méthode | idem — voir « Le verbe exposé aussi en méthode » |
 
 `ops::geom` n'apparaît pas : ses deux fonctions (`locate_points`,
-`project_points`) sont les primitives internes de `Model.embedded` et
-`Model.contact`, et ne sont pas exposées à Python. C'est la seule dérogation
+`project_points`) sont les primitives internes de `model.embedded` et
+`model.contact`, et ne sont pas exposées à Python. C'est la seule dérogation
 de module entier, enregistrée dans `tests/python/test_mirror_completeness.py`.
 
 ## Cas tranchés explicitement

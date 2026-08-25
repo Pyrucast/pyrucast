@@ -16,11 +16,11 @@ use pyrucast::aggregate::Aggregate;
 use pyrucast::atoms::{ElementType, Node};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
-use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::ops::mesh;
+use pyrucast::ops::model;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
 
@@ -53,8 +53,8 @@ fn thermal_line_recovers_analytical_solution() -> Result<()> {
     let multiplier = mesh::barycenter(&imposed)?;
     let mult = multiplier.node(0, 0, 0)?.id();
 
-    let conduction = Model::heat_conduction(&fes)?;
-    let dirichlet = Model::dirichlet(
+    let conduction = model::heat_conduction(&fes)?;
+    let dirichlet = model::dirichlet(
         "T".into(),
         "q".into(),
         &imposed,

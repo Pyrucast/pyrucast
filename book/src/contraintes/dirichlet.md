@@ -5,7 +5,7 @@ La condition de **Dirichlet** impose la valeur d'une variable primale,
 imposée par **multiplicateurs de Lagrange** : aucun matériau, aucune loi de
 comportement. Elle ne crée **aucun nœud** et ne mute jamais le `Coords`.
 
-Implémentation : `src/models/dirichlet.rs` ; constructeur `Model::dirichlet(…)`.
+Implémentation : `src/models/dirichlet.rs` ; opérateur `ops::model::dirichlet(…)`.
 
 ## Deux maillages fournis par l'utilisateur
 
@@ -35,7 +35,7 @@ Deux sont requis, deux sont déduits et **surchargeables** :
 Signature complète :
 
 ```text
-Model.dirichlet(imposed_variable, target_dual, imposed_mesh, multiplier_mesh,
+model.dirichlet(imposed_variable, target_dual, imposed_mesh, multiplier_mesh,
                 multiplier=None, imposed_value=None, sense="=")
 ```
 
@@ -80,7 +80,7 @@ compose la conduction thermique avec deux contraintes Dirichlet par l'union `|`
 {{#include ../../../tests/python/test_doc_contraintes.py:dirichlet_complet}}
 ```
 
-La forme Rust équivalente (constructeurs au niveau parent, composés par
+La forme Rust équivalente (opérateurs au niveau parent, composés par
 `union`) est dans le chapitre [Modèle physique](../model.md).
 
 ## Limitations actuelles

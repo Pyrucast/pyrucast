@@ -79,6 +79,8 @@ src/
 │   ├── node_field/     # → NodeField : positions, divergence, restrict, flux, …
 │   ├── element_field/  # → ElementField : gradient, deformation, material_field
 │   │   └── behavior.rs     # intégration de la loi de comportement (COMP)
+│   ├── model/          # → Model : les déclarations de physique (heat_conduction,
+│   │                   #   elasticity, dirichlet, contact, … une par fichier)
 │   ├── matrix.rs       # → Matrix : stiffness, mass, geometric, tangent, lump
 │   ├── coords.rs       # écrit dans le magasin : set, displace
 │   ├── measure/        # → un nombre : integral, xtx, xty
@@ -117,7 +119,7 @@ python/pyrucast/
 ├── mesh.py            # un module par module d'ops/ : ré-exporte _pyrucast
 ├── node_field.py      #   en rendant leur vrai nom aux homonymes
 ├── element_field.py   #   (`consolidate_mesh as consolidate`, …)
-├── matrix.py, field.py, measure.py, export.py, solver.py, coords.py
+├── matrix.py, model.py, field.py, measure.py, export.py, solver.py, coords.py
 ├── thermomechanics.py # couche Python pure de haut niveau
 ├── py.typed
 └── _pyrucast/
@@ -215,7 +217,7 @@ trait `SubModelKind` — voir [Ajouter une physique](../ajouter-une-physique.md)
 | Pour ajouter… | Toucher principalement |
 |---|---|
 | un type d'élément | `atoms/element_kind/<nom>.rs` + 2 lignes dans `atoms/element_kind/mod.rs` + 2 dans `atoms/element_type.rs` ([guide](ajouter-un-element-fini.md)) |
-| une physique | `models/<nom>.rs` + 2 lignes dans `containers/model.rs` + 1 dans `py/model.rs` ([guide](../ajouter-une-physique.md)) |
+| une physique | `models/<nom>.rs` + 2 lignes dans `containers/model.rs` + `ops/model/<nom>.rs` + son wrapper `py/ops/model.rs` + son ré-export dans `python/pyrucast/model.py` ([guide](../ajouter-une-physique.md)) |
 | un opérateur | `ops/<conteneur produit>/<nom>.rs` + son wrapper `py/ops/<même module>.rs` + son ré-export dans `python/pyrucast/<même module>.py` |
 | un objet conteneur | `containers/<nom>.rs` + `py/<nom>.rs` + son ré-export dans `python/pyrucast/__init__.py` + un chapitre de doc |
 

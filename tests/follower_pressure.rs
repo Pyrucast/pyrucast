@@ -34,6 +34,7 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::ops::element_field;
+use pyrucast::ops::model;
 use pyrucast::Result;
 
 const P: f64 = 3.0; // pressure
@@ -100,7 +101,7 @@ fn a_volumetric_subspace_is_rejected() -> Result<()> {
         .collect::<Result<_>>()?;
     let mut square = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
     square.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>())?;
-    let err = Model::follower_pressure(&FiniteElementSpace::lagrange1(&square)?).unwrap_err();
+    let err = model::follower_pressure(&FiniteElementSpace::lagrange1(&square)?).unwrap_err();
     assert!(err.to_string().contains("not a boundary"), "{err}");
     Ok(())
 }
@@ -151,7 +152,7 @@ impl Edge {
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
         mesh.add_cell(&[nodes[0].id(), nodes[1].id()])?;
         let fes = FiniteElementSpace::lagrange1(&mesh)?;
-        let model = Model::follower_pressure(&fes)?;
+        let model = model::follower_pressure(&fes)?;
         let materials = element_field::material_field(&model, &[("p", P)])?;
         Ok(Self {
             nodes,

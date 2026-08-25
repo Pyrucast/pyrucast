@@ -135,7 +135,7 @@ def main() -> None:
     multiplier = pyrucast.mesh.barycenter(imposed)
     mults = [multiplier.node(0, j, 0) for j in range(len(right_nodes))]
 
-    model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.dirichlet(
+    model = pyrucast.model.heat_conduction(fes) | pyrucast.model.dirichlet(
         "T", "q", imposed, multiplier
     )
     materials = pyrucast.element_field.material_field(model, [("k", K)])

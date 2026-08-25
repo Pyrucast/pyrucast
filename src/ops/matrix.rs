@@ -53,13 +53,14 @@ use nalgebra_sparse::{CooMatrix, CsrMatrix};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::ops::{element_field, matrix};
+/// # use pyrucast::ops::model;
 /// # let coords = Handle::new(Coords::new(1).unwrap());
 /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
 /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
 /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
 /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-/// # let model = Model::heat_conduction(&fes).unwrap();
+/// # let model = model::heat_conduction(&fes).unwrap();
 /// let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
 /// let k = matrix::stiffness(&model, &materials).unwrap();
 ///
@@ -97,6 +98,7 @@ pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::models::MatrixKind;
 /// # use pyrucast::ops::{element_field, matrix, mesh, scatter};
+/// # use pyrucast::ops::model;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -104,7 +106,7 @@ pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-/// # let modele = Model::heat_conduction(&fes).unwrap();
+/// # let modele = model::heat_conduction(&fes).unwrap();
 /// # let materiaux = element_field::material_field(&modele,
 /// #     &[("k", 1.0), ("rho", 2.0), ("cp", 3.0)]).unwrap();
 /// // Une seule machinerie pour les quatre natures : `stiffness` et `mass`
@@ -308,13 +310,14 @@ fn build_contribution(
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::ops::{element_field, matrix};
+/// # use pyrucast::ops::model;
 /// # let coords = Handle::new(Coords::new(1).unwrap());
 /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
 /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
 /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
 /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-/// # let model = Model::heat_conduction(&fes).unwrap();
+/// # let model = model::heat_conduction(&fes).unwrap();
 /// // La matrice de capacité d'une conduction lit `rho` **et** `cp` : c'est
 /// // ρ·c_p qui multiplie ∫ Nᵀ N, pas la seule densité.
 /// let materials =
@@ -354,11 +357,12 @@ pub fn mass(model: &Model, materials: &ElementField) -> Result<Matrix> {
 /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
 /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id(), n[3].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-/// # let model = Model::elasticity(&fes, ElasticityModel::PlaneStress).unwrap();
+/// # let model = model::elasticity(&fes, ElasticityModel::PlaneStress).unwrap();
 /// # let materials =
 /// #     element_field::material_field(&model, &[("E", 210.0), ("nu", 0.3)]).unwrap();
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::ops::model;
 /// // Une contrainte uniaxiale σ_xx = 3, portée aux points de Gauss.
 /// let mut stress =
 ///     ElementField::new(&fes, vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_xy".into()])
@@ -399,10 +403,11 @@ pub fn geometric(model: &Model, materials: &ElementField, stress: &ElementField)
 /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
 /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id(), n[3].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-/// # let model = Model::elasticity(&fes, ElasticityModel::PlaneStress).unwrap();
+/// # let model = model::elasticity(&fes, ElasticityModel::PlaneStress).unwrap();
 /// # let materials =
 /// #     element_field::material_field(&model, &[("E", 210.0), ("nu", 0.3)]).unwrap();
 /// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::ops::model;
 /// // Élasticité : la tangente **est** la raideur, l'état est ignoré.
 /// let state = ElementField::new(&fes, vec!["sigma_xx".into()]).unwrap();
 /// let kt = matrix::tangent(&model, &materials, &state).unwrap();
@@ -433,13 +438,14 @@ pub fn tangent(model: &Model, materials: &ElementField, state: &ElementField) ->
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::ops::{element_field, matrix};
+/// # use pyrucast::ops::model;
 /// # let coords = Handle::new(Coords::new(1).unwrap());
 /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
 /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
 /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
 /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-/// # let model = Model::heat_conduction(&fes).unwrap();
+/// # let model = model::heat_conduction(&fes).unwrap();
 /// # let materials = element_field::material_field(
 /// #     &model, &[("k", 1.0), ("rho", 2.0), ("cp", 1.0)]).unwrap();
 /// let m = matrix::mass(&model, &materials).unwrap();

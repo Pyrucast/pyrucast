@@ -18,7 +18,12 @@
 //! 2. add one variant to [`crate::containers::model::SubModel`];
 //! 3. add one arm to
 //!    [`SubModel::as_kind`](crate::containers::model::SubModel::as_kind);
-//! 4. expose it via `Model::<name>` (Rust) and a `#[classmethod]` (Python).
+//! 4. add `ops/model/<name>.rs` with the parent-level operator
+//!    `pub fn <name>(fes: &FiniteElementSpace, …) -> Result<Model>`, plus its
+//!    `pub mod` / `pub use` in [`crate::ops::model`];
+//! 5. wrap it as a `#[pyfunction]` in `py/ops/model.rs`, register it in the
+//!    (flat) `#[pymodule]` of `lib.rs`, and re-export it from
+//!    `python/pyrucast/model.py`.
 //!
 //! Everything else is generic. See the book chapter *« Ajouter une
 //! physique »* for the full walkthrough.

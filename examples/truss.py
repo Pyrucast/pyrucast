@@ -29,7 +29,7 @@ def _clamp(node, var, dual):
     """Dirichlet homogène (u = 0) sur `var` au nœud `node`."""
     imposed = pyrucast.mesh.poi1_from_nodes([node])
     multiplier = pyrucast.mesh.barycenter(imposed)
-    return pyrucast.Model.dirichlet(var, dual, imposed, multiplier)
+    return pyrucast.model.dirichlet(var, dual, imposed, multiplier)
 
 
 def main() -> None:
@@ -39,7 +39,7 @@ def main() -> None:
     mesh = pyrucast.mesh.line(n0, n1, 1)  # un seul SEG2 (mailleur `line`)
     fes = pyrucast.FiniteElementSpace(mesh)
 
-    model = pyrucast.Model.truss(fes)
+    model = pyrucast.model.truss(fes)
     model = model | _clamp(n0, "u_x", "f_x")
     model = model | _clamp(n0, "u_y", "f_y")
     model = model | _clamp(n1, "u_y", "f_y")  # pas de raideur transversale

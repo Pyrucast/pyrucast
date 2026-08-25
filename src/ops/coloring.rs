@@ -43,10 +43,11 @@ use std::hash::Hash;
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-/// # let modele = Model::heat_conduction(&fes).unwrap();
+/// # let modele = model::heat_conduction(&fes).unwrap();
 /// # let materiaux = element_field::material_field(&modele,
 /// #     &[("k", 1.0), ("rho", 2.0), ("cp", 3.0)]).unwrap();
 /// # use pyrucast::ops::coloring;
+/// # use pyrucast::ops::model;
 /// // Deux mailles qui partagent une clé — un nœud — ne peuvent pas être de
 /// // la même couleur : c'est ce qui rend le scatter parallèle sans course.
 /// let couleurs = coloring::greedy_color(2, 2, &[0u32, 1, 1, 2]);

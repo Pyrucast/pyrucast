@@ -14,7 +14,7 @@ Lagrange**, exactement comme [Dirichlet](dirichlet.md) — dont elle est la
 quelconques. Aucun matériau, aucune loi de comportement ; elle ne crée aucun
 nœud et ne mute jamais le `Coords`.
 
-Implémentation : `src/models/mpc.rs` ; constructeur `Model::mpc(…)`.
+Implémentation : `src/models/mpc.rs` ; opérateur `ops::model::mpc(…)`.
 
 ## Mise en donnée : un maillage par terme
 
@@ -49,7 +49,7 @@ L'MPC partage **une** paire de variables entre toutes ses relations, toutes deux
 Signature complète :
 
 ```text
-Model.mpc(terms, multiplier_mesh, multiplier=None, imposed_value=None, sense="=")
+model.mpc(terms, multiplier_mesh, multiplier=None, imposed_value=None, sense="=")
 # terms : liste de (mesh, variable, dual, coefficient)
 ```
 
@@ -61,7 +61,7 @@ unilatérales » de la page [Contraintes](../contraintes.md) et le solveur
 ## Les blocs `C` / `Cᵀ`
 
 À l'assemblage, l'MPC contribue **une paire de blocs par (sous-maillage, terme)**,
-via le même constructeur partagé que Dirichlet mais avec le coefficient `aₖ` au
+via le même code partagé que Dirichlet mais avec le coefficient `aₖ` au
 lieu de `1` (chaque bloc est marqué non-symétrique ; seule l'union `C ∪ Cᵀ`
 l'est — propriété **globale** du système point-selle) :
 

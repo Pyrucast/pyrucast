@@ -5,14 +5,14 @@
 Cast3M sélectionne le type d'élément dans `MODE` (`'POUT'`, `'TIMO'`,
 `'DKT'`, `'COQ4'`…) et ses caractéristiques géométriques dans `MATE`
 (`'SECT'`, `'INRY'`, `'EPAI'`…). pyrucast suit le même principe : un
-constructeur `Model.<physique>(fes, ...)` par famille d'éléments, des
+opérateur `model.<physique>(fes, ...)` par famille d'éléments, des
 composantes matériau nommées portant la géométrie de la section.
 
 | pyrucast | Cast3M | primales / duales |
 |---|---|---|
-| `Model.truss(fes)` | `MODE ... 'BARR'` | `u_x,u_y(,u_z)` / `f_x,f_y(,f_z)` |
-| `Model.timoshenko(fes)` | `MODE ... 'TIMO'` | `w, theta` / `f_w, m_theta` |
-| `Model.timoshenko(fes)` | `MODE ... 'POUT'` | selon la dimension : `w, theta` en 1-D, `u_x, u_y, r_z` en plan, six DDL dans l'espace |
+| `model.truss(fes)` | `MODE ... 'BARR'` | `u_x,u_y(,u_z)` / `f_x,f_y(,f_z)` |
+| `model.timoshenko(fes)` | `MODE ... 'TIMO'` | `w, theta` / `f_w, m_theta` |
+| `model.timoshenko(fes)` | `MODE ... 'POUT'` | selon la dimension : `w, theta` en 1-D, `u_x, u_y, r_z` en plan, six DDL dans l'espace |
 
 Barre en traction — comparée à la solution analytique
 \\( u_x = F \cdot L / (E \cdot A) \\), export du résultat au format VTK :

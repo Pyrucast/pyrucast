@@ -8,8 +8,8 @@ mécanique non linéaire (Newton modifié + accélération d'Anderson), le coupl
 
 L'utilisateur ne fournit qu'un **dictionnaire** (maillage, modèle, charges,
 matériaux, instants) ; il le récupère complété des résultats par pas. Pour une
-mécanique élasto-plastique, il suffit de remplacer ``Model.elasticity`` par
-``Model.plasticity_perfect`` : le même appel gère la boucle non linéaire.
+mécanique élasto-plastique, il suffit de remplacer ``model.elasticity`` par
+``model.plasticity_perfect`` : le même appel gère la boucle non linéaire.
 
 Lancement ::
 
@@ -68,7 +68,7 @@ def main():
 
     def clamp(nodes, var, dual):
         imposed = pc.mesh.poi1_from_nodes(nodes)
-        return pc.Model.dirichlet(var, dual, imposed, pc.mesh.barycenter(imposed))
+        return pc.model.dirichlet(var, dual, imposed, pc.mesh.barycenter(imposed))
 
     # ── Modèle : conduction + élasticité (contraintes planes) + Dirichlet ────
     # Thermique : température imposée sur les bords gauche/droit (un
@@ -77,9 +77,9 @@ def main():
     th_imposed = pc.mesh.poi1_from_nodes(left + right)
     th_mult = pc.mesh.translate(th_imposed, [0.0, 0.0])
     model = (
-        pc.Model.heat_conduction(fes)
-        | pc.Model.elasticity(fes, "plane_stress")
-        | pc.Model.dirichlet("T", "q", th_imposed, th_mult)
+        pc.model.heat_conduction(fes)
+        | pc.model.elasticity(fes, "plane_stress")
+        | pc.model.dirichlet("T", "q", th_imposed, th_mult)
         | clamp(left, "u_x", "f_x")
         | clamp(bottom, "u_y", "f_y")
     )

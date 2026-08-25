@@ -423,5 +423,8 @@ la surface à quatre paramètres et l'écart traction/compression pour Ottosen. 
 **toutes** ont leur tangente confrontée à une différence centrée des forces
 internes.
 
-**Renommage.** `Model.plasticity` s'appelle désormais `Model.plasticity_perfect`,
-pour que les quatre lois se nomment de la même façon. Seul le nom a changé.
+**Renommages.** `Model.plasticity` est d'abord devenue `plasticity_perfect`,
+pour que les quatre lois se nomment de la même façon ; puis le catalogue entier
+a quitté le type `Model` pour le module des opérateurs (2026-08-25). On écrit
+aujourd'hui `pyrucast.model.plasticity_perfect(fes, model)`. Seuls les noms ont
+changé.

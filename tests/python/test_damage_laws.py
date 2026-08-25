@@ -45,7 +45,7 @@ def _strain(c, nodes, fes, factors):
 
 def test_damage_tc_keeps_two_independent_histories():
     c, nodes, fes = _cube()
-    model = pyrucast.Model.damage_tc(fes, "solid")
+    model = pyrucast.model.damage_tc(fes, "solid")
     materials = pyrucast.element_field.material_field(model, TC)
     state = pyrucast.element_field.integrate_behavior(
         model, _strain(c, nodes, fes, [1.5e-3, 0.0, 0.0]), materials
@@ -60,7 +60,7 @@ def test_damage_tc_keeps_two_independent_histories():
 
 def test_sic_sic_damages_by_direction():
     c, nodes, fes = _cube()
-    model = pyrucast.Model.damage_sic_sic(fes, "solid")
+    model = pyrucast.model.damage_sic_sic(fes, "solid")
     materials = pyrucast.element_field.material_field(
         model,
         [
@@ -93,7 +93,7 @@ def test_sic_sic_damages_by_direction():
 
 def test_gurson_exposes_and_grows_its_porosity():
     c, nodes, fes = _cube()
-    model = pyrucast.Model.gurson(fes, "solid")
+    model = pyrucast.model.gurson(fes, "solid")
     materials = pyrucast.element_field.material_field(
         model,
         [
@@ -123,7 +123,7 @@ def test_gurson_exposes_and_grows_its_porosity():
 
 def test_mazars_kept_its_name_and_its_single_scalar():
     _c, _n, fes = _cube()
-    model = pyrucast.Model.mazars(fes, "solid")
+    model = pyrucast.model.mazars(fes, "solid")
     assert model[0].material_components() == [
         "E",
         "nu",

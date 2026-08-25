@@ -27,6 +27,7 @@ use pyrucast::handle::Handle;
 use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::ops::element_field::{deformation, interp_to_gauss, thermal_strain};
 use pyrucast::ops::mesh;
+use pyrucast::ops::model;
 use pyrucast::ops::node_field::internal_forces;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
@@ -73,7 +74,7 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
     let clamp = |nodes: &[Node], var: &str, dual: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
         let multiplier = mesh::barycenter(&imposed)?;
-        Model::dirichlet(
+        model::dirichlet(
             var.into(),
             dual.into(),
             &imposed,
@@ -86,7 +87,7 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
     let left: Vec<Node> = (0..=NY).map(|j| grid[idx(0, j)].clone()).collect();
     let right: Vec<Node> = (0..=NY).map(|j| grid[idx(NX, j)].clone()).collect();
     let bottom: Vec<Node> = (0..=NX).map(|i| grid[idx(i, 0)].clone()).collect();
-    let mut model = Model::elasticity(&fes, ElasticityModel::PlaneStress)?;
+    let mut model = model::elasticity(&fes, ElasticityModel::PlaneStress)?;
     model = model.union(&clamp(&left, "u_x", "f_x")?)?;
     model = model.union(&clamp(&right, "u_x", "f_x")?)?;
     model = model.union(&clamp(&bottom, "u_y", "f_y")?)?;
@@ -191,12 +192,12 @@ fn thermal_expansion_reaches_plasticity_and_damage() -> Result<()> {
     for (label, model, values) in [
         (
             "plasticity",
-            Model::plasticity_perfect(&fes, ElasticityModel::PlaneStress)?,
+            model::plasticity_perfect(&fes, ElasticityModel::PlaneStress)?,
             vec![("E", E), ("nu", NU), ("sigma_y", SIGMA_Y), ("alpha", ALPHA)],
         ),
         (
             "damage",
-            Model::mazars(&fes, ElasticityModel::PlaneStress)?,
+            model::mazars(&fes, ElasticityModel::PlaneStress)?,
             vec![
                 ("E", E),
                 ("nu", NU),

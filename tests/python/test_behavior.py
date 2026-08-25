@@ -22,7 +22,7 @@ def _heat_setup(n_elems=4, length=1.0, k=2.0):
     fes = pyrucast.FiniteElementSpace(mesh)
     materials = pyrucast.ElementField(fes, ["k"])
     materials[0].set_uniform("k", k)
-    model = pyrucast.Model.heat_conduction(fes)
+    model = pyrucast.model.heat_conduction(fes)
 
     # Nodal temperature T(x) = x over a POI1 support of all nodes.
     t_mesh = pyrucast.Mesh(c, "POI1")
@@ -67,7 +67,7 @@ def test_has_behavior_true_for_hc_false_for_dirichlet():
     fes = pyrucast.FiniteElementSpace(mesh)
     imposed = pyrucast.mesh.poi1_from_nodes([a])
     multiplier = pyrucast.mesh.barycenter(imposed)
-    model = pyrucast.Model.heat_conduction(fes) | pyrucast.Model.dirichlet(
+    model = pyrucast.model.heat_conduction(fes) | pyrucast.model.dirichlet(
         "T", "q", imposed, multiplier
     )
     assert model[0].has_behavior() is True

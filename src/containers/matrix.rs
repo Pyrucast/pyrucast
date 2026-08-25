@@ -305,6 +305,7 @@ impl crate::dump::Dump for DofOrdering {
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::ops::element_field;
+/// # use pyrucast::ops::model;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -313,7 +314,7 @@ impl crate::dump::Dump for DofOrdering {
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-/// # let modele = Model::heat_conduction(&fes).unwrap();
+/// # let modele = model::heat_conduction(&fes).unwrap();
 /// # let mat = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// // Un bloc **calculé** ne matérialise aucune valeur : il porte la recette
 /// // que l'assembleur global déroule maille par maille, droit dans le CSR.
@@ -538,6 +539,7 @@ impl SubMatrix {
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::element_field;
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -546,7 +548,7 @@ impl SubMatrix {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-    /// # let modele = Model::heat_conduction(&fes).unwrap();
+    /// # let modele = model::heat_conduction(&fes).unwrap();
     /// # let mat = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
     /// // La même chose vue du constructeur : un gabarit dimensionné, vide,
     /// // dont les valeurs viendront du noyau du sous-modèle.
@@ -2590,13 +2592,14 @@ impl Matrix {
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::{element_field, matrix};
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(1).unwrap());
     /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
     /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Une raideur de Galerkine est symétrique : le drapeau le déclare.
@@ -2624,13 +2627,14 @@ impl Matrix {
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::{element_field, matrix};
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(1).unwrap());
     /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
     /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Un DDL de ligne : (nœud, variable **duale**).
@@ -2658,13 +2662,14 @@ impl Matrix {
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::{element_field, matrix};
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(1).unwrap());
     /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
     /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Un DDL de colonne : (nœud, variable **primale**).
@@ -2689,13 +2694,14 @@ impl Matrix {
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::{element_field, matrix};
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(1).unwrap());
     /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
     /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Les noms sont internés une seule fois, lignes et colonnes confondues.
@@ -2713,13 +2719,14 @@ impl Matrix {
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::{element_field, matrix};
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(1).unwrap());
     /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
     /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Les noms sont internés une seule fois, lignes et colonnes confondues.
@@ -2750,13 +2757,14 @@ impl Matrix {
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::{element_field, matrix};
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(1).unwrap());
     /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
     /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// assert_eq!(k.n_rows().unwrap(), 2); // deux nœuds, une variable duale
@@ -2777,13 +2785,14 @@ impl Matrix {
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::{element_field, matrix};
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(1).unwrap());
     /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
     /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// assert_eq!(k.n_cols().unwrap(), 2);
@@ -2804,13 +2813,14 @@ impl Matrix {
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::{element_field, matrix};
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(1).unwrap());
     /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
     /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Compte les entrées **stockées** dans les blocs. Un bloc *calculé*
@@ -2839,13 +2849,14 @@ impl Matrix {
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::{element_field, matrix};
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(1).unwrap());
     /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
     /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Un SEG2 de longueur 1, k = 1 : K = [[1, -1], [-1, 1]].
@@ -2897,13 +2908,14 @@ impl Matrix {
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::{element_field, matrix};
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(1).unwrap());
     /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
     /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Un 5-uplet par entrée : nœud ligne, var duale, nœud colonne, var
@@ -2934,13 +2946,14 @@ impl Matrix {
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::{element_field, matrix};
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(1).unwrap());
     /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
     /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Le CSR **est** l'état assemblé : emprunté, pas reconstruit.
@@ -2962,13 +2975,14 @@ impl Matrix {
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::{element_field, matrix};
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(1).unwrap());
     /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
     /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Vue nalgebra (column-major), prête pour LU ou Cholesky.
@@ -2998,13 +3012,14 @@ impl Matrix {
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::{element_field, matrix};
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(1).unwrap());
     /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
     /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Vue dense ligne-major, longueur n_rows × n_cols.
@@ -3035,13 +3050,14 @@ impl Matrix {
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::{element_field, matrix};
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(1).unwrap());
     /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
     /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// assert_eq!(k.to_coo().unwrap().nnz(), 4);
@@ -3067,13 +3083,14 @@ impl Matrix {
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::{element_field, matrix};
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(1).unwrap());
     /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
     /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// assert_eq!(k.to_csc().unwrap().ncols(), 2);
@@ -3094,13 +3111,14 @@ impl Matrix {
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::{element_field, matrix};
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(1).unwrap());
     /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
     /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // K · [1, 1] = 0 : le mode rigide d'une conduction.
@@ -3143,13 +3161,14 @@ impl Matrix {
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::{element_field, matrix};
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(1).unwrap());
     /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
     /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Le support **ligne** : la cible de projection d'un second membre.
@@ -3174,13 +3193,14 @@ impl Matrix {
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::{element_field, matrix};
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(1).unwrap());
     /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
     /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Le support **colonne** : celui d'un champ que l'on multiplie.
@@ -3218,10 +3238,11 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// # use pyrucast::models::Physics;
+    /// # use pyrucast::ops::model;
     /// // Le résultat n'est **pas** assemblé : appeler `assemble` avant de résoudre.
     /// let thermique = k.filter(Physics::Thermal).unwrap();
     /// assert_eq!(thermique.len(), 1);
@@ -3258,10 +3279,11 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = Model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// # use pyrucast::models::Physics;
+    /// # use pyrucast::ops::model;
     /// // Les natures **présentes**, dédupliquées.
     /// assert!(k.physics().unwrap().contains(&Physics::Thermal));
     /// ```

@@ -15,7 +15,7 @@ def _bar(dx, dy):
 def test_truss_consistent_mass():
     rho, area = 2.0, 3.0
     fes, a, b, length = _bar(3.0, 4.0)  # L = 5
-    model = pyrucast.Model.truss(fes)
+    model = pyrucast.model.truss(fes)
     materials = pyrucast.element_field.material_field(
         model, [("E", 1.0), ("A", area), ("rho", rho)]
     )
@@ -31,7 +31,7 @@ def test_truss_consistent_mass():
 def test_truss_geometric_transverse():
     n = 7.0
     fes, a, b, length = _bar(1.0, 0.0)  # axis x ⇒ transverse y
-    model = pyrucast.Model.truss(fes)
+    model = pyrucast.model.truss(fes)
     materials = pyrucast.element_field.material_field(model, [("E", 1.0), ("A", 1.0)])
     state = pyrucast.ElementField(fes, ["n"])
     state[0].set_uniform("n", n)

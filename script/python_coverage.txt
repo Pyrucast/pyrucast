@@ -9,9 +9,6 @@ cell
 col_dofs
 component_count
 component_index
-creep_blackburn
-creep_lemaitre
-damage_sic_sic
 dense
 div_to_component
 element
@@ -22,7 +19,6 @@ fespace
 field_names
 geometric_matrix
 get_by_node
-gurson
 has_behavior
 is_alive
 mass_matrix
@@ -31,10 +27,8 @@ mul_dense
 nearest_node
 node_values
 ordinate_type
-ottosen
 out_of_range
 physics
-plasticity_isotropic
 point_values
 pyrucast.coords.displace
 pyrucast.element_field.interp_to_gauss
@@ -61,6 +55,14 @@ pyrucast.mesh.read_gmsh_str
 pyrucast.mesh.regularize
 pyrucast.mesh.symmetry_line
 pyrucast.mesh.symmetry_point
+pyrucast.model.creep_blackburn
+pyrucast.model.creep_lemaitre
+pyrucast.model.damage_sic_sic
+pyrucast.model.gurson
+pyrucast.model.ottosen
+pyrucast.model.plasticity_isotropic
+pyrucast.model.viscoplasticity_chaboche
+pyrucast.model.viscoplasticity_lemaitre_chaboche
 pyrucast.node_field.divergence
 pyrucast.node_field.internal_forces_continuum
 pyrucast.node_field.restrict
@@ -75,5 +77,3 @@ stiffness_matrix
 sub_to_component
 support_submesh
 tangent_matrix
-viscoplasticity_chaboche
-viscoplasticity_lemaitre_chaboche

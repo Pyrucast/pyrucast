@@ -53,6 +53,18 @@ RENAMED = {
     "mask_element": "mask",
 }
 
+# Modules Python entiers sans méthode, avec la raison. La dérogation vaut par
+# **construction** — elle tient pour chaque fonction du module, celles à venir
+# comprises — et c'est ce qui la distingue d'une exclusion nom par nom.
+NO_METHOD_MODULES = {
+    "model": (
+        "condition (1) : le premier argument est le **support** que le modèle "
+        "recouvre (l'espace EF, ou les maillages que relie une contrainte), pas "
+        "un sujet qu'on transforme. `fes.heat_conduction()` ferait promettre à "
+        "tout espace EF les 28 physiques du catalogue."
+    ),
+}
+
 # Sans méthode, avec la raison. Condition (3) sauf mention contraire.
 NO_METHOD = {
     "deformation": "exige des composantes de déplacement u_x/u_y/u_z",
@@ -92,10 +104,20 @@ def subjects(first):
     return FIELDS if first == "Any" else [first]
 
 
+def excluded_by_module():
+    """Les noms couverts par une dérogation de module entier."""
+    return {
+        name
+        for module in NO_METHOD_MODULES
+        for name in getattr(pyrucast, module).__all__
+    }
+
+
 def test_every_eligible_operator_is_also_a_method():
+    by_module = excluded_by_module()
     missing = []
     for name, first, _ret in free_functions():
-        if name in NO_METHOD:
+        if name in NO_METHOD or name in by_module:
             continue
         method = RENAMED.get(name, name)
         for cls in subjects(first):
@@ -110,6 +132,24 @@ def test_exclusions_are_documented_and_real():
     for fn, reason in NO_METHOD.items():
         assert reason.strip(), f"{fn} : exclusion sans raison écrite"
         assert fn in names, f"{fn} : exclusion périmée, la fonction n'existe plus"
+
+
+def test_module_exclusions_are_documented_and_real():
+    """Une dérogation de module doit viser un module vivant qui en a besoin.
+
+    « Qui en a besoin » = au moins une de ses fonctions serait éligible aux
+    conditions (1) et (2) sans elle. Un module dont plus aucune fonction ne
+    l'est verrait sa dérogation devenir du bruit, et ce test la signale.
+    """
+    eligible = {name for name, _, _ in free_functions()}
+    for module, reason in NO_METHOD_MODULES.items():
+        assert reason.strip(), f"{module} : dérogation sans raison écrite"
+        names = set(getattr(pyrucast, module).__all__)
+        assert names, f"{module} : dérogation sur un module vide"
+        assert names & eligible, (
+            f"{module} : dérogation périmée, plus aucune de ses fonctions "
+            "n'est éligible à la projection en méthode"
+        )
 
 
 def test_renames_point_to_existing_functions():

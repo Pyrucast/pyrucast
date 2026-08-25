@@ -46,6 +46,7 @@ use std::sync::atomic::AtomicU64;
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::models::MatrixKind;
 /// # use pyrucast::ops::{element_field, matrix, mesh, scatter};
+/// # use pyrucast::ops::model;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -53,7 +54,7 @@ use std::sync::atomic::AtomicU64;
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-/// # let modele = Model::heat_conduction(&fes).unwrap();
+/// # let modele = model::heat_conduction(&fes).unwrap();
 /// # let materiaux = element_field::material_field(&modele,
 /// #     &[("k", 1.0), ("rho", 2.0), ("cp", 3.0)]).unwrap();
 /// // Le motif est **matériau-indépendant** : il se bâtit une fois, puis
@@ -222,6 +223,7 @@ pub fn build_pattern(k: &Matrix) -> Result<AssemblyPattern> {
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::models::MatrixKind;
 /// # use pyrucast::ops::{element_field, matrix, mesh, scatter};
+/// # use pyrucast::ops::model;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -229,7 +231,7 @@ pub fn build_pattern(k: &Matrix) -> Result<AssemblyPattern> {
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-/// # let modele = Model::heat_conduction(&fes).unwrap();
+/// # let modele = model::heat_conduction(&fes).unwrap();
 /// # let materiaux = element_field::material_field(&modele,
 /// #     &[("k", 1.0), ("rho", 2.0), ("cp", 3.0)]).unwrap();
 /// // Le motif est **matériau-indépendant** : il se bâtit une fois, puis
@@ -355,6 +357,7 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::models::MatrixKind;
 /// # use pyrucast::ops::{element_field, matrix, mesh, scatter};
+/// # use pyrucast::ops::model;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -362,7 +365,7 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-/// # let modele = Model::heat_conduction(&fes).unwrap();
+/// # let modele = model::heat_conduction(&fes).unwrap();
 /// # let materiaux = element_field::material_field(&modele,
 /// #     &[("k", 1.0), ("rho", 2.0), ("cp", 3.0)]).unwrap();
 /// // Le motif est **matériau-indépendant** : il se bâtit une fois, puis

@@ -98,9 +98,9 @@ Chaque physique est une struct sous `src/models/` implémentant le trait
 `SubModelKind`, enveloppée par une variante de l'énum `SubModel`. Leur **détail**
 (équations, matériau, comportement, exemples) est dans la partie
 [Détails des physiques](physiques.md) ; on n'en rappelle ici que les
-constructeurs et les variables, vus du `Model` :
+opérateurs qui les déclarent et leurs variables, vus du `Model` :
 
-| Constructeur (`Model::…`) | Primales | Duales | Matériau | Chapitre |
+| Opérateur (`ops::model::…`, Python `pyrucast.model.…`) | Primales | Duales | Matériau | Chapitre |
 |---|---|---|---|---|
 | `heat_conduction(fes)` | `T` | `q` | `k` | [Thermique](thermique.md) |
 | `heat_conduction_with_symmetry(fes, sym)` | `T` | `q` | `k_1…` / `k_11…` + repère | [Conduction orientée](thermique.md#conduction-orthotrope-et-anisotrope) |
