@@ -88,12 +88,21 @@ Par convention, un maillage n'est plus modifié une fois construit : un
 suite les laisserait dans un état incohérent.
 
 Cette convention est désormais **imposée**. Dès qu'un objet autre qu'un
-maillage capture un `SubMesh` (construction d'un `SubFiniteElementSpace`, d'un
-`SubNodeField`, d'un support de `SubMatrix`…), ce sous-maillage est **scellé** :
-sa connectivité est figée pour toujours. `add_cell` / `add_cell_taking`
-renvoient alors l'erreur `MeshSealed`. Un `Mesh` qui se contente de contenir le
-sous-maillage ne le scelle **pas** — il peut continuer à grossir tant qu'aucun
-consommateur ne s'y attache. On teste l'état avec `is_sealed`.
+maillage capture un `SubMesh` et **indexe ses cellules** (construction d'un
+`SubFiniteElementSpace`, d'un support de `SubMatrix`…), ce sous-maillage est
+**scellé** : sa connectivité est figée pour toujours. `add_cell` /
+`add_cell_taking` renvoient alors l'erreur `MeshSealed`. Un `Mesh` qui se
+contente de contenir le sous-maillage ne le scelle **pas** — il peut continuer
+à grossir tant qu'aucun consommateur ne s'y attache. On teste l'état avec
+`is_sealed`.
+
+Un [champ aux nœuds](node-field.md) fait exception, parce qu'il n'indexe pas
+les cellules du maillage : il se pose sur le **compagnon POI1** de la zone, et
+c'est ce compagnon-là qui est scellé. Le maillage donné en argument, lui, reste
+modifiable ; le modifier lâche son compagnon, si bien qu'un champ construit
+ensuite se retrouve sur un **autre** support — les champs déjà construits ne
+sont pas invalidés pour autant, ils restent définis sur le nuage de nœuds
+d'avant (voir [Champ aux nœuds](node-field.md#support--un-sous-maillage-poi1-par-zone)).
 
 Pour repartir d'un maillage scellé et le modifier à nouveau, on en prend une
 **copie profonde** avec `duplicate()` : un `SubMesh` (ou `Mesh`) neuf, **non

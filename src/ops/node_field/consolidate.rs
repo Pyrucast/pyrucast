@@ -83,7 +83,7 @@ pub fn consolidate(field: &NodeField) -> Result<NodeField> {
             let s = h.read();
             (
                 s.support(),
-                s.nodes().to_vec(),
+                s.node_ids(),
                 s.components().to_vec(),
                 s.values().to_vec(),
             )

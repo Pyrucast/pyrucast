@@ -19,9 +19,13 @@
 //! handle is enough to keep the SubMesh (and therefore its nodes)
 //! alive.
 //!
-//! By project convention, a SubMesh's connectivity is frozen after
-//! creation (see project memory), so the field caches the node list
-//! once at construction for fast lookup.
+//! **The field stores no node id of its own.** A POI1 SubMesh *is* the
+//! node list (one node per cell), so the support answers every question
+//! about who the rows belong to: the ids are read in place under a read
+//! guard on the support, and the `NodeId → row` lookup goes through the
+//! support's own cached map. That is the whole point of having
+//! a support — a second copy per field would be the same list stored as
+//! many times as there are fields (and time steps) on that support.
 //!
 //! The default value of every component is `0.0`.
 //!
@@ -105,19 +109,13 @@ use std::ops::{Index, IndexMut};
 /// ```
 #[derive(Serialize, Deserialize)]
 pub struct SubNodeField {
-    /// POI1 SubMesh owning the per-node refcounts. The field keeps a
-    /// clone of this handle for its whole lifetime; that is the only
-    /// thing keeping the support (and its nodes) alive.
+    /// POI1 SubMesh owning the per-node refcounts, and **sole holder of the
+    /// node list**: its connectivity is that list, in the order this field
+    /// indexes `values` by. The field keeps a clone of this handle for its
+    /// whole lifetime; that is the only thing keeping the support (and its
+    /// nodes) alive, and the support is sealed on capture so the row order
+    /// can never move under the values.
     support: Handle<SubMesh>,
-    /// Cached connectivity of `support` (POI1 ⇒ one node per cell).
-    /// Frozen at construction by [[project-submesh-immutable-size]].
-    ///
-    /// **Never archived**: it is a copy of the support's connectivity, and the
-    /// support is sealed the moment a field captures it, so the copy cannot
-    /// drift. `on_load` takes it again — which is 4 MiB per field of a million
-    /// nodes that the file does not carry.
-    #[serde(skip)]
-    nodes: Vec<NodeId>,
     components: Vec<String>,
     /// Row-major: `values[i * components.len() + c]`.
     values: Vec<f64>,
@@ -151,7 +149,7 @@ impl SubNodeField {
     pub fn from_poi1(submesh: &Handle<SubMesh>, components: Vec<String>) -> Result<Self> {
         crate::containers::field::check_components("SubNodeField", &components)?;
 
-        let nodes: Vec<NodeId> = {
+        let n_nodes = {
             let sm = submesh.read();
             if sm.element_type() != ElementType::POI1 {
                 return Err(PyrucastError::Message(format!(
@@ -159,19 +157,18 @@ impl SubNodeField {
                     sm.element_type()
                 )));
             }
-            // POI1: connectivity is exactly the node list (1 node per cell).
-            sm.connectivity().to_vec()
+            // POI1: one node per cell, so the cell count *is* the node count
+            // and the connectivity *is* the node list. Nothing to copy.
+            sm.cell_count()
         };
 
-        // The field snapshots this POI1 support's node list and shares its
-        // handle; freeze it so the two can never diverge.
+        // The field indexes its rows by position in this support; freeze it so
+        // the row order can never move under the values.
         let support = crate::containers::mesh::seal(submesh)?;
 
-        let n_nodes = nodes.len();
         let n_comp = components.len();
         Ok(SubNodeField {
             support,
-            nodes,
             components,
             values: vec![0.0; n_nodes * n_comp],
         })
@@ -183,6 +180,15 @@ impl SubNodeField {
     /// materialised once and cached, so every field restricted to this submesh
     /// (and the stiffness block / `divergence` / `flux` output over it) shares
     /// one support slot and pairs under `same_support`.
+    ///
+    /// **`submesh` itself is left unsealed.** The field never reads it again —
+    /// it holds the companion, and it is the *companion* that is frozen. The
+    /// argument may therefore keep growing; doing so drops its companion
+    /// ([`SubMesh::to_poi1`] memoizes per connectivity state), so a field built
+    /// afterwards lands on a **new** support and no longer pairs with this one.
+    /// Nothing is invalidated — the older fields are simply defined on the
+    /// earlier node cloud, and [`restrict`](fn@crate::ops::node_field::restrict)
+    /// onto the new mesh brings them across.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -215,10 +221,8 @@ impl SubNodeField {
         if element_type == ElementType::POI1 {
             return Self::from_poi1(submesh, components);
         }
-        // Freeze the source (so later `add_cell`s cannot leave it behind, and so
-        // `to_poi1` may memoize the companion), then share that cached POI1
-        // support. `from_poi1` validates `components`.
-        crate::containers::mesh::seal(submesh)?;
+        // Share the source's cached POI1 companion — `from_poi1` seals *that*
+        // and validates `components`. The source stays as it is.
         let poi = submesh.read().to_poi1()?;
         Self::from_poi1(&poi, components)
     }
@@ -240,15 +244,29 @@ impl SubNodeField {
     /// assert_eq!(u.node_count(), 2);
     /// ```
     pub fn node_count(&self) -> usize {
-        self.nodes.len()
+        // Read off the value buffer rather than the support: no lock, and
+        // `components` is never empty (checked at construction).
+        self.values.len() / self.components.len()
     }
 
     // `components`, `component_count`, `component_index`, … come from
     // the [`crate::containers::field::SubField`] trait.
 
-    /// Node ids this field is defined on, in support order.
-    pub(crate) fn nodes(&self) -> &[NodeId] {
-        &self.nodes
+    /// Node ids this field is defined on, in support order, read **in place**
+    /// from a caller-held read guard on the support — no copy. Counterpart of
+    /// [`index_of_with`](SubNodeField::index_of_with) for whole-list iteration;
+    /// a caller that has no guard yet and wants an owned list takes
+    /// [`node_ids`](SubNodeField::node_ids).
+    pub(crate) fn nodes_with<'a>(&self, support: &'a SubMesh) -> &'a [NodeId] {
+        // POI1 ⇒ one node per cell: the connectivity *is* the node list.
+        support.connectivity()
+    }
+
+    /// Owned copy of the support's node list, in support order — for callers
+    /// that must let the support guard go before using it (typically because
+    /// they write back into the field, whose own writes re-lock the support).
+    pub(crate) fn node_ids(&self) -> Vec<NodeId> {
+        self.support.read().connectivity().to_vec()
     }
 
     /// Handle to the owning `Coords` (derived from the support).
@@ -399,7 +417,7 @@ impl SubNodeField {
     /// Position of a NodeId in the support, or `None` if absent.
     ///
     /// The support is a sealed POI1 SubMesh, so its `NodeId → index` map is
-    /// cached and consistent with `self.nodes` (same first-appearance order).
+    /// cached and indexes exactly the rows of this field (same order).
     /// We consult that map for an O(1) lookup instead of the linear scan that
     /// used to dominate the hot write paths (`set_value`, arithmetic, …). A
     /// short read guard on the support is opened and released here; callers
@@ -500,7 +518,8 @@ impl SubNodeField {
     /// assert_eq!(m.node(0, 1, 0).unwrap().id(), b.id());
     /// ```
     pub fn support_submesh(&self) -> Result<SubMesh> {
-        SubMesh::poi1_from_node_ids(self.coords(), &self.nodes)
+        let support = self.support.read();
+        SubMesh::poi1_from_node_ids(support.coords(), self.nodes_with(&support))
     }
 
     /// Build a [`Mesh`] with a single POI1 submesh mirroring the support of
@@ -548,11 +567,11 @@ impl SubNodeField {
     /// assert_eq!(u.node_values(0).unwrap(), &[1.0, 2.0]);
     /// ```
     pub fn node_values(&self, node_idx: usize) -> Result<&[f64]> {
-        if node_idx >= self.nodes.len() {
+        if node_idx >= self.node_count() {
             return Err(PyrucastError::Message(format!(
                 "node index {} ≥ node_count {}",
                 node_idx,
-                self.nodes.len()
+                self.node_count()
             )));
         }
         let ncomp = self.components.len();
@@ -639,11 +658,11 @@ impl SubNodeField {
     /// Restrict this field to the nodes of `mesh`.
     ///
     fn check_indices(&self, ni: usize, ci: usize) -> Result<()> {
-        if ni >= self.nodes.len() {
+        if ni >= self.node_count() {
             return Err(PyrucastError::Message(format!(
                 "node index {} ≥ node_count {}",
                 ni,
-                self.nodes.len()
+                self.node_count()
             )));
         }
         if ci >= self.components.len() {
@@ -681,7 +700,7 @@ impl fmt::Debug for SubNodeField {
         // Bounded structure only — the per-node values live in `dump()`.
         f.debug_struct("SubNodeField")
             .field("support", &self.support)
-            .field("node_count", &self.nodes.len())
+            .field("node_count", &self.node_count())
             .field("components", &self.components)
             .finish()
     }
@@ -692,7 +711,7 @@ impl fmt::Display for SubNodeField {
         write!(
             f,
             "SubNodeField: {} node(s), {} component(s) [{}]",
-            self.nodes.len(),
+            self.node_count(),
             self.components.len(),
             self.components.join(", ")
         )
@@ -706,8 +725,9 @@ impl crate::dump::Dump for SubNodeField {
         let mut headers = Vec::with_capacity(ncomp + 1);
         headers.push("node".to_string());
         headers.extend(self.components.iter().cloned());
+        let support = self.support.read();
         let rows: Vec<Vec<String>> = self
-            .nodes
+            .nodes_with(&support)
             .iter()
             .enumerate()
             .map(|(i, nid)| {
@@ -762,7 +782,6 @@ impl Clone for SubNodeField {
         // the shared SubMesh.
         SubNodeField {
             support: self.support.clone(),
-            nodes: self.nodes.clone(),
             components: self.components.clone(),
             values: self.values.clone(),
         }
@@ -1135,7 +1154,9 @@ impl NodeField {
         let mut out: Vec<NodeId> = Vec::new();
         for h in self {
             let s = h.read();
-            for &nid in s.nodes() {
+            let support = s.support();
+            let support = support.read();
+            for &nid in s.nodes_with(&support) {
                 if !out.contains(&nid) {
                     out.push(nid);
                 }
@@ -1211,7 +1232,13 @@ impl NodeField {
         let mut seen: HashMap<(NodeId, String), f64> = HashMap::new();
         for h in self {
             let s = h.read();
-            let (nodes, comps, values) = (s.nodes(), SubField::components(&*s), s.values());
+            let support = s.support();
+            let support = support.read();
+            let (nodes, comps, values) = (
+                s.nodes_with(&support),
+                SubField::components(&*s),
+                s.values(),
+            );
             let ncomp = comps.len();
             for (ni, &nid) in nodes.iter().enumerate() {
                 for (ci, comp) in comps.iter().enumerate() {
@@ -1428,15 +1455,11 @@ impl NodeFieldView {
 
 // ─── Archive ────────────────────────────────────────────────────────────────
 
+/// Nothing to rebuild on load: the node list was never in the file to begin
+/// with. The support is a sealed POI1 mesh archived alongside, and its
+/// connectivity *is* the list, in the order this field indexes its values by.
 impl crate::archive::Archivable for SubNodeField {
     const TAG: &'static str = "SubNodeField";
-
-    /// Take the node list from the support again rather than carrying a copy of
-    /// it in the file. The support is a sealed POI1 mesh, so its connectivity
-    /// *is* the node list, in the order this field indexes its values by.
-    fn on_load(&mut self) {
-        self.nodes = self.support.read().connectivity().to_vec();
-    }
 }
 
 impl crate::archive::Archivable for NodeField {
@@ -1926,5 +1949,66 @@ mod tests {
         assert_eq!((f.clone() - 2.0).get(0, 0).unwrap(), 10.0);
         assert_eq!((f.clone() * 3.0).get(0, 0).unwrap(), 36.0);
         assert_eq!((f * 4.0 / 2.0).get(0, 0).unwrap(), 24.0);
+    }
+
+    // ── Support : le champ ne porte aucun nœud ──────────────────────────────
+
+    /// Two triangles sharing an edge, in a one-zone mesh.
+    fn two_triangles() -> (Handle<Coords>, Vec<Node>, Handle<SubMesh>) {
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]]
+            .iter()
+            .map(|p| Node::create_in(coords.clone(), p).unwrap())
+            .collect();
+        let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+        sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+        (coords, n, Handle::new(sm))
+    }
+
+    #[test]
+    fn a_field_seals_the_companion_not_the_mesh() {
+        let (_coords, n, zone) = two_triangles();
+
+        let f = SubNodeField::from_support(&zone, vec!["T".into()]).unwrap();
+        assert!(
+            !zone.read().is_sealed(),
+            "le champ ne scelle pas le maillage donné en argument"
+        );
+        assert!(f.support().read().is_sealed(), "c'est le compagnon POI1");
+        assert_eq!(f.node_count(), 3);
+
+        // Un second champ sur la même zone retombe sur le même support.
+        let g = SubNodeField::from_support(&zone, vec!["q".into()]).unwrap();
+        assert!(Handle::same_object(&f.support(), &g.support()));
+        assert!(f.same_support(&g));
+
+        // Les identifiants sont lus dans le support, pas recopiés.
+        let support = f.support();
+        let support = support.read();
+        assert_eq!(f.nodes_with(&support), &[n[0].id(), n[1].id(), n[2].id()]);
+    }
+
+    #[test]
+    fn growing_the_mesh_moves_later_fields_to_another_support() {
+        let (_coords, n, zone) = two_triangles();
+
+        let mut avant = SubNodeField::from_support(&zone, vec!["T".into()]).unwrap();
+        avant.set_value(n[0].id(), "T", 20.0).unwrap();
+
+        // Le maillage n'étant pas scellé, il peut encore grandir.
+        zone.write()
+            .add_cell(&[n[1].id(), n[3].id(), n[2].id()])
+            .unwrap();
+        let apres = SubNodeField::from_support(&zone, vec!["T".into()]).unwrap();
+
+        // Support neuf : les deux champs ne s'apparient plus…
+        assert!(!avant.same_support(&apres));
+        assert_eq!(apres.node_count(), 4);
+        assert!((&avant + &apres).is_err());
+
+        // …mais l'ancien n'est pas invalidé : il vit sur l'ancien nuage.
+        assert_eq!(avant.node_count(), 3);
+        assert_eq!(avant.value(n[0].id(), "T").unwrap(), 20.0);
+        assert!(avant.value(n[3].id(), "T").is_err());
     }
 }

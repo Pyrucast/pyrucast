@@ -98,9 +98,9 @@ pub struct SubMesh {
     /// lookup (node fields, …) read it in place while holding their store
     /// guard on this submesh — no copy — so the O(n) build is paid once and
     /// mutualised across every field on this support. Not serialized — it is
-    /// derived from `connectivity` and rebuilt on demand after a reload. Only
-    /// ever populated once the submesh is sealed (its connectivity frozen),
-    /// so it can never go stale.
+    /// derived from `connectivity` and rebuilt on demand after a reload.
+    /// Dropped by every connectivity mutation (see `invalidate_caches`), so it
+    /// can never go stale.
     #[serde(skip)]
     node_index: OnceLock<HashMap<NodeId, usize>>,
     /// Lazily-built **canonical POI1 companion**: the node cloud of this
@@ -111,8 +111,10 @@ pub struct SubMesh {
     /// stiffness block's support, a `restrict` onto this mesh, and a
     /// `divergence`/`flux` output over it all land on one handle and combine
     /// directly. Not serialized (derived from `connectivity`, rebuilt on
-    /// demand). Only ever populated once the submesh is sealed, so it can never
-    /// go stale.
+    /// demand). Dropped by every connectivity mutation (see
+    /// `invalidate_caches`): the companion answers for **one** state of this
+    /// submesh, and the fields already sitting on it keep it alive on their
+    /// own — they stay valid, on that earlier node cloud.
     #[serde(skip)]
     poi1_companion: OnceLock<Handle<SubMesh>>,
 }
@@ -179,9 +181,9 @@ impl SubMesh {
     /// support in). Built once and cached; callers keep their read guard on
     /// this submesh while using the returned reference — no copy.
     ///
-    /// Meant for sealed supports: the map is derived from `connectivity`, and
-    /// a sealed submesh can no longer grow, so the cache can never go stale.
-    /// (It is only ever queried through a sealed support in practice.)
+    /// The map is derived from `connectivity`, and every mutator drops it, so
+    /// it can never go stale. (It is queried through a sealed support in
+    /// practice — a field's, which can no longer move at all.)
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -209,6 +211,22 @@ impl SubMesh {
             }
             map
         })
+    }
+
+    /// Drop the caches derived from the connectivity — the `NodeId → index`
+    /// map and the POI1 companion. Called by every mutator, right after the
+    /// connectivity moves.
+    ///
+    /// Dropping the companion handle does **not** invalidate the node fields
+    /// built on it: they hold it themselves, so it stays alive, sealed, with
+    /// its node refcounts. They are simply defined on the node cloud of the
+    /// submesh as it was; the next [`SubMesh::to_poi1`] materialises a fresh
+    /// companion for the new state, and
+    /// [`restrict`](fn@crate::ops::node_field::restrict) carries a field from
+    /// one to the other.
+    fn invalidate_caches(&mut self) {
+        self.node_index = OnceLock::new();
+        self.poi1_companion = OnceLock::new();
     }
 
     /// Seal this submesh: freeze its connectivity permanently. After this,
@@ -333,6 +351,9 @@ impl SubMesh {
         }
         let idx = self.connectivity.len() / npc;
         self.connectivity.extend_from_slice(nodes);
+        // After the `Coords` guard above is released: dropping the previous
+        // companion decrefs its nodes, which takes that same lock.
+        self.invalidate_caches();
         Ok(idx)
     }
 
@@ -394,6 +415,7 @@ impl SubMesh {
         }
         let idx = self.connectivity.len() / npc;
         self.connectivity.extend_from_slice(nodes);
+        self.invalidate_caches();
         Ok(idx)
     }
 
@@ -532,8 +554,7 @@ impl SubMesh {
             self.connectivity[i] = new;
         }
         // Both caches are derived from the connectivity that just moved.
-        self.node_index = OnceLock::new();
-        self.poi1_companion = OnceLock::new();
+        self.invalidate_caches();
         Ok(changes.len())
     }
 
@@ -678,9 +699,9 @@ impl SubMesh {
     /// order of first appearance** (one POI1 cell per unique node), as a sealed
     /// [`SubMesh`] handle.
     ///
-    /// **Cached, per submesh.** Once `self` is sealed the companion is built at
-    /// most once and every later call returns the *same* store slot, so all the
-    /// node fields that project this submesh to its nodes pair under
+    /// **Cached, per submesh.** The companion is built at most once per state
+    /// of the connectivity, and every later call returns the *same* store slot,
+    /// so all the node fields that project this submesh to its nodes pair under
     /// [`same_support`](crate::containers::field::SubField::same_support): a
     /// stiffness block's support (built this way in every physics' `new`), a
     /// [`restrict`](fn@crate::ops::node_field::restrict) onto this mesh, and a
@@ -688,10 +709,11 @@ impl SubMesh {
     /// and combine directly by the field operators. This is what lets
     /// `solve(K, f) - restrict(g, mesh)` and `&K * &restrict(f, mesh)` line up.
     ///
-    /// On an **unsealed** submesh nothing is cached — a fresh cloud is returned
-    /// each call (the old behaviour), since the connectivity could still change
-    /// and stale the companion. Shared building block:
-    /// [`crate::ops::mesh::to_poi1()`] applies it submesh-by-submesh.
+    /// The cache does **not** require `self` to be sealed: every mutator drops
+    /// it (see `invalidate_caches`), so a submesh that keeps growing simply
+    /// hands out a new companion afterwards. The companion itself is always
+    /// sealed — it is what node fields index their rows by. Shared building
+    /// block: [`crate::ops::mesh::to_poi1()`] applies it submesh-by-submesh.
     pub fn to_poi1(&self) -> Result<Handle<SubMesh>> {
         if let Some(h) = self.poi1_companion.get() {
             return Ok(h.clone());
@@ -713,18 +735,15 @@ impl SubMesh {
         // the previous `Handle::new(sm.read().to_poi1()?)` idiom already relied on).
         let handle = Handle::new(SubMesh::poi1_from_node_ids(self.coords.clone(), &seen)?);
         seal(&handle)?;
-        if self.sealed {
-            // Frozen source ⇒ safe to memoize. On a race the loser drops its
-            // build and everyone reads the winner's slot.
-            let _ = self.poi1_companion.set(handle);
-            Ok(self
-                .poi1_companion
-                .get()
-                .expect("populated on this path")
-                .clone())
-        } else {
-            Ok(handle)
-        }
+        // Memoize. On a race the loser drops its build and everyone reads the
+        // winner's slot. Mutating `self` later drops this slot, so what is
+        // cached always answers for the current connectivity.
+        let _ = self.poi1_companion.set(handle);
+        Ok(self
+            .poi1_companion
+            .get()
+            .expect("populated on this path")
+            .clone())
     }
 
     /// Visualize this submesh.
@@ -1910,7 +1929,7 @@ mod tests {
     }
 
     #[test]
-    fn to_poi1_caches_companion_on_a_sealed_submesh() {
+    fn to_poi1_caches_companion_even_unsealed() {
         let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
@@ -1920,21 +1939,55 @@ mod tests {
         sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         let h = Handle::new(sm);
 
-        // Unsealed: nothing memoized — a fresh cloud each call.
+        // Unsealed, and still memoized: the companion answers for the current
+        // connectivity, and a mutation drops it.
         let u1 = h.read().to_poi1().unwrap();
         let u2 = h.read().to_poi1().unwrap();
-        assert!(!u1.same_object(&u2), "unsealed submesh is not memoized");
-
-        // Sealed: the companion is built once and every call shares its slot.
-        seal(&h).unwrap();
-        let p1 = h.read().to_poi1().unwrap();
-        let p2 = h.read().to_poi1().unwrap();
         assert!(
-            p1.same_object(&p2),
-            "sealed submesh memoizes its POI1 companion"
+            u1.same_object(&u2),
+            "companion memoized on an unsealed submesh"
         );
-        assert_eq!(p1.read().element_type(), ElementType::POI1);
-        assert_eq!(p1.read().cell_count(), 3); // three distinct nodes
+        assert!(
+            !h.read().is_sealed(),
+            "asking for the companion does not seal"
+        );
+        assert!(u1.read().is_sealed(), "the companion itself is sealed");
+        assert_eq!(u1.read().element_type(), ElementType::POI1);
+        assert_eq!(u1.read().cell_count(), 3); // three distinct nodes
+
+        // Sealing changes nothing: same slot.
+        seal(&h).unwrap();
+        assert!(h.read().to_poi1().unwrap().same_object(&u1));
+    }
+
+    #[test]
+    fn growing_a_submesh_drops_its_poi1_companion() {
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+        let d = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
+
+        let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+        sm.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+        let h = Handle::new(sm);
+
+        let before = h.read().to_poi1().unwrap();
+        assert_eq!(before.read().cell_count(), 3);
+
+        // One more cell ⇒ a different node cloud, so a different companion.
+        h.write().add_cell(&[b.id(), d.id(), c.id()]).unwrap();
+        let after = h.read().to_poi1().unwrap();
+        assert!(
+            !before.same_object(&after),
+            "the stale companion was dropped"
+        );
+        assert_eq!(after.read().cell_count(), 4);
+        // The old one is untouched — whoever holds it (a field) still reads
+        // the three nodes it was built on.
+        assert_eq!(before.read().cell_count(), 3);
+        // And its node_index went with it.
+        assert_eq!(h.read().node_index()[&d.id()], 3);
     }
 }
 

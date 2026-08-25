@@ -11,8 +11,11 @@ use crate::error::Result;
 /// POI1 input submesh is therefore copied node-for-node; an empty input
 /// submesh yields an empty POI1 submesh (so the count is preserved).
 ///
-/// Every node referenced by the result is increfed afresh by the new POI1
-/// submeshes; `mesh` itself is left untouched.
+/// Every node referenced by the result is increfed afresh by the POI1
+/// submeshes; `mesh`'s own connectivity is left untouched. Each output submesh
+/// is the input submesh's **memoized companion**, so calling this twice on the
+/// same mesh yields the same submesh slots — and those increfs live as long as
+/// that cache, which a mutation of the input submesh (or its drop) releases.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -109,11 +112,21 @@ mod tests {
             assert_eq!(cf.refcount(b.id()), 3); // +POI1(sub1)
         }
 
+        // Dropping the result gives nothing back: its submeshes are the
+        // companions memoized by the source submeshes, which still hold them.
         drop(poi);
         {
             let cf = coords.read();
-            assert_eq!(cf.refcount(a.id()), 3);
-            assert_eq!(cf.refcount(b.id()), 2);
+            assert_eq!(cf.refcount(a.id()), 5);
+            assert_eq!(cf.refcount(b.id()), 3);
+        }
+
+        // Dropping the source drops its caches, and the companions with them.
+        drop(mesh);
+        {
+            let cf = coords.read();
+            assert_eq!(cf.refcount(a.id()), 1); // the `Node` handle alone
+            assert_eq!(cf.refcount(b.id()), 1);
         }
     }
 

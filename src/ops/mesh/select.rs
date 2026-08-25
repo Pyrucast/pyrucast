@@ -97,10 +97,16 @@ fn sub_node_submesh(
     let ncomp = comps.len();
     let values = sub.values();
     let mut kept: Vec<NodeId> = Vec::new();
-    for (ni, &nid) in sub.nodes().iter().enumerate() {
-        let row = &values[ni * ncomp..(ni + 1) * ncomp];
-        if test.iter().all(|&ci| band.contains(row[ci])) {
-            kept.push(nid);
+    // Node ids read in place, then the guard is released: building the POI1
+    // below write-locks the `Coords`.
+    {
+        let support = sub.support();
+        let support = support.read();
+        for (ni, &nid) in sub.nodes_with(&support).iter().enumerate() {
+            let row = &values[ni * ncomp..(ni + 1) * ncomp];
+            if test.iter().all(|&ci| band.contains(row[ci])) {
+                kept.push(nid);
+            }
         }
     }
     Ok(Some(SubMesh::poi1_from_node_ids(sub.coords(), &kept)?))

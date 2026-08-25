@@ -172,8 +172,9 @@ fn weld_in_place(mesh: &Mesh, representative: &HashMap<NodeId, NodeId>) -> Resul
         if s.is_sealed() {
             return Err(PyrucastError::Message(format!(
                 "merge_nodes(in_place): submesh {si} is sealed — a finite-element \
-                 space, field or matrix already reads its nodes; weld before \
-                 building them, or weld by copy (in_place = false)"
+                 space, a matrix, or a node field supported on this POI1 cloud \
+                 already reads its nodes; weld before building them, or weld by \
+                 copy (in_place = false)"
             )));
         }
         let npc = s.element_type().nodes_per_cell();

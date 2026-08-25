@@ -11,7 +11,9 @@ use crate::handle::Handle;
 /// [`restrict`] and [`restrict_like`].
 fn fill_from(sub: &mut SubNodeField, source: &NodeFieldView) -> Result<()> {
     let components = sub.components().to_vec();
-    for nid in sub.nodes().to_vec() {
+    // Owned list: the writes below re-lock the support, so no guard may be
+    // held across them.
+    for nid in sub.node_ids() {
         for comp in &components {
             if let Some(v) = source.value_opt(nid, comp) {
                 sub.set_value(nid, comp, v)?;

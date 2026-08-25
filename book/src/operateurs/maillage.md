@@ -51,7 +51,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `points_on_cone(mesh, base, top, base_radius, top_radius=0.0, tol=None)` | les nœuds **sur la surface latérale** du même cône |
 | `points_in_torus(mesh, center, axis, major_radius, minor_radius, tol=None)` | les nœuds **dans** le tore à section circulaire (**3D seulement**) |
 | `points_on_torus(mesh, center, axis, major_radius, minor_radius, tol=None)` | les nœuds **sur** la surface du même tore |
-| `to_poi1(mesh)` | les nœuds **distincts** d'un maillage, en POI1 ; nuage **canonique mis en cache** par sous-maillage (scellé) ⇒ handle reproductible, partagé par `restrict`/blocs de matrice/`divergence`/`flux` (supports appariables) |
+| `to_poi1(mesh)` | les nœuds **distincts** d'un maillage, en POI1 ; nuage **canonique mémoïsé** par sous-maillage (le nuage est scellé, le sous-maillage source non ; toute modification de celui-ci lâche le cache) ⇒ handle reproductible, partagé par `restrict`/blocs de matrice/`divergence`/`flux` (supports appariables) |
 | `to_quadratic(mesh)` | la **copie quadratique** (Lagrange-2) d'un maillage linéaire : TRI3→TRI6, HEX8→HEX20, … (voir plus bas) |
 | `convert(mesh, element_type)` | **change le type d'élément** sans déplacer ni ajouter de nœud : identité, `QUA4`→`TRI3` (2 triangles), `HEX8`→`TET4` (6 tétraèdres) (voir plus bas) |
 | `barycenter(mesh)` | un POI1 au **centre de gravité** de chaque cellule, structure de sous-maillage préservée |
@@ -2231,9 +2231,10 @@ D'où deux refus, vérifiés **sur tout le maillage avant la moindre écriture**
   copiante l'abandonne : l'abandonner changerait le nombre de mailles, c'est-à-
   dire précisément l'invariant sur lequel repose l'appel sur place. Baissez
   `tol`, ou passez par la variante copiante ;
-- un sous-maillage **scellé** est une erreur : un espace d'éléments finis, un
-  champ ou une matrice l'a capturé et lit sa numérotation de nœuds. Soudez
-  avant de les construire (ou repartez d'un `duplicate()`).
+- un sous-maillage **scellé** est une erreur : un espace d'éléments finis, une
+  matrice — ou un champ, si c'est un nuage POI1 qui lui sert de support — l'a
+  capturé et lit sa numérotation de nœuds. Soudez avant de les construire (ou
+  repartez d'un `duplicate()`).
 
 Les caches dérivés de la connectivité (index des nœuds, compagnon POI1 de
 `to_poi1`) sont invalidés par la réécriture, et les refcounts suivent : chaque

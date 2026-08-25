@@ -108,7 +108,7 @@ pub fn positions(mesh: &Mesh, components: Option<Vec<String>>) -> Result<NodeFie
     for sm in mesh {
         let mut sub = SubNodeField::from_support(sm, components.clone())?;
         // Read this zone's coordinates under a single Coords lock.
-        let nodes: Vec<NodeId> = sub.nodes().to_vec();
+        let nodes: Vec<NodeId> = sub.node_ids();
         let coords: Vec<Vec<f64>> = {
             let c = coords.read();
             nodes

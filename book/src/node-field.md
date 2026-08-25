@@ -24,13 +24,32 @@ Un `SubMesh` POI1 est, par construction, **exactement une liste de nœuds**
   support tel quel (aucun refcount par nœud supplémentaire : le SubMesh est
   l'unique propriétaire des increfs, garder son handle suffit à garder les
   nœuds en vie) ;
-- construit depuis un SubMesh d'un autre type d'élément, le champ
-  matérialise un support POI1 frais sur les **nœuds distincts** de la zone
-  (ordre de première apparition dans la connectivité).
+- construit depuis un SubMesh d'un autre type d'élément, le champ se pose sur
+  le **compagnon POI1 canonique** de la zone — ses **nœuds distincts** dans
+  l'ordre de première apparition —, matérialisé une fois et **mémoïsé** par le
+  sous-maillage. Deux champs bâtis sur la même zone tombent donc sur le **même
+  support**, et s'apparient (cf. [`same_support`](field.md)).
 
-La liste de nœuds est **figée à la construction** (la connectivité d'un
-SubMesh est gelée par convention de projet) : la taille du buffer de
-valeurs ne change jamais.
+Le champ **ne stocke aucun identifiant de nœud** : un POI1 *est* la liste de
+nœuds, et c'est le support qui la détient, une fois pour tous les champs qui s'y
+posent. Recopier la liste dans chaque champ reviendrait à la stocker autant de
+fois qu'il y a de champs (et de pas de temps) sur ce support ; le champ ne porte
+que ses valeurs, et lit les nœuds dans le support quand il en a besoin.
+
+## Scellement : le compagnon, pas le maillage
+
+C'est le **support** qui est scellé — le compagnon POI1 —, jamais le maillage
+donné en argument. Le champ indexe ses lignes par position dans ce support, donc
+ce support ne doit plus bouger ; mais la zone d'origine, elle, n'a aucune raison
+de geler : le champ n'y touche plus.
+
+Modifier cette zone (`add_cell`, `remap_nodes`) lui fait **lâcher son
+compagnon** : le nuage de nœuds a changé, le cache n'y répond plus. Conséquence,
+un champ construit après la modification se pose sur un **nouveau** support et
+ne s'apparie plus avec les précédents. Ce n'est pas une invalidation : les
+champs d'avant gardent leur support en vie et restent parfaitement lisibles,
+simplement définis sur le maillage d'avant. Pour les ramener sur le nouveau, un
+[`restrict`](operateurs/champs.md#restriction-fusion-consolidation) suffit.
 
 ```text
    NodeField (agrégat)
