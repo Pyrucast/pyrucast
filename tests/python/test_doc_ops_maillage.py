@@ -161,6 +161,23 @@ for m in (haut, tournee, autre_moitie):
     assert m.element_types() == ["TRI3"]
     assert m.cell_count() == 1
 
+# ── copie ──────────────────────────────────────────────────
+
+face, _, _, _ = _face_et_copies()
+# ANCHOR: copie
+# Une copie sur ses **propres** nœuds, aux mêmes endroits : les deux maillages
+# ne se déplacent plus ensemble.
+jumelle = pyrucast.mesh.copy(face, new_nodes=True)
+
+# Un calque : même connectivité, **mêmes** nœuds. Il est descellé, donc de
+# nouveau modifiable même si `face` a déjà servi à un calcul.
+calque = face.copy(new_nodes=False)
+# ANCHOR_END: copie
+assert jumelle.node(0, 0, 0).id != face.node(0, 0, 0).id
+assert jumelle.node(0, 0, 0).position() == face.node(0, 0, 0).position()
+assert calque.node(0, 0, 0).id == face.node(0, 0, 0).id
+assert calque.cell_count() == face.cell_count()
+
 # ── sweep solid ────────────────────────────────────────────
 
 face, _, tournee, _ = _face_et_copies()

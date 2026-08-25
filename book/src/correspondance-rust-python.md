@@ -119,6 +119,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `revolve(mesh: &Mesh, angle: f64, n_layers: usize, center: &[f64], axis: Option<&[f64]>) -> Mesh` | `revolve(mesh, angle, n_layers, center, axis=None) -> Mesh` |
 | `to_quadratic(mesh: &Mesh) -> Mesh` | `to_quadratic(mesh) -> Mesh` |
 | `convert(mesh: &Mesh, element_type: ElementType) -> Mesh` | `convert(mesh, element_type) -> Mesh` |
+| `copy(mesh: &Mesh, new_nodes: bool) -> Mesh` | `copy(mesh, new_nodes=True) -> Mesh` |
 | `translate(mesh: &Mesh, vector: &[f64]) -> Mesh` | `translate(mesh, vector) -> Mesh` |
 | `rotate(mesh: &Mesh, angle: f64, center: &[f64], axis: Option<&[f64]>) -> Mesh` | `rotate(mesh, angle, center, axis=None) -> Mesh` |
 | `symmetry_point(mesh: &Mesh, center: &[f64]) -> Mesh` | `symmetry_point(mesh, center) -> Mesh` |

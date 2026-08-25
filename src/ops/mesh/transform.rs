@@ -44,7 +44,7 @@ use std::collections::HashMap;
 /// `reverse` additionally flips each cell's node order (the same permutation
 /// as [`invert`](fn@super::invert)), which is what an orientation-reversing
 /// `f` needs to keep the copy's Jacobians positive.
-fn map_coords(
+pub(super) fn map_coords(
     mesh: &Mesh,
     reverse: bool,
     mut f: impl FnMut(&[f64]) -> Result<Vec<f64>>,

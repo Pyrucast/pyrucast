@@ -850,3 +850,56 @@ def test_merge_nodes_prints_a_tally(capfd):
     pyrucast.mesh.merge_nodes(left | right, 1e-6, in_place=True)
     out = capfd.readouterr().out
     assert "merge_nodes (in place): 1 node(s) welded, cells untouched" in out
+
+
+def _triangle_et_segment():
+    """Un maillage à deux zones : un TRI3 et un SEG2, sur les mêmes nœuds."""
+    c = pyrucast.Coords(2)
+    a, b = c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0])
+    cc = c.add_node([0.0, 1.0])
+    tri = pyrucast.Mesh(c, "TRI3")
+    tri.unit().add_cell([a, b, cc])
+    seg = pyrucast.Mesh(c, "SEG2")
+    seg.unit().add_cell([a, b])
+    return c, tri | seg
+
+
+def test_copy_with_new_nodes_is_independent():
+    _, mesh = _triangle_et_segment()
+    jumelle = pyrucast.mesh.copy(mesh, new_nodes=True)
+
+    assert jumelle.element_types() == mesh.element_types()
+    assert jumelle.cell_counts() == mesh.cell_counts()
+    ancien = mesh.node(0, 0, 0)
+    neuf = jumelle.node(0, 0, 0)
+    assert neuf.id != ancien.id
+    assert neuf.position() == ancien.position()
+
+    # Les nœuds neufs sont bien à part : bouger l'un ne bouge pas l'autre.
+    neuf.set_position([9.0, 9.0])
+    assert ancien.position() == [0.0, 0.0]
+
+
+def test_copy_without_new_nodes_shares_them():
+    _, mesh = _triangle_et_segment()
+    calque = mesh.copy(new_nodes=False)
+
+    assert calque.cell_counts() == mesh.cell_counts()
+    assert calque.node(0, 0, 0).id == mesh.node(0, 0, 0).id
+    # Par défaut, la copie prend des nœuds neufs.
+    assert mesh.copy().node(0, 0, 0).id != mesh.node(0, 0, 0).id
+
+
+def test_copy_is_unsealed_even_from_a_sealed_mesh():
+    c, mesh = _triangle_et_segment()
+    pyrucast.FiniteElementSpace(mesh)  # scelle les deux zones
+    assert mesh[0].is_sealed
+
+    d = c.add_node([1.0, 1.0])
+    for new_nodes in (True, False):
+        copie = mesh.copy(new_nodes)
+        assert not copie[0].is_sealed
+        if not new_nodes:  # les nœuds de la copie neuve sont d'autres nœuds
+            copie[0].add_cell([mesh.node(0, 0, 0), mesh.node(0, 0, 1), d])
+            assert copie.cell_count() == 3
+    assert mesh.cell_count() == 2  # l'original n'a pas bougé

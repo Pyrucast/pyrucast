@@ -44,6 +44,11 @@ impl Mesh {
         crate::ops::mesh::convert(self, target)
     }
 
+    /// Voir [`mesh::copy`](fn@crate::ops::mesh::copy).
+    pub fn copy(&self, new_nodes: bool) -> Result<Mesh> {
+        crate::ops::mesh::copy(self, new_nodes)
+    }
+
     /// Voir [`mesh::elements_on`](fn@crate::ops::mesh::elements_on).
     pub fn elements_on(&self, points: &Mesh, strict: bool) -> Result<Mesh> {
         crate::ops::mesh::elements_on(self, points, strict)

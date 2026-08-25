@@ -98,7 +98,10 @@ consommateur ne s'y attache. On teste l'état avec `is_sealed`.
 Pour repartir d'un maillage scellé et le modifier à nouveau, on en prend une
 **copie profonde** avec `duplicate()` : un `SubMesh` (ou `Mesh`) neuf, **non
 scellé**, avec la même connectivité (les nœuds sont partagés — même `Coords` —,
-seuls leurs refcounts augmentent).
+seuls leurs refcounts augmentent). L'opérateur
+[`mesh.copy(m, new_nodes=…)`](operateurs/maillage.md#copie-sur-place--copy) est
+la même chose au niveau `Mesh`, avec le choix supplémentaire de recréer des
+nœuds neufs aux mêmes endroits plutôt que de partager ceux de l'original.
 
 ```python
 {{#include ../../tests/python/test_doc_conteneurs.py:scellement}}

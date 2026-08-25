@@ -129,6 +129,7 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::mesh::symmetry_plane, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::to_quadratic, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::convert, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesh::copy, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::triangulate_volume, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::triangulate_surface, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::cleanup, m)?)?;

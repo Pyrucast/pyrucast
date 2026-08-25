@@ -651,6 +651,27 @@ pub fn convert(mesh: PyRef<PyMesh>, element_type: &str) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: result })
 }
 
+/// Copy `mesh`, either onto **fresh nodes** placed at the same spots
+/// (`new_nodes=True`, the default) or onto the very same nodes
+/// (`new_nodes=False`, only the connectivity is copied).
+///
+/// Both modes keep the submesh order, element types, cell order and face
+/// colours, and hand back a mesh that is **never sealed** — editable even
+/// when the source has been frozen by a finite-element space, a field or a
+/// matrix. The original is left untouched.
+///
+/// With `new_nodes=True` each distinct node of `mesh` yields one fresh node at
+/// the same position (nodes shared between cells stay shared), so the two
+/// meshes no longer move together. With `new_nodes=False` they share their
+/// nodes: moving one moves it in both.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (mesh, new_nodes=true))]
+pub fn copy(mesh: PyRef<PyMesh>, new_nodes: bool) -> PyResult<PyMesh> {
+    let result = crate::ops::mesh::copy(&mesh.inner, new_nodes)?;
+    Ok(PyMesh { inner: result })
+}
+
 /// Translate `mesh` by `vector`, returning a fresh copy with its own nodes
 /// (the original is left untouched). `vector` matches the mesh dimension.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
@@ -1567,6 +1588,12 @@ impl PyMesh {
     /// Voir `pyrucast.mesh.convert`.
     fn convert(slf: PyRef<'_, Self>, element_type: &str) -> PyResult<PyMesh> {
         super::mesh::convert(slf, element_type)
+    }
+
+    /// Voir `pyrucast.mesh.copy`.
+    #[pyo3(signature = (new_nodes=true))]
+    fn copy(slf: PyRef<'_, Self>, new_nodes: bool) -> PyResult<PyMesh> {
+        super::mesh::copy(slf, new_nodes)
     }
 
     /// Voir `pyrucast.mesh.translate`.

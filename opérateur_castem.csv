@@ -153,7 +153,7 @@ Objets - gestion;EXIS;Teste l'existence d'un objet ou d'une composante;Python na
 Objets - gestion;OUBL;Libère un objet de la mémoire;Python natif (del / GC)
 Objets - gestion;MENA;Nettoyage mémoire (ramasse-miettes);Python natif (GC)
 Objets - gestion;DETR;Détruit un objet;Python natif (del)
-Objets - gestion;COPI;Copie (duplique) un objet;.copy() / clone
+Objets - gestion;COPI;Copie (duplique) un objet;mesh.copy (new_nodes) / duplicate
 Objets - gestion;VIDE;Teste si un objet est vide;Python natif (len == 0)
 Objets - gestion;TYPE;Type d'un objet;Python natif (type())
 Objets - gestion;OPTI;Fixe les options globales (dimension, mode, mémoire);paramètres / Coords (dimension et repère : new / axisymmetric)

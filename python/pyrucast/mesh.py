@@ -20,6 +20,7 @@ from ._pyrucast import (
     circle as circle,
     consolidate_mesh as consolidate,
     convert as convert,
+    copy as copy,
     elements_on as elements_on,
     extrude as extrude,
     from_gmsh_arrays as from_gmsh_arrays,

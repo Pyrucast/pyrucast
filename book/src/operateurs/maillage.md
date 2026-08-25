@@ -19,6 +19,7 @@ un **nouveau** `Mesh`. Côté Python ils sont exposés à plat
 | `sweep(mesh_a, mesh_b, n_layers, element_type="QUA4")` | tisse `QUA4`/`TRI3`/`QUA8`/`QUA9`/`TRI6` entre deux lignes `SEG2` (un `QUA4` est toujours construit d'abord, puis converti) |
 | `transfinite(side1, side2, side3, side4, element_type="QUA4")` | **généralisation de `sweep` à 4 côtés** (l'équivalent Cast3M de `DALL`) : interpolation transfinie (patch de Coons) entre quatre lignes `SEG2` formant un contour fermé (voir plus bas) |
 | `sweep_solid(mesh_a, mesh_b, n_layers)` | **compagnon 3D** de `sweep` : tisse un solide entre deux surfaces (TRI3→PENTA6, QUA4→HEX8) |
+| `copy(mesh, new_nodes=True)` | **copie** du maillage sur des nœuds **neufs** aux mêmes endroits, ou (`new_nodes=False`) sur les **mêmes** nœuds — dans les deux cas descellée (voir plus bas) |
 | `translate(mesh, vector)` | **copie** du maillage translatée de `vector` (nœuds neufs, original intact) |
 | `rotate(mesh, angle, center, axis=None)` | **copie** du maillage tournée de `angle` (rad) autour de `center` (axe `axis` en 3D) |
 | `symmetry_point(mesh, center)` | **copie** symétrique par rapport au **point** `center` (Cast3M `SYME`, voir plus bas) |
@@ -123,6 +124,31 @@ sur le bord, quelle que soit leur forme (pas seulement des droites). Comme
 > se limite au cas standard de l'interpolation transfinie — côtés opposés
 > de **même** nombre d'éléments — largement suffisant en pratique et
 > implémentable simplement.
+
+## Copie sur place : `copy`
+
+`copy(mesh, new_nodes=True)` rend une copie du maillage **sans le déplacer** :
+mêmes sous-maillages dans le même ordre, mêmes types, mêmes couleurs, même
+connectivité. Ce que l'argument tranche, c'est si les deux maillages se tiennent
+encore par leur géométrie :
+
+- `new_nodes=True` (par défaut) crée **un nœud neuf par nœud distinct**, à la
+  même position, dans la même `Coords` — un nœud partagé entre plusieurs
+  cellules de la source reste partagé dans la copie. Les deux maillages sont
+  alors indépendants : déplacer un nœud de l'un laisse l'autre en place. C'est
+  ce que font les [copies rigides](#copies-rigides--translate-rotate-et-les-symétries),
+  moins le déplacement.
+- `new_nodes=False` copie **la seule connectivité** : ce sont les mêmes nœuds,
+  dont le refcount monte. Déplacer un nœud les déplace tous les deux.
+
+Dans les deux cas la copie est **descellée** ([Maillage](../mesh.md#scellement-connectivité-figée-après-consommation)),
+donc de nouveau modifiable même si l'original a été consommé par un espace
+éléments finis, un champ ou une matrice ; c'est la forme fonction libre de la
+méthode `duplicate()`, qui est le cas `new_nodes=False`.
+
+```python
+{{#include ../../../tests/python/test_doc_ops_maillage.py:copie}}
+```
 
 ## Copies rigides : `translate`, `rotate` et les symétries
 
