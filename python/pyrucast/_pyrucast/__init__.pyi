@@ -36,6 +36,7 @@ __all__ = [
     "consolidate_mesh",
     "consolidate_node",
     "convert",
+    "copy",
     "cos",
     "cosh",
     "deformation",
@@ -393,13 +394,17 @@ class ElementField:
         `revolve` / `revolve_angle` sweep an axisymmetric plot into its body
         of revolution — see `SubMesh.plot`.
         """
-    def min(self, component: builtins.str) -> builtins.float:
+    def min(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
         r"""
-        Smallest value of `component` across the sub-fields defining it.
+        Smallest value of `component` across the zones defining it — or, called
+        without a component, the smallest value of the **whole** field, every
+        component of every zone pooled (see `SubElementField.min`).
         """
-    def max(self, component: builtins.str) -> builtins.float:
+    def max(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
         r"""
-        Largest value of `component` across the sub-fields defining it.
+        Largest value of `component` across the zones defining it — or, called
+        without a component, the largest value of the **whole** field (see
+        `min`).
         """
     def sum(self, component: builtins.str) -> builtins.float:
         r"""
@@ -450,29 +455,6 @@ class ElementField:
         r"""
         `field < x` → a 0/1 mask field (see `__ge__`).
         """
-    def unit(self) -> SubElementField:
-        r"""
-        The sole sub-object **view** of a unitary aggregate
-        (exactly one sub), else a clear error. Use it where the
-        single-zone case needs a sub method: `parent.unit().m(...)`.
-        More honest than `parent[0]` (which silently takes the
-        first of several) — see `CONVENTIONS.md`.
-        """
-    def add_sub(self, sub: SubElementField) -> None:
-        r"""
-        Append a sub-object **in place** (the handle is shared, not
-        deep-copied). The functional counterpart is `|`, which leaves
-        the operands untouched and returns a fresh aggregate.
-        """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
-        r"""
-        Print the full content (third display level) to stdout:
-        every sub-object's values/topology, beyond `repr`'s bounded
-        structure. Returns nothing.
-        """
-    def __len__(self) -> builtins.int: ...
     @typing.overload
     def __getitem__(self, key: int) -> SubElementField:
         r"""
@@ -509,6 +491,29 @@ class ElementField:
         `subfield | field` — the mirror of `field | subfield`, differing only
         in that the lone zone comes first.
         """
+    def unit(self) -> SubElementField:
+        r"""
+        The sole sub-object **view** of a unitary aggregate
+        (exactly one sub), else a clear error. Use it where the
+        single-zone case needs a sub method: `parent.unit().m(...)`.
+        More honest than `parent[0]` (which silently takes the
+        first of several) — see `CONVENTIONS.md`.
+        """
+    def add_sub(self, sub: SubElementField) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+        r"""
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
+        """
+    def __len__(self) -> builtins.int: ...
     def consolidate(self) -> ElementField:
         r"""
         Voir `pyrucast.element_field.consolidate`.
@@ -636,28 +641,6 @@ class Evolution:
         `revolve` / `revolve_angle` sweep an axisymmetric plot into its body
         of revolution — see `SubMesh.plot`.
         """
-    def unit(self) -> SubEvolution:
-        r"""
-        The sole sub-object **view** of a unitary aggregate
-        (exactly one sub), else a clear error. Use it where the
-        single-zone case needs a sub method: `parent.unit().m(...)`.
-        More honest than `parent[0]` (which silently takes the
-        first of several) — see `CONVENTIONS.md`.
-        """
-    def add_sub(self, sub: SubEvolution) -> None:
-        r"""
-        Append a sub-object **in place** (the handle is shared, not
-        deep-copied). The functional counterpart is `|`, which leaves
-        the operands untouched and returns a fresh aggregate.
-        """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
-        r"""
-        Print the full content (third display level) to stdout:
-        every sub-object's values/topology, beyond `repr`'s bounded
-        structure. Returns nothing.
-        """
     @typing.overload
     def __getitem__(self, key: int) -> SubEvolution:
         r"""
@@ -680,6 +663,28 @@ class Evolution:
         `sub_evolution | evolution` — the mirror of
         `evolution | sub_evolution`, differing only in that the lone curve
         comes first.
+        """
+    def unit(self) -> SubEvolution:
+        r"""
+        The sole sub-object **view** of a unitary aggregate
+        (exactly one sub), else a clear error. Use it where the
+        single-zone case needs a sub method: `parent.unit().m(...)`.
+        More honest than `parent[0]` (which silently takes the
+        first of several) — see `CONVENTIONS.md`.
+        """
+    def add_sub(self, sub: SubEvolution) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+        r"""
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
         """
     def __len__(self) -> builtins.int: ...
 
@@ -727,7 +732,6 @@ class FiniteElementSpace:
         order (shared handles, sealed while captured). The reverse of building a
         `FiniteElementSpace(mesh)`.
         """
-    def __len__(self) -> builtins.int: ...
     @typing.overload
     def __getitem__(self, key: int) -> SubFiniteElementSpace:
         r"""
@@ -773,6 +777,7 @@ class FiniteElementSpace:
         every sub-object's values/topology, beyond `repr`'s bounded
         structure. Returns nothing.
         """
+    def __len__(self) -> builtins.int: ...
 
 @typing.final
 class Matrix:
@@ -893,29 +898,6 @@ class Matrix:
         `factor` (lazy — no value is rewritten). **Not** finalized: call
         `finalize()` (or `assemble` for computed blocks) before solving.
         """
-    def __len__(self) -> builtins.int: ...
-    def unit(self) -> SubMatrix:
-        r"""
-        The sole sub-object **view** of a unitary aggregate
-        (exactly one sub), else a clear error. Use it where the
-        single-zone case needs a sub method: `parent.unit().m(...)`.
-        More honest than `parent[0]` (which silently takes the
-        first of several) — see `CONVENTIONS.md`.
-        """
-    def add_sub(self, sub: SubMatrix) -> None:
-        r"""
-        Append a sub-object **in place** (the handle is shared, not
-        deep-copied). The functional counterpart is `|`, which leaves
-        the operands untouched and returns a fresh aggregate.
-        """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
-        r"""
-        Print the full content (third display level) to stdout:
-        every sub-object's values/topology, beyond `repr`'s bounded
-        structure. Returns nothing.
-        """
     @typing.overload
     def __getitem__(self, key: int) -> SubMatrix:
         r"""
@@ -939,6 +921,29 @@ class Matrix:
         `sub_matrix | matrix` — the mirror of `matrix | sub_matrix`,
         differing only in that the lone block comes first.
         """
+    def unit(self) -> SubMatrix:
+        r"""
+        The sole sub-object **view** of a unitary aggregate
+        (exactly one sub), else a clear error. Use it where the
+        single-zone case needs a sub method: `parent.unit().m(...)`.
+        More honest than `parent[0]` (which silently takes the
+        first of several) — see `CONVENTIONS.md`.
+        """
+    def add_sub(self, sub: SubMatrix) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+        r"""
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
+        """
+    def __len__(self) -> builtins.int: ...
     def lump(self) -> Matrix:
         r"""
         Voir `pyrucast.matrix.lump`.
@@ -983,6 +988,18 @@ class Mesh:
         Deep-copy the whole mesh into fresh, **unsealed** submeshes with the
         same connectivity — editable again even if the source was sealed by
         consumers. Nodes are shared (same `Coords`).
+        """
+    def set_face_color(self, rgb: tuple[builtins.int, builtins.int, builtins.int]) -> Mesh:
+        r"""
+        Paint **every** submesh with the same face colour `(r, g, b)`, and hand
+        the mesh back so the call chains:
+        `pyrucast.mesh.circle(...).set_face_color((220, 60, 60)).plot()`.
+        
+        What comes back holds the very **same** zones, not copies: it is this
+        mesh, and the two are interchangeable. The colour is viz metadata, so a
+        **sealed** mesh takes it — the seal freezes the connectivity, not the
+        way it is drawn. To give each zone its own colour, set the `face_color`
+        property of that `SubMesh`.
         """
     def node(self, submesh_idx: builtins.int, cell_idx: builtins.int, node_idx: builtins.int) -> Node:
         r"""
@@ -1180,6 +1197,10 @@ class Mesh:
     def convert(self, element_type: builtins.str) -> Mesh:
         r"""
         Voir `pyrucast.mesh.convert`.
+        """
+    def copy(self, new_nodes: builtins.bool = True) -> Mesh:
+        r"""
+        Voir `pyrucast.mesh.copy`.
         """
     def translate(self, vector: typing.Sequence[builtins.float]) -> Mesh:
         r"""
@@ -1800,29 +1821,6 @@ class Model:
         Returns the same kind of `NodeField` over the multiplier nodes; union it
         with `|`. Raises if an index is out of range.
         """
-    def unit(self) -> SubModel:
-        r"""
-        The sole sub-object **view** of a unitary aggregate
-        (exactly one sub), else a clear error. Use it where the
-        single-zone case needs a sub method: `parent.unit().m(...)`.
-        More honest than `parent[0]` (which silently takes the
-        first of several) — see `CONVENTIONS.md`.
-        """
-    def add_sub(self, sub: SubModel) -> None:
-        r"""
-        Append a sub-object **in place** (the handle is shared, not
-        deep-copied). The functional counterpart is `|`, which leaves
-        the operands untouched and returns a fresh aggregate.
-        """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
-        r"""
-        Print the full content (third display level) to stdout:
-        every sub-object's values/topology, beyond `repr`'s bounded
-        structure. Returns nothing.
-        """
-    def __len__(self) -> builtins.int: ...
     @typing.overload
     def __getitem__(self, key: int) -> SubModel:
         r"""
@@ -1846,6 +1844,29 @@ class Model:
         `sub_model | model` — the mirror of `model | sub_model`, differing
         only in that the lone term comes first.
         """
+    def unit(self) -> SubModel:
+        r"""
+        The sole sub-object **view** of a unitary aggregate
+        (exactly one sub), else a clear error. Use it where the
+        single-zone case needs a sub method: `parent.unit().m(...)`.
+        More honest than `parent[0]` (which silently takes the
+        first of several) — see `CONVENTIONS.md`.
+        """
+    def add_sub(self, sub: SubModel) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+        r"""
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
+        """
+    def __len__(self) -> builtins.int: ...
     def material_field(self, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> ElementField:
         r"""
         Voir `pyrucast.element_field.material_field`.
@@ -1972,13 +1993,17 @@ class NodeField:
         zones must hold the same value everywhere. Raises on the first
         conflict.
         """
-    def min(self, component: builtins.str) -> builtins.float:
+    def min(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
         r"""
-        Smallest value of `component` across the zones defining it.
+        Smallest value of `component` across the zones defining it — or, called
+        without a component, the smallest value of the **whole** field, every
+        component of every zone pooled (see `SubNodeField.min`).
         """
-    def max(self, component: builtins.str) -> builtins.float:
+    def max(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
         r"""
-        Largest value of `component` across the zones defining it.
+        Largest value of `component` across the zones defining it — or, called
+        without a component, the largest value of the **whole** field (see
+        `min`).
         """
     def sum(self, component: builtins.str) -> builtins.float:
         r"""
@@ -2047,28 +2072,6 @@ class NodeField:
         r"""
         `field < x` → a 0/1 mask field (see `__ge__`).
         """
-    def unit(self) -> SubNodeField:
-        r"""
-        The sole sub-object **view** of a unitary aggregate
-        (exactly one sub), else a clear error. Use it where the
-        single-zone case needs a sub method: `parent.unit().m(...)`.
-        More honest than `parent[0]` (which silently takes the
-        first of several) — see `CONVENTIONS.md`.
-        """
-    def add_sub(self, sub: SubNodeField) -> None:
-        r"""
-        Append a sub-object **in place** (the handle is shared, not
-        deep-copied). The functional counterpart is `|`, which leaves
-        the operands untouched and returns a fresh aggregate.
-        """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
-    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
-        r"""
-        Print the full content (third display level) to stdout:
-        every sub-object's values/topology, beyond `repr`'s bounded
-        structure. Returns nothing.
-        """
     @typing.overload
     def __getitem__(self, key: int) -> SubNodeField:
         r"""
@@ -2103,6 +2106,28 @@ class NodeField:
         r"""
         `subfield | field` — the mirror of `field | subfield`, differing only
         in that the lone zone comes first.
+        """
+    def unit(self) -> SubNodeField:
+        r"""
+        The sole sub-object **view** of a unitary aggregate
+        (exactly one sub), else a clear error. Use it where the
+        single-zone case needs a sub method: `parent.unit().m(...)`.
+        More honest than `parent[0]` (which silently takes the
+        first of several) — see `CONVENTIONS.md`.
+        """
+    def add_sub(self, sub: SubNodeField) -> None:
+        r"""
+        Append a sub-object **in place** (the handle is shared, not
+        deep-copied). The functional counterpart is `|`, which leaves
+        the operands untouched and returns a fresh aggregate.
+        """
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+    def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
+        r"""
+        Print the full content (third display level) to stdout:
+        every sub-object's values/topology, beyond `repr`'s bounded
+        structure. Returns nothing.
         """
     def __len__(self) -> builtins.int: ...
     def gradient(self, fespace: FiniteElementSpace) -> ElementField:
@@ -2242,13 +2267,19 @@ class SubElementField:
         r"""
         Set `component` to `value` at every point of `cell`.
         """
-    def min(self, component: builtins.str) -> builtins.float:
+    def min(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
         r"""
-        Smallest value of the named `component`.
+        Smallest value of the named `component` — or, called without one, the
+        smallest value of the **whole** field, every component pooled. Pooling
+        reads the field as the flat list of its values: on components carrying
+        different units it answers "the smallest number in there", not a
+        physical quantity.
         """
-    def max(self, component: builtins.str) -> builtins.float:
+    def max(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
         r"""
-        Largest value of the named `component`.
+        Largest value of the named `component` — or, called without one, the
+        largest value of the **whole** field, every component pooled (see
+        `min`).
         """
     def sum(self, component: builtins.str) -> builtins.float:
         r"""
@@ -2908,13 +2939,19 @@ class SubNodeField:
         r"""
         Set the value at `node` for the named `component`.
         """
-    def min(self, component: builtins.str) -> builtins.float:
+    def min(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
         r"""
-        Smallest value of the named `component`.
+        Smallest value of the named `component` — or, called without one, the
+        smallest value of the **whole** field, every component pooled. Pooling
+        reads the field as the flat list of its values: on components carrying
+        different units it answers "the smallest number in there", not a
+        physical quantity.
         """
-    def max(self, component: builtins.str) -> builtins.float:
+    def max(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
         r"""
-        Largest value of the named `component`.
+        Largest value of the named `component` — or, called without one, the
+        largest value of the **whole** field, every component pooled (see
+        `min`).
         """
     def sum(self, component: builtins.str) -> builtins.float:
         r"""
@@ -3156,8 +3193,12 @@ def circle(center: Node, normal: typing.Sequence[builtins.float], radius: builti
 
 def cleanup(mesh: Mesh) -> Mesh:
     r"""
-    Fix the connectivity of a surface mesh: remove its doublets and switch the
-    diagonals that lower the valence error. No node moves.
+    Fix the connectivity of a surface mesh: remove its doublets, give up the
+    nodes that have only three cells around them, and switch the diagonals that
+    lower the valence error.
+    
+    **No node of the contour ever moves**, and none is ever given up: the mesh
+    keeps exactly the boundary it came with.
     
     A **doublet** is an interior node with only two quadrangles around it,
     which therefore share two edges; the node sits in a wedge no smoothing can
@@ -3165,13 +3206,40 @@ def cleanup(mesh: Mesh) -> Mesh:
     five, giving corners of 120° or 72° on average — and the angles around a
     node sum to 2π whatever the positions, so smoothing will never square them.
     
-    The only move is the diagonal switch: two quadrangles sharing an edge form
-    a hexagon, which splits across any of its three diagonals. It changes no
-    node and no boundary, and is applied only when it strictly lowers the
-    valence error and leaves both cells convex.
+    Two moves answer that:
     
-    Triangles are read for incidence and never touched — that is
+    - the **diagonal switch**, for a node of valence five or more: two
+      quadrangles sharing an edge form a hexagon, which splits across any of
+      its three diagonals. It changes no node and no boundary, and is applied
+      only when it strictly lowers the valence error and leaves both cells
+      convex.
+    - the **collapse**, for an interior node with only three cells: round a
+      node carrying `q` quadrangles and `t` triangles the star is bounded by a
+      polygon of `n = 2q + t` sides, and an `n`-gon decomposes with no interior
+      node into `q'` quadrangles and `t'` triangles such that `2q' + t' = n - 2`
+      — always a cell fewer than the star. So the node is given up along with
+      that cell: 3 quadrangles become 2, and 1 quadrangle with 2 triangles
+      becomes a single quadrangle. It is the only move that removes a node,
+      changes how many cells there are, or moves anything: removing a node
+      leaves the ring round it stretched, so the move is judged after relaxing
+      that ring, and the relaxation is kept along with it. A move that does not
+      improve the neighbourhood's worst cell is undone whole.
+    
+    - the **pair collapse**, for two interior nodes sharing an edge with at
+      least one short of a cell: neither can be given up alone without trading
+      one irregular node for two, but together they carry `val(a) + val(b) - 2`
+      cells — a hexagon's worth at 3-3, a heptagon's at 3-4 — and both re-cut
+      with two cells fewer. Two nodes and two cells go at once, and a triangle
+      in the star is carried across rather than created.
+    
+    Triangles are read for incidence and reshaped, and they only ever leave two
+    at a time — their number has the parity of the boundary's edge count, which
+    nothing here may change. Turning a lone triangle into a quadrangle is
     `merge_triangles`'s job.
+    
+    Your own nodes come back untouched apart from those on a ring a collapse
+    relaxed, which are duplicated — the mesh you hand in is never modified. The
+    result comes back wound the way it went in, clockwise or not.
     """
 
 def consolidate_element(field: ElementField) -> ElementField:
@@ -3216,6 +3284,23 @@ def convert(mesh: Mesh, element_type: builtins.str) -> Mesh:
     split). Corner nodes are re-used; face colours are preserved. To promote to
     a quadratic type (`TRI3`→`TRI6`, …), which creates mid-edge nodes, use
     `to_quadratic`. The original mesh is untouched.
+    """
+
+def copy(mesh: Mesh, new_nodes: builtins.bool = True) -> Mesh:
+    r"""
+    Copy `mesh`, either onto **fresh nodes** placed at the same spots
+    (`new_nodes=True`, the default) or onto the very same nodes
+    (`new_nodes=False`, only the connectivity is copied).
+    
+    Both modes keep the submesh order, element types, cell order and face
+    colours, and hand back a mesh that is **never sealed** — editable even
+    when the source has been frozen by a finite-element space, a field or a
+    matrix. The original is left untouched.
+    
+    With `new_nodes=True` each distinct node of `mesh` yields one fresh node at
+    the same position (nodes shared between cells stay shared), so the two
+    meshes no longer move together. With `new_nodes=False` they share their
+    nodes: moving one moves it in both.
     """
 
 def cos(field: typing.Any) -> typing.Any:
