@@ -91,14 +91,22 @@ impl PySubElementField {
         Ok(())
     }
 
-    /// Smallest value of the named `component`.
-    fn min(&self, component: &str) -> PyResult<f64> {
+    /// Smallest value of the named `component` — or, called without one, the
+    /// smallest value of the **whole** field, every component pooled. Pooling
+    /// reads the field as the flat list of its values: on components carrying
+    /// different units it answers "the smallest number in there", not a
+    /// physical quantity.
+    #[pyo3(signature = (component=None))]
+    fn min(&self, component: Option<&str>) -> PyResult<f64> {
         use crate::containers::field::SubField;
         Ok(SubField::min(&*self.handle.read(), component)?)
     }
 
-    /// Largest value of the named `component`.
-    fn max(&self, component: &str) -> PyResult<f64> {
+    /// Largest value of the named `component` — or, called without one, the
+    /// largest value of the **whole** field, every component pooled (see
+    /// `min`).
+    #[pyo3(signature = (component=None))]
+    fn max(&self, component: Option<&str>) -> PyResult<f64> {
         use crate::containers::field::SubField;
         Ok(SubField::max(&*self.handle.read(), component)?)
     }
@@ -300,14 +308,20 @@ impl PyElementField {
         Ok(())
     }
 
-    /// Smallest value of `component` across the sub-fields defining it.
-    fn min(&self, component: &str) -> PyResult<f64> {
+    /// Smallest value of `component` across the zones defining it — or, called
+    /// without a component, the smallest value of the **whole** field, every
+    /// component of every zone pooled (see `SubElementField.min`).
+    #[pyo3(signature = (component=None))]
+    fn min(&self, component: Option<&str>) -> PyResult<f64> {
         use crate::containers::field::Field;
         Ok(Field::min(&self.inner, component)?)
     }
 
-    /// Largest value of `component` across the sub-fields defining it.
-    fn max(&self, component: &str) -> PyResult<f64> {
+    /// Largest value of `component` across the zones defining it — or, called
+    /// without a component, the largest value of the **whole** field (see
+    /// `min`).
+    #[pyo3(signature = (component=None))]
+    fn max(&self, component: Option<&str>) -> PyResult<f64> {
         use crate::containers::field::Field;
         Ok(Field::max(&self.inner, component)?)
     }

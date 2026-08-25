@@ -47,7 +47,8 @@ Au niveau agrégat, `Field` **replie** les opérations sur les zones :
 - `components()` — l'**union** des composantes des zones (ordre de première
   apparition) ; une composante peut n'exister que sur certaines zones ;
 - `min(c)` / `max(c)` — repliés sur les zones qui définissent `c` (erreur si
-  aucune) ;
+  aucune) ; **sans argument**, sur tout le champ, toutes composantes et toutes
+  zones confondues ;
 - `view()` — une vue **zéro-copie** (un guard de lecture par zone), utilisée
   par les opérateurs qui font beaucoup de lectures (gradient, solveur, viz).
 
@@ -160,7 +161,7 @@ logique nouvelle.
 | Niveau | Méthode | Effet |
 |---|---|---|
 | zone & agrégat | `components()` | composantes (union au niveau agrégat) |
-| zone & agrégat | `min(c)` / `max(c)` | extrema d'une composante |
+| zone & agrégat | `min(c)` / `max(c)` | extrema d'une composante — sans argument, de tout le champ |
 | zone | `set_uniform(c, v)` | force `c` à `v` |
 | zone & agrégat | `f + s`, `f - s`, `f * s`, `f / s` | scalaire, nouveau champ |
 | zone & agrégat | `f ** s`, `f ** g` | puissance élément par élément (Python `**` ; Rust : `merge_components`) |

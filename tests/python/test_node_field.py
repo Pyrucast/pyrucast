@@ -651,6 +651,19 @@ def test_min_max_per_component():
         raise AssertionError("expected RuntimeError for unknown component")
 
 
+def test_min_max_without_component_pool_every_component():
+    c, nodes, sm = _poi1_with(3)
+    f = pyrucast.NodeField(sm, ["U", "V"])
+    for i, n in enumerate(nodes):
+        f[0].set_value(n, "U", float(i + 1))  # 1, 2, 3
+        f[0].set_value(n, "V", -float(i + 1))  # -1, -2, -3
+    # Sans composante : la plus petite (resp. grande) valeur du champ entier.
+    assert f[0].min() == -3.0  # dans V
+    assert f[0].max() == 3.0  # dans U
+    assert f.min() == -3.0
+    assert f.max() == 3.0
+
+
 def test_min_max_fold_across_zones():
     c, nodes, mesh = _two_zone_mesh()
     f = pyrucast.NodeField(mesh, ["T"])
@@ -658,6 +671,9 @@ def test_min_max_fold_across_zones():
     f[1].set_value(nodes[3], "T", 5.0)
     assert f.min("T") == -2.0
     assert f.max("T") == 5.0
+    # Sans composante, la réduction traverse aussi les zones.
+    assert f.min() == -2.0
+    assert f.max() == 5.0
 
 
 # ─── consolidate_node ────────────────────────────────────────────────────────

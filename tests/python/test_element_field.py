@@ -250,6 +250,9 @@ def test_min_max_per_component():
     # Aggregate level: folds across the sub-fields.
     assert ef.min("k") == -5.0
     assert ef.max("k") == 2.0
+    # Sans composante : tout le champ, toutes composantes confondues.
+    assert sub.min() == -5.0
+    assert ef.max() == 2.0
     assert ef.components() == ["k"]
     try:
         ef.min("missing")

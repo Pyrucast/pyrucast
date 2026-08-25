@@ -392,6 +392,7 @@ méthode, à côté de `min` / `max` :
 | Réduction | Réduit | Résultat |
 |---|---|---|
 | `field.min(comp)` / `field.max(comp)` | une composante | un `float` (exact) |
+| `field.min()` / `field.max()` | toutes les composantes | un `float` (exact) |
 | `field.sum(comp)` | une composante (`Σ` nœuds/points) | un `float` |
 | `xtx(field)` | toutes les valeurs au carré (`Σ v²`, `XTX`) | un `float` |
 | `xtx(field, components=[…])` | seules ces composantes au carré | un `float` |
@@ -399,6 +400,15 @@ méthode, à côté de `min` / `max` :
 `sum` et `xtx` regroupent la somme en parallèle : dépendantes du nombre de
 threads au dernier ULP (contrairement à `min` / `max`, exactes quel que soit
 l'ordre).
+
+Appelées **sans argument**, `min` et `max` lisent le champ comme la liste plate
+de ses valeurs — toutes composantes confondues, et, au niveau agrégat, toutes
+zones confondues. C'est l'esprit de `xtx`, et la même mise en garde : sur un
+champ dont les composantes ne portent pas la même unité (`sigma_xx` à côté de
+`sigma_xy`), la réponse est « la plus petite valeur là-dedans », pas une
+grandeur physique — il faut alors nommer la composante. Pour la liste des
+extremums composante par composante, une compréhension suffit :
+`{c: f.min(c) for c in f.components()}`.
 
 Par défaut `xtx` somme **toutes** les composantes. En passant `components`, on
 restreint la somme à celles-là (les autres sont ignorées) — utile pour mesurer

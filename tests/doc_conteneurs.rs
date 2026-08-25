@@ -136,7 +136,7 @@ fn un_champ_aux_points_de_gauss_porte_le_materiau() -> Result<()> {
     )?;
 
     // Statistiques et arithmétique au niveau agrégat.
-    assert_eq!(Field::max(&mat, "E")?, 210e9);
+    assert_eq!(Field::max(&mat, Some("E"))?, 210e9);
     let scaled = &mat * 1.1; // nouveau champ (référence : préserve `mat`)
     mat.mul_to_component("E", 0.95)?; // en place, seulement "E"
     let _ = (mat2, scaled);

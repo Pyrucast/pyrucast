@@ -200,7 +200,13 @@ ry = forces.sum("f_y")
 r2 = pyrucast.measure.xtx(residu)
 # Même norme, restreinte aux seules composantes de translation.
 r2_uy = pyrucast.measure.xtx(residu, components=["f_y"])
+# Extremums d'une composante nommée…
+fy_max = forces.max("f_y")
+# …ou, sans argument, de tout le champ, composantes confondues.
+partout = forces.min()
 # ANCHOR_END: sommes
 assert rx == 6.0 and ry == 12.0
 assert r2 == 6 * 25.0
 assert r2_uy == 6 * 16.0
+assert fy_max == 2.0
+assert partout == 1.0

@@ -31,8 +31,10 @@
 //! let mut f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
 //! f.set(0, 0, -3.0).unwrap();
 //! f.set(1, 0, 7.5).unwrap();
-//! assert_eq!(SubField::min(&f, "T").unwrap(), -3.0);
-//! assert_eq!(SubField::max(&f, "T").unwrap(), 7.5);
+//! assert_eq!(SubField::min(&f, Some("T")).unwrap(), -3.0);
+//! assert_eq!(SubField::max(&f, Some("T")).unwrap(), 7.5);
+//! // Sans composante nommée, la réduction porte sur tout le champ.
+//! assert_eq!(SubField::min(&f, None).unwrap(), -3.0);
 //! ```
 
 use crate::aggregate::Aggregate;
@@ -541,17 +543,25 @@ pub trait SubField {
         Ok(out)
     }
 
-    /// Smallest value of the named component.
+    /// Smallest value of the named component — or, with `None`, the smallest
+    /// value of the **whole** field, every component pooled.
+    ///
+    /// Pooling reads the field as the flat list of its values, in the spirit of
+    /// [`SubField::xtx`]: on a field whose components carry different units
+    /// (`sigma_xx` next to `sigma_xy`) the answer is "the smallest number in
+    /// there", not a physical quantity — name the component when that matters.
     ///
     /// Errors if the component is unknown or the field holds no value.
-    fn min(&self, component: &str) -> Result<f64> {
+    fn min(&self, component: Option<&str>) -> Result<f64> {
         fold_component(self, component, "min", f64::min)
     }
 
-    /// Largest value of the named component.
+    /// Largest value of the named component — or, with `None`, the largest
+    /// value of the **whole** field, every component pooled (see
+    /// [`SubField::min`]).
     ///
     /// Errors if the component is unknown or the field holds no value.
-    fn max(&self, component: &str) -> Result<f64> {
+    fn max(&self, component: Option<&str>) -> Result<f64> {
         fold_component(self, component, "max", f64::max)
     }
 
@@ -686,28 +696,43 @@ pub trait SubField {
 /// Fold `op` over every value of one component of a [`SubField`].
 fn fold_component<S: SubField + ?Sized>(
     field: &S,
-    component: &str,
+    component: Option<&str>,
     op_name: &str,
     op: fn(f64, f64) -> f64,
 ) -> Result<f64> {
-    let ci = field
-        .component_index(component)
-        .ok_or_else(|| PyrucastError::Message(format!("unknown component: {}", component)))?;
-    let n_comp = field.component_count();
-    // Parallel reduction over rows: `op` (min/max) is associative & commutative
-    // ⇒ the result is identical to the sequential left-fold for any thread count.
-    field
-        .values()
-        .par_chunks(n_comp)
-        .with_min_len((MIN_PARALLEL_LEN / n_comp).max(1))
-        .map(|row| row[ci])
-        .reduce_with(op)
-        .ok_or_else(|| {
-            PyrucastError::Message(format!(
+    // Parallel reduction: `op` (min/max) is associative & commutative ⇒ the
+    // result is identical to the sequential left-fold for any thread count.
+    // With a component, one value per row is read; without one, the values are
+    // read flat — the layout is irrelevant when every one of them counts.
+    let folded = match component {
+        Some(name) => {
+            let ci = field
+                .component_index(name)
+                .ok_or_else(|| PyrucastError::Message(format!("unknown component: {}", name)))?;
+            let n_comp = field.component_count();
+            field
+                .values()
+                .par_chunks(n_comp)
+                .with_min_len((MIN_PARALLEL_LEN / n_comp).max(1))
+                .map(|row| row[ci])
+                .reduce_with(op)
+        }
+        None => field
+            .values()
+            .par_iter()
+            .with_min_len(MIN_PARALLEL_LEN)
+            .copied()
+            .reduce_with(op),
+    };
+    folded.ok_or_else(|| {
+        PyrucastError::Message(match component {
+            Some(name) => format!(
                 "{}: no value for component {} (empty support)",
-                op_name, component
-            ))
+                op_name, name
+            ),
+            None => format!("{}: the field holds no value", op_name),
         })
+    })
 }
 
 // ─── Scalar-operator macro ──────────────────────────────────────────────────
@@ -856,7 +881,8 @@ macro_rules! __field_op {
 /// Blanket-implemented for every [`Aggregate`] whose sub-object is a
 /// [`SubField`] — `ElementField` today, `NodeField` once it becomes an
 /// aggregate. A component may exist on some subs only; `min`/`max` fold
-/// over the subs that define it and error if none does.
+/// over the subs that define it and error if none does — and, called
+/// without a component, over every value of every sub.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -902,17 +928,23 @@ where
         Ok(out)
     }
 
-    /// Smallest value of `component` across the subs defining it.
+    /// Smallest value of `component` across the subs defining it — or, with
+    /// `None`, the smallest value of the **whole** field, every component of
+    /// every zone pooled (see [`SubField::min`] for what pooling means).
     ///
-    /// Errors if no sub defines the component.
-    fn min(&self, component: &str) -> Result<f64> {
+    /// Errors if no sub defines the component; with `None`, if no zone holds
+    /// a single value.
+    fn min(&self, component: Option<&str>) -> Result<f64> {
         fold_subs(self, component, "min", f64::min)
     }
 
-    /// Largest value of `component` across the subs defining it.
+    /// Largest value of `component` across the subs defining it — or, with
+    /// `None`, the largest value of the **whole** field (see
+    /// [`SubField::min`]).
     ///
-    /// Errors if no sub defines the component.
-    fn max(&self, component: &str) -> Result<f64> {
+    /// Errors if no sub defines the component; with `None`, if no zone holds
+    /// a single value.
+    fn max(&self, component: Option<&str>) -> Result<f64> {
         fold_subs(self, component, "max", f64::max)
     }
 
@@ -1423,7 +1455,12 @@ impl Pscal for ElementField {
 }
 
 /// Fold `op` over one component across every sub that defines it.
-fn fold_subs<A>(agg: &A, component: &str, op_name: &str, op: fn(f64, f64) -> f64) -> Result<f64>
+fn fold_subs<A>(
+    agg: &A,
+    component: Option<&str>,
+    op_name: &str,
+    op: fn(f64, f64) -> f64,
+) -> Result<f64>
 where
     A: Aggregate,
     A::Sub: SubField,
@@ -1431,12 +1468,21 @@ where
     // Per-zone fold in parallel (each zone fold is itself parallel), then a
     // serial associative combine. `op` (min/max) is associative & commutative
     // ⇒ thread-count-independent.
+    //
+    // A zone that has nothing to say contributes `None` rather than an error:
+    // a zone that does not define the component, or — when every component is
+    // pooled — a zone with no value at all. The error is raised once, at the
+    // end, if *no* zone contributed.
     let handles: Vec<&Handle<A::Sub>> = agg.iter().collect();
     let per_sub: Vec<Option<f64>> = handles
         .par_iter()
         .map(|h| -> Result<Option<f64>> {
             let s = h.read();
-            if s.component_index(component).is_none() {
+            let silent = match component {
+                Some(name) => s.component_index(name).is_none(),
+                None => s.values().is_empty(),
+            };
+            if silent {
                 Ok(None)
             } else {
                 Ok(Some(fold_component(&*s, component, op_name, op)?))
@@ -1445,10 +1491,10 @@ where
         .collect::<Result<_>>()?;
     let acc = per_sub.into_iter().flatten().reduce(op);
     acc.ok_or_else(|| {
-        PyrucastError::Message(format!(
-            "{}: no sub-field defines component {}",
-            op_name, component
-        ))
+        PyrucastError::Message(match component {
+            Some(name) => format!("{}: no sub-field defines component {}", op_name, name),
+            None => format!("{}: the field holds no value", op_name),
+        })
     })
 }
 
@@ -1487,15 +1533,15 @@ mod tests {
     #[test]
     fn subfield_min_max_on_node_field() {
         let f = make_node_field(&[4.0, -1.5, 2.0]);
-        assert_eq!(SubField::min(&f, "T").unwrap(), -1.5);
-        assert_eq!(SubField::max(&f, "T").unwrap(), 4.0);
+        assert_eq!(SubField::min(&f, Some("T")).unwrap(), -1.5);
+        assert_eq!(SubField::max(&f, Some("T")).unwrap(), 4.0);
     }
 
     #[test]
     fn subfield_min_max_unknown_component_errors() {
         let f = make_node_field(&[1.0]);
-        assert!(SubField::min(&f, "missing").is_err());
-        assert!(SubField::max(&f, "missing").is_err());
+        assert!(SubField::min(&f, Some("missing")).is_err());
+        assert!(SubField::max(&f, Some("missing")).is_err());
     }
 
     #[test]
@@ -1515,10 +1561,32 @@ mod tests {
         f.set(0, 1, -10.0).unwrap();
         f.set(1, 0, 20.0).unwrap();
         f.set(1, 1, -20.0).unwrap();
-        assert_eq!(SubField::min(&f, "U").unwrap(), 10.0);
-        assert_eq!(SubField::max(&f, "U").unwrap(), 20.0);
-        assert_eq!(SubField::min(&f, "V").unwrap(), -20.0);
-        assert_eq!(SubField::max(&f, "V").unwrap(), -10.0);
+        assert_eq!(SubField::min(&f, Some("U")).unwrap(), 10.0);
+        assert_eq!(SubField::max(&f, Some("U")).unwrap(), 20.0);
+        assert_eq!(SubField::min(&f, Some("V")).unwrap(), -20.0);
+        assert_eq!(SubField::max(&f, Some("V")).unwrap(), -10.0);
+    }
+
+    #[test]
+    fn subfield_min_max_without_component_pool_every_component() {
+        // Two components with opposite signs: pooling reads the flat list of
+        // values, so the answer comes from whichever component holds it.
+        let coords = Handle::new(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let sm = {
+            let mut sm = SubMesh::new(coords, ElementType::POI1);
+            sm.add_cell(&[a.id()]).unwrap();
+            sm.add_cell(&[b.id()]).unwrap();
+            Handle::new(sm)
+        };
+        let mut f = SubNodeField::from_poi1(&sm, vec!["U".into(), "V".into()]).unwrap();
+        f.set(0, 0, 10.0).unwrap();
+        f.set(0, 1, -10.0).unwrap();
+        f.set(1, 0, 20.0).unwrap();
+        f.set(1, 1, -20.0).unwrap();
+        assert_eq!(SubField::min(&f, None).unwrap(), -20.0); // dans V
+        assert_eq!(SubField::max(&f, None).unwrap(), 20.0); // dans U
     }
 
     #[test]
@@ -1526,7 +1594,8 @@ mod tests {
         let coords = Handle::new(Coords::new(1).unwrap());
         let sm: Handle<SubMesh> = Handle::new(SubMesh::new(coords, ElementType::POI1));
         let f = SubNodeField::from_poi1(&sm, vec!["T".into()]).unwrap();
-        assert!(SubField::min(&f, "T").is_err());
+        assert!(SubField::min(&f, Some("T")).is_err());
+        assert!(SubField::min(&f, None).is_err());
     }
 
     #[test]
@@ -1599,18 +1668,39 @@ mod tests {
             s.set_uniform("k", -2.0).unwrap();
             s.set_uniform("E", 210e9).unwrap();
         }
-        assert_eq!(Field::min(&ef, "k").unwrap(), -2.0);
-        assert_eq!(Field::max(&ef, "k").unwrap(), 3.0);
+        assert_eq!(Field::min(&ef, Some("k")).unwrap(), -2.0);
+        assert_eq!(Field::max(&ef, Some("k")).unwrap(), 3.0);
         // E exists on the second zone only: folded over that zone alone.
-        assert_eq!(Field::min(&ef, "E").unwrap(), 210e9);
-        assert_eq!(Field::max(&ef, "E").unwrap(), 210e9);
+        assert_eq!(Field::min(&ef, Some("E")).unwrap(), 210e9);
+        assert_eq!(Field::max(&ef, Some("E")).unwrap(), 210e9);
+    }
+
+    #[test]
+    fn field_min_max_without_component_pool_every_zone() {
+        let ef = make_two_zone_element_field();
+        ef.get(0).unwrap().write().set_uniform("k", 3.0).unwrap();
+        {
+            let mut s = ef.get(1).unwrap().write();
+            s.set_uniform("k", -2.0).unwrap();
+            s.set_uniform("E", 210e9).unwrap();
+        }
+        // Toutes zones et toutes composantes confondues.
+        assert_eq!(Field::min(&ef, None).unwrap(), -2.0);
+        assert_eq!(Field::max(&ef, None).unwrap(), 210e9);
+    }
+
+    #[test]
+    fn field_min_without_component_on_an_empty_aggregate_errors() {
+        let ef = ElementField::default();
+        assert!(Field::min(&ef, None).is_err());
+        assert!(Field::max(&ef, None).is_err());
     }
 
     #[test]
     fn field_min_unknown_component_errors() {
         let ef = make_two_zone_element_field();
-        assert!(Field::min(&ef, "missing").is_err());
-        assert!(Field::max(&ef, "missing").is_err());
+        assert!(Field::min(&ef, Some("missing")).is_err());
+        assert!(Field::max(&ef, Some("missing")).is_err());
     }
 
     #[test]

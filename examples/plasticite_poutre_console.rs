@@ -322,7 +322,7 @@ fn main() -> Result<()> {
 /// le comptage en masquant la composante `p` en 0/1 (bande « > 1e-12 ») puis en
 /// la sommant ([`Field::sum`]).
 fn plastic_diagnostics(state: &ElementField) -> Result<(f64, usize)> {
-    let p_max = Field::max(state, "p")?;
+    let p_max = Field::max(state, Some("p"))?;
     let band = Band::new(None, Some(1e-12), None, None)?;
     let masked = mask(state, &band, Some(vec!["p".to_string()]))?;
     let n_plastic = Field::sum(&masked, "p")?.round() as usize;
