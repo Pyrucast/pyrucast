@@ -337,8 +337,10 @@ Trois conséquences mécaniques :
    parents : Python `Model.heat_conduction(fes) | Model.dirichlet(...)`,
    Rust `model.union(&dirichlet)?`. L'union clone les `Handle` (bump de
    refcount, pas de copie profonde) et **déduplique par handle**, donc les
-   sous-objets sont **partagés** entre parents. `add_sub` reste un primitif
-   bas niveau (et le chemin interne des constructeurs), pas l'API d'usage.
+   sous-objets sont **partagés** entre parents. `add_sub` (une zone) et
+   `add_subs` (toutes les zones d'un autre agrégat, concaténées sans
+   déduplication) restent des primitifs bas niveau (et le chemin interne des
+   constructeurs), pas l'API d'usage.
 
 3. **Le `Sub*` est une vue, pas un point de construction (surface Python).**
    On y accède par indexation (`parent[i]`), exactement comme

@@ -93,6 +93,35 @@ def test_aggregate_union_sub_and_sub_union_sub():
     assert len(m2) == 3
 
 
+def test_add_subs_concatenates_every_zone_in_place():
+    """`agg.add_subs(other)` is `add_sub` for a whole aggregate: no dedup."""
+    c = pyrucast.Coords(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    d = c.add_node([2.0, 0.0])
+    two = pyrucast.mesh.line(a, b, 2)  # one submesh, 2 cells
+    five = pyrucast.mesh.line(b, d, 5)  # one submesh, 5 cells
+    other = five | two  # 5 then 2
+
+    two.add_subs(other)
+    # Every zone of `other` is appended, in order — including the one `two`
+    # already held (concatenation, not union).
+    assert two.cell_counts() == [2, 5, 2]
+    # The source aggregate is untouched.
+    assert other.cell_counts() == [5, 2]
+
+    # `check_push` still applies: a mesh on another Coords is rejected.
+    other_coords = pyrucast.Coords(2)
+    e = other_coords.add_node([0.0, 0.0])
+    f = other_coords.add_node([1.0, 0.0])
+    try:
+        two.add_subs(pyrucast.mesh.line(e, f, 1))
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected RuntimeError adding zones on another Coords")
+
+
 def test_sub_union_aggregate_mirrors_aggregate_union_sub():
     """`sub | agg` (Mesh.__ror__) is accepted like `agg | sub`, sub first."""
     c = pyrucast.Coords(2)

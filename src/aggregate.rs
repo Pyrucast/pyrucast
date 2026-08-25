@@ -288,6 +288,40 @@ pub trait Aggregate: Default {
         Ok(())
     }
 
+    /// [`Aggregate::add_sub`] for a whole aggregate: append **every** sub of
+    /// `other` at the tail, in order, each one going through
+    /// [`Aggregate::check_push`] / [`Aggregate::post_push`]. Handles are
+    /// shared (refcount bump), not deep-copied.
+    ///
+    /// Like `add_sub` this is a low-level **concatenation** primitive: no
+    /// deduplication, no [`Aggregate::finalize`]. The usual composition API
+    /// is the union (`|` in Python, [`Aggregate::union`] in Rust), which
+    /// leaves both operands untouched, skips subs already held and finalizes
+    /// — see `CONVENTIONS.md`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::ElementType;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// let coords = Handle::new(Coords::new(2).unwrap());
+    /// let mut a = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// let b = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
+    /// a.add_subs(&b)?;
+    /// assert_eq!(a.len(), 2);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    fn add_subs(&mut self, other: &Self) -> crate::error::Result<()>
+    where
+        Self: Sized,
+    {
+        for h in other.iter() {
+            self.add_sub(h.clone())?;
+        }
+        Ok(())
+    }
+
     /// Check compatibility (via [`Aggregate::check_push`] on the first item of `other`)
     /// then append handles from `other` into `self`, **deduplicating by
     /// handle identity** ([`Handle::same_object`]): a sub already present is
@@ -576,6 +610,16 @@ macro_rules! impl_aggregate_pymethods {
                 /// the operands untouched and returns a fresh aggregate.
                 fn add_sub(&mut self, sub: pyo3::PyRef<'_, $Sub>) -> pyo3::PyResult<()> {
                     $crate::aggregate::Aggregate::add_sub(&mut self.inner, sub.handle.clone())?;
+                    Ok(())
+                }
+
+                /// `add_sub` for a whole aggregate: append **every** zone of
+                /// `other` **in place**, in order (handles shared, not
+                /// deep-copied). Plain concatenation: no deduplication, unlike
+                /// the functional `|`, which leaves both operands untouched
+                /// and returns a fresh, deduplicated aggregate.
+                fn add_subs(&mut self, other: pyo3::PyRef<'_, $T>) -> pyo3::PyResult<()> {
+                    $crate::aggregate::Aggregate::add_subs(&mut self.inner, &other.inner)?;
                     Ok(())
                 }
 
@@ -1031,6 +1075,26 @@ mod tests {
         assert_eq!(b.len(), 3);
         let h = b.get(1).unwrap();
         assert_eq!(h.read().0, 2);
+    }
+
+    #[test]
+    fn add_subs_concatenates_without_deduplicating() {
+        let shared = Handle::new(Item(2));
+        let mut a = Bag::default();
+        a.push(Handle::new(Item(1)));
+        a.push(shared.clone());
+        let mut b = Bag::default();
+        b.push(shared.clone()); // already held by `a`: kept all the same
+        b.push(Handle::new(Item(3)));
+
+        a.add_subs(&b).unwrap();
+
+        let collected: Vec<u32> = a.iter().map(|h| h.read().0).collect();
+        assert_eq!(collected, vec![1, 2, 2, 3]);
+        // Handles are shared, not deep-copied.
+        assert!(a.get(2).unwrap().same_object(&shared));
+        // The source aggregate is untouched.
+        assert_eq!(b.len(), 2);
     }
 
     #[test]

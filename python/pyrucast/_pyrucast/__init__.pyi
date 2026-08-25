@@ -505,6 +505,14 @@ class ElementField:
         deep-copied). The functional counterpart is `|`, which leaves
         the operands untouched and returns a fresh aggregate.
         """
+    def add_subs(self, other: ElementField) -> None:
+        r"""
+        `add_sub` for a whole aggregate: append **every** zone of
+        `other` **in place**, in order (handles shared, not
+        deep-copied). Plain concatenation: no deduplication, unlike
+        the functional `|`, which leaves both operands untouched
+        and returns a fresh, deduplicated aggregate.
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
@@ -678,6 +686,14 @@ class Evolution:
         deep-copied). The functional counterpart is `|`, which leaves
         the operands untouched and returns a fresh aggregate.
         """
+    def add_subs(self, other: Evolution) -> None:
+        r"""
+        `add_sub` for a whole aggregate: append **every** zone of
+        `other` **in place**, in order (handles shared, not
+        deep-copied). Plain concatenation: no deduplication, unlike
+        the functional `|`, which leaves both operands untouched
+        and returns a fresh, deduplicated aggregate.
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
@@ -768,6 +784,14 @@ class FiniteElementSpace:
         Append a sub-object **in place** (the handle is shared, not
         deep-copied). The functional counterpart is `|`, which leaves
         the operands untouched and returns a fresh aggregate.
+        """
+    def add_subs(self, other: FiniteElementSpace) -> None:
+        r"""
+        `add_sub` for a whole aggregate: append **every** zone of
+        `other` **in place**, in order (handles shared, not
+        deep-copied). Plain concatenation: no deduplication, unlike
+        the functional `|`, which leaves both operands untouched
+        and returns a fresh, deduplicated aggregate.
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
@@ -935,6 +959,14 @@ class Matrix:
         deep-copied). The functional counterpart is `|`, which leaves
         the operands untouched and returns a fresh aggregate.
         """
+    def add_subs(self, other: Matrix) -> None:
+        r"""
+        `add_sub` for a whole aggregate: append **every** zone of
+        `other` **in place**, in order (handles shared, not
+        deep-copied). Plain concatenation: no deduplication, unlike
+        the functional `|`, which leaves both operands untouched
+        and returns a fresh, deduplicated aggregate.
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
@@ -1076,6 +1108,14 @@ class Mesh:
         Append a sub-object **in place** (the handle is shared, not
         deep-copied). The functional counterpart is `|`, which leaves
         the operands untouched and returns a fresh aggregate.
+        """
+    def add_subs(self, other: Mesh) -> None:
+        r"""
+        `add_sub` for a whole aggregate: append **every** zone of
+        `other` **in place**, in order (handles shared, not
+        deep-copied). Plain concatenation: no deduplication, unlike
+        the functional `|`, which leaves both operands untouched
+        and returns a fresh, deduplicated aggregate.
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
@@ -1858,6 +1898,14 @@ class Model:
         deep-copied). The functional counterpart is `|`, which leaves
         the operands untouched and returns a fresh aggregate.
         """
+    def add_subs(self, other: Model) -> None:
+        r"""
+        `add_sub` for a whole aggregate: append **every** zone of
+        `other` **in place**, in order (handles shared, not
+        deep-copied). Plain concatenation: no deduplication, unlike
+        the functional `|`, which leaves both operands untouched
+        and returns a fresh, deduplicated aggregate.
+        """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
@@ -2120,6 +2168,14 @@ class NodeField:
         Append a sub-object **in place** (the handle is shared, not
         deep-copied). The functional counterpart is `|`, which leaves
         the operands untouched and returns a fresh aggregate.
+        """
+    def add_subs(self, other: NodeField) -> None:
+        r"""
+        `add_sub` for a whole aggregate: append **every** zone of
+        `other` **in place**, in order (handles shared, not
+        deep-copied). Plain concatenation: no deduplication, unlike
+        the functional `|`, which leaves both operands untouched
+        and returns a fresh, deduplicated aggregate.
         """
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...

@@ -37,11 +37,12 @@ Tout agrégat expose, côté **Python** :
 | `for sub in agg:` | itère les zones (via le protocole séquence) |
 | `agg.unit()` | la **seule** zone d'un agrégat unitaire, sinon une erreur claire |
 | `agg.add_sub(sub)` | ajoute une zone en place |
+| `agg.add_subs(other)` | concatène en place **toutes** les zones d'un autre agrégat (sans déduplication) |
 | `agg \| other` | **union** (voir plus bas) |
 | `repr` / `str` / `dump()` | les trois niveaux d'affichage |
 
 Côté **Rust**, le trait `Aggregate` fournit les mêmes : `len`, `is_empty`,
-`get(i)`, `subset(indices)`, `iter`, `unit`, `push`/`add_sub`, plus
+`get(i)`, `subset(indices)`, `iter`, `unit`, `push`/`add_sub`/`add_subs`, plus
 `Index<usize>` et `IntoIterator` via la macro `impl_aggregate_std_traits!`.
 
 > **`agg[i]` vue, `agg[i:j]` agrégat.** L'indexation entière renvoie une
@@ -100,6 +101,14 @@ L'union est donc acceptée **dans les deux sens** : `sub | agg` passe par le
 diffère de `agg | sub` que par l'ordre des zones. La déduplication et la
 finalisation sont identiques — une zone déjà présente est simplement déplacée
 en tête.
+
+> **En place : `add_sub` / `add_subs`.** L'union rend un agrégat **neuf** et
+> laisse ses deux opérandes intacts. Pour modifier l'agrégat courant, les deux
+> primitives bas niveau sont `agg.add_sub(sub)` (une zone) et
+> `agg.add_subs(other)` (**toutes** les zones d'un autre agrégat, dans
+> l'ordre). Elles vérifient `check_push` mais **ne dédupliquent pas** et
+> n'appellent pas `finalize` : c'est de la concaténation. L'API d'usage pour
+> composer reste `|` (cf. `CONVENTIONS.md`).
 
 Plus, pour les nœuds (cf. [Nœud](node.md)) :
 

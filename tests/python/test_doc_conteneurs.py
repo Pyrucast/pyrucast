@@ -145,8 +145,14 @@ qua.unit().add_cell([ns[0], ns[1], ns[2], ns[3]])
 mesh = tri | qua
 print(len(mesh))  # 2 sous-maillages
 print(mesh)  # Mesh: 2 submesh(es), 2 cell(s) total
+
+# Ajout en place : `add_sub` pour une zone, `add_subs` pour toutes celles
+# d'un autre agrégat (concaténation, sans déduplication).
+tri.add_subs(qua)
+print(len(tri))  # 2 sous-maillages
 # ANCHOR_END: aggregat
 assert len(mesh) == 2
+assert len(tri) == 2
 
 # ── premiers pas ───────────────────────────────────────────
 
