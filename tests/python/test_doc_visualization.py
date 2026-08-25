@@ -91,6 +91,11 @@ coords, _, _ = _triangle()
 sm = pyrucast.Mesh(coords, "TRI3")[0]  # vue du sous-maillage unique
 sm.face_color = (220, 60, 60)
 assert sm.face_color == (220, 60, 60)
+
+# La même couleur pour **toutes** les zones d'un maillage, sans boucle : la
+# méthode rend le maillage, donc elle s'enchaîne.
+piece = pyrucast.Mesh(coords, "TRI3").set_face_color((60, 60, 220))
+assert all(zone.face_color == (60, 60, 220) for zone in piece)
 # ANCHOR_END: couleur
 
 # ── Champs et échelles ──────────────────────────────────────────────────────

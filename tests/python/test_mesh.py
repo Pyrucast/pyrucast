@@ -903,3 +903,24 @@ def test_copy_is_unsealed_even_from_a_sealed_mesh():
             copie[0].add_cell([mesh.node(0, 0, 0), mesh.node(0, 0, 1), d])
             assert copie.cell_count() == 3
     assert mesh.cell_count() == 2  # l'original n'a pas bougé
+
+
+def test_set_face_color_paints_every_zone_and_chains():
+    _, mesh = _triangle_et_segment()
+    mesh[0].face_color = (1, 2, 3)
+
+    retour = mesh.set_face_color((220, 60, 60))
+
+    assert [zone.face_color for zone in mesh] == [(220, 60, 60)] * 2
+    # Le maillage rendu est celui-ci : mêmes zones, donc on peut enchaîner.
+    assert retour.cell_counts() == mesh.cell_counts()
+    retour[1].face_color = (7, 8, 9)
+    assert mesh[1].face_color == (7, 8, 9)
+
+
+def test_set_face_color_works_on_a_sealed_mesh():
+    _, mesh = _triangle_et_segment()
+    pyrucast.FiniteElementSpace(mesh)
+    assert mesh[0].is_sealed
+    mesh.set_face_color((10, 20, 30))
+    assert mesh[0].face_color == (10, 20, 30)

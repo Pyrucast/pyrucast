@@ -317,6 +317,22 @@ impl PyMesh {
         })
     }
 
+    /// Paint **every** submesh with the same face colour `(r, g, b)`, and hand
+    /// the mesh back so the call chains:
+    /// `pyrucast.mesh.circle(...).set_face_color((220, 60, 60)).plot()`.
+    ///
+    /// What comes back holds the very **same** zones, not copies: it is this
+    /// mesh, and the two are interchangeable. The colour is viz metadata, so a
+    /// **sealed** mesh takes it — the seal freezes the connectivity, not the
+    /// way it is drawn. To give each zone its own colour, set the `face_color`
+    /// property of that `SubMesh`.
+    fn set_face_color(&self, rgb: (u8, u8, u8)) -> PyResult<PyMesh> {
+        let color = crate::atoms::RgbColor::new(rgb.0, rgb.1, rgb.2);
+        Ok(Self {
+            inner: self.inner.set_face_color(color),
+        })
+    }
+
     /// The `node_idx`-th node of cell `cell_idx` in submesh `submesh_idx`.
     fn node(&self, submesh_idx: usize, cell_idx: usize, node_idx: usize) -> PyResult<PyNode> {
         let node = self.inner.node(submesh_idx, cell_idx, node_idx)?;

@@ -66,10 +66,16 @@ fn exporter_un_sous_maillage_en_svg() -> Result<()> {
 // ANCHOR: couleur
 #[test]
 fn chaque_zone_porte_sa_couleur() -> Result<()> {
-    let (_, coords, _) = scene()?;
+    let (_, coords, maillage) = scene()?;
     let mut sm = SubMesh::new(coords, ElementType::TRI3);
     sm.set_face_color(RgbColor::new(220, 60, 60));
     assert_eq!(sm.face_color(), RgbColor::new(220, 60, 60));
+
+    // La même couleur pour **toutes** les zones d'un maillage, sans boucle :
+    // la méthode rend le maillage, donc elle s'enchaîne.
+    let bleu = RgbColor::new(60, 60, 220);
+    assert_eq!(maillage.set_face_color(bleu).cell_count()?, 1);
+    assert!(maillage.iter().all(|z| z.read().face_color() == bleu));
     Ok(())
 }
 // ANCHOR_END: couleur

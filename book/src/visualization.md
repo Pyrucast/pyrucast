@@ -118,6 +118,8 @@ Côté Python :
 
 Quand on appelle `Mesh.plot`, chaque sous-maillage est rendu avec **sa propre** `face_color`, ce qui permet de distinguer visuellement des composants regroupés dans un même maillage (par exemple : peau / cœur / interfaces).
 
+Pour peindre **toutes** les zones d'un coup, `Mesh.set_face_color((r, g, b))` pose la même couleur sur chacune et **rend le maillage** — les mêmes zones, pas des copies —, ce qui permet de l'enchaîner : `pyrucast.mesh.circle(...).set_face_color((220, 60, 60)).plot()`. La couleur étant une donnée de tracé, un maillage **scellé** l'accepte : le sceau fige la connectivité, pas la façon de la dessiner.
+
 ## Coloration par un champ — `NodeField` ou `ElementField`
 
 `plot` accepte un argument optionnel `field` — un [`NodeField`](node-field.md) **ou** un [`ElementField`](element-field.md), interchangeables — qui **remplace la couleur uniforme** par une couleur tirée d'une *colormap* appliquée aux valeurs du champ.

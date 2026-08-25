@@ -1105,6 +1105,45 @@ impl Mesh {
         Ok(copy)
     }
 
+    /// Paint **every** submesh with the same face colour, and hand the mesh
+    /// back so the call chains — `mesh::circle(…)?.set_face_color(rouge)`.
+    ///
+    /// What comes back holds the very **same** zones (the same handles), not
+    /// copies of them: it *is* this mesh, and the two are interchangeable.
+    /// The colour is viz metadata — [`SubMesh::set_face_color`] on each zone —
+    /// so a **sealed** mesh takes it without complaint; the seal freezes the
+    /// connectivity, not the way it is drawn.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node, RgbColor};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let seg = { let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+    /// #     sm.add_cell(&[n[0].id(), n[1].id()]).unwrap(); Handle::new(sm) };
+    /// # mesh.add_sub(seg).unwrap();
+    /// // Une couleur pour toutes les zones, sans boucle — et le maillage
+    /// // revient, pour enchaîner.
+    /// let rouge = RgbColor::new(220, 60, 60);
+    /// assert_eq!(mesh.set_face_color(rouge).cell_count()?, 2);
+    /// assert!(mesh.iter().all(|z| z.read().face_color() == rouge));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn set_face_color(&self, color: RgbColor) -> Mesh {
+        let mut same = Self::default();
+        for sub in self {
+            sub.write().set_face_color(color);
+            same.subs.push(sub.clone());
+        }
+        same
+    }
+
     /// Add a cell directly when the mesh has exactly one submesh.
     ///
     /// ```
@@ -1925,6 +1964,36 @@ mod nearest_node_tests {
         // Closest to the origin is n00.
         let found = mesh.nearest_node(&[-0.2, 0.1]).unwrap();
         assert_eq!(found.id(), n00.id());
+    }
+
+    #[test]
+    fn set_face_color_paints_every_zone_even_sealed() {
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[0.0, 1.0]).unwrap();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+        mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
+        let seg = {
+            let mut sm = SubMesh::new(coords, ElementType::SEG2);
+            sm.add_cell(&[a.id(), b.id()]).unwrap();
+            sm.set_face_color(RgbColor::new(1, 2, 3));
+            Handle::new(sm)
+        };
+        mesh.add_sub(seg).unwrap();
+        // Le sceau gèle la connectivité, pas la façon de la dessiner.
+        crate::containers::finite_element_space::FiniteElementSpace::lagrange1(&mesh).unwrap();
+        assert!(mesh.get(0).unwrap().read().is_sealed());
+
+        let rouge = RgbColor::new(220, 60, 60);
+        let retour = mesh.set_face_color(rouge);
+
+        assert_eq!(retour.len(), 2);
+        for i in 0..2 {
+            // Les mêmes zones, pas des copies : le maillage rendu est celui-ci.
+            assert!(retour.get(i).unwrap().same_object(&mesh.get(i).unwrap()));
+            assert_eq!(mesh.get(i).unwrap().read().face_color(), rouge);
+        }
     }
 
     #[test]
