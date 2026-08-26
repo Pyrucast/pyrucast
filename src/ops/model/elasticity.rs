@@ -1,10 +1,9 @@
 //! Linear elasticity.
 
-use crate::aggregate::Aggregate;
+use super::spanning;
 use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
-use crate::handle::Handle;
 use crate::models::elasticity::ElasticityModel;
 use crate::models::symmetry::MaterialSymmetry;
 
@@ -81,13 +80,7 @@ pub fn elasticity_with_symmetry(
     model: ElasticityModel,
     symmetry: MaterialSymmetry,
 ) -> Result<Model> {
-    let mut out = Model::empty();
-    for sub in fes {
-        out.add_sub(Handle::new(SubModel::elasticity_with_symmetry(
-            sub.clone(),
-            model,
-            symmetry,
-        )?))?;
-    }
-    Ok(out)
+    spanning(fes, |zone| {
+        SubModel::elasticity_with_symmetry(zone, model, symmetry)
+    })
 }

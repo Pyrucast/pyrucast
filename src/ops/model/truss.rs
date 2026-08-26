@@ -1,10 +1,9 @@
 //! Bar (truss) elements.
 
-use crate::aggregate::Aggregate;
+use super::spanning;
 use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
-use crate::handle::Handle;
 
 /// Truss / bar `Model` spanning **every** subspace of `fes` — one
 /// [`SubModel::Truss`] per
@@ -42,9 +41,5 @@ use crate::handle::Handle;
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn truss(fes: &FiniteElementSpace) -> Result<Model> {
-    let mut model = Model::empty();
-    for sub in fes {
-        model.add_sub(Handle::new(SubModel::truss(sub.clone())?))?;
-    }
-    Ok(model)
+    spanning(fes, SubModel::truss)
 }

@@ -1,10 +1,9 @@
 //! Shells (Kirchhoff-Love / Reissner-Mindlin).
 
-use crate::aggregate::Aggregate;
+use super::spanning;
 use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
-use crate::handle::Handle;
 use crate::models::shell::ShellModel;
 
 /// Shell `Model` spanning **every** subspace of a *surface* `fes`.
@@ -31,9 +30,5 @@ use crate::models::shell::ShellModel;
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn shell(fes: &FiniteElementSpace, model: ShellModel) -> Result<Model> {
-    let mut out = Model::empty();
-    for sub in fes {
-        out.add_sub(Handle::new(SubModel::shell(sub.clone(), model)?))?;
-    }
-    Ok(out)
+    spanning(fes, |zone| SubModel::shell(zone, model))
 }

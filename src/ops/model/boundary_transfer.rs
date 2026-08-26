@@ -1,10 +1,9 @@
 //! Transfer through a boundary (convection, Robin).
 
-use crate::aggregate::Aggregate;
+use super::spanning;
 use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
-use crate::handle::Handle;
 use crate::models::Physics;
 
 /// Surface exchange `Model` spanning **every** subspace of a *boundary*
@@ -55,13 +54,7 @@ pub fn boundary_transfer(
     components: Vec<(String, String)>,
     physics: Physics,
 ) -> Result<Model> {
-    let mut model = Model::empty();
-    for sub in fes {
-        model.add_sub(Handle::new(SubModel::boundary_transfer(
-            sub.clone(),
-            components.clone(),
-            physics,
-        )?))?;
-    }
-    Ok(model)
+    spanning(fes, |zone| {
+        SubModel::boundary_transfer(zone, components.clone(), physics)
+    })
 }

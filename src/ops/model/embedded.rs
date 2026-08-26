@@ -1,10 +1,9 @@
 //! Immersed nodes bound to a host interpolation.
 
-use crate::aggregate::Aggregate;
+use super::single;
 use crate::containers::mesh::Mesh;
 use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
-use crate::handle::Handle;
 
 /// Embedded (immersed) constraint `Model` (a single sub-model) tying each
 /// node of `immersed` to the interpolation of `host` at that node, for every
@@ -57,14 +56,12 @@ pub fn embedded(
     imposed_values: Option<Vec<String>>,
     tol: Option<f64>,
 ) -> Result<Model> {
-    let mut model = Model::empty();
-    model.add_sub(Handle::new(SubModel::embedded(
+    single(SubModel::embedded(
         immersed,
         host,
         components,
         multipliers,
         imposed_values,
         tol,
-    )?))?;
-    Ok(model)
+    )?)
 }

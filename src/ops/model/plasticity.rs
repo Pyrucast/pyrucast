@@ -1,10 +1,9 @@
 //! Elasto-plasticity, by yield law.
 
-use crate::aggregate::Aggregate;
+use super::spanning;
 use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
-use crate::handle::Handle;
 use crate::models::elasticity::ElasticityModel;
 use crate::models::plastic::PlasticLaw;
 
@@ -82,13 +81,5 @@ pub fn plasticity_with_law(
     model: ElasticityModel,
     law: PlasticLaw,
 ) -> Result<Model> {
-    let mut out = Model::empty();
-    for sub in fes {
-        out.add_sub(Handle::new(SubModel::plasticity_with_law(
-            sub.clone(),
-            model,
-            law,
-        )?))?;
-    }
-    Ok(out)
+    spanning(fes, |zone| SubModel::plasticity_with_law(zone, model, law))
 }

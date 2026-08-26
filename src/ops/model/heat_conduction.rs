@@ -1,10 +1,9 @@
 //! Heat conduction (Fourier).
 
-use crate::aggregate::Aggregate;
+use super::spanning;
 use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
-use crate::handle::Handle;
 use crate::models::symmetry::MaterialSymmetry;
 
 /// Heat-conduction `Model` spanning **every** subspace of `fes` — one
@@ -87,12 +86,7 @@ pub fn heat_conduction_with_symmetry(
     fes: &FiniteElementSpace,
     symmetry: MaterialSymmetry,
 ) -> Result<Model> {
-    let mut model = Model::empty();
-    for sub in fes {
-        model.add_sub(Handle::new(SubModel::heat_conduction_with_symmetry(
-            sub.clone(),
-            symmetry,
-        )?))?;
-    }
-    Ok(model)
+    spanning(fes, |zone| {
+        SubModel::heat_conduction_with_symmetry(zone, symmetry)
+    })
 }

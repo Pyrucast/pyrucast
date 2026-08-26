@@ -1,10 +1,9 @@
 //! Fickian diffusion of a named species.
 
-use crate::aggregate::Aggregate;
+use super::spanning;
 use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
-use crate::handle::Handle;
 use crate::models::symmetry::MaterialSymmetry;
 
 /// Fickian-diffusion `Model` spanning **every** subspace of `fes`,
@@ -78,13 +77,7 @@ pub fn fick_with_symmetry(
     symmetry: MaterialSymmetry,
     species: &str,
 ) -> Result<Model> {
-    let mut model = Model::empty();
-    for sub in fes {
-        model.add_sub(Handle::new(SubModel::fick_with_symmetry(
-            sub.clone(),
-            symmetry,
-            species,
-        )?))?;
-    }
-    Ok(model)
+    spanning(fes, |zone| {
+        SubModel::fick_with_symmetry(zone, symmetry, species)
+    })
 }

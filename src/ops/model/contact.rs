@@ -1,10 +1,9 @@
 //! Node-to-surface unilateral contact.
 
-use crate::aggregate::Aggregate;
+use super::single;
 use crate::containers::mesh::Mesh;
 use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
-use crate::handle::Handle;
 
 /// Node-to-surface contact `Model` (a single sub-model) preventing the
 /// nodes of `slave` from penetrating the oriented `master` surface.
@@ -54,13 +53,11 @@ pub fn contact(
     multiplier: Option<String>,
     imposed_value: Option<String>,
 ) -> Result<Model> {
-    let mut model = Model::empty();
-    model.add_sub(Handle::new(SubModel::contact(
+    single(SubModel::contact(
         slave,
         master,
         components,
         multiplier,
         imposed_value,
-    )?))?;
-    Ok(model)
+    )?)
 }

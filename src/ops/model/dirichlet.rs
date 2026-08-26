@@ -1,10 +1,9 @@
 //! Imposed value on a variable (Lagrange multiplier).
 
-use crate::aggregate::Aggregate;
+use super::single;
 use crate::containers::mesh::Mesh;
 use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
-use crate::handle::Handle;
 use crate::models::RelationSense;
 
 /// Dirichlet `Model` (a single sub-model) constraining `imposed_variable`
@@ -53,8 +52,7 @@ pub fn dirichlet(
     imposed_value: Option<String>,
     sense: RelationSense,
 ) -> Result<Model> {
-    let mut model = Model::empty();
-    model.add_sub(Handle::new(SubModel::dirichlet(
+    single(SubModel::dirichlet(
         imposed_variable,
         target_dual,
         imposed_mesh,
@@ -62,6 +60,5 @@ pub fn dirichlet(
         multiplier,
         imposed_value,
         sense,
-    )?))?;
-    Ok(model)
+    )?)
 }

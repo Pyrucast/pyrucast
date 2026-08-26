@@ -1,10 +1,9 @@
 //! Radiative exchange on a boundary.
 
-use crate::aggregate::Aggregate;
+use super::spanning;
 use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
-use crate::handle::Handle;
 
 /// Radiation-to-infinity `Model` spanning **every** subspace of a *boundary*
 /// `fes`. Parent-level operator; the emissivity and far-field
@@ -39,9 +38,5 @@ use crate::handle::Handle;
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn radiation(fes: &FiniteElementSpace) -> Result<Model> {
-    let mut model = Model::empty();
-    for sub in fes {
-        model.add_sub(Handle::new(SubModel::radiation(sub.clone())?))?;
-    }
-    Ok(model)
+    spanning(fes, SubModel::radiation)
 }

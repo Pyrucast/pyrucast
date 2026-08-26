@@ -1,10 +1,9 @@
 //! Timoshenko beams.
 
-use crate::aggregate::Aggregate;
+use super::spanning;
 use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
-use crate::handle::Handle;
 
 /// Timoshenko-beam `Model` spanning **every** subspace of `fes`.
 /// Parent-level operator; material (`E`, `I`, `G`, `A_s`) is
@@ -43,9 +42,5 @@ use crate::handle::Handle;
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn timoshenko(fes: &FiniteElementSpace) -> Result<Model> {
-    let mut out = Model::empty();
-    for sub in fes {
-        out.add_sub(Handle::new(SubModel::timoshenko(sub.clone())?))?;
-    }
-    Ok(out)
+    spanning(fes, SubModel::timoshenko)
 }

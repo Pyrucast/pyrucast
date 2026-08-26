@@ -1,10 +1,9 @@
 //! Multi-point constraint (linear relation between DOFs).
 
-use crate::aggregate::Aggregate;
+use super::single;
 use crate::containers::mesh::Mesh;
 use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
-use crate::handle::Handle;
 use crate::models::mpc::MpcTerm;
 use crate::models::RelationSense;
 
@@ -54,13 +53,11 @@ pub fn mpc(
     imposed_value: Option<String>,
     sense: RelationSense,
 ) -> Result<Model> {
-    let mut model = Model::empty();
-    model.add_sub(Handle::new(SubModel::mpc(
+    single(SubModel::mpc(
         terms,
         multiplier_mesh,
         multiplier,
         imposed_value,
         sense,
-    )?))?;
-    Ok(model)
+    )?)
 }

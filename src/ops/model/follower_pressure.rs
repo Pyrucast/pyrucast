@@ -1,10 +1,9 @@
 //! Follower pressure on a boundary.
 
-use crate::aggregate::Aggregate;
+use super::spanning;
 use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
-use crate::handle::Handle;
 
 /// Follower-pressure `Model` spanning **every** subspace of a *boundary*
 /// `fes`. Parent-level operator; `p` is supplied at assembly time.
@@ -40,9 +39,5 @@ use crate::handle::Handle;
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn follower_pressure(fes: &FiniteElementSpace) -> Result<Model> {
-    let mut model = Model::empty();
-    for sub in fes {
-        model.add_sub(Handle::new(SubModel::follower_pressure(sub.clone())?))?;
-    }
-    Ok(model)
+    spanning(fes, SubModel::follower_pressure)
 }
