@@ -43,6 +43,7 @@
 //! last two do, which is exactly what lets them handle cyclic loading — and what
 //! costs them seven extra internal variables.
 
+use super::{back_stress_names, YieldLaw};
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::ElasticityModel;
 use crate::models::plastic::{
@@ -546,6 +547,166 @@ pub fn chaboche(
         p: prev.p + dp,
         vars,
     })
+}
+
+/// Norton-Odqvist secondary creep, `ṗ = (q/K)^n`.
+pub(crate) struct CreepNorton;
+
+impl YieldLaw for CreepNorton {
+    fn material_components(&self) -> &'static [&'static str] {
+        &["E", "nu", "K", "n"]
+    }
+
+    fn is_rate_dependent(&self) -> bool {
+        true
+    }
+
+    fn return_map(
+        &self,
+        trial: &[f64; 6],
+        prev: &PrevState,
+        mat: &MatParams,
+        dt: Option<f64>,
+    ) -> Result<PlasticStep> {
+        norton(
+            trial,
+            prev,
+            mat,
+            dt.expect("rate-dependent: dt checked by the caller"),
+        )
+    }
+}
+
+/// Blackburn creep — primary **and** secondary, hence its own state.
+pub(crate) struct CreepBlackburn;
+
+impl YieldLaw for CreepBlackburn {
+    fn material_components(&self) -> &'static [&'static str] {
+        &["E", "nu", "A_1", "alpha_1", "r_1", "B_s", "beta_s"]
+    }
+
+    fn is_rate_dependent(&self) -> bool {
+        true
+    }
+
+    /// The primary creep strain, tracked apart from the total so the law
+    /// integrates correctly under a varying load.
+    fn internal_names(&self) -> Vec<String> {
+        vec!["p_prim".to_string()]
+    }
+
+    fn return_map(
+        &self,
+        trial: &[f64; 6],
+        prev: &PrevState,
+        mat: &MatParams,
+        dt: Option<f64>,
+    ) -> Result<PlasticStep> {
+        blackburn(
+            trial,
+            prev,
+            mat,
+            dt.expect("rate-dependent: dt checked by the caller"),
+        )
+    }
+}
+
+/// Lemaitre creep, `ṗ = (q/K)^N · p^(−M)`.
+pub(crate) struct CreepLemaitre;
+
+impl YieldLaw for CreepLemaitre {
+    fn material_components(&self) -> &'static [&'static str] {
+        &["E", "nu", "K", "N", "M"]
+    }
+
+    fn is_rate_dependent(&self) -> bool {
+        true
+    }
+
+    fn return_map(
+        &self,
+        trial: &[f64; 6],
+        prev: &PrevState,
+        mat: &MatParams,
+        dt: Option<f64>,
+    ) -> Result<PlasticStep> {
+        lemaitre(
+            trial,
+            prev,
+            mat,
+            dt.expect("rate-dependent: dt checked by the caller"),
+        )
+    }
+}
+
+/// Chaboche viscoplasticity — kinematic **and** isotropic hardening.
+pub(crate) struct ViscoplasticChaboche;
+
+impl YieldLaw for ViscoplasticChaboche {
+    fn material_components(&self) -> &'static [&'static str] {
+        &["E", "nu", "k", "K", "n", "C_1", "gamma_1", "b", "Q"]
+    }
+
+    fn is_rate_dependent(&self) -> bool {
+        true
+    }
+
+    /// The back stress (a full tensor) and the isotropic drag.
+    fn internal_names(&self) -> Vec<String> {
+        back_stress_names(false)
+    }
+
+    fn return_map(
+        &self,
+        trial: &[f64; 6],
+        prev: &PrevState,
+        mat: &MatParams,
+        dt: Option<f64>,
+    ) -> Result<PlasticStep> {
+        chaboche(
+            trial,
+            prev,
+            mat,
+            dt.expect("rate-dependent: dt checked by the caller"),
+            false,
+        )
+    }
+}
+
+/// Chaboche coupled with Lemaitre damage.
+pub(crate) struct ViscoplasticLemaitreChaboche;
+
+impl YieldLaw for ViscoplasticLemaitreChaboche {
+    fn material_components(&self) -> &'static [&'static str] {
+        &[
+            "E", "nu", "k", "K", "n", "C_1", "gamma_1", "b", "Q", "S", "s", "D_c",
+        ]
+    }
+
+    fn is_rate_dependent(&self) -> bool {
+        true
+    }
+
+    /// The back stress and the isotropic drag, **plus** the damage.
+    fn internal_names(&self) -> Vec<String> {
+        back_stress_names(true)
+    }
+
+    fn return_map(
+        &self,
+        trial: &[f64; 6],
+        prev: &PrevState,
+        mat: &MatParams,
+        dt: Option<f64>,
+    ) -> Result<PlasticStep> {
+        chaboche(
+            trial,
+            prev,
+            mat,
+            dt.expect("rate-dependent: dt checked by the caller"),
+            true,
+        )
+    }
 }
 
 crate::physics_operator! {

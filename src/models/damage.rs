@@ -97,7 +97,45 @@ pub enum DamageLaw {
     SicSic,
 }
 
+/// What a damage law has to say about itself.
+///
+/// The counterpart of `YieldLaw` on the
+/// damage side, and the same division of labour as
+/// [`SubModelKind`] one level up: the enum
+/// [`DamageLaw`] carries the **identity** — what an archive stores — and the
+/// trait carries the **behaviour**, so a single `match`
+/// (`DamageLaw::as_law`) relates the two.
+///
+/// Adding a law: a unit struct and its `impl` in the law's own file, plus one
+/// arm in `as_law`.
+pub(crate) trait DamageKind: Sync {
+    /// The material components the law reads. `space_dim` matters for a law
+    /// whose orthotropy has a different count in plane and in space.
+    fn material_components(&self, space_dim: usize) -> &'static [&'static str];
+
+    /// Advance the law by one strain increment, for one Gauss point.
+    fn update(
+        &self,
+        eps: &[f64; 6],
+        prev: &[f64],
+        mat: &MatRead,
+        space_dim: usize,
+    ) -> Result<DamageUpdate>;
+
+    /// The law's internal variables, beyond the reported `damage`.
+    fn internal_names(&self) -> Vec<String>;
+}
+
 impl DamageLaw {
+    /// The behaviour behind this identity — **the only `match` per law**.
+    pub(crate) fn as_law(self) -> &'static dyn DamageKind {
+        match self {
+            Self::Mazars => &mazars::Mazars,
+            Self::DamageTc => &damage_tc::DamageTc,
+            Self::SicSic => &sic_sic::SicSic,
+        }
+    }
+
     /// The lowercase name (the inverse of
     /// [`from_name`](crate::named::Named::from_name)).
     ///
@@ -186,12 +224,7 @@ impl DamageLaw {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn material_components(self, space_dim: usize) -> &'static [&'static str] {
-        match self {
-            Self::Mazars => mazars::MATERIAL,
-            Self::DamageTc => damage_tc::MATERIAL,
-            Self::SicSic if space_dim == 2 => sic_sic::MATERIAL_2D,
-            Self::SicSic => sic_sic::MATERIAL_3D,
-        }
+        self.as_law().material_components(space_dim)
     }
 
     /// The law's internal variables, beyond the reported `damage`.
@@ -221,23 +254,7 @@ impl DamageLaw {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn internal_names(self) -> Vec<String> {
-        match self {
-            Self::Mazars => vec!["kappa".into()],
-            Self::DamageTc => vec![
-                "r_plus".into(),
-                "r_minus".into(),
-                "d_plus".into(),
-                "d_minus".into(),
-            ],
-            Self::SicSic => vec![
-                "kappa_1".into(),
-                "kappa_2".into(),
-                "kappa_3".into(),
-                "d_1".into(),
-                "d_2".into(),
-                "d_3".into(),
-            ],
-        }
+        self.as_law().internal_names()
     }
 
     /// One step of the law, at a Gauss point.
@@ -281,11 +298,7 @@ impl DamageLaw {
         mat: &MatRead,
         space_dim: usize,
     ) -> Result<DamageUpdate> {
-        match self {
-            Self::Mazars => mazars::update(eps, prev, mat),
-            Self::DamageTc => damage_tc::update(eps, prev, mat),
-            Self::SicSic => sic_sic::update(eps, prev, mat, space_dim),
-        }
+        self.as_law().update(eps, prev, mat, space_dim)
     }
 }
 

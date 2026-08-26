@@ -89,6 +89,7 @@
 //! meaning. Detecting it is the one branch this law needs, and it is exactly the
 //! case a naive implementation gets wrong under strong tension.
 
+use super::YieldLaw;
 use crate::error::Result;
 use crate::models::elasticity::ElasticityModel;
 use crate::models::plastic::{
@@ -403,6 +404,25 @@ fn apex_return(
 // difference finds zero of its own accord. A body entirely at its apex therefore
 // assembles a singular tangent — not an artefact, but the honest report that
 // such a material carries no further load.
+
+/// Drucker-Prager: pressure-sensitive, non-associated flow.
+pub(crate) struct DruckerPrager;
+
+impl YieldLaw for DruckerPrager {
+    fn material_components(&self) -> &'static [&'static str] {
+        &["E", "nu", "friction", "k", "psi"]
+    }
+
+    fn return_map(
+        &self,
+        trial: &[f64; 6],
+        prev: &PrevState,
+        mat: &MatParams,
+        _dt: Option<f64>,
+    ) -> Result<PlasticStep> {
+        return_map(trial, prev, mat)
+    }
+}
 
 crate::physics_operator! {
     /// [`model::drucker_prager`](crate::ops::model::drucker_prager()) — pressure-sensitive plasticity

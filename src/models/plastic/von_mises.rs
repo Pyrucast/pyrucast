@@ -25,6 +25,7 @@
 //! That closed form is why von Mises does not go through the cutting plane: an
 //! exact answer beats a converged one.
 
+use super::YieldLaw;
 use crate::error::Result;
 use crate::models::elasticity::ElasticityModel;
 use crate::models::plastic::PlasticLaw;
@@ -201,6 +202,62 @@ pub fn tangent(trial: &[f64; 6], mat: &MatParams, hardening: f64, p_prev: f64) -
         }
     }
     d
+}
+
+/// The perfect von Mises law — no hardening.
+pub(crate) struct Perfect;
+
+impl YieldLaw for Perfect {
+    fn material_components(&self) -> &'static [&'static str] {
+        &["E", "nu", "sigma_y"]
+    }
+
+    fn return_map(
+        &self,
+        trial: &[f64; 6],
+        prev: &PrevState,
+        mat: &MatParams,
+        _dt: Option<f64>,
+    ) -> Result<PlasticStep> {
+        return_map(trial, prev, mat, 0.0)
+    }
+
+    fn analytic_tangent(
+        &self,
+        trial: &[f64; 6],
+        prev: &PrevState,
+        mat: &MatParams,
+    ) -> Option<Result<[[f64; 6]; 6]>> {
+        Some(Ok(tangent(trial, mat, 0.0, prev.p)))
+    }
+}
+
+/// von Mises with **linear isotropic hardening**, `σ_y(p) = σ_y + H·p`.
+pub(crate) struct Isotropic;
+
+impl YieldLaw for Isotropic {
+    fn material_components(&self) -> &'static [&'static str] {
+        &["E", "nu", "sigma_y", "H"]
+    }
+
+    fn return_map(
+        &self,
+        trial: &[f64; 6],
+        prev: &PrevState,
+        mat: &MatParams,
+        _dt: Option<f64>,
+    ) -> Result<PlasticStep> {
+        return_map(trial, prev, mat, mat.get("H")?)
+    }
+
+    fn analytic_tangent(
+        &self,
+        trial: &[f64; 6],
+        prev: &PrevState,
+        mat: &MatParams,
+    ) -> Option<Result<[[f64; 6]; 6]>> {
+        Some(mat.get("H").map(|h| tangent(trial, mat, h, prev.p)))
+    }
 }
 
 crate::physics_operator! {

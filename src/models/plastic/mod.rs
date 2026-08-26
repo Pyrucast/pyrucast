@@ -149,7 +149,84 @@ pub enum PlasticLaw {
     Gurson,
 }
 
+/// What a yield law has to say about itself.
+///
+/// Every elastoplastic law shares the same physics — same DOFs, same elastic
+/// operator, same incremental A → B mounting, same state. A law differs only by
+/// its **yield surface**, its flow rule, and what those two need. This trait is
+/// that difference, and nothing else.
+///
+/// Same shape as [`SubModelKind`](crate::models::SubModelKind) one level up:
+/// the enum [`PlasticLaw`] carries the **identity** — it is what an archive
+/// stores, and a closure has no name — and the trait carries the **behaviour**,
+/// so that a single `match` (`PlasticLaw::as_law`) relates the two and no
+/// other code dispatches per law.
+///
+/// Adding a law: a unit struct and its `impl` in the law's own file, plus one
+/// arm in `as_law`. Nothing else in this module changes.
+pub(crate) trait YieldLaw: Sync {
+    /// The material components the law reads, in the order they are documented.
+    fn material_components(&self) -> &'static [&'static str];
+
+    /// Project a trial stress onto the yield surface. `dt` is present whenever
+    /// [`is_rate_dependent`](Self::is_rate_dependent) is true — the caller
+    /// checks.
+    fn return_map(
+        &self,
+        trial: &[f64; 6],
+        prev: &PrevState,
+        mat: &MatParams,
+        dt: Option<f64>,
+    ) -> Result<PlasticStep>;
+
+    /// The law's **own** internal variables, beyond `ε_p` and `p`. Most laws
+    /// need none.
+    fn internal_names(&self) -> Vec<String> {
+        Vec::new()
+    }
+
+    /// Whether the law needs the time increment. Erroring without one beats
+    /// integrating a viscous law as if it were instantaneous.
+    fn is_rate_dependent(&self) -> bool {
+        false
+    }
+
+    /// The consistent tangent, **analytically**, when the law has one that has
+    /// been confronted with a finite difference. `None` takes the numerical
+    /// route, which cannot be mis-derived.
+    ///
+    /// One method where there used to be a flag, a `match` on the hardening and
+    /// an `unreachable!()` — a proof obligation the compiler did not check.
+    /// Only von Mises overrides it.
+    fn analytic_tangent(
+        &self,
+        _trial: &[f64; 6],
+        _prev: &PrevState,
+        _mat: &MatParams,
+    ) -> Option<Result<[[f64; 6]; 6]>> {
+        None
+    }
+}
+
 impl PlasticLaw {
+    /// The behaviour behind this identity — **the only `match` per law**, on
+    /// the model of [`SubModel::as_kind`](crate::containers::model::SubModel::as_kind).
+    /// The enum is what an archive stores; the trait is what the physics calls.
+    pub(crate) fn as_law(self) -> &'static dyn YieldLaw {
+        match self {
+            Self::Perfect => &von_mises::Perfect,
+            Self::Isotropic => &von_mises::Isotropic,
+            Self::DruckerPrager => &drucker_prager::DruckerPrager,
+            Self::Ottosen => &ottosen::Ottosen,
+            Self::CreepNorton => &viscous::CreepNorton,
+            Self::CreepBlackburn => &viscous::CreepBlackburn,
+            Self::CreepLemaitre => &viscous::CreepLemaitre,
+            Self::ViscoplasticChaboche => &viscous::ViscoplasticChaboche,
+            Self::ViscoplasticLemaitreChaboche => &viscous::ViscoplasticLemaitreChaboche,
+            Self::Gurson => &gurson::Gurson,
+        }
+    }
+
     /// The lowercase name (the inverse of
     /// [`from_name`](crate::named::Named::from_name)).
     ///
@@ -271,34 +348,7 @@ impl PlasticLaw {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn material_components(self) -> &'static [&'static str] {
-        match self {
-            Self::Perfect => &["E", "nu", "sigma_y"],
-            Self::Isotropic => &["E", "nu", "sigma_y", "H"],
-            Self::DruckerPrager => &["E", "nu", "friction", "k", "psi"],
-            Self::Ottosen => &["E", "nu", "a", "b", "k_1", "k_2", "sigma_c"],
-            Self::CreepNorton => &["E", "nu", "K", "n"],
-            Self::CreepBlackburn => &["E", "nu", "A_1", "alpha_1", "r_1", "B_s", "beta_s"],
-            Self::CreepLemaitre => &["E", "nu", "K", "N", "M"],
-            Self::ViscoplasticChaboche => &["E", "nu", "k", "K", "n", "C_1", "gamma_1", "b", "Q"],
-            Self::ViscoplasticLemaitreChaboche => &[
-                "E", "nu", "k", "K", "n", "C_1", "gamma_1", "b", "Q", "S", "s", "D_c",
-            ],
-            Self::Gurson => &[
-                "E", "nu", "sigma_y", "q_1", "q_2", "q_3", "f_0", "f_c", "f_f",
-            ],
-        }
-    }
-
-    /// Whether this law has an **analytic consistent tangent** that has been
-    /// validated against a finite difference. The others take the numerical
-    /// route.
-    ///
-    /// Only von Mises qualifies, and deliberately: Drucker-Prager's hand
-    /// derivation was 24 % off — plausible, and wrong — until
-    /// `tests/plastic_laws.rs` caught it. A tangent nobody can check is worth
-    /// less than one that costs twelve extra evaluations.
-    fn has_analytic_tangent(self) -> bool {
-        matches!(self, Self::Perfect | Self::Isotropic)
+        self.as_law().material_components()
     }
 
     /// The law's **own** internal variables, beyond `ε_p` and `p`. Empty for a
@@ -336,23 +386,7 @@ impl PlasticLaw {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn internal_names(self) -> Vec<String> {
-        match self {
-            Self::Perfect
-            | Self::Isotropic
-            | Self::DruckerPrager
-            | Self::Ottosen
-            | Self::CreepNorton
-            | Self::CreepLemaitre => Vec::new(),
-            // The porosity, which **is** the state of a porous law.
-            Self::Gurson => vec!["porosity".to_string()],
-            // The primary creep strain, tracked apart from the total so the law
-            // integrates correctly under a varying load.
-            Self::CreepBlackburn => vec!["p_prim".to_string()],
-            // The back stress (a full tensor) and the isotropic drag.
-            Self::ViscoplasticChaboche => back_stress_names(false),
-            // …plus the damage.
-            Self::ViscoplasticLemaitreChaboche => back_stress_names(true),
-        }
+        self.as_law().internal_names()
     }
 
     /// Whether this law is **rate-dependent** — it needs the time increment, and
@@ -388,14 +422,7 @@ impl PlasticLaw {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn is_viscous(self) -> bool {
-        matches!(
-            self,
-            Self::CreepNorton
-                | Self::CreepBlackburn
-                | Self::CreepLemaitre
-                | Self::ViscoplasticChaboche
-                | Self::ViscoplasticLemaitreChaboche
-        )
+        self.as_law().is_rate_dependent()
     }
 
     /// Project a trial stress onto this law's yield surface.
@@ -451,24 +478,11 @@ impl PlasticLaw {
     ) -> Result<PlasticStep> {
         if self.is_viscous() && dt.is_none() {
             return Err(PyrucastError::Message(format!(
-                "plasticity ({self}): this law is rate-dependent and needs a time increment —                  pass `dt` to integrate_behavior"
+                "plasticity ({self}): this law is rate-dependent and needs a time increment — \
+                 pass `dt` to integrate_behavior"
             )));
         }
-        match self {
-            Self::Perfect => von_mises::return_map(trial, prev, mat, 0.0),
-            Self::Isotropic => von_mises::return_map(trial, prev, mat, mat.get("H")?),
-            Self::DruckerPrager => drucker_prager::return_map(trial, prev, mat),
-            Self::Ottosen => ottosen::return_map(trial, prev, mat),
-            // Viscous from here on: `dt` is present, the guard above saw to it.
-            Self::CreepNorton => viscous::norton(trial, prev, mat, dt.unwrap()),
-            Self::CreepBlackburn => viscous::blackburn(trial, prev, mat, dt.unwrap()),
-            Self::CreepLemaitre => viscous::lemaitre(trial, prev, mat, dt.unwrap()),
-            Self::ViscoplasticChaboche => viscous::chaboche(trial, prev, mat, dt.unwrap(), false),
-            Self::ViscoplasticLemaitreChaboche => {
-                viscous::chaboche(trial, prev, mat, dt.unwrap(), true)
-            }
-            Self::Gurson => gurson::return_map(trial, prev, mat),
-        }
+        self.as_law().return_map(trial, prev, mat, dt)
     }
 }
 
@@ -1184,14 +1198,9 @@ fn raw_consistent_tangent(
     mat: &MatParams,
     dt: Option<f64>,
 ) -> Result<[[f64; 6]; 6]> {
-    if law.has_analytic_tangent() {
-        let trial = elastic_predictor(eps_b, prev, mat.lambda, mat.mu);
-        let hardening = match law {
-            PlasticLaw::Perfect => 0.0,
-            PlasticLaw::Isotropic => mat.get("H")?,
-            _ => unreachable!("only von Mises has an analytic tangent"),
-        };
-        return Ok(von_mises::tangent(&trial, mat, hardening, prev.p));
+    let trial = elastic_predictor(eps_b, prev, mat.lambda, mat.mu);
+    if let Some(analytic) = law.as_law().analytic_tangent(&trial, prev, mat) {
+        return analytic;
     }
     finite_difference_tangent(law, eps_b, prev, mat, dt)
 }

@@ -40,6 +40,7 @@
 //!
 //! Flow is **associated** (`g = f`), the usual choice for this criterion.
 
+use super::YieldLaw;
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::ElasticityModel;
 use crate::models::plastic::{
@@ -206,6 +207,25 @@ pub fn return_map(trial: &[f64; 6], prev: &PrevState, mat: &MatParams) -> Result
         p,
         vars: Vec::new(),
     })
+}
+
+/// Ottosen's four-parameter criterion for concrete.
+pub(crate) struct Ottosen;
+
+impl YieldLaw for Ottosen {
+    fn material_components(&self) -> &'static [&'static str] {
+        &["E", "nu", "a", "b", "k_1", "k_2", "sigma_c"]
+    }
+
+    fn return_map(
+        &self,
+        trial: &[f64; 6],
+        prev: &PrevState,
+        mat: &MatParams,
+        _dt: Option<f64>,
+    ) -> Result<PlasticStep> {
+        return_map(trial, prev, mat)
+    }
 }
 
 crate::physics_operator! {

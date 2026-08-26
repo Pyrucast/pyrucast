@@ -32,6 +32,7 @@
 //! `r₀⁺ = f_t/√E` and `r₀⁻ = f_c/√E` are the thresholds; `A_t` and `A_c` set how
 //! fast each branch softens.
 
+use super::DamageKind;
 use crate::error::Result;
 use crate::models::damage::DamageLaw;
 use crate::models::damage::{elastic_stress, lame, pos, DamageUpdate, MatRead};
@@ -199,6 +200,34 @@ pub fn update(eps: &[f64; 6], prev: &[f64], mat: &MatRead) -> Result<DamageUpdat
         damage: d_plus.max(d_minus),
         vars: vec![r_plus, r_minus, d_plus, d_minus],
     })
+}
+
+/// Damage-TC — separate tension and compression damages.
+pub(crate) struct DamageTc;
+
+impl DamageKind for DamageTc {
+    fn material_components(&self, _space_dim: usize) -> &'static [&'static str] {
+        MATERIAL
+    }
+
+    fn internal_names(&self) -> Vec<String> {
+        vec![
+            "r_plus".into(),
+            "r_minus".into(),
+            "d_plus".into(),
+            "d_minus".into(),
+        ]
+    }
+
+    fn update(
+        &self,
+        eps: &[f64; 6],
+        prev: &[f64],
+        mat: &MatRead,
+        _space_dim: usize,
+    ) -> Result<DamageUpdate> {
+        update(eps, prev, mat)
+    }
 }
 
 crate::physics_operator! {

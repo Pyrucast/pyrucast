@@ -52,6 +52,7 @@
 //! both a deviatoric and a volumetric part, which is exactly what makes the
 //! plastic flow dilatant.
 
+use super::YieldLaw;
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::ElasticityModel;
 use crate::models::plastic::{
@@ -227,6 +228,32 @@ pub fn return_map(trial: &[f64; 6], prev: &PrevState, mat: &MatParams) -> Result
         p,
         vars: vec![f],
     })
+}
+
+/// Gurson-Tvergaard-Needleman porous plasticity.
+pub(crate) struct Gurson;
+
+impl YieldLaw for Gurson {
+    fn material_components(&self) -> &'static [&'static str] {
+        &[
+            "E", "nu", "sigma_y", "q_1", "q_2", "q_3", "f_0", "f_c", "f_f",
+        ]
+    }
+
+    /// The porosity, which **is** the state of a porous law.
+    fn internal_names(&self) -> Vec<String> {
+        vec!["porosity".to_string()]
+    }
+
+    fn return_map(
+        &self,
+        trial: &[f64; 6],
+        prev: &PrevState,
+        mat: &MatParams,
+        _dt: Option<f64>,
+    ) -> Result<PlasticStep> {
+        return_map(trial, prev, mat)
+    }
 }
 
 crate::physics_operator! {
