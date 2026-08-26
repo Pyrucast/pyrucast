@@ -18,14 +18,6 @@ use pyo3::types::{PyFloat, PyList};
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-/// Parse an optional policy name into an optional [`OutOfRange`] override.
-fn parse_policy(name: Option<&str>) -> PyResult<Option<OutOfRange>> {
-    match name {
-        Some(s) => Ok(Some(OutOfRange::from_name(s)?)),
-        None => Ok(None),
-    }
-}
-
 /// Extract one tabulated value (`float` / `SubNodeField` / `SubElementField`)
 /// from a Python object.
 fn extract_sub_value(value: &Bound<'_, PyAny>) -> PyResult<SubValue> {
@@ -84,20 +76,21 @@ impl PySubEvolution {
     /// `SubEvolution(samples, out_of_range="error", abscissa_type=None,
     /// ordinate_type=None)` — one curve. `samples` is a list of
     /// `(abscissa, value)`; the values must all be of the same kind (and, for
-    /// fields, on the same support). `abscissa_type` names the physical type of
+    /// fields, on the same support). `out_of_range` defaults to `"error"`.
+    /// `abscissa_type` names the physical type of
     /// the abscissa (used to label plots and to select a field component when a
     /// field is interpolated); `ordinate_type` names the value's type (scalar
     /// curves only).
     #[new]
-    #[pyo3(signature = (samples, out_of_range="error", abscissa_type=None, ordinate_type=None))]
+    #[pyo3(signature = (samples, out_of_range=None, abscissa_type=None, ordinate_type=None))]
     fn py_new(
         py: Python<'_>,
         samples: Vec<(f64, Py<PyAny>)>,
-        out_of_range: &str,
+        out_of_range: Option<OutOfRange>,
         abscissa_type: Option<String>,
         ordinate_type: Option<String>,
     ) -> PyResult<Self> {
-        let oor = OutOfRange::from_name(out_of_range)?;
+        let oor = out_of_range.unwrap_or(OutOfRange::Error);
         let mut pairs = Vec::with_capacity(samples.len());
         for (x, v) in samples {
             pairs.push((x, extract_sub_value(v.bind(py))?));
@@ -151,9 +144,9 @@ impl PySubEvolution {
         &self,
         py: Python<'_>,
         x: Py<PyAny>,
-        out_of_range: Option<&str>,
+        out_of_range: Option<OutOfRange>,
     ) -> PyResult<Py<PyAny>> {
-        let policy = parse_policy(out_of_range)?;
+        let policy = out_of_range;
         let x = x.bind(py);
         let sub = self.handle.read();
         if let Ok(v) = x.extract::<f64>() {
@@ -202,7 +195,7 @@ impl PySubEvolution {
         component: Option<String>,
         vmin: Option<f64>,
         vmax: Option<f64>,
-        cmap: Option<String>,
+        cmap: Option<crate::viz::Colormap>,
         smooth: usize,
         frame: Option<usize>,
         revolve: bool,
@@ -213,7 +206,7 @@ impl PySubEvolution {
     ) -> PyResult<()> {
         let view = crate::py::build_view(view, show_axes, revolve, revolve_angle)?;
         let scale = crate::viz::ColorScale {
-            cmap: crate::py::mesh::parse_cmap(cmap)?,
+            cmap: cmap.unwrap_or_default(),
             vmin,
             vmax,
         };
@@ -265,20 +258,21 @@ pub struct PyEvolution {
 #[pymethods]
 impl PyEvolution {
     /// `Evolution(steps, out_of_range="error")` — build from whole values
+    /// (`out_of_range` defaults to `"error"`)
     /// tabulated at each abscissa. `steps` is a list of `(abscissa, value)`
     /// where `value` is a float, a `NodeField` or an `ElementField`; the kind
     /// is taken from the first step. Whole fields are transposed into one
     /// curve per zone.
     #[new]
-    #[pyo3(signature = (steps, out_of_range="error", abscissa_type=None, ordinate_type=None))]
+    #[pyo3(signature = (steps, out_of_range=None, abscissa_type=None, ordinate_type=None))]
     fn py_new(
         py: Python<'_>,
         steps: Vec<(f64, Py<PyAny>)>,
-        out_of_range: &str,
+        out_of_range: Option<OutOfRange>,
         abscissa_type: Option<String>,
         ordinate_type: Option<String>,
     ) -> PyResult<Self> {
-        let oor = OutOfRange::from_name(out_of_range)?;
+        let oor = out_of_range.unwrap_or(OutOfRange::Error);
         if steps.is_empty() {
             return Err(PyValueError::new_err(
                 "Evolution: at least one step is required",
@@ -354,9 +348,9 @@ impl PyEvolution {
         &self,
         py: Python<'_>,
         x: Py<PyAny>,
-        out_of_range: Option<&str>,
+        out_of_range: Option<OutOfRange>,
     ) -> PyResult<Py<PyAny>> {
-        let policy = parse_policy(out_of_range)?;
+        let policy = out_of_range;
         let x = x.bind(py);
         if let Ok(v) = x.extract::<f64>() {
             return match self.inner.interpolate(v, policy)? {
@@ -402,7 +396,7 @@ impl PyEvolution {
         component: Option<String>,
         vmin: Option<f64>,
         vmax: Option<f64>,
-        cmap: Option<String>,
+        cmap: Option<crate::viz::Colormap>,
         smooth: usize,
         frame: Option<usize>,
         revolve: bool,
@@ -413,7 +407,7 @@ impl PyEvolution {
     ) -> PyResult<()> {
         let view = crate::py::build_view(view, show_axes, revolve, revolve_angle)?;
         let scale = crate::viz::ColorScale {
-            cmap: crate::py::mesh::parse_cmap(cmap)?,
+            cmap: cmap.unwrap_or_default(),
             vmin,
             vmax,
         };

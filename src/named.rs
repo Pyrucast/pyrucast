@@ -159,9 +159,12 @@ macro_rules! named_enum {
         impl<'a, 'py> ::pyo3::FromPyObject<'a, 'py> for $ty {
             type Error = ::pyo3::PyErr;
 
+            // `::pyo3::PyErr` plutôt que `Self::Error` : un énuméré qui porte
+            // une variante `Error` — `OutOfRange` en a une — rendrait le type
+            // associé ambigu.
             fn extract(
                 obj: ::pyo3::Borrowed<'a, 'py, ::pyo3::PyAny>,
-            ) -> ::std::result::Result<Self, Self::Error> {
+            ) -> ::std::result::Result<Self, ::pyo3::PyErr> {
                 let name: String = obj.extract()?;
                 <$ty as $crate::named::Named>::parse(&name)
                     .map_err(|e| ::pyo3::exceptions::PyValueError::new_err(e.to_string()))
@@ -187,4 +190,9 @@ named_enum!(
     crate::models::plastic::PlasticLaw,
     crate::models::shell::ShellModel,
     crate::models::symmetry::MaterialSymmetry,
+    crate::containers::evolution::OutOfRange,
+    crate::ops::mesh::FrontRelax,
 );
+
+#[cfg(feature = "viz")]
+named_enum!(crate::viz::Colormap);

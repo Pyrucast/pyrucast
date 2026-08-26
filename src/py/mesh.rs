@@ -31,22 +31,6 @@ fn with_field_arg<R>(
     }
 }
 
-/// Parse an optional `cmap` name into a [`crate::viz::Colormap`].
-/// `None` ⇒ the default (Viridis); an unknown name is a `ValueError`
-/// that lists the accepted names.
-#[cfg(feature = "viz")]
-pub(crate) fn parse_cmap(name: Option<String>) -> PyResult<crate::viz::Colormap> {
-    match name {
-        None => Ok(crate::viz::Colormap::default()),
-        Some(n) => crate::viz::Colormap::from_name(&n).ok_or_else(|| {
-            PyValueError::new_err(format!(
-                "unknown colormap {n:?} (available: {:?})",
-                crate::viz::Colormap::names()
-            ))
-        }),
-    }
-}
-
 /// Resolve the geometry rendering style from the `wireframe` flag,
 /// rejecting it when a field is also given (a field always colours faces,
 /// so a wireframe makes no sense).
@@ -198,7 +182,7 @@ impl PySubMesh {
         component: Option<String>,
         vmin: Option<f64>,
         vmax: Option<f64>,
-        cmap: Option<String>,
+        cmap: Option<crate::viz::Colormap>,
         smooth: usize,
         wireframe: bool,
         revolve: bool,
@@ -208,7 +192,7 @@ impl PySubMesh {
         let style = mesh_style(wireframe, field.is_some())?;
         let view = crate::py::build_view(view, show_axes, revolve, revolve_angle)?;
         let scale = crate::viz::ColorScale {
-            cmap: parse_cmap(cmap)?,
+            cmap: cmap.unwrap_or_default(),
             vmin,
             vmax,
         };
@@ -388,7 +372,7 @@ impl PyMesh {
         component: Option<String>,
         vmin: Option<f64>,
         vmax: Option<f64>,
-        cmap: Option<String>,
+        cmap: Option<crate::viz::Colormap>,
         smooth: usize,
         wireframe: bool,
         revolve: bool,
@@ -398,7 +382,7 @@ impl PyMesh {
         let style = mesh_style(wireframe, field.is_some())?;
         let view = crate::py::build_view(view, show_axes, revolve, revolve_angle)?;
         let scale = crate::viz::ColorScale {
-            cmap: parse_cmap(cmap)?,
+            cmap: cmap.unwrap_or_default(),
             vmin,
             vmax,
         };

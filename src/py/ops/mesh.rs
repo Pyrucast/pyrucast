@@ -474,14 +474,14 @@ pub fn invert(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
 /// `element_type` is `"SEG2"` (default) or `"SEG3"`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (a, b, n_elems, element_type="SEG2"))]
+#[pyo3(signature = (a, b, n_elems, element_type=None))]
 pub fn line(
     a: PyRef<PyNode>,
     b: PyRef<PyNode>,
     n_elems: usize,
-    element_type: &str,
+    element_type: Option<ElementType>,
 ) -> PyResult<PyMesh> {
-    let element_type = crate::py::named::<ElementType>(element_type)?;
+    let element_type = element_type.unwrap_or(ElementType::SEG2);
     let mesh = crate::ops::mesh::line(a.as_node(), b.as_node(), n_elems, element_type)?;
     Ok(PyMesh { inner: mesh })
 }
@@ -493,15 +493,15 @@ pub fn line(
 /// `element_type` is `"SEG2"` (default) or `"SEG3"`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (center, normal, radius, n_elems, element_type="SEG2"))]
+#[pyo3(signature = (center, normal, radius, n_elems, element_type=None))]
 pub fn circle(
     center: PyRef<PyNode>,
     normal: Vec<f64>,
     radius: f64,
     n_elems: usize,
-    element_type: &str,
+    element_type: Option<ElementType>,
 ) -> PyResult<PyMesh> {
-    let element_type = crate::py::named::<ElementType>(element_type)?;
+    let element_type = element_type.unwrap_or(ElementType::SEG2);
     let mesh = crate::ops::mesh::circle(center.as_node(), &normal, radius, n_elems, element_type)?;
     Ok(PyMesh { inner: mesh })
 }
@@ -513,15 +513,15 @@ pub fn circle(
 /// `element_type` is `"SEG2"` (default) or `"SEG3"`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (a, center, b, n_elems, element_type="SEG2"))]
+#[pyo3(signature = (a, center, b, n_elems, element_type=None))]
 pub fn arc(
     a: PyRef<PyNode>,
     center: PyRef<PyNode>,
     b: PyRef<PyNode>,
     n_elems: usize,
-    element_type: &str,
+    element_type: Option<ElementType>,
 ) -> PyResult<PyMesh> {
-    let element_type = crate::py::named::<ElementType>(element_type)?;
+    let element_type = element_type.unwrap_or(ElementType::SEG2);
     let mesh = crate::ops::mesh::arc(
         a.as_node(),
         center.as_node(),
@@ -540,14 +540,14 @@ pub fn arc(
 /// split for the triangles, promoted to quadratic for `QUA8`/`QUA9`/`TRI6`).
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (mesh_a, mesh_b, n_layers, element_type="QUA4"))]
+#[pyo3(signature = (mesh_a, mesh_b, n_layers, element_type=None))]
 pub fn sweep(
     mesh_a: PyRef<PyMesh>,
     mesh_b: PyRef<PyMesh>,
     n_layers: usize,
-    element_type: &str,
+    element_type: Option<ElementType>,
 ) -> PyResult<PyMesh> {
-    let element_type = crate::py::named::<ElementType>(element_type)?;
+    let element_type = element_type.unwrap_or(ElementType::QUA4);
     let mesh = crate::ops::mesh::sweep(&mesh_a.inner, &mesh_b.inner, n_layers, element_type)?;
     Ok(PyMesh { inner: mesh })
 }
@@ -563,15 +563,15 @@ pub fn sweep(
 /// `"TRI6"` — same conversion path as `sweep`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (side1, side2, side3, side4, element_type="QUA4"))]
+#[pyo3(signature = (side1, side2, side3, side4, element_type=None))]
 pub fn transfinite(
     side1: PyRef<PyMesh>,
     side2: PyRef<PyMesh>,
     side3: PyRef<PyMesh>,
     side4: PyRef<PyMesh>,
-    element_type: &str,
+    element_type: Option<ElementType>,
 ) -> PyResult<PyMesh> {
-    let element_type = crate::py::named::<ElementType>(element_type)?;
+    let element_type = element_type.unwrap_or(ElementType::QUA4);
     let mesh = crate::ops::mesh::transfinite(
         &side1.inner,
         &side2.inner,
@@ -839,7 +839,7 @@ pub fn pave_surface(
     element_type: ElementType,
     size: Option<f64>,
     all_quad: bool,
-    relax: Option<&str>,
+    relax: Option<FrontRelax>,
 ) -> PyResult<PyMesh> {
     // Poll Python signals while paving so a long run stays Ctrl+C-able.
     let mesh = crate::ops::mesh::pave_surface_cancellable(
@@ -847,7 +847,7 @@ pub fn pave_surface(
         element_type,
         size,
         all_quad,
-        parse_relax(relax)?,
+        relax.unwrap_or_default(),
         &PySignals(py),
     )?;
     Ok(PyMesh { inner: mesh })
@@ -949,18 +949,6 @@ pub fn merge_triangles(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
     Ok(PyMesh { inner: out })
 }
 
-/// Read the `relax` argument the three surface pavers share.
-fn parse_relax(name: Option<&str>) -> PyResult<FrontRelax> {
-    match name {
-        None => Ok(FrontRelax::Free),
-        Some(n) => FrontRelax::from_name(n).ok_or_else(|| {
-            PyValueError::new_err(format!(
-                "unknown front relaxation: {n} (expected \"free\", \"along\" or \"none\")"
-            ))
-        }),
-    }
-}
-
 /// Mesh the inside of a closed contour with a structured grid core and a
 /// frontal band — the regular-mesh companion of `pave_surface`.
 ///
@@ -1006,7 +994,7 @@ pub fn grid_surface(
     size: Option<f64>,
     band: usize,
     all_quad: bool,
-    relax: Option<&str>,
+    relax: Option<FrontRelax>,
 ) -> PyResult<PyMesh> {
     let mesh = crate::ops::mesh::grid_surface_cancellable(
         &contour.inner,
@@ -1014,7 +1002,7 @@ pub fn grid_surface(
         size,
         band,
         all_quad,
-        parse_relax(relax)?,
+        relax.unwrap_or_default(),
         &PySignals(py),
     )?;
     Ok(PyMesh { inner: mesh })
@@ -1061,7 +1049,7 @@ pub fn grid_surface2(
     size: Option<f64>,
     band: usize,
     all_quad: bool,
-    relax: Option<&str>,
+    relax: Option<FrontRelax>,
 ) -> PyResult<PyMesh> {
     let mesh = crate::ops::mesh::grid_surface2_cancellable(
         &contour.inner,
@@ -1069,7 +1057,7 @@ pub fn grid_surface2(
         size,
         band,
         all_quad,
-        parse_relax(relax)?,
+        relax.unwrap_or_default(),
         &PySignals(py),
     )?;
     Ok(PyMesh { inner: mesh })
@@ -1528,24 +1516,24 @@ impl PyMesh {
     }
 
     /// Voir `pyrucast.mesh.sweep`.
-    #[pyo3(signature = (mesh_b, n_layers, element_type="QUA4"))]
+    #[pyo3(signature = (mesh_b, n_layers, element_type=None))]
     fn sweep(
         slf: PyRef<'_, Self>,
         mesh_b: PyRef<PyMesh>,
         n_layers: usize,
-        element_type: &str,
+        element_type: Option<ElementType>,
     ) -> PyResult<PyMesh> {
         super::mesh::sweep(slf, mesh_b, n_layers, element_type)
     }
 
     /// Voir `pyrucast.mesh.transfinite`.
-    #[pyo3(signature = (side2, side3, side4, element_type="QUA4"))]
+    #[pyo3(signature = (side2, side3, side4, element_type=None))]
     fn transfinite(
         slf: PyRef<'_, Self>,
         side2: PyRef<PyMesh>,
         side3: PyRef<PyMesh>,
         side4: PyRef<PyMesh>,
-        element_type: &str,
+        element_type: Option<ElementType>,
     ) -> PyResult<PyMesh> {
         super::mesh::transfinite(slf, side2, side3, side4, element_type)
     }
@@ -1647,7 +1635,7 @@ impl PyMesh {
         element_type: ElementType,
         size: Option<f64>,
         all_quad: bool,
-        relax: Option<&str>,
+        relax: Option<FrontRelax>,
     ) -> PyResult<PyMesh> {
         super::mesh::pave_surface(py, slf, element_type, size, all_quad, relax)
     }
@@ -1682,7 +1670,7 @@ impl PyMesh {
         size: Option<f64>,
         band: usize,
         all_quad: bool,
-        relax: Option<&str>,
+        relax: Option<FrontRelax>,
     ) -> PyResult<PyMesh> {
         super::mesh::grid_surface(py, slf, element_type, size, band, all_quad, relax)
     }
@@ -1696,7 +1684,7 @@ impl PyMesh {
         size: Option<f64>,
         band: usize,
         all_quad: bool,
-        relax: Option<&str>,
+        relax: Option<FrontRelax>,
     ) -> PyResult<PyMesh> {
         super::mesh::grid_surface2(py, slf, element_type, size, band, all_quad, relax)
     }

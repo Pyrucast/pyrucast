@@ -107,27 +107,6 @@ pub enum OutOfRange {
 }
 
 impl OutOfRange {
-    /// Parse a policy from its lowercase name (`"error"`, `"clamp"`,
-    /// `"extrapolate"`). Used by the Python layer.
-    ///
-    /// ```
-    /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange, SubEvolution, SubValue, ValueKind};
-    /// // Le nom que porte l'API Python — et rien d'autre.
-    /// assert_eq!(OutOfRange::from_name("clamp")?, OutOfRange::Clamp);
-    /// assert!(OutOfRange::from_name("saturate").is_err());
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn from_name(name: &str) -> Result<Self> {
-        match name {
-            "error" => Ok(OutOfRange::Error),
-            "clamp" => Ok(OutOfRange::Clamp),
-            "extrapolate" => Ok(OutOfRange::Extrapolate),
-            other => Err(PyrucastError::Message(format!(
-                "unknown out_of_range policy '{other}' (expected 'error', 'clamp' or 'extrapolate')"
-            ))),
-        }
-    }
-
     /// The policy's canonical name.
     ///
     /// ```
@@ -140,6 +119,15 @@ impl OutOfRange {
             OutOfRange::Clamp => "clamp",
             OutOfRange::Extrapolate => "extrapolate",
         }
+    }
+}
+
+impl crate::named::Named for OutOfRange {
+    const LABEL: &'static str = "out_of_range policy";
+    const VALUES: &'static [Self] = &[Self::Error, Self::Clamp, Self::Extrapolate];
+
+    fn name(self) -> &'static str {
+        OutOfRange::name(self)
     }
 }
 

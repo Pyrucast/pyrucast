@@ -285,7 +285,7 @@ impl PyElementField {
         component: Option<String>,
         vmin: Option<f64>,
         vmax: Option<f64>,
-        cmap: Option<String>,
+        cmap: Option<crate::viz::Colormap>,
         smooth: usize,
         revolve: bool,
         revolve_angle: f64,
@@ -293,7 +293,7 @@ impl PyElementField {
     ) -> PyResult<()> {
         let view = crate::py::build_view(view, show_axes, revolve, revolve_angle)?;
         let scale = crate::viz::ColorScale {
-            cmap: crate::py::mesh::parse_cmap(cmap)?,
+            cmap: cmap.unwrap_or_default(),
             vmin,
             vmax,
         };

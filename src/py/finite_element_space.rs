@@ -188,12 +188,17 @@ impl PyFiniteElementSpace {
     /// every submesh.
     ///
     /// `FiniteElementSpace(mesh, interpolation="LAGRANGE1", quadrature="GAUSS")`
-    /// — same `(interpolation, quadrature)` applied to every submesh.
+    /// — same `(interpolation, quadrature)` applied to every submesh. Those two
+    /// names **are** the defaults; omitting either one keeps it.
     #[new]
-    #[pyo3(signature = (mesh, interpolation="LAGRANGE1", quadrature="GAUSS"))]
-    fn py_new(mesh: PyRef<PyMesh>, interpolation: &str, quadrature: &str) -> PyResult<Self> {
-        let interp = crate::py::named::<Interpolation>(interpolation)?;
-        let quad = crate::py::named::<QuadratureRule>(quadrature)?;
+    #[pyo3(signature = (mesh, interpolation=None, quadrature=None))]
+    fn py_new(
+        mesh: PyRef<PyMesh>,
+        interpolation: Option<Interpolation>,
+        quadrature: Option<QuadratureRule>,
+    ) -> PyResult<Self> {
+        let interp = interpolation.unwrap_or(Interpolation::Lagrange1);
+        let quad = quadrature.unwrap_or(QuadratureRule::Gauss);
         let n_sub = mesh.inner.len();
         let choices: Vec<(Interpolation, QuadratureRule)> =
             (0..n_sub).map(|_| (interp, quad)).collect();

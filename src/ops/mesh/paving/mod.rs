@@ -158,29 +158,14 @@ pub enum FrontRelax {
 }
 
 impl FrontRelax {
-    /// Parse the name a caller gives — `"free"`, `"along"` or `"none"`.
+    /// The name [`from_name`](crate::named::Named::from_name) reads back.
     ///
     /// ```
-    /// use pyrucast::ops::mesh::FrontRelax;
-    /// assert_eq!(FrontRelax::from_name("along"), Some(FrontRelax::Along));
-    /// assert_eq!(FrontRelax::from_name("none"), Some(FrontRelax::Off));
-    /// // Rien n'est deviné : un nom inconnu n'est pas le défaut.
-    /// assert_eq!(FrontRelax::from_name("Along"), None);
-    /// ```
-    pub fn from_name(name: &str) -> Option<FrontRelax> {
-        match name {
-            "free" => Some(FrontRelax::Free),
-            "along" => Some(FrontRelax::Along),
-            "none" | "off" => Some(FrontRelax::Off),
-            _ => None,
-        }
-    }
-
-    /// The name [`from_name`](FrontRelax::from_name) reads back.
-    ///
-    /// ```
+    /// use pyrucast::named::Named;
     /// use pyrucast::ops::mesh::FrontRelax;
     /// assert_eq!(FrontRelax::default().name(), "free");
+    /// // `off` est un alias de `none`, et la casse ne compte pas.
+    /// assert_eq!(FrontRelax::from_name("OFF"), Some(FrontRelax::Off));
     /// for m in [FrontRelax::Free, FrontRelax::Along, FrontRelax::Off] {
     ///     assert_eq!(FrontRelax::from_name(m.name()), Some(m));
     /// }
@@ -191,6 +176,19 @@ impl FrontRelax {
             FrontRelax::Along => "along",
             FrontRelax::Off => "none",
         }
+    }
+}
+
+impl crate::named::Named for FrontRelax {
+    const LABEL: &'static str = "front relaxation";
+    const VALUES: &'static [Self] = &[Self::Free, Self::Along, Self::Off];
+
+    fn name(self) -> &'static str {
+        FrontRelax::name(self)
+    }
+
+    fn aliases() -> &'static [(&'static str, Self)] {
+        &[("off", Self::Off)]
     }
 }
 

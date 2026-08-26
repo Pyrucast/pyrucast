@@ -91,25 +91,6 @@ fn interp(anchors: &[(f64, u8, u8, u8)], t: f64) -> RgbColor {
 }
 
 impl Colormap {
-    /// Parse a user-facing name (case-insensitive, common aliases
-    /// accepted). Returns `None` for an unknown name.
-    pub fn from_name(name: &str) -> Option<Self> {
-        match name.trim().to_ascii_lowercase().as_str() {
-            "viridis" => Some(Self::Viridis),
-            "jet" | "jet-lite" | "jetlite" => Some(Self::Jet),
-            "coolwarm" | "cool-warm" | "cool_warm" | "rdbu" => Some(Self::CoolWarm),
-            "hot" => Some(Self::Hot),
-            "gray" | "grey" | "grayscale" | "greyscale" => Some(Self::Gray),
-            _ => None,
-        }
-    }
-
-    /// Canonical names accepted by [`Colormap::from_name`], for help and
-    /// error messages.
-    pub fn names() -> &'static [&'static str] {
-        &["viridis", "jet", "coolwarm", "hot", "gray"]
-    }
-
     /// Sample the colormap at `t ∈ [0, 1]` (clamped outside the range).
     pub fn sample(self, t: f64) -> RgbColor {
         let t = t.clamp(0.0, 1.0);
@@ -131,6 +112,40 @@ impl Colormap {
                 RgbColor::new(to_u8(r), to_u8(g), to_u8(b))
             }
         }
+    }
+}
+
+impl crate::named::Named for Colormap {
+    const LABEL: &'static str = "colormap";
+    const VALUES: &'static [Self] = &[
+        Self::Viridis,
+        Self::Jet,
+        Self::CoolWarm,
+        Self::Hot,
+        Self::Gray,
+    ];
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Viridis => "viridis",
+            Self::Jet => "jet",
+            Self::CoolWarm => "coolwarm",
+            Self::Hot => "hot",
+            Self::Gray => "gray",
+        }
+    }
+
+    fn aliases() -> &'static [(&'static str, Self)] {
+        &[
+            ("jet-lite", Self::Jet),
+            ("jetlite", Self::Jet),
+            ("cool-warm", Self::CoolWarm),
+            ("cool_warm", Self::CoolWarm),
+            ("rdbu", Self::CoolWarm),
+            ("grey", Self::Gray),
+            ("grayscale", Self::Gray),
+            ("greyscale", Self::Gray),
+        ]
     }
 }
 
@@ -710,6 +725,7 @@ mod tests {
     use crate::containers::node_field::{NodeField, SubNodeField};
     use crate::coords::Coords;
     use crate::handle::Handle;
+    use crate::named::Named;
 
     #[test]
     fn colormap_endpoints() {

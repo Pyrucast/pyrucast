@@ -204,6 +204,7 @@ mod tests {
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
     use crate::handle::Handle;
+    use crate::named::Named;
     use std::collections::HashMap;
     use std::sync::atomic::AtomicBool;
 
@@ -637,7 +638,10 @@ mod tests {
     fn an_unknown_relaxation_name_is_not_read_as_the_default() {
         assert_eq!(FrontRelax::from_name("along"), Some(FrontRelax::Along));
         assert_eq!(FrontRelax::from_name("none"), Some(FrontRelax::Off));
-        assert_eq!(FrontRelax::from_name("Along"), None);
+        // La casse ne compte plus, et `off` est un alias de `none`.
+        assert_eq!(FrontRelax::from_name("Along"), Some(FrontRelax::Along));
+        assert_eq!(FrontRelax::from_name("OFF"), Some(FrontRelax::Off));
+        assert_eq!(FrontRelax::from_name("nope"), None);
         assert_eq!(FrontRelax::from_name(""), None);
         for m in [FrontRelax::Free, FrontRelax::Along, FrontRelax::Off] {
             assert_eq!(FrontRelax::from_name(m.name()), Some(m));

@@ -631,9 +631,10 @@ class Evolution:
     zone); or low-level by composing `SubEvolution`s with `|`. Index it
     (`evolution[i]`) to reach a `SubEvolution`.
     """
-    def __new__(cls, steps: typing.Sequence[tuple[builtins.float, typing.Any]], out_of_range: builtins.str = 'error', abscissa_type: typing.Optional[builtins.str] = None, ordinate_type: typing.Optional[builtins.str] = None) -> Evolution:
+    def __new__(cls, steps: typing.Sequence[tuple[builtins.float, typing.Any]], out_of_range: typing.Optional[builtins.str] = None, abscissa_type: typing.Optional[builtins.str] = None, ordinate_type: typing.Optional[builtins.str] = None) -> Evolution:
         r"""
         `Evolution(steps, out_of_range="error")` — build from whole values
+        (`out_of_range` defaults to `"error"`)
         tabulated at each abscissa. `steps` is a list of `(abscissa, value)`
         where `value` is a float, a `NodeField` or an `ElementField`; the kind
         is taken from the first step. Whole fields are transposed into one
@@ -742,13 +743,14 @@ class FiniteElementSpace:
     `.with_choices(...)` per submesh); index it (`fes[i]`) to reach a
     `SubFiniteElementSpace`, compose several with `|`.
     """
-    def __new__(cls, mesh: Mesh, interpolation: builtins.str = 'LAGRANGE1', quadrature: builtins.str = 'GAUSS') -> FiniteElementSpace:
+    def __new__(cls, mesh: Mesh, interpolation: typing.Optional[builtins.str] = None, quadrature: typing.Optional[builtins.str] = None) -> FiniteElementSpace:
         r"""
         `FiniteElementSpace(mesh)` — Lagrange-1 + default Gauss for
         every submesh.
         
         `FiniteElementSpace(mesh, interpolation="LAGRANGE1", quadrature="GAUSS")`
-        — same `(interpolation, quadrature)` applied to every submesh.
+        — same `(interpolation, quadrature)` applied to every submesh. Those two
+        names **are** the defaults; omitting either one keeps it.
         """
     @classmethod
     def with_choices(cls, mesh: Mesh, choices: typing.Sequence[tuple[builtins.str, builtins.str]]) -> FiniteElementSpace:
@@ -1238,11 +1240,11 @@ class Mesh:
         r"""
         Voir `pyrucast.mesh.chain`.
         """
-    def sweep(self, mesh_b: Mesh, n_layers: builtins.int, element_type: builtins.str = 'QUA4') -> Mesh:
+    def sweep(self, mesh_b: Mesh, n_layers: builtins.int, element_type: typing.Optional[builtins.str] = None) -> Mesh:
         r"""
         Voir `pyrucast.mesh.sweep`.
         """
-    def transfinite(self, side2: Mesh, side3: Mesh, side4: Mesh, element_type: builtins.str = 'QUA4') -> Mesh:
+    def transfinite(self, side2: Mesh, side3: Mesh, side4: Mesh, element_type: typing.Optional[builtins.str] = None) -> Mesh:
         r"""
         Voir `pyrucast.mesh.transfinite`.
         """
@@ -2054,12 +2056,13 @@ class SubEvolution:
     is a list of `(abscissa, value)` pairs; compose several curves into an
     `Evolution` with `|`.
     """
-    def __new__(cls, samples: typing.Sequence[tuple[builtins.float, typing.Any]], out_of_range: builtins.str = 'error', abscissa_type: typing.Optional[builtins.str] = None, ordinate_type: typing.Optional[builtins.str] = None) -> SubEvolution:
+    def __new__(cls, samples: typing.Sequence[tuple[builtins.float, typing.Any]], out_of_range: typing.Optional[builtins.str] = None, abscissa_type: typing.Optional[builtins.str] = None, ordinate_type: typing.Optional[builtins.str] = None) -> SubEvolution:
         r"""
         `SubEvolution(samples, out_of_range="error", abscissa_type=None,
         ordinate_type=None)` — one curve. `samples` is a list of
         `(abscissa, value)`; the values must all be of the same kind (and, for
-        fields, on the same support). `abscissa_type` names the physical type of
+        fields, on the same support). `out_of_range` defaults to `"error"`.
+        `abscissa_type` names the physical type of
         the abscissa (used to label plots and to select a field component when a
         field is interpolated); `ordinate_type` names the value's type (scalar
         curves only).
@@ -2722,7 +2725,7 @@ def abs(field: typing.Any) -> typing.Any:
     Element-wise absolute value of a field.
     """
 
-def arc(a: Node, center: Node, b: Node, n_elems: builtins.int, element_type: builtins.str = 'SEG2') -> Mesh:
+def arc(a: Node, center: Node, b: Node, n_elems: builtins.int, element_type: typing.Optional[builtins.str] = None) -> Mesh:
     r"""
     Build an open arc of `n_elems` elements from `a` to `b`, following the
     circle centred on `center` that passes through both (the shorter arc is
@@ -2847,7 +2850,7 @@ def chain(mesh: Mesh) -> Mesh:
     Returns a fresh mesh sharing the input's nodes.
     """
 
-def circle(center: Node, normal: typing.Sequence[builtins.float], radius: builtins.float, n_elems: builtins.int, element_type: builtins.str = 'SEG2') -> Mesh:
+def circle(center: Node, normal: typing.Sequence[builtins.float], radius: builtins.float, n_elems: builtins.int, element_type: typing.Optional[builtins.str] = None) -> Mesh:
     r"""
     Build a closed circle mesh of `n_elems` elements, centred on `center`,
     lying in the plane defined by the 3-component `normal`, with the given
@@ -3509,7 +3512,7 @@ def invert(mesh: Mesh) -> Mesh:
     input's nodes.
     """
 
-def line(a: Node, b: Node, n_elems: builtins.int, element_type: builtins.str = 'SEG2') -> Mesh:
+def line(a: Node, b: Node, n_elems: builtins.int, element_type: typing.Optional[builtins.str] = None) -> Mesh:
     r"""
     Build a line of `n_elems` elements from node `a` to node `b`.
     
@@ -4258,7 +4261,7 @@ def sub_material_field(sub_model: SubModel, components_and_values: typing.Sequen
     need no material (e.g. Dirichlet).
     """
 
-def sweep(mesh_a: Mesh, mesh_b: Mesh, n_layers: builtins.int, element_type: builtins.str = 'QUA4') -> Mesh:
+def sweep(mesh_a: Mesh, mesh_b: Mesh, n_layers: builtins.int, element_type: typing.Optional[builtins.str] = None) -> Mesh:
     r"""
     Sweep two SEG2 line meshes into a mesh of `element_type`, building
     `n_layers` layers between `mesh_a` and `mesh_b`.
@@ -4381,7 +4384,7 @@ def to_quadratic(mesh: Mesh) -> Mesh:
     and shared between the cells that use it. The original mesh is untouched.
     """
 
-def transfinite(side1: Mesh, side2: Mesh, side3: Mesh, side4: Mesh, element_type: builtins.str = 'QUA4') -> Mesh:
+def transfinite(side1: Mesh, side2: Mesh, side3: Mesh, side4: Mesh, element_type: typing.Optional[builtins.str] = None) -> Mesh:
     r"""
     Build a structured surface bounded by four `SEG2` sides, by transfinite
     interpolation (the Coons-patch generalization of `sweep` from two lines

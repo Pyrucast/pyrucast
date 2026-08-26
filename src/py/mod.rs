@@ -51,17 +51,3 @@ pub(crate) fn build_view(
     };
     Ok(v)
 }
-
-/// Read a [`Named`](crate::named::Named) value from its name, as a Python
-/// `ValueError` on failure.
-///
-/// Almost every wrapper takes the Rust type directly — the `FromPyObject` impl
-/// of [`named_enum!`](crate::named_enum) does the reading. This helper serves
-/// the handful of parameters that must stay `str` because pyo3 carries a
-/// **literal default** for them (`element_type="SEG2"`): a default is a Rust
-/// expression of the parameter's type, and only a `str` default renders as
-/// readable Python in the generated stub.
-#[cfg(feature = "python-api")]
-pub(crate) fn named<T: crate::named::Named>(name: &str) -> pyo3::PyResult<T> {
-    T::parse(name).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
-}
