@@ -72,8 +72,8 @@ pub mod plasticity;
 pub mod radiation;
 pub mod shell;
 pub mod timoshenko;
-pub mod truss;
 
+pub use crate::models::truss::truss;
 pub use bernoulli::bernoulli;
 pub use boundary_transfer::boundary_transfer;
 pub use contact::contact;
@@ -90,4 +90,3 @@ pub use plasticity::{plasticity_perfect, plasticity_with_law};
 pub use radiation::radiation;
 pub use shell::shell;
 pub use timoshenko::timoshenko;
-pub use truss::truss;

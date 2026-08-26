@@ -202,17 +202,6 @@ pub fn boundary_transfer(
     Ok(PyModel { inner })
 }
 
-/// `model.truss(fespace)` — truss / bar (axial-force) model spanning
-/// **every** subspace of `fespace` (SEG2 elements). DOFs are the vector
-/// displacement `u_x, u_y(, u_z)`; the orientation is taken from the node
-/// coordinates. Material (`E`, `A`) is supplied at assembly time.
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-#[pyfunction]
-pub fn truss(fespace: PyRef<PyFiniteElementSpace>) -> PyResult<PyModel> {
-    let inner = model::truss(&fespace.inner)?;
-    Ok(PyModel { inner })
-}
-
 /// `model.elasticity(fespace, model, symmetry=None)` — linear-elasticity
 /// model spanning every subspace of `fespace`. `model` is `"plane_stress"`,
 /// `"plane_strain"` or `"axisymmetric"` (2-D), or `"solid"` (3-D). DOFs are

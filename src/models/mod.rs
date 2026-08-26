@@ -1480,3 +1480,60 @@ pub(crate) fn voigt_stress_matrix(
     }
     Ok(sig)
 }
+
+/// Declare a physics' **parent-level operator** and its Python twin, from a
+/// single place in the physics' own file.
+///
+/// The author of a physics writes physics and documentation; the plumbing —
+/// the sweep, the `#[pyfunction]`, the stub attribute, the unwrapping of the
+/// Python wrappers — is emitted here. They never open `src/py/`.
+///
+/// Two doc blocks, because the two audiences differ: the Rust one carries the
+/// `///` comment and its doctest, the Python one a string literal, which is
+/// what lands in the `.pyi`. Sharing a single block would put a Rust doctest
+/// into a Python docstring. Same shape as `py_field_unary!` in
+/// `src/py/ops/field.rs`, the house precedent.
+///
+/// ```
+/// # use pyrucast::ops::model;
+/// # use pyrucast::named::Named;
+/// // L'opérateur produit est une fonction libre ordinaire.
+/// assert_eq!(pyrucast::atoms::ElementType::from_name("SEG2").is_some(), true);
+/// ```
+#[macro_export]
+macro_rules! physics_operator {
+    (
+        $(#[$rust_doc:meta])*
+        pub fn $name:ident(fes $(, $arg:ident : $ty:ty)* $(,)?) via $sub:path;
+        python: $py_doc:literal
+    ) => {
+        $(#[$rust_doc])*
+        pub fn $name(
+            fes: &$crate::containers::finite_element_space::FiniteElementSpace,
+            $($arg: $ty,)*
+        ) -> $crate::error::Result<$crate::containers::model::Model> {
+            $crate::ops::model::spanning(fes, |zone| $sub(zone $(, $arg)*))
+        }
+
+        /// The Python face of this physics — generated, never hand-written.
+        #[cfg(feature = "python-api")]
+        pub mod python {
+            // Les types des arguments sont écrits dans la portée du fichier de
+            // la physique ; une physique sans argument n'en importe aucun.
+            #[allow(unused_imports)]
+            use super::*;
+
+            #[doc = $py_doc]
+            #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pyfunction)]
+            #[::pyo3::pyfunction]
+            pub fn $name(
+                fespace: ::pyo3::PyRef<$crate::py::finite_element_space::PyFiniteElementSpace>,
+                $($arg: $ty,)*
+            ) -> ::pyo3::PyResult<$crate::py::model::PyModel> {
+                Ok($crate::py::model::PyModel {
+                    inner: super::$name(&fespace.inner $(, $arg)*)?,
+                })
+            }
+        }
+    };
+}

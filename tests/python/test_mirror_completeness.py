@@ -118,7 +118,11 @@ def rust_exports():
         # ce que rustfmt fait dès que la liste dépasse la largeur. Un balayage
         # ligne à ligne les rate en silence : c'est ainsi que toute la famille
         # `points_*` est restée invisible à ce test.
-        for m in re.finditer(r"pub use \w+::(?:\{(.*?)\}|(\w+));", text, re.S):
+        # `pub use sous_module::…` mais aussi `pub use crate::chemin::…` : un
+        # opérateur peut être défini ailleurs et seulement ré-exporté ici, ce
+        # qu'un chemin à un seul segment ne couvrait pas — le garde-fou perdait
+        # alors l'opérateur **en silence**.
+        for m in re.finditer(r"pub use (?:\w+::)+(?:\{(.*?)\}|(\w+));", text, re.S):
             names = m.group(1) or m.group(2)
             for name in (n.strip() for n in names.split(",")):
                 if name and name[0].islower():

@@ -120,7 +120,7 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::model::follower_pressure, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::model::interface_transfer, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::model::boundary_transfer, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::model::truss, m)?)?;
+    m.add_function(wrap_pyfunction!(models::truss::python::truss, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::model::elasticity, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::model::plasticity_perfect, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::model::plasticity_isotropic, m)?)?;
