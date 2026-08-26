@@ -41,6 +41,7 @@
 //! Flow is **associated** (`g = f`), the usual choice for this criterion.
 
 use crate::error::{PyrucastError, Result};
+use crate::models::elasticity::ElasticityModel;
 use crate::models::plastic::{
     elastic_stress, i1, j2, j3, require_positive, MatParams, PlasticLaw, PlasticStep, PrevState,
 };
@@ -205,4 +206,37 @@ pub fn return_map(trial: &[f64; 6], prev: &PrevState, mat: &MatParams) -> Result
         p,
         vars: Vec::new(),
     })
+}
+
+crate::physics_operator! {
+    /// [`model::ottosen`](crate::ops::model::ottosen()) — Ottosen's four-parameter criterion for
+    /// concrete, whose strength depends on the pressure **and** on the Lode
+    /// angle (so tension and compression differ). Material `E`, `nu`, `a`, `b`,
+    /// `k_1`, `k_2`, `sigma_c`.
+    ///
+    /// Integrated by a cutting-plane return with a numerically differentiated
+    /// normal: the criterion is exact, and the gradient — long enough that a
+    /// hand-derived one could not be checked — is a central difference.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::ops::model;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// let m = model::ottosen(&fes, ElasticityModel::PlaneStrain)?;
+    /// assert_eq!(m.primal_vars()?, vec!["u_x".to_string(), "u_y".to_string()]);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn ottosen(fes, model: ElasticityModel) = crate::ops::model::plasticity_with_law, PlasticLaw::Ottosen;
+    python: "`model.ottosen(fespace, model)` — Ottosen's four-parameter criterion for\nconcrete, whose strength depends on the pressure **and** on the Lode\nangle (so tension and compression differ). Material `E`, `nu`, `a`, `b`,\n`k_1`, `k_2`, `sigma_c`.\n\nIntegrated by a cutting-plane return with a numerically differentiated\nnormal: the criterion is exact, and the gradient — long enough that a\nhand-derived one could not be checked — is a central difference."
 }

@@ -90,6 +90,7 @@
 //! case a naive implementation gets wrong under strong tension.
 
 use crate::error::Result;
+use crate::models::elasticity::ElasticityModel;
 use crate::models::plastic::{
     deviator, i1, require_positive, von_mises_stress, MatParams, PlasticLaw, PlasticStep, PrevState,
 };
@@ -402,3 +403,37 @@ fn apex_return(
 // difference finds zero of its own accord. A body entirely at its apex therefore
 // assembles a singular tangent — not an artefact, but the honest report that
 // such a material carries no further load.
+
+crate::physics_operator! {
+    /// [`model::drucker_prager`](crate::ops::model::drucker_prager()) — pressure-sensitive plasticity
+    /// with **non-associated** flow: `f = q + α·I₁ − k`, plastic potential
+    /// `g = q + ψ·I₁`. Material `E`, `nu`, `alpha` (friction), `k` (cohesion),
+    /// `psi` (dilatancy).
+    ///
+    /// `ψ = α` recovers associated flow; `ψ < α` is the usual choice for soils
+    /// and rocks, whose measured dilatancy is far below what friction alone
+    /// would imply. A non-associated law has a **non-symmetric** tangent.
+    /// Returns beyond the cone's apex (`I₁ = k/α`) collapse onto the tip.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::ops::model;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// let m = model::drucker_prager(&fes, ElasticityModel::PlaneStrain)?;
+    /// assert_eq!(m.primal_vars()?, vec!["u_x".to_string(), "u_y".to_string()]);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn drucker_prager(fes, model: ElasticityModel) = crate::ops::model::plasticity_with_law, PlasticLaw::DruckerPrager;
+    python: "`model.drucker_prager(fespace, model)` — pressure-sensitive plasticity\nwith **non-associated** flow: `f = q + α·I₁ − k`, plastic potential\n`g = q + ψ·I₁`. Material `E`, `nu`, `alpha` (friction), `k` (cohesion),\n`psi` (dilatancy).\n\n`ψ = α` recovers associated flow; `ψ < α` is the usual choice for soils\nand rocks, whose measured dilatancy is far below what friction alone\nwould imply. A non-associated law has a **non-symmetric** tangent.\nReturns beyond the cone's apex (`I₁ = k/α`) collapse onto the tip."
+}

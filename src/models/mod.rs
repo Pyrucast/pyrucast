@@ -1502,6 +1502,46 @@ pub(crate) fn voigt_stress_matrix(
 /// ```
 #[macro_export]
 macro_rules! physics_operator {
+
+    // ── Alias : une façade nommée par-dessus un opérateur générique ─────────
+    //
+    // Les lois d'écoulement et d'endommagement sont des **attributs** d'une
+    // physique unique (cf. `models::plastic`), pas des physiques de plus. Elles
+    // se lisent pourtant mieux nommées au site d'appel — `drucker_prager(fes,
+    // m)` plutôt que `plasticity_with_law(fes, m, PlasticLaw::DruckerPrager)`.
+    // La façade ne duplique rien : elle transmet à l'opérateur générique.
+    (
+        $(#[$rust_doc:meta])*
+        pub fn $name:ident(fes $(, $arg:ident : $ty:ty)* $(,)?) = $target:path, $fixed:expr;
+        python: $py_doc:literal
+    ) => {
+        $(#[$rust_doc])*
+        pub fn $name(
+            fes: &$crate::containers::finite_element_space::FiniteElementSpace,
+            $($arg: $ty,)*
+        ) -> $crate::error::Result<$crate::containers::model::Model> {
+            $target(fes, $($arg,)* $fixed)
+        }
+
+        /// The Python face of this physics — generated, never hand-written.
+        #[cfg(feature = "python-api")]
+        pub mod $name {
+            #[allow(unused_imports)]
+            use super::*;
+
+            #[doc = $py_doc]
+            #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pyfunction)]
+            #[::pyo3::pyfunction]
+            pub fn $name(
+                fespace: ::pyo3::PyRef<$crate::py::finite_element_space::PyFiniteElementSpace>,
+                $($arg: $ty,)*
+            ) -> ::pyo3::PyResult<$crate::py::model::PyModel> {
+                Ok($crate::py::model::PyModel {
+                    inner: super::$name(&fespace.inner $(, $arg)*)?,
+                })
+            }
+        }
+    };
     (
         $(#[$rust_doc:meta])*
         pub fn $name:ident(fes $(, $arg:ident : $ty:ty)* $(,)?) via $sub:path;

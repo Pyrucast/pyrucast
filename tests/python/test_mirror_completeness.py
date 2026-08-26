@@ -176,20 +176,6 @@ PYTHON_ONLY = {
     "solve_eliminate": "nom qualifié de `solver::eliminate::solve`",
     "solve_unilateral": "nom qualifié de `solver::unilateral::solve`",
     "export_vtk": "nom qualifié de `export::vtk::write`",
-    # Les lois de `ops::model` : Rust les nomme par une valeur d'enum passée à
-    # `plasticity_with_law` / `damage_with_law`, Python par une fonction chacune,
-    # faute d'enum exposée. Même catalogue, plié différemment.
-    "plasticity_isotropic": "`plasticity_with_law(…, PlasticLaw::Isotropic)`",
-    "drucker_prager": "`plasticity_with_law(…, PlasticLaw::DruckerPrager)`",
-    "ottosen": "`plasticity_with_law(…, PlasticLaw::Ottosen)`",
-    "creep_norton": "`plasticity_with_law(…, PlasticLaw::CreepNorton)`",
-    "creep_blackburn": "`plasticity_with_law(…, PlasticLaw::CreepBlackburn)`",
-    "creep_lemaitre": "`plasticity_with_law(…, PlasticLaw::CreepLemaitre)`",
-    "viscoplasticity_chaboche": "`plasticity_with_law(…, PlasticLaw::ViscoplasticChaboche)`",
-    "viscoplasticity_lemaitre_chaboche": "`plasticity_with_law(…, PlasticLaw::ViscoplasticLemaitreChaboche)`",
-    "gurson": "`plasticity_with_law(…, PlasticLaw::Gurson)`",
-    "damage_tc": "`damage_with_law(…, DamageLaw::DamageTc)`",
-    "damage_sic_sic": "`damage_with_law(…, DamageLaw::SicSic)`",
     "xtx": "primitive du trait `Field`, exposée en opérateur de réduction",
     "xty": "primitive du trait `Field`, exposée en opérateur de réduction",
     # La seule entrée qui ne soit pas un simple renommage : `from_gmsh` a besoin
@@ -230,9 +216,26 @@ def test_every_python_function_has_a_rust_operator():
     )
 
 
-def test_python_only_entries_are_documented():
+def test_python_only_entries_are_documented_and_real():
+    """Une dérogation doit porter une raison **et** rester nécessaire.
+
+    La seconde moitié manquait : onze entrées ont survécu à l'apparition de
+    leur jumelle Rust sans que rien ne le signale. Une dérogation périmée est
+    un raisonnement qu'on croit encore valable.
+    """
+    # Trois noms existent des deux côtés sans que la dérogation soit périmée :
+    # la fonction Python y répartit sur **plusieurs** fonctions Rust, dont une
+    # porte le même nom. Le nom coïncide, l'opération non.
+    dispatchers = {"integral", "solve_eliminate", "solve_unilateral"}
+    rust = {name for _, name in rust_exports()}
     for fn, reason in PYTHON_ONLY.items():
         assert reason.strip(), f"{fn} : dérogation sans raison écrite"
+        if fn in dispatchers:
+            continue
+        assert fn not in rust, (
+            f"{fn} : dérogation périmée — Rust expose désormais ce nom, "
+            "la retirer de PYTHON_ONLY"
+        )
 
 
 def test_beam_deformation_is_reachable():

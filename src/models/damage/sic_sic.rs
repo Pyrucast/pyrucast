@@ -35,7 +35,9 @@
 //! that does not happen.
 
 use crate::error::Result;
+use crate::models::damage::DamageLaw;
 use crate::models::damage::{lame, pos, DamageUpdate, MatRead};
+use crate::models::elasticity::ElasticityModel;
 use crate::models::symmetry;
 use nalgebra::Matrix3;
 
@@ -206,4 +208,43 @@ pub fn update(
             kappas[0], kappas[1], kappas[2], damages[0], damages[1], damages[2],
         ],
     })
+}
+
+crate::physics_operator! {
+    /// [`model::damage_sic_sic`](crate::ops::model::damage_sic_sic()) — **orthotropic** damage of a
+    /// woven SiC/SiC ceramic-matrix composite: one damage per weave direction.
+    /// Material `E`, `nu`, then `eps_0_i`, `eps_c_i`, `d_max_i` for `i = 1..3`,
+    /// plus the material axes (`V1X, V1Y[, V1Z, V2X…]`).
+    ///
+    /// The matrix cracks in planes normal to the tows while the fibres keep
+    /// carrying load, so the stiffness falls **by direction** and by very
+    /// different amounts — which no scalar damage can express. The directions
+    /// are the same material axes an orthotropic elasticity uses, so a curved
+    /// part gets them right cell by cell.
+    ///
+    /// Each damage **saturates** at `d_max_i` rather than reaching one: matrix
+    /// cracking does not take the whole stiffness, and a law that let it would
+    /// predict a collapse that does not happen. State: `kappa_1..3`, `d_1..3`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::ops::model;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// let m = model::damage_sic_sic(&fes, ElasticityModel::PlaneStrain)?;
+    /// assert_eq!(m.primal_vars()?, vec!["u_x".to_string(), "u_y".to_string()]);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn damage_sic_sic(fes, model: ElasticityModel) = crate::ops::model::damage_with_law, DamageLaw::SicSic;
+    python: "`model.damage_sic_sic(fespace, model)` — **orthotropic** damage of a\nwoven SiC/SiC ceramic-matrix composite: one damage per weave direction.\nMaterial `E`, `nu`, then `eps_0_i`, `eps_c_i`, `d_max_i` for `i = 1..3`,\nplus the material axes (`V1X, V1Y[, V1Z, V2X…]`).\n\nThe matrix cracks in planes normal to the tows while the fibres keep\ncarrying load, so the stiffness falls **by direction** and by very\ndifferent amounts — which no scalar damage can express. The directions\nare the same material axes an orthotropic elasticity uses, so a curved\npart gets them right cell by cell.\n\nEach damage **saturates** at `d_max_i` rather than reaching one: matrix\ncracking does not take the whole stiffness, and a law that let it would\npredict a collapse that does not happen. State: `kappa_1..3`, `d_1..3`."
 }

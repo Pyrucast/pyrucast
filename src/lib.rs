@@ -128,25 +128,55 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     m.add_function(wrap_pyfunction!(models::truss::python::truss, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::model::elasticity, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::model::plasticity_perfect, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::model::plasticity_isotropic, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::model::drucker_prager, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::model::ottosen, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::model::creep_norton, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::model::creep_blackburn, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::model::creep_lemaitre, m)?)?;
     m.add_function(wrap_pyfunction!(
-        py::ops::model::viscoplasticity_chaboche,
+        models::plastic::von_mises::plasticity_perfect::plasticity_perfect,
         m
     )?)?;
     m.add_function(wrap_pyfunction!(
-        py::ops::model::viscoplasticity_lemaitre_chaboche,
+        models::plastic::von_mises::plasticity_isotropic::plasticity_isotropic,
         m
     )?)?;
-    m.add_function(wrap_pyfunction!(py::ops::model::damage_tc, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::model::damage_sic_sic, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::model::gurson, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::model::mazars, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        models::plastic::drucker_prager::drucker_prager::drucker_prager,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        models::plastic::ottosen::ottosen::ottosen,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        models::plastic::viscous::creep_norton::creep_norton,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        models::plastic::viscous::creep_blackburn::creep_blackburn,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        models::plastic::viscous::creep_lemaitre::creep_lemaitre,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        models::plastic::viscous::viscoplasticity_chaboche::viscoplasticity_chaboche,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        models::plastic::viscous::viscoplasticity_lemaitre_chaboche::viscoplasticity_lemaitre_chaboche,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        models::damage::damage_tc::damage_tc::damage_tc,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        models::damage::sic_sic::damage_sic_sic::damage_sic_sic,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        models::plastic::gurson::gurson::gurson,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(models::damage::mazars::mazars::mazars, m)?)?;
     m.add_function(wrap_pyfunction!(models::bernoulli::python::bernoulli, m)?)?;
     m.add_function(wrap_pyfunction!(models::shell::python::shell, m)?)?;
     m.add_function(wrap_pyfunction!(models::timoshenko::python::timoshenko, m)?)?;

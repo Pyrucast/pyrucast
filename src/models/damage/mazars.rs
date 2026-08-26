@@ -12,7 +12,9 @@
 //! The single history variable is `κ = max_t ε̃`: damage never heals.
 
 use crate::error::Result;
+use crate::models::damage::DamageLaw;
 use crate::models::damage::{elastic_stress, lame, pos, DamageUpdate, MatRead};
+use crate::models::elasticity::ElasticityModel;
 use nalgebra::Matrix3;
 
 /// Material parameters of the Mazars model at one Gauss point.
@@ -198,4 +200,35 @@ pub fn update(eps: &[f64; 6], prev: &[f64], mat: &MatRead) -> Result<DamageUpdat
         damage,
         vars: vec![kappa],
     })
+}
+
+crate::physics_operator! {
+    /// [`model::mazars`](crate::ops::model::mazars()) — Mazars isotropic damage spanning every
+    /// subspace of `fespace`. `model` is `"plane_stress"` / `"plane_strain"` /
+    /// `"axisymmetric"` (2-D) or `"solid"` (3-D). Same DOFs as elasticity; material
+    /// (`E`, `nu`, `eps_d0`, `A_t`, `B_t`, `A_c`, `B_c`) is supplied at
+    /// assembly / integration time. The behaviour integration (`COMP`) carries
+    /// the scalar history variable `kappa` (`VAR0`→`VAR1`) and outputs `damage`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::ops::model;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// let m = model::mazars(&fes, ElasticityModel::PlaneStrain)?;
+    /// assert_eq!(m.primal_vars()?, vec!["u_x".to_string(), "u_y".to_string()]);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn mazars(fes, model: ElasticityModel) = crate::ops::model::damage_with_law, DamageLaw::Mazars;
+    python: "`model.mazars(fespace, model)` — Mazars isotropic damage spanning every\nsubspace of `fespace`. `model` is `\"plane_stress\"` / `\"plane_strain\"` /\n`\"axisymmetric\"` (2-D) or `\"solid\"` (3-D). Same DOFs as elasticity; material\n(`E`, `nu`, `eps_d0`, `A_t`, `B_t`, `A_c`, `B_c`) is supplied at\nassembly / integration time. The behaviour integration (`COMP`) carries\nthe scalar history variable `kappa` (`VAR0`→`VAR1`) and outputs `damage`."
 }
