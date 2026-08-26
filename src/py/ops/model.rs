@@ -8,7 +8,6 @@ use crate::models::damage::DamageLaw;
 use crate::models::elasticity::ElasticityModel;
 use crate::models::mpc::MpcTerm;
 use crate::models::plastic::PlasticLaw;
-use crate::models::shell::ShellModel;
 use crate::models::symmetry::MaterialSymmetry;
 use crate::models::{Physics, RelationSense};
 use crate::ops::model;
@@ -93,51 +92,6 @@ pub fn fick(
     Ok(PyModel { inner })
 }
 
-/// `model.radiation(fespace)` — radiation to infinity on a *boundary*
-/// `fespace`: `q·n = σε(T⁴ − T_∞⁴)`. Same DOFs (`"T"`/`"q"`) as
-/// `heat_conduction`, so it composes with `|`:
-/// `model.heat_conduction(bulk) | model.radiation(boundary)`.
-///
-/// Material: `emis` (emissivity) and `T_inf` (far-field temperature), plus an
-/// optional `sigma` overriding the SI Stefan-Boltzmann constant. With the
-/// default `sigma`, `T` is an **absolute** temperature — a fourth power has
-/// no invariance to shift an origin through.
-///
-/// Unlike convection this law is non-linear, so it contributes three terms:
-/// the linearised film `4σεT_∞³∫NᵢNⱼ` as stiffness, the exact residual
-/// `∫Nᵢσε(T⁴ − T_∞⁴)` through `internal_forces`, and the consistent tangent
-/// `4σεT³∫NᵢNⱼ` through `matrix.tangent(...)`. Its natures are `"thermal"`
-/// **and** `"radiation"`.
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-#[pyfunction]
-pub fn radiation(fespace: PyRef<PyFiniteElementSpace>) -> PyResult<PyModel> {
-    let inner = model::radiation(&fespace.inner)?;
-    Ok(PyModel { inner })
-}
-
-/// `model.follower_pressure(fespace)` — a pressure that **turns with the
-/// surface** it acts on, on a *boundary* `fespace` (an edge mesh in 2-D, a
-/// surface mesh in 3-D). Material: `p`, the pressure.
-///
-/// Unlike a dead load built once with `flux(...)`, its direction depends on
-/// the current displacement, so it is recomputed at each residual
-/// evaluation:
-///
-/// ```text
-/// u → element_field.gradient → integrate_behavior → node_field.internal_forces
-/// ```
-///
-/// It contributes **no matrix** — only internal forces. A positive `p`
-/// pushes *against* the boundary mesh's own normal, which follows its
-/// winding: orienting the boundary outwards gives the usual compressive
-/// sign.
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-#[pyfunction]
-pub fn follower_pressure(fespace: PyRef<PyFiniteElementSpace>) -> PyResult<PyModel> {
-    let inner = model::follower_pressure(&fespace.inner)?;
-    Ok(PyModel { inner })
-}
-
 /// `model.interface_transfer(side_a, side_b, kind=None, tol=None)` — the
 /// exchange law `j·n = h(c₁ − c₂)` across an interface between two bodies
 /// that do **not** share their nodes. `kind` is `"mass"` (the default:
@@ -170,35 +124,6 @@ pub fn interface_transfer(
         physics,
         tol.unwrap_or(1e-9),
     )?;
-    Ok(PyModel { inner })
-}
-
-/// `model.boundary_transfer(fespace, components, physics)` — surface
-/// exchange with an **imposed ambient** (Robin / film) spanning every
-/// subspace of a *boundary* `fespace` (edge mesh in 2-D, surface mesh in
-/// 3-D).
-///
-/// `components` is a list of `(primal, dual)` pairs — naming the bulk
-/// physics' own DOFs is what makes the boundary term couple into it:
-///
-/// | you write | you get |
-/// |---|---|
-/// | `[("T", "q")], "thermal"` | Newton's law of cooling |
-/// | `[("c_H2", "j_H2")], "diffusion"` | a surface mass-transfer law |
-/// | `[("u_x", "f_x"), ("u_y", "f_y")], "mechanical"` | a Winkler elastic foundation |
-///
-/// The coefficients `h_<primal>` (one per pair) are supplied at assembly
-/// time; the ambient value enters as a load `h·a_ext·∫N_i dΓ`, built with
-/// `flux(...)`. Compose with `|`:
-/// `model.heat_conduction(bulk) | model.boundary_transfer(skin, [("T", "q")], "thermal")`.
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-#[pyfunction]
-pub fn boundary_transfer(
-    fespace: PyRef<PyFiniteElementSpace>,
-    components: Vec<(String, String)>,
-    physics: Physics,
-) -> PyResult<PyModel> {
-    let inner = model::boundary_transfer(&fespace.inner, components, physics)?;
     Ok(PyModel { inner })
 }
 
@@ -448,97 +373,6 @@ pub fn gurson(fespace: PyRef<PyFiniteElementSpace>, model: ElasticityModel) -> P
 #[pyfunction]
 pub fn mazars(fespace: PyRef<PyFiniteElementSpace>, model: ElasticityModel) -> PyResult<PyModel> {
     let inner = model::mazars(&fespace.inner, model)?;
-    Ok(PyModel { inner })
-}
-
-/// `model.bernoulli(fespace)` — the classical **Euler-Bernoulli** beam,
-/// where plane sections stay normal to the deflected axis and there is no
-/// transverse shear at all.
-///
-/// The configuration follows the mesh: a 1-D `Coords` gives a pure-bending
-/// beam (DOFs `w`, `theta`; material `E`, `I`), a 2-D one a plane frame
-/// (`u_x, u_y, r_z`; `+ A`), a 3-D one a space frame (six DOFs;
-/// `+ I_y, I_z, J, G`). Read them back with `model.primal_vars()`.
-///
-/// The deflection is interpolated by **cubic Hermite** functions, so the
-/// subspace must be `HERMITE3` — build it with
-/// `FiniteElementSpace(mesh, interpolation="HERMITE3")`. That basis is what
-/// makes the element **nodally exact** wherever the interior carries no
-/// distributed load, so one element per member suffices for a frame; a
-/// Lagrange subspace would carry a linear deflection, of zero curvature, and
-/// is refused.
-///
-/// Prefer `timoshenko` for a stocky member, where the shear compliance
-/// matters. Reaching Bernoulli by making the shear area huge would work in
-/// exact arithmetic and lock in floating point, which is why this is a
-/// physics of its own rather than a limiting case.
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-#[pyfunction]
-pub fn bernoulli(fespace: PyRef<PyFiniteElementSpace>) -> PyResult<PyModel> {
-    Ok(PyModel {
-        inner: model::bernoulli(&fespace.inner)?,
-    })
-}
-
-/// `model.shell(fespace, model)` — a **shell**: a surface carrying membrane
-/// forces and bending moments, on a TRI3/QUA4 mesh in 3-D. Material `E`,
-/// `nu`, `h` (thickness), plus an optional `rho`.
-///
-/// | `model` | transverse shear | when |
-/// |---|---|---|
-/// | `"thick"` | yes, integrated **reduced** | the general case |
-/// | `"kirchhoff"` | imposed zero at discrete points | thin shells |
-///
-/// Six DOFs per node (`u_x…u_z, r_x…r_z`), as for `frame3d`, so a shell and
-/// a space frame share nodes directly. The sixth — the **drilling** rotation
-/// about the normal — is tied to the membrane's own in-plane rotation, which
-/// removes the singularity a flat facet would otherwise have without
-/// resisting a rigid rotation of that facet.
-///
-/// `"thick"` (Reissner-Mindlin) integrates the transverse shear at
-/// **reduced** quadrature: at full quadrature it would overwhelm the bending
-/// term by `1/h²` as the shell thins and the element would refuse to bend at
-/// all (shear locking). It takes an optional `k_s`, the shear-correction
-/// factor (`5/6` by default).
-///
-/// `"kirchhoff"` (DKT on a triangle, DKQ on a quadrangle) has no transverse
-/// shear at all: `γ = 0` is imposed at the corners and along each side, so
-/// the thin limit is exact by construction and there is nothing left to
-/// lock. It reports six generalised forces rather than eight — a thin plate
-/// has no constitutive `Q`, only a reaction.
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-#[pyfunction]
-pub fn shell(fespace: PyRef<PyFiniteElementSpace>, model: ShellModel) -> PyResult<PyModel> {
-    Ok(PyModel {
-        inner: model::shell(&fespace.inner, model)?,
-    })
-}
-
-/// `model.timoshenko(fespace)` — the **shear-deformable** beam, in whichever
-/// configuration the mesh puts it (`SEG2` throughout):
-///
-/// | `Coords` | DOFs per node | material | section forces |
-/// |---|---|---|---|
-/// | 1-D | `w`, `theta` | `E, I, G, A_s` | `M, V` |
-/// | 2-D | `u_x, u_y, r_z` | `+ A` | `N, M, V` |
-/// | 3-D | six | `E, A, I_y, I_z, J, G, A_sy, A_sz` | `N, M_y, M_z, T, V_y, V_z` |
-///
-/// This replaces `model.frame` and `model.frame3d`, which were the same
-/// physics in 2-D and 3-D. Read the DOF names back with
-/// `model.primal_vars()`.
-///
-/// The element is the **exact** one — the closed form driven by
-/// `Φ = 12EI/(G·A_s·L²)` — so one element per member suffices. Its shape
-/// functions depend on the material through `Φ`, hence no space can tabulate
-/// them: build the subspace with
-/// `FiniteElementSpace(mesh, interpolation="MODEL_EMBEDDED")`.
-///
-/// Prefer `bernoulli` for a slender member, where the shear compliance is
-/// negligible.
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-#[pyfunction]
-pub fn timoshenko(fespace: PyRef<PyFiniteElementSpace>) -> PyResult<PyModel> {
-    let inner = model::timoshenko(&fespace.inner)?;
     Ok(PyModel { inner })
 }
 

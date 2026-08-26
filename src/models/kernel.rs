@@ -620,7 +620,7 @@ impl<'a> CellGeom<'a> {
     }
 
     /// The guard the field accessors share — see
-    /// [`SubFiniteElementSpace`](crate::containers::finite_element_space::SubFiniteElementSpace).
+    /// [`SubFiniteElementSpace`].
     fn reject_if_model_embedded(&self, what: &str) -> Result<()> {
         if self.rd.model_embedded {
             return Err(PyrucastError::Message(format!(

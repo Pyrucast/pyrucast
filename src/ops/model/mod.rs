@@ -56,37 +56,31 @@ pub(crate) fn single(sub: SubModel) -> Result<Model> {
     Ok(model)
 }
 
-pub mod bernoulli;
-pub mod boundary_transfer;
 pub mod contact;
 pub mod damage;
 pub mod dirichlet;
 pub mod elasticity;
 pub mod embedded;
 pub mod fick;
-pub mod follower_pressure;
 pub mod heat_conduction;
 pub mod interface_transfer;
 pub mod mpc;
 pub mod plasticity;
-pub mod radiation;
-pub mod shell;
-pub mod timoshenko;
 
+pub use crate::models::bernoulli::bernoulli;
+pub use crate::models::boundary_transfer::boundary_transfer;
+pub use crate::models::follower_pressure::follower_pressure;
+pub use crate::models::radiation::radiation;
+pub use crate::models::shell::shell;
+pub use crate::models::timoshenko::timoshenko;
 pub use crate::models::truss::truss;
-pub use bernoulli::bernoulli;
-pub use boundary_transfer::boundary_transfer;
 pub use contact::contact;
 pub use damage::{damage_with_law, mazars};
 pub use dirichlet::dirichlet;
 pub use elasticity::{elasticity, elasticity_with_symmetry};
 pub use embedded::embedded;
 pub use fick::{fick, fick_with_symmetry};
-pub use follower_pressure::follower_pressure;
 pub use heat_conduction::{heat_conduction, heat_conduction_with_symmetry};
 pub use interface_transfer::interface_transfer;
 pub use mpc::mpc;
 pub use plasticity::{plasticity_perfect, plasticity_with_law};
-pub use radiation::radiation;
-pub use shell::shell;
-pub use timoshenko::timoshenko;

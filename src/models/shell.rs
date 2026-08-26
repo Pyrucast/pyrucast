@@ -55,6 +55,7 @@ use crate::containers::finite_element_space::{
 };
 use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
+use crate::containers::model::SubModel;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
@@ -809,4 +810,32 @@ pub fn to_global(local: &[Vec<f64>], frame: &[[f64; 3]; 3], n_nodes: usize, ke: 
             ke[i * side + j] += acc;
         }
     }
+}
+
+crate::physics_operator! {
+    /// Shell `Model` spanning **every** subspace of a *surface* `fes`.
+    /// Parent-level operator; material is supplied at assembly time.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::Model;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::shell::ShellModel;
+    /// # use pyrucast::ops::model;
+    /// # let coords = Handle::new(Coords::new(3).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
+    /// let m = model::shell(&fes, ShellModel::Thick)?;
+    /// assert_eq!(m.len(), fes.len());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn shell(fes, model: ShellModel) via SubModel::shell;
+    python: "`model.shell(fespace, model)` — a **shell**: a surface carrying membrane\nforces and bending moments, on a TRI3/QUA4 mesh in 3-D. Material `E`,\n`nu`, `h` (thickness), plus an optional `rho`.\n\n| `model` | transverse shear | when |\n|---|---|---|\n| `\"thick\"` | yes, integrated **reduced** | the general case |\n| `\"kirchhoff\"` | imposed zero at discrete points | thin shells |\n\nSix DOFs per node (`u_x…u_z, r_x…r_z`), as for `frame3d`, so a shell and\na space frame share nodes directly. The sixth — the **drilling** rotation\nabout the normal — is tied to the membrane's own in-plane rotation, which\nremoves the singularity a flat facet would otherwise have without\nresisting a rigid rotation of that facet.\n\n`\"thick\"` (Reissner-Mindlin) integrates the transverse shear at\n**reduced** quadrature: at full quadrature it would overwhelm the bending\nterm by `1/h²` as the shell thins and the element would refuse to bend at\nall (shear locking). It takes an optional `k_s`, the shear-correction\nfactor (`5/6` by default).\n\n`\"kirchhoff\"` (DKT on a triangle, DKQ on a quadrangle) has no transverse\nshear at all: `γ = 0` is imposed at the corners and along each side, so\nthe thin limit is exact by construction and there is nothing left to\nlock. It reports six generalised forces rather than eight — a thin plate\nhas no constitutive `Q`, only a reaction."
 }

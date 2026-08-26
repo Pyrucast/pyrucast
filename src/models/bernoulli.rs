@@ -46,6 +46,7 @@ use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
+use crate::containers::model::SubModel;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
@@ -606,4 +607,43 @@ fn planar_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64]) -> R
         }
     }
     Ok(())
+}
+
+crate::physics_operator! {
+    /// Euler-Bernoulli beam `Model` spanning **every** subspace of `fes`.
+    /// Parent-level operator; material is supplied at assembly time.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::{Model, SubModel};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
+    /// # use pyrucast::models::{Physics, RelationSense};
+    /// # use pyrucast::ops::mesh;
+    /// # use pyrucast::ops::model;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+    /// # let mult = mesh::barycenter(&impose).unwrap();
+    /// # use pyrucast::atoms::Interpolation;
+    /// # let mut b = SubMesh::new(coords.clone(), ElementType::SEG2);
+    /// # b.add_cell(&[n[0].id(), n[1].id()])?;
+    /// let poutres = FiniteElementSpace::new(&Mesh::from_submesh(b), Interpolation::Hermite3)?;
+    /// let m = model::bernoulli(&poutres)?;
+    /// assert_eq!(m.len(), 1);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn bernoulli(fes) via SubModel::bernoulli;
+    python: "`model.bernoulli(fespace)` — the classical **Euler-Bernoulli** beam,\nwhere plane sections stay normal to the deflected axis and there is no\ntransverse shear at all.\n\nThe configuration follows the mesh: a 1-D `Coords` gives a pure-bending\nbeam (DOFs `w`, `theta`; material `E`, `I`), a 2-D one a plane frame\n(`u_x, u_y, r_z`; `+ A`), a 3-D one a space frame (six DOFs;\n`+ I_y, I_z, J, G`). Read them back with `model.primal_vars()`.\n\nThe deflection is interpolated by **cubic Hermite** functions, so the\nsubspace must be `HERMITE3` — build it with\n`FiniteElementSpace(mesh, interpolation=\"HERMITE3\")`. That basis is what\nmakes the element **nodally exact** wherever the interior carries no\ndistributed load, so one element per member suffices for a frame; a\nLagrange subspace would carry a linear deflection, of zero curvature, and\nis refused.\n\nPrefer `timoshenko` for a stocky member, where the shear compliance\nmatters. Reaching Bernoulli by making the shear area huge would work in\nexact arithmetic and lock in floating point, which is why this is a\nphysics of its own rather than a limiting case."
 }

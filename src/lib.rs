@@ -116,10 +116,16 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::solver::solve_unilateral, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::model::heat_conduction, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::model::fick, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::model::radiation, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::model::follower_pressure, m)?)?;
+    m.add_function(wrap_pyfunction!(models::radiation::python::radiation, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        models::follower_pressure::python::follower_pressure,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(py::ops::model::interface_transfer, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::model::boundary_transfer, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        models::boundary_transfer::python::boundary_transfer,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(models::truss::python::truss, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::model::elasticity, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::model::plasticity_perfect, m)?)?;
@@ -141,9 +147,9 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::model::damage_sic_sic, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::model::gurson, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::model::mazars, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::model::bernoulli, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::model::shell, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::model::timoshenko, m)?)?;
+    m.add_function(wrap_pyfunction!(models::bernoulli::python::bernoulli, m)?)?;
+    m.add_function(wrap_pyfunction!(models::shell::python::shell, m)?)?;
+    m.add_function(wrap_pyfunction!(models::timoshenko::python::timoshenko, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::model::dirichlet, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::model::mpc, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::model::embedded, m)?)?;

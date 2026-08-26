@@ -1512,7 +1512,11 @@ macro_rules! physics_operator {
             fes: &$crate::containers::finite_element_space::FiniteElementSpace,
             $($arg: $ty,)*
         ) -> $crate::error::Result<$crate::containers::model::Model> {
-            $crate::ops::model::spanning(fes, |zone| $sub(zone $(, $arg)*))
+            // Un argument non-`Copy` (`Vec<(String, String)>`) serait déplacé
+            // à la première zone : la fermeture est `FnMut`, elle en voit
+            // plusieurs. On clone donc, ce qui ne coûte rien sur les énumérés.
+            #[allow(clippy::clone_on_copy)]
+            $crate::ops::model::spanning(fes, |zone| $sub(zone $(, $arg.clone())*))
         }
 
         /// The Python face of this physics — generated, never hand-written.

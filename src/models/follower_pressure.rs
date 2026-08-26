@@ -78,6 +78,7 @@ use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
+use crate::containers::model::SubModel;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
@@ -363,4 +364,42 @@ impl Domain for FollowerPressure {
         }
         Ok(())
     }
+}
+
+crate::physics_operator! {
+    /// Follower-pressure `Model` spanning **every** subspace of a *boundary*
+    /// `fes`. Parent-level operator; `p` is supplied at assembly time.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::{Model, SubModel};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
+    /// # use pyrucast::models::{Physics, RelationSense};
+    /// # use pyrucast::ops::mesh;
+    /// # use pyrucast::ops::model;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+    /// # let mult = mesh::barycenter(&impose).unwrap();
+    /// # let mut bord = SubMesh::new(coords.clone(), ElementType::SEG2);
+    /// # bord.add_cell(&[n[0].id(), n[1].id()])?;
+    /// # let fes_bord = FiniteElementSpace::lagrange1(&Mesh::from_submesh(bord))?;
+    /// let m = model::follower_pressure(&fes_bord)?;
+    /// assert_eq!(m.len(), 1);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn follower_pressure(fes) via SubModel::follower_pressure;
+    python: "`model.follower_pressure(fespace)` — a pressure that **turns with the\nsurface** it acts on, on a *boundary* `fespace` (an edge mesh in 2-D, a\nsurface mesh in 3-D). Material: `p`, the pressure.\n\nUnlike a dead load built once with `flux(...)`, its direction depends on\nthe current displacement, so it is recomputed at each residual\nevaluation:\n\n```text\nu → element_field.gradient → integrate_behavior → node_field.internal_forces\n```\n\nIt contributes **no matrix** — only internal forces. A positive `p`\npushes *against* the boundary mesh's own normal, which follows its\nwinding: orienting the boundary outwards gives the usual compressive\nsign."
 }

@@ -50,6 +50,7 @@ use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
+use crate::containers::model::SubModel;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
@@ -536,4 +537,45 @@ mod tests {
         let (b2, _, _) = one_beam(&[0.0, 0.0], &[2.0, 0.0]);
         assert!(b2.geometric_layout().is_some());
     }
+}
+
+crate::physics_operator! {
+    /// Timoshenko-beam `Model` spanning **every** subspace of `fes`.
+    /// Parent-level operator; material (`E`, `I`, `G`, `A_s`) is
+    /// supplied at assembly time.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::{Model, SubModel};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
+    /// # use pyrucast::models::{Physics, RelationSense};
+    /// # use pyrucast::ops::mesh;
+    /// # use pyrucast::ops::model;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+    /// # let mult = mesh::barycenter(&impose).unwrap();
+    /// # use pyrucast::atoms::Interpolation;
+    /// # let mut b = SubMesh::new(coords.clone(), ElementType::SEG2);
+    /// # b.add_cell(&[n[0].id(), n[1].id()])?;
+    /// let poutres =
+    ///     FiniteElementSpace::new(&Mesh::from_submesh(b), Interpolation::ModelEmbedded)?;
+    /// let m = model::timoshenko(&poutres)?;
+    /// assert_eq!(m.len(), 1);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn timoshenko(fes) via SubModel::timoshenko;
+    python: "`model.timoshenko(fespace)` — the **shear-deformable** beam, in whichever\nconfiguration the mesh puts it (`SEG2` throughout):\n\n| `Coords` | DOFs per node | material | section forces |\n|---|---|---|---|\n| 1-D | `w`, `theta` | `E, I, G, A_s` | `M, V` |\n| 2-D | `u_x, u_y, r_z` | `+ A` | `N, M, V` |\n| 3-D | six | `E, A, I_y, I_z, J, G, A_sy, A_sz` | `N, M_y, M_z, T, V_y, V_z` |\n\nThis replaces `model.frame` and `model.frame3d`, which were the same\nphysics in 2-D and 3-D. Read the DOF names back with\n`model.primal_vars()`.\n\nThe element is the **exact** one — the closed form driven by\n`Φ = 12EI/(G·A_s·L²)` — so one element per member suffices. Its shape\nfunctions depend on the material through `Φ`, hence no space can tabulate\nthem: build the subspace with\n`FiniteElementSpace(mesh, interpolation=\"MODEL_EMBEDDED\")`.\n\nPrefer `bernoulli` for a slender member, where the shear compliance is\nnegligible."
 }
