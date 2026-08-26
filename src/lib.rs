@@ -44,6 +44,7 @@ pub mod error;
 pub mod handle;
 pub mod interrupt;
 pub mod models;
+pub mod named;
 pub mod ops;
 pub mod parallel;
 

@@ -150,8 +150,8 @@ pub enum PlasticLaw {
 }
 
 impl PlasticLaw {
-    /// Parse from a lowercase tag (`"perfect"`, `"isotropic"`,
-    /// `"drucker_prager"`, `"ottosen"`).
+    /// The lowercase name (the inverse of
+    /// [`from_name`](crate::named::Named::from_name)).
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -175,56 +175,13 @@ impl PlasticLaw {
     /// # let mat = MatParams::new(&materiau, 0).unwrap();
     /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
     /// #                         vars: Vec::new() };
-    /// assert_eq!(PlasticLaw::from_tag("perfect"), Some(PlasticLaw::Perfect));
-    /// assert_eq!(PlasticLaw::from_tag("tresca"), None);
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn from_tag(tag: &str) -> Option<Self> {
-        match tag {
-            "perfect" => Some(Self::Perfect),
-            "isotropic" => Some(Self::Isotropic),
-            "drucker_prager" => Some(Self::DruckerPrager),
-            "ottosen" => Some(Self::Ottosen),
-            "creep_norton" => Some(Self::CreepNorton),
-            "creep_blackburn" => Some(Self::CreepBlackburn),
-            "creep_lemaitre" => Some(Self::CreepLemaitre),
-            "viscoplastic_chaboche" => Some(Self::ViscoplasticChaboche),
-            "viscoplastic_lemaitre_chaboche" => Some(Self::ViscoplasticLemaitreChaboche),
-            "gurson" => Some(Self::Gurson),
-            _ => None,
-        }
-    }
-
-    /// The lowercase tag (the inverse of [`from_tag`](Self::from_tag)).
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::element_field::SubElementField;
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PlasticStep, PrevState};
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// # let materiau = SubElementField::from_uniform_per_component(
-    /// #     fes.get(0).unwrap(),
-    /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
-    /// #     &[210_000.0, 0.3, 250.0]).unwrap();
-    /// # let mat = MatParams::new(&materiau, 0).unwrap();
-    /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-    /// #                         vars: Vec::new() };
-    /// // Réciproque exacte de `from_tag`, pour les dix lois.
+    /// # use pyrucast::named::Named;
+    /// // Réciproque exacte de `from_name`, pour les dix lois.
     /// assert!(PlasticLaw::ALL.iter()
-    ///     .all(|l| PlasticLaw::from_tag(l.to_tag()) == Some(*l)));
+    ///     .all(|l| PlasticLaw::from_name(l.name()) == Some(*l)));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn to_tag(self) -> &'static str {
+    pub fn name(self) -> &'static str {
         match self {
             Self::Perfect => "perfect",
             Self::Isotropic => "isotropic",
@@ -282,42 +239,6 @@ impl PlasticLaw {
         Self::ViscoplasticLemaitreChaboche,
         Self::Gurson,
     ];
-
-    /// The accepted tags, `|`-joined — for error messages.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::element_field::SubElementField;
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PlasticStep, PrevState};
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// # let materiau = SubElementField::from_uniform_per_component(
-    /// #     fes.get(0).unwrap(),
-    /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
-    /// #     &[210_000.0, 0.3, 250.0]).unwrap();
-    /// # let mat = MatParams::new(&materiau, 0).unwrap();
-    /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-    /// #                         vars: Vec::new() };
-    /// // Ce que citent les messages d'erreur quand un nom est inconnu.
-    /// assert!(PlasticLaw::tag_list().contains("perfect"));
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn tag_list() -> String {
-        Self::ALL
-            .iter()
-            .map(|l| l.to_tag())
-            .collect::<Vec<_>>()
-            .join("|")
-    }
 
     /// The material components this law requires. Elasticity (`E`, `nu`) is
     /// common to all; what follows describes the surface.
@@ -551,9 +472,18 @@ impl PlasticLaw {
     }
 }
 
+impl crate::named::Named for PlasticLaw {
+    const LABEL: &'static str = "plastic law";
+    const VALUES: &'static [Self] = &Self::ALL;
+
+    fn name(self) -> &'static str {
+        PlasticLaw::name(self)
+    }
+}
+
 impl std::fmt::Display for PlasticLaw {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.to_tag())
+        f.write_str(self.name())
     }
 }
 

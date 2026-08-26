@@ -481,9 +481,8 @@ pub fn line(
     n_elems: usize,
     element_type: &str,
 ) -> PyResult<PyMesh> {
-    let et = ElementType::from_name(element_type)
-        .ok_or_else(|| PyValueError::new_err(format!("unknown element type: {element_type}")))?;
-    let mesh = crate::ops::mesh::line(a.as_node(), b.as_node(), n_elems, et)?;
+    let element_type = crate::py::named::<ElementType>(element_type)?;
+    let mesh = crate::ops::mesh::line(a.as_node(), b.as_node(), n_elems, element_type)?;
     Ok(PyMesh { inner: mesh })
 }
 
@@ -502,9 +501,8 @@ pub fn circle(
     n_elems: usize,
     element_type: &str,
 ) -> PyResult<PyMesh> {
-    let et = ElementType::from_name(element_type)
-        .ok_or_else(|| PyValueError::new_err(format!("unknown element type: {element_type}")))?;
-    let mesh = crate::ops::mesh::circle(center.as_node(), &normal, radius, n_elems, et)?;
+    let element_type = crate::py::named::<ElementType>(element_type)?;
+    let mesh = crate::ops::mesh::circle(center.as_node(), &normal, radius, n_elems, element_type)?;
     Ok(PyMesh { inner: mesh })
 }
 
@@ -523,9 +521,14 @@ pub fn arc(
     n_elems: usize,
     element_type: &str,
 ) -> PyResult<PyMesh> {
-    let et = ElementType::from_name(element_type)
-        .ok_or_else(|| PyValueError::new_err(format!("unknown element type: {element_type}")))?;
-    let mesh = crate::ops::mesh::arc(a.as_node(), center.as_node(), b.as_node(), n_elems, et)?;
+    let element_type = crate::py::named::<ElementType>(element_type)?;
+    let mesh = crate::ops::mesh::arc(
+        a.as_node(),
+        center.as_node(),
+        b.as_node(),
+        n_elems,
+        element_type,
+    )?;
     Ok(PyMesh { inner: mesh })
 }
 
@@ -544,9 +547,8 @@ pub fn sweep(
     n_layers: usize,
     element_type: &str,
 ) -> PyResult<PyMesh> {
-    let et = ElementType::from_name(element_type)
-        .ok_or_else(|| PyValueError::new_err(format!("unknown element type: {element_type}")))?;
-    let mesh = crate::ops::mesh::sweep(&mesh_a.inner, &mesh_b.inner, n_layers, et)?;
+    let element_type = crate::py::named::<ElementType>(element_type)?;
+    let mesh = crate::ops::mesh::sweep(&mesh_a.inner, &mesh_b.inner, n_layers, element_type)?;
     Ok(PyMesh { inner: mesh })
 }
 
@@ -569,10 +571,14 @@ pub fn transfinite(
     side4: PyRef<PyMesh>,
     element_type: &str,
 ) -> PyResult<PyMesh> {
-    let et = ElementType::from_name(element_type)
-        .ok_or_else(|| PyValueError::new_err(format!("unknown element type: {element_type}")))?;
-    let mesh =
-        crate::ops::mesh::transfinite(&side1.inner, &side2.inner, &side3.inner, &side4.inner, et)?;
+    let element_type = crate::py::named::<ElementType>(element_type)?;
+    let mesh = crate::ops::mesh::transfinite(
+        &side1.inner,
+        &side2.inner,
+        &side3.inner,
+        &side4.inner,
+        element_type,
+    )?;
     Ok(PyMesh { inner: mesh })
 }
 
@@ -644,10 +650,8 @@ pub fn to_quadratic(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
 /// `to_quadratic`. The original mesh is untouched.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn convert(mesh: PyRef<PyMesh>, element_type: &str) -> PyResult<PyMesh> {
-    let et = ElementType::from_name(element_type)
-        .ok_or_else(|| PyValueError::new_err(format!("unknown element type: {element_type}")))?;
-    let result = crate::ops::mesh::convert(&mesh.inner, et)?;
+pub fn convert(mesh: PyRef<PyMesh>, element_type: ElementType) -> PyResult<PyMesh> {
+    let result = crate::ops::mesh::convert(&mesh.inner, element_type)?;
     Ok(PyMesh { inner: result })
 }
 
@@ -766,15 +770,13 @@ pub fn symmetry_plane(
 pub fn triangulate_surface(
     py: Python<'_>,
     contour: PyRef<PyMesh>,
-    element_type: &str,
+    element_type: ElementType,
     size: Option<f64>,
 ) -> PyResult<PyMesh> {
-    let et = ElementType::from_name(element_type)
-        .ok_or_else(|| PyValueError::new_err(format!("unknown element type: {element_type}")))?;
     // Poll Python signals while meshing so a long run stays Ctrl+C-able.
     let mesh = crate::ops::mesh::triangulate_surface_cancellable(
         &contour.inner,
-        et,
+        element_type,
         size,
         &PySignals(py),
     )?;
@@ -834,17 +836,15 @@ pub fn triangulate_surface(
 pub fn pave_surface(
     py: Python<'_>,
     contour: PyRef<PyMesh>,
-    element_type: &str,
+    element_type: ElementType,
     size: Option<f64>,
     all_quad: bool,
     relax: Option<&str>,
 ) -> PyResult<PyMesh> {
-    let et = ElementType::from_name(element_type)
-        .ok_or_else(|| PyValueError::new_err(format!("unknown element type: {element_type}")))?;
     // Poll Python signals while paving so a long run stays Ctrl+C-able.
     let mesh = crate::ops::mesh::pave_surface_cancellable(
         &contour.inner,
-        et,
+        element_type,
         size,
         all_quad,
         parse_relax(relax)?,
@@ -1002,17 +1002,15 @@ fn parse_relax(name: Option<&str>) -> PyResult<FrontRelax> {
 pub fn grid_surface(
     py: Python<'_>,
     contour: PyRef<PyMesh>,
-    element_type: &str,
+    element_type: ElementType,
     size: Option<f64>,
     band: usize,
     all_quad: bool,
     relax: Option<&str>,
 ) -> PyResult<PyMesh> {
-    let et = ElementType::from_name(element_type)
-        .ok_or_else(|| PyValueError::new_err(format!("unknown element type: {element_type}")))?;
     let mesh = crate::ops::mesh::grid_surface_cancellable(
         &contour.inner,
-        et,
+        element_type,
         size,
         band,
         all_quad,
@@ -1059,17 +1057,15 @@ pub fn grid_surface(
 pub fn grid_surface2(
     py: Python<'_>,
     contour: PyRef<PyMesh>,
-    element_type: &str,
+    element_type: ElementType,
     size: Option<f64>,
     band: usize,
     all_quad: bool,
     relax: Option<&str>,
 ) -> PyResult<PyMesh> {
-    let et = ElementType::from_name(element_type)
-        .ok_or_else(|| PyValueError::new_err(format!("unknown element type: {element_type}")))?;
     let mesh = crate::ops::mesh::grid_surface2_cancellable(
         &contour.inner,
-        et,
+        element_type,
         size,
         band,
         all_quad,
@@ -1586,7 +1582,7 @@ impl PyMesh {
     }
 
     /// Voir `pyrucast.mesh.convert`.
-    fn convert(slf: PyRef<'_, Self>, element_type: &str) -> PyResult<PyMesh> {
+    fn convert(slf: PyRef<'_, Self>, element_type: ElementType) -> PyResult<PyMesh> {
         super::mesh::convert(slf, element_type)
     }
 
@@ -1637,7 +1633,7 @@ impl PyMesh {
     fn triangulate_surface(
         slf: PyRef<'_, Self>,
         py: Python<'_>,
-        element_type: &str,
+        element_type: ElementType,
         size: Option<f64>,
     ) -> PyResult<PyMesh> {
         super::mesh::triangulate_surface(py, slf, element_type, size)
@@ -1648,7 +1644,7 @@ impl PyMesh {
     fn pave_surface(
         slf: PyRef<'_, Self>,
         py: Python<'_>,
-        element_type: &str,
+        element_type: ElementType,
         size: Option<f64>,
         all_quad: bool,
         relax: Option<&str>,
@@ -1682,7 +1678,7 @@ impl PyMesh {
     fn grid_surface(
         slf: PyRef<'_, Self>,
         py: Python<'_>,
-        element_type: &str,
+        element_type: ElementType,
         size: Option<f64>,
         band: usize,
         all_quad: bool,
@@ -1696,7 +1692,7 @@ impl PyMesh {
     fn grid_surface2(
         slf: PyRef<'_, Self>,
         py: Python<'_>,
-        element_type: &str,
+        element_type: ElementType,
         size: Option<f64>,
         band: usize,
         all_quad: bool,

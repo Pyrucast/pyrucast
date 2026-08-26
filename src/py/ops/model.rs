@@ -17,41 +17,14 @@ use crate::py::mesh::PyMesh;
 use crate::py::model::PyModel;
 use pyo3::prelude::*;
 
-/// Parse a physics-nature tag — the one thing a free component list cannot
-/// imply, so the caller states it.
-fn parse_physics(what: &str, tag: &str) -> PyResult<Physics> {
-    Physics::from_tag(tag).ok_or_else(|| {
-        pyo3::exceptions::PyValueError::new_err(format!(
-            "{what}: unknown physics '{tag}' (expected {})",
-            Physics::tag_list()
-        ))
-    })
-}
-
-/// Parse the optional `symmetry` tag shared by every physics that reads an
-/// oriented material (`elasticity`, `heat_conduction`, `fick`). `None` means the
-/// isotropic default, so adding the axis broke no existing call.
-fn parse_symmetry(what: &str, tag: Option<&str>) -> PyResult<MaterialSymmetry> {
-    match tag {
-        None => Ok(MaterialSymmetry::Isotropic),
-        Some(t) => MaterialSymmetry::from_tag(t).ok_or_else(|| {
-            pyo3::exceptions::PyValueError::new_err(format!(
-                "{what}: unknown symmetry '{t}' (expected isotropic|orthotropic|anisotropic)"
-            ))
-        }),
-    }
-}
-
 /// Build a damage `Model` for a given law, parsing the kinematic tag.
-fn damage_with(fespace: &PyFiniteElementSpace, model: &str, law: DamageLaw) -> PyResult<PyModel> {
-    let m = ElasticityModel::from_tag(model).ok_or_else(|| {
-        pyo3::exceptions::PyValueError::new_err(format!(
-            "damage ({law}): unknown model '{model}' \
-             (expected plane_stress|plane_strain|axisymmetric|solid)"
-        ))
-    })?;
+fn damage_with(
+    fespace: &PyFiniteElementSpace,
+    kinematics: ElasticityModel,
+    law: DamageLaw,
+) -> PyResult<PyModel> {
     Ok(PyModel {
-        inner: model::damage_with_law(&fespace.inner, m, law)?,
+        inner: model::damage_with_law(&fespace.inner, kinematics, law)?,
     })
 }
 
@@ -60,17 +33,11 @@ fn damage_with(fespace: &PyFiniteElementSpace, model: &str, law: DamageLaw) -> P
 /// name — the material contract follows from it.
 fn plasticity_with(
     fespace: &PyFiniteElementSpace,
-    model: &str,
+    kinematics: ElasticityModel,
     law: PlasticLaw,
 ) -> PyResult<PyModel> {
-    let m = ElasticityModel::from_tag(model).ok_or_else(|| {
-        pyo3::exceptions::PyValueError::new_err(format!(
-            "plasticity ({law}): unknown model '{model}' \
-             (expected plane_stress|plane_strain|axisymmetric|solid)"
-        ))
-    })?;
     Ok(PyModel {
-        inner: model::plasticity_with_law(&fespace.inner, m, law)?,
+        inner: model::plasticity_with_law(&fespace.inner, kinematics, law)?,
     })
 }
 
@@ -90,9 +57,9 @@ fn plasticity_with(
 #[pyo3(signature = (fespace, symmetry=None))]
 pub fn heat_conduction(
     fespace: PyRef<PyFiniteElementSpace>,
-    symmetry: Option<&str>,
+    symmetry: Option<MaterialSymmetry>,
 ) -> PyResult<PyModel> {
-    let s = parse_symmetry("heat_conduction", symmetry)?;
+    let s = symmetry.unwrap_or(MaterialSymmetry::Isotropic);
     let inner = model::heat_conduction_with_symmetry(&fespace.inner, s)?;
     Ok(PyModel { inner })
 }
@@ -119,9 +86,9 @@ pub fn heat_conduction(
 pub fn fick(
     fespace: PyRef<PyFiniteElementSpace>,
     species: &str,
-    symmetry: Option<&str>,
+    symmetry: Option<MaterialSymmetry>,
 ) -> PyResult<PyModel> {
-    let s = parse_symmetry("fick", symmetry)?;
+    let s = symmetry.unwrap_or(MaterialSymmetry::Isotropic);
     let inner = model::fick_with_symmetry(&fespace.inner, s, species)?;
     Ok(PyModel { inner })
 }
@@ -193,15 +160,14 @@ pub fn interface_transfer(
     side_a: PyRef<PyFiniteElementSpace>,
     side_b: PyRef<PyFiniteElementSpace>,
     components: Vec<(String, String)>,
-    physics: &str,
+    physics: Physics,
     tol: Option<f64>,
 ) -> PyResult<PyModel> {
-    let p = parse_physics("interface_transfer", physics)?;
     let inner = model::interface_transfer(
         &side_a.inner,
         &side_b.inner,
         components,
-        p,
+        physics,
         tol.unwrap_or(1e-9),
     )?;
     Ok(PyModel { inner })
@@ -230,10 +196,9 @@ pub fn interface_transfer(
 pub fn boundary_transfer(
     fespace: PyRef<PyFiniteElementSpace>,
     components: Vec<(String, String)>,
-    physics: &str,
+    physics: Physics,
 ) -> PyResult<PyModel> {
-    let p = parse_physics("boundary_transfer", physics)?;
-    let inner = model::boundary_transfer(&fespace.inner, components, p)?;
+    let inner = model::boundary_transfer(&fespace.inner, components, physics)?;
     Ok(PyModel { inner })
 }
 
@@ -269,17 +234,11 @@ pub fn truss(fespace: PyRef<PyFiniteElementSpace>) -> PyResult<PyModel> {
 #[pyo3(signature = (fespace, model, symmetry=None))]
 pub fn elasticity(
     fespace: PyRef<PyFiniteElementSpace>,
-    model: &str,
-    symmetry: Option<&str>,
+    model: ElasticityModel,
+    symmetry: Option<MaterialSymmetry>,
 ) -> PyResult<PyModel> {
-    let m = ElasticityModel::from_tag(model).ok_or_else(|| {
-        pyo3::exceptions::PyValueError::new_err(format!(
-            "elasticity: unknown model '{model}' \
-             (expected plane_stress|plane_strain|axisymmetric|solid)"
-        ))
-    })?;
-    let s = parse_symmetry("elasticity", symmetry)?;
-    let inner = model::elasticity_with_symmetry(&fespace.inner, m, s)?;
+    let s = symmetry.unwrap_or(MaterialSymmetry::Isotropic);
+    let inner = model::elasticity_with_symmetry(&fespace.inner, model, s)?;
     Ok(PyModel { inner })
 }
 
@@ -293,7 +252,10 @@ pub fn elasticity(
 /// tangent `D_alg`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn plasticity_perfect(fespace: PyRef<PyFiniteElementSpace>, model: &str) -> PyResult<PyModel> {
+pub fn plasticity_perfect(
+    fespace: PyRef<PyFiniteElementSpace>,
+    model: ElasticityModel,
+) -> PyResult<PyModel> {
     plasticity_with(&fespace, model, PlasticLaw::Perfect)
 }
 
@@ -305,7 +267,7 @@ pub fn plasticity_perfect(fespace: PyRef<PyFiniteElementSpace>, model: &str) -> 
 #[pyfunction]
 pub fn plasticity_isotropic(
     fespace: PyRef<PyFiniteElementSpace>,
-    model: &str,
+    model: ElasticityModel,
 ) -> PyResult<PyModel> {
     plasticity_with(&fespace, model, PlasticLaw::Isotropic)
 }
@@ -321,7 +283,10 @@ pub fn plasticity_isotropic(
 /// Returns beyond the cone's apex (`I₁ = k/α`) collapse onto the tip.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn drucker_prager(fespace: PyRef<PyFiniteElementSpace>, model: &str) -> PyResult<PyModel> {
+pub fn drucker_prager(
+    fespace: PyRef<PyFiniteElementSpace>,
+    model: ElasticityModel,
+) -> PyResult<PyModel> {
     plasticity_with(&fespace, model, PlasticLaw::DruckerPrager)
 }
 
@@ -335,7 +300,7 @@ pub fn drucker_prager(fespace: PyRef<PyFiniteElementSpace>, model: &str) -> PyRe
 /// hand-derived one could not be checked — is a central difference.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn ottosen(fespace: PyRef<PyFiniteElementSpace>, model: &str) -> PyResult<PyModel> {
+pub fn ottosen(fespace: PyRef<PyFiniteElementSpace>, model: ElasticityModel) -> PyResult<PyModel> {
     plasticity_with(&fespace, model, PlasticLaw::Ottosen)
 }
 
@@ -349,7 +314,10 @@ pub fn ottosen(fespace: PyRef<PyFiniteElementSpace>, model: &str) -> PyResult<Py
 /// plausible wrong answer.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn creep_norton(fespace: PyRef<PyFiniteElementSpace>, model: &str) -> PyResult<PyModel> {
+pub fn creep_norton(
+    fespace: PyRef<PyFiniteElementSpace>,
+    model: ElasticityModel,
+) -> PyResult<PyModel> {
     plasticity_with(&fespace, model, PlasticLaw::CreepNorton)
 }
 
@@ -362,7 +330,10 @@ pub fn creep_norton(fespace: PyRef<PyFiniteElementSpace>, model: &str) -> PyResu
 /// the law integrates correctly under a varying load.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn creep_blackburn(fespace: PyRef<PyFiniteElementSpace>, model: &str) -> PyResult<PyModel> {
+pub fn creep_blackburn(
+    fespace: PyRef<PyFiniteElementSpace>,
+    model: ElasticityModel,
+) -> PyResult<PyModel> {
     plasticity_with(&fespace, model, PlasticLaw::CreepBlackburn)
 }
 
@@ -375,7 +346,10 @@ pub fn creep_blackburn(fespace: PyRef<PyFiniteElementSpace>, model: &str) -> PyR
 /// usable under a varying load, where a time-hardening form would be wrong.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn creep_lemaitre(fespace: PyRef<PyFiniteElementSpace>, model: &str) -> PyResult<PyModel> {
+pub fn creep_lemaitre(
+    fespace: PyRef<PyFiniteElementSpace>,
+    model: ElasticityModel,
+) -> PyResult<PyModel> {
     plasticity_with(&fespace, model, PlasticLaw::CreepLemaitre)
 }
 
@@ -392,7 +366,7 @@ pub fn creep_lemaitre(fespace: PyRef<PyFiniteElementSpace>, model: &str) -> PyRe
 #[pyfunction]
 pub fn viscoplasticity_chaboche(
     fespace: PyRef<PyFiniteElementSpace>,
-    model: &str,
+    model: ElasticityModel,
 ) -> PyResult<PyModel> {
     plasticity_with(&fespace, model, PlasticLaw::ViscoplasticChaboche)
 }
@@ -409,7 +383,7 @@ pub fn viscoplasticity_chaboche(
 #[pyfunction]
 pub fn viscoplasticity_lemaitre_chaboche(
     fespace: PyRef<PyFiniteElementSpace>,
-    model: &str,
+    model: ElasticityModel,
 ) -> PyResult<PyModel> {
     plasticity_with(&fespace, model, PlasticLaw::ViscoplasticLemaitreChaboche)
 }
@@ -426,7 +400,10 @@ pub fn viscoplasticity_lemaitre_chaboche(
 /// `d_minus`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn damage_tc(fespace: PyRef<PyFiniteElementSpace>, model: &str) -> PyResult<PyModel> {
+pub fn damage_tc(
+    fespace: PyRef<PyFiniteElementSpace>,
+    model: ElasticityModel,
+) -> PyResult<PyModel> {
     damage_with(&fespace, model, DamageLaw::DamageTc)
 }
 
@@ -446,7 +423,10 @@ pub fn damage_tc(fespace: PyRef<PyFiniteElementSpace>, model: &str) -> PyResult<
 /// predict a collapse that does not happen. State: `kappa_1..3`, `d_1..3`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn damage_sic_sic(fespace: PyRef<PyFiniteElementSpace>, model: &str) -> PyResult<PyModel> {
+pub fn damage_sic_sic(
+    fespace: PyRef<PyFiniteElementSpace>,
+    model: ElasticityModel,
+) -> PyResult<PyModel> {
     damage_with(&fespace, model, DamageLaw::SicSic)
 }
 
@@ -465,7 +445,7 @@ pub fn damage_sic_sic(fespace: PyRef<PyFiniteElementSpace>, model: &str) -> PyRe
 /// from `f_0`. Void **nucleation** is not modelled — only growth.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn gurson(fespace: PyRef<PyFiniteElementSpace>, model: &str) -> PyResult<PyModel> {
+pub fn gurson(fespace: PyRef<PyFiniteElementSpace>, model: ElasticityModel) -> PyResult<PyModel> {
     plasticity_with(&fespace, model, PlasticLaw::Gurson)
 }
 
@@ -477,14 +457,8 @@ pub fn gurson(fespace: PyRef<PyFiniteElementSpace>, model: &str) -> PyResult<PyM
 /// the scalar history variable `kappa` (`VAR0`→`VAR1`) and outputs `damage`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn mazars(fespace: PyRef<PyFiniteElementSpace>, model: &str) -> PyResult<PyModel> {
-    let m = ElasticityModel::from_tag(model).ok_or_else(|| {
-        pyo3::exceptions::PyValueError::new_err(format!(
-            "mazars: unknown model '{model}' \
-             (expected plane_stress|plane_strain|axisymmetric|solid)"
-        ))
-    })?;
-    let inner = model::mazars(&fespace.inner, m)?;
+pub fn mazars(fespace: PyRef<PyFiniteElementSpace>, model: ElasticityModel) -> PyResult<PyModel> {
+    let inner = model::mazars(&fespace.inner, model)?;
     Ok(PyModel { inner })
 }
 
@@ -545,15 +519,9 @@ pub fn bernoulli(fespace: PyRef<PyFiniteElementSpace>) -> PyResult<PyModel> {
 /// has no constitutive `Q`, only a reaction.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn shell(fespace: PyRef<PyFiniteElementSpace>, model: &str) -> PyResult<PyModel> {
-    let m = ShellModel::from_tag(model).ok_or_else(|| {
-        pyo3::exceptions::PyValueError::new_err(format!(
-            "shell: unknown model '{model}' (expected {})",
-            ShellModel::tag_list()
-        ))
-    })?;
+pub fn shell(fespace: PyRef<PyFiniteElementSpace>, model: ShellModel) -> PyResult<PyModel> {
     Ok(PyModel {
-        inner: model::shell(&fespace.inner, m)?,
+        inner: model::shell(&fespace.inner, model)?,
     })
 }
 

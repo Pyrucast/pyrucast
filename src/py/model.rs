@@ -55,7 +55,7 @@ impl PySubModel {
             .read()
             .physics()
             .iter()
-            .map(|p| p.to_tag().to_string())
+            .map(|p| p.name().to_string())
             .collect())
     }
 
@@ -164,15 +164,9 @@ impl PyModel {
     /// A coupled physics declares several natures and is therefore returned by
     /// each of its filters — a radiation boundary is both `"thermal"` and
     /// `"radiation"`.
-    fn filter(&self, physics: &str) -> PyResult<Self> {
-        let p = Physics::from_tag(physics).ok_or_else(|| {
-            pyo3::exceptions::PyValueError::new_err(format!(
-                "filter: unknown physics '{physics}' (expected {})",
-                Physics::tag_list()
-            ))
-        })?;
+    fn filter(&self, physics: Physics) -> PyResult<Self> {
         Ok(Self {
-            inner: self.inner.filter(p)?,
+            inner: self.inner.filter(physics)?,
         })
     }
 

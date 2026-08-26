@@ -448,36 +448,16 @@ pub enum Physics {
 }
 
 impl Physics {
-    /// Parse from a lowercase tag (`"mechanical"`, `"thermal"`, `"constraint"`,
-    /// `"other"`, `"diffusion"`, `"radiation"`) — the Python-facing spelling,
-    /// mirroring
-    /// [`ElasticityModel::from_tag`](crate::models::elasticity::ElasticityModel::from_tag).
+    /// The lowercase name of this nature (the inverse of
+    /// [`from_name`](crate::named::Named::from_name)).
     ///
     /// ```
     /// # use pyrucast::models::Physics;
-    /// assert_eq!(Physics::from_tag("thermal"), Some(Physics::Thermal));
-    /// assert_eq!(Physics::from_tag("acoustique"), None);
+    /// # use pyrucast::named::Named;
+    /// // Réciproque exacte de `from_name`, pour les six natures.
+    /// assert!(Physics::ALL.iter().all(|p| Physics::from_name(p.name()) == Some(*p)));
     /// ```
-    pub fn from_tag(tag: &str) -> Option<Self> {
-        match tag {
-            "mechanical" => Some(Self::Mechanical),
-            "thermal" => Some(Self::Thermal),
-            "constraint" => Some(Self::Constraint),
-            "other" => Some(Self::Other),
-            "diffusion" => Some(Self::Diffusion),
-            "radiation" => Some(Self::Radiation),
-            _ => None,
-        }
-    }
-
-    /// The lowercase tag for this nature (the inverse of [`from_tag`](Self::from_tag)).
-    ///
-    /// ```
-    /// # use pyrucast::models::Physics;
-    /// // Réciproque exacte de `from_tag`, pour les six natures.
-    /// assert!(Physics::ALL.iter().all(|p| Physics::from_tag(p.to_tag()) == Some(*p)));
-    /// ```
-    pub fn to_tag(self) -> &'static str {
+    pub fn name(self) -> &'static str {
         match self {
             Self::Mechanical => "mechanical",
             Self::Thermal => "thermal",
@@ -506,25 +486,20 @@ impl Physics {
         Self::Diffusion,
         Self::Radiation,
     ];
+}
 
-    /// The accepted tags, `|`-joined — for error messages.
-    ///
-    /// ```
-    /// # use pyrucast::models::Physics;
-    /// assert!(Physics::tag_list().contains("diffusion"));
-    /// ```
-    pub fn tag_list() -> String {
-        Self::ALL
-            .iter()
-            .map(|p| p.to_tag())
-            .collect::<Vec<_>>()
-            .join("|")
+impl crate::named::Named for Physics {
+    const LABEL: &'static str = "physics";
+    const VALUES: &'static [Self] = &Self::ALL;
+
+    fn name(self) -> &'static str {
+        Physics::name(self)
     }
 }
 
 impl std::fmt::Display for Physics {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.to_tag())
+        f.write_str(self.name())
     }
 }
 

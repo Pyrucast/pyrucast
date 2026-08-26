@@ -68,6 +68,7 @@ use std::fmt;
 /// ```
 /// # use pyrucast::atoms::ElementType;
 /// // Chaque variante connaît sa topologie et son nom d'échange.
+/// # use pyrucast::named::Named;
 /// let t = ElementType::from_name("PENTA6").unwrap();
 /// assert_eq!((t.nodes_per_cell(), t.topological_dim()), (6, 3));
 /// ```
@@ -152,7 +153,7 @@ impl ElementType {
     /// Every variant, in declaration order.
     ///
     /// The single list the rest of the crate iterates over: parsing
-    /// ([`from_name`](Self::from_name)) and the exhaustiveness tests read it
+    /// ([`from_name`](crate::named::Named::from_name)) and the exhaustiveness tests read it
     /// rather than repeating a literal array that a new variant would silently
     /// miss. Adding a variant means extending **this** slice — nothing else
     /// enumerates the element types.
@@ -311,21 +312,17 @@ impl ElementType {
             ],
         }
     }
+}
 
-    /// Parse from a short name (case-insensitive).
-    ///
-    /// Derived from [`ALL`](Self::ALL) and [`name`](Self::name), so a new
-    /// variant is parsable as soon as it is declared — there is no separate
-    /// string table to keep in step.
-    ///
-    /// ```
-    /// # use pyrucast::atoms::ElementType;
-    /// assert_eq!(ElementType::from_name("TRI3"), Some(ElementType::TRI3));
-    /// assert_eq!(ElementType::from_name("TRIANGLE"), None);
-    /// ```
-    pub fn from_name(s: &str) -> Option<Self> {
-        let upper = s.to_ascii_uppercase();
-        Self::ALL.iter().copied().find(|et| et.name() == upper)
+/// Parsing is derived from [`ALL`](ElementType::ALL) and
+/// [`name`](ElementType::name), so a new variant is parsable as soon as it is
+/// declared — there is no separate string table to keep in step.
+impl crate::named::Named for ElementType {
+    const LABEL: &'static str = "element type";
+    const VALUES: &'static [Self] = Self::ALL;
+
+    fn name(self) -> &'static str {
+        ElementType::name(self)
     }
 }
 
@@ -349,6 +346,7 @@ impl crate::dump::Dump for ElementType {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::named::Named;
 
     #[test]
     fn element_metadata() {

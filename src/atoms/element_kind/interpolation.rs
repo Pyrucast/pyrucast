@@ -191,23 +191,6 @@ impl Interpolation {
         }
     }
 
-    /// Parse from a short name (case-insensitive).
-    ///
-    /// ```
-    /// # use pyrucast::atoms::{ElementType, Interpolation};
-    /// assert_eq!(Interpolation::from_name("LAGRANGE1"), Some(Interpolation::Lagrange1));
-    /// assert_eq!(Interpolation::from_name("P17"), None);
-    /// ```
-    pub fn from_name(s: &str) -> Option<Self> {
-        match s.to_ascii_uppercase().as_str() {
-            "LAGRANGE1" | "LAG1" => Some(Self::Lagrange1),
-            "LAGRANGE2" | "LAG2" => Some(Self::Lagrange2),
-            "HERMITE3" | "HER3" => Some(Self::Hermite3),
-            "MODEL_EMBEDDED" | "MODELEMBEDDED" | "EMBEDDED" => Some(Self::ModelEmbedded),
-            _ => None,
-        }
-    }
-
     /// Evaluate the shape functions `N_i(ξ)` at the reference point `xi`.
     ///
     /// Returns a flat `Vec<f64>` of length
@@ -333,6 +316,30 @@ impl Interpolation {
     }
 }
 
+impl crate::named::Named for Interpolation {
+    const LABEL: &'static str = "interpolation";
+    const VALUES: &'static [Self] = &[
+        Self::Lagrange1,
+        Self::Lagrange2,
+        Self::Hermite3,
+        Self::ModelEmbedded,
+    ];
+
+    fn name(self) -> &'static str {
+        Interpolation::name(self)
+    }
+
+    fn aliases() -> &'static [(&'static str, Self)] {
+        &[
+            ("LAG1", Self::Lagrange1),
+            ("LAG2", Self::Lagrange2),
+            ("HER3", Self::Hermite3),
+            ("MODELEMBEDDED", Self::ModelEmbedded),
+            ("EMBEDDED", Self::ModelEmbedded),
+        ]
+    }
+}
+
 impl fmt::Display for Interpolation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.name())
@@ -348,6 +355,7 @@ impl crate::dump::Dump for Interpolation {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::named::Named;
 
     /// Sum of Lagrange shape functions equals 1 everywhere (partition of
     /// unity).

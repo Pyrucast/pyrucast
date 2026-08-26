@@ -95,8 +95,8 @@ pub enum MaterialSymmetry {
 }
 
 impl MaterialSymmetry {
-    /// Parse from a lowercase tag (`"isotropic"`, `"orthotropic"`,
-    /// `"anisotropic"`) — the Python-facing spelling.
+    /// The lowercase name of this symmetry — the inverse of
+    /// [`from_name`](crate::named::Named::from_name).
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -109,6 +109,7 @@ impl MaterialSymmetry {
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::models::elasticity::ElasticityModel;
     /// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
+    /// # use pyrucast::named::Named;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -119,50 +120,13 @@ impl MaterialSymmetry {
     /// #     fes.get(0).unwrap(),
     /// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
     /// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
-    /// assert_eq!(MaterialSymmetry::from_tag("orthotropic"),
-    ///            Some(MaterialSymmetry::Orthotropic));
-    /// assert_eq!(MaterialSymmetry::from_tag("ORTHOTROPE"), None); // minuscules
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn from_tag(tag: &str) -> Option<Self> {
-        match tag {
-            "isotropic" => Some(Self::Isotropic),
-            "orthotropic" => Some(Self::Orthotropic),
-            "anisotropic" => Some(Self::Anisotropic),
-            _ => None,
-        }
-    }
-
-    /// The lowercase tag for this symmetry (the inverse of [`from_tag`](Self::from_tag)).
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::element_field::SubElementField;
-    /// # use pyrucast::containers::field::SubField;
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
-    /// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// # let mut mat = SubElementField::from_uniform_per_component(
-    /// #     fes.get(0).unwrap(),
-    /// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
-    /// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
-    /// assert_eq!(MaterialSymmetry::Anisotropic.to_tag(), "anisotropic");
-    /// // Réciproque exacte de `from_tag`.
-    /// assert_eq!(MaterialSymmetry::from_tag(MaterialSymmetry::Anisotropic.to_tag()),
+    /// assert_eq!(MaterialSymmetry::Anisotropic.name(), "anisotropic");
+    /// // Réciproque exacte de `from_name`, et la casse ne compte pas.
+    /// assert_eq!(MaterialSymmetry::from_name(MaterialSymmetry::Anisotropic.name()),
     ///            Some(MaterialSymmetry::Anisotropic));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn to_tag(self) -> &'static str {
+    pub fn name(self) -> &'static str {
         match self {
             Self::Isotropic => "isotropic",
             Self::Orthotropic => "orthotropic",
@@ -203,9 +167,18 @@ impl MaterialSymmetry {
     }
 }
 
+impl crate::named::Named for MaterialSymmetry {
+    const LABEL: &'static str = "symmetry";
+    const VALUES: &'static [Self] = &[Self::Isotropic, Self::Orthotropic, Self::Anisotropic];
+
+    fn name(self) -> &'static str {
+        MaterialSymmetry::name(self)
+    }
+}
+
 impl std::fmt::Display for MaterialSymmetry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.to_tag())
+        f.write_str(self.name())
     }
 }
 
@@ -975,6 +948,7 @@ pub fn transport_tensor(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::named::Named;
 
     /// A rotation about `z` by `theta`, as the frame vectors would give it.
     fn rot_z(theta: f64) -> Matrix3<f64> {
@@ -998,9 +972,9 @@ mod tests {
             MaterialSymmetry::Orthotropic,
             MaterialSymmetry::Anisotropic,
         ] {
-            assert_eq!(MaterialSymmetry::from_tag(s.to_tag()), Some(s));
+            assert_eq!(MaterialSymmetry::from_name(s.name()), Some(s));
         }
-        assert_eq!(MaterialSymmetry::from_tag("cubic"), None);
+        assert_eq!(MaterialSymmetry::from_name("cubic"), None);
     }
 
     #[test]

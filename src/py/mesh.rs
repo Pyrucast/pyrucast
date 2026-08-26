@@ -7,7 +7,11 @@ use crate::containers::mesh::{Mesh, SubMesh};
 use crate::handle::Handle;
 use crate::py::coords::PyCoords;
 use crate::py::node::PyNode;
-use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyTypeError};
+// `PyValueError` ne sert plus qu'aux erreurs de la visualisation : les noms
+// d'énumérés passent désormais par `FromPyObject` (cf. `named_enum!`).
+#[cfg(feature = "viz")]
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 /// Borrow a Python `NodeField` or `ElementField` as a [`crate::viz::FieldArg`].
@@ -283,15 +287,10 @@ impl PyMesh {
     /// `Mesh(coords, element_type)` — mesh with one pre-created submesh.
     #[new]
     #[pyo3(signature = (coords, element_type=None))]
-    fn py_new(coords: PyRef<PyCoords>, element_type: Option<&str>) -> PyResult<Self> {
+    fn py_new(coords: PyRef<PyCoords>, element_type: Option<ElementType>) -> PyResult<Self> {
         let coords = coords.handle.clone();
         let mesh = match element_type {
-            Some(et_str) => {
-                let et = ElementType::from_name(et_str).ok_or_else(|| {
-                    PyValueError::new_err(format!("unknown element type: {et_str}"))
-                })?;
-                Mesh::from_submesh(SubMesh::new(coords, et))
-            }
+            Some(et) => Mesh::from_submesh(SubMesh::new(coords, et)),
             None => Mesh::empty(),
         };
         Ok(Self { inner: mesh })

@@ -95,7 +95,7 @@ impl PySubMatrix {
             .read()
             .physics()
             .iter()
-            .map(|p| p.to_tag().to_string())
+            .map(|p| p.name().to_string())
             .collect())
     }
 
@@ -246,15 +246,9 @@ impl PyMatrix {
     /// `"constraint"`, `"other"`, `"diffusion"`, `"radiation"`). The result is
     /// **not** finalized — call `assemble` (or `finalize` for literal-only
     /// blocks) before solving.
-    fn filter(&self, physics: &str) -> PyResult<Self> {
-        let p = Physics::from_tag(physics).ok_or_else(|| {
-            pyo3::exceptions::PyValueError::new_err(format!(
-                "filter: unknown physics '{physics}' (expected {})",
-                Physics::tag_list()
-            ))
-        })?;
+    fn filter(&self, physics: Physics) -> PyResult<Self> {
         Ok(Self {
-            inner: self.inner.filter(p)?,
+            inner: self.inner.filter(physics)?,
         })
     }
 
@@ -267,7 +261,7 @@ impl PyMatrix {
             .inner
             .physics()?
             .iter()
-            .map(|p| p.to_tag().to_string())
+            .map(|p| p.name().to_string())
             .collect())
     }
 

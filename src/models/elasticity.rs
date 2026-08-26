@@ -96,25 +96,6 @@ pub enum ElasticityModel {
 }
 
 impl ElasticityModel {
-    /// Parse from a lowercase tag (`"plane_stress"`, `"plane_strain"`,
-    /// `"axisymmetric"`, `"solid"`).
-    ///
-    /// ```
-    /// # use pyrucast::models::elasticity::{self, ElasticityModel};
-    /// assert_eq!(ElasticityModel::from_tag("plane_stress"),
-    ///            Some(ElasticityModel::PlaneStress));
-    /// assert_eq!(ElasticityModel::from_tag("coque"), None);
-    /// ```
-    pub fn from_tag(tag: &str) -> Option<Self> {
-        match tag {
-            "plane_stress" => Some(Self::PlaneStress),
-            "plane_strain" => Some(Self::PlaneStrain),
-            "axisymmetric" => Some(Self::Axisymmetric),
-            "solid" => Some(Self::Solid),
-            _ => None,
-        }
-    }
-
     /// Whether this model carries the hoop (θθ) component — i.e. is
     /// [`Axisymmetric`](Self::Axisymmetric).
     ///
@@ -127,6 +108,25 @@ impl ElasticityModel {
     /// ```
     pub fn is_axisymmetric(self) -> bool {
         self == Self::Axisymmetric
+    }
+}
+
+impl crate::named::Named for ElasticityModel {
+    const LABEL: &'static str = "elasticity model";
+    const VALUES: &'static [Self] = &[
+        Self::PlaneStress,
+        Self::PlaneStrain,
+        Self::Axisymmetric,
+        Self::Solid,
+    ];
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::PlaneStress => "plane_stress",
+            Self::PlaneStrain => "plane_strain",
+            Self::Axisymmetric => "axisymmetric",
+            Self::Solid => "solid",
+        }
     }
 }
 

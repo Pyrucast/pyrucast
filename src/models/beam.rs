@@ -90,9 +90,9 @@ impl BeamModel {
     ///
     /// ```
     /// # use pyrucast::models::beam::{self, BeamModel};
-    /// assert_eq!(BeamModel::Frame3d.to_tag(), "frame_3d");
+    /// assert_eq!(BeamModel::Frame3d.name(), "frame_3d");
     /// ```
-    pub fn to_tag(self) -> &'static str {
+    pub fn name(self) -> &'static str {
         match self {
             Self::Planar1d => "planar_1d",
             Self::Frame2d => "frame_2d",
@@ -145,7 +145,7 @@ impl BeamModel {
 
 impl std::fmt::Display for BeamModel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.to_tag())
+        f.write_str(self.name())
     }
 }
 

@@ -1816,7 +1816,7 @@ impl fmt::Display for SubMatrix {
         let physics: std::borrow::Cow<str> = if self.physics.is_empty() {
             "".into()
         } else {
-            let tags: Vec<&str> = self.physics.iter().map(|p| p.to_tag()).collect();
+            let tags: Vec<&str> = self.physics.iter().map(|p| p.name()).collect();
             format!(", {}", tags.join("+")).into()
         };
         let factor: std::borrow::Cow<str> = if self.factor == 1.0 {

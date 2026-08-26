@@ -55,22 +55,6 @@ impl QuadratureRule {
         }
     }
 
-    /// Parse from a short name (case-insensitive).
-    ///
-    /// ```
-    /// # use pyrucast::atoms::{ElementType, QuadratureRule};
-    /// // Insensible à la casse.
-    /// assert_eq!(QuadratureRule::from_name("gauss"), Some(QuadratureRule::Gauss));
-    /// assert_eq!(QuadratureRule::from_name("simpson"), None);
-    /// ```
-    pub fn from_name(s: &str) -> Option<Self> {
-        match s.to_ascii_uppercase().as_str() {
-            "GAUSS" => Some(Self::Gauss),
-            "REDUCED" => Some(Self::Reduced),
-            _ => None,
-        }
-    }
-
     /// Whether this rule is defined for `element_type` — i.e. anything but
     /// `POI1`, which has no reference frame to integrate over.
     ///
@@ -133,6 +117,15 @@ impl QuadratureRule {
     }
 }
 
+impl crate::named::Named for QuadratureRule {
+    const LABEL: &'static str = "quadrature rule";
+    const VALUES: &'static [Self] = &[Self::Gauss, Self::Reduced];
+
+    fn name(self) -> &'static str {
+        QuadratureRule::name(self)
+    }
+}
+
 impl fmt::Display for QuadratureRule {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.name())
@@ -186,6 +179,7 @@ pub(super) fn tri6_gauss() -> (Vec<f64>, Vec<f64>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::named::Named;
 
     /// Every element type carrying a reference frame (i.e. all but `POI1`),
     /// for the parametric quadrature tests. Derived from

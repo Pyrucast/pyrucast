@@ -98,7 +98,8 @@ pub enum DamageLaw {
 }
 
 impl DamageLaw {
-    /// Parse from a lowercase tag (`"mazars"`, `"damage_tc"`, `"sic_sic"`).
+    /// The lowercase name (the inverse of
+    /// [`from_name`](crate::named::Named::from_name)).
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -118,45 +119,13 @@ impl DamageLaw {
     /// # let materiau = SubElementField::from_uniform_per_component(
     /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
     /// # let mat = MatRead { field: &materiau, cell: 0 };
-    /// assert_eq!(DamageLaw::from_tag("mazars"), Some(DamageLaw::Mazars));
-    /// assert_eq!(DamageLaw::from_tag("kachanov"), None);
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn from_tag(tag: &str) -> Option<Self> {
-        match tag {
-            "mazars" => Some(Self::Mazars),
-            "damage_tc" => Some(Self::DamageTc),
-            "sic_sic" => Some(Self::SicSic),
-            _ => None,
-        }
-    }
-
-    /// The lowercase tag (the inverse of [`from_tag`](Self::from_tag)).
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::element_field::SubElementField;
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::damage::{self, DamageLaw, MatRead};
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// # let materiau = SubElementField::from_uniform_per_component(
-    /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
-    /// # let mat = MatRead { field: &materiau, cell: 0 };
-    /// // Réciproque exacte de `from_tag`, pour les trois lois.
+    /// # use pyrucast::named::Named;
+    /// // Réciproque exacte de `from_name`, pour les trois lois.
     /// assert!(DamageLaw::ALL.iter()
-    ///     .all(|l| DamageLaw::from_tag(l.to_tag()) == Some(*l)));
+    ///     .all(|l| DamageLaw::from_name(l.name()) == Some(*l)));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn to_tag(self) -> &'static str {
+    pub fn name(self) -> &'static str {
         match self {
             Self::Mazars => "mazars",
             Self::DamageTc => "damage_tc",
@@ -188,38 +157,6 @@ impl DamageLaw {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub const ALL: [DamageLaw; 3] = [Self::Mazars, Self::DamageTc, Self::SicSic];
-
-    /// The accepted tags, `|`-joined — for error messages.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::element_field::SubElementField;
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::damage::{self, DamageLaw, MatRead};
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// # let materiau = SubElementField::from_uniform_per_component(
-    /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
-    /// # let mat = MatRead { field: &materiau, cell: 0 };
-    /// // Ce que citent les messages quand un nom de loi est inconnu.
-    /// assert!(DamageLaw::tag_list().contains("mazars"));
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn tag_list() -> String {
-        Self::ALL
-            .iter()
-            .map(|l| l.to_tag())
-            .collect::<Vec<_>>()
-            .join("|")
-    }
 
     /// The material components this law requires.
     ///
@@ -352,9 +289,18 @@ impl DamageLaw {
     }
 }
 
+impl crate::named::Named for DamageLaw {
+    const LABEL: &'static str = "damage law";
+    const VALUES: &'static [Self] = &Self::ALL;
+
+    fn name(self) -> &'static str {
+        DamageLaw::name(self)
+    }
+}
+
 impl std::fmt::Display for DamageLaw {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.to_tag())
+        f.write_str(self.name())
     }
 }
 

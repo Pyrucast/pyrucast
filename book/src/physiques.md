@@ -90,7 +90,7 @@ et **ce n'est pas un manque**. `matrix.mass(...)` sur un modèle contenant une
 pression suiveuse voit simplement qu'elle n'a pas de masse.
 
 Les **tags** donnés sous chaque nom sont les chaînes exactes que prennent les
-constructeurs (`from_tag`) : c'est ce qu'on écrit, pas une paraphrase.
+opérateurs (`from_name`) : c'est ce qu'on écrit, pas une paraphrase.
 
 ### Thermique — primale `T`, duale `q`, `filter("thermal")`
 

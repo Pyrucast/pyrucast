@@ -6,22 +6,11 @@ use crate::atoms::Element;
 use crate::atoms::Interpolation;
 use crate::atoms::QuadratureRule;
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
-use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::py::element::PyElement;
 use crate::py::mesh::PyMesh;
-use pyo3::exceptions::{PyIndexError, PyValueError};
+use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
-
-fn parse_interpolation(s: &str) -> PyResult<Interpolation> {
-    Interpolation::from_name(s)
-        .ok_or_else(|| PyValueError::new_err(format!("unknown interpolation: {s}")))
-}
-
-fn parse_quadrature(s: &str) -> PyResult<QuadratureRule> {
-    QuadratureRule::from_name(s)
-        .ok_or_else(|| PyValueError::new_err(format!("unknown quadrature rule: {s}")))
-}
 
 /// One subspace of a `FiniteElementSpace`: the finite elements over a
 /// single submesh, with their interpolation and quadrature.
@@ -203,8 +192,8 @@ impl PyFiniteElementSpace {
     #[new]
     #[pyo3(signature = (mesh, interpolation="LAGRANGE1", quadrature="GAUSS"))]
     fn py_new(mesh: PyRef<PyMesh>, interpolation: &str, quadrature: &str) -> PyResult<Self> {
-        let interp = parse_interpolation(interpolation)?;
-        let quad = parse_quadrature(quadrature)?;
+        let interp = crate::py::named::<Interpolation>(interpolation)?;
+        let quad = crate::py::named::<QuadratureRule>(quadrature)?;
         let n_sub = mesh.inner.len();
         let choices: Vec<(Interpolation, QuadratureRule)> =
             (0..n_sub).map(|_| (interp, quad)).collect();
@@ -217,21 +206,9 @@ impl PyFiniteElementSpace {
     fn with_choices(
         _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
         mesh: PyRef<PyMesh>,
-        choices: Vec<(String, String)>,
+        choices: Vec<(Interpolation, QuadratureRule)>,
     ) -> PyResult<Self> {
-        let parsed: Result<Vec<_>> = choices
-            .iter()
-            .map(|(i, q)| -> Result<(Interpolation, QuadratureRule)> {
-                let interp = Interpolation::from_name(i)
-                    .ok_or_else(|| PyrucastError::Message(format!("unknown interpolation: {i}")))?;
-                let quad = QuadratureRule::from_name(q).ok_or_else(|| {
-                    PyrucastError::Message(format!("unknown quadrature rule: {q}"))
-                })?;
-                Ok((interp, quad))
-            })
-            .collect();
-        let parsed = parsed?;
-        let fes = FiniteElementSpace::with(&mesh.inner, &parsed)?;
+        let fes = FiniteElementSpace::with(&mesh.inner, &choices)?;
         Ok(Self { inner: fes })
     }
 

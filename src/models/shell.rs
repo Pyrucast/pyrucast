@@ -102,43 +102,20 @@ pub enum ShellModel {
 }
 
 impl ShellModel {
-    /// Parse from a lowercase tag (`"thick"`, `"kirchhoff"`).
+    /// The lowercase name (the inverse of
+    /// [`from_name`](crate::named::Named::from_name)).
     ///
     /// ```
     /// # use pyrucast::models::shell::{self, ShellModel};
-    /// assert_eq!(ShellModel::from_tag("kirchhoff"), Some(ShellModel::Kirchhoff));
-    /// assert_eq!(ShellModel::from_tag("membrane"), None);
+    /// assert_eq!(ShellModel::Thick.name(), "thick");
+    /// # use pyrucast::named::Named;
+    /// assert_eq!(ShellModel::from_name(ShellModel::Thick.name()), Some(ShellModel::Thick));
     /// ```
-    pub fn from_tag(tag: &str) -> Option<Self> {
-        match tag {
-            "thick" => Some(Self::Thick),
-            "kirchhoff" => Some(Self::Kirchhoff),
-            _ => None,
-        }
-    }
-
-    /// The lowercase tag (the inverse of [`from_tag`](Self::from_tag)).
-    ///
-    /// ```
-    /// # use pyrucast::models::shell::{self, ShellModel};
-    /// assert_eq!(ShellModel::Thick.to_tag(), "thick");
-    /// assert_eq!(ShellModel::from_tag(ShellModel::Thick.to_tag()), Some(ShellModel::Thick));
-    /// ```
-    pub fn to_tag(self) -> &'static str {
+    pub fn name(self) -> &'static str {
         match self {
             Self::Thick => "thick",
             Self::Kirchhoff => "kirchhoff",
         }
-    }
-
-    /// The accepted tags, `|`-joined — for error messages.
-    ///
-    /// ```
-    /// # use pyrucast::models::shell::{self, ShellModel};
-    /// assert!(ShellModel::tag_list().contains("kirchhoff"));
-    /// ```
-    pub fn tag_list() -> String {
-        ["thick", "kirchhoff"].join("|")
     }
 
     /// Whether the formulation carries a transverse shear at all. A discrete
@@ -157,9 +134,18 @@ impl ShellModel {
     }
 }
 
+impl crate::named::Named for ShellModel {
+    const LABEL: &'static str = "shell model";
+    const VALUES: &'static [Self] = &[Self::Thick, Self::Kirchhoff];
+
+    fn name(self) -> &'static str {
+        ShellModel::name(self)
+    }
+}
+
 impl std::fmt::Display for ShellModel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.to_tag())
+        f.write_str(self.name())
     }
 }
 
