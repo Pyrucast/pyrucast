@@ -50,35 +50,51 @@ n'implémente que celui qui la concerne) :
 
 ## Les étapes
 
-Ajouter une physique se réduit à **cinq** gestes :
+Ajouter une physique de forme courante — celle qui couvre un espace éléments
+finis — coûte **un fichier et une ligne** :
 
 1. **`src/models/<ma_physique>.rs`** (nouveau) — une struct portant ses
-   supports + un `impl SubModelKind` + un constructeur `new(...)` faisant le
-   travail de construction (calque sur `heat_conduction.rs`, cas simple à
-   1 bloc avec raideur *et* masse, `boundary_transfer.rs`, cas le plus court, ou
-   `dirichlet.rs`, contrainte de Lagrange à 2 blocs portée par des maillages
-   fournis par l'utilisateur). La struct dérive `Serialize, Deserialize` (et
-   `Clone` si ses champs le permettent).
-2. **`src/models/mod.rs`** — `pub mod <ma_physique>;`.
-3. **`src/containers/model.rs`** — **une** variante dans `enum SubModel` et
-   **une** ligne dans `SubModel::as_kind()`. Plus le constructeur
-   `SubModel::<ma_physique>(...)`, la primitive à une zone.
-4. **`src/ops/model/<ma_physique>.rs`** (nouveau) — l'opérateur parent
-   `pub fn <ma_physique>(fes: &FiniteElementSpace, …) -> Result<Model>`, qui
-   balaie les sous-espaces et rend un `Model` couvrant tout le support ; plus
-   son `pub mod` / `pub use` dans `src/ops/model/mod.rs`.
-5. **`src/py/ops/model.rs`** — un `#[pyfunction]` `<ma_physique>(...)`, son
-   `m.add_function(...)` dans le `#[pymodule]` de `src/lib.rs` (le module
-   `_pyrucast` est plat), et sa ligne dans `python/pyrucast/model.py`
-   (import ré-exporté **et** `__all__`).
+   supports, un `impl SubModelKind`, un constructeur `new(...)`, ses tests, et
+   une invocation de `physics_operator!` qui déclare l'opérateur public avec sa
+   documentation (calque sur `truss.rs`, le cas le plus court).
+2. **`src/containers/model.rs`** — **une** variante dans `enum SubModel` et
+   **une** ligne dans `SubModel::as_kind()`.
 
-Le geste 5 est **vérifié** : `tests/python/test_mirror_completeness.py`
-réclame le binding Python de toute fonction d'`ops::model`, et échoue si on
-l'oublie. Rien à déclarer en revanche du côté de
-`tests/python/test_method_exposure.py` : la dérogation y porte sur le **module
-entier** (`NO_METHOD_MODULES`), parce que la raison vaut par construction pour
-toute physique — le premier argument est le support que le modèle recouvre, pas
-un sujet qu'on transforme.
+Plus deux lignes de raccordement : `pub mod` dans `src/models/mod.rs`,
+`pub use` dans `src/ops/model/mod.rs`, et l'enregistrement dans le `#[pymodule]`
+de `src/lib.rs` (le module `_pyrucast` est plat).
+
+**Ce qu'on n'écrit plus.** Le balayage des sous-espaces, le `#[pyfunction]`, son
+attribut de stub, le déballage des enveloppes Python : `physics_operator!` les
+émet. Un auteur de physique n'ouvre jamais `src/py/`.
+
+```rust
+{{#include ../../src/models/truss.rs:operator}}
+```
+
+**Deux blocs de documentation, et c'est voulu** : le Rust porte son `///` et son
+doctest, le Python un littéral qui atterrit dans le `.pyi`. Les partager
+mettrait un doctest Rust dans une docstring Python.
+
+### Les formes que la macro ne couvre pas
+
+Elle sert le balayage — le cas d'une physique nouvelle. Restent écrits à la
+main, chacun avec sa raison :
+
+- les **contraintes** (`dirichlet`, `mpc`, `embedded`, `contact`), portées par
+  des maillages fournis par l'utilisateur et non par un espace EF ;
+- les variantes **à symétrie** (`heat_conduction`, `fick`, `elasticity`), dont
+  la face Python replie la symétrie en `symmetry=None` ;
+- `interface_transfer`, qui apparie deux espaces avec un contrôle de longueur.
+
+### Ajouter une loi plutôt qu'une physique
+
+Une loi d'écoulement ou d'endommagement n'est **pas** une physique : c'est un
+attribut de la plasticité ou de l'endommagement, qui en partagent les DDL,
+l'opérateur élastique et l'état. Elle coûte son fichier sous
+`src/models/plastic/` ou `src/models/damage/` — struct unitaire, `impl YieldLaw`
+ou `impl DamageKind`, façade une façade `physics_operator!` déléguant à l'opérateur générique — plus une
+variante d'énuméré et un bras dans `as_law()`.
 
 Tout le reste est générique et **ne change pas**.
 

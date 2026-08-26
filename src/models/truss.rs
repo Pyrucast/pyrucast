@@ -598,6 +598,7 @@ mod tests {
     }
 }
 
+// ANCHOR: operator
 crate::physics_operator! {
     /// Truss / bar `Model` spanning **every** subspace of `fes` — one
     /// [`SubModel::Truss`] per
@@ -637,3 +638,4 @@ crate::physics_operator! {
     pub fn truss(fes) via SubModel::truss;
     python: "`model.truss(fespace)` — truss / bar (axial-force) model spanning\n**every** subspace of `fespace` (SEG2 elements). DOFs are the vector\ndisplacement `u_x, u_y(, u_z)`; the orientation is taken from the node\ncoordinates. Material (`E`, `A`) is supplied at assembly time."
 }
+// ANCHOR_END: operator

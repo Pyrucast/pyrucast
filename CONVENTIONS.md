@@ -313,6 +313,14 @@ couche FFI suivent le même découpage que Rust — `containers/` (data) vs
 - **wrappers d'opération** → `src/py/ops/<famille>.rs`, en miroir de
   `src/ops/<famille>/` ; n'y vivent que des `#[pyfunction]` libres.
 
+  **Exception, pour `model` seul** : le wrapper d'une physique de forme
+  courante n'est pas écrit, il est **généré** par `physics_operator!` dans le
+  fichier de la physique, à partir de la même déclaration que l'opérateur Rust.
+  `src/py/ops/model.rs` ne garde que les formes que la macro ne couvre pas. La
+  raison est celle du coût d'extension : un auteur de physique écrit de la
+  physique, pas de la plomberie — et une face Python écrite à la main est une
+  face de plus à ne pas oublier.
+
 C'est un **repère de navigation**, pas un changement de surface : depuis un
 wrapper on retrouve l'impl Rust par parité de chemin —
 `py/ops/mesh.rs` ↔ `ops/mesh/`, et `line` ↔ `ops/mesh/line.rs`.
