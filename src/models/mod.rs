@@ -55,7 +55,6 @@ pub mod heat_conduction;
 pub mod interface_transfer;
 pub mod kernel;
 pub mod mpc;
-pub mod plastic;
 pub mod plasticity;
 pub mod radiation;
 pub mod shell;
@@ -1506,7 +1505,7 @@ macro_rules! physics_operator {
     // ── Alias : une façade nommée par-dessus un opérateur générique ─────────
     //
     // Les lois d'écoulement et d'endommagement sont des **attributs** d'une
-    // physique unique (cf. `models::plastic`), pas des physiques de plus. Elles
+    // physique unique (cf. `models::plasticity::law`), pas des physiques de plus. Elles
     // se lisent pourtant mieux nommées au site d'appel — `drucker_prager(fes,
     // m)` plutôt que `plasticity_with_law(fes, m, PlasticLaw::DruckerPrager)`.
     // La façade ne duplique rien : elle transmet à l'opérateur générique.
@@ -1523,9 +1522,10 @@ macro_rules! physics_operator {
             $target(fes, $($arg,)* $fixed)
         }
 
-        /// The Python face of this physics — generated, never hand-written.
         #[cfg(feature = "python-api")]
-        pub mod $name {
+        ::paste::paste! {
+        /// The Python face of this physics — generated, never hand-written.
+        pub mod [<$name _py>] {
             #[allow(unused_imports)]
             use super::*;
 
@@ -1540,7 +1540,7 @@ macro_rules! physics_operator {
                     inner: super::$name(&fespace.inner $(, $arg)*)?,
                 })
             }
-        }
+        } }
     };
     (
         $(#[$rust_doc:meta])*
@@ -1559,9 +1559,10 @@ macro_rules! physics_operator {
             $crate::ops::model::spanning(fes, |zone| $sub(zone $(, $arg.clone())*))
         }
 
-        /// The Python face of this physics — generated, never hand-written.
         #[cfg(feature = "python-api")]
-        pub mod python {
+        ::paste::paste! {
+        /// The Python face of this physics — generated, never hand-written.
+        pub mod [<$name _py>] {
             // Les types des arguments sont écrits dans la portée du fichier de
             // la physique ; une physique sans argument n'en importe aucun.
             #[allow(unused_imports)]
@@ -1578,6 +1579,6 @@ macro_rules! physics_operator {
                     inner: super::$name(&fespace.inner $(, $arg)*)?,
                 })
             }
-        }
+        } }
     };
 }

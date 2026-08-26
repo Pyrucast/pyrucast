@@ -29,7 +29,7 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::elasticity::ElasticityModel;
-use pyrucast::models::plastic::PlasticLaw;
+use pyrucast::models::plasticity::law::PlasticLaw;
 use pyrucast::ops::element_field::{behavior::integrate, deformation, material_field};
 use pyrucast::ops::matrix::tangent;
 use pyrucast::ops::model;

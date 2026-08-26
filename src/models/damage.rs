@@ -55,7 +55,7 @@ use serde::{Deserialize, Serialize};
 const AXES: [&str; 3] = ["x", "y", "z"];
 /// Which damage law a [`Damage`] sub-model obeys.
 ///
-/// The same attribute pattern as [`PlasticLaw`](crate::models::plastic::PlasticLaw):
+/// The same attribute pattern as [`PlasticLaw`](crate::models::plasticity::law::PlasticLaw):
 /// the DOFs, the elastic operator and the incremental montage are shared, and
 /// only the law that turns a strain into a degraded stress differs.
 ///
@@ -99,7 +99,7 @@ pub enum DamageLaw {
 
 /// What a damage law has to say about itself.
 ///
-/// The counterpart of `YieldLaw` on the
+/// The counterpart of `PlasticLawKind` on the
 /// damage side, and the same division of labour as
 /// [`SubModelKind`] one level up: the enum
 /// [`DamageLaw`] carries the **identity** — what an archive stores — and the
@@ -108,7 +108,7 @@ pub enum DamageLaw {
 ///
 /// Adding a law: a unit struct and its `impl` in the law's own file, plus one
 /// arm in `as_law`.
-pub(crate) trait DamageKind: Sync {
+pub(crate) trait DamageLawKind: Sync {
     /// The material components the law reads. `space_dim` matters for a law
     /// whose orthotropy has a different count in plane and in space.
     fn material_components(&self, space_dim: usize) -> &'static [&'static str];
@@ -128,7 +128,7 @@ pub(crate) trait DamageKind: Sync {
 
 impl DamageLaw {
     /// The behaviour behind this identity — **the only `match` per law**.
-    pub(crate) fn as_law(self) -> &'static dyn DamageKind {
+    pub(crate) fn as_law(self) -> &'static dyn DamageLawKind {
         match self {
             Self::Mazars => &mazars::Mazars,
             Self::DamageTc => &damage_tc::DamageTc,

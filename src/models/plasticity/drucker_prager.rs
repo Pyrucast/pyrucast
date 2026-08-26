@@ -89,10 +89,10 @@
 //! meaning. Detecting it is the one branch this law needs, and it is exactly the
 //! case a naive implementation gets wrong under strong tension.
 
-use super::YieldLaw;
+use super::law::PlasticLawKind;
 use crate::error::Result;
 use crate::models::elasticity::ElasticityModel;
-use crate::models::plastic::{
+use crate::models::plasticity::law::{
     deviator, i1, require_positive, von_mises_stress, MatParams, PlasticLaw, PlasticStep, PrevState,
 };
 
@@ -204,7 +204,8 @@ impl Params {
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PrevState};
+/// # use pyrucast::models::plasticity;
+/// # use pyrucast::models::plasticity::law::{self, MatParams, PlasticLaw, PrevState};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -220,21 +221,21 @@ impl Params {
 /// // von Mises la laisserait passer indéfiniment. Le retour se fait sur
 /// // l'**apex** du cône, à I₁ = k/α, quelle que soit l'intensité.
 /// for s in [200.0, 1000.0] {
-///     let pas = plastic::drucker_prager::return_map(
+///     let pas = plasticity::drucker_prager::return_map(
 ///         &[s, s, s, 0.0, 0.0, 0.0], &repos, &mat)?;
-///     assert!((plastic::i1(&pas.sigma) - 200.0).abs() < 1e-9);
+///     assert!((law::i1(&pas.sigma) - 200.0).abs() < 1e-9);
 ///     // L'apex ne produit aucun écoulement **déviatorique** : `p`, qui
 ///     // cumule celui-ci, reste nul, tandis que ε_p gonfle en volume.
 ///     assert_eq!(pas.p, 0.0);
-///     assert!(plastic::i1(&pas.eps_p) > 0.0);
+///     assert!(law::i1(&pas.eps_p) > 0.0);
 /// }
 ///
 /// // Hors de l'apex, `p` croît, et l'écoulement est **non associé** : la
 /// // dilatance `psi` diffère du frottement, donc ε_p n'est pas isochore.
-/// let pas = plastic::drucker_prager::return_map(
+/// let pas = plasticity::drucker_prager::return_map(
 ///     &[400.0, 0.0, 0.0, 0.0, 0.0, 0.0], &repos, &mat)?;
 /// assert!(pas.p > 0.0);
-/// assert!(plastic::i1(&pas.eps_p) > 0.0);
+/// assert!(law::i1(&pas.eps_p) > 0.0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn return_map(trial: &[f64; 6], prev: &PrevState, mat: &MatParams) -> Result<PlasticStep> {
@@ -388,7 +389,7 @@ fn apex_return(
 // ─── On the tangent ─────────────────────────────────────────────────────────
 //
 // Drucker-Prager takes its consistent tangent by finite differences, from
-// [`crate::models::plastic::consistent_tangent`].
+// [`crate::models::plasticity::law::consistent_tangent`].
 //
 // That is a deliberate reversal of an earlier hand derivation. Non-associated
 // flow makes `∂σ/∂ε` pick up an `m⊗n` term with `m ≠ n`, and getting its
@@ -408,7 +409,7 @@ fn apex_return(
 /// Drucker-Prager: pressure-sensitive, non-associated flow.
 pub(crate) struct DruckerPrager;
 
-impl YieldLaw for DruckerPrager {
+impl PlasticLawKind for DruckerPrager {
     fn material_components(&self) -> &'static [&'static str] {
         &["E", "nu", "friction", "k", "psi"]
     }

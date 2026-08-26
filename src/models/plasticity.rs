@@ -11,7 +11,7 @@
 //! their surface and flow rule. That mirrors Cast3M, where `PLASTIQUE PARFAIT`,
 //! `PLASTIQUE ISOTROPE`, `PLASTIQUE DRUCKER_PRAGER` and `PLASTIQUE OTTOSEN` are
 //! variants of one formulation. Each law's return map lives in
-//! [`crate::models::plastic`]; the material components it needs are declared
+//! [`crate::models::plasticity::law`]; the material components it needs are declared
 //! there too, so this file never grows when a law is added.
 //!
 //! The integration is history-dependent and uses the **incremental montage**
@@ -46,6 +46,13 @@
 //! `D_alg` (emitted alongside the stress, consumed by
 //! [`crate::ops::matrix::tangent`]) for quadratic convergence.
 
+pub mod drucker_prager;
+pub mod gurson;
+pub mod law;
+pub mod ottosen;
+pub mod viscous;
+pub mod von_mises;
+
 use crate::containers::element_field::SubElementField;
 use crate::containers::field::SubField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
@@ -55,15 +62,15 @@ use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::elasticity::{self, ElasticityModel};
 use crate::models::owned_components;
-use crate::models::plastic::{self, MatParams, PlasticLaw, PrevState};
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use law::{MatParams, PlasticLaw, PrevState};
 use serde::{Deserialize, Serialize};
 
 /// Axis suffixes for the vector components, indexed by spatial direction.
 const AXES: [&str; 3] = ["x", "y", "z"];
 /// Full 3-D tensor component suffixes, in the internal state order
 /// `[xx, yy, zz, yz, xz, xy]` (off-diagonals are **tensor** strains, `ε_ij`).
-use crate::models::plastic::TENSOR_SUFFIXES;
+use crate::models::plasticity::law::TENSOR_SUFFIXES;
 /// Index pairs `(i, j)` matching [`TENSOR_SUFFIXES`].
 const TENSOR_PAIRS: [(usize, usize); 6] = [(0, 0), (1, 1), (2, 2), (1, 2), (0, 2), (0, 1)];
 
@@ -159,7 +166,7 @@ fn echoes_sigma_zz(space_dim: usize, model: ElasticityModel) -> bool {
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # use pyrucast::models::plasticity::Plasticity;
-/// # use pyrucast::models::plastic::PlasticLaw;
+/// # use pyrucast::models::plasticity::law::PlasticLaw;
 /// // La physique élastoplastique d'une zone : sa loi décide du matériau
 /// // qu'elle réclame et de l'état qu'elle porte.
 /// let p = Plasticity::new(zone.clone(), ElasticityModel::PlaneStrain)?;
@@ -229,7 +236,7 @@ impl Plasticity {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # use pyrucast::models::plasticity::Plasticity;
-    /// # use pyrucast::models::plastic::PlasticLaw;
+    /// # use pyrucast::models::plasticity::law::PlasticLaw;
     /// // La loi explicite, et le contrôle de cohérence entre la cinématique et
     /// // la dimension de l'espace.
     /// let p = Plasticity::with_law(
@@ -445,11 +452,11 @@ impl Domain for Plasticity {
     fn optional_material_components(&self) -> &'static [&'static str] {
         // A law may accept constitutive parameters it can do without. The
         // general Drucker-Prager surface is nine numbers, of which six default
-        // to the simple cone — see [`crate::models::plastic::drucker_prager`].
+        // to the simple cone — see [`crate::models::plasticity::drucker_prager`].
         // They ride the optional channel so that a three-parameter model stays
         // writable in three numbers.
         match self.law {
-            crate::models::plastic::PlasticLaw::DruckerPrager => &[
+            crate::models::plasticity::law::PlasticLaw::DruckerPrager => &[
                 "alpha",
                 "rho",
                 "beta",
@@ -526,7 +533,7 @@ impl Domain for Plasticity {
         };
 
         let (step, eps_b_full) =
-            plastic::incremental_step(self.law, &eps_b, &prev_state, &params, self.model, dt)?;
+            law::incremental_step(self.law, &eps_b, &prev_state, &params, self.model, dt)?;
 
         let v = stress_names(d, self.model).len();
         for r in 0..v {
@@ -553,7 +560,7 @@ impl Domain for Plasticity {
         // Consistent tangent D_alg at the converged step, evaluated at the solved
         // ε(B) (which carries the plane-stress ε_zz). Emitted (upper triangle)
         // right after the state, in `ktan_i_j` order.
-        let d3 = plastic::consistent_tangent(self.law, &eps_b_full, &prev_state, &params, dt)?;
+        let d3 = law::consistent_tangent(self.law, &eps_b_full, &prev_state, &params, dt)?;
         let dv = crate::models::symmetry::reduce_to_model(&d3, self.model);
         let mut idx = base;
         for i in 0..dv.len() {
@@ -568,7 +575,7 @@ impl Domain for Plasticity {
 
 // The constitutive core — the elastic predictor, the return maps, the
 // plane-stress secant loop and the consistent tangents — lives in
-// [`crate::models::plastic`], shared by every yield law. What remains here is
+// [`crate::models::plasticity::law`], shared by every yield law. What remains here is
 // the physics: the DOFs, the layouts, and the plumbing between the field
 // components and the full-3-D state the laws work in.
 
@@ -752,7 +759,7 @@ mod tests {
             .integrate_behavior(&strain, None, Some(&mat), None)
             .unwrap();
         // Confined uniaxial *strain* (only ε_xx ≠ 0): σ_xx = (λ+2μ)·ε.
-        let (lambda, mu) = plastic::lame(e, nu);
+        let (lambda, mu) = law::lame(e, nu);
         for g in 0..out.gauss_count() {
             assert!(
                 (out.value(0, g, "sigma_xx").unwrap() - (lambda + 2.0 * mu) * 1e-4).abs() < 1e-6
@@ -789,9 +796,9 @@ mod tests {
                 out.value(0, g, "sigma_xy").unwrap(),
             ];
             assert!(
-                (plastic::von_mises_stress(&s) - sy).abs() < 1e-3,
+                (law::von_mises_stress(&s) - sy).abs() < 1e-3,
                 "q = {}",
-                plastic::von_mises_stress(&s)
+                law::von_mises_stress(&s)
             );
             assert!(out.value(0, g, "p").unwrap() > 0.0);
         }
@@ -934,9 +941,9 @@ mod tests {
             unloaded.value(0, 0, "sigma_xy").unwrap(),
         ];
         assert!(
-            plastic::von_mises_stress(&s) < sy - 1.0,
+            law::von_mises_stress(&s) < sy - 1.0,
             "elastic unload must drop below σ_y, got q = {}",
-            plastic::von_mises_stress(&s)
+            law::von_mises_stress(&s)
         );
     }
 

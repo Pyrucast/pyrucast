@@ -43,10 +43,10 @@
 //! last two do, which is exactly what lets them handle cyclic loading — and what
 //! costs them seven extra internal variables.
 
-use super::{back_stress_names, YieldLaw};
+use super::law::{back_stress_names, PlasticLawKind};
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::ElasticityModel;
-use crate::models::plastic::{
+use crate::models::plasticity::law::{
     deviator, i1, require_positive, von_mises_stress, MatParams, PlasticLaw, PlasticStep, PrevState,
 };
 
@@ -69,7 +69,8 @@ use crate::models::plastic::{
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PrevState};
+/// # use pyrucast::models::plasticity;
+/// # use pyrucast::models::plasticity::law::{self, MatParams, PlasticLaw, PrevState};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -84,11 +85,11 @@ use crate::models::plastic::{
 /// // Une bissection plutôt qu'un Newton : le résidu est monotone, et un
 /// // Newton non gardé dépasserait vers un multiplicateur négatif ou
 /// // partirait à l'infini sur une loi raide.
-/// let dp = plastic::viscous::solve_multiplier(
+/// let dp = plasticity::viscous::solve_multiplier(
 ///     PlasticLaw::CreepNorton, 1.0, 1.0, |dp| Ok(0.5 - dp))?;
 /// assert!((dp - 0.25).abs() < 1e-9); // dp = dt·(0,5 − dp) ⇒ dp = 0,25
 /// // Un taux nul à l'origine : rien ne coule, le multiplicateur est nul.
-/// assert_eq!(plastic::viscous::solve_multiplier(
+/// assert_eq!(plasticity::viscous::solve_multiplier(
 ///     PlasticLaw::CreepNorton, 1.0, 1.0, |_| Ok(0.0))?, 0.0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -221,7 +222,8 @@ fn scale_deviator(
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PrevState};
+/// # use pyrucast::models::plasticity;
+/// # use pyrucast::models::plasticity::law::{self, MatParams, PlasticLaw, PrevState};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -235,13 +237,13 @@ fn scale_deviator(
 /// #                         vars: Vec::new() };
 /// // Fluage secondaire : **aucun seuil**, la moindre contrainte coule.
 /// let trial = [100.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-/// let pas = plastic::viscous::norton(&trial, &repos, &mat, 1.0)?;
+/// let pas = plasticity::viscous::norton(&trial, &repos, &mat, 1.0)?;
 /// assert!(pas.p > 0.0);
 /// // Le taux est en (q/K)^n : dix fois plus longtemps, bien plus de fluage.
-/// let long = plastic::viscous::norton(&trial, &repos, &mat, 10.0)?;
+/// let long = plasticity::viscous::norton(&trial, &repos, &mat, 10.0)?;
 /// assert!(long.p > pas.p);
 /// // Un pas de temps nul ne fait rien couler.
-/// assert_eq!(plastic::viscous::norton(&trial, &repos, &mat, 0.0)?.p, 0.0);
+/// assert_eq!(plasticity::viscous::norton(&trial, &repos, &mat, 0.0)?.p, 0.0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn norton(trial: &[f64; 6], prev: &PrevState, mat: &MatParams, dt: f64) -> Result<PlasticStep> {
@@ -273,7 +275,8 @@ pub fn norton(trial: &[f64; 6], prev: &PrevState, mat: &MatParams, dt: f64) -> R
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PrevState};
+/// # use pyrucast::models::plasticity;
+/// # use pyrucast::models::plasticity::law::{self, MatParams, PlasticLaw, PrevState};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -288,9 +291,9 @@ pub fn norton(trial: &[f64; 6], prev: &PrevState, mat: &MatParams, dt: f64) -> R
 /// // Fluage primaire par écrouissage en déformation : le taux décroît à
 /// // mesure que `p` s'accumule, d'où un fluage qui **ralentit**.
 /// let trial = [200.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-/// let premier = plastic::viscous::lemaitre(&trial, &repos, &mat, 1.0)?;
+/// let premier = plasticity::viscous::lemaitre(&trial, &repos, &mat, 1.0)?;
 /// let plus_loin = PrevState { p: 0.01, ..repos };
-/// let ensuite = plastic::viscous::lemaitre(&trial, &plus_loin, &mat, 1.0)?;
+/// let ensuite = plasticity::viscous::lemaitre(&trial, &plus_loin, &mat, 1.0)?;
 /// assert!(ensuite.p - plus_loin.p < premier.p);
 /// // `p` est plancherisé : au tout premier pas le taux serait infini.
 /// assert!(premier.p.is_finite());
@@ -338,7 +341,8 @@ pub fn lemaitre(
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PrevState};
+/// # use pyrucast::models::plasticity;
+/// # use pyrucast::models::plasticity::law::{self, MatParams, PlasticLaw, PrevState};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -354,7 +358,7 @@ pub fn lemaitre(
 /// // déformation primaire est suivie comme variable interne propre, ce qui
 /// // est la seule façon d'intégrer juste sous charge variable.
 /// let trial = [200.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-/// let pas = plastic::viscous::blackburn(&trial, &repos, &mat, 1.0)?;
+/// let pas = plasticity::viscous::blackburn(&trial, &repos, &mat, 1.0)?;
 /// assert_eq!(pas.vars.len(), 1); // p_prim
 /// assert!(pas.vars[0] > 0.0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -437,7 +441,8 @@ pub fn blackburn(
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PrevState};
+/// # use pyrucast::models::plasticity;
+/// # use pyrucast::models::plasticity::law::{self, MatParams, PlasticLaw, PrevState};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -452,7 +457,7 @@ pub fn blackburn(
 /// // Écrouissages cinématique (Armstrong-Frederick) et isotrope : l'état
 /// // porte une contrainte cinématique **tensorielle** et un traînage.
 /// let trial = [400.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-/// let pas = plastic::viscous::chaboche(&trial, &repos, &mat, 1.0, false)?;
+/// let pas = plasticity::viscous::chaboche(&trial, &repos, &mat, 1.0, false)?;
 /// assert!(pas.p > 0.0);
 /// assert_eq!(pas.vars.len(), PlasticLaw::ViscoplasticChaboche.internal_names().len());
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -552,7 +557,7 @@ pub fn chaboche(
 /// Norton-Odqvist secondary creep, `ṗ = (q/K)^n`.
 pub(crate) struct CreepNorton;
 
-impl YieldLaw for CreepNorton {
+impl PlasticLawKind for CreepNorton {
     fn material_components(&self) -> &'static [&'static str] {
         &["E", "nu", "K", "n"]
     }
@@ -580,7 +585,7 @@ impl YieldLaw for CreepNorton {
 /// Blackburn creep — primary **and** secondary, hence its own state.
 pub(crate) struct CreepBlackburn;
 
-impl YieldLaw for CreepBlackburn {
+impl PlasticLawKind for CreepBlackburn {
     fn material_components(&self) -> &'static [&'static str] {
         &["E", "nu", "A_1", "alpha_1", "r_1", "B_s", "beta_s"]
     }
@@ -614,7 +619,7 @@ impl YieldLaw for CreepBlackburn {
 /// Lemaitre creep, `ṗ = (q/K)^N · p^(−M)`.
 pub(crate) struct CreepLemaitre;
 
-impl YieldLaw for CreepLemaitre {
+impl PlasticLawKind for CreepLemaitre {
     fn material_components(&self) -> &'static [&'static str] {
         &["E", "nu", "K", "N", "M"]
     }
@@ -642,7 +647,7 @@ impl YieldLaw for CreepLemaitre {
 /// Chaboche viscoplasticity — kinematic **and** isotropic hardening.
 pub(crate) struct ViscoplasticChaboche;
 
-impl YieldLaw for ViscoplasticChaboche {
+impl PlasticLawKind for ViscoplasticChaboche {
     fn material_components(&self) -> &'static [&'static str] {
         &["E", "nu", "k", "K", "n", "C_1", "gamma_1", "b", "Q"]
     }
@@ -676,7 +681,7 @@ impl YieldLaw for ViscoplasticChaboche {
 /// Chaboche coupled with Lemaitre damage.
 pub(crate) struct ViscoplasticLemaitreChaboche;
 
-impl YieldLaw for ViscoplasticLemaitreChaboche {
+impl PlasticLawKind for ViscoplasticLemaitreChaboche {
     fn material_components(&self) -> &'static [&'static str] {
         &[
             "E", "nu", "k", "K", "n", "C_1", "gamma_1", "b", "Q", "S", "s", "D_c",

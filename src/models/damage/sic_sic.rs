@@ -34,7 +34,7 @@
 //! along its tows. A law that let the damage reach one would predict a collapse
 //! that does not happen.
 
-use super::DamageKind;
+use super::DamageLawKind;
 use crate::error::Result;
 use crate::models::damage::DamageLaw;
 use crate::models::damage::{lame, pos, DamageUpdate, MatRead};
@@ -214,7 +214,7 @@ pub fn update(
 /// SiC/SiC — orthotropic damage, three directions.
 pub(crate) struct SicSic;
 
-impl DamageKind for SicSic {
+impl DamageLawKind for SicSic {
     fn material_components(&self, space_dim: usize) -> &'static [&'static str] {
         if space_dim == 2 {
             MATERIAL_2D

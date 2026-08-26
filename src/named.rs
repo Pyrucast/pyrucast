@@ -187,7 +187,7 @@ named_enum!(
     crate::models::Physics,
     crate::models::damage::DamageLaw,
     crate::models::elasticity::ElasticityModel,
-    crate::models::plastic::PlasticLaw,
+    crate::models::plasticity::law::PlasticLaw,
     crate::models::shell::ShellModel,
     crate::models::symmetry::MaterialSymmetry,
     crate::containers::evolution::OutOfRange,

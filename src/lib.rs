@@ -116,70 +116,82 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::solver::solve_unilateral, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::model::heat_conduction, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::model::fick, m)?)?;
-    m.add_function(wrap_pyfunction!(models::radiation::python::radiation, m)?)?;
     m.add_function(wrap_pyfunction!(
-        models::follower_pressure::python::follower_pressure,
+        models::radiation::radiation_py::radiation,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        models::follower_pressure::follower_pressure_py::follower_pressure,
         m
     )?)?;
     m.add_function(wrap_pyfunction!(py::ops::model::interface_transfer, m)?)?;
     m.add_function(wrap_pyfunction!(
-        models::boundary_transfer::python::boundary_transfer,
+        models::boundary_transfer::boundary_transfer_py::boundary_transfer,
         m
     )?)?;
-    m.add_function(wrap_pyfunction!(models::truss::python::truss, m)?)?;
+    m.add_function(wrap_pyfunction!(models::truss::truss_py::truss, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::model::elasticity, m)?)?;
     m.add_function(wrap_pyfunction!(
-        models::plastic::von_mises::plasticity_perfect::plasticity_perfect,
+        models::plasticity::von_mises::plasticity_perfect_py::plasticity_perfect,
         m
     )?)?;
     m.add_function(wrap_pyfunction!(
-        models::plastic::von_mises::plasticity_isotropic::plasticity_isotropic,
+        models::plasticity::von_mises::plasticity_isotropic_py::plasticity_isotropic,
         m
     )?)?;
     m.add_function(wrap_pyfunction!(
-        models::plastic::drucker_prager::drucker_prager::drucker_prager,
+        models::plasticity::drucker_prager::drucker_prager_py::drucker_prager,
         m
     )?)?;
     m.add_function(wrap_pyfunction!(
-        models::plastic::ottosen::ottosen::ottosen,
+        models::plasticity::ottosen::ottosen_py::ottosen,
         m
     )?)?;
     m.add_function(wrap_pyfunction!(
-        models::plastic::viscous::creep_norton::creep_norton,
+        models::plasticity::viscous::creep_norton_py::creep_norton,
         m
     )?)?;
     m.add_function(wrap_pyfunction!(
-        models::plastic::viscous::creep_blackburn::creep_blackburn,
+        models::plasticity::viscous::creep_blackburn_py::creep_blackburn,
         m
     )?)?;
     m.add_function(wrap_pyfunction!(
-        models::plastic::viscous::creep_lemaitre::creep_lemaitre,
+        models::plasticity::viscous::creep_lemaitre_py::creep_lemaitre,
         m
     )?)?;
     m.add_function(wrap_pyfunction!(
-        models::plastic::viscous::viscoplasticity_chaboche::viscoplasticity_chaboche,
+        models::plasticity::viscous::viscoplasticity_chaboche_py::viscoplasticity_chaboche,
         m
     )?)?;
     m.add_function(wrap_pyfunction!(
-        models::plastic::viscous::viscoplasticity_lemaitre_chaboche::viscoplasticity_lemaitre_chaboche,
+        models::plasticity::viscous::viscoplasticity_lemaitre_chaboche_py::viscoplasticity_lemaitre_chaboche,
         m
     )?)?;
     m.add_function(wrap_pyfunction!(
-        models::damage::damage_tc::damage_tc::damage_tc,
+        models::damage::damage_tc::damage_tc_py::damage_tc,
         m
     )?)?;
     m.add_function(wrap_pyfunction!(
-        models::damage::sic_sic::damage_sic_sic::damage_sic_sic,
+        models::damage::sic_sic::damage_sic_sic_py::damage_sic_sic,
         m
     )?)?;
     m.add_function(wrap_pyfunction!(
-        models::plastic::gurson::gurson::gurson,
+        models::plasticity::gurson::gurson_py::gurson,
         m
     )?)?;
-    m.add_function(wrap_pyfunction!(models::damage::mazars::mazars::mazars, m)?)?;
-    m.add_function(wrap_pyfunction!(models::bernoulli::python::bernoulli, m)?)?;
-    m.add_function(wrap_pyfunction!(models::shell::python::shell, m)?)?;
-    m.add_function(wrap_pyfunction!(models::timoshenko::python::timoshenko, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        models::damage::mazars::mazars_py::mazars,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        models::bernoulli::bernoulli_py::bernoulli,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(models::shell::shell_py::shell, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        models::timoshenko::timoshenko_py::timoshenko,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(py::ops::model::dirichlet, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::model::mpc, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::model::embedded, m)?)?;

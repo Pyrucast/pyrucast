@@ -48,14 +48,14 @@
 //!
 //! The surface is scalar and closed-form, but its return has no closed form, so
 //! it goes through the same **cutting plane with a numerically differentiated
-//! normal** as [`ottosen`](crate::models::plastic::ottosen). The normal here has
+//! normal** as [`ottosen`](crate::models::plasticity::ottosen). The normal here has
 //! both a deviatoric and a volumetric part, which is exactly what makes the
 //! plastic flow dilatant.
 
-use super::YieldLaw;
+use super::law::PlasticLawKind;
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::ElasticityModel;
-use crate::models::plastic::{
+use crate::models::plasticity::law::{
     elastic_stress, i1, require_positive, von_mises_stress, MatParams, PlasticLaw, PlasticStep,
     PrevState,
 };
@@ -82,7 +82,8 @@ fn effective_porosity(f: f64, q1: f64, f_c: f64, f_f: f64) -> f64 {
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PrevState};
+/// # use pyrucast::models::plasticity;
+/// # use pyrucast::models::plasticity::law::{self, MatParams, PlasticLaw, PrevState};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -97,8 +98,8 @@ fn effective_porosity(f: f64, q1: f64, f_c: f64, f_f: f64) -> f64 {
 /// // La porosité **rétrécit** la surface de charge : à contrainte égale, un
 /// // métal plus poreux est plus près de céder.
 /// let s = [200.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-/// let sain = plastic::gurson::yield_function(&s, 0.001, &mat)?;
-/// let poreux = plastic::gurson::yield_function(&s, 0.05, &mat)?;
+/// let sain = plasticity::gurson::yield_function(&s, 0.001, &mat)?;
+/// let poreux = plasticity::gurson::yield_function(&s, 0.05, &mat)?;
 /// assert!(poreux > sain);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -142,7 +143,8 @@ fn numerical_normal(sigma: &[f64; 6], f: f64, mat: &MatParams, scale: f64) -> Re
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PrevState};
+/// # use pyrucast::models::plasticity;
+/// # use pyrucast::models::plasticity::law::{self, MatParams, PlasticLaw, PrevState};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -157,7 +159,7 @@ fn numerical_normal(sigma: &[f64; 6], f: f64, mat: &MatParams, scale: f64) -> Re
 /// // La porosité **est** l'état : elle croît avec l'écoulement, et c'est
 /// // elle qui mène à la rupture ductile.
 /// let trial = [800.0, 400.0, 400.0, 0.0, 0.0, 0.0];
-/// let pas = plastic::gurson::return_map(&trial, &repos, &mat)?;
+/// let pas = plasticity::gurson::return_map(&trial, &repos, &mat)?;
 /// assert!(pas.p > 0.0);
 /// assert_eq!(pas.vars.len(), 1);
 /// assert!(pas.vars[0] >= repos.vars[0]); // la porosité ne décroît pas
@@ -233,7 +235,7 @@ pub fn return_map(trial: &[f64; 6], prev: &PrevState, mat: &MatParams) -> Result
 /// Gurson-Tvergaard-Needleman porous plasticity.
 pub(crate) struct Gurson;
 
-impl YieldLaw for Gurson {
+impl PlasticLawKind for Gurson {
     fn material_components(&self) -> &'static [&'static str] {
         &[
             "E", "nu", "sigma_y", "q_1", "q_2", "q_3", "f_0", "f_c", "f_f",

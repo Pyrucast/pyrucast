@@ -59,8 +59,13 @@ src/
 │   ├── transfer.rs         # le noyau h∫NiNj partagé par les deux échanges
 │   ├── truss.rs
 │   ├── elasticity.rs
-│   ├── plasticity.rs       # von Mises parfaite
-│   ├── mazars.rs           # endommagement
+│   ├── plasticity.rs       # LA physique élastoplastique, pour toute loi
+│   ├── plastic/            #   la machinerie des lois d'écoulement…
+│   │   ├── mod.rs          #     PlasticLaw (identité) + YieldLaw (comportement)
+│   │   └── von_mises.rs, drucker_prager.rs, ottosen.rs, viscous.rs, gurson.rs
+│   ├── damage.rs           # LA physique d'endommagement, pour toute loi
+│   ├── damage/             #   DamageLaw + DamageKind, puis une loi par fichier
+│   │   └── mazars.rs, damage_tc.rs, sic_sic.rs
 │   ├── timoshenko.rs
 │   ├── frame.rs           # portique 2D
 │   ├── frame3d.rs         # cadre 3D

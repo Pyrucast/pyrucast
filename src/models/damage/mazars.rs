@@ -11,7 +11,7 @@
 //!
 //! The single history variable is `κ = max_t ε̃`: damage never heals.
 
-use super::DamageKind;
+use super::DamageLawKind;
 use crate::error::Result;
 use crate::models::damage::DamageLaw;
 use crate::models::damage::{elastic_stress, lame, pos, DamageUpdate, MatRead};
@@ -206,7 +206,7 @@ pub fn update(eps: &[f64; 6], prev: &[f64], mat: &MatRead) -> Result<DamageUpdat
 /// Mazars isotropic damage — the classical concrete law.
 pub(crate) struct Mazars;
 
-impl DamageKind for Mazars {
+impl DamageLawKind for Mazars {
     fn material_components(&self, _space_dim: usize) -> &'static [&'static str] {
         MATERIAL
     }

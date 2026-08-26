@@ -5,7 +5,7 @@ use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
 use crate::models::elasticity::ElasticityModel;
-use crate::models::plastic::PlasticLaw;
+use crate::models::plasticity::law::PlasticLaw;
 
 /// Elastoplastic `Model` spanning **every** subspace of `fes`, with an
 /// explicit yield law (von Mises perfect or hardening, Drucker-Prager,
@@ -35,7 +35,7 @@ use crate::models::plastic::PlasticLaw;
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # use pyrucast::models::plastic::PlasticLaw;
+/// # use pyrucast::models::plasticity::law::PlasticLaw;
 /// let m = model::plasticity_with_law(
 ///     &fes, ElasticityModel::PlaneStrain, PlasticLaw::Perfect)?;
 /// assert_eq!(m.len(), fes.len());

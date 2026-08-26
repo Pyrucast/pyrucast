@@ -130,8 +130,8 @@ use crate::models::elasticity::ElasticityModel;
 use crate::models::symmetry::MaterialSymmetry;
 use crate::models::{
     bernoulli, boundary_transfer, contact, damage, dirichlet, elasticity, embedded, fick,
-    follower_pressure, heat_conduction, interface_transfer, mpc, plastic, plasticity, radiation,
-    shell, timoshenko, truss, Constraint, MatrixKind, Physics, RelationSense, SubModelKind,
+    follower_pressure, heat_conduction, interface_transfer, mpc, plasticity, radiation, shell,
+    timoshenko, truss, Constraint, MatrixKind, Physics, RelationSense, SubModelKind,
 };
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -873,12 +873,12 @@ impl SubModel {
         fespace: Handle<SubFiniteElementSpace>,
         model: ElasticityModel,
     ) -> Result<Self> {
-        Self::plasticity_with_law(fespace, model, plastic::PlasticLaw::Perfect)
+        Self::plasticity_with_law(fespace, model, plasticity::law::PlasticLaw::Perfect)
     }
 
     /// Elastoplasticity with an explicit yield law — the general form.
     /// The material each law needs is declared by
-    /// [`PlasticLaw::material_components`](plastic::PlasticLaw::material_components).
+    /// [`PlasticLaw::material_components`](plasticity::law::PlasticLaw::material_components).
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -902,7 +902,7 @@ impl SubModel {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// # use pyrucast::models::plastic::PlasticLaw;
+    /// # use pyrucast::models::plasticity::law::PlasticLaw;
     /// // La loi d'écrouissage **déclare elle-même** le matériau qu'elle exige.
     /// let m = SubModel::plasticity_with_law(
     ///     zone.clone(), ElasticityModel::PlaneStrain, PlasticLaw::Perfect)?;
@@ -912,7 +912,7 @@ impl SubModel {
     pub fn plasticity_with_law(
         fespace: Handle<SubFiniteElementSpace>,
         model: ElasticityModel,
-        law: plastic::PlasticLaw,
+        law: plasticity::law::PlasticLaw,
     ) -> Result<Self> {
         Ok(SubModel::Plasticity(plasticity::Plasticity::with_law(
             fespace, model, law,

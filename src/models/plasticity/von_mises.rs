@@ -25,11 +25,11 @@
 //! That closed form is why von Mises does not go through the cutting plane: an
 //! exact answer beats a converged one.
 
-use super::YieldLaw;
+use super::law::PlasticLawKind;
 use crate::error::Result;
 use crate::models::elasticity::ElasticityModel;
-use crate::models::plastic::PlasticLaw;
-use crate::models::plastic::{
+use crate::models::plasticity::law::PlasticLaw;
+use crate::models::plasticity::law::{
     deviator, elastic_tangent, von_mises_stress, MatParams, PlasticStep, PrevState,
 };
 
@@ -46,7 +46,8 @@ use crate::models::plastic::{
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PrevState};
+/// # use pyrucast::models::plasticity;
+/// # use pyrucast::models::plasticity::law::{self, MatParams, PlasticLaw, PrevState};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -61,14 +62,14 @@ use crate::models::plastic::{
 /// // Sans écrouissage (`hardening = 0`), la projection ramène **exactement**
 /// // q sur σ_y, et la déformation plastique est purement déviatorique.
 /// let trial = [400.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-/// let pas = plastic::von_mises::return_map(&trial, &repos, &mat, 0.0)?;
-/// assert!((plastic::von_mises_stress(&pas.sigma) - 250.0).abs() < 1e-6);
-/// assert!(plastic::i1(&pas.eps_p).abs() < 1e-12); // écoulement isochore
+/// let pas = plasticity::von_mises::return_map(&trial, &repos, &mat, 0.0)?;
+/// assert!((law::von_mises_stress(&pas.sigma) - 250.0).abs() < 1e-6);
+/// assert!(law::i1(&pas.eps_p).abs() < 1e-12); // écoulement isochore
 ///
 /// // Avec écrouissage isotrope, le seuil monte de H·p : la contrainte
 /// // retenue est **plus grande**.
-/// let dur = plastic::von_mises::return_map(&trial, &repos, &mat, 20_000.0)?;
-/// assert!(plastic::von_mises_stress(&dur.sigma) > 250.0);
+/// let dur = plasticity::von_mises::return_map(&trial, &repos, &mat, 20_000.0)?;
+/// assert!(law::von_mises_stress(&dur.sigma) > 250.0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn return_map(
@@ -133,7 +134,8 @@ pub fn return_map(
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::plastic::{self, MatParams, PlasticLaw, PrevState};
+/// # use pyrucast::models::plasticity;
+/// # use pyrucast::models::plasticity::law::{self, MatParams, PlasticLaw, PrevState};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -147,12 +149,12 @@ pub fn return_map(
 /// #                         vars: Vec::new() };
 /// // Sous le seuil, la tangente cohérente **est** la tangente élastique.
 /// let sous = [100.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-/// let d = plastic::von_mises::tangent(&sous, &mat, 0.0, 0.0);
-/// assert_eq!(d, plastic::elastic_tangent(mat.lambda, mat.mu));
+/// let d = plasticity::von_mises::tangent(&sous, &mat, 0.0, 0.0);
+/// assert_eq!(d, law::elastic_tangent(mat.lambda, mat.mu));
 ///
 /// // Au-delà, elle s'assouplit : le module apparent chute.
 /// let au_dela = [400.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-/// let dp = plastic::von_mises::tangent(&au_dela, &mat, 0.0, 0.0);
+/// let dp = plasticity::von_mises::tangent(&au_dela, &mat, 0.0, 0.0);
 /// assert!(dp[0][0] < d[0][0]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -207,7 +209,7 @@ pub fn tangent(trial: &[f64; 6], mat: &MatParams, hardening: f64, p_prev: f64) -
 /// The perfect von Mises law — no hardening.
 pub(crate) struct Perfect;
 
-impl YieldLaw for Perfect {
+impl PlasticLawKind for Perfect {
     fn material_components(&self) -> &'static [&'static str] {
         &["E", "nu", "sigma_y"]
     }
@@ -235,7 +237,7 @@ impl YieldLaw for Perfect {
 /// von Mises with **linear isotropic hardening**, `σ_y(p) = σ_y + H·p`.
 pub(crate) struct Isotropic;
 
-impl YieldLaw for Isotropic {
+impl PlasticLawKind for Isotropic {
     fn material_components(&self) -> &'static [&'static str] {
         &["E", "nu", "sigma_y", "H"]
     }
