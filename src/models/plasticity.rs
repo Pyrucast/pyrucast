@@ -455,19 +455,7 @@ impl Domain for Plasticity {
         // to the simple cone — see [`crate::models::plasticity::drucker_prager`].
         // They ride the optional channel so that a three-parameter model stays
         // writable in three numbers.
-        match self.law {
-            crate::models::plasticity::law::PlasticLaw::DruckerPrager => &[
-                "alpha",
-                "rho",
-                "beta",
-                "delta",
-                "H",
-                "friction_ult",
-                "beta_ult",
-                "k_ult",
-            ],
-            _ => &["alpha", "rho"],
-        }
+        self.law.as_law().optional_material_components()
     }
 
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
@@ -533,7 +521,9 @@ impl Domain for Plasticity {
         };
 
         let (step, eps_b_full) =
-            law::incremental_step(self.law, &eps_b, &prev_state, &params, self.model, dt)?;
+            self.law
+                .as_law()
+                .incremental_step(&eps_b, &prev_state, &params, self.model, dt)?;
 
         let v = stress_names(d, self.model).len();
         for r in 0..v {
@@ -560,7 +550,10 @@ impl Domain for Plasticity {
         // Consistent tangent D_alg at the converged step, evaluated at the solved
         // ε(B) (which carries the plane-stress ε_zz). Emitted (upper triangle)
         // right after the state, in `ktan_i_j` order.
-        let d3 = law::consistent_tangent(self.law, &eps_b_full, &prev_state, &params, dt)?;
+        let d3 = self
+            .law
+            .as_law()
+            .consistent_tangent(&eps_b_full, &prev_state, &params, dt)?;
         let dv = crate::models::symmetry::reduce_to_model(&d3, self.model);
         let mut idx = base;
         for i in 0..dv.len() {
@@ -684,6 +677,7 @@ mod tests {
     use crate::containers::mesh::Mesh;
     use crate::coords::Coords;
     use crate::handle::Handle;
+    use crate::models::tensor;
 
     fn unit_quad(model: ElasticityModel) -> Plasticity {
         let coords = Handle::new(Coords::new(2).unwrap());
@@ -759,7 +753,7 @@ mod tests {
             .integrate_behavior(&strain, None, Some(&mat), None)
             .unwrap();
         // Confined uniaxial *strain* (only ε_xx ≠ 0): σ_xx = (λ+2μ)·ε.
-        let (lambda, mu) = law::lame(e, nu);
+        let (lambda, mu) = elasticity::lame(e, nu);
         for g in 0..out.gauss_count() {
             assert!(
                 (out.value(0, g, "sigma_xx").unwrap() - (lambda + 2.0 * mu) * 1e-4).abs() < 1e-6
@@ -796,9 +790,9 @@ mod tests {
                 out.value(0, g, "sigma_xy").unwrap(),
             ];
             assert!(
-                (law::von_mises_stress(&s) - sy).abs() < 1e-3,
+                (tensor::von_mises_stress(&s) - sy).abs() < 1e-3,
                 "q = {}",
-                law::von_mises_stress(&s)
+                tensor::von_mises_stress(&s)
             );
             assert!(out.value(0, g, "p").unwrap() > 0.0);
         }
@@ -941,9 +935,9 @@ mod tests {
             unloaded.value(0, 0, "sigma_xy").unwrap(),
         ];
         assert!(
-            law::von_mises_stress(&s) < sy - 1.0,
+            tensor::von_mises_stress(&s) < sy - 1.0,
             "elastic unload must drop below σ_y, got q = {}",
-            law::von_mises_stress(&s)
+            tensor::von_mises_stress(&s)
         );
     }
 

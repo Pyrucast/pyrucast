@@ -59,6 +59,7 @@ pub mod plasticity;
 pub mod radiation;
 pub mod shell;
 pub mod symmetry;
+pub mod tensor;
 pub mod timoshenko;
 pub mod transfer;
 pub mod truss;

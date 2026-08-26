@@ -43,12 +43,13 @@
 //! last two do, which is exactly what lets them handle cyclic loading — and what
 //! costs them seven extra internal variables.
 
-use super::law::{back_stress_names, PlasticLawKind};
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::ElasticityModel;
 use crate::models::plasticity::law::{
-    deviator, i1, require_positive, von_mises_stress, MatParams, PlasticLaw, PlasticStep, PrevState,
+    require_positive, MatParams, PlasticLaw, PlasticStep, PrevState,
 };
+use crate::models::plasticity::law::{PlasticLawKind, TENSOR_SUFFIXES};
+use crate::models::tensor::{deviator, i1, von_mises_stress};
 
 /// Solve `R(Δp) = Δp − dt·rate(Δp) = 0` for the plastic multiplier.
 ///
@@ -558,6 +559,10 @@ pub fn chaboche(
 pub(crate) struct CreepNorton;
 
 impl PlasticLawKind for CreepNorton {
+    fn name(&self) -> &'static str {
+        "creep_norton"
+    }
+
     fn material_components(&self) -> &'static [&'static str] {
         &["E", "nu", "K", "n"]
     }
@@ -586,6 +591,10 @@ impl PlasticLawKind for CreepNorton {
 pub(crate) struct CreepBlackburn;
 
 impl PlasticLawKind for CreepBlackburn {
+    fn name(&self) -> &'static str {
+        "creep_blackburn"
+    }
+
     fn material_components(&self) -> &'static [&'static str] {
         &["E", "nu", "A_1", "alpha_1", "r_1", "B_s", "beta_s"]
     }
@@ -620,6 +629,10 @@ impl PlasticLawKind for CreepBlackburn {
 pub(crate) struct CreepLemaitre;
 
 impl PlasticLawKind for CreepLemaitre {
+    fn name(&self) -> &'static str {
+        "creep_lemaitre"
+    }
+
     fn material_components(&self) -> &'static [&'static str] {
         &["E", "nu", "K", "N", "M"]
     }
@@ -648,6 +661,10 @@ impl PlasticLawKind for CreepLemaitre {
 pub(crate) struct ViscoplasticChaboche;
 
 impl PlasticLawKind for ViscoplasticChaboche {
+    fn name(&self) -> &'static str {
+        "viscoplasticity_chaboche"
+    }
+
     fn material_components(&self) -> &'static [&'static str] {
         &["E", "nu", "k", "K", "n", "C_1", "gamma_1", "b", "Q"]
     }
@@ -682,6 +699,10 @@ impl PlasticLawKind for ViscoplasticChaboche {
 pub(crate) struct ViscoplasticLemaitreChaboche;
 
 impl PlasticLawKind for ViscoplasticLemaitreChaboche {
+    fn name(&self) -> &'static str {
+        "viscoplasticity_lemaitre_chaboche"
+    }
+
     fn material_components(&self) -> &'static [&'static str] {
         &[
             "E", "nu", "k", "K", "n", "C_1", "gamma_1", "b", "Q", "S", "s", "D_c",
@@ -876,4 +897,15 @@ crate::physics_operator! {
     /// ```
     pub fn viscoplasticity_lemaitre_chaboche(fes, model: ElasticityModel) = crate::ops::model::plasticity_with_law, PlasticLaw::ViscoplasticLemaitreChaboche;
     python: "`model.viscoplasticity_lemaitre_chaboche(fespace, model)` — Chaboche\nviscoplasticity coupled to Lemaitre's ductile **damage**: the flow is\ndriven by the effective stress `σ/(1−D)`, and `Ḋ = (Y/S)^s·ṗ`. Material\nas above, plus `S`, `s`, `D_c`.\n\nA damaged material flows faster, which damages it more — the coupling\nthat produces tertiary creep and, at `D_c`, rupture. Adds `damage` to the\ninternal state."
+}
+
+/// The internal-variable names of a Chaboche-family law: the back stress
+/// (a full 3-D tensor), the isotropic drag, and optionally the damage.
+pub(crate) fn back_stress_names(damage: bool) -> Vec<String> {
+    let mut names: Vec<String> = TENSOR_SUFFIXES.iter().map(|s| format!("X_{s}")).collect();
+    names.push("R".to_string());
+    if damage {
+        names.push("damage".to_string());
+    }
+    names
 }

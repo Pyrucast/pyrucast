@@ -27,11 +27,11 @@
 
 use super::law::PlasticLawKind;
 use crate::error::Result;
+use crate::models::elasticity::elastic_tangent;
 use crate::models::elasticity::ElasticityModel;
 use crate::models::plasticity::law::PlasticLaw;
-use crate::models::plasticity::law::{
-    deviator, elastic_tangent, von_mises_stress, MatParams, PlasticStep, PrevState,
-};
+use crate::models::plasticity::law::{MatParams, PlasticStep, PrevState};
+use crate::models::tensor::{deviator, von_mises_stress};
 
 /// Radial return onto `q = σ_y + H·p`.
 ///
@@ -47,6 +47,8 @@ use crate::models::plasticity::law::{
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::models::plasticity;
+/// # use pyrucast::models::elasticity;
+/// # use pyrucast::models::tensor;
 /// # use pyrucast::models::plasticity::law::{self, MatParams, PlasticLaw, PrevState};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -63,13 +65,13 @@ use crate::models::plasticity::law::{
 /// // q sur σ_y, et la déformation plastique est purement déviatorique.
 /// let trial = [400.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 /// let pas = plasticity::von_mises::return_map(&trial, &repos, &mat, 0.0)?;
-/// assert!((law::von_mises_stress(&pas.sigma) - 250.0).abs() < 1e-6);
-/// assert!(law::i1(&pas.eps_p).abs() < 1e-12); // écoulement isochore
+/// assert!((tensor::von_mises_stress(&pas.sigma) - 250.0).abs() < 1e-6);
+/// assert!(tensor::i1(&pas.eps_p).abs() < 1e-12); // écoulement isochore
 ///
 /// // Avec écrouissage isotrope, le seuil monte de H·p : la contrainte
 /// // retenue est **plus grande**.
 /// let dur = plasticity::von_mises::return_map(&trial, &repos, &mat, 20_000.0)?;
-/// assert!(law::von_mises_stress(&dur.sigma) > 250.0);
+/// assert!(tensor::von_mises_stress(&dur.sigma) > 250.0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn return_map(
@@ -116,6 +118,7 @@ pub fn return_map(
 /// D = K·1⊗1 + 2μθ·I_dev − 2μθ̄·n̂⊗n̂
 /// θ = σ_y(p+Δp)/q_trial          θ̄ = 3μ/(3μ + H) − (1 − θ)
 /// ```
+/// # use pyrucast::models::elasticity;
 ///
 /// with `n̂ = s_trial/‖s_trial‖` the **unit** deviatoric direction. For `H = 0`
 /// the two coefficients collapse (`θ̄ = θ`) and this is exactly the perfect-J2
@@ -134,6 +137,7 @@ pub fn return_map(
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity;
 /// # use pyrucast::models::plasticity;
 /// # use pyrucast::models::plasticity::law::{self, MatParams, PlasticLaw, PrevState};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
@@ -150,7 +154,7 @@ pub fn return_map(
 /// // Sous le seuil, la tangente cohérente **est** la tangente élastique.
 /// let sous = [100.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 /// let d = plasticity::von_mises::tangent(&sous, &mat, 0.0, 0.0);
-/// assert_eq!(d, law::elastic_tangent(mat.lambda, mat.mu));
+/// assert_eq!(d, elasticity::elastic_tangent(mat.lambda, mat.mu));
 ///
 /// // Au-delà, elle s'assouplit : le module apparent chute.
 /// let au_dela = [400.0, 0.0, 0.0, 0.0, 0.0, 0.0];
@@ -210,6 +214,10 @@ pub fn tangent(trial: &[f64; 6], mat: &MatParams, hardening: f64, p_prev: f64) -
 pub(crate) struct Perfect;
 
 impl PlasticLawKind for Perfect {
+    fn name(&self) -> &'static str {
+        "perfect"
+    }
+
     fn material_components(&self) -> &'static [&'static str] {
         &["E", "nu", "sigma_y"]
     }
@@ -238,6 +246,10 @@ impl PlasticLawKind for Perfect {
 pub(crate) struct Isotropic;
 
 impl PlasticLawKind for Isotropic {
+    fn name(&self) -> &'static str {
+        "isotropic"
+    }
+
     fn material_components(&self) -> &'static [&'static str] {
         &["E", "nu", "sigma_y", "H"]
     }

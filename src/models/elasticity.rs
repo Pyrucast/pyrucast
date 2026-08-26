@@ -1105,6 +1105,71 @@ pub fn element_tangent_from_state(
 
 // ─── Unit tests ──────────────────────────────────────────────────────────────
 
+/// Lamé coefficients `(λ, μ)` from `E`, `nu`.
+///
+/// ```
+/// # use pyrucast::models::elasticity;
+/// # use pyrucast::models::plasticity::law;
+/// let (lambda, mu) = elasticity::lame(210_000.0, 0.3);
+/// // μ = E / 2(1+ν), λ = Eν / (1+ν)(1−2ν).
+/// assert!((mu - 210_000.0 / 2.6).abs() < 1e-9);
+/// assert!((lambda - 121_153.846_153_85).abs() < 1e-6);
+/// ```
+pub fn lame(e: f64, nu: f64) -> (f64, f64) {
+    let lambda = e * nu / ((1.0 + nu) * (1.0 - 2.0 * nu));
+    let mu = e / (2.0 * (1.0 + nu));
+    (lambda, mu)
+}
+
+/// Isotropic elastic stress (full 3-D, order `[xx, yy, zz, yz, xz, xy]`) from a
+/// **tensor** strain: `σ = λ tr(ε) I + 2μ ε`.
+///
+/// ```
+/// # use pyrucast::models::elasticity;
+/// # use pyrucast::models::plasticity::law;
+/// let (lambda, mu) = elasticity::lame(210_000.0, 0.3);
+/// // Un cisaillement pur **tensoriel** ε_xy = 1 donne σ_xy = 2μ.
+/// let s = elasticity::elastic_stress(&[0.0, 0.0, 0.0, 0.0, 0.0, 1.0], lambda, mu);
+/// assert!((s[5] - 2.0 * mu).abs() < 1e-9);
+/// assert!(s[0].abs() < 1e-9); // trace nulle ⇒ pas de part sphérique
+/// ```
+pub fn elastic_stress(eps: &[f64; 6], lambda: f64, mu: f64) -> [f64; 6] {
+    let tr = eps[0] + eps[1] + eps[2];
+    [
+        lambda * tr + 2.0 * mu * eps[0],
+        lambda * tr + 2.0 * mu * eps[1],
+        lambda * tr + 2.0 * mu * eps[2],
+        2.0 * mu * eps[3],
+        2.0 * mu * eps[4],
+        2.0 * mu * eps[5],
+    ]
+}
+
+/// The elastic modulus in full-3-D engineering Voigt — the tangent wherever the
+/// step stayed elastic, and the starting point of every analytic one.
+///
+/// ```
+/// # use pyrucast::models::elasticity;
+/// # use pyrucast::models::plasticity::law;
+/// let (lambda, mu) = elasticity::lame(210_000.0, 0.3);
+/// let d = elasticity::elastic_tangent(lambda, mu);
+/// // Voigt **de l'ingénieur** : le bloc de cisaillement vaut μ, non 2μ.
+/// assert!((d[3][3] - mu).abs() < 1e-9);
+/// assert!((d[0][0] - (lambda + 2.0 * mu)).abs() < 1e-9);
+/// ```
+pub fn elastic_tangent(lambda: f64, mu: f64) -> [[f64; 6]; 6] {
+    let mut c = [[0.0; 6]; 6];
+    for i in 0..3 {
+        for j in 0..3 {
+            c[i][j] = if i == j { lambda + 2.0 * mu } else { lambda };
+        }
+    }
+    for i in 3..6 {
+        c[i][i] = mu;
+    }
+    c
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -62,6 +62,8 @@
 use crate::containers::element_field::SubElementField;
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::ElasticityModel;
+use crate::models::elasticity::{elastic_stress, lame};
+use crate::models::tensor::symmetrise;
 use serde::{Deserialize, Serialize};
 
 /// Full 3-D tensor component suffixes, in the internal state order
@@ -89,6 +91,8 @@ pub const TENSOR_SUFFIXES: [&str; 6] = ["xx", "yy", "zz", "yz", "xz", "xy"];
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::elasticity;
+/// # use pyrucast::models::tensor;
 /// # use pyrucast::models::plasticity::law::{self, MatParams, PlasticLaw, PlasticStep, PrevState};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -159,6 +163,9 @@ pub enum PlasticLaw {
 /// Adding a law: a unit struct and its `impl` in the law's own file, plus one
 /// arm in `as_law`. Nothing else in this module changes.
 pub(crate) trait PlasticLawKind: Sync {
+    /// The law's canonical name, for messages.
+    fn name(&self) -> &'static str;
+
     /// The material components the law reads, in the order they are documented.
     fn material_components(&self) -> &'static [&'static str];
 
@@ -172,6 +179,29 @@ pub(crate) trait PlasticLawKind: Sync {
         mat: &MatParams,
         dt: Option<f64>,
     ) -> Result<PlasticStep>;
+
+    /// [`return_map`](Self::return_map), with the rate-dependence guard.
+    ///
+    /// **Every internal path goes through here, and that is the point.** The
+    /// guard used to live on the enum's `return_map`; when the algorithms moved
+    /// into this trait they reached the law directly, and a clean error became
+    /// a panic. `tests/viscous_laws.rs` caught it.
+    fn checked_return_map(
+        &self,
+        trial: &[f64; 6],
+        prev: &PrevState,
+        mat: &MatParams,
+        dt: Option<f64>,
+    ) -> Result<PlasticStep> {
+        if self.is_rate_dependent() && dt.is_none() {
+            return Err(PyrucastError::Message(format!(
+                "plasticity ({}): this law is rate-dependent and needs a time \
+                 increment — pass `dt` to integrate_behavior",
+                self.name()
+            )));
+        }
+        self.return_map(trial, prev, mat, dt)
+    }
 
     /// The law's **own** internal variables, beyond `ε_p` and `p`. Most laws
     /// need none.
@@ -192,6 +222,13 @@ pub(crate) trait PlasticLawKind: Sync {
     /// One method where there used to be a flag, a `match` on the hardening and
     /// an `unreachable!()` — a proof obligation the compiler did not check.
     /// Only von Mises overrides it.
+    /// Optional material components the law accepts beyond the required ones.
+    /// `alpha` (thermal expansion) and `rho` (density) for every law; a law with
+    /// a richer surface adds its own.
+    fn optional_material_components(&self) -> &'static [&'static str] {
+        &["alpha", "rho"]
+    }
+
     fn analytic_tangent(
         &self,
         _trial: &[f64; 6],
@@ -199,6 +236,158 @@ pub(crate) trait PlasticLawKind: Sync {
         _mat: &MatParams,
     ) -> Option<Result<[[f64; 6]; 6]>> {
         None
+    }
+
+    /// One incremental step A → B at a Gauss point, for **any** law.
+    ///
+    /// Returns `(σ(B), ε_p(B), p(B), ε(B))`. The returned strain is what should be
+    /// echoed as `ε(A)` of the next step: in plane stress it carries the
+    /// out-of-plane `ε_zz` solved here, which the caller could not know.
+    ///
+    fn incremental_step(
+        &self,
+        eps_b: &[f64; 6],
+        prev: &PrevState,
+        mat: &MatParams,
+        model: ElasticityModel,
+        dt: Option<f64>,
+    ) -> Result<(PlasticStep, [f64; 6])> {
+        if model == ElasticityModel::PlaneStress {
+            return self.plane_stress_step(eps_b, prev, mat, dt);
+        }
+        // Solid / plane strain / axisymmetric: ε(B) is fully prescribed.
+        let trial = elastic_predictor(eps_b, prev, mat.lambda, mat.mu);
+        Ok((self.checked_return_map(&trial, prev, mat, dt)?, *eps_b))
+    }
+
+    /// Plane stress, around any law: solve `σ_zz(B) = 0` for `ε_zz(B)` by the secant
+    /// method, each evaluation running a full 3-D return.
+    ///
+    /// Written once here rather than in each law: the out-of-plane condition is a
+    /// property of the **kinematics**, not of the yield surface, so no law should
+    /// have to know about it.
+    fn plane_stress_step(
+        &self,
+        eps_in_b: &[f64; 6],
+        prev: &PrevState,
+        mat: &MatParams,
+        dt: Option<f64>,
+    ) -> Result<(PlasticStep, [f64; 6])> {
+        let eval = |ezz: f64| -> Result<(PlasticStep, [f64; 6])> {
+            let mut eps_b = *eps_in_b;
+            eps_b[2] = ezz;
+            eps_b[3] = 0.0;
+            eps_b[4] = 0.0;
+            let trial = elastic_predictor(&eps_b, prev, mat.lambda, mat.mu);
+            Ok((self.checked_return_map(&trial, prev, mat, dt)?, eps_b))
+        };
+        // Initial guess: ε_zz(A) plus the elastic plane-stress out-of-plane
+        // increment −ν/(1−ν)·(Δε_xx + Δε_yy).
+        let nu_term = mat.lambda / (mat.lambda + 2.0 * mat.mu); // = ν/(1−ν)
+        let mut z0 =
+            prev.eps[2] - nu_term * (eps_in_b[0] - prev.eps[0] + eps_in_b[1] - prev.eps[1]);
+        let mut z1 = z0 + 1e-6_f64.max(z0.abs() * 1e-3);
+        let mut f0 = eval(z0)?.0.sigma[2];
+        let mut f1 = eval(z1)?.0.sigma[2];
+        for _ in 0..50 {
+            if f1.abs() < 1e-10 * (mat.mu + 1.0) {
+                break;
+            }
+            let denom = f1 - f0;
+            if denom.abs() < f64::MIN_POSITIVE {
+                break;
+            }
+            let z2 = z1 - f1 * (z1 - z0) / denom;
+            z0 = z1;
+            f0 = f1;
+            z1 = z2;
+            f1 = eval(z1)?.0.sigma[2];
+        }
+        eval(z1)
+    }
+
+    /// The full-3-D engineering-Voigt consistent tangent `D_alg = ∂σ(B)/∂ε(B)`.
+    ///
+    /// Analytic for von Mises, whose closed form is validated against a finite
+    /// difference; **numerical** for the others. Both are exact enough for Newton to
+    /// converge quadratically, and the numerical route costs twelve evaluations of a
+    /// cheap update — far less than a hand-derived tangent nobody can check, which
+    /// in the Drucker-Prager case turned out to be 24 % wrong.
+    ///
+    fn consistent_tangent(
+        &self,
+        eps_b: &[f64; 6],
+        prev: &PrevState,
+        mat: &MatParams,
+        dt: Option<f64>,
+    ) -> Result<[[f64; 6]; 6]> {
+        let d = self.raw_consistent_tangent(eps_b, prev, mat, dt)?;
+        // `D_alg` travels through the state field as its **upper triangle**
+        // (`ktan_i_j`, i ≤ j) and is read back mirrored, so the format can only
+        // carry a symmetric tangent. Non-associated flow produces a genuinely
+        // non-symmetric one, which is therefore **symmetrised** here — the usual
+        // engineering compromise, and stated rather than hidden.
+        //
+        // The cost is Newton's *quadratic* rate on a non-associated law; it still
+        // converges, one order slower. The gain is that every consumer of a tangent
+        // — the state layout, the solver, the pattern cache — stays symmetric. For
+        // an associated law (von Mises, Ottosen) this is a no-op, bit for bit.
+        Ok(symmetrise(d))
+    }
+
+    /// The tangent before symmetrisation — analytic where validated, numerical
+    /// otherwise.
+    fn raw_consistent_tangent(
+        &self,
+        eps_b: &[f64; 6],
+        prev: &PrevState,
+        mat: &MatParams,
+        dt: Option<f64>,
+    ) -> Result<[[f64; 6]; 6]> {
+        let trial = elastic_predictor(eps_b, prev, mat.lambda, mat.mu);
+        if let Some(analytic) = self.analytic_tangent(&trial, prev, mat) {
+            return analytic;
+        }
+        self.finite_difference_tangent(eps_b, prev, mat, dt)
+    }
+
+    /// `∂σ/∂ε` by central differences on the return map, in engineering Voigt.
+    ///
+    /// The perturbation is applied to the **tensor** strain; the shear columns are
+    /// halved on the way out, which is exactly what turns `∂σ/∂ε_ij` into
+    /// `∂σ/∂γ_ij`.
+    fn finite_difference_tangent(
+        &self,
+        eps_b: &[f64; 6],
+        prev: &PrevState,
+        mat: &MatParams,
+        dt: Option<f64>,
+    ) -> Result<[[f64; 6]; 6]> {
+        // A strain-sized step: relative to the strain itself when it is meaningful,
+        // to the elastic strain scale otherwise.
+        // The step is relative to the strain itself. It must stay well above the
+        // noise of the return map (an iterative one for some laws converges to a
+        // tolerance, not exactly) and well below the curvature scale of the surface;
+        // `1e-6·‖ε‖` sits comfortably between the two.
+        let scale = eps_b.iter().fold(0.0_f64, |m, v| m.max(v.abs())).max(1e-8);
+        let h = 1e-6 * scale;
+        let mut d = [[0.0; 6]; 6];
+        for j in 0..6 {
+            let run = |sign: f64| -> Result<[f64; 6]> {
+                let mut e = *eps_b;
+                e[j] += sign * h;
+                let trial = elastic_predictor(&e, prev, mat.lambda, mat.mu);
+                Ok(self.checked_return_map(&trial, prev, mat, dt)?.sigma)
+            };
+            let (sp, sm) = (run(1.0)?, run(-1.0)?);
+            // Engineering shear: γ = 2ε, so a column against a tensor shear is twice
+            // the column against the engineering one.
+            let factor = if j < 3 { 1.0 } else { 0.5 };
+            for i in 0..6 {
+                d[i][j] = factor * (sp[i] - sm[i]) / (2.0 * h);
+            }
+        }
+        Ok(d)
     }
 }
 
@@ -425,6 +614,7 @@ impl PlasticLaw {
     /// **required** by a viscous one.
     ///
     /// ```
+    /// # use pyrucast::models::tensor;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::element_field::SubElementField;
@@ -456,7 +646,7 @@ impl PlasticLaw {
     /// // sans écrouissage ramène exactement q à σ_y, et p devient non nul.
     /// let au_dessus = [400.0, 0.0, 0.0, 0.0, 0.0, 0.0];
     /// let pas = PlasticLaw::Perfect.return_map(&au_dessus, &repos, &mat, None)?;
-    /// assert!((law::von_mises_stress(&pas.sigma) - 250.0).abs() < 1e-6);
+    /// assert!((tensor::von_mises_stress(&pas.sigma) - 250.0).abs() < 1e-6);
     /// assert!(pas.p > 0.0);
     ///
     /// // Une loi visqueuse sans `dt` est refusée plutôt qu'approximée.
@@ -495,17 +685,6 @@ impl std::fmt::Display for PlasticLaw {
     }
 }
 
-/// The internal-variable names of a Chaboche-family law: the back stress
-/// (a full 3-D tensor), the isotropic drag, and optionally the damage.
-pub(crate) fn back_stress_names(damage: bool) -> Vec<String> {
-    let mut names: Vec<String> = TENSOR_SUFFIXES.iter().map(|s| format!("X_{s}")).collect();
-    names.push("R".to_string());
-    if damage {
-        names.push("damage".to_string());
-    }
-    names
-}
-
 // ─── Material parameters at one Gauss point ─────────────────────────────────
 
 /// The material a law reads, resolved for one cell.
@@ -514,6 +693,7 @@ pub(crate) fn back_stress_names(damage: bool) -> Vec<String> {
 /// looked up by name, so adding a law adds no plumbing here.
 ///
 /// ```
+/// # use pyrucast::models::elasticity;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::SubElementField;
@@ -535,7 +715,7 @@ pub(crate) fn back_stress_names(damage: bool) -> Vec<String> {
 /// // besoin — le reste se cherche par nom, de sorte qu'ajouter une loi
 /// // n'ajoute aucune plomberie ici.
 /// let m = MatParams::new(&materiau, 0)?;
-/// assert_eq!((m.lambda, m.mu), law::lame(210_000.0, 0.3));
+/// assert_eq!((m.lambda, m.mu), elasticity::lame(210_000.0, 0.3));
 /// assert_eq!(m.get("sigma_y")?, 250.0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -659,123 +839,6 @@ impl<'a> MatParams<'a> {
 }
 
 // ─── Elastic kinematics, shared by every law ────────────────────────────────
-
-/// Lamé coefficients `(λ, μ)` from `E`, `nu`.
-///
-/// ```
-/// # use pyrucast::models::plasticity::law;
-/// let (lambda, mu) = law::lame(210_000.0, 0.3);
-/// // μ = E / 2(1+ν), λ = Eν / (1+ν)(1−2ν).
-/// assert!((mu - 210_000.0 / 2.6).abs() < 1e-9);
-/// assert!((lambda - 121_153.846_153_85).abs() < 1e-6);
-/// ```
-pub fn lame(e: f64, nu: f64) -> (f64, f64) {
-    let lambda = e * nu / ((1.0 + nu) * (1.0 - 2.0 * nu));
-    let mu = e / (2.0 * (1.0 + nu));
-    (lambda, mu)
-}
-
-/// Isotropic elastic stress (full 3-D, order `[xx, yy, zz, yz, xz, xy]`) from a
-/// **tensor** strain: `σ = λ tr(ε) I + 2μ ε`.
-///
-/// ```
-/// # use pyrucast::models::plasticity::law;
-/// let (lambda, mu) = law::lame(210_000.0, 0.3);
-/// // Un cisaillement pur **tensoriel** ε_xy = 1 donne σ_xy = 2μ.
-/// let s = law::elastic_stress(&[0.0, 0.0, 0.0, 0.0, 0.0, 1.0], lambda, mu);
-/// assert!((s[5] - 2.0 * mu).abs() < 1e-9);
-/// assert!(s[0].abs() < 1e-9); // trace nulle ⇒ pas de part sphérique
-/// ```
-pub fn elastic_stress(eps: &[f64; 6], lambda: f64, mu: f64) -> [f64; 6] {
-    let tr = eps[0] + eps[1] + eps[2];
-    [
-        lambda * tr + 2.0 * mu * eps[0],
-        lambda * tr + 2.0 * mu * eps[1],
-        lambda * tr + 2.0 * mu * eps[2],
-        2.0 * mu * eps[3],
-        2.0 * mu * eps[4],
-        2.0 * mu * eps[5],
-    ]
-}
-
-/// First invariant `I₁ = tr(σ)`.
-///
-/// ```
-/// # use pyrucast::models::plasticity::law;
-/// // I₁ = tr(σ) : la part sphérique, trois fois la pression moyenne.
-/// assert_eq!(law::i1(&[1.0, 2.0, 3.0, 9.0, 9.0, 9.0]), 6.0);
-/// ```
-pub fn i1(sigma: &[f64; 6]) -> f64 {
-    sigma[0] + sigma[1] + sigma[2]
-}
-
-/// The stress deviator `s = σ − (I₁/3)·I` (same Voigt order).
-///
-/// ```
-/// # use pyrucast::models::plasticity::law;
-/// // Le déviateur est de trace nulle, et laisse les cisaillements intacts.
-/// let s = law::deviator(&[3.0, 0.0, 0.0, 0.0, 0.0, 5.0]);
-/// assert!(law::i1(&s).abs() < 1e-12);
-/// assert_eq!(s[5], 5.0);
-/// ```
-pub fn deviator(sigma: &[f64; 6]) -> [f64; 6] {
-    let mean = i1(sigma) / 3.0;
-    [
-        sigma[0] - mean,
-        sigma[1] - mean,
-        sigma[2] - mean,
-        sigma[3],
-        sigma[4],
-        sigma[5],
-    ]
-}
-
-/// Second deviatoric invariant `J₂ = ½ s:s` (off-diagonals counted twice).
-///
-/// ```
-/// # use pyrucast::models::plasticity::law;
-/// // J₂ = ½ s:s, les hors-diagonaux comptés **deux fois**.
-/// assert_eq!(law::j2(&[0.0, 0.0, 0.0, 0.0, 0.0, 1.0]), 1.0);
-/// // Insensible à la pression : ajouter une part sphérique ne change rien.
-/// let a = law::j2(&[1.0, -1.0, 0.0, 0.0, 0.0, 0.0]);
-/// let b = law::j2(&[101.0, 99.0, 100.0, 0.0, 0.0, 0.0]);
-/// assert!((a - b).abs() < 1e-9);
-/// ```
-pub fn j2(sigma: &[f64; 6]) -> f64 {
-    let s = deviator(sigma);
-    0.5 * (s[0] * s[0]
-        + s[1] * s[1]
-        + s[2] * s[2]
-        + 2.0 * (s[3] * s[3] + s[4] * s[4] + s[5] * s[5]))
-}
-
-/// Third deviatoric invariant `J₃ = det(s)`.
-///
-/// ```
-/// # use pyrucast::models::plasticity::law;
-/// // J₃ = det(s) — ce qui distingue traction et compression, et fait
-/// // l'angle de Lode des critères à quatre paramètres.
-/// assert!(law::j3(&[1.0, 1.0, 1.0, 0.0, 0.0, 0.0]).abs() < 1e-12);
-/// assert!(law::j3(&[2.0, -1.0, -1.0, 0.0, 0.0, 0.0]) > 0.0);
-/// ```
-pub fn j3(sigma: &[f64; 6]) -> f64 {
-    let s = deviator(sigma);
-    // det of the symmetric tensor [[s0, s5, s4], [s5, s1, s3], [s4, s3, s2]].
-    s[0] * (s[1] * s[2] - s[3] * s[3]) - s[5] * (s[5] * s[2] - s[3] * s[4])
-        + s[4] * (s[5] * s[3] - s[1] * s[4])
-}
-
-/// von Mises equivalent stress `q = √(3 J₂)`.
-///
-/// ```
-/// # use pyrucast::models::plasticity::law;
-/// // q = √(3 J₂). En traction uniaxiale, q vaut la contrainte appliquée.
-/// let q = law::von_mises_stress(&[300.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
-/// assert!((q - 300.0).abs() < 1e-9);
-/// ```
-pub fn von_mises_stress(sigma: &[f64; 6]) -> f64 {
-    (3.0 * j2(sigma)).sqrt()
-}
 
 /// The converged state at the **start of the step A** — the input to the
 /// incremental montage. All full 3-D.
@@ -955,6 +1018,7 @@ impl PlasticStep {
 /// (with `σ(A)` rotated and `Δε` an objective increment).
 ///
 /// ```
+/// # use pyrucast::models::elasticity;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::SubElementField;
@@ -982,7 +1046,7 @@ impl PlasticStep {
 /// let trial = law::elastic_predictor(&eps_b, &repos, mat.lambda, mat.mu);
 /// assert!(trial[0] > 0.0);
 /// // Partant du repos, elle coïncide avec C:ε.
-/// let direct = law::elastic_stress(&eps_b, mat.lambda, mat.mu);
+/// let direct = elasticity::elastic_stress(&eps_b, mat.lambda, mat.mu);
 /// assert!((trial[0] - direct[0]).abs() < 1e-9);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -994,273 +1058,7 @@ pub fn elastic_predictor(eps_b: &[f64; 6], prev: &PrevState, lambda: f64, mu: f6
 
 // ─── The incremental step, around any law ───────────────────────────────────
 
-/// One incremental step A → B at a Gauss point, for **any** law.
-///
-/// Returns `(σ(B), ε_p(B), p(B), ε(B))`. The returned strain is what should be
-/// echoed as `ε(A)` of the next step: in plane stress it carries the
-/// out-of-plane `ε_zz` solved here, which the caller could not know.
-///
-/// ```
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::element_field::SubElementField;
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
-/// # use pyrucast::models::plasticity::law::{self, MatParams, PlasticLaw, PrevState};
-/// # let coords = Handle::new(Coords::new(2).unwrap());
-/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// # let materiau = SubElementField::from_uniform_per_component(
-/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "sigma_y".into()],
-/// #     &[210_000.0, 0.3, 250.0]).unwrap();
-/// # let mat = MatParams::new(&materiau, 0).unwrap();
-/// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-/// #                         vars: Vec::new() };
-/// // Un pas élastique laisse `p` où il était…
-/// let petit = [1e-4, 0.0, 0.0, 0.0, 0.0, 0.0];
-/// let (pas, eps) = law::incremental_step(
-///     PlasticLaw::Perfect, &petit, &repos, &mat, ElasticityModel::PlaneStrain, None)?;
-/// assert_eq!(pas.p, 0.0);
-/// assert_eq!(eps, petit); // en déformations planes, ε(B) est imposé
-///
-/// // …un pas plastique la fait croître, et ramène q sur σ_y.
-/// let grand = [5e-3, 0.0, 0.0, 0.0, 0.0, 0.0];
-/// let (pas, _) = law::incremental_step(
-///     PlasticLaw::Perfect, &grand, &repos, &mat, ElasticityModel::PlaneStrain, None)?;
-/// assert!(pas.p > 0.0);
-/// assert!((law::von_mises_stress(&pas.sigma) - 250.0).abs() < 1e-6);
-///
-/// // En contraintes planes, ε_zz est **résolu ici** : la déformation
-/// // rendue diffère de celle qu'on a passée, et c'est elle qu'il faut
-/// // renvoyer comme ε(A) du pas suivant.
-/// let (_, eps) = law::incremental_step(
-///     PlasticLaw::Perfect, &grand, &repos, &mat, ElasticityModel::PlaneStress, None)?;
-/// assert!(eps[2] != 0.0);
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn incremental_step(
-    law: PlasticLaw,
-    eps_b: &[f64; 6],
-    prev: &PrevState,
-    mat: &MatParams,
-    model: ElasticityModel,
-    dt: Option<f64>,
-) -> Result<(PlasticStep, [f64; 6])> {
-    if model == ElasticityModel::PlaneStress {
-        return plane_stress_step(law, eps_b, prev, mat, dt);
-    }
-    // Solid / plane strain / axisymmetric: ε(B) is fully prescribed.
-    let trial = elastic_predictor(eps_b, prev, mat.lambda, mat.mu);
-    Ok((law.return_map(&trial, prev, mat, dt)?, *eps_b))
-}
-
-/// Plane stress, around any law: solve `σ_zz(B) = 0` for `ε_zz(B)` by the secant
-/// method, each evaluation running a full 3-D return.
-///
-/// Written once here rather than in each law: the out-of-plane condition is a
-/// property of the **kinematics**, not of the yield surface, so no law should
-/// have to know about it.
-fn plane_stress_step(
-    law: PlasticLaw,
-    eps_in_b: &[f64; 6],
-    prev: &PrevState,
-    mat: &MatParams,
-    dt: Option<f64>,
-) -> Result<(PlasticStep, [f64; 6])> {
-    let eval = |ezz: f64| -> Result<(PlasticStep, [f64; 6])> {
-        let mut eps_b = *eps_in_b;
-        eps_b[2] = ezz;
-        eps_b[3] = 0.0;
-        eps_b[4] = 0.0;
-        let trial = elastic_predictor(&eps_b, prev, mat.lambda, mat.mu);
-        Ok((law.return_map(&trial, prev, mat, dt)?, eps_b))
-    };
-    // Initial guess: ε_zz(A) plus the elastic plane-stress out-of-plane
-    // increment −ν/(1−ν)·(Δε_xx + Δε_yy).
-    let nu_term = mat.lambda / (mat.lambda + 2.0 * mat.mu); // = ν/(1−ν)
-    let mut z0 = prev.eps[2] - nu_term * (eps_in_b[0] - prev.eps[0] + eps_in_b[1] - prev.eps[1]);
-    let mut z1 = z0 + 1e-6_f64.max(z0.abs() * 1e-3);
-    let mut f0 = eval(z0)?.0.sigma[2];
-    let mut f1 = eval(z1)?.0.sigma[2];
-    for _ in 0..50 {
-        if f1.abs() < 1e-10 * (mat.mu + 1.0) {
-            break;
-        }
-        let denom = f1 - f0;
-        if denom.abs() < f64::MIN_POSITIVE {
-            break;
-        }
-        let z2 = z1 - f1 * (z1 - z0) / denom;
-        z0 = z1;
-        f0 = f1;
-        z1 = z2;
-        f1 = eval(z1)?.0.sigma[2];
-    }
-    eval(z1)
-}
-
 // ─── The consistent tangent ─────────────────────────────────────────────────
-
-/// The full-3-D engineering-Voigt consistent tangent `D_alg = ∂σ(B)/∂ε(B)`.
-///
-/// Analytic for von Mises, whose closed form is validated against a finite
-/// difference; **numerical** for the others. Both are exact enough for Newton to
-/// converge quadratically, and the numerical route costs twelve evaluations of a
-/// cheap update — far less than a hand-derived tangent nobody can check, which
-/// in the Drucker-Prager case turned out to be 24 % wrong.
-///
-/// ```
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::element_field::SubElementField;
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
-/// # use pyrucast::models::plasticity::law::{self, MatParams, PlasticLaw, PrevState};
-/// # let coords = Handle::new(Coords::new(2).unwrap());
-/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// # let materiau = SubElementField::from_uniform_per_component(
-/// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "sigma_y".into()],
-/// #     &[210_000.0, 0.3, 250.0]).unwrap();
-/// # let mat = MatParams::new(&materiau, 0).unwrap();
-/// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-/// #                         vars: Vec::new() };
-/// // Dans le domaine élastique, la tangente cohérente **est** la tangente
-/// // élastique — quelle que soit la loi.
-/// let petit = [1e-5, 0.0, 0.0, 0.0, 0.0, 0.0];
-/// let d = law::consistent_tangent(PlasticLaw::Perfect, &petit, &repos, &mat, None)?;
-/// let e = law::elastic_tangent(mat.lambda, mat.mu);
-/// assert!((d[0][0] - e[0][0]).abs() < 1e-3);
-///
-/// // Une fois plastifié, elle s'assouplit — c'est ce qui donne à Newton sa
-/// // convergence quadratique.
-/// let grand = [5e-3, 0.0, 0.0, 0.0, 0.0, 0.0];
-/// let dp = law::consistent_tangent(PlasticLaw::Perfect, &grand, &repos, &mat, None)?;
-/// assert!(dp[0][0] < d[0][0]);
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn consistent_tangent(
-    law: PlasticLaw,
-    eps_b: &[f64; 6],
-    prev: &PrevState,
-    mat: &MatParams,
-    dt: Option<f64>,
-) -> Result<[[f64; 6]; 6]> {
-    let d = raw_consistent_tangent(law, eps_b, prev, mat, dt)?;
-    // `D_alg` travels through the state field as its **upper triangle**
-    // (`ktan_i_j`, i ≤ j) and is read back mirrored, so the format can only
-    // carry a symmetric tangent. Non-associated flow produces a genuinely
-    // non-symmetric one, which is therefore **symmetrised** here — the usual
-    // engineering compromise, and stated rather than hidden.
-    //
-    // The cost is Newton's *quadratic* rate on a non-associated law; it still
-    // converges, one order slower. The gain is that every consumer of a tangent
-    // — the state layout, the solver, the pattern cache — stays symmetric. For
-    // an associated law (von Mises, Ottosen) this is a no-op, bit for bit.
-    Ok(symmetrise(d))
-}
-
-/// `½(D + Dᵀ)` — exact, and the identity on an already-symmetric matrix.
-fn symmetrise(d: [[f64; 6]; 6]) -> [[f64; 6]; 6] {
-    let mut out = [[0.0; 6]; 6];
-    for i in 0..6 {
-        for j in 0..6 {
-            out[i][j] = 0.5 * (d[i][j] + d[j][i]);
-        }
-    }
-    out
-}
-
-/// The tangent before symmetrisation — analytic where validated, numerical
-/// otherwise.
-fn raw_consistent_tangent(
-    law: PlasticLaw,
-    eps_b: &[f64; 6],
-    prev: &PrevState,
-    mat: &MatParams,
-    dt: Option<f64>,
-) -> Result<[[f64; 6]; 6]> {
-    let trial = elastic_predictor(eps_b, prev, mat.lambda, mat.mu);
-    if let Some(analytic) = law.as_law().analytic_tangent(&trial, prev, mat) {
-        return analytic;
-    }
-    finite_difference_tangent(law, eps_b, prev, mat, dt)
-}
-
-/// `∂σ/∂ε` by central differences on the return map, in engineering Voigt.
-///
-/// The perturbation is applied to the **tensor** strain; the shear columns are
-/// halved on the way out, which is exactly what turns `∂σ/∂ε_ij` into
-/// `∂σ/∂γ_ij`.
-fn finite_difference_tangent(
-    law: PlasticLaw,
-    eps_b: &[f64; 6],
-    prev: &PrevState,
-    mat: &MatParams,
-    dt: Option<f64>,
-) -> Result<[[f64; 6]; 6]> {
-    // A strain-sized step: relative to the strain itself when it is meaningful,
-    // to the elastic strain scale otherwise.
-    // The step is relative to the strain itself. It must stay well above the
-    // noise of the return map (an iterative one for some laws converges to a
-    // tolerance, not exactly) and well below the curvature scale of the surface;
-    // `1e-6·‖ε‖` sits comfortably between the two.
-    let scale = eps_b.iter().fold(0.0_f64, |m, v| m.max(v.abs())).max(1e-8);
-    let h = 1e-6 * scale;
-    let mut d = [[0.0; 6]; 6];
-    for j in 0..6 {
-        let run = |sign: f64| -> Result<[f64; 6]> {
-            let mut e = *eps_b;
-            e[j] += sign * h;
-            let trial = elastic_predictor(&e, prev, mat.lambda, mat.mu);
-            Ok(law.return_map(&trial, prev, mat, dt)?.sigma)
-        };
-        let (sp, sm) = (run(1.0)?, run(-1.0)?);
-        // Engineering shear: γ = 2ε, so a column against a tensor shear is twice
-        // the column against the engineering one.
-        let factor = if j < 3 { 1.0 } else { 0.5 };
-        for i in 0..6 {
-            d[i][j] = factor * (sp[i] - sm[i]) / (2.0 * h);
-        }
-    }
-    Ok(d)
-}
-
-/// The elastic modulus in full-3-D engineering Voigt — the tangent wherever the
-/// step stayed elastic, and the starting point of every analytic one.
-///
-/// ```
-/// # use pyrucast::models::plasticity::law;
-/// let (lambda, mu) = law::lame(210_000.0, 0.3);
-/// let d = law::elastic_tangent(lambda, mu);
-/// // Voigt **de l'ingénieur** : le bloc de cisaillement vaut μ, non 2μ.
-/// assert!((d[3][3] - mu).abs() < 1e-9);
-/// assert!((d[0][0] - (lambda + 2.0 * mu)).abs() < 1e-9);
-/// ```
-pub fn elastic_tangent(lambda: f64, mu: f64) -> [[f64; 6]; 6] {
-    let mut c = [[0.0; 6]; 6];
-    for i in 0..3 {
-        for j in 0..3 {
-            c[i][j] = if i == j { lambda + 2.0 * mu } else { lambda };
-        }
-    }
-    for i in 3..6 {
-        c[i][i] = mu;
-    }
-    c
-}
 
 /// Guard a law's material against a value that would make its return map
 /// meaningless, with a message naming the law and the constant.

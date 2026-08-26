@@ -36,16 +36,18 @@
 //! criterion is then exact, and the gradient accurate to `O(h²)`. Trading an
 //! unverifiable analytic gradient for a numerical one that cannot be
 //! mis-derived is the right trade here; the consistent tangent follows the same
-//! reasoning ([`crate::models::plasticity::law::consistent_tangent`]).
+//! reasoning (`PlasticLawKind::consistent_tangent`).
 //!
 //! Flow is **associated** (`g = f`), the usual choice for this criterion.
 
 use super::law::PlasticLawKind;
 use crate::error::{PyrucastError, Result};
+use crate::models::elasticity::elastic_stress;
 use crate::models::elasticity::ElasticityModel;
 use crate::models::plasticity::law::{
-    elastic_stress, i1, j2, j3, require_positive, MatParams, PlasticLaw, PlasticStep, PrevState,
+    require_positive, MatParams, PlasticLaw, PlasticStep, PrevState,
 };
+use crate::models::tensor::{i1, j2, j3};
 
 /// Ottosen's yield function, exactly as written above. Negative inside the
 /// elastic domain.
@@ -215,6 +217,10 @@ pub fn return_map(trial: &[f64; 6], prev: &PrevState, mat: &MatParams) -> Result
 pub(crate) struct Ottosen;
 
 impl PlasticLawKind for Ottosen {
+    fn name(&self) -> &'static str {
+        "ottosen"
+    }
+
     fn material_components(&self) -> &'static [&'static str] {
         &["E", "nu", "a", "b", "k_1", "k_2", "sigma_c"]
     }

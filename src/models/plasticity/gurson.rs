@@ -54,11 +54,12 @@
 
 use super::law::PlasticLawKind;
 use crate::error::{PyrucastError, Result};
+use crate::models::elasticity::elastic_stress;
 use crate::models::elasticity::ElasticityModel;
 use crate::models::plasticity::law::{
-    elastic_stress, i1, require_positive, von_mises_stress, MatParams, PlasticLaw, PlasticStep,
-    PrevState,
+    require_positive, MatParams, PlasticLaw, PlasticStep, PrevState,
 };
+use crate::models::tensor::{i1, von_mises_stress};
 
 /// The **effective** porosity of Tvergaard and Needleman — `f` below the
 /// coalescence threshold, accelerating to `1/q₁` at failure above it.
@@ -236,6 +237,10 @@ pub fn return_map(trial: &[f64; 6], prev: &PrevState, mat: &MatParams) -> Result
 pub(crate) struct Gurson;
 
 impl PlasticLawKind for Gurson {
+    fn name(&self) -> &'static str {
+        "gurson"
+    }
+
     fn material_components(&self) -> &'static [&'static str] {
         &[
             "E", "nu", "sigma_y", "q_1", "q_2", "q_3", "f_0", "f_c", "f_f",
