@@ -559,10 +559,6 @@ pub fn chaboche(
 pub(crate) struct CreepNorton;
 
 impl PlasticLawKind for CreepNorton {
-    fn name(&self) -> &'static str {
-        "creep_norton"
-    }
-
     fn material_components(&self) -> &'static [&'static str] {
         &["E", "nu", "K", "n"]
     }
@@ -576,14 +572,9 @@ impl PlasticLawKind for CreepNorton {
         trial: &[f64; 6],
         prev: &PrevState,
         mat: &MatParams,
-        dt: Option<f64>,
+        dt: f64,
     ) -> Result<PlasticStep> {
-        norton(
-            trial,
-            prev,
-            mat,
-            dt.expect("rate-dependent: dt checked by the caller"),
-        )
+        norton(trial, prev, mat, dt)
     }
 }
 
@@ -591,10 +582,6 @@ impl PlasticLawKind for CreepNorton {
 pub(crate) struct CreepBlackburn;
 
 impl PlasticLawKind for CreepBlackburn {
-    fn name(&self) -> &'static str {
-        "creep_blackburn"
-    }
-
     fn material_components(&self) -> &'static [&'static str] {
         &["E", "nu", "A_1", "alpha_1", "r_1", "B_s", "beta_s"]
     }
@@ -614,14 +601,9 @@ impl PlasticLawKind for CreepBlackburn {
         trial: &[f64; 6],
         prev: &PrevState,
         mat: &MatParams,
-        dt: Option<f64>,
+        dt: f64,
     ) -> Result<PlasticStep> {
-        blackburn(
-            trial,
-            prev,
-            mat,
-            dt.expect("rate-dependent: dt checked by the caller"),
-        )
+        blackburn(trial, prev, mat, dt)
     }
 }
 
@@ -629,10 +611,6 @@ impl PlasticLawKind for CreepBlackburn {
 pub(crate) struct CreepLemaitre;
 
 impl PlasticLawKind for CreepLemaitre {
-    fn name(&self) -> &'static str {
-        "creep_lemaitre"
-    }
-
     fn material_components(&self) -> &'static [&'static str] {
         &["E", "nu", "K", "N", "M"]
     }
@@ -646,14 +624,9 @@ impl PlasticLawKind for CreepLemaitre {
         trial: &[f64; 6],
         prev: &PrevState,
         mat: &MatParams,
-        dt: Option<f64>,
+        dt: f64,
     ) -> Result<PlasticStep> {
-        lemaitre(
-            trial,
-            prev,
-            mat,
-            dt.expect("rate-dependent: dt checked by the caller"),
-        )
+        lemaitre(trial, prev, mat, dt)
     }
 }
 
@@ -661,10 +634,6 @@ impl PlasticLawKind for CreepLemaitre {
 pub(crate) struct ViscoplasticChaboche;
 
 impl PlasticLawKind for ViscoplasticChaboche {
-    fn name(&self) -> &'static str {
-        "viscoplasticity_chaboche"
-    }
-
     fn material_components(&self) -> &'static [&'static str] {
         &["E", "nu", "k", "K", "n", "C_1", "gamma_1", "b", "Q"]
     }
@@ -683,15 +652,9 @@ impl PlasticLawKind for ViscoplasticChaboche {
         trial: &[f64; 6],
         prev: &PrevState,
         mat: &MatParams,
-        dt: Option<f64>,
+        dt: f64,
     ) -> Result<PlasticStep> {
-        chaboche(
-            trial,
-            prev,
-            mat,
-            dt.expect("rate-dependent: dt checked by the caller"),
-            false,
-        )
+        chaboche(trial, prev, mat, dt, false)
     }
 }
 
@@ -699,10 +662,6 @@ impl PlasticLawKind for ViscoplasticChaboche {
 pub(crate) struct ViscoplasticLemaitreChaboche;
 
 impl PlasticLawKind for ViscoplasticLemaitreChaboche {
-    fn name(&self) -> &'static str {
-        "viscoplasticity_lemaitre_chaboche"
-    }
-
     fn material_components(&self) -> &'static [&'static str] {
         &[
             "E", "nu", "k", "K", "n", "C_1", "gamma_1", "b", "Q", "S", "s", "D_c",
@@ -723,15 +682,9 @@ impl PlasticLawKind for ViscoplasticLemaitreChaboche {
         trial: &[f64; 6],
         prev: &PrevState,
         mat: &MatParams,
-        dt: Option<f64>,
+        dt: f64,
     ) -> Result<PlasticStep> {
-        chaboche(
-            trial,
-            prev,
-            mat,
-            dt.expect("rate-dependent: dt checked by the caller"),
-            true,
-        )
+        chaboche(trial, prev, mat, dt, true)
     }
 }
 

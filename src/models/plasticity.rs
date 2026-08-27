@@ -449,6 +449,12 @@ impl Domain for Plasticity {
     /// Seeding them here, once per zone before the first step, is what lets the
     /// return map read `prev.var(0)` unconditionally: no law has to recognise a
     /// first step at a Gauss point.
+    /// True for the creep and viscoplastic laws, whose answer depends on how
+    /// long the step lasted.
+    fn requires_dt(&self) -> bool {
+        self.law.is_viscous()
+    }
+
     fn initial_state(&self, material: &SubElementField) -> Result<SubElementField> {
         let mut state =
             SubElementField::new(self.fespace.clone(), self.behavior_output_components()?)?;
@@ -479,7 +485,7 @@ impl Domain for Plasticity {
         prev: &SubElementField,
         material: Option<&SubElementField>,
         g: usize,
-        dt: Option<f64>,
+        dt: f64,
         out: &mut [f64],
     ) -> Result<()> {
         let mat = material.expect("Plasticity declares a material_fespace ⇒ material is supplied");
@@ -731,7 +737,7 @@ mod tests {
         strain.set_uniform("eps_xx", 1e-4).unwrap();
         let strain = Handle::new(strain);
         let out = pl
-            .integrate_behavior(&strain, &rest(&pl, &mat), Some(&mat), None)
+            .integrate_behavior(&strain, &rest(&pl, &mat), Some(&mat), 0.0)
             .unwrap();
         // Confined uniaxial *strain* (only ε_xx ≠ 0): σ_xx = (λ+2μ)·ε.
         let (lambda, mu) = elasticity::lame(e, nu);
@@ -759,7 +765,7 @@ mod tests {
         strain.set_uniform("eps_xx", 1e-2).unwrap();
         let strain = Handle::new(strain);
         let out = pl
-            .integrate_behavior(&strain, &rest(&pl, &mat), Some(&mat), None)
+            .integrate_behavior(&strain, &rest(&pl, &mat), Some(&mat), 0.0)
             .unwrap();
         for g in 0..out.gauss_count() {
             let s = [
@@ -795,7 +801,7 @@ mod tests {
         strain.set_uniform("eps_xx", eps0).unwrap();
         let strain = Handle::new(strain);
         let out = pl
-            .integrate_behavior(&strain, &rest(&pl, &mat), Some(&mat), None)
+            .integrate_behavior(&strain, &rest(&pl, &mat), Some(&mat), 0.0)
             .unwrap();
         // Linear plane stress uniaxial-strain: σ_xx = E/(1-ν²)·ε, σ_yy = ν·σ_xx.
         let c = e / (1.0 - nu * nu);
@@ -826,7 +832,7 @@ mod tests {
         let mat = material(&pl, e, nu, sy);
         // First load past yield (prev = None ⇒ reference config A).
         let st1 = pl
-            .integrate_behavior(&uniaxial(&pl, 5e-3), &rest(&pl, &mat), Some(&mat), None)
+            .integrate_behavior(&uniaxial(&pl, 5e-3), &rest(&pl, &mat), Some(&mat), 0.0)
             .unwrap();
         let p1 = st1.value(0, 0, "p").unwrap();
         assert!(p1 > 0.0);
@@ -835,7 +841,7 @@ mod tests {
         // output), *not* merged into the deformation field.
         let prev = Handle::new(st1);
         let st2 = pl
-            .integrate_behavior(&uniaxial(&pl, 6e-3), &prev, Some(&mat), None)
+            .integrate_behavior(&uniaxial(&pl, 6e-3), &prev, Some(&mat), 0.0)
             .unwrap();
         // Cumulated plastic strain only grows.
         assert!(st2.value(0, 0, "p").unwrap() >= p1);
@@ -854,12 +860,7 @@ mod tests {
 
         // Single step 0 → ε_final.
         let single = pl
-            .integrate_behavior(
-                &uniaxial(&pl, eps_final),
-                &rest(&pl, &mat),
-                Some(&mat),
-                None,
-            )
+            .integrate_behavior(&uniaxial(&pl, eps_final), &rest(&pl, &mat), Some(&mat), 0.0)
             .unwrap();
 
         // Ten proportional increments, threading `prev` — which starts at the
@@ -869,7 +870,7 @@ mod tests {
         for i in 1..=nsteps {
             let val = eps_final * i as f64 / nsteps as f64;
             let out = pl
-                .integrate_behavior(&uniaxial(&pl, val), &prev, Some(&mat), None)
+                .integrate_behavior(&uniaxial(&pl, val), &prev, Some(&mat), 0.0)
                 .unwrap();
             prev = Handle::new(out);
         }
@@ -897,7 +898,7 @@ mod tests {
 
         // Load well past yield.
         let loaded = Handle::new(
-            pl.integrate_behavior(&uniaxial(&pl, 1e-2), &rest(&pl, &mat), Some(&mat), None)
+            pl.integrate_behavior(&uniaxial(&pl, 1e-2), &rest(&pl, &mat), Some(&mat), 0.0)
                 .unwrap(),
         );
         let p1 = loaded.read().value(0, 0, "p").unwrap();
@@ -905,7 +906,7 @@ mod tests {
 
         // Small unload (still far past yield), threading the loaded state as `prev`.
         let unloaded = pl
-            .integrate_behavior(&uniaxial(&pl, 9.9e-3), &loaded, Some(&mat), None)
+            .integrate_behavior(&uniaxial(&pl, 9.9e-3), &loaded, Some(&mat), 0.0)
             .unwrap();
         // Elastic: p unchanged.
         assert!(

@@ -367,7 +367,7 @@ impl Domain for Bernoulli {
         _prev: &SubElementField,
         material: Option<&SubElementField>,
         g: usize,
-        _dt: Option<f64>,
+        _dt: f64,
         out: &mut [f64],
     ) -> Result<()> {
         let mat = material.expect("Bernoulli declares a material_fespace");

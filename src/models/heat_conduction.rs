@@ -435,7 +435,7 @@ impl Domain for HeatConduction {
         _prev: &SubElementField,
         material: Option<&SubElementField>,
         g: usize,
-        _dt: Option<f64>,
+        _dt: f64,
         out: &mut [f64],
     ) -> Result<()> {
         let mat =
@@ -676,7 +676,7 @@ mod tests {
         let mat = Handle::new(mat);
 
         let flux = hc
-            .integrate_behavior(&def, &rest(&hc, &mat), Some(&mat), None)
+            .integrate_behavior(&def, &rest(&hc, &mat), Some(&mat), 0.0)
             .unwrap();
         assert_eq!(flux.components(), &["flux_x".to_string()]);
         let expected = k * grad;

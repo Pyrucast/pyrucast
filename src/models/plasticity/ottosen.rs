@@ -217,10 +217,6 @@ pub fn return_map(trial: &[f64; 6], prev: &PrevState, mat: &MatParams) -> Result
 pub(crate) struct Ottosen;
 
 impl PlasticLawKind for Ottosen {
-    fn name(&self) -> &'static str {
-        "ottosen"
-    }
-
     fn material_components(&self) -> &'static [&'static str] {
         &["E", "nu", "a", "b", "k_1", "k_2", "sigma_c"]
     }
@@ -230,7 +226,7 @@ impl PlasticLawKind for Ottosen {
         trial: &[f64; 6],
         prev: &PrevState,
         mat: &MatParams,
-        _dt: Option<f64>,
+        _dt: f64,
     ) -> Result<PlasticStep> {
         return_map(trial, prev, mat)
     }

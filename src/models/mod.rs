@@ -1355,6 +1355,19 @@ pub trait Domain: Sync {
         SubElementField::new(self.behavior_fespace(), self.behavior_output_components()?)
     }
 
+    /// Whether this domain's law needs the **time increment** — a creep or
+    /// viscoplastic law, whose answer depends on how long the step lasted.
+    /// Default: `false`.
+    ///
+    /// Read once, by [`crate::ops::element_field::behavior::integrate`], which
+    /// refuses the whole integration when such a law is handed no `dt`. The
+    /// kernel then receives a plain `f64` and never asks: the question belongs
+    /// to the step, and answering it per Gauss point answered it some tens of
+    /// millions of times to say the same thing.
+    fn requires_dt(&self) -> bool {
+        false
+    }
+
     /// Constitutive law at **one Gauss point** — the pure, sequential kernel a
     /// physics author writes. Integrates the step **A → B** for cell `geom.cell`
     /// at Gauss point `g`:
@@ -1386,7 +1399,7 @@ pub trait Domain: Sync {
         prev: &SubElementField,
         material: Option<&SubElementField>,
         g: usize,
-        dt: Option<f64>,
+        dt: f64,
         out: &mut [f64],
     ) -> Result<()>;
 
@@ -1413,7 +1426,7 @@ pub trait Domain: Sync {
         deformation: &Handle<SubElementField>,
         prev: &Handle<SubElementField>,
         material: Option<&Handle<SubElementField>>,
-        dt: Option<f64>,
+        dt: f64,
     ) -> Result<SubElementField> {
         let fespace = self.behavior_fespace();
         let out_components = self.behavior_output_components()?;

@@ -163,45 +163,23 @@ pub enum PlasticLaw {
 /// Adding a law: a unit struct and its `impl` in the law's own file, plus one
 /// arm in `as_law`. Nothing else in this module changes.
 pub(crate) trait PlasticLawKind: Sync {
-    /// The law's canonical name, for messages.
-    fn name(&self) -> &'static str;
-
     /// The material components the law reads, in the order they are documented.
     fn material_components(&self) -> &'static [&'static str];
 
-    /// Project a trial stress onto the yield surface. `dt` is present whenever
-    /// [`is_rate_dependent`](Self::is_rate_dependent) is true — the caller
-    /// checks.
+    /// Project a trial stress onto the yield surface.
+    ///
+    /// `dt` is always supplied. A law that ignores it is rate-independent and
+    /// says so through [`is_rate_dependent`](Self::is_rate_dependent); a law
+    /// that reads it is guaranteed a caller-supplied increment, because the
+    /// behaviour operator refuses the whole integration otherwise — once, before
+    /// any point is touched, rather than at each of them.
     fn return_map(
         &self,
         trial: &[f64; 6],
         prev: &PrevState,
         mat: &MatParams,
-        dt: Option<f64>,
+        dt: f64,
     ) -> Result<PlasticStep>;
-
-    /// [`return_map`](Self::return_map), with the rate-dependence guard.
-    ///
-    /// **Every internal path goes through here, and that is the point.** The
-    /// guard used to live on the enum's `return_map`; when the algorithms moved
-    /// into this trait they reached the law directly, and a clean error became
-    /// a panic. `tests/viscous_laws.rs` caught it.
-    fn checked_return_map(
-        &self,
-        trial: &[f64; 6],
-        prev: &PrevState,
-        mat: &MatParams,
-        dt: Option<f64>,
-    ) -> Result<PlasticStep> {
-        if self.is_rate_dependent() && dt.is_none() {
-            return Err(PyrucastError::Message(format!(
-                "plasticity ({}): this law is rate-dependent and needs a time \
-                 increment — pass `dt` to integrate_behavior",
-                self.name()
-            )));
-        }
-        self.return_map(trial, prev, mat, dt)
-    }
 
     /// The law's **own** internal variables, beyond `ε_p` and `p`. Most laws
     /// need none.
@@ -263,14 +241,14 @@ pub(crate) trait PlasticLawKind: Sync {
         prev: &PrevState,
         mat: &MatParams,
         kinematics: Kinematics,
-        dt: Option<f64>,
+        dt: f64,
     ) -> Result<(PlasticStep, [f64; 6])> {
         if kinematics == Kinematics::PlaneStress {
             return self.plane_stress_step(eps_b, prev, mat, dt);
         }
         // Solid / plane strain / axisymmetric: ε(B) is fully prescribed.
         let trial = elastic_predictor(eps_b, prev, mat.lambda, mat.mu);
-        Ok((self.checked_return_map(&trial, prev, mat, dt)?, *eps_b))
+        Ok((self.return_map(&trial, prev, mat, dt)?, *eps_b))
     }
 
     /// Plane stress, around any law: solve `σ_zz(B) = 0` for `ε_zz(B)` by the secant
@@ -284,7 +262,7 @@ pub(crate) trait PlasticLawKind: Sync {
         eps_in_b: &[f64; 6],
         prev: &PrevState,
         mat: &MatParams,
-        dt: Option<f64>,
+        dt: f64,
     ) -> Result<(PlasticStep, [f64; 6])> {
         let eval = |ezz: f64| -> Result<(PlasticStep, [f64; 6])> {
             let mut eps_b = *eps_in_b;
@@ -292,7 +270,7 @@ pub(crate) trait PlasticLawKind: Sync {
             eps_b[3] = 0.0;
             eps_b[4] = 0.0;
             let trial = elastic_predictor(&eps_b, prev, mat.lambda, mat.mu);
-            Ok((self.checked_return_map(&trial, prev, mat, dt)?, eps_b))
+            Ok((self.return_map(&trial, prev, mat, dt)?, eps_b))
         };
         // Initial guess: ε_zz(A) plus the elastic plane-stress out-of-plane
         // increment −ν/(1−ν)·(Δε_xx + Δε_yy).
@@ -332,7 +310,7 @@ pub(crate) trait PlasticLawKind: Sync {
         eps_b: &[f64; 6],
         prev: &PrevState,
         mat: &MatParams,
-        dt: Option<f64>,
+        dt: f64,
     ) -> Result<[[f64; 6]; 6]> {
         let d = self.raw_consistent_tangent(eps_b, prev, mat, dt)?;
         // `D_alg` travels through the state field as its **upper triangle**
@@ -355,7 +333,7 @@ pub(crate) trait PlasticLawKind: Sync {
         eps_b: &[f64; 6],
         prev: &PrevState,
         mat: &MatParams,
-        dt: Option<f64>,
+        dt: f64,
     ) -> Result<[[f64; 6]; 6]> {
         let trial = elastic_predictor(eps_b, prev, mat.lambda, mat.mu);
         if let Some(analytic) = self.analytic_tangent(&trial, prev, mat) {
@@ -374,7 +352,7 @@ pub(crate) trait PlasticLawKind: Sync {
         eps_b: &[f64; 6],
         prev: &PrevState,
         mat: &MatParams,
-        dt: Option<f64>,
+        dt: f64,
     ) -> Result<[[f64; 6]; 6]> {
         // A strain-sized step: relative to the strain itself when it is meaningful,
         // to the elastic strain scale otherwise.
@@ -390,7 +368,7 @@ pub(crate) trait PlasticLawKind: Sync {
                 let mut e = *eps_b;
                 e[j] += sign * h;
                 let trial = elastic_predictor(&e, prev, mat.lambda, mat.mu);
-                Ok(self.checked_return_map(&trial, prev, mat, dt)?.sigma)
+                Ok(self.return_map(&trial, prev, mat, dt)?.sigma)
             };
             let (sp, sm) = (run(1.0)?, run(-1.0)?);
             // Engineering shear: γ = 2ε, so a column against a tensor shear is twice
@@ -673,13 +651,17 @@ impl PlasticLaw {
         mat: &MatParams,
         dt: Option<f64>,
     ) -> Result<PlasticStep> {
+        // A public entry point, and therefore the place that still asks: a
+        // caller reaching a law directly may have no increment to give. Below
+        // this line `dt` is a plain `f64` — the kernels never ask again.
         if self.is_viscous() && dt.is_none() {
             return Err(PyrucastError::Message(format!(
                 "plasticity ({self}): this law is rate-dependent and needs a time increment — \
                  pass `dt` to integrate_behavior"
             )));
         }
-        self.as_law().return_map(trial, prev, mat, dt)
+        self.as_law()
+            .return_map(trial, prev, mat, dt.unwrap_or(0.0))
     }
 }
 

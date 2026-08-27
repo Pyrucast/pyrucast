@@ -214,10 +214,6 @@ pub fn tangent(trial: &[f64; 6], mat: &MatParams, hardening: f64, p_prev: f64) -
 pub(crate) struct Perfect;
 
 impl PlasticLawKind for Perfect {
-    fn name(&self) -> &'static str {
-        "perfect"
-    }
-
     fn material_components(&self) -> &'static [&'static str] {
         &["E", "nu", "sigma_y"]
     }
@@ -227,7 +223,7 @@ impl PlasticLawKind for Perfect {
         trial: &[f64; 6],
         prev: &PrevState,
         mat: &MatParams,
-        _dt: Option<f64>,
+        _dt: f64,
     ) -> Result<PlasticStep> {
         return_map(trial, prev, mat, 0.0)
     }
@@ -246,10 +242,6 @@ impl PlasticLawKind for Perfect {
 pub(crate) struct Isotropic;
 
 impl PlasticLawKind for Isotropic {
-    fn name(&self) -> &'static str {
-        "isotropic"
-    }
-
     fn material_components(&self) -> &'static [&'static str] {
         &["E", "nu", "sigma_y", "H"]
     }
@@ -259,7 +251,7 @@ impl PlasticLawKind for Isotropic {
         trial: &[f64; 6],
         prev: &PrevState,
         mat: &MatParams,
-        _dt: Option<f64>,
+        _dt: f64,
     ) -> Result<PlasticStep> {
         return_map(trial, prev, mat, mat.get("H")?)
     }

@@ -131,9 +131,24 @@ pub fn integrate(
             }
         };
 
-        let state = h
-            .read()
-            .integrate_behavior(&input, &prev_zone, material.as_ref(), dt)?;
+        // A rate-dependent law with no increment is refused here, before a
+        // single point is integrated — where the message can name the physics,
+        // and where the question is asked once instead of per Gauss point.
+        let sub = h.read();
+        let dt = match (dt, sub.requires_dt()) {
+            (Some(dt), _) => dt,
+            (None, false) => 0.0,
+            (None, true) => {
+                return Err(PyrucastError::Message(format!(
+                    "{}: this law is rate-dependent and needs a time increment — \
+                     pass `dt` to integrate_behavior",
+                    sub.as_kind().label()
+                )))
+            }
+        };
+
+        let state = sub.integrate_behavior(&input, &prev_zone, material.as_ref(), dt)?;
+        drop(sub);
         out.add_sub(Handle::new(state))?;
     }
     Ok(out)

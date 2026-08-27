@@ -234,10 +234,6 @@ pub fn return_map(trial: &[f64; 6], prev: &PrevState, mat: &MatParams) -> Result
 pub(crate) struct Gurson;
 
 impl PlasticLawKind for Gurson {
-    fn name(&self) -> &'static str {
-        "gurson"
-    }
-
     fn material_components(&self) -> &'static [&'static str] {
         &[
             "E", "nu", "sigma_y", "q_1", "q_2", "q_3", "f_0", "f_c", "f_f",
@@ -260,7 +256,7 @@ impl PlasticLawKind for Gurson {
         trial: &[f64; 6],
         prev: &PrevState,
         mat: &MatParams,
-        _dt: Option<f64>,
+        _dt: f64,
     ) -> Result<PlasticStep> {
         return_map(trial, prev, mat)
     }

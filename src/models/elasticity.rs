@@ -415,7 +415,7 @@ impl Domain for Elasticity {
         _prev: &SubElementField,
         material: Option<&SubElementField>,
         g: usize,
-        _dt: Option<f64>,
+        _dt: f64,
         out: &mut [f64],
     ) -> Result<()> {
         let mat = material.expect("Elasticity declares a material_fespace ⇒ material is supplied");
@@ -1172,7 +1172,7 @@ mod tests {
         let strain = Handle::new(strain);
 
         let out = el
-            .integrate_behavior(&strain, &rest(&el, &mat), Some(&mat), None)
+            .integrate_behavior(&strain, &rest(&el, &mat), Some(&mat), 0.0)
             .unwrap();
         let c = e / (1.0 - nu * nu);
         for g in 0..out.gauss_count() {

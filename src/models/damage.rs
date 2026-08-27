@@ -355,7 +355,7 @@ impl Domain for Damage {
         prev: &SubElementField,
         material: Option<&SubElementField>,
         g: usize,
-        _dt: Option<f64>,
+        _dt: f64,
         out: &mut [f64],
     ) -> Result<()> {
         let mat = material.expect("Damage declares a material_fespace ⇒ material is supplied");
@@ -501,7 +501,7 @@ mod tests {
         let eps0 = 1e-5; // < eps_d0 = 1e-4
         let strain = strain_field(&mz, eps0);
         let out = mz
-            .integrate_behavior(&strain, &rest(&mz, &mat), Some(&mat), None)
+            .integrate_behavior(&strain, &rest(&mz, &mat), Some(&mat), 0.0)
             .unwrap();
         let (e, nu) = (30_000.0, 0.2);
         let c = e / (1.0 - nu * nu);
@@ -520,7 +520,7 @@ mod tests {
         let eps0 = 5e-4; // > eps_d0
         let strain = strain_field(&mz, eps0);
         let out = mz
-            .integrate_behavior(&strain, &rest(&mz, &mat), Some(&mat), None)
+            .integrate_behavior(&strain, &rest(&mz, &mat), Some(&mat), 0.0)
             .unwrap();
         let (e, nu) = (30_000.0, 0.2);
         let c = e / (1.0 - nu * nu);
@@ -542,7 +542,7 @@ mod tests {
         // Load to 5e-4.
         let s1 = strain_field(&mz, 5e-4);
         let st1 = mz
-            .integrate_behavior(&s1, &rest(&mz, &mat), Some(&mat), None)
+            .integrate_behavior(&s1, &rest(&mz, &mat), Some(&mat), 0.0)
             .unwrap();
         let k1 = st1.value(0, 0, "kappa").unwrap();
         let d1 = st1.value(0, 0, "damage").unwrap();
@@ -550,7 +550,7 @@ mod tests {
         // Unload to 2e-4, feeding the step-1 state (κ) via `prev`.
         let prev = Handle::new(st1);
         let s2 = strain_field(&mz, 2e-4);
-        let st2 = mz.integrate_behavior(&s2, &prev, Some(&mat), None).unwrap();
+        let st2 = mz.integrate_behavior(&s2, &prev, Some(&mat), 0.0).unwrap();
         assert!((st2.value(0, 0, "kappa").unwrap() - k1).abs() < 1e-12);
         // Damage unchanged on unloading (same κ).
         assert!((st2.value(0, 0, "damage").unwrap() - d1).abs() < 1e-9);
@@ -588,7 +588,7 @@ mod tests {
         s.set_uniform("eps_xx", 5e-4).unwrap();
         let s = Handle::new(s);
         let out = mz
-            .integrate_behavior(&s, &rest(&mz, &mat), Some(&mat), None)
+            .integrate_behavior(&s, &rest(&mz, &mat), Some(&mat), 0.0)
             .unwrap();
         for g in 0..out.gauss_count() {
             assert!(out.value(0, g, "damage").unwrap() > 0.0);

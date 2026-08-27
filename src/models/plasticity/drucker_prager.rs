@@ -412,10 +412,6 @@ fn apex_return(
 pub(crate) struct DruckerPrager;
 
 impl PlasticLawKind for DruckerPrager {
-    fn name(&self) -> &'static str {
-        "drucker_prager"
-    }
-
     /// The general surface is nine numbers, six of which default to the simple
     /// cone: they ride the optional channel so a three-parameter kinematics stays
     /// writable in three numbers.
@@ -441,7 +437,7 @@ impl PlasticLawKind for DruckerPrager {
         trial: &[f64; 6],
         prev: &PrevState,
         mat: &MatParams,
-        _dt: Option<f64>,
+        _dt: f64,
     ) -> Result<PlasticStep> {
         return_map(trial, prev, mat)
     }

@@ -269,7 +269,7 @@ impl Domain for Truss {
         _prev: &SubElementField,
         material: Option<&SubElementField>,
         g: usize,
-        _dt: Option<f64>,
+        _dt: f64,
         out: &mut [f64],
     ) -> Result<()> {
         let mat = material.expect("Truss declares a material_fespace ⇒ material is supplied");
@@ -587,7 +587,7 @@ mod tests {
         let strain = Handle::new(strain);
 
         let out = truss
-            .integrate_behavior(&strain, &rest(&truss, &mat), Some(&mat), None)
+            .integrate_behavior(&strain, &rest(&truss, &mat), Some(&mat), 0.0)
             .unwrap();
         assert_eq!(out.components(), &["n".to_string()]);
         let expected = e * area * eps0;

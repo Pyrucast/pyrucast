@@ -469,7 +469,7 @@ impl Domain for Fick {
         _prev: &SubElementField,
         material: Option<&SubElementField>,
         g: usize,
-        _dt: Option<f64>,
+        _dt: f64,
         out: &mut [f64],
     ) -> Result<()> {
         let mat = material.expect("Fick declares a material_fespace ⇒ material is supplied");
