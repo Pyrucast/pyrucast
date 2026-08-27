@@ -168,14 +168,11 @@ fn numerical_normal(sigma: &[f64; 6], f: f64, mat: &MatParams, scale: f64) -> Re
 /// ```
 pub fn return_map(trial: &[f64; 6], prev: &PrevState, mat: &MatParams) -> Result<PlasticStep> {
     let sigma_y = mat.get("sigma_y")?;
-    // The porosity at A: the law's own variable, or the **initial** porosity on
-    // the very first step, where the state carries nothing yet. A default of
-    // zero would start the material as a perfect solid and never let it damage.
-    let f_a = if prev.vars.is_empty() {
-        mat.get("f_0")?
-    } else {
-        prev.var(0)
-    };
+    // The porosity at A — the law's own variable, always carried: the state at
+    // rest is seeded with `f_0` by `initial_internal_sources`, so there is no
+    // « first step » to recognise here. A material starting as a perfect solid
+    // would have no void to grow and would never damage.
+    let f_a = prev.var(0);
 
     if yield_function(trial, f_a, mat)? <= 0.0 {
         let mut step = PlasticStep::elastic(trial, prev);
@@ -250,6 +247,12 @@ impl PlasticLawKind for Gurson {
     /// The porosity, which **is** the state of a porous law.
     fn internal_names(&self) -> Vec<String> {
         vec!["porosity".to_string()]
+    }
+
+    /// The porosity starts at `f_0`, never at zero: a material that begins as a
+    /// perfect solid has no void to grow and never damages.
+    fn initial_internal_sources(&self) -> &'static [&'static str] {
+        &["f_0"]
     }
 
     fn return_map(

@@ -412,7 +412,7 @@ impl Domain for Elasticity {
         &self,
         geom: &CellGeom,
         input: &SubElementField,
-        _prev: Option<&SubElementField>,
+        _prev: &SubElementField,
         material: Option<&SubElementField>,
         g: usize,
         _dt: Option<f64>,
@@ -1098,6 +1098,12 @@ pub fn elastic_tangent(lambda: f64, mu: f64) -> [[f64; 6]; 6] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The rest state of `d` on its material — the `prev` of a first step,
+    /// which the behaviour operator materializes for a caller who has none.
+    fn rest<D: Domain>(d: &D, mat: &Handle<SubElementField>) -> Handle<SubElementField> {
+        Handle::new(d.initial_state(&mat.read()).unwrap())
+    }
     use crate::aggregate::Aggregate;
     use crate::atoms::{ElementType, Node, NodeId};
     use crate::containers::field::SubField;
@@ -1166,7 +1172,7 @@ mod tests {
         let strain = Handle::new(strain);
 
         let out = el
-            .integrate_behavior(&strain, None, Some(&mat), None)
+            .integrate_behavior(&strain, &rest(&el, &mat), Some(&mat), None)
             .unwrap();
         let c = e / (1.0 - nu * nu);
         for g in 0..out.gauss_count() {

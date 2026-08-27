@@ -432,7 +432,7 @@ impl Domain for HeatConduction {
         &self,
         geom: &CellGeom,
         input: &SubElementField,
-        _prev: Option<&SubElementField>,
+        _prev: &SubElementField,
         material: Option<&SubElementField>,
         g: usize,
         _dt: Option<f64>,
@@ -624,6 +624,12 @@ pub fn element_capacity(geom: &CellGeom, material: &SubElementField, ke: &mut [f
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The rest state of `d` on its material — the `prev` of a first step,
+    /// which the behaviour operator materializes for a caller who has none.
+    fn rest<D: Domain>(d: &D, mat: &Handle<SubElementField>) -> Handle<SubElementField> {
+        Handle::new(d.initial_state(&mat.read()).unwrap())
+    }
     use crate::aggregate::Aggregate;
     use crate::atoms::{ElementType, Node};
     use crate::containers::field::SubField;
@@ -669,7 +675,9 @@ mod tests {
         mat.set_uniform(MATERIAL_COMPONENT, k).unwrap();
         let mat = Handle::new(mat);
 
-        let flux = hc.integrate_behavior(&def, None, Some(&mat), None).unwrap();
+        let flux = hc
+            .integrate_behavior(&def, &rest(&hc, &mat), Some(&mat), None)
+            .unwrap();
         assert_eq!(flux.components(), &["flux_x".to_string()]);
         let expected = k * grad;
         for g in 0..flux.gauss_count() {

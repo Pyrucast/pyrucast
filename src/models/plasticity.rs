@@ -18,8 +18,9 @@
 //! A → B: the end-of-step strain `ε(B)` comes in as `deformation`, while the
 //! converged state at the start of the step A — the stress `σ(A)`, the plastic
 //! strain `ε_p(A)`, the cumulated `p(A)` and the strain `ε(A)` — comes in as
-//! `prev` (the previous step's output; `None` on the first step, where A is the
-//! reference configuration). The elastic predictor is `σ_trial = σ(A) + C:Δε`
+//! `prev` (the previous step's output, or the **rest state** on the first step,
+//! where A is the reference configuration). The elastic predictor is
+//! `σ_trial = σ(A) + C:Δε`
 //! with `Δε = ε(B) − ε(A)` — algebraically identical to `C:(ε(B) − ε_p(A))` in
 //! small strain, but the form that carries `σ(A)` explicitly, ready for a
 //! large-strain law. The output echoes the full-3-D `ε(B)` (and, in 2-D, the
@@ -441,6 +442,32 @@ impl Domain for Plasticity {
         Ok(comps)
     }
 
+    /// Zero everywhere, **except** the internal variables a law starts from a
+    /// material constant — Gurson's porosity `f_0`, declared by
+    /// [`PlasticLawKind::initial_internal_sources`](law::PlasticLawKind::initial_internal_sources).
+    ///
+    /// Seeding them here, once per zone before the first step, is what lets the
+    /// return map read `prev.var(0)` unconditionally: no law has to recognise a
+    /// first step at a Gauss point.
+    fn initial_state(&self, material: &SubElementField) -> Result<SubElementField> {
+        let mut state =
+            SubElementField::new(self.fespace.clone(), self.behavior_output_components()?)?;
+        let sources = self.law.as_law().initial_internal_sources();
+        if sources.is_empty() {
+            return Ok(state);
+        }
+        for (var, source) in self.law.internal_names().iter().zip(sources) {
+            let slot = state.component_index_or_err(var)?;
+            let from = material.component_index_or_err(source)?;
+            for cell in 0..state.cell_count() {
+                for g in 0..state.gauss_count() {
+                    state.set(cell, g, slot, material.get(cell, g, from)?)?;
+                }
+            }
+        }
+        Ok(state)
+    }
+
     /// Incremental radial-return at one Gauss point. Output layout =
     /// stress (Voigt, `v`) + plastic strain `eps_p` (full 3-D tensor, 6) +
     /// cumulated plastic strain `p` (1) + echoed strain `ε(B)` (full 3-D, 6)
@@ -449,7 +476,7 @@ impl Domain for Plasticity {
         &self,
         geom: &CellGeom,
         deformation: &SubElementField,
-        prev: Option<&SubElementField>,
+        prev: &SubElementField,
         material: Option<&SubElementField>,
         g: usize,
         dt: Option<f64>,
@@ -468,19 +495,17 @@ impl Domain for Plasticity {
             sigma: read_prev_stress(prev, cell, g),
             eps_p: read_prev_plastic_strain(prev, cell, g),
             p: prev_opt(prev, cell, g, "p"),
-            // The law's own variables, in the order it declared them. Left
-            // **empty** on the first step, where `prev` is `None`: a law whose
-            // state starts from a material constant (Gurson's initial porosity)
-            // must be able to tell « no state yet » from « state that is zero ».
-            vars: match prev {
-                None => Vec::new(),
-                Some(_) => self
-                    .law
-                    .internal_names()
-                    .iter()
-                    .map(|n| prev_opt(prev, cell, g, n))
-                    .collect(),
-            },
+            // The law's own variables, in the order it declared them. Always
+            // present: the state at rest is built once by `initial_state`, which
+            // seeds a law whose variable starts from a material constant
+            // (Gurson's porosity `f_0`). No law has to tell « no state yet »
+            // from « state that is zero » here.
+            vars: self
+                .law
+                .internal_names()
+                .iter()
+                .map(|n| prev_opt(prev, cell, g, n))
+                .collect(),
         };
 
         let (step, eps_b_full) = self.law.as_law().incremental_step(
@@ -583,12 +608,12 @@ fn read_strain(
 
 /// Read a component from the optional previous-state field `prev`, defaulting to
 /// `0.0` when there is no previous step (`None`) or the component is absent.
-pub(crate) fn prev_opt(prev: Option<&SubElementField>, cell: usize, g: usize, name: &str) -> f64 {
-    prev.map_or(0.0, |f| read_opt(f, cell, g, name))
+pub(crate) fn prev_opt(prev: &SubElementField, cell: usize, g: usize, name: &str) -> f64 {
+    read_opt(prev, cell, g, name)
 }
 
 /// Full 3-D strain `ε(A)` echoed by the previous step (zero on the first step).
-fn read_prev_strain(prev: Option<&SubElementField>, cell: usize, g: usize) -> [f64; 6] {
+fn read_prev_strain(prev: &SubElementField, cell: usize, g: usize) -> [f64; 6] {
     std::array::from_fn(|k| prev_opt(prev, cell, g, &format!("eps_{}", TENSOR_SUFFIXES[k])))
 }
 
@@ -596,12 +621,12 @@ fn read_prev_strain(prev: Option<&SubElementField>, cell: usize, g: usize) -> [f
 /// name: `sigma_zz` comes from the 2-D echo (or the 3-D dual), and the shear
 /// `sigma_yz`/`sigma_xz` are absent in 2-D (⇒ `0.0`), exactly the plane
 /// assumptions.
-fn read_prev_stress(prev: Option<&SubElementField>, cell: usize, g: usize) -> [f64; 6] {
+fn read_prev_stress(prev: &SubElementField, cell: usize, g: usize) -> [f64; 6] {
     std::array::from_fn(|k| prev_opt(prev, cell, g, &format!("sigma_{}", TENSOR_SUFFIXES[k])))
 }
 
 /// Previous plastic strain tensor `ε_p(A)` (VAR0), defaulting to zero.
-fn read_prev_plastic_strain(prev: Option<&SubElementField>, cell: usize, g: usize) -> [f64; 6] {
+fn read_prev_plastic_strain(prev: &SubElementField, cell: usize, g: usize) -> [f64; 6] {
     std::array::from_fn(|k| prev_opt(prev, cell, g, &format!("eps_p_{}", TENSOR_SUFFIXES[k])))
 }
 
@@ -620,6 +645,12 @@ fn tensor_index(i: usize, j: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The rest state of `d` on its material — the `prev` of a first step,
+    /// which the behaviour operator materializes for a caller who has none.
+    fn rest<D: Domain>(d: &D, mat: &Handle<SubElementField>) -> Handle<SubElementField> {
+        Handle::new(d.initial_state(&mat.read()).unwrap())
+    }
     use crate::aggregate::Aggregate;
     use crate::atoms::{ElementType, Node, NodeId};
     use crate::containers::field::SubField;
@@ -700,7 +731,7 @@ mod tests {
         strain.set_uniform("eps_xx", 1e-4).unwrap();
         let strain = Handle::new(strain);
         let out = pl
-            .integrate_behavior(&strain, None, Some(&mat), None)
+            .integrate_behavior(&strain, &rest(&pl, &mat), Some(&mat), None)
             .unwrap();
         // Confined uniaxial *strain* (only ε_xx ≠ 0): σ_xx = (λ+2μ)·ε.
         let (lambda, mu) = elasticity::lame(e, nu);
@@ -728,7 +759,7 @@ mod tests {
         strain.set_uniform("eps_xx", 1e-2).unwrap();
         let strain = Handle::new(strain);
         let out = pl
-            .integrate_behavior(&strain, None, Some(&mat), None)
+            .integrate_behavior(&strain, &rest(&pl, &mat), Some(&mat), None)
             .unwrap();
         for g in 0..out.gauss_count() {
             let s = [
@@ -764,7 +795,7 @@ mod tests {
         strain.set_uniform("eps_xx", eps0).unwrap();
         let strain = Handle::new(strain);
         let out = pl
-            .integrate_behavior(&strain, None, Some(&mat), None)
+            .integrate_behavior(&strain, &rest(&pl, &mat), Some(&mat), None)
             .unwrap();
         // Linear plane stress uniaxial-strain: σ_xx = E/(1-ν²)·ε, σ_yy = ν·σ_xx.
         let c = e / (1.0 - nu * nu);
@@ -795,7 +826,7 @@ mod tests {
         let mat = material(&pl, e, nu, sy);
         // First load past yield (prev = None ⇒ reference config A).
         let st1 = pl
-            .integrate_behavior(&uniaxial(&pl, 5e-3), None, Some(&mat), None)
+            .integrate_behavior(&uniaxial(&pl, 5e-3), &rest(&pl, &mat), Some(&mat), None)
             .unwrap();
         let p1 = st1.value(0, 0, "p").unwrap();
         assert!(p1 > 0.0);
@@ -804,7 +835,7 @@ mod tests {
         // output), *not* merged into the deformation field.
         let prev = Handle::new(st1);
         let st2 = pl
-            .integrate_behavior(&uniaxial(&pl, 6e-3), Some(&prev), Some(&mat), None)
+            .integrate_behavior(&uniaxial(&pl, 6e-3), &prev, Some(&mat), None)
             .unwrap();
         // Cumulated plastic strain only grows.
         assert!(st2.value(0, 0, "p").unwrap() >= p1);
@@ -823,20 +854,26 @@ mod tests {
 
         // Single step 0 → ε_final.
         let single = pl
-            .integrate_behavior(&uniaxial(&pl, eps_final), None, Some(&mat), None)
+            .integrate_behavior(
+                &uniaxial(&pl, eps_final),
+                &rest(&pl, &mat),
+                Some(&mat),
+                None,
+            )
             .unwrap();
 
-        // Ten proportional increments, threading `prev`.
+        // Ten proportional increments, threading `prev` — which starts at the
+        // rest state rather than at « nothing yet ».
         let nsteps = 10;
-        let mut prev: Option<Handle<SubElementField>> = None;
+        let mut prev = rest(&pl, &mat);
         for i in 1..=nsteps {
             let val = eps_final * i as f64 / nsteps as f64;
             let out = pl
-                .integrate_behavior(&uniaxial(&pl, val), prev.as_ref(), Some(&mat), None)
+                .integrate_behavior(&uniaxial(&pl, val), &prev, Some(&mat), None)
                 .unwrap();
-            prev = Some(Handle::new(out));
+            prev = Handle::new(out);
         }
-        let multi = prev.unwrap().read();
+        let multi = prev.read();
         for comp in [
             "sigma_xx", "sigma_yy", "sigma_zz", "p", "eps_p_xx", "eps_p_yy",
         ] {
@@ -860,7 +897,7 @@ mod tests {
 
         // Load well past yield.
         let loaded = Handle::new(
-            pl.integrate_behavior(&uniaxial(&pl, 1e-2), None, Some(&mat), None)
+            pl.integrate_behavior(&uniaxial(&pl, 1e-2), &rest(&pl, &mat), Some(&mat), None)
                 .unwrap(),
         );
         let p1 = loaded.read().value(0, 0, "p").unwrap();
@@ -868,7 +905,7 @@ mod tests {
 
         // Small unload (still far past yield), threading the loaded state as `prev`.
         let unloaded = pl
-            .integrate_behavior(&uniaxial(&pl, 9.9e-3), Some(&loaded), Some(&mat), None)
+            .integrate_behavior(&uniaxial(&pl, 9.9e-3), &loaded, Some(&mat), None)
             .unwrap();
         // Elastic: p unchanged.
         assert!(

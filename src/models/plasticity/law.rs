@@ -209,6 +209,19 @@ pub(crate) trait PlasticLawKind: Sync {
         Vec::new()
     }
 
+    /// Material component seeding each internal variable at rest, in
+    /// [`internal_names`](Self::internal_names) order. Empty — the usual case —
+    /// means every internal variable starts at zero.
+    ///
+    /// This is how a law states that its rest state is **not** the zero state:
+    /// Gurson's porosity starts at `f_0`, and a material that begins as a
+    /// perfect solid never damages. The initial state is built once, before the
+    /// first step, so the law never has to tell « no state yet » from « state
+    /// that is zero » at a Gauss point.
+    fn initial_internal_sources(&self) -> &'static [&'static str] {
+        &[]
+    }
+
     /// Whether the law needs the time increment. Erroring without one beats
     /// integrating a viscous law as if it were instantaneous.
     fn is_rate_dependent(&self) -> bool {

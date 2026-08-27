@@ -266,7 +266,7 @@ impl Domain for Truss {
         &self,
         geom: &CellGeom,
         input: &SubElementField,
-        _prev: Option<&SubElementField>,
+        _prev: &SubElementField,
         material: Option<&SubElementField>,
         g: usize,
         _dt: Option<f64>,
@@ -508,6 +508,12 @@ pub fn element_geometric(geom: &CellGeom, state: &SubElementField, ke: &mut [f64
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The rest state of `d` on its material — the `prev` of a first step,
+    /// which the behaviour operator materializes for a caller who has none.
+    fn rest<D: Domain>(d: &D, mat: &Handle<SubElementField>) -> Handle<SubElementField> {
+        Handle::new(d.initial_state(&mat.read()).unwrap())
+    }
     use crate::aggregate::Aggregate;
     use crate::atoms::{ElementType, Node, NodeId};
     use crate::containers::field::SubField;
@@ -581,7 +587,7 @@ mod tests {
         let strain = Handle::new(strain);
 
         let out = truss
-            .integrate_behavior(&strain, None, Some(&mat), None)
+            .integrate_behavior(&strain, &rest(&truss, &mat), Some(&mat), None)
             .unwrap();
         assert_eq!(out.components(), &["n".to_string()]);
         let expected = e * area * eps0;

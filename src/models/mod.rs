@@ -1336,6 +1336,25 @@ pub trait Domain: Sync {
     /// followed by the updated internal state (`VAR1`), in order.
     fn behavior_output_components(&self) -> Result<Vec<String>>;
 
+    /// The material state **at rest**, before any step — the `prev` of the first
+    /// step. **Provided**: zero on every output component, which is the rest
+    /// state of nearly every law (σ = 0, ε = 0, ε_p = 0, p = 0).
+    ///
+    /// It exists so that `prev` is **always** a real field. The alternative —
+    /// an `Option` threaded down to the Gauss point — made every physics ask
+    /// « is there a state yet? » some tens of millions of times per solve, to
+    /// answer the same thing every time; and it is a question about the *step*,
+    /// not about the point. The field has to be allocated for the step's output
+    /// anyway, so materializing it costs one buffer that was already coming.
+    ///
+    /// Redefine it where the rest state is **not** the zero state: a law whose
+    /// internal variable starts from a material constant (Gurson's initial
+    /// porosity `f_0`) seeds it here, once, instead of testing for emptiness at
+    /// every Gauss point.
+    fn initial_state(&self, _material: &SubElementField) -> Result<SubElementField> {
+        SubElementField::new(self.behavior_fespace(), self.behavior_output_components()?)
+    }
+
     /// Constitutive law at **one Gauss point** — the pure, sequential kernel a
     /// physics author writes. Integrates the step **A → B** for cell `geom.cell`
     /// at Gauss point `g`:
@@ -1344,9 +1363,9 @@ pub trait Domain: Sync {
     ///   temperature gradient `∇T`, …) produced by a *geometric* operator;
     /// - `prev` is the **converged state at the start of the step A** — the
     ///   dual flux/stress σ(A), the internal variables `VAR(A)`, and (for laws
-    ///   that form an increment) the start-of-step kinematics ε(A) — read by
-    ///   component name. It is `None` on the first step, where A is the reference
-    ///   configuration (σ(A) = 0, ε(A) = 0);
+    ///   that form an increment) the start-of-step kinematics ε(A). It is
+    ///   **always** a real field: on the first step it is
+    ///   [`initial_state`](Self::initial_state), the rest state;
     /// - `material` is the per-zone material data, `Some(_)` iff the domain
     ///   declares a [`material_fespace`](Self::material_fespace);
     /// - `dt` is the time increment, `None` for a rate-independent law (a
@@ -1364,7 +1383,7 @@ pub trait Domain: Sync {
         &self,
         geom: &CellGeom,
         deformation: &SubElementField,
-        prev: Option<&SubElementField>,
+        prev: &SubElementField,
         material: Option<&SubElementField>,
         g: usize,
         dt: Option<f64>,
@@ -1377,8 +1396,9 @@ pub trait Domain: Sync {
     ///
     /// This is the **incremental montage** A → B: `deformation` carries the
     /// end-of-step kinematics ε(B) alone, and `prev` — the *converged output of
-    /// the previous step* — carries the whole state at A (σ(A), `VAR(A)`, ε(A)).
-    /// `prev` is `None` on the first step. Returns the **material-state** field
+    /// the previous step*, or [`initial_state`](Self::initial_state) on the
+    /// first one — carries the whole state at A (σ(A), `VAR(A)`, ε(A)).
+    /// Returns the **material-state** field
     /// at B: the dual flux/stress followed by the updated internal-state
     /// variables (`VAR1`), which becomes the next step's `prev`. Where
     /// [`SubModelKind::build_stiffness_blocks`] is the *linearization* of the
@@ -1391,14 +1411,14 @@ pub trait Domain: Sync {
     fn integrate_behavior(
         &self,
         deformation: &Handle<SubElementField>,
-        prev: Option<&Handle<SubElementField>>,
+        prev: &Handle<SubElementField>,
         material: Option<&Handle<SubElementField>>,
         dt: Option<f64>,
     ) -> Result<SubElementField> {
         let fespace = self.behavior_fespace();
         let out_components = self.behavior_output_components()?;
-        let prev_guard = prev.map(|h| h.read());
-        let prev_ref = prev_guard.as_deref();
+        let prev_guard = prev.read();
+        let prev_ref: &SubElementField = &prev_guard;
         kernel::element_pointwise(
             &fespace,
             deformation,

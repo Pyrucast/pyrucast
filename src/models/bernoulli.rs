@@ -364,7 +364,7 @@ impl Domain for Bernoulli {
         &self,
         geom: &CellGeom,
         input: &SubElementField,
-        _prev: Option<&SubElementField>,
+        _prev: &SubElementField,
         material: Option<&SubElementField>,
         g: usize,
         _dt: Option<f64>,

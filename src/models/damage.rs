@@ -21,7 +21,7 @@
 //!
 //! Material components `E`, `nu`, `eps_d0`, `A_t`, `B_t`, `A_c`, `B_c`. The
 //! single internal variable `kappa` comes in as the previous-step state `prev`
-//! (`κ(A)`, floored at `eps_d0` in the update, so `None` on the first step is
+//! (`κ(A)`, floored at `eps_d0` in the update, so the zero of the rest state is
 //! fine) and out as the updated `VAR1`, alongside the scalar `damage`. The
 //! effective stress is a function of the current total strain `ε(B)` — damage
 //! mechanics has no strain increment; only `κ` is history.
@@ -352,7 +352,7 @@ impl Domain for Damage {
         &self,
         geom: &CellGeom,
         deformation: &SubElementField,
-        prev: Option<&SubElementField>,
+        prev: &SubElementField,
         material: Option<&SubElementField>,
         g: usize,
         _dt: Option<f64>,
@@ -364,17 +364,14 @@ impl Domain for Damage {
         // End-of-step strain ε(B); the law's history from `prev` (absent on the
         // first step, where every variable starts at zero).
         let eps = read_strain(deformation, cell, g, d, read.get("nu")?, self.kinematics)?;
-        // Left **empty** on the first step, where `prev` is `None`, so a law can
-        // tell « no state yet » from « state that is zero ».
-        let prev_vars: Vec<f64> = match prev {
-            None => Vec::new(),
-            Some(_) => self
-                .law
-                .internal_names()
-                .iter()
-                .map(|n| prev_opt(prev, cell, g, n))
-                .collect(),
-        };
+        // Always present: the state at rest is materialized once, before the
+        // first step, so no law has to recognise « no state yet » here.
+        let prev_vars: Vec<f64> = self
+            .law
+            .internal_names()
+            .iter()
+            .map(|n| prev_opt(prev, cell, g, n))
+            .collect();
 
         let update = self.law.update(&eps, &prev_vars, &read, d)?;
         let v = stress_names(d, self.kinematics).len();
@@ -432,6 +429,12 @@ fn read_strain(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The rest state of `d` on its material — the `prev` of a first step,
+    /// which the behaviour operator materializes for a caller who has none.
+    fn rest<D: Domain>(d: &D, mat: &Handle<SubElementField>) -> Handle<SubElementField> {
+        Handle::new(d.initial_state(&mat.read()).unwrap())
+    }
     use crate::aggregate::Aggregate;
     use crate::atoms::{ElementType, Node};
     use crate::containers::field::SubField;
@@ -498,7 +501,7 @@ mod tests {
         let eps0 = 1e-5; // < eps_d0 = 1e-4
         let strain = strain_field(&mz, eps0);
         let out = mz
-            .integrate_behavior(&strain, None, Some(&mat), None)
+            .integrate_behavior(&strain, &rest(&mz, &mat), Some(&mat), None)
             .unwrap();
         let (e, nu) = (30_000.0, 0.2);
         let c = e / (1.0 - nu * nu);
@@ -517,7 +520,7 @@ mod tests {
         let eps0 = 5e-4; // > eps_d0
         let strain = strain_field(&mz, eps0);
         let out = mz
-            .integrate_behavior(&strain, None, Some(&mat), None)
+            .integrate_behavior(&strain, &rest(&mz, &mat), Some(&mat), None)
             .unwrap();
         let (e, nu) = (30_000.0, 0.2);
         let c = e / (1.0 - nu * nu);
@@ -538,16 +541,16 @@ mod tests {
         let mat = material(&mz);
         // Load to 5e-4.
         let s1 = strain_field(&mz, 5e-4);
-        let st1 = mz.integrate_behavior(&s1, None, Some(&mat), None).unwrap();
+        let st1 = mz
+            .integrate_behavior(&s1, &rest(&mz, &mat), Some(&mat), None)
+            .unwrap();
         let k1 = st1.value(0, 0, "kappa").unwrap();
         let d1 = st1.value(0, 0, "damage").unwrap();
 
         // Unload to 2e-4, feeding the step-1 state (κ) via `prev`.
         let prev = Handle::new(st1);
         let s2 = strain_field(&mz, 2e-4);
-        let st2 = mz
-            .integrate_behavior(&s2, Some(&prev), Some(&mat), None)
-            .unwrap();
+        let st2 = mz.integrate_behavior(&s2, &prev, Some(&mat), None).unwrap();
         assert!((st2.value(0, 0, "kappa").unwrap() - k1).abs() < 1e-12);
         // Damage unchanged on unloading (same κ).
         assert!((st2.value(0, 0, "damage").unwrap() - d1).abs() < 1e-9);
@@ -584,7 +587,9 @@ mod tests {
         .unwrap();
         s.set_uniform("eps_xx", 5e-4).unwrap();
         let s = Handle::new(s);
-        let out = mz.integrate_behavior(&s, None, Some(&mat), None).unwrap();
+        let out = mz
+            .integrate_behavior(&s, &rest(&mz, &mat), Some(&mat), None)
+            .unwrap();
         for g in 0..out.gauss_count() {
             assert!(out.value(0, g, "damage").unwrap() > 0.0);
         }

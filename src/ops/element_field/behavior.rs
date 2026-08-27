@@ -26,7 +26,7 @@
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::ElementField;
 use crate::containers::model::Model;
-use crate::error::Result;
+use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 
 /// Integrate the constitutive law of `model` (Cast3m `COMP`), stepping A → B.
@@ -103,13 +103,10 @@ pub fn integrate(
         // outside the sub-model lock). The previous state is paired on the
         // behaviour subspace, exactly like the deformation.
         let input = deformation.sub_for_fespace(&beh_fespace)?;
-        let prev_zone = match prev {
-            Some(p) => Some(p.sub_for_fespace(&beh_fespace)?),
-            None => None,
-        };
         // Resolve the material zone by the components this physics needs, so a
         // shared fespace carrying several component-disjoint material zones
         // resolves each physics' own zone without an explicit consolidate.
+        // Resolved *before* the previous state, which a law may seed from it.
         let material = match mat_fespace {
             Some(fe) => Some(match mat_components {
                 Some(required) => materials.sub_for_fespace_with(&fe, &required)?,
@@ -118,9 +115,25 @@ pub fn integrate(
             None => None,
         };
 
-        let state =
-            h.read()
-                .integrate_behavior(&input, prev_zone.as_ref(), material.as_ref(), dt)?;
+        // The state at A. A caller with nothing to hand over — the first step —
+        // gets the **rest state**, materialized here, once for the whole zone.
+        // Below this line the state always exists, so no physics has to ask.
+        let prev_zone = match prev {
+            Some(p) => p.sub_for_fespace(&beh_fespace)?,
+            None => {
+                let mat = material.as_ref().ok_or_else(|| {
+                    PyrucastError::Message(format!(
+                        "{}: a behaviour without material data cannot build its rest state",
+                        h.read().as_kind().label()
+                    ))
+                })?;
+                Handle::new(h.read().initial_state(mat)?)
+            }
+        };
+
+        let state = h
+            .read()
+            .integrate_behavior(&input, &prev_zone, material.as_ref(), dt)?;
         out.add_sub(Handle::new(state))?;
     }
     Ok(out)

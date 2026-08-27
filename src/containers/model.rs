@@ -1944,7 +1944,7 @@ impl SubModel {
     pub(crate) fn integrate_behavior(
         &self,
         deformation: &Handle<SubElementField>,
-        prev: Option<&Handle<SubElementField>>,
+        prev: &Handle<SubElementField>,
         material: Option<&Handle<SubElementField>>,
         dt: Option<f64>,
     ) -> Result<SubElementField> {
@@ -1957,6 +1957,24 @@ impl SubModel {
                 ))
             })?
             .integrate_behavior(deformation, prev, material, dt)
+    }
+
+    /// This sub-model's material state **at rest** — the `prev` of a first step,
+    /// which [`crate::ops::element_field::behavior::integrate`] materializes so
+    /// that the state always exists.
+    pub(crate) fn initial_state(
+        &self,
+        material: &Handle<SubElementField>,
+    ) -> Result<SubElementField> {
+        self.as_kind()
+            .as_domain()
+            .ok_or_else(|| {
+                crate::error::PyrucastError::Message(format!(
+                    "{}: no behaviour — initial_state is undefined",
+                    self.as_kind().label()
+                ))
+            })?
+            .initial_state(&material.read())
     }
 
     /// Internal nodal forces `f = ∫ Bᵀ σ dΩ` of this sub-model (Cast3m `BSIG`).
