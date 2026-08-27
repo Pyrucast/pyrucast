@@ -2374,12 +2374,14 @@ pub fn scatter_to_nodes(
         },
     )?;
 
-    let mut out = SubNodeField::from_poi1(support, dual_vars.clone())?;
-    for (k, &nid) in unique.iter().enumerate() {
-        for (di, name) in dual_vars.iter().enumerate() {
-            out.set_value(nid, name, flat[k * n_dual + di])?;
-        }
-    }
+    // `flat` was accumulated at `slot_of[nid] * n_dual + di`, and `slot_of` is
+    // the position in the support's own connectivity — which is exactly how the
+    // field below indexes its rows. Same layout, so the write-back is a copy,
+    // not a lookup per (node, component): on a 400×80 mesh that loop used to
+    // take a read lock, hash a `NodeId` and search a component name sixty-five
+    // thousand times per call.
+    let mut out = SubNodeField::from_poi1(support, dual_vars)?;
+    out.values_mut().copy_from_slice(&flat);
     Ok(out)
 }
 

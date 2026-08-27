@@ -202,16 +202,18 @@ pub fn project_points(surface: &Mesh, points: &[Vec<f64>]) -> Result<Vec<Project
     // (submesh, cell) order with a cheap bbox-distance lower bound pruning the
     // ones that cannot beat the best candidate — result identical to a full
     // scan, so the tie-break is deterministic.
+    // Every point's dimension, checked **once**: it is a property of the list,
+    // and asking it inside the parallel map asked it per point.
+    if let Some(bad) = points.iter().find(|x| x.len() != sdim) {
+        return Err(PyrucastError::Message(format!(
+            "project_points: point has dim {} but the surface lives in {sdim}-D",
+            bad.len()
+        )));
+    }
     points
         .par_iter()
         .with_min_len(MIN_PARALLEL_LEN)
         .map(|x| -> Result<Projection> {
-            if x.len() != sdim {
-                return Err(PyrucastError::Message(format!(
-                    "project_points: point has dim {} but the surface lives in {sdim}-D",
-                    x.len()
-                )));
-            }
             let mut best: Option<(f64, &Facet, Vec<f64>)> = None;
             for facet in &facets {
                 if let Some((d2_min, _, _)) = &best

@@ -11,15 +11,13 @@ use crate::handle::Handle;
 /// [`restrict`] and [`restrict_like`].
 fn fill_from(sub: &mut SubNodeField, source: &NodeFieldView) -> Result<()> {
     let components = sub.components().to_vec();
-    // Owned list: the writes below re-lock the support, so no guard may be
-    // held across them.
-    for nid in sub.node_ids() {
-        for comp in &components {
-            if let Some(v) = source.value_opt(nid, comp) {
-                sub.set_value(nid, comp, v)?;
-            }
-        }
-    }
+    let nodes = sub.node_ids();
+    // The source's component positions, resolved **once** per zone; the gather
+    // then writes straight into the target's rows, which are in `nodes` order.
+    // Writing by name instead took a read lock on the support, hashed the
+    // `NodeId` and searched the component name — per node and per component.
+    let reads = source.resolve_reads(&components);
+    source.gather_cell(&nodes, &reads, sub.values_mut());
     Ok(())
 }
 
