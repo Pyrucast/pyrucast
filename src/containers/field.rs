@@ -217,6 +217,14 @@ impl<S: Any + Send + Sync> FieldView<S> {
 
 // ─── SubField ───────────────────────────────────────────────────────────────
 
+/// Marks a slot a field does not carry, in a table built by
+/// [`SubField::resolve_optional_components`].
+///
+/// `u32::MAX` and not `Option<u32>`: the table is read in the innermost loop of
+/// every physics, and a sentinel keeps it a flat `&[u32]` — one cache line for a
+/// whole tensor's worth of slots.
+pub const ABSENT_COMPONENT: u32 = u32::MAX;
+
 /// One homogeneous block of field values.
 ///
 /// The contract is purely structural: named components plus a flat value
@@ -289,6 +297,111 @@ pub trait SubField {
     fn component_index_or_err(&self, name: &str) -> Result<usize> {
         self.component_index(name)
             .ok_or_else(|| PyrucastError::Message(format!("unknown component: {}", name)))
+    }
+
+    /// Resolve a **canonical component order** into positions in this field —
+    /// the upstream half of index-based reading.
+    ///
+    /// A kernel that runs per Gauss point must not look components up by name:
+    /// the search is a string comparison, and it re-proves at every point what
+    /// is a property of the *zone*. It reads `values[table[SLOT]]` instead, and
+    /// this builds `table` — once per zone, outside any hot loop.
+    ///
+    /// Every name in `canonical` must be present: a field that cannot serve the
+    /// caller's convention is an error here, where it can be named, rather than
+    /// a wrong number later. `what` names the field in that message ("material",
+    /// "deformation", …), because a bare component name says nothing about which
+    /// of three fields is malformed. A field carrying **more** components than
+    /// asked is fine — the table simply ignores them.
+    ///
+    /// Use [`resolve_optional_components`](Self::resolve_optional_components)
+    /// for slots a field may legitimately omit.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
+    /// // Un matériau rangé « à l'envers » par rapport à la convention.
+    /// let mat = SubElementField::from_uniform_per_component(
+    ///     fes.get(0)?, vec!["nu".into(), "E".into()], &[0.3, 210_000.0])?;
+    /// // La table absorbe l'écart d'ordre : la lecture reste juste.
+    /// let table = mat.resolve_components(&["E", "nu"], "material")?;
+    /// assert_eq!(table, vec![1, 0]);
+    /// let row = mat.point_values(0, 0)?;
+    /// assert_eq!(row[table[0] as usize], 210_000.0); // E
+    /// assert_eq!(row[table[1] as usize], 0.3);       // nu
+    /// // Une composante requise absente erre ici, en se nommant.
+    /// let err = mat.resolve_components(&["E", "sigma_y"], "material").unwrap_err();
+    /// assert!(format!("{err}").contains("sigma_y"));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    fn resolve_components(&self, canonical: &[&str], what: &str) -> Result<Vec<u32>> {
+        canonical
+            .iter()
+            .map(|name| {
+                self.component_index(name).map(|i| i as u32).ok_or_else(|| {
+                    PyrucastError::Message(format!(
+                        "{what}: missing component '{name}' — expected {canonical:?}, \
+                             this field carries {:?}",
+                        self.components()
+                    ))
+                })
+            })
+            .collect()
+    }
+
+    /// Resolve a canonical order where a slot may be **absent**, marking each
+    /// missing one [`ABSENT_COMPONENT`].
+    ///
+    /// The counterpart of [`resolve_components`](Self::resolve_components) for
+    /// what a field is allowed not to carry: an optional material constant the
+    /// caller never supplied, a state component a 2-D kinematics does not span.
+    /// Absence is a fact of the zone, so the kernel branches on the table it was
+    /// handed — never on a lookup it performs itself.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::field::{SubField, ABSENT_COMPONENT};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
+    /// let mat = SubElementField::from_uniform_per_component(
+    ///     fes.get(0)?, vec!["E".into(), "nu".into(), "alpha".into()],
+    ///     &[210_000.0, 0.3, 1.2e-5])?;
+    /// // `alpha` a été fourni, `rho` non : la table le dit, une fois pour la zone.
+    /// let table = mat.resolve_optional_components(&["alpha", "rho"]);
+    /// assert_eq!(table[0], 2);
+    /// assert_eq!(table[1], ABSENT_COMPONENT);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    fn resolve_optional_components(&self, canonical: &[&str]) -> Vec<u32> {
+        canonical
+            .iter()
+            .map(|name| {
+                self.component_index(name)
+                    .map_or(ABSENT_COMPONENT, |i| i as u32)
+            })
+            .collect()
     }
 
     /// Flat value buffer, mutable (same layout as [`SubField::values`]).
