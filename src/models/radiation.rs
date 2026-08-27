@@ -134,7 +134,7 @@ const OUTPUT_TANGENT: &str = "ktan";
 /// // d'où un couplage direct dans sa raideur.
 /// let r = Radiation::new(zone.clone())?;
 /// assert_eq!(r.primal_vars(), vec!["T".to_string()]);
-/// assert!(r.material_components().unwrap().contains(&"emis".to_string()));
+/// assert!(r.material_components().contains(&"emis".to_string()));
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Clone, Serialize, Deserialize)]
@@ -171,7 +171,7 @@ impl Radiation {
     /// // d'où un couplage direct dans sa raideur.
     /// let r = Radiation::new(zone.clone())?;
     /// assert_eq!(r.primal_vars(), vec!["T".to_string()]);
-    /// assert!(r.material_components().unwrap().contains(&"emis".to_string()));
+    /// assert!(r.material_components().contains(&"emis".to_string()));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
@@ -295,8 +295,8 @@ impl Domain for Radiation {
         self.fespace.clone()
     }
 
-    fn material_components(&self) -> Option<Vec<String>> {
-        Some(owned_components(MATERIAL_COMPONENTS))
+    fn material_components(&self) -> Vec<String> {
+        owned_components(MATERIAL_COMPONENTS)
     }
 
     fn optional_material_components(&self) -> &'static [&'static str] {
@@ -307,8 +307,8 @@ impl Domain for Radiation {
         self.fespace.clone()
     }
 
-    fn behavior_output_components(&self) -> Result<Vec<String>> {
-        Ok(vec![OUTPUT_FLUX.to_string(), OUTPUT_TANGENT.to_string()])
+    fn behavior_output_components(&self) -> Vec<String> {
+        vec![OUTPUT_FLUX.to_string(), OUTPUT_TANGENT.to_string()]
     }
 
     /// `σε(T⁴ − T_∞⁴)` and its derivative `4σεT³`, at one Gauss point. Emitting

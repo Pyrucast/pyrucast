@@ -99,7 +99,7 @@ fn behavior_of(model: BeamModel) -> &'static [&'static str] {
 /// // La poutre d'Euler-Bernoulli : flèche interpolée en Hermite cubique,
 /// // d'où deux fonctions de forme par nœud.
 /// let b = Bernoulli::new(zone.clone())?;
-/// assert!(b.material_components().unwrap().contains(&"E".to_string()));
+/// assert!(b.material_components().contains(&"E".to_string()));
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Clone, Serialize, Deserialize)]
@@ -134,7 +134,7 @@ impl Bernoulli {
     /// // La poutre d'Euler-Bernoulli : flèche interpolée en Hermite cubique,
     /// // d'où deux fonctions de forme par nœud.
     /// let b = Bernoulli::new(zone.clone())?;
-    /// assert!(b.material_components().unwrap().contains(&"E".to_string()));
+    /// assert!(b.material_components().contains(&"E".to_string()));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
@@ -334,8 +334,8 @@ impl Domain for Bernoulli {
         self.fespace.clone()
     }
 
-    fn material_components(&self) -> Option<Vec<String>> {
-        Some(owned_components(material_of(self.model)))
+    fn material_components(&self) -> Vec<String> {
+        owned_components(material_of(self.model))
     }
 
     /// `rho` for the mass, and — in the 1-D configuration — the full area `A`,
@@ -351,11 +351,11 @@ impl Domain for Bernoulli {
         self.fespace.clone()
     }
 
-    fn behavior_output_components(&self) -> Result<Vec<String>> {
-        Ok(behavior_of(self.model)
+    fn behavior_output_components(&self) -> Vec<String> {
+        behavior_of(self.model)
             .iter()
             .map(|s| s.to_string())
-            .collect())
+            .collect()
     }
 
     /// The section forces from the generalised strains — a **linear** law, as it

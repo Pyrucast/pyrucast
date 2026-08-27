@@ -67,7 +67,7 @@ fn strain_names(space_dim: usize) -> Vec<String> {
 /// # use pyrucast::models::truss::Truss;
 /// // La barre : deux constantes, aucune flexion.
 /// let t = Truss::new(zone.clone())?;
-/// assert_eq!(t.material_components(), Some(vec!["E".to_string(), "A".to_string()]));
+/// assert_eq!(t.material_components(), vec!["E".to_string(), "A".to_string()]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Clone, Serialize, Deserialize)]
@@ -103,7 +103,7 @@ impl Truss {
     /// # use pyrucast::models::truss::Truss;
     /// // La barre : deux constantes, aucune flexion.
     /// let t = Truss::new(zone.clone())?;
-    /// assert_eq!(t.material_components(), Some(vec!["E".to_string(), "A".to_string()]));
+    /// assert_eq!(t.material_components(), vec!["E".to_string(), "A".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
@@ -243,8 +243,8 @@ impl Domain for Truss {
         self.fespace.clone()
     }
 
-    fn material_components(&self) -> Option<Vec<String>> {
-        Some(owned_components(MATERIAL_COMPONENTS))
+    fn material_components(&self) -> Vec<String> {
+        owned_components(MATERIAL_COMPONENTS)
     }
 
     /// `rho` (density) — required only by the mass matrix.
@@ -256,8 +256,8 @@ impl Domain for Truss {
         self.fespace.clone()
     }
 
-    fn behavior_output_components(&self) -> Result<Vec<String>> {
-        Ok(vec!["n".to_string()])
+    fn behavior_output_components(&self) -> Vec<String> {
+        vec!["n".to_string()]
     }
 
     /// Axial force `N = E·A·ε_axial` at one Gauss point, with `ε_axial = cᵀ ε c`

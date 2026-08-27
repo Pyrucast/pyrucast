@@ -138,7 +138,7 @@ pub(crate) fn check_continuum_dimensions(
 /// # use pyrucast::models::elasticity::Elasticity;
 /// # use pyrucast::models::tensor::Kinematics;
 /// let e = Elasticity::new(zone.clone(), Kinematics::PlaneStress)?;
-/// assert_eq!(e.material_components(), Some(vec!["E".to_string(), "nu".to_string()]));
+/// assert_eq!(e.material_components(), vec!["E".to_string(), "nu".to_string()]);
 /// // La dilatation thermique est **facultative** : sans `alpha`, le modèle
 /// // s'assemble sans elle.
 /// assert!(e.optional_material_components().contains(&"alpha"));
@@ -177,7 +177,7 @@ impl Elasticity {
     /// # use pyrucast::models::elasticity::Elasticity;
     /// # use pyrucast::models::tensor::Kinematics;
     /// let e = Elasticity::new(zone.clone(), Kinematics::PlaneStress)?;
-    /// assert_eq!(e.material_components(), Some(vec!["E".to_string(), "nu".to_string()]));
+    /// assert_eq!(e.material_components(), vec!["E".to_string(), "nu".to_string()]);
     /// // La dilatation thermique est **facultative** : sans `alpha`, le modèle
     /// // s'assemble sans elle.
     /// assert!(e.optional_material_components().contains(&"alpha"));
@@ -213,7 +213,7 @@ impl Elasticity {
     /// // matériau, qui porte alors les modules **et** les axes.
     /// let o = Elasticity::with_symmetry(
     ///     zone.clone(), Kinematics::PlaneStress, MaterialSymmetry::Orthotropic)?;
-    /// assert!(o.material_components().unwrap().len() > 2);
+    /// assert!(o.material_components().len() > 2);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     /// # use pyrucast::models::tensor::Kinematics;
@@ -384,11 +384,8 @@ impl Domain for Elasticity {
         self.fespace.clone()
     }
 
-    fn material_components(&self) -> Option<Vec<String>> {
-        Some(owned_components(material_contract(
-            self.symmetry,
-            self.space_dim,
-        )))
+    fn material_components(&self) -> Vec<String> {
+        owned_components(material_contract(self.symmetry, self.space_dim))
     }
 
     /// `alpha` (thermal-expansion coefficient) — accepted through the material
@@ -403,8 +400,8 @@ impl Domain for Elasticity {
         self.fespace.clone()
     }
 
-    fn behavior_output_components(&self) -> Result<Vec<String>> {
-        Ok(stress_names(self.space_dim, self.kinematics))
+    fn behavior_output_components(&self) -> Vec<String> {
+        stress_names(self.space_dim, self.kinematics)
     }
 
     /// Linear stress σ = D·ε at one Gauss point (material constants per cell).

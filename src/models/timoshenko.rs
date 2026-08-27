@@ -101,7 +101,7 @@ fn behavior_of(model: BeamModel) -> &'static [&'static str] {
 /// // La poutre exacte : son interpolation dépend du matériau par Φ, donc
 /// // elle appartient à la formulation, non à l'espace.
 /// let t = Timoshenko::new(zone.clone())?;
-/// assert!(t.material_components().unwrap().contains(&"A_s".to_string()));
+/// assert!(t.material_components().contains(&"A_s".to_string()));
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Clone, Serialize, Deserialize)]
@@ -136,7 +136,7 @@ impl Timoshenko {
     /// // La poutre exacte : son interpolation dépend du matériau par Φ, donc
     /// // elle appartient à la formulation, non à l'espace.
     /// let t = Timoshenko::new(zone.clone())?;
-    /// assert!(t.material_components().unwrap().contains(&"A_s".to_string()));
+    /// assert!(t.material_components().contains(&"A_s".to_string()));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
@@ -297,8 +297,8 @@ impl Domain for Timoshenko {
         self.fespace.clone()
     }
 
-    fn material_components(&self) -> Option<Vec<String>> {
-        Some(owned_components(material_of(self.model)))
+    fn material_components(&self) -> Vec<String> {
+        owned_components(material_of(self.model))
     }
 
     /// `rho` for the mass, and — in the 1-D configuration — the full area `A`,
@@ -314,11 +314,11 @@ impl Domain for Timoshenko {
         self.fespace.clone()
     }
 
-    fn behavior_output_components(&self) -> Result<Vec<String>> {
-        Ok(behavior_of(self.model)
+    fn behavior_output_components(&self) -> Vec<String> {
+        behavior_of(self.model)
             .iter()
             .map(|s| s.to_string())
-            .collect())
+            .collect()
     }
 
     /// The section forces from the generalised strains — a **linear** law, as

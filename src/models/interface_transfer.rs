@@ -320,21 +320,19 @@ impl Domain for InterfaceTransfer {
 
     /// One coefficient per transferred quantity, named after it — `h_T`,
     /// `h_c_H2`, `h_u_x`.
-    fn material_components(&self) -> Option<Vec<String>> {
-        Some(
-            self.components
-                .iter()
-                .map(|(p, _)| coefficient_name(p))
-                .collect(),
-        )
+    fn material_components(&self) -> Vec<String> {
+        self.components
+            .iter()
+            .map(|(p, _)| coefficient_name(p))
+            .collect()
     }
 
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.side_a.clone()
     }
 
-    fn behavior_output_components(&self) -> Result<Vec<String>> {
-        Ok(self.components.iter().map(|(p, _)| flux_name(p)).collect())
+    fn behavior_output_components(&self) -> Vec<String> {
+        self.components.iter().map(|(p, _)| flux_name(p)).collect()
     }
 
     /// The exchanged flux density `h·(a₁ − a₂)` at one Gauss point, from the jump

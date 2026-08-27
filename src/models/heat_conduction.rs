@@ -234,7 +234,7 @@ impl HeatConduction {
     /// // Bâtit le POI1 stable des nœuds de la zone, réutilisé comme support de
     /// // ligne et de colonne de **tous** les blocs assemblés.
     /// let hc = HeatConduction::new(zone.clone())?;
-    /// assert_eq!(hc.material_components(), Some(vec!["k".to_string()]));
+    /// assert_eq!(hc.material_components(), vec!["k".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
@@ -271,7 +271,7 @@ impl HeatConduction {
     /// # use pyrucast::models::Domain;
     /// // Le constructeur général, dont `new` est le cas isotrope.
     /// let ortho = HeatConduction::with_symmetry(zone.clone(), MaterialSymmetry::Orthotropic)?;
-    /// assert!(ortho.material_components().unwrap().len() > 1);
+    /// assert!(ortho.material_components().len() > 1);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn with_symmetry(
@@ -404,11 +404,8 @@ impl Domain for HeatConduction {
         self.fespace.clone()
     }
 
-    fn material_components(&self) -> Option<Vec<String>> {
-        Some(owned_components(material_contract(
-            self.symmetry,
-            self.space_dim,
-        )))
+    fn material_components(&self) -> Vec<String> {
+        owned_components(material_contract(self.symmetry, self.space_dim))
     }
 
     /// `rho` + `cp` — required only by the heat-capacity (mass) matrix, never by
@@ -421,8 +418,8 @@ impl Domain for HeatConduction {
         self.fespace.clone()
     }
 
-    fn behavior_output_components(&self) -> Result<Vec<String>> {
-        Ok(flux_components(self.fespace.read().space_dim()))
+    fn behavior_output_components(&self) -> Vec<String> {
+        flux_components(self.fespace.read().space_dim())
     }
 
     /// Linear constitutive law: weak-form flux = k·∇T at one Gauss point.

@@ -87,7 +87,7 @@ use serde::{Deserialize, Serialize};
 /// let b = BoundaryTransfer::new(
 ///     zone.clone(), vec![("T".into(), "q".into())], Physics::Thermal)?;
 /// assert_eq!(b.primal_vars(), vec!["T".to_string()]);
-/// assert!(b.material_components().unwrap().contains(&"h_T".to_string()));
+/// assert!(b.material_components().contains(&"h_T".to_string()));
 /// // Une liste vide n'a ni matrice ni coefficient : refusée.
 /// assert!(BoundaryTransfer::new(zone.clone(), vec![], Physics::Thermal).is_err());
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -139,7 +139,7 @@ impl BoundaryTransfer {
     /// let b = BoundaryTransfer::new(
     ///     zone.clone(), vec![("T".into(), "q".into())], Physics::Thermal)?;
     /// assert_eq!(b.primal_vars(), vec!["T".to_string()]);
-    /// assert!(b.material_components().unwrap().contains(&"h_T".to_string()));
+    /// assert!(b.material_components().contains(&"h_T".to_string()));
     /// // Une liste vide n'a ni matrice ni coefficient : refusée.
     /// assert!(BoundaryTransfer::new(zone.clone(), vec![], Physics::Thermal).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -238,21 +238,19 @@ impl Domain for BoundaryTransfer {
     /// One coefficient per transferred quantity, named after it — `h_T`,
     /// `h_c_H2`, `h_u_x`. Derived, which is why the contract had to become
     /// owned.
-    fn material_components(&self) -> Option<Vec<String>> {
-        Some(
-            self.components
-                .iter()
-                .map(|(p, _)| coefficient_name(p))
-                .collect(),
-        )
+    fn material_components(&self) -> Vec<String> {
+        self.components
+            .iter()
+            .map(|(p, _)| coefficient_name(p))
+            .collect()
     }
 
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.fespace.clone()
     }
 
-    fn behavior_output_components(&self) -> Result<Vec<String>> {
-        Ok(self.components.iter().map(|(p, _)| flux_name(p)).collect())
+    fn behavior_output_components(&self) -> Vec<String> {
+        self.components.iter().map(|(p, _)| flux_name(p)).collect()
     }
 
     /// The linear film law, one quantity at a time: the weak-form flux density

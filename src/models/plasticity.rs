@@ -134,7 +134,7 @@ fn echoes_sigma_zz(space_dim: usize, kinematics: Kinematics) -> bool {
 /// // La physique élastoplastique d'une zone : sa loi décide du matériau
 /// // qu'elle réclame et de l'état qu'elle porte.
 /// let p = Plasticity::new(zone.clone(), Kinematics::PlaneStrain)?;
-/// assert!(p.material_components().unwrap().contains(&"sigma_y".to_string()));
+/// assert!(p.material_components().contains(&"sigma_y".to_string()));
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Clone, Serialize, Deserialize)]
@@ -171,7 +171,7 @@ impl Plasticity {
     /// // Von Mises **parfaite** : la loi par défaut, celle avec laquelle cette
     /// // physique est née.
     /// let p = Plasticity::new(zone.clone(), Kinematics::PlaneStrain)?;
-    /// assert_eq!(p.material_components().unwrap().len(), 3); // E, nu, sigma_y
+    /// assert_eq!(p.material_components().len(), 3); // E, nu, sigma_y
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(fespace: Handle<SubFiniteElementSpace>, kinematics: Kinematics) -> Result<Self> {
@@ -205,7 +205,7 @@ impl Plasticity {
     /// // la dimension de l'espace.
     /// let p = Plasticity::with_law(
     ///     zone.clone(), Kinematics::PlaneStrain, PlasticLaw::Isotropic)?;
-    /// assert!(p.material_components().unwrap().contains(&"H".to_string()));
+    /// assert!(p.material_components().contains(&"H".to_string()));
     /// // Un modèle solide sur une zone 2-D est refusé.
     /// assert!(Plasticity::with_law(
     ///     zone.clone(), Kinematics::Full3D, PlasticLaw::Perfect).is_err());
@@ -389,8 +389,8 @@ impl Domain for Plasticity {
         self.fespace.clone()
     }
 
-    fn material_components(&self) -> Option<Vec<String>> {
-        Some(owned_components(self.law.material_components()))
+    fn material_components(&self) -> Vec<String> {
+        owned_components(self.law.material_components())
     }
 
     /// `alpha` (thermal expansion) and `rho` (density) — the same pair
@@ -426,7 +426,7 @@ impl Domain for Plasticity {
         self.fespace.clone()
     }
 
-    fn behavior_output_components(&self) -> Result<Vec<String>> {
+    fn behavior_output_components(&self) -> Vec<String> {
         let mut comps = stress_names(self.space_dim, self.kinematics);
         comps.extend(state_names());
         comps.extend(echo_names(self.space_dim, self.kinematics));
@@ -439,7 +439,7 @@ impl Domain for Plasticity {
             self.space_dim,
             self.kinematics,
         ));
-        Ok(comps)
+        comps
     }
 
     /// Zero everywhere, **except** the internal variables a law starts from a
@@ -457,7 +457,7 @@ impl Domain for Plasticity {
 
     fn initial_state(&self, material: &SubElementField) -> Result<SubElementField> {
         let mut state =
-            SubElementField::new(self.fespace.clone(), self.behavior_output_components()?)?;
+            SubElementField::new(self.fespace.clone(), self.behavior_output_components())?;
         let sources = self.law.as_law().initial_internal_sources();
         if sources.is_empty() {
             return Ok(state);
@@ -717,7 +717,7 @@ mod tests {
         assert_eq!(pl.dual_vars(), vec!["f_x", "f_y"]);
         assert_eq!(
             pl.material_components(),
-            Some(owned_components(PlasticLaw::Perfect.material_components()))
+            owned_components(PlasticLaw::Perfect.material_components())
         );
     }
 

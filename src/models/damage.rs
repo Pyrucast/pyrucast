@@ -81,7 +81,7 @@ use serde::{Deserialize, Serialize};
 /// # use pyrucast::models::tensor::Kinematics;
 /// // Mazars par défaut : un seuil et deux branches, traction et compression.
 /// let d = Damage::new(zone.clone(), Kinematics::PlaneStress)?;
-/// assert!(d.material_components().unwrap().contains(&"eps_d0".to_string()));
+/// assert!(d.material_components().contains(&"eps_d0".to_string()));
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Clone, Serialize, Deserialize)]
@@ -117,7 +117,7 @@ impl Damage {
     /// # use pyrucast::models::tensor::Kinematics;
     /// // Mazars par défaut : un seuil et deux branches, traction et compression.
     /// let d = Damage::new(zone.clone(), Kinematics::PlaneStress)?;
-    /// assert!(d.material_components().unwrap().contains(&"eps_d0".to_string()));
+    /// assert!(d.material_components().contains(&"eps_d0".to_string()));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(fespace: Handle<SubFiniteElementSpace>, kinematics: Kinematics) -> Result<Self> {
@@ -152,7 +152,7 @@ impl Damage {
     /// // deux résistances là où Mazars n'en demande qu'une.
     /// let tc = Damage::with_law(
     ///     zone.clone(), Kinematics::PlaneStress, DamageLaw::DamageTc)?;
-    /// assert!(tc.material_components().unwrap().contains(&"f_t".to_string()));
+    /// assert!(tc.material_components().contains(&"f_t".to_string()));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn with_law(
@@ -310,10 +310,8 @@ impl Domain for Damage {
         self.fespace.clone()
     }
 
-    fn material_components(&self) -> Option<Vec<String>> {
-        Some(owned_components(
-            self.law.material_components(self.space_dim),
-        ))
+    fn material_components(&self) -> Vec<String> {
+        owned_components(self.law.material_components(self.space_dim))
     }
 
     /// `alpha` (thermal expansion) and `rho` (density) — the same pair
@@ -338,12 +336,12 @@ impl Domain for Damage {
         self.fespace.clone()
     }
 
-    fn behavior_output_components(&self) -> Result<Vec<String>> {
+    fn behavior_output_components(&self) -> Vec<String> {
         let mut comps = stress_names(self.space_dim, self.kinematics);
         comps.push("damage".into());
         // The law's own history and per-direction damages.
         comps.extend(self.law.internal_names());
-        Ok(comps)
+        comps
     }
 
     /// One damage step at a Gauss point. Output layout = stress (Voigt, `v`) +
@@ -486,10 +484,7 @@ mod tests {
         let mz = unit_quad(Kinematics::PlaneStress);
         assert_eq!(mz.primal_vars(), vec!["u_x", "u_y"]);
         assert_eq!(mz.dual_vars(), vec!["f_x", "f_y"]);
-        assert_eq!(
-            mz.material_components(),
-            Some(owned_components(mazars::MATERIAL))
-        );
+        assert_eq!(mz.material_components(), owned_components(mazars::MATERIAL));
     }
 
     /// Below the damage threshold the response is elastic: D = 0 and σ_xx is

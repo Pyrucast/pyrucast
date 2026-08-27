@@ -1718,9 +1718,7 @@ impl SubModel {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn material_components(&self) -> Option<Vec<String>> {
-        self.as_kind()
-            .as_domain()
-            .and_then(|d| d.material_components())
+        self.as_kind().as_domain().map(|d| d.material_components())
     }
 
     /// Optional material component names this sub-model accepts (never required).

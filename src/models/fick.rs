@@ -439,12 +439,8 @@ impl Domain for Fick {
     /// Every diffusivity carries the species and goes last (`D_H2`, `D_1_H2`,
     /// `D_11_H2`); the material axes `V1X…V2Z` keep their bare names, being the
     /// medium's frame rather than the species' business.
-    fn material_components(&self) -> Option<Vec<String>> {
-        Some(material_contract(
-            self.symmetry,
-            self.space_dim,
-            &self.species,
-        ))
+    fn material_components(&self) -> Vec<String> {
+        material_contract(self.symmetry, self.space_dim, &self.species)
     }
 
     /// `poro` — required only by the storage (mass) matrix, never by the
@@ -457,8 +453,8 @@ impl Domain for Fick {
         self.fespace.clone()
     }
 
-    fn behavior_output_components(&self) -> Result<Vec<String>> {
-        Ok(flux_components(self.space_dim, &self.species))
+    fn behavior_output_components(&self) -> Vec<String> {
+        flux_components(self.space_dim, &self.species)
     }
 
     /// Fick's law: weak-form flux `D·∇c` at one Gauss point.

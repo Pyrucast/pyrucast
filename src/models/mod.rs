@@ -1287,7 +1287,7 @@ pub fn owned_components(names: &[&str]) -> Vec<String> {
 /// // Matière et comportement sont **une seule** capacité : le matériau
 /// // paramètre la loi de comportement, il n'a pas de sens sans elle.
 /// let d = volume.as_kind().as_domain().unwrap();
-/// assert_eq!(d.material_components(), Some(vec!["k".to_string()]));
+/// assert_eq!(d.material_components(), vec!["k".to_string()]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub trait Domain: Sync {
@@ -1306,8 +1306,8 @@ pub trait Domain: Sync {
     /// when the material field is built, so the allocation is not on any hot
     /// path. Most implementers hand a static list to
     /// [`owned_components`](fn@owned_components) and are done.
-    fn material_components(&self) -> Option<Vec<String>> {
-        None
+    fn material_components(&self) -> Vec<String> {
+        Vec::new()
     }
 
     /// Material component names this domain **accepts but does not require**:
@@ -1334,7 +1334,7 @@ pub trait Domain: Sync {
     /// Output component names of the material-state field produced by
     /// [`integrate_point`](Self::integrate_point) — the dual flux/stress
     /// followed by the updated internal state (`VAR1`), in order.
-    fn behavior_output_components(&self) -> Result<Vec<String>>;
+    fn behavior_output_components(&self) -> Vec<String>;
 
     /// The material state **at rest**, before any step — the `prev` of the first
     /// step. **Provided**: zero on every output component, which is the rest
@@ -1352,7 +1352,7 @@ pub trait Domain: Sync {
     /// porosity `f_0`) seeds it here, once, instead of testing for emptiness at
     /// every Gauss point.
     fn initial_state(&self, _material: &SubElementField) -> Result<SubElementField> {
-        SubElementField::new(self.behavior_fespace(), self.behavior_output_components()?)
+        SubElementField::new(self.behavior_fespace(), self.behavior_output_components())
     }
 
     /// Whether this domain's law needs the **time increment** — a creep or
@@ -1429,7 +1429,7 @@ pub trait Domain: Sync {
         dt: f64,
     ) -> Result<SubElementField> {
         let fespace = self.behavior_fespace();
-        let out_components = self.behavior_output_components()?;
+        let out_components = self.behavior_output_components();
         let prev_guard = prev.read();
         let prev_ref: &SubElementField = &prev_guard;
         kernel::element_pointwise(

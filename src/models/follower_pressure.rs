@@ -145,7 +145,7 @@ fn traction_names(space_dim: usize) -> Vec<String> {
 /// // Une pression qui tourne avec la surface : une seule constante.
 /// let f = FollowerPressure::new(zone.clone())?;
 /// assert_eq!(f.material_components(),
-///            Some(vec![follower_pressure::MATERIAL_COMPONENT.to_string()]));
+///            vec![follower_pressure::MATERIAL_COMPONENT.to_string()]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Clone, Serialize, Deserialize)]
@@ -181,7 +181,7 @@ impl FollowerPressure {
     /// // Une pression qui tourne avec la surface : une seule constante.
     /// let f = FollowerPressure::new(zone.clone())?;
     /// assert_eq!(f.material_components(),
-    ///            Some(vec![follower_pressure::MATERIAL_COMPONENT.to_string()]));
+    ///            vec![follower_pressure::MATERIAL_COMPONENT.to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
@@ -292,16 +292,16 @@ impl Domain for FollowerPressure {
         self.fespace.clone()
     }
 
-    fn material_components(&self) -> Option<Vec<String>> {
-        Some(owned_components(MATERIAL_COMPONENTS))
+    fn material_components(&self) -> Vec<String> {
+        owned_components(MATERIAL_COMPONENTS)
     }
 
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.fespace.clone()
     }
 
-    fn behavior_output_components(&self) -> Result<Vec<String>> {
-        Ok(traction_names(self.space_dim))
+    fn behavior_output_components(&self) -> Vec<String> {
+        traction_names(self.space_dim)
     }
 
     /// The referential traction at one Gauss point, from the deformed tangents.

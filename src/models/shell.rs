@@ -172,7 +172,7 @@ impl std::fmt::Display for ShellModel {
 /// // Une coque vit sur une surface plongée en 3-D et porte l'épaisseur
 /// // dans son matériau.
 /// let s = Shell::new(zone.clone(), ShellModel::Thick)?;
-/// assert!(s.material_components().unwrap().contains(&"h".to_string()));
+/// assert!(s.material_components().contains(&"h".to_string()));
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Clone, Serialize, Deserialize)]
@@ -212,7 +212,7 @@ impl Shell {
     /// // Une coque vit sur une surface plongée en 3-D et porte l'épaisseur
     /// // dans son matériau.
     /// let s = Shell::new(zone.clone(), ShellModel::Thick)?;
-    /// assert!(s.material_components().unwrap().contains(&"h".to_string()));
+    /// assert!(s.material_components().contains(&"h".to_string()));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(fespace: Handle<SubFiniteElementSpace>, model: ShellModel) -> Result<Self> {
@@ -334,8 +334,8 @@ impl Domain for Shell {
         self.fespace.clone()
     }
 
-    fn material_components(&self) -> Option<Vec<String>> {
-        Some(owned_components(MATERIAL_COMPONENTS))
+    fn material_components(&self) -> Vec<String> {
+        owned_components(MATERIAL_COMPONENTS)
     }
 
     /// `rho` for a mass matrix, `k_s` to override the shear-correction factor
@@ -357,13 +357,13 @@ impl Domain for Shell {
     /// element does not: its `Q` is a **reaction**, recovered from the gradient
     /// of the moments, not a constitutive product — reporting it here would
     /// state a law that does not exist.
-    fn behavior_output_components(&self) -> Result<Vec<String>> {
+    fn behavior_output_components(&self) -> Vec<String> {
         let n = if self.model.has_transverse_shear() {
             BEHAVIOR.len()
         } else {
             BEHAVIOR_NO_SHEAR
         };
-        Ok(BEHAVIOR[..n].iter().map(|s| s.to_string()).collect())
+        BEHAVIOR[..n].iter().map(|s| s.to_string()).collect()
     }
 
     /// The generalised forces from the generalised strains — a linear law, as
