@@ -47,18 +47,6 @@ import os
 
 import pyrucast
 
-# Composantes de l'état interne plastique portées d'un pas au suivant (VAR) :
-# déformation plastique 3-D (tenseur, 6) + déformation plastique cumulée `p`.
-STATE_COMPONENTS = [
-    "eps_p_xx",
-    "eps_p_yy",
-    "eps_p_zz",
-    "eps_p_yz",
-    "eps_p_xz",
-    "eps_p_xy",
-    "p",
-]
-
 
 def _plastic_diagnostics(state):
     """(p_max, nombre de points de Gauss plastifiés) — `p > 0` marque un point.
@@ -136,7 +124,11 @@ def main():
 
     # ── État de la simulation (persistant entre les pas) ────────────────────
     u = pyrucast.NodeField(mesh, ["u_x", "u_y"])  # déplacement cumulé, nul au départ
-    state = pyrucast.ElementField(fes, STATE_COMPONENTS)  # VAR0, nul au premier pas
+    # L'état au repos : `None` au premier pas, où A est la configuration de
+    # référence. L'opérateur le matérialise lui-même, avec **toutes** les
+    # composantes que la loi relit ensuite — σ(A), ε(A), l'état interne — là où
+    # une liste écrite à la main en oublie.
+    state = None
 
     # ── Boucle sur les pas de charge ────────────────────────────────────────
     # Newton modifié (opérateur = K élastique) : convergence linéaire, donc lente

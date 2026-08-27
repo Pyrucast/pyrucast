@@ -223,7 +223,11 @@ def main():
 
     # ── État de la simulation (persistant entre les pas) ────────────────────
     u = pyrucast.NodeField(mesh, ["u_x", "u_y"])  # déplacement cumulé, nul au départ
-    state = pyrucast.ElementField(fes, STATE_COMPONENTS)  # VAR0, nul au premier pas
+    # L'état au repos : `None` au premier pas, où A est la configuration de
+    # référence. L'opérateur le matérialise lui-même, avec **toutes** les
+    # composantes que la loi relit ensuite — σ(A), ε(A), l'état interne — là où
+    # une liste écrite à la main en oublie.
+    state = None
 
     # ── Boucle sur les pas de charge ────────────────────────────────────────
     max_newton = 200
