@@ -23,6 +23,7 @@ use crate::containers::field::SubField;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
+use crate::models::kernel::MAX_CELL_DOFS;
 use crate::models::kernel::{self, CellGeom};
 
 /// Weak divergence `div F` of a per-element vector `field` (see the module
@@ -113,8 +114,10 @@ fn divergence_element(geoms: &[CellGeom], field: &SubElementField, fe: &mut [f64
     let geom = &geoms[0];
     let d = geom.space_dim;
     let comps = field.components();
+    let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
     for g in 0..geom.n_gauss {
-        let dn = geom.dn_dx(g)?; // [i * d + a]
+        let dn = &mut dn_buf[..geom.n_nodes * d]; // [i * d + a]
+        geom.dn_dx(g, dn)?;
         let det_j_w = geom.det_j_w(g)?;
         for i in 0..geom.n_nodes {
             let mut grad_dot_f = 0.0;

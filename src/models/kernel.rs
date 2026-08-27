@@ -53,7 +53,7 @@ use crate::atoms::NodeId;
 use crate::containers::element_field::SubElementField;
 use crate::containers::field::SubField;
 use crate::containers::finite_element_space::{
-    build_dn_dx, build_jacobian, jacobian_measure, SubFiniteElementSpace,
+    build_dn_dx, build_jacobian, jacobian_measure, SubFiniteElementSpace, MAX_JACOBIAN,
 };
 use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::SubMesh;
@@ -145,11 +145,10 @@ impl RefData {
 ///
 /// The basis alternates value, slope, value, slope — one pair per node — so the
 /// odd indices are the ones whose reference degree of freedom is `∂w/∂ξ`.
-fn scale_slope_slots(row: &[f64], j: f64) -> Vec<f64> {
-    row.iter()
-        .enumerate()
-        .map(|(i, v)| if i % 2 == 1 { v * j } else { *v })
-        .collect()
+fn scale_slope_slots_into(row: &[f64], j: f64, out: &mut [f64]) {
+    for (i, (v, o)) in row.iter().zip(out.iter_mut()).enumerate() {
+        *o = if i % 2 == 1 { v * j } else { *v };
+    }
 }
 
 /// Geometry of one cell, computed **without touching the store**: coordinates
@@ -363,20 +362,30 @@ impl<'a> CellGeom<'a> {
     /// #     ).map(|_| ())
     /// # };
     /// noyau(&|geom| {
-    ///     // La matrice B. Les gradients somment au vecteur nul.
-    ///     let b = geom.dn_dx(0)?;
+    ///     // La matrice B, écrite dans un tampon de l'appelant : au point de
+    ///     // Gauss, une allocation coûte plus cher que l'algèbre qu'elle porte.
+    ///     let mut b = [0.0_f64; 6];
+    ///     geom.dn_dx(0, &mut b)?;
     ///     assert!((b[0] + b[2] + b[4]).abs() < 1e-12);
     ///     Ok(())
     /// })?;
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn dn_dx(&self, g: usize) -> Result<Vec<f64>> {
+    pub fn dn_dx(&self, g: usize, out: &mut [f64]) -> Result<()> {
         self.ensure_cell_coords()?;
         let cc = self.cell_coords.borrow();
         let cc = cc.as_ref().unwrap();
         let dn = &self.rd.dn_ref[g];
-        let jac = build_jacobian(cc, dn, self.space_dim, self.rd.ref_dim, self.n_nodes);
-        build_dn_dx(&jac, dn, self.space_dim, self.rd.ref_dim, self.n_nodes)
+        let mut jac = [0.0_f64; MAX_JACOBIAN];
+        build_jacobian(
+            cc,
+            dn,
+            self.space_dim,
+            self.rd.ref_dim,
+            self.n_nodes,
+            &mut jac,
+        );
+        build_dn_dx(&jac, dn, self.space_dim, self.rd.ref_dim, self.n_nodes, out)
     }
 
     /// Shape-function values `N_i(ξ_g)` at Gauss point `g`.
@@ -553,18 +562,25 @@ impl<'a> CellGeom<'a> {
     /// #     ).map(|_| ())
     /// # };
     /// noyau(&|geom| {
-    ///     assert_eq!(geom.field_n_at_g(0)?.len(), geom.shape_count());
+    ///     // Le tampon ne sert qu'aux bases C¹ : ici la méthode prête
+    ///     // directement la ligne déjà en mémoire.
+    ///     let mut buf = [0.0_f64; 8];
+    ///     assert_eq!(geom.field_n_at_g(0, &mut buf)?.len(), geom.shape_count());
     ///     Ok(())
     /// })?;
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn field_n_at_g(&self, g: usize) -> Result<Vec<f64>> {
+    pub fn field_n_at_g<'s>(&'s self, g: usize, scratch: &'s mut [f64]) -> Result<&'s [f64]> {
         self.reject_if_model_embedded("shape values")?;
+        // The common case: the field basis **is** the geometric one, already in
+        // reference data. Lending it beats copying it at every Gauss point.
         if self.rd.field_n_ref.is_empty() {
-            return Ok(self.rd.n_ref[g].clone());
+            return Ok(&self.rd.n_ref[g]);
         }
         let j = self.segment_jacobian()?;
-        Ok(scale_slope_slots(&self.rd.field_n_ref[g], j))
+        let row = &self.rd.field_n_ref[g];
+        scale_slope_slots_into(row, j, &mut scratch[..row.len()]);
+        Ok(&scratch[..row.len()])
     }
 
     /// Field second derivatives `∂²N_i/∂x²` at Gauss point `g`, acting on
@@ -600,12 +616,13 @@ impl<'a> CellGeom<'a> {
     /// // poutre. Réservées aux espaces C¹ sur un segment : ailleurs, une
     /// // erreur nommée plutôt qu'un zéro.
     /// kernel::reduce_cells(&zone, |geom| {
-    ///     assert!(geom.field_d2n_dx2(0).is_err()); // TRI3 Lagrange
+    ///     let mut buf = [0.0_f64; 8];
+    ///     assert!(geom.field_d2n_dx2(0, &mut buf).is_err()); // TRI3 Lagrange
     ///     Ok(0.0)
     /// })?;
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn field_d2n_dx2(&self, g: usize) -> Result<Vec<f64>> {
+    pub fn field_d2n_dx2(&self, g: usize, out: &mut [f64]) -> Result<usize> {
         self.reject_if_model_embedded("second derivatives")?;
         if self.rd.field_d2n_ref.is_empty() {
             return Err(PyrucastError::Message(
@@ -615,8 +632,12 @@ impl<'a> CellGeom<'a> {
         let j = self.segment_jacobian()?;
         // `J` scales the slope columns to physical DOFs, `J⁻²` maps the
         // reference second derivative to a physical one.
-        let scaled = scale_slope_slots(&self.rd.field_d2n_ref[g], j);
-        Ok(scaled.iter().map(|v| v / (j * j)).collect())
+        let row = &self.rd.field_d2n_ref[g];
+        scale_slope_slots_into(row, j, &mut out[..row.len()]);
+        for v in &mut out[..row.len()] {
+            *v /= j * j;
+        }
+        Ok(row.len())
     }
 
     /// The guard the field accessors share — see
@@ -688,24 +709,26 @@ impl<'a> CellGeom<'a> {
     ///     // Le point de Gauss en coordonnées **physiques** : Σ N_i x_i.
     ///     // La règle du TRI3 place ses points aux **milieux des arêtes** :
     ///     // le premier est donc sur le bord, en (1, 0).
-    ///     assert_eq!(geom.x_at_g(0)?, vec![1.0, 0.0]);
+    ///     let mut x = [0.0_f64; 2];
+    ///     geom.x_at_g(0, &mut x)?;
+    ///     assert_eq!(x, [1.0, 0.0]);
     ///     Ok(())
     /// })?;
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn x_at_g(&self, g: usize) -> Result<Vec<f64>> {
+    pub fn x_at_g(&self, g: usize, out: &mut [f64]) -> Result<()> {
         self.ensure_cell_coords()?;
         let cc = self.cell_coords.borrow();
         let cc = cc.as_ref().unwrap();
         let n = &self.rd.n_ref[g];
         let d = self.space_dim;
-        let mut x = vec![0.0_f64; d];
+        out[..d].fill(0.0);
         for i in 0..self.n_nodes {
-            for (a, xa) in x.iter_mut().enumerate() {
+            for (a, xa) in out[..d].iter_mut().enumerate() {
                 *xa += n[i] * cc[i * d + a];
             }
         }
-        Ok(x)
+        Ok(())
     }
 
     /// Radius `r` at Gauss point `g` — the first physical coordinate, on an
@@ -742,7 +765,9 @@ impl<'a> CellGeom<'a> {
     ///         let geom = &geoms[0];
     ///         assert!(geom.axisymmetric);
     ///         // `x = r` : le rayon est l'abscisse du point de Gauss.
-    ///         assert_eq!(geom.radius(0)?, geom.x_at_g(0)?[0]);
+    ///         let mut x = [0.0_f64; 2];
+    ///         geom.x_at_g(0, &mut x)?;
+    ///         assert_eq!(geom.radius(0)?, x[0]);
     ///         Ok(())
     ///     },
     /// )?;
@@ -820,23 +845,31 @@ impl<'a> CellGeom<'a> {
     /// # };
     /// noyau(&|geom| {
     ///     // Une tangente par direction de l'élément de référence : deux pour
-    ///     // une surface, une pour une ligne.
-    ///     assert_eq!(geom.tangents(0)?.len(), 2);
+    ///     // une surface, une pour une ligne. Elles arrivent à plat,
+    ///     // `out[k * space_dim + a]`.
+    ///     let mut t = [0.0_f64; 4];
+    ///     geom.tangents(0, &mut t)?;
+    ///     assert!(t[..4].iter().any(|v| *v != 0.0));
     ///     Ok(())
     /// })?;
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn tangents(&self, g: usize) -> Result<Vec<Vec<f64>>> {
+    pub fn tangents(&self, g: usize, out: &mut [f64]) -> Result<()> {
         self.ensure_cell_coords()?;
         let cc = self.cell_coords.borrow();
         let cc = cc.as_ref().unwrap();
         let (d, r) = (self.space_dim, self.rd.ref_dim);
-        let jac = build_jacobian(cc, &self.rd.dn_ref[g], d, r, self.n_nodes);
+        let mut jac = [0.0_f64; MAX_JACOBIAN];
+        build_jacobian(cc, &self.rd.dn_ref[g], d, r, self.n_nodes, &mut jac);
         // `build_jacobian` lays the tangents out as `jac[a * r + k]`: column `k`
-        // is the tangent along reference direction `k`.
-        Ok((0..r)
-            .map(|k| (0..d).map(|a| jac[a * r + k]).collect())
-            .collect())
+        // is the tangent along reference direction `k`. `out` receives them
+        // tangent-major, `out[k * d + a]`.
+        for k in 0..r {
+            for a in 0..d {
+                out[k * d + a] = jac[a * r + k];
+            }
+        }
+        Ok(())
     }
 
     /// The (unnormalised) normal of a boundary cell from its tangents — the
@@ -880,24 +913,37 @@ impl<'a> CellGeom<'a> {
     /// // vectoriel en 3-D, la rotation d'un quart de tour en 2-D. Elle porte
     /// // la **norme** des tangentes, elle n'est pas normalisée ;
     /// // [`normal`](Self::normal) s'en charge.
-    /// assert_eq!(CellGeom::normal_from_tangents(&[vec![2.0, 0.0]])?, vec![0.0, -2.0]);
+    /// let mut nu = [0.0_f64; 2];
+    /// CellGeom::normal_from_tangents(&[2.0, 0.0], 1, 2, &mut nu)?;
+    /// assert_eq!(nu, [0.0, -2.0]);
     /// // Une ou deux tangentes, pas davantage.
-    /// assert!(CellGeom::normal_from_tangents(&[]).is_err());
+    /// assert!(CellGeom::normal_from_tangents(&[], 0, 2, &mut nu).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn normal_from_tangents(tangents: &[Vec<f64>]) -> Result<Vec<f64>> {
-        match tangents {
-            [t] => Ok(vec![t[1], -t[0]]),
-            [a1, a2] => Ok(vec![
-                a1[1] * a2[2] - a1[2] * a2[1],
-                a1[2] * a2[0] - a1[0] * a2[2],
-                a1[0] * a2[1] - a1[1] * a2[0],
-            ]),
-            _ => Err(PyrucastError::Message(format!(
-                "normal_from_tangents: a normal needs 1 tangent (2-D) or 2 (3-D), got {}",
-                tangents.len()
-            ))),
+    pub fn normal_from_tangents(
+        tangents: &[f64],
+        n_tangents: usize,
+        space_dim: usize,
+        out: &mut [f64],
+    ) -> Result<()> {
+        let t = |k: usize, a: usize| tangents[k * space_dim + a];
+        match n_tangents {
+            1 => {
+                out[0] = t(0, 1);
+                out[1] = -t(0, 0);
+            }
+            2 => {
+                out[0] = t(0, 1) * t(1, 2) - t(0, 2) * t(1, 1);
+                out[1] = t(0, 2) * t(1, 0) - t(0, 0) * t(1, 2);
+                out[2] = t(0, 0) * t(1, 1) - t(0, 1) * t(1, 0);
+            }
+            n => {
+                return Err(PyrucastError::Message(format!(
+                    "normal_from_tangents: a normal needs 1 tangent (2-D) or 2 (3-D), got {n}"
+                )))
+            }
         }
+        Ok(())
     }
 
     /// Unit **normal** of a boundary cell at Gauss point `g`, in the reference
@@ -941,14 +987,15 @@ impl<'a> CellGeom<'a> {
     /// // brute, divisée par sa norme. Elle n'a de sens que sur une facette :
     /// // une dimension de référence de moins que l'espace.
     /// kernel::reduce_cells(&zone, |geom| {
-    ///     let nu = geom.normal(0)?;
+    ///     let mut nu = [0.0_f64; 3];
+    ///     geom.normal(0, &mut nu)?;
     ///     assert!((nu.iter().map(|x| x * x).sum::<f64>() - 1.0).abs() < 1e-12);
     ///     assert!((nu[2].abs() - 1.0).abs() < 1e-12); // le triangle est dans z = 0
     ///     Ok(0.0)
     /// })?;
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn normal(&self, g: usize) -> Result<Vec<f64>> {
+    pub fn normal(&self, g: usize, out: &mut [f64]) -> Result<()> {
         let (d, r) = (self.space_dim, self.rd.ref_dim);
         if r + 1 != d {
             return Err(PyrucastError::Message(format!(
@@ -957,18 +1004,20 @@ impl<'a> CellGeom<'a> {
                 d - 1
             )));
         }
-        let mut n = Self::normal_from_tangents(&self.tangents(g)?)?;
-        let norm = n.iter().map(|v| v * v).sum::<f64>().sqrt();
+        let mut tan = [0.0_f64; MAX_JACOBIAN];
+        self.tangents(g, &mut tan)?;
+        Self::normal_from_tangents(&tan, r, d, out)?;
+        let norm = out[..d].iter().map(|v| v * v).sum::<f64>().sqrt();
         if norm <= f64::EPSILON {
             return Err(PyrucastError::Message(format!(
                 "CellGeom::normal: cell {} is degenerate at Gauss point {g} (null normal)",
                 self.cell
             )));
         }
-        for v in &mut n {
+        for v in &mut out[..d] {
             *v /= norm;
         }
-        Ok(n)
+        Ok(())
     }
 
     /// `|J|_g · w_g` — the integration weight of Gauss point `g`.
@@ -1022,7 +1071,15 @@ impl<'a> CellGeom<'a> {
         let cc = self.cell_coords.borrow();
         let cc = cc.as_ref().unwrap();
         let dn = &self.rd.dn_ref[g];
-        let jac = build_jacobian(cc, dn, self.space_dim, self.rd.ref_dim, self.n_nodes);
+        let mut jac = [0.0_f64; MAX_JACOBIAN];
+        build_jacobian(
+            cc,
+            dn,
+            self.space_dim,
+            self.rd.ref_dim,
+            self.n_nodes,
+            &mut jac,
+        );
         let w = jacobian_measure(&jac, self.space_dim, self.rd.ref_dim) * self.rd.weights[g];
         // One predictable branch on a per-subspace constant; the Cartesian path
         // returns here having paid nothing else. The revolved path reuses the
@@ -1260,9 +1317,11 @@ pub(crate) fn nodal_pointwise(
     Ok(out)
 }
 
-/// The most values a cell's gather buffer holds: twenty nodes (HEX20) times
-/// three components, the widest a geometric producer reads.
-const MAX_CELL_DOFS: usize = 64;
+/// The most values a per-cell buffer holds: twenty nodes (HEX20) times three
+/// components — the widest gather, and the widest `dN/dx` a cell can have.
+///
+/// It sizes **stack** buffers, so a Gauss point costs no allocation.
+pub(crate) const MAX_CELL_DOFS: usize = 64;
 
 /// Assemble one stiffness block by a per-cell element-matrix kernel, in
 /// parallel.
@@ -2380,8 +2439,8 @@ mod tests {
                 let r = geom.radius(g)?;
                 assert!(r > 0.0 && r < 1.0, "radius {r} outside (0, 1)");
                 // radius is the first physical coordinate, and z stays in [0, 1].
-                let x = geom.x_at_g(g)?;
-                assert_eq!(x.len(), 2);
+                let mut x = [0.0_f64; 2];
+                geom.x_at_g(g, &mut x)?;
                 assert!((x[0] - r).abs() < 1e-15);
                 assert!(x[1] > 0.0 && x[1] < 1.0);
             }

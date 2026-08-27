@@ -12,6 +12,7 @@ use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::Result;
 use crate::handle::Handle;
+use crate::models::kernel::MAX_CELL_DOFS;
 use crate::models::owned_components;
 use crate::models::symmetry::{self, MaterialSymmetry};
 use crate::models::ZoneLayout;
@@ -370,8 +371,10 @@ impl SubModelKind for HeatConduction {
     ) -> Result<()> {
         let geom = &geoms[0];
         let d = geom.space_dim;
+        let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
         for g in 0..geom.n_gauss {
-            let dn = geom.dn_dx(g)?; // [i * d + a]
+            let dn = &mut dn_buf[..geom.n_nodes * d];
+            geom.dn_dx(g, dn)?; // [i * d + a]
             let w = geom.det_j_w(g)?;
             for i in 0..geom.n_nodes {
                 let mut s = 0.0;
@@ -526,8 +529,10 @@ pub fn element_stiffness(
     } else {
         None
     };
+    let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
     for g in 0..geom.n_gauss {
-        let dn = geom.dn_dx(g)?;
+        let dn = &mut dn_buf[..n_nodes * geom.space_dim];
+        geom.dn_dx(g, dn)?;
         let det_j_w = geom.det_j_w(g)?;
         match &tensor {
             None => {

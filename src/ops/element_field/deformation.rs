@@ -15,6 +15,7 @@ use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::kernel;
+use crate::models::kernel::MAX_CELL_DOFS;
 use crate::ops::element_field::gradient::AXES;
 
 /// Linearized (small-strain) deformation `ε = ½(∇u + ∇uᵀ)` of a displacement
@@ -112,8 +113,10 @@ pub fn deformation(u: &NodeField, fespace: &FiniteElementSpace) -> Result<Elemen
         // gathered them once, so the Gauss loop is arithmetic alone.
         let nc = components.len();
         let sf = kernel::nodal_pointwise(sub, &view, &components, names, |geom, g, dofs, out| {
-            let dn_dx = geom.dn_dx(g)?;
             let sd = geom.space_dim;
+            let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
+            let dn_dx = &mut dn_buf[..geom.n_nodes * sd];
+            geom.dn_dx(g, dn_dx)?;
             for (c, &(i, j)) in pairs.iter().enumerate() {
                 let mut dij = 0.0; // ∂u_i/∂x_j
                 let mut dji = 0.0; // ∂u_j/∂x_i
@@ -125,7 +128,8 @@ pub fn deformation(u: &NodeField, fespace: &FiniteElementSpace) -> Result<Elemen
             }
             if axisymmetric {
                 // ε_θθ = u_r / r, with u_r interpolated at the Gauss point.
-                let n = geom.field_n_at_g(g)?;
+                let mut n_buf = [0.0_f64; MAX_CELL_DOFS];
+                let n = geom.field_n_at_g(g, &mut n_buf)?;
                 let mut u_r = 0.0;
                 for k in 0..geom.n_nodes {
                     u_r += dofs[k * nc] * n[k];

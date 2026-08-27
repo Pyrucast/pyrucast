@@ -28,6 +28,7 @@ use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
+use crate::models::kernel::MAX_CELL_DOFS;
 use crate::models::owned_components;
 use crate::models::symmetry::{self, MaterialSymmetry};
 use crate::models::tensor::{dual_name, primal_name, stress_names, Kinematics};
@@ -708,7 +709,9 @@ pub fn element_stiffness(
         } else {
             None
         };
-        let b = b_matrix(&geom.dn_dx(g)?, n_nodes, space_dim, hoop);
+        let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
+        geom.dn_dx(g, &mut dn_buf[..n_nodes * space_dim])?;
+        let b = b_matrix(&dn_buf[..n_nodes * space_dim], n_nodes, space_dim, hoop);
         // DB = D·B  (voigt × dofs).
         let mut db = vec![vec![0.0; dofs]; v];
         for r in 0..v {
@@ -865,8 +868,10 @@ pub fn element_geometric(geom: &CellGeom, stress: &SubElementField, ke: &mut [f6
     let lay = stress.resolve_components(&refs, "stress")?;
     let stride = stress.component_count();
     let values = stress.values();
+    let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
     for g in 0..geom.n_gauss {
-        let dn = geom.dn_dx(g)?; // [i * d + c]
+        let dn = &mut dn_buf[..n_nodes * d]; // [i * d + c]
+        geom.dn_dx(g, dn)?;
         let w = geom.det_j_w(g)?;
         let start = (geom.cell * geom.n_gauss + g) * stride;
         let mut sig = [0.0_f64; 9]; // [c * d + e]
@@ -1073,7 +1078,9 @@ pub fn element_tangent_from_state(
         } else {
             None
         };
-        let b = b_matrix(&geom.dn_dx(g)?, n_nodes, space_dim, hoop);
+        let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
+        geom.dn_dx(g, &mut dn_buf[..n_nodes * space_dim])?;
+        let b = b_matrix(&dn_buf[..n_nodes * space_dim], n_nodes, space_dim, hoop);
         let d = read_tangent_matrix(state, geom.cell, g, space_dim, kinematics)?;
         // DB = D·B (voigt × dofs), then Kᵉ += Bᵀ (DB) · |J| w.
         let mut db = vec![vec![0.0; dofs]; v];

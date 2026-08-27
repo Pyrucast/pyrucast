@@ -50,6 +50,7 @@ use crate::containers::model::SubModel;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
+use crate::models::kernel::MAX_CELL_DOFS;
 use crate::models::owned_components;
 use crate::models::ZoneLayout;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
@@ -420,8 +421,10 @@ impl Domain for Bernoulli {
 /// and fail the beam tests, where before it could have been anything at all.
 fn bending_4x4(geom: &CellGeom, ei: f64) -> Result<Vec<Vec<f64>>> {
     let mut k = vec![vec![0.0_f64; 4]; 4];
+    let mut b_buf = [0.0_f64; MAX_CELL_DOFS];
     for g in 0..geom.n_gauss {
-        let b = geom.field_d2n_dx2(g)?;
+        let n = geom.field_d2n_dx2(g, &mut b_buf)?;
+        let b = &b_buf[..n];
         let w = geom.det_j_w(g)?;
         for a in 0..4 {
             for c in 0..4 {

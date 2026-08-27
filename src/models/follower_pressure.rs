@@ -347,24 +347,30 @@ impl Domain for FollowerPressure {
 
         // The deformed tangents ā_k = a_k + (∇_s u)·a_k, and the reference
         // measure |a₁ × a₂| that turns the result into a *referential* traction.
-        let reference = geom.tangents(g)?;
-        let deformed: Vec<Vec<f64>> = reference
-            .iter()
-            .map(|a| {
-                (0..d)
-                    .map(|i| a[i] + (0..d).map(|j| grad[i * d + j] * a[j]).sum::<f64>())
-                    .collect()
-            })
-            .collect();
+        // Both live on the stack: a surface cell has at most two tangents in 3-D.
+        let n_tan = d - 1;
+        let mut reference = [0.0_f64; 6];
+        geom.tangents(g, &mut reference[..n_tan * d])?;
+        let mut deformed = [0.0_f64; 6];
+        for k in 0..n_tan {
+            for i in 0..d {
+                deformed[k * d + i] = reference[k * d + i]
+                    + (0..d)
+                        .map(|j| grad[i * d + j] * reference[k * d + j])
+                        .sum::<f64>();
+            }
+        }
 
-        let n_ref = CellGeom::normal_from_tangents(&reference)?;
-        let area_ref = n_ref.iter().map(|v| v * v).sum::<f64>().sqrt();
+        let mut n_ref = [0.0_f64; 3];
+        CellGeom::normal_from_tangents(&reference, n_tan, d, &mut n_ref)?;
+        let area_ref = n_ref[..d].iter().map(|v| v * v).sum::<f64>().sqrt();
         if area_ref <= f64::EPSILON {
             return Err(PyrucastError::Message(format!(
                 "FollowerPressure: cell {cell} is degenerate at Gauss point {g} (null area)"
             )));
         }
-        let n_def = CellGeom::normal_from_tangents(&deformed)?;
+        let mut n_def = [0.0_f64; 3];
+        CellGeom::normal_from_tangents(&deformed, n_tan, d, &mut n_def)?;
 
         // The pressure pushes **against** the normal, hence the minus sign; the
         // magnitude of `n_def` already carries the area change.

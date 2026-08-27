@@ -24,6 +24,7 @@ use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
 use crate::models::kernel;
+use crate::models::kernel::MAX_CELL_DOFS;
 use std::collections::HashMap;
 
 /// `∫_Ω f dΩ` of a **nodal** `field`, interpolated with the FE shape functions
@@ -90,7 +91,8 @@ pub fn integral(field: &NodeField, fespace: &FiniteElementSpace, component: &str
             let ids = geom.node_ids();
             let mut acc = 0.0;
             for g in 0..geom.n_gauss {
-                let n = geom.field_n_at_g(g)?; // field shape values N_i(ξ_g)
+                let mut n_buf = [0.0_f64; MAX_CELL_DOFS];
+                let n = geom.field_n_at_g(g, &mut n_buf)?; // field shape values N_i(ξ_g)
                 let mut fg = 0.0;
                 for i in 0..geom.n_nodes {
                     fg += vals[&ids[i]] * n[i];

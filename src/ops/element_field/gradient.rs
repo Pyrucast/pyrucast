@@ -13,6 +13,7 @@ use crate::containers::node_field::NodeField;
 use crate::error::Result;
 use crate::handle::Handle;
 use crate::models::kernel;
+use crate::models::kernel::MAX_CELL_DOFS;
 
 /// Axis suffixes for spatial directions (`x`, `y`, `z`).
 pub(crate) const AXES: [&str; 3] = ["x", "y", "z"];
@@ -82,8 +83,10 @@ pub fn gradient(field: &NodeField, fespace: &FiniteElementSpace) -> Result<Eleme
         // component-major then axis (grad_<comp>_x, grad_<comp>_y, …).
         let nc = components.len();
         let sf = kernel::nodal_pointwise(sub, &view, &components, names, |geom, g, dofs, out| {
-            let dn_dx = geom.dn_dx(g)?;
             let sd = geom.space_dim;
+            let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
+            let dn_dx = &mut dn_buf[..geom.n_nodes * sd];
+            geom.dn_dx(g, dn_dx)?;
             let mut oc = 0;
             for c in 0..nc {
                 for a in 0..sd {

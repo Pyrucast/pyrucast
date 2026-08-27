@@ -893,13 +893,17 @@ impl SubFiniteElementSpace {
         self.check_g(g)?;
         let coords = self.cell_node_coords(cell_idx)?;
         let dn = self.dn_at_g(g)?;
-        Ok(build_jacobian(
+        let (space_dim, ref_dim) = (self.space_dim, self.ref_dim()?);
+        let mut jac = [0.0_f64; MAX_JACOBIAN];
+        build_jacobian(
             &coords,
             dn,
-            self.space_dim,
-            self.ref_dim()?,
+            space_dim,
+            ref_dim,
             self.nodes_per_cell()?,
-        ))
+            &mut jac,
+        );
+        Ok(jac[..space_dim * ref_dim].to_vec())
     }
 
     /// Determinant `|J|` of the Jacobian — `det(J)` if `space_dim ==
@@ -971,7 +975,9 @@ impl SubFiniteElementSpace {
         let n_nodes = self.nodes_per_cell()?;
         let ref_dim = self.ref_dim()?;
         let space_dim = self.space_dim;
-        build_dn_dx(&jac, dn_dxi, space_dim, ref_dim, n_nodes)
+        let mut out = vec![0.0_f64; n_nodes * space_dim];
+        build_dn_dx(&jac, dn_dxi, space_dim, ref_dim, n_nodes, &mut out)?;
+        Ok(out)
     }
 
     // ── Internals ───────────────────────────────────────────────────────────
@@ -1308,8 +1314,8 @@ pub(crate) fn build_jacobian(
     space_dim: usize,
     ref_dim: usize,
     n_nodes: usize,
-) -> Vec<f64> {
-    let mut jac = vec![0.0; space_dim * ref_dim];
+    jac: &mut [f64; MAX_JACOBIAN],
+) {
     for a in 0..space_dim {
         for k in 0..ref_dim {
             let mut sum = 0.0;
@@ -1319,19 +1325,26 @@ pub(crate) fn build_jacobian(
             jac[a * ref_dim + k] = sum;
         }
     }
-    jac
 }
+
+/// The most entries a Jacobian, its Gram matrix or their inverse can hold:
+/// `space_dim × ref_dim`, both at most three.
+///
+/// It sizes **stack** buffers in the geometry, which is the whole point: these
+/// matrices are nine numbers at most, and a constitutive loop that allocates
+/// them per Gauss point spends more time in the allocator than in the algebra.
+pub(crate) const MAX_JACOBIAN: usize = 9;
 
 /// Compute `sqrt(det(JᵀJ))` — the measure scaling factor used in
 /// numerical integration. For square `J` this equals `|det(J)|`.
 pub(crate) fn jacobian_measure(jac: &[f64], space_dim: usize, ref_dim: usize) -> f64 {
-    let g = gram_matrix(jac, space_dim, ref_dim);
+    let mut g = [0.0_f64; MAX_JACOBIAN];
+    gram_matrix(jac, space_dim, ref_dim, &mut g);
     det_small(&g, ref_dim).max(0.0).sqrt()
 }
 
 /// Build `G = JᵀJ` of size `ref_dim × ref_dim`, row-major.
-fn gram_matrix(jac: &[f64], space_dim: usize, ref_dim: usize) -> Vec<f64> {
-    let mut g = vec![0.0; ref_dim * ref_dim];
+fn gram_matrix(jac: &[f64], space_dim: usize, ref_dim: usize, g: &mut [f64; MAX_JACOBIAN]) {
     for i in 0..ref_dim {
         for j in 0..ref_dim {
             let mut s = 0.0;
@@ -1341,7 +1354,6 @@ fn gram_matrix(jac: &[f64], space_dim: usize, ref_dim: usize) -> Vec<f64> {
             g[i * ref_dim + j] = s;
         }
     }
-    g
 }
 
 /// Determinant of a small (1×1, 2×2, 3×3) row-major square matrix.
@@ -1360,36 +1372,36 @@ fn det_small(m: &[f64], n: usize) -> f64 {
 /// Invert a small (1×1, 2×2, 3×3) row-major square matrix.
 ///
 /// Returns an error if the matrix is (numerically) singular.
-fn inverse_small(m: &[f64], n: usize) -> Result<Vec<f64>> {
+fn inverse_small(m: &[f64], n: usize, inv: &mut [f64; MAX_JACOBIAN]) -> Result<()> {
     let det = det_small(m, n);
     if det.abs() < f64::EPSILON {
         return Err(PyrucastError::Message(
             "inverse_small: singular matrix".into(),
         ));
     }
-    let inv = match n {
-        1 => vec![1.0 / m[0]],
+    let d = det;
+    match n {
+        1 => inv[0] = 1.0 / m[0],
         2 => {
-            let d = det;
-            vec![m[3] / d, -m[1] / d, -m[2] / d, m[0] / d]
+            inv[0] = m[3] / d;
+            inv[1] = -m[1] / d;
+            inv[2] = -m[2] / d;
+            inv[3] = m[0] / d;
         }
         3 => {
-            let d = det;
-            vec![
-                (m[4] * m[8] - m[5] * m[7]) / d,
-                (m[2] * m[7] - m[1] * m[8]) / d,
-                (m[1] * m[5] - m[2] * m[4]) / d,
-                (m[5] * m[6] - m[3] * m[8]) / d,
-                (m[0] * m[8] - m[2] * m[6]) / d,
-                (m[2] * m[3] - m[0] * m[5]) / d,
-                (m[3] * m[7] - m[4] * m[6]) / d,
-                (m[1] * m[6] - m[0] * m[7]) / d,
-                (m[0] * m[4] - m[1] * m[3]) / d,
-            ]
+            inv[0] = (m[4] * m[8] - m[5] * m[7]) / d;
+            inv[1] = (m[2] * m[7] - m[1] * m[8]) / d;
+            inv[2] = (m[1] * m[5] - m[2] * m[4]) / d;
+            inv[3] = (m[5] * m[6] - m[3] * m[8]) / d;
+            inv[4] = (m[0] * m[8] - m[2] * m[6]) / d;
+            inv[5] = (m[2] * m[3] - m[0] * m[5]) / d;
+            inv[6] = (m[3] * m[7] - m[4] * m[6]) / d;
+            inv[7] = (m[1] * m[6] - m[0] * m[7]) / d;
+            inv[8] = (m[0] * m[4] - m[1] * m[3]) / d;
         }
         _ => unreachable!(),
-    };
-    Ok(inv)
+    }
+    Ok(())
 }
 
 /// Compute `dN_i/dx_a` from the Jacobian and reference derivatives.
@@ -1402,12 +1414,15 @@ pub(crate) fn build_dn_dx(
     space_dim: usize,
     ref_dim: usize,
     n_nodes: usize,
-) -> Result<Vec<f64>> {
-    let g = gram_matrix(jac, space_dim, ref_dim);
-    let g_inv = inverse_small(&g, ref_dim)?;
+    out: &mut [f64],
+) -> Result<()> {
+    let mut g = [0.0_f64; MAX_JACOBIAN];
+    gram_matrix(jac, space_dim, ref_dim, &mut g);
+    let mut g_inv = [0.0_f64; MAX_JACOBIAN];
+    inverse_small(&g, ref_dim, &mut g_inv)?;
 
     // M[a*ref_dim + l] = Σ_k J[a*ref_dim + k] · G_inv[k*ref_dim + l]
-    let mut m = vec![0.0; space_dim * ref_dim];
+    let mut m = [0.0_f64; MAX_JACOBIAN];
     for a in 0..space_dim {
         for l in 0..ref_dim {
             let mut s = 0.0;
@@ -1419,7 +1434,6 @@ pub(crate) fn build_dn_dx(
     }
 
     // dN/dx[i*space_dim + a] = Σ_l M[a*ref_dim + l] · dN/dξ[i*ref_dim + l]
-    let mut out = vec![0.0; n_nodes * space_dim];
     for i in 0..n_nodes {
         for a in 0..space_dim {
             let mut s = 0.0;
@@ -1429,7 +1443,7 @@ pub(crate) fn build_dn_dx(
             out[i * space_dim + a] = s;
         }
     }
-    Ok(out)
+    Ok(())
 }
 
 // ─── Unit tests ────────────────────────────────────────────────────────────

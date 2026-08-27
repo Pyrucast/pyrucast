@@ -38,6 +38,7 @@ use crate::containers::node_field::SubNodeField;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
+use crate::models::kernel::MAX_CELL_DOFS;
 use serde::{Deserialize, Serialize};
 
 pub mod beam;
@@ -1607,8 +1608,10 @@ pub(crate) fn continuum_internal_force_element(
     let n_nodes = geom.n_nodes;
     let stride = stress.component_count();
     let values = stress.values();
+    let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
     for g in 0..geom.n_gauss {
-        let dn = geom.dn_dx(g)?; // [i * d + b]
+        let dn = &mut dn_buf[..n_nodes * d]; // [i * d + b]
+        geom.dn_dx(g, dn)?;
         let w = geom.det_j_w(g)?;
         let start = (geom.cell * geom.n_gauss + g) * stride;
         let row = &values[start..start + stride];

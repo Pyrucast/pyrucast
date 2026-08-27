@@ -60,6 +60,7 @@ use crate::containers::model::SubModel;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
+use crate::models::kernel::MAX_CELL_DOFS;
 use crate::models::owned_components;
 use crate::models::ZoneLayout;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
@@ -556,7 +557,9 @@ pub fn local_derivatives(
     frame: &[[f64; 3]; 3],
     g: usize,
 ) -> Result<Vec<[f64; 2]>> {
-    let dn = geom.dn_dx(g)?;
+    let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
+    let dn = &mut dn_buf[..geom.n_nodes * geom.space_dim];
+    geom.dn_dx(g, dn)?;
     Ok((0..geom.n_nodes)
         .map(|i| {
             let grad = [dn[i * 3], dn[i * 3 + 1], dn[i * 3 + 2]];
