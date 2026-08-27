@@ -47,6 +47,7 @@
 
 use crate::containers::element_field::SubElementField;
 use crate::containers::field::SubField;
+use crate::containers::field::ABSENT_COMPONENT;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
@@ -55,6 +56,7 @@ use crate::dump::DumpOptions;
 use crate::error::Result;
 use crate::handle::Handle;
 use crate::models::owned_components;
+use crate::models::ZoneLayout;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use serde::{Deserialize, Serialize};
 
@@ -314,22 +316,31 @@ impl Domain for Radiation {
     /// `σε(T⁴ − T_∞⁴)` and its derivative `4σεT³`, at one Gauss point. Emitting
     /// both in one pass is the producer half of the tangent pairing: the kernel
     /// that knows the law is the one that differentiates it.
+    fn deformation_reads(&self) -> Vec<String> {
+        vec![INPUT_COMPONENT.to_string()]
+    }
+
     fn integrate_point(
         &self,
-        geom: &CellGeom,
-        input: &SubElementField,
-        _prev: &SubElementField,
-        material: Option<&SubElementField>,
-        g: usize,
+        _geom: &CellGeom,
+        _g: usize,
+        lay: &ZoneLayout,
+        deformation: &[f64],
+        _prev: &[f64],
+        material: &[f64],
         _dt: f64,
         out: &mut [f64],
     ) -> Result<()> {
-        let mat = material.expect("Radiation declares a material_fespace");
-        let cell = geom.cell;
-        let sigma = sigma_of(mat, cell, g)?;
-        let emis = mat.value(cell, g, "emis")?;
-        let t_inf = mat.value(cell, g, "T_inf")?;
-        let t = input.value(cell, g, INPUT_COMPONENT)?;
+        // The Stefan-Boltzmann constant is the one optional component: absent,
+        // the SI value stands. Which of the two is a fact of the zone, settled
+        // in the layout, not a lookup.
+        let sigma = match lay.optional_material[0] {
+            ABSENT_COMPONENT => STEFAN_BOLTZMANN,
+            i => material[i as usize],
+        };
+        let emis = material[lay.material[0] as usize];
+        let t_inf = material[lay.material[1] as usize];
+        let t = deformation[lay.deformation[0] as usize];
         out[0] = sigma * emis * (t.powi(4) - t_inf.powi(4));
         out[1] = 4.0 * sigma * emis * t.powi(3);
         Ok(())

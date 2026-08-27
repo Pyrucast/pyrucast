@@ -40,6 +40,14 @@ use crate::models::elasticity::{elastic_stress, lame};
 use crate::models::tensor::Kinematics;
 use nalgebra::Matrix3;
 
+/// Positions in this law's material contract, [`MATERIAL`].
+const E: usize = 0;
+const NU: usize = 1;
+const F_T: usize = 2;
+const F_C: usize = 3;
+const A_T: usize = 4;
+const A_C: usize = 5;
+
 /// The law's material contract.
 ///
 /// ```
@@ -60,7 +68,9 @@ use nalgebra::Matrix3;
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let materiau = SubElementField::from_uniform_per_component(
 /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "f_t".into(), "f_c".into(), "A_t".into(), "A_c".into()], &[30000.0, 0.2, 3.0, 30.0, 0.5, 0.5]).unwrap();
-/// # let mat = MatRead { field: &materiau, cell: 0 };
+/// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+/// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+/// # let mat = MatRead { row: materiau.point_values(0, 0).unwrap(), idx: &idx_mat };
 /// // Deux résistances et deux fragilités : traction et compression sont
 /// // suivies séparément.
 /// assert!(damage::damage_tc::MATERIAL.contains(&"f_t"));
@@ -92,7 +102,9 @@ pub const MATERIAL: &[&str] = &["E", "nu", "f_t", "f_c", "A_t", "A_c"];
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let materiau = SubElementField::from_uniform_per_component(
 /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "f_t".into(), "f_c".into(), "A_t".into(), "A_c".into()], &[30000.0, 0.2, 3.0, 30.0, 0.5, 0.5]).unwrap();
-/// # let mat = MatRead { field: &materiau, cell: 0 };
+/// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+/// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+/// # let mat = MatRead { row: materiau.point_values(0, 0).unwrap(), idx: &idx_mat };
 /// // Deux endommagements distincts : la traction en active un, la
 /// // compression l'autre — c'est ce qui **restitue la raideur** quand une
 /// // fissure se referme.
@@ -104,10 +116,10 @@ pub const MATERIAL: &[&str] = &["E", "nu", "f_t", "f_c", "A_t", "A_c"];
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn update(eps: &[f64; 6], prev: &[f64], mat: &MatRead) -> Result<DamageUpdate> {
-    let e = mat.get("E")?;
-    let nu = mat.get("nu")?;
-    let (f_t, f_c) = (mat.get("f_t")?, mat.get("f_c")?);
-    let (a_t, a_c) = (mat.get("A_t")?, mat.get("A_c")?);
+    let e = mat.get(E);
+    let nu = mat.get(NU);
+    let (f_t, f_c) = (mat.get(F_T), mat.get(F_C));
+    let (a_t, a_c) = (mat.get(A_T), mat.get(A_C));
     let (lambda, mu) = lame(e, nu);
 
     let sigma_eff = elastic_stress(eps, lambda, mu);

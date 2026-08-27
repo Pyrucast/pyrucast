@@ -45,6 +45,7 @@
 //! numbers.
 
 use crate::containers::element_field::SubElementField;
+use crate::containers::field::SubField;
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::{self};
 use crate::models::tensor::Kinematics;
@@ -315,20 +316,25 @@ pub fn frame_components(symmetry: MaterialSymmetry, space_dim: usize) -> &'stati
 /// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
 /// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
 /// // R mène des axes **matériau** aux axes globaux : ses colonnes sont les
-/// // axes matériau vus globalement. Ici V1 = (0, 1) : un quart de tour.
-/// let r = symmetry::frame_rotation(&mat, 0, 2)?;
+/// // axes matériau vus globalement. Ici V1 = (0, 1) : un quart de tour. Le
+/// // repère ferme le contrat, donc il commence ici à la position 3.
+/// let ligne = mat.point_values(0, 0)?.to_vec();
+/// let r = symmetry::frame_rotation(|k| ligne[k], 3, 2)?;
 /// assert!((r[(0, 0)] - 0.0).abs() < 1e-12 && (r[(1, 0)] - 1.0).abs() < 1e-12);
 /// // Un repère dégénéré est refusé plutôt que silencieusement absurde.
 /// mat.set_uniform("V1Y", 0.0)?;
-/// assert!(symmetry::frame_rotation(&mat, 0, 2).is_err());
+/// let nul = mat.point_values(0, 0)?.to_vec();
+/// assert!(symmetry::frame_rotation(|k| nul[k], 3, 2).is_err());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn frame_rotation(
-    material: &SubElementField,
-    cell: usize,
+    v: impl Fn(usize) -> f64,
+    frame_at: usize,
     space_dim: usize,
 ) -> Result<Matrix3<f64>> {
-    let read = |name: &str| material.value(cell, 0, name);
+    // The frame components close every anisotropic contract, in the order
+    // V1X, V1Y(, V1Z, V2X, V2Y, V2Z) — `frame_at` is where they start.
+    let read = |k: usize| -> Result<f64> { Ok(v(frame_at + k)) };
     let degenerate = |what: &str| {
         PyrucastError::Message(format!(
             "material frame: {what} — the orthotropy axes must be non-null and independent \
@@ -337,7 +343,7 @@ pub fn frame_rotation(
     };
 
     if space_dim == 2 {
-        let v1 = Vector3::new(read("V1X")?, read("V1Y")?, 0.0);
+        let v1 = Vector3::new(read(0)?, read(1)?, 0.0);
         let e1 = v1
             .try_normalize(f64::EPSILON)
             .ok_or_else(|| degenerate("V1 is null"))?;
@@ -348,8 +354,8 @@ pub fn frame_rotation(
         return Ok(Matrix3::from_columns(&[e1, e2, e3]));
     }
 
-    let v1 = Vector3::new(read("V1X")?, read("V1Y")?, read("V1Z")?);
-    let v2 = Vector3::new(read("V2X")?, read("V2Y")?, read("V2Z")?);
+    let v1 = Vector3::new(read(0)?, read(1)?, read(2)?);
+    let v2 = Vector3::new(read(3)?, read(4)?, read(5)?);
     let e1 = v1
         .try_normalize(f64::EPSILON)
         .ok_or_else(|| degenerate("V1 is null"))?;
@@ -466,7 +472,8 @@ fn rotate_tensor(c: &Tensor4, r: &Matrix3<f64>) -> Tensor4 {
 ///     [210e3, 10e3, 10e3], [0.3, 0.3, 0.3], [5e3, 5e3, 5e3])?;
 /// assert_eq!(symmetry::rotate_voigt(&d, &Matrix3::identity()), d);
 /// // …un quart de tour échange les deux premières directions.
-/// let r = symmetry::frame_rotation(&mat, 0, 2)?;
+/// let ligne = mat.point_values(0, 0)?.to_vec();
+/// let r = symmetry::frame_rotation(|k| ligne[k], 3, 2)?;
 /// let dr = symmetry::rotate_voigt(&d, &r);
 /// assert!((dr[0][0] - d[1][1]).abs() < 1e-6);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -553,13 +560,10 @@ pub const ANISOTROPIC_ELASTIC: [&str; 21] = [
 /// compliance is singular — which is what an inconsistent set of ratios
 /// (`ν_12² > E_1/E_2`, …) produces, and which would otherwise assemble a
 /// non-positive stiffness in silence.
-fn orthotropic_stiffness(material: &SubElementField, cell: usize) -> Result<[[f64; 6]; 6]> {
-    let v = |name: &str| material.value(cell, 0, name);
-    orthotropic_from_constants(
-        [v("E_1")?, v("E_2")?, v("E_3")?],
-        [v("nu_12")?, v("nu_13")?, v("nu_23")?],
-        [v("G_12")?, v("G_13")?, v("G_23")?],
-    )
+fn orthotropic_stiffness(v: impl Fn(usize) -> f64) -> Result<[[f64; 6]; 6]> {
+    // Positions in [`ORTHOTROPIC_ELASTIC`], which opens every orthotropic
+    // material contract: the nine constants, then the frame.
+    orthotropic_from_constants([v(0), v(1), v(2)], [v(3), v(4), v(5)], [v(6), v(7), v(8)])
 }
 
 /// The same, from bare constants — the arithmetic core, so it can be exercised
@@ -641,18 +645,19 @@ pub fn orthotropic_from_constants(e: [f64; 3], nu: [f64; 3], g: [f64; 3]) -> Res
 
 /// Full 3-D anisotropic stiffness in the material axes, read straight from the
 /// 21 upper-triangle components and mirrored.
-fn anisotropic_stiffness(material: &SubElementField, cell: usize) -> Result<[[f64; 6]; 6]> {
+fn anisotropic_stiffness(v: impl Fn(usize) -> f64) -> [[f64; 6]; 6] {
     let mut d = [[0.0; 6]; 6];
-    let mut names = ANISOTROPIC_ELASTIC.iter();
+    // [`ANISOTROPIC_ELASTIC`] covers the upper triangle, in that order.
+    let mut k = 0;
     for i in 0..6 {
         for j in i..6 {
-            let name = names.next().expect("21 names cover the upper triangle");
-            let value = material.value(cell, 0, name)?;
+            let value = v(k);
+            k += 1;
             d[i][j] = value;
             d[j][i] = value;
         }
     }
-    Ok(d)
+    d
 }
 
 /// The constitutive (Voigt) matrix of a cell, in **global** axes and reduced to
@@ -700,21 +705,49 @@ pub fn elastic_constitutive(
     kinematics: Kinematics,
     space_dim: usize,
 ) -> Result<Vec<Vec<f64>>> {
+    let contract = elasticity::material_contract(symmetry, space_dim);
+    let idx = material.resolve_components(contract, "material")?;
+    let row = material.point_values(cell, 0)?;
+    let mut d = [[0.0_f64; 6]; 6];
+    let v = elastic_constitutive_into(row, &idx, symmetry, kinematics, space_dim, &mut d)?;
+    Ok(d[..v].iter().map(|r| r[..v].to_vec()).collect())
+}
+
+/// [`elastic_constitutive`] from a **material row** and its resolved layout,
+/// writing into a caller-owned buffer and returning the Voigt size `v`.
+///
+/// The form a constitutive kernel calls: `idx` gives the position of each
+/// component of [`elasticity::material_contract`] in `material`, resolved once
+/// per zone, so this reads by index and allocates nothing.
+pub fn elastic_constitutive_into(
+    material: &[f64],
+    idx: &[u32],
+    symmetry: MaterialSymmetry,
+    kinematics: Kinematics,
+    space_dim: usize,
+    out: &mut [[f64; 6]; 6],
+) -> Result<usize> {
+    let v = |k: usize| material[idx[k] as usize];
     if symmetry == MaterialSymmetry::Isotropic {
-        return Ok(elasticity::constitutive(
-            material.value(cell, 0, "E")?,
-            material.value(cell, 0, "nu")?,
+        return Ok(elasticity::constitutive_into(
+            v(0),
+            v(1),
             kinematics,
             space_dim,
+            out,
         ));
     }
-    let d_mat = match symmetry {
-        MaterialSymmetry::Orthotropic => orthotropic_stiffness(material, cell)?,
-        MaterialSymmetry::Anisotropic => anisotropic_stiffness(material, cell)?,
+    let (d_mat, frame_at) = match symmetry {
+        MaterialSymmetry::Orthotropic => (orthotropic_stiffness(v)?, ORTHOTROPIC_ELASTIC.len()),
+        MaterialSymmetry::Anisotropic => (anisotropic_stiffness(v), ANISOTROPIC_ELASTIC.len()),
         MaterialSymmetry::Isotropic => unreachable!("handled above"),
     };
-    let r = frame_rotation(material, cell, space_dim)?;
-    Ok(reduce_to_model(&rotate_voigt(&d_mat, &r), kinematics))
+    let r = frame_rotation(v, frame_at, space_dim)?;
+    Ok(reduce_to_model_into(
+        &rotate_voigt(&d_mat, &r),
+        kinematics,
+        out,
+    ))
 }
 
 /// Reduce a full-3-D engineering-Voigt matrix to the kinematics's `v×v` matrix: the
@@ -761,6 +794,23 @@ pub fn elastic_constitutive(
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn reduce_to_model(d3: &[[f64; 6]; 6], kinematics: Kinematics) -> Vec<Vec<f64>> {
+    let mut d = [[0.0_f64; 6]; 6];
+    let v = reduce_to_model_into(d3, kinematics, &mut d);
+    d[..v].iter().map(|r| r[..v].to_vec()).collect()
+}
+
+/// [`reduce_to_model`] writing into a caller-owned buffer, returning the Voigt
+/// size `v` it filled (`d[..v][..v]`).
+///
+/// The form a constitutive kernel calls: the same reduction, but on the stack.
+/// The allocating shape above builds two levels of `Vec` for a matrix of at most
+/// thirty-six numbers, which is nothing once per assembly and a great deal once
+/// per Gauss point of every iteration.
+pub fn reduce_to_model_into(
+    d3: &[[f64; 6]; 6],
+    kinematics: Kinematics,
+    out: &mut [[f64; 6]; 6],
+) -> usize {
     /// Where each axisymmetric Voigt slot `[rr, zz, θθ, rz]` sits in the 3-D order.
     const AXI_TO_3D: [usize; 4] = [0, 1, 2, 5];
     /// The in-plane slots `[xx, yy, xy]`.
@@ -768,25 +818,37 @@ pub fn reduce_to_model(d3: &[[f64; 6]; 6], kinematics: Kinematics) -> Vec<Vec<f6
     match kinematics {
         // Axisymmetric: the plain [rr, zz, θθ, rz] sub-block. No condensation —
         // all four strains are prescribed (the hoop is measured, not assumed).
-        Kinematics::Axisymmetric => AXI_TO_3D
-            .iter()
-            .map(|&i| AXI_TO_3D.iter().map(|&j| d3[i][j]).collect())
-            .collect(),
-        Kinematics::Full3D => d3.iter().map(|r| r.to_vec()).collect(),
-        Kinematics::PlaneStrain => PLANE
-            .iter()
-            .map(|&i| PLANE.iter().map(|&j| d3[i][j]).collect())
-            .collect(),
+        Kinematics::Axisymmetric => {
+            for (a, &i) in AXI_TO_3D.iter().enumerate() {
+                for (b, &j) in AXI_TO_3D.iter().enumerate() {
+                    out[a][b] = d3[i][j];
+                }
+            }
+            AXI_TO_3D.len()
+        }
+        Kinematics::Full3D => {
+            *out = *d3;
+            6
+        }
+        Kinematics::PlaneStrain => {
+            for (a, &i) in PLANE.iter().enumerate() {
+                for (b, &j) in PLANE.iter().enumerate() {
+                    out[a][b] = d3[i][j];
+                }
+            }
+            PLANE.len()
+        }
         Kinematics::PlaneStress => {
             // Condense the out-of-plane normal `zz` (index 2) so σ_zz = 0:
             // D2[i][j] = D3[i][j] − D3[i][2]·D3[2][j]/D3[2][2].
             let z = 2usize;
             let dzz = d3[z][z];
-            let cond = |i: usize, j: usize| d3[i][j] - d3[i][z] * d3[z][j] / dzz;
-            PLANE
-                .iter()
-                .map(|&i| PLANE.iter().map(|&j| cond(i, j)).collect())
-                .collect()
+            for (a, &i) in PLANE.iter().enumerate() {
+                for (b, &j) in PLANE.iter().enumerate() {
+                    out[a][b] = d3[i][j] - d3[i][z] * d3[z][j] / dzz;
+                }
+            }
+            PLANE.len()
         }
     }
 }
@@ -916,28 +978,48 @@ pub fn transport_tensor(
     space_dim: usize,
     prefix: &str,
 ) -> Result<Matrix3<f64>> {
+    let names: Vec<String> = match symmetry {
+        MaterialSymmetry::Isotropic => vec![prefix.to_string()],
+        MaterialSymmetry::Orthotropic => orthotropic_scalar(prefix).to_vec(),
+        MaterialSymmetry::Anisotropic => anisotropic_scalar(prefix).to_vec(),
+    };
+    let frame: &[&str] = match (symmetry, space_dim) {
+        (MaterialSymmetry::Isotropic, _) => &[],
+        (_, 2) => &["V1X", "V1Y"],
+        _ => &["V1X", "V1Y", "V1Z", "V2X", "V2Y", "V2Z"],
+    };
+    let mut read: Vec<f64> = Vec::with_capacity(names.len() + frame.len());
+    for n in &names {
+        read.push(material.value(cell, g, n)?);
+    }
+    for n in frame {
+        read.push(material.value(cell, 0, n)?);
+    }
+    transport_tensor_from(|k| read[k], symmetry, space_dim)
+}
+
+/// [`transport_tensor`] from a **material row** already read positionally: `v(k)`
+/// is the `k`-th component of the physics' transport contract — the conductivity
+/// constants, then the frame.
+///
+/// The form a constitutive kernel calls: no name, no allocation.
+pub fn transport_tensor_from(
+    v: impl Fn(usize) -> f64,
+    symmetry: MaterialSymmetry,
+    space_dim: usize,
+) -> Result<Matrix3<f64>> {
     let k3 = match symmetry {
-        MaterialSymmetry::Isotropic => {
-            let k = material.value(cell, g, prefix)?;
-            Matrix3::from_diagonal_element(k)
-        }
+        MaterialSymmetry::Isotropic => Matrix3::from_diagonal_element(v(0)),
         MaterialSymmetry::Orthotropic => {
-            let n = orthotropic_scalar(prefix);
-            let d = Matrix3::from_diagonal(&Vector3::new(
-                material.value(cell, 0, &n[0])?,
-                material.value(cell, 0, &n[1])?,
-                material.value(cell, 0, &n[2])?,
-            ));
-            let r = frame_rotation(material, cell, space_dim)?;
+            let d = Matrix3::from_diagonal(&Vector3::new(v(0), v(1), v(2)));
+            let r = frame_rotation(&v, 3, space_dim)?;
             r * d * r.transpose()
         }
         MaterialSymmetry::Anisotropic => {
-            let n = anisotropic_scalar(prefix);
-            let v = |i: usize| material.value(cell, 0, &n[i]);
-            let (k11, k12, k13) = (v(0)?, v(1)?, v(2)?);
-            let (k22, k23, k33) = (v(3)?, v(4)?, v(5)?);
+            let (k11, k12, k13) = (v(0), v(1), v(2));
+            let (k22, k23, k33) = (v(3), v(4), v(5));
             let d = Matrix3::new(k11, k12, k13, k12, k22, k23, k13, k23, k33);
-            let r = frame_rotation(material, cell, space_dim)?;
+            let r = frame_rotation(&v, 6, space_dim)?;
             r * d * r.transpose()
         }
     };

@@ -14,6 +14,7 @@ use crate::error::Result;
 use crate::handle::Handle;
 use crate::models::owned_components;
 use crate::models::symmetry::{self, MaterialSymmetry};
+use crate::models::ZoneLayout;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use serde::{Deserialize, Serialize};
 
@@ -425,26 +426,31 @@ impl Domain for HeatConduction {
     /// Linear constitutive law: weak-form flux = k·∇T at one Gauss point.
     /// (No internal-state variables — `VAR0`/`VAR1` are empty; a non-linear law
     /// would read trailing state components of `input` and write updated ones.)
+    fn deformation_reads(&self) -> Vec<String> {
+        deformation_components(self.space_dim)
+    }
+
     fn integrate_point(
         &self,
         geom: &CellGeom,
-        input: &SubElementField,
-        _prev: &SubElementField,
-        material: Option<&SubElementField>,
-        g: usize,
+        _g: usize,
+        lay: &ZoneLayout,
+        deformation: &[f64],
+        _prev: &[f64],
+        material: &[f64],
         _dt: f64,
         out: &mut [f64],
     ) -> Result<()> {
-        let mat =
-            material.expect("HeatConduction declares a material_fespace ⇒ material is supplied");
-        let (cell, space_dim) = (geom.cell, geom.space_dim);
-        let grad_names = deformation_components(space_dim);
-        let k3 =
-            symmetry::transport_tensor(mat, cell, g, self.symmetry, space_dim, MATERIAL_COMPONENT)?;
+        let space_dim = geom.space_dim;
+        let k3 = symmetry::transport_tensor_from(
+            |k| material[lay.material[k] as usize],
+            self.symmetry,
+            space_dim,
+        )?;
         for a in 0..space_dim {
             let mut acc = 0.0;
             for b in 0..space_dim {
-                acc += k3[(a, b)] * input.value(cell, g, &grad_names[b])?;
+                acc += k3[(a, b)] * deformation[lay.deformation[b] as usize];
             }
             out[a] = acc;
         }

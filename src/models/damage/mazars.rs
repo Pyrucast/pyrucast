@@ -19,6 +19,15 @@ use crate::models::elasticity::{elastic_stress, lame};
 use crate::models::tensor::Kinematics;
 use nalgebra::Matrix3;
 
+/// Positions in this law's material contract, [`MATERIAL`].
+const E: usize = 0;
+const NU: usize = 1;
+const EPS_D0: usize = 2;
+const A_T: usize = 3;
+const B_T: usize = 4;
+const A_C: usize = 5;
+const B_C: usize = 6;
+
 /// Material parameters of the Mazars kinematics at one Gauss point.
 ///
 /// ```
@@ -41,7 +50,9 @@ use nalgebra::Matrix3;
 /// #     fes.get(0)?, vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(),
 /// #                       "B_t".into(), "A_c".into(), "B_c".into()],
 /// #     &[30_000.0, 0.2, 1e-4, 0.8, 20_000.0, 1.4, 1_850.0])?;
-/// # let mat = MatRead { field: &materiau, cell: 0 };
+/// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+/// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+/// # let mat = MatRead { row: materiau.point_values(0, 0).unwrap(), idx: &idx_mat };
 /// // Les paramètres de Mazars, lus une fois par maille : le seuil `eps_d0`
 /// // et les deux branches, traction et compression. Ils ne sont pas
 /// // exposés champ par champ — c'est `update` qui les emploie.
@@ -145,7 +156,9 @@ fn mazars_update(eps: &[f64; 6], kappa_old: f64, p: &MazarsParams) -> ([f64; 6],
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let materiau = SubElementField::from_uniform_per_component(
 /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
-/// # let mat = MatRead { field: &materiau, cell: 0 };
+/// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+/// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+/// # let mat = MatRead { row: materiau.point_values(0, 0).unwrap(), idx: &idx_mat };
 /// // Un seuil `eps_d0`, puis deux branches : traction (A_t, B_t) et
 /// // compression (A_c, B_c), mélangées par la part de traction.
 /// assert!(damage::mazars::MATERIAL.contains(&"eps_d0"));
@@ -173,7 +186,9 @@ pub const MATERIAL: &[&str] = &["E", "nu", "eps_d0", "A_t", "B_t", "A_c", "B_c"]
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let materiau = SubElementField::from_uniform_per_component(
 /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
-/// # let mat = MatRead { field: &materiau, cell: 0 };
+/// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+/// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+/// # let mat = MatRead { row: materiau.point_values(0, 0).unwrap(), idx: &idx_mat };
 /// // `kappa` est la mémoire de la loi : il **ne décroît pas**. Décharger
 /// // après avoir endommagé ne répare rien.
 /// let grand = [1e-3, 0.0, 0.0, 0.0, 0.0, 0.0];
@@ -190,13 +205,13 @@ pub const MATERIAL: &[&str] = &["E", "nu", "eps_d0", "A_t", "B_t", "A_c", "B_c"]
 /// ```
 pub fn update(eps: &[f64; 6], prev: &[f64], mat: &MatRead) -> Result<DamageUpdate> {
     let p = MazarsParams {
-        e: mat.get("E")?,
-        nu: mat.get("nu")?,
-        eps_d0: mat.get("eps_d0")?,
-        a_t: mat.get("A_t")?,
-        b_t: mat.get("B_t")?,
-        a_c: mat.get("A_c")?,
-        b_c: mat.get("B_c")?,
+        e: mat.get(E),
+        nu: mat.get(NU),
+        eps_d0: mat.get(EPS_D0),
+        a_t: mat.get(A_T),
+        b_t: mat.get(B_T),
+        a_c: mat.get(A_C),
+        b_c: mat.get(B_C),
     };
     let kappa_old = prev.first().copied().unwrap_or(0.0);
     let (sigma, damage, kappa) = mazars_update(eps, kappa_old, &p);

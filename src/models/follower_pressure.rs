@@ -84,6 +84,7 @@ use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::owned_components;
 use crate::models::tensor::{dual_name, primal_name};
+use crate::models::ZoneLayout;
 use crate::models::{
     CellGeom, Contribution, Domain, MatrixKind, MatrixLayout, Physics, SubModelKind,
 };
@@ -308,27 +309,36 @@ impl Domain for FollowerPressure {
     ///
     /// This is where the direction is refreshed: call it again with an updated
     /// displacement and the load has turned with the surface.
+    fn deformation_reads(&self) -> Vec<String> {
+        let d = self.space_dim;
+        let mut names = Vec::with_capacity(d * d);
+        for a in 0..d {
+            for b in 0..d {
+                names.push(format!("grad_u_{}_{}", AXES[a], AXES[b]));
+            }
+        }
+        names
+    }
+
     fn integrate_point(
         &self,
         geom: &CellGeom,
-        input: &SubElementField,
-        _prev: &SubElementField,
-        material: Option<&SubElementField>,
         g: usize,
+        lay: &ZoneLayout,
+        deformation: &[f64],
+        _prev: &[f64],
+        material: &[f64],
         _dt: f64,
         out: &mut [f64],
     ) -> Result<()> {
-        let mat = material.expect("FollowerPressure declares a material_fespace");
         let (cell, d) = (geom.cell, self.space_dim);
-        let p = mat.value(cell, g, MATERIAL_COMPONENT)?;
+        let p = material[lay.material[0] as usize];
 
-        // ∇_s u, the tangential gradient of the displacement.
-        let mut grad = vec![0.0; d * d];
-        for a in 0..d {
-            for b in 0..d {
-                let name = format!("grad_u_{}_{}", AXES[a], AXES[b]);
-                grad[a * d + b] = input.value(cell, g, &name)?;
-            }
+        // ∇_s u, the tangential gradient of the displacement, row-major over
+        // `deformation_reads`' own `(a, b)` order.
+        let mut grad = [0.0_f64; 9];
+        for k in 0..d * d {
+            grad[k] = deformation[lay.deformation[k] as usize];
         }
 
         // The deformed tangents ā_k = a_k + (∇_s u)·a_k, and the reference

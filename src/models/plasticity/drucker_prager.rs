@@ -97,6 +97,21 @@ use crate::models::plasticity::law::{
 use crate::models::tensor::Kinematics;
 use crate::models::tensor::{deviator, i1, von_mises_stress};
 
+/// Positions in this law's required contract,
+/// `["E", "nu", "friction", "k", "psi"]`.
+const FRICTION: usize = 2;
+const COHESION: usize = 3;
+const DILATANCY: usize = 4;
+/// Positions in its **optional** contract, `["alpha", "rho", "beta", "delta",
+/// "H", "friction_ult", "beta_ult", "k_ult"]` — the six that turn the simple
+/// cone into the general surface, plus the two an ancillary operator reads.
+const OPT_BETA: usize = 2;
+const OPT_DELTA: usize = 3;
+const OPT_H: usize = 4;
+const OPT_FRICTION_ULT: usize = 5;
+const OPT_BETA_ULT: usize = 6;
+const OPT_K_ULT: usize = 7;
+
 /// The nine parameters of the general surface.
 #[derive(Clone, Copy)]
 struct Params {
@@ -115,47 +130,38 @@ struct Params {
     delta: f64,
 }
 
-/// An optional constitutive parameter, or its default.
-///
-/// Absent from the material field means « take the default », not an error: the
-/// three-parameter cone is the common case and must stay writable in three
-/// numbers.
-fn optional(mat: &MatParams, name: &str, default: f64) -> f64 {
-    mat.get(name).unwrap_or(default)
-}
-
 /// Read the nine and reject a non-physical set.
 fn params(mat: &MatParams) -> Result<Params> {
-    let friction = mat.get("friction")?;
-    let k = require_positive(PlasticLaw::DruckerPrager, "k", mat.get("k")?)?;
-    let psi = mat.get("psi")?;
+    let friction = mat.get(FRICTION);
+    let k = require_positive(PlasticLaw::DruckerPrager, "k", mat.get(COHESION))?;
+    let psi = mat.get(DILATANCY);
     let beta = require_positive(
         PlasticLaw::DruckerPrager,
         "beta",
-        optional(mat, "beta", 1.0),
+        mat.optional(OPT_BETA, 1.0),
     )?;
     let beta_ult = require_positive(
         PlasticLaw::DruckerPrager,
         "beta_ult",
-        optional(mat, "beta_ult", beta),
+        mat.optional(OPT_BETA_ULT, beta),
     )?;
     Ok(Params {
         friction,
         beta,
         k,
-        friction_ult: optional(mat, "friction_ult", friction),
+        friction_ult: mat.optional(OPT_FRICTION_ULT, friction),
         beta_ult,
         k_ult: require_positive(
             PlasticLaw::DruckerPrager,
             "k_ult",
-            optional(mat, "k_ult", k),
+            mat.optional(OPT_K_ULT, k),
         )?,
-        hardening: optional(mat, "H", 0.0),
+        hardening: mat.optional(OPT_H, 0.0),
         psi,
         delta: require_positive(
             PlasticLaw::DruckerPrager,
             "delta",
-            optional(mat, "delta", 1.0),
+            mat.optional(OPT_DELTA, 1.0),
         )?,
     })
 }
@@ -216,9 +222,11 @@ impl Params {
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let materiau = SubElementField::from_uniform_per_component(
 /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "friction".into(), "k".into(), "psi".into()], &[210000.0, 0.3, 0.5, 100.0, 0.2]).unwrap();
-/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+/// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+/// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-/// #                         vars: Vec::new() };
+/// #                         vars: &[] };
 /// // Sensible à la pression : une traction hydrostatique plastifie, là où
 /// // von Mises la laisserait passer indéfiniment. Le retour se fait sur
 /// // l'**apex** du cône, à I₁ = k/α, quelle que soit l'intensité.

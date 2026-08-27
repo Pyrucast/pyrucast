@@ -59,7 +59,6 @@
 //! states the figure rather than hiding it behind a loose tolerance for
 //! everything.
 
-use crate::containers::element_field::SubElementField;
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::{elastic_stress, lame};
 use crate::models::tensor::symmetrise;
@@ -76,6 +75,14 @@ use serde::{Deserialize, Serialize};
 /// assert_eq!(law::TENSOR_SUFFIXES, ["xx", "yy", "zz", "yz", "xz", "xy"]);
 /// ```
 pub const TENSOR_SUFFIXES: [&str; 6] = ["xx", "yy", "zz", "yz", "xz", "xy"];
+
+/// The most internal variables any law carries — the six back-stress components
+/// of Chaboche, its isotropic drag `R` and Lemaitre's damage.
+///
+/// It bounds a **stack** buffer in the constitutive kernel, which is why it is a
+/// constant rather than a `Vec`'s length: the state at a Gauss point is read
+/// into an array, not allocated.
+pub const MAX_INTERNAL_VARS: usize = 8;
 
 /// Which yield surface and flow rule an elastoplastic kinematics obeys.
 ///
@@ -104,9 +111,11 @@ pub const TENSOR_SUFFIXES: [&str; 6] = ["xx", "yy", "zz", "yz", "xz", "xy"];
 /// #     fes.get(0).unwrap(),
 /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
 /// #     &[210_000.0, 0.3, 250.0]).unwrap();
-/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+/// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+/// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-/// #                         vars: Vec::new() };
+/// #                         vars: &[] };
 /// // Une loi déclare **elle-même** le matériau qu'elle exige et l'état
 /// // qu'elle porte : c'est ce qui permet d'en ajouter une sans toucher
 /// // au reste.
@@ -423,9 +432,11 @@ impl PlasticLaw {
     /// #     fes.get(0).unwrap(),
     /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
     /// #     &[210_000.0, 0.3, 250.0]).unwrap();
-    /// # let mat = MatParams::new(&materiau, 0).unwrap();
+    /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+    /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+    /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
     /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-    /// #                         vars: Vec::new() };
+    /// #                         vars: &[] };
     /// # use pyrucast::named::Named;
     /// // Réciproque exacte de `from_name`, pour les dix lois.
     /// assert!(PlasticLaw::ALL.iter()
@@ -470,9 +481,11 @@ impl PlasticLaw {
     /// #     fes.get(0).unwrap(),
     /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
     /// #     &[210_000.0, 0.3, 250.0]).unwrap();
-    /// # let mat = MatParams::new(&materiau, 0).unwrap();
+    /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+    /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+    /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
     /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-    /// #                         vars: Vec::new() };
+    /// #                         vars: &[] };
     /// // La liste exhaustive, dont se servent la surface Python et les messages.
     /// assert_eq!(PlasticLaw::ALL.len(), 10);
     /// assert!(PlasticLaw::ALL.contains(&PlasticLaw::Perfect));
@@ -513,9 +526,11 @@ impl PlasticLaw {
     /// #     fes.get(0).unwrap(),
     /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
     /// #     &[210_000.0, 0.3, 250.0]).unwrap();
-    /// # let mat = MatParams::new(&materiau, 0).unwrap();
+    /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+    /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+    /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
     /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-    /// #                         vars: Vec::new() };
+    /// #                         vars: &[] };
     /// // Perfect : un seuil constant. Isotropic : plus le module d'écrouissage.
     /// assert!(PlasticLaw::Perfect.material_components().contains(&"sigma_y"));
     /// assert!(PlasticLaw::Isotropic.material_components().contains(&"H"));
@@ -550,9 +565,11 @@ impl PlasticLaw {
     /// #     fes.get(0).unwrap(),
     /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
     /// #     &[210_000.0, 0.3, 250.0]).unwrap();
-    /// # let mat = MatParams::new(&materiau, 0).unwrap();
+    /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+    /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+    /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
     /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-    /// #                         vars: Vec::new() };
+    /// #                         vars: &[] };
     /// // Ce que la loi porte **au-delà** de ε_p et p — rien pour la plupart.
     /// assert!(PlasticLaw::Perfect.internal_names().is_empty());
     /// // La porosité **est** l'état d'une loi de métal poreux.
@@ -586,9 +603,11 @@ impl PlasticLaw {
     /// #     fes.get(0).unwrap(),
     /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
     /// #     &[210_000.0, 0.3, 250.0]).unwrap();
-    /// # let mat = MatParams::new(&materiau, 0).unwrap();
+    /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+    /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+    /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
     /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-    /// #                         vars: Vec::new() };
+    /// #                         vars: &[] };
     /// // Une loi visqueuse exige l'incrément de temps ; intégrer sans lui,
     /// // comme si la loi était instantanée, serait faux en silence.
     /// assert!(!PlasticLaw::Perfect.is_viscous());
@@ -624,9 +643,11 @@ impl PlasticLaw {
     /// #     fes.get(0).unwrap(),
     /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
     /// #     &[210_000.0, 0.3, 250.0]).unwrap();
-    /// # let mat = MatParams::new(&materiau, 0).unwrap();
+    /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+    /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+    /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
     /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-    /// #                         vars: Vec::new() };
+    /// #                         vars: &[] };
     /// // Sous le seuil, la contrainte d'essai passe telle quelle.
     /// let sous = [100.0, 0.0, 0.0, 0.0, 0.0, 0.0];
     /// let pas = PlasticLaw::Perfect.return_map(&sous, &repos, &mat, None)?;
@@ -709,9 +730,11 @@ impl std::fmt::Display for PlasticLaw {
 /// // Les constantes élastiques sont **pré-calculées** — toute loi en a
 /// // besoin — le reste se cherche par nom, de sorte qu'ajouter une loi
 /// // n'ajoute aucune plomberie ici.
-/// let m = MatParams::new(&materiau, 0)?;
+/// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+/// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+/// let m = MatParams::new(materiau.point_values(0, 0)?, &idx_mat, &opt_mat);
 /// assert_eq!((m.lambda, m.mu), elasticity::lame(210_000.0, 0.3));
-/// assert_eq!(m.get("sigma_y")?, 250.0);
+/// assert_eq!(m.get(2), 250.0); // σ_y, troisième du contrat
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub struct MatParams<'a> {
@@ -719,85 +742,77 @@ pub struct MatParams<'a> {
     pub lambda: f64,
     /// Shear modulus.
     pub mu: f64,
-    material: &'a SubElementField,
-    cell: usize,
+    row: &'a [f64],
+    idx: &'a [u32],
+    opt_idx: &'a [u32],
 }
 
 impl<'a> MatParams<'a> {
-    /// Read `E` and `nu` for this cell and pre-compute the Lamé coefficients.
+    /// The material of one cell: its row, plus where each component of the law's
+    /// own contract sits in it (resolved once for the zone).
+    ///
+    /// Every plastic contract opens with `E`, `nu` — the two constants no law
+    /// can do without — so the Lamé coefficients are pre-computed here and the
+    /// rest is read by [`get`](Self::get), positionally.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::field::SubField;
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::plasticity::law::{self, MatParams, PlasticLaw, PlasticStep, PrevState};
+    /// # use pyrucast::models::elasticity;
+    /// # use pyrucast::models::plasticity::law::{MatParams, PlasticLaw};
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
     /// # let materiau = SubElementField::from_uniform_per_component(
-    /// #     fes.get(0).unwrap(),
-    /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
-    /// #     &[210_000.0, 0.3, 250.0]).unwrap();
-    /// # let mat = MatParams::new(&materiau, 0).unwrap();
-    /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-    /// #                         vars: Vec::new() };
-    /// // `E` et `nu` sont lus une fois par maille, et les coefficients de Lamé
-    /// // calculés d'avance — pas à chaque point de Gauss.
-    /// let m = MatParams::new(&materiau, 0)?;
-    /// assert!((m.mu - 210_000.0 / 2.6).abs() < 1e-9);
+    /// #     fes.get(0)?, vec!["E".into(), "nu".into(), "sigma_y".into()],
+    /// #     &[210_000.0, 0.3, 250.0])?;
+    /// // La résolution a lieu **une fois par zone** ; le noyau, lui, indexe.
+    /// let idx = materiau.resolve_components(
+    ///     PlasticLaw::Perfect.material_components(), "material")?;
+    /// let m = MatParams::new(materiau.point_values(0, 0)?, &idx, &[]);
+    /// assert_eq!((m.lambda, m.mu), elasticity::lame(210_000.0, 0.3));
+    /// assert_eq!(m.get(2), 250.0); // σ_y, troisième du contrat
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn new(material: &'a SubElementField, cell: usize) -> Result<Self> {
-        let (lambda, mu) = lame(
-            material.value(cell, 0, "E")?,
-            material.value(cell, 0, "nu")?,
-        );
-        Ok(Self {
+    pub fn new(row: &'a [f64], idx: &'a [u32], opt_idx: &'a [u32]) -> Self {
+        let (lambda, mu) = lame(row[idx[0] as usize], row[idx[1] as usize]);
+        Self {
             lambda,
             mu,
-            material,
-            cell,
-        })
+            row,
+            idx,
+            opt_idx,
+        }
     }
 
-    /// A material component of this cell, by name.
+    /// The `k`-th component of this law's
+    /// [`material_components`](PlasticLawKind::material_components), for this
+    /// cell. No name, no search, no `Result`: the component's presence was
+    /// settled when the layout was resolved.
+    pub fn get(&self, k: usize) -> f64 {
+        self.row[self.idx[k] as usize]
+    }
+
+    /// The `k`-th component of this law's
+    /// [`optional_material_components`](crate::models::Domain::optional_material_components),
+    /// or `default` where the caller supplied none.
     ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::element_field::SubElementField;
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::plasticity::law::{self, MatParams, PlasticLaw, PlasticStep, PrevState};
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// # let materiau = SubElementField::from_uniform_per_component(
-    /// #     fes.get(0).unwrap(),
-    /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
-    /// #     &[210_000.0, 0.3, 250.0]).unwrap();
-    /// # let mat = MatParams::new(&materiau, 0).unwrap();
-    /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-    /// #                         vars: Vec::new() };
-    /// assert_eq!(mat.get("sigma_y")?, 250.0);
-    /// // Une constante absente est une erreur, pas un zéro silencieux.
-    /// assert!(mat.get("H").is_err());
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn get(&self, name: &str) -> Result<f64> {
-        self.material.value(self.cell, 0, name)
+    /// Absence is a fact of the **zone**, settled when the layout was resolved:
+    /// the branch here is on a resolved index, never on a name.
+    pub fn optional(&self, k: usize, default: f64) -> f64 {
+        match self.opt_idx[k] {
+            crate::containers::field::ABSENT_COMPONENT => default,
+            i => self.row[i as usize],
+        }
     }
 
     /// Bulk modulus `K = λ + 2μ/3`.
@@ -821,9 +836,11 @@ impl<'a> MatParams<'a> {
     /// #     fes.get(0).unwrap(),
     /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
     /// #     &[210_000.0, 0.3, 250.0]).unwrap();
-    /// # let mat = MatParams::new(&materiau, 0).unwrap();
+    /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+    /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+    /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
     /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-    /// #                         vars: Vec::new() };
+    /// #                         vars: &[] };
     /// // K = λ + 2μ/3 — ce dont a besoin toute loi sensible à la pression.
     /// assert!((mat.bulk() - (mat.lambda + 2.0 * mat.mu / 3.0)).abs() < 1e-9);
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -857,16 +874,18 @@ impl<'a> MatParams<'a> {
 /// #     fes.get(0).unwrap(),
 /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
 /// #     &[210_000.0, 0.3, 250.0]).unwrap();
-/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+/// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+/// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-/// #                         vars: Vec::new() };
+/// #                         vars: &[] };
 /// // L'état au début du pas A : c'est de là que part chaque intégration.
 /// assert_eq!(repos.p, 0.0);
 /// assert_eq!(repos.var(0), 0.0); // aucune variable interne portée
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Clone, Default)]
-pub struct PrevState {
+pub struct PrevState<'a> {
     /// Strain `ε(A)`.
     pub eps: [f64; 6],
     /// Stress `σ(A)`.
@@ -879,10 +898,14 @@ pub struct PrevState {
     /// [`PlasticLaw::internal_names`] order — a back stress, a damage, whatever
     /// the law carries beyond `ε_p` and `p`. Empty for the laws that carry
     /// nothing more, which is most of them.
-    pub vars: Vec<f64>,
+    ///
+    /// **Borrowed**: the kernel reads them into a stack buffer bounded by
+    /// [`MAX_INTERNAL_VARS`] and lends it here, so a Gauss point allocates
+    /// nothing.
+    pub vars: &'a [f64],
 }
 
-impl PrevState {
+impl PrevState<'_> {
     /// Internal variable `i`, or `0` when the state does not carry it (the first
     /// step, where A is the reference configuration).
     ///
@@ -905,13 +928,15 @@ impl PrevState {
     /// #     fes.get(0).unwrap(),
     /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
     /// #     &[210_000.0, 0.3, 250.0]).unwrap();
-    /// # let mat = MatParams::new(&materiau, 0).unwrap();
+    /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+    /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+    /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
     /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-    /// #                         vars: Vec::new() };
+    /// #                         vars: &[] };
     /// // Rend `0` plutôt que d'échouer quand l'état ne porte pas la variable —
     /// // ce qui est le cas au premier pas, où A est la configuration de départ.
     /// assert_eq!(repos.var(0), 0.0);
-    /// let avec = PrevState { vars: vec![0.02], ..repos };
+    /// let avec = PrevState { vars: &[0.02], ..repos };
     /// assert_eq!(avec.var(0), 0.02);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -941,9 +966,11 @@ impl PrevState {
 /// #     fes.get(0).unwrap(),
 /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
 /// #     &[210_000.0, 0.3, 250.0]).unwrap();
-/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+/// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+/// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-/// #                         vars: Vec::new() };
+/// #                         vars: &[] };
 /// // Ce qu'une loi rend en fin de pas B : contrainte, déformation
 /// // plastique, plasticité cumulée, et ses variables internes.
 /// let trial = [100.0, 0.0, 0.0, 0.0, 0.0, 0.0];
@@ -986,9 +1013,11 @@ impl PlasticStep {
     /// #     fes.get(0).unwrap(),
     /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
     /// #     &[210_000.0, 0.3, 250.0]).unwrap();
-    /// # let mat = MatParams::new(&materiau, 0).unwrap();
+    /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+    /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+    /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
     /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-    /// #                         vars: Vec::new() };
+    /// #                         vars: &[] };
     /// // Un pas **élastique** : la contrainte d'essai tient, rien n'évolue.
     /// let trial = [100.0, 0.0, 0.0, 0.0, 0.0, 0.0];
     /// let pas = PlasticStep::elastic(&trial, &repos);
@@ -1000,7 +1029,7 @@ impl PlasticStep {
             sigma: *trial,
             eps_p: prev.eps_p,
             p: prev.p,
-            vars: prev.vars.clone(),
+            vars: prev.vars.to_vec(),
         }
     }
 }
@@ -1032,9 +1061,11 @@ impl PlasticStep {
 /// #     fes.get(0).unwrap(),
 /// #     vec!["E".into(), "nu".into(), "sigma_y".into()],
 /// #     &[210_000.0, 0.3, 250.0]).unwrap();
-/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+/// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+/// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-/// #                         vars: Vec::new() };
+/// #                         vars: &[] };
 /// // σ_trial = σ(A) + C:Δε — la forme qui porte σ(A) explicitement, celle
 /// // qu'une loi en grandes déformations reprend telle quelle.
 /// let eps_b = [1e-3, 0.0, 0.0, 0.0, 0.0, 0.0];

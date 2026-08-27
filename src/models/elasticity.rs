@@ -30,6 +30,7 @@ use crate::handle::Handle;
 use crate::models::owned_components;
 use crate::models::symmetry::{self, MaterialSymmetry};
 use crate::models::tensor::{dual_name, primal_name, stress_names, Kinematics};
+use crate::models::ZoneLayout;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use serde::{Deserialize, Serialize};
 
@@ -61,7 +62,10 @@ const ANISOTROPIC_3D: &[&str] = &[
 /// the assembler resolves a material zone by its **required component set**
 /// ([`crate::ops::matrix::assemble_kind`]), these disjoint contracts let an
 /// isotropic and an orthotropic zone live on one mesh without any consolidation.
-fn material_contract(symmetry: MaterialSymmetry, space_dim: usize) -> &'static [&'static str] {
+pub(crate) fn material_contract(
+    symmetry: MaterialSymmetry,
+    space_dim: usize,
+) -> &'static [&'static str] {
     match (symmetry, space_dim) {
         (MaterialSymmetry::Isotropic, _) => MATERIAL_COMPONENTS,
         (MaterialSymmetry::Orthotropic, 2) => ORTHOTROPIC_2D,
@@ -405,22 +409,34 @@ impl Domain for Elasticity {
     }
 
     /// Linear stress σ = D·ε at one Gauss point (material constants per cell).
+    fn deformation_reads(&self) -> Vec<String> {
+        strain_reads(self.space_dim, self.kinematics)
+    }
+
     fn integrate_point(
         &self,
-        geom: &CellGeom,
-        input: &SubElementField,
-        _prev: &SubElementField,
-        material: Option<&SubElementField>,
-        g: usize,
+        _geom: &CellGeom,
+        _g: usize,
+        lay: &ZoneLayout,
+        deformation: &[f64],
+        _prev: &[f64],
+        material: &[f64],
         _dt: f64,
         out: &mut [f64],
     ) -> Result<()> {
-        let mat = material.expect("Elasticity declares a material_fespace ⇒ material is supplied");
-        let (cell, d) = (geom.cell, self.space_dim);
-        let dmat = symmetry::elastic_constitutive(mat, cell, self.symmetry, self.kinematics, d)?;
-        let strain = voigt_strain(&|name| input.value(cell, g, name), d, self.kinematics)?;
-        for (r, drow) in dmat.iter().enumerate() {
-            out[r] = drow.iter().zip(&strain).map(|(dv, s)| dv * s).sum();
+        let d = self.space_dim;
+        let mut dmat = [[0.0_f64; 6]; 6];
+        let v = symmetry::elastic_constitutive_into(
+            material,
+            &lay.material,
+            self.symmetry,
+            self.kinematics,
+            d,
+            &mut dmat,
+        )?;
+        let strain = read_voigt_strain(deformation, &lay.deformation, d, self.kinematics);
+        for r in 0..v {
+            out[r] = (0..v).map(|c| dmat[r][c] * strain[c]).sum();
         }
         Ok(())
     }
@@ -443,22 +459,42 @@ impl Domain for Elasticity {
 /// ```
 /// # use pyrucast::models::tensor::Kinematics;
 pub fn constitutive(e: f64, nu: f64, kinematics: Kinematics, space_dim: usize) -> Vec<Vec<f64>> {
+    let mut d = [[0.0_f64; 6]; 6];
+    let v = constitutive_into(e, nu, kinematics, space_dim, &mut d);
+    d[..v].iter().map(|r| r[..v].to_vec()).collect()
+}
+
+/// [`constitutive`] writing into a caller-owned buffer, returning the Voigt size
+/// `v` it filled (`d[..v][..v]`).
+///
+/// The form a constitutive kernel calls: at most thirty-six numbers, on the
+/// stack. Building two levels of `Vec` for them is nothing once per assembly and
+/// a great deal once per Gauss point of every iteration.
+pub fn constitutive_into(
+    e: f64,
+    nu: f64,
+    kinematics: Kinematics,
+    space_dim: usize,
+    d: &mut [[f64; 6]; 6],
+) -> usize {
     match (space_dim, kinematics) {
         (2, Kinematics::PlaneStress) => {
             let c = e / (1.0 - nu * nu);
-            vec![
-                vec![c, c * nu, 0.0],
-                vec![c * nu, c, 0.0],
-                vec![0.0, 0.0, c * (1.0 - nu) / 2.0],
-            ]
+            d[0][0] = c;
+            d[0][1] = c * nu;
+            d[1][0] = c * nu;
+            d[1][1] = c;
+            d[2][2] = c * (1.0 - nu) / 2.0;
+            3
         }
         (2, Kinematics::PlaneStrain) => {
             let c = e / ((1.0 + nu) * (1.0 - 2.0 * nu));
-            vec![
-                vec![c * (1.0 - nu), c * nu, 0.0],
-                vec![c * nu, c * (1.0 - nu), 0.0],
-                vec![0.0, 0.0, c * (1.0 - 2.0 * nu) / 2.0],
-            ]
+            d[0][0] = c * (1.0 - nu);
+            d[0][1] = c * nu;
+            d[1][0] = c * nu;
+            d[1][1] = c * (1.0 - nu);
+            d[2][2] = c * (1.0 - 2.0 * nu) / 2.0;
+            3
         }
         (2, Kinematics::Axisymmetric) => {
             // Voigt order [rr, zz, θθ, rz]: the three normal directions are
@@ -466,18 +502,18 @@ pub fn constitutive(e: f64, nu: f64, kinematics: Kinematics, space_dim: usize) -
             // (as in plane strain, with θθ restored) and `rz` is the lone shear.
             let c = e / ((1.0 + nu) * (1.0 - 2.0 * nu));
             let (d_n, d_off) = (c * (1.0 - nu), c * nu);
-            vec![
-                vec![d_n, d_off, d_off, 0.0],
-                vec![d_off, d_n, d_off, 0.0],
-                vec![d_off, d_off, d_n, 0.0],
-                vec![0.0, 0.0, 0.0, c * (1.0 - 2.0 * nu) / 2.0],
-            ]
+            for i in 0..3 {
+                for j in 0..3 {
+                    d[i][j] = if i == j { d_n } else { d_off };
+                }
+            }
+            d[3][3] = c * (1.0 - 2.0 * nu) / 2.0;
+            4
         }
         _ => {
             // 3-D solid (Voigt order [xx, yy, zz, yz, xz, xy]).
             let c = e / ((1.0 + nu) * (1.0 - 2.0 * nu));
             let g = c * (1.0 - 2.0 * nu) / 2.0;
-            let mut d = vec![vec![0.0; 6]; 6];
             for i in 0..3 {
                 for j in 0..3 {
                     d[i][j] = if i == j { c * (1.0 - nu) } else { c * nu };
@@ -486,40 +522,60 @@ pub fn constitutive(e: f64, nu: f64, kinematics: Kinematics, space_dim: usize) -
             d[3][3] = g;
             d[4][4] = g;
             d[5][5] = g;
-            d
+            6
         }
     }
 }
 
-/// Voigt **engineering** strain from the tensor strain components produced by
-/// [`crate::ops::element_field::deformation`] (`eps_xx`, `eps_xy`, …), reading each
-/// component by name through `eps`. Off-diagonals become `γ = 2ε`.
-fn voigt_strain(
-    eps: &dyn Fn(&str) -> Result<f64>,
+/// The strain components a continuum law reads, **in Voigt order** — the
+/// convention its indices assume, declared for
+/// [`crate::models::Domain::deformation_reads`].
+///
+/// Axisymmetry is the odd one: its fourth slot is the *measured* hoop `eps_zz`,
+/// produced by
+/// [`crate::ops::element_field::deformation`](fn@crate::ops::element_field::deformation),
+/// not an assumption.
+pub(crate) fn strain_reads(space_dim: usize, kinematics: Kinematics) -> Vec<String> {
+    let names: &[&str] = if space_dim == 2 && kinematics.is_axisymmetric() {
+        &["eps_xx", "eps_yy", "eps_zz", "eps_xy"]
+    } else if space_dim == 2 {
+        &["eps_xx", "eps_yy", "eps_xy"]
+    } else {
+        &["eps_xx", "eps_yy", "eps_zz", "eps_yz", "eps_xz", "eps_xy"]
+    };
+    owned_components(names)
+}
+
+/// How many **normal** components open the Voigt order: the ones the
+/// engineering convention leaves alone. The shears that follow are doubled
+/// (`γ = 2ε`), which is what a `D` matrix in engineering Voigt expects.
+pub(crate) fn normal_count(space_dim: usize, kinematics: Kinematics) -> usize {
+    if space_dim == 2 && kinematics.is_axisymmetric() {
+        3
+    } else if space_dim == 2 {
+        2
+    } else {
+        3
+    }
+}
+
+/// Read the engineering-Voigt strain of one Gauss point out of its row.
+///
+/// No name, no allocation: the row is the field's own buffer and `idx` says
+/// where each component sits, resolved once for the zone.
+pub(crate) fn read_voigt_strain(
+    deformation: &[f64],
+    idx: &[u32],
     space_dim: usize,
     kinematics: Kinematics,
-) -> Result<Vec<f64>> {
-    if space_dim == 2 && kinematics.is_axisymmetric() {
-        // [εrr, εzz, εθθ, γrz] — the hoop `eps_zz` is produced by
-        // `ops::element_field::deformation` on an axisymmetric space.
-        Ok(vec![
-            eps("eps_xx")?,
-            eps("eps_yy")?,
-            eps("eps_zz")?,
-            2.0 * eps("eps_xy")?,
-        ])
-    } else if space_dim == 2 {
-        Ok(vec![eps("eps_xx")?, eps("eps_yy")?, 2.0 * eps("eps_xy")?])
-    } else {
-        Ok(vec![
-            eps("eps_xx")?,
-            eps("eps_yy")?,
-            eps("eps_zz")?,
-            2.0 * eps("eps_yz")?,
-            2.0 * eps("eps_xz")?,
-            2.0 * eps("eps_xy")?,
-        ])
+) -> [f64; 6] {
+    let mut eps = [0.0_f64; 6];
+    let n = normal_count(space_dim, kinematics);
+    for (r, &i) in idx.iter().enumerate() {
+        let v = deformation[i as usize];
+        eps[r] = if r < n { v } else { 2.0 * v };
     }
+    eps
 }
 
 /// Strain-displacement matrix `B` (Voigt) from `∂N_i/∂x_a` (`dn_dx`, layout

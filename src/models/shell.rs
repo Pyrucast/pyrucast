@@ -50,6 +50,7 @@ pub mod thick;
 
 use crate::atoms::ElementType;
 use crate::containers::element_field::SubElementField;
+use crate::containers::field::ABSENT_COMPONENT;
 use crate::containers::finite_element_space::{
     Interpolation, QuadratureRule, SubFiniteElementSpace,
 };
@@ -60,6 +61,7 @@ use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::owned_components;
+use crate::models::ZoneLayout;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use serde::{Deserialize, Serialize};
 
@@ -371,46 +373,51 @@ impl Domain for Shell {
     ///
     /// The strains come in as the components a shell-deformation operator would
     /// produce (`eps_xx`, `kappa_xx`, `gamma_xz`, …), all in the **local** frame.
+    fn deformation_reads(&self) -> Vec<String> {
+        let mut names = owned_components(&[
+            "eps_xx", "eps_yy", "eps_xy", "kappa_xx", "kappa_yy", "kappa_xy",
+        ]);
+        if self.model.has_transverse_shear() {
+            names.extend(owned_components(&["gamma_xz", "gamma_yz"]));
+        }
+        names
+    }
+
     fn integrate_point(
         &self,
-        geom: &CellGeom,
-        input: &SubElementField,
-        _prev: &SubElementField,
-        material: Option<&SubElementField>,
-        g: usize,
+        _geom: &CellGeom,
+        _g: usize,
+        lay: &ZoneLayout,
+        deformation: &[f64],
+        _prev: &[f64],
+        material: &[f64],
         _dt: f64,
         out: &mut [f64],
     ) -> Result<()> {
-        let mat = material.expect("Shell declares a material_fespace");
-        let cell = geom.cell;
         let (e, nu, h) = (
-            mat.value(cell, 0, "E")?,
-            mat.value(cell, 0, "nu")?,
-            mat.value(cell, 0, "h")?,
+            material[lay.material[0] as usize],
+            material[lay.material[1] as usize],
+            material[lay.material[2] as usize],
         );
         let dm = thick::membrane_law(e, nu, h);
         let db = thick::bending_law(e, nu, h);
+        let d = |k: usize| deformation[lay.deformation[k] as usize];
 
-        let eps = [
-            input.value(cell, g, "eps_xx")?,
-            input.value(cell, g, "eps_yy")?,
-            input.value(cell, g, "eps_xy")?,
-        ];
-        let kappa = [
-            input.value(cell, g, "kappa_xx")?,
-            input.value(cell, g, "kappa_yy")?,
-            input.value(cell, g, "kappa_xy")?,
-        ];
+        let eps = [d(0), d(1), d(2)];
+        let kappa = [d(3), d(4), d(5)];
         for i in 0..3 {
             out[i] = (0..3).map(|j| dm[i][j] * eps[j]).sum();
             out[3 + i] = (0..3).map(|j| db[i][j] * kappa[j]).sum();
         }
         if self.model.has_transverse_shear() {
-            let ds = thick::shear_law(e, nu, h, thick::shear_factor(mat, cell));
-            let gamma = [
-                input.value(cell, g, "gamma_xz")?,
-                input.value(cell, g, "gamma_yz")?,
-            ];
+            // `k_s` overrides the 5/6 of a homogeneous rectangular section; which
+            // of the two applies is a fact of the zone, settled in the layout.
+            let k_s = match lay.optional_material[1] {
+                ABSENT_COMPONENT => 5.0 / 6.0,
+                i => material[i as usize],
+            };
+            let ds = thick::shear_law(e, nu, h, k_s);
+            let gamma = [d(6), d(7)];
             for i in 0..2 {
                 out[6 + i] = ds * gamma[i];
             }

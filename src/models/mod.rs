@@ -30,6 +30,7 @@
 
 use crate::atoms::NodeId;
 use crate::containers::element_field::SubElementField;
+use crate::containers::field::{SubField, ABSENT_COMPONENT};
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::{Mesh, SubMesh};
@@ -1238,6 +1239,35 @@ pub fn owned_components(names: &[&str]) -> Vec<String> {
     names.iter().map(|s| s.to_string()).collect()
 }
 
+/// Where a physics' components sit in the rows its kernel is handed.
+///
+/// A constitutive kernel runs once per Gauss point — some tens of millions of
+/// times in a non-linear solve — so it reads by **index**, never by name: a name
+/// lookup is a string comparison that re-proves at every point what is a
+/// property of the zone. This table is that proof, done once, before the
+/// parallel region: it translates the canonical order a physics declares
+/// ([`Domain::deformation_reads`], [`Domain::state_reads`],
+/// [`Domain::material_components`]) into positions in the actual fields.
+///
+/// Resolving rather than assuming also makes the convention **checked**: a field
+/// built by hand, in another order or missing a component, is refused by
+/// [`Domain::zone_layout`] with a message naming the field and the gap — instead
+/// of silently feeding a permuted tensor to the law.
+pub struct ZoneLayout {
+    /// Position of each [`Domain::deformation_reads`] component.
+    pub deformation: Vec<u32>,
+    /// Position of each [`Domain::state_reads`] component in the `prev` row.
+    pub state: Vec<u32>,
+    /// Position of each **required** material component, in
+    /// [`Domain::material_components`] order.
+    pub material: Vec<u32>,
+    /// Position of each **optional** material component, in
+    /// [`Domain::optional_material_components`] order;
+    /// [`ABSENT_COMPONENT`](crate::containers::field::ABSENT_COMPONENT) where
+    /// the caller supplied none.
+    pub optional_material: Vec<u32>,
+}
+
 /// A **domain** sub-model — an optional capability, not part of the base
 /// [`SubModelKind`] contract. A domain is a physics defined *over a region*: it
 /// reads material data **and** integrates a constitutive law over its cells. A
@@ -1336,6 +1366,62 @@ pub trait Domain: Sync {
     /// followed by the updated internal state (`VAR1`), in order.
     fn behavior_output_components(&self) -> Vec<String>;
 
+    /// Components this kernel reads from the **deformation** row, in the slot
+    /// order its indices assume — the physics' own convention (`eps_xx`,
+    /// `eps_yy`, `eps_xy` for a plane continuum; `grad_T_x`, … for conduction).
+    ///
+    /// Read once per zone by [`zone_layout`](Self::zone_layout), never at a
+    /// Gauss point. Declaring it is physics — naming what the law consumes —
+    /// and it is what lets the kernel index instead of search.
+    fn deformation_reads(&self) -> Vec<String>;
+
+    /// Components this kernel reads from the **previous state** row, in slot
+    /// order. Default: none — most laws have no history.
+    ///
+    /// Every declared component must exist in the state: what a law reads back
+    /// is what it wrote, so a mismatch is a real inconsistency, caught once per
+    /// zone rather than turned into a silent zero at each point.
+    fn state_reads(&self) -> Vec<String> {
+        Vec::new()
+    }
+
+    /// Resolve this physics' conventions against the fields it will actually be
+    /// handed — **the upstream half of index-based reading**, and the only place
+    /// component names are matched at all.
+    ///
+    /// **Provided**, and rarely worth redefining. Required components must be
+    /// present (a missing one names itself in the error); optional material
+    /// components may be absent, marked
+    /// [`ABSENT_COMPONENT`](crate::containers::field::ABSENT_COMPONENT).
+    fn zone_layout(
+        &self,
+        deformation: &SubElementField,
+        prev: &SubElementField,
+        material: Option<&SubElementField>,
+    ) -> Result<ZoneLayout> {
+        let def_names = self.deformation_reads();
+        let state_names = self.state_reads();
+        let mat_names = self.material_components();
+        let def_refs: Vec<&str> = def_names.iter().map(String::as_str).collect();
+        let state_refs: Vec<&str> = state_names.iter().map(String::as_str).collect();
+        let mat_refs: Vec<&str> = mat_names.iter().map(String::as_str).collect();
+        Ok(ZoneLayout {
+            deformation: deformation.resolve_components(&def_refs, "deformation")?,
+            state: prev.resolve_components(&state_refs, "previous state")?,
+            // A physics that declares no material gets empty tables, which it
+            // never indexes — there is no field to resolve against, and none to
+            // invent either.
+            material: match material {
+                Some(m) => m.resolve_components(&mat_refs, "material")?,
+                None => Vec::new(),
+            },
+            optional_material: match material {
+                Some(m) => m.resolve_optional_components(self.optional_material_components()),
+                None => vec![ABSENT_COMPONENT; self.optional_material_components().len()],
+            },
+        })
+    }
+
     /// The material state **at rest**, before any step — the `prev` of the first
     /// step. **Provided**: zero on every output component, which is the rest
     /// state of nearly every law (σ = 0, ε = 0, ε_p = 0, p = 0).
@@ -1372,33 +1458,46 @@ pub trait Domain: Sync {
     /// physics author writes. Integrates the step **A → B** for cell `geom.cell`
     /// at Gauss point `g`:
     ///
+    /// Every input is the **row of this Gauss point** — a borrowed slice of the
+    /// field's own buffer, never a copy — read through `lay`:
+    ///
     /// - `deformation` is the **end-of-step** kinematics ε(B) (the strain, the
-    ///   temperature gradient `∇T`, …) produced by a *geometric* operator;
+    ///   temperature gradient `∇T`, …) produced by a *geometric* operator, in
+    ///   [`deformation_reads`](Self::deformation_reads) order;
     /// - `prev` is the **converged state at the start of the step A** — the
     ///   dual flux/stress σ(A), the internal variables `VAR(A)`, and (for laws
     ///   that form an increment) the start-of-step kinematics ε(A). It is
-    ///   **always** a real field: on the first step it is
+    ///   **always** a real row: on the first step it is
     ///   [`initial_state`](Self::initial_state), the rest state;
-    /// - `material` is the per-zone material data, `Some(_)` iff the domain
-    ///   declares a [`material_fespace`](Self::material_fespace);
-    /// - `dt` is the time increment, `None` for a rate-independent law (a
-    ///   rate/viscous law errors when it is `None`).
+    /// - `material` is this cell's material data, empty for a physics that
+    ///   declares none;
+    /// - `dt` is the time increment, `0.0` for a rate-independent law — a law
+    ///   that needs one is guaranteed to get it, because
+    ///   [`crate::ops::element_field::behavior::integrate`] refuses the whole
+    ///   integration otherwise.
     ///
     /// Write the [`behavior_output_components`](Self::behavior_output_components)
     /// values — the material state at B (σ(B), `VAR(B)`, and any echoed ε(B)) —
     /// into `out`. It **never sees rayon, the store, or a lock**:
     /// [`integrate_behavior`](Self::integrate_behavior) drives it in parallel
     /// over all cells.
-    // A constitutive kernel legitimately needs its geometry, the A→B kinematics
-    // (`deformation`, `prev`), material, Gauss index, time step and output slot.
+    ///
+    /// Two invariants hold here, and they are what makes this kernel fast: **no
+    /// test that upstream already settled** (a component's presence, a field's
+    /// shape, an absent increment) and **no dynamic allocation** — no `Vec`, no
+    /// `String`, no `format!`, no intermediate struct. What is left is the
+    /// physics, including its own branches.
+    // A constitutive kernel legitimately needs its geometry, the Gauss index,
+    // its layout, the A→B kinematics, material, time step and output slot.
     #[allow(clippy::too_many_arguments)]
     fn integrate_point(
         &self,
         geom: &CellGeom,
-        deformation: &SubElementField,
-        prev: &SubElementField,
-        material: Option<&SubElementField>,
         g: usize,
+        lay: &ZoneLayout,
+        deformation: &[f64],
+        prev: &[f64],
+        material: &[f64],
         dt: f64,
         out: &mut [f64],
     ) -> Result<()>;
@@ -1418,9 +1517,9 @@ pub trait Domain: Sync {
     /// law, this is its *exact* response: for a linear law the two agree
     /// (`∫ Bᵀ·flux = K·u`); a non-linear law departs from that tangent.
     ///
-    /// `prev`/`dt` are captured by the point closure (the `prev` guard is held
-    /// for the whole parallel region), so [`kernel::element_pointwise`] stays a
-    /// generic single-input driver.
+    /// The **layout is resolved here**, once, and `dt` captured by the point
+    /// closure: below this line the kernel indexes and computes, and does
+    /// nothing else.
     fn integrate_behavior(
         &self,
         deformation: &Handle<SubElementField>,
@@ -1430,14 +1529,21 @@ pub trait Domain: Sync {
     ) -> Result<SubElementField> {
         let fespace = self.behavior_fespace();
         let out_components = self.behavior_output_components();
-        let prev_guard = prev.read();
-        let prev_ref: &SubElementField = &prev_guard;
+        // One resolution per zone, against the fields actually handed over —
+        // which is also where a hand-built field is refused.
+        let lay = {
+            let mat_guard = material.map(|h| h.read());
+            self.zone_layout(&deformation.read(), &prev.read(), mat_guard.as_deref())?
+        };
         kernel::element_pointwise(
             &fespace,
             deformation,
+            Some(prev),
             material,
             out_components,
-            |geom, def, mat, g, out| self.integrate_point(geom, def, prev_ref, mat, g, dt, out),
+            |geom, g, def, prev, mat, out| {
+                self.integrate_point(geom, g, &lay, def, prev, mat, dt, out)
+            },
         )
     }
 }

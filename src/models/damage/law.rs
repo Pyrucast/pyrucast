@@ -5,7 +5,6 @@
 //! `damage.rs`; each law sits in its own file next door. Same shape as
 //! `plasticity/law.rs`.
 
-use crate::containers::element_field::SubElementField;
 use crate::error::Result;
 use serde::{Deserialize, Serialize};
 /// Which damage law a [`Damage`](super::Damage) sub-model obeys.
@@ -33,7 +32,9 @@ use serde::{Deserialize, Serialize};
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let materiau = SubElementField::from_uniform_per_component(
 /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
-/// # let mat = MatRead { field: &materiau, cell: 0 };
+/// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+/// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+/// # let mat = MatRead { row: materiau.point_values(0, 0).unwrap(), idx: &idx_mat };
 /// // Même motif que `PlasticLaw` : les DDL, l'opérateur élastique et le
 /// // montage incrémental sont partagés ; seule diffère la loi qui dégrade
 /// // la contrainte.
@@ -115,7 +116,9 @@ impl DamageLaw {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let materiau = SubElementField::from_uniform_per_component(
     /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
-    /// # let mat = MatRead { field: &materiau, cell: 0 };
+    /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+    /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+    /// # let mat = MatRead { row: materiau.point_values(0, 0).unwrap(), idx: &idx_mat };
     /// # use pyrucast::named::Named;
     /// // Réciproque exacte de `from_name`, pour les trois lois.
     /// assert!(DamageLaw::ALL.iter()
@@ -151,7 +154,9 @@ impl DamageLaw {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let materiau = SubElementField::from_uniform_per_component(
     /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
-    /// # let mat = MatRead { field: &materiau, cell: 0 };
+    /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+    /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+    /// # let mat = MatRead { row: materiau.point_values(0, 0).unwrap(), idx: &idx_mat };
     /// assert_eq!(DamageLaw::ALL, [DamageLaw::Mazars, DamageLaw::DamageTc, DamageLaw::SicSic]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -178,7 +183,9 @@ impl DamageLaw {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let materiau = SubElementField::from_uniform_per_component(
     /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
-    /// # let mat = MatRead { field: &materiau, cell: 0 };
+    /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+    /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+    /// # let mat = MatRead { row: materiau.point_values(0, 0).unwrap(), idx: &idx_mat };
     /// // Mazars : un seuil et deux branches. SiC/SiC porte en plus les axes
     /// // du tissage, donc **plus de composantes en 3-D qu'en 2-D**.
     /// assert!(DamageLaw::Mazars.material_components(2).contains(&"eps_d0"));
@@ -211,7 +218,9 @@ impl DamageLaw {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let materiau = SubElementField::from_uniform_per_component(
     /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
-    /// # let mat = MatRead { field: &materiau, cell: 0 };
+    /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+    /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+    /// # let mat = MatRead { row: materiau.point_values(0, 0).unwrap(), idx: &idx_mat };
     /// // L'état de la loi, au-delà du `damage` rapporté pour la visualisation.
     /// assert_eq!(DamageLaw::Mazars.internal_names(), vec!["kappa".to_string()]);
     /// // Damage-TC en porte quatre : deux seuils et deux endommagements.
@@ -243,7 +252,9 @@ impl DamageLaw {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let materiau = SubElementField::from_uniform_per_component(
     /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
-    /// # let mat = MatRead { field: &materiau, cell: 0 };
+    /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+    /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+    /// # let mat = MatRead { row: materiau.point_values(0, 0).unwrap(), idx: &idx_mat };
     /// // Sous le seuil `eps_d0`, rien ne s'endommage.
     /// let petit = [1e-5, 0.0, 0.0, 0.0, 0.0, 0.0];
     /// let u = DamageLaw::Mazars.update(&petit, &[0.0], &mat, 2)?;
@@ -305,7 +316,9 @@ impl std::fmt::Display for DamageLaw {
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let materiau = SubElementField::from_uniform_per_component(
 /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
-/// # let mat = MatRead { field: &materiau, cell: 0 };
+/// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+/// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+/// # let mat = MatRead { row: materiau.point_values(0, 0).unwrap(), idx: &idx_mat };
 /// // `damage` est un **résumé** pour la visualisation ; l'état est `vars`.
 /// // Une loi à plusieurs endommagements y rapporte le pire.
 /// let u = DamageLaw::Mazars.update(&[1e-3, 0.0, 0.0, 0.0, 0.0, 0.0], &[0.0], &mat, 2)?;
@@ -343,49 +356,56 @@ pub struct DamageUpdate {
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let materiau = SubElementField::from_uniform_per_component(
 /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
-/// # let mat = MatRead { field: &materiau, cell: 0 };
-/// // La forme que veut chaque loi : le matériau d'une maille, lu par nom.
-/// assert_eq!(mat.get("eps_d0")?, 1e-4);
-/// assert_eq!(mat.cell, 0);
+/// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+/// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+/// # let mat = MatRead { row: materiau.point_values(0, 0).unwrap(), idx: &idx_mat };
+/// // La forme que veut chaque loi : la ligne matériau d'une maille, lue par
+/// // position — la troisième composante du contrat est `eps_d0`.
+/// assert_eq!(mat.get(2), 1e-4);
+/// assert_eq!(mat.row.len(), 7);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub struct MatRead<'a> {
-    /// The material field, exposed so a law can reach the shared frame reader.
-    pub field: &'a SubElementField,
-    /// The cell this reads.
-    pub cell: usize,
+    /// The cell's material row.
+    pub row: &'a [f64],
+    /// Where each component of the law's contract sits in it, resolved once for
+    /// the zone.
+    pub idx: &'a [u32],
 }
 
 impl MatRead<'_> {
-    /// A material component of this cell, by name.
+    /// The `k`-th component of this law's material contract, for this cell.
+    ///
+    /// No name, no search, no `Result`: the component's presence and its
+    /// position were settled when the zone layout was resolved.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::field::SubField;
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::damage::{self};
-    /// # use pyrucast::models::damage::law::{self, DamageLaw, MatRead};
-    /// # use pyrucast::models::elasticity;
+    /// # use pyrucast::models::damage::law::MatRead;
+    /// # use pyrucast::models::damage::mazars;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
     /// # let materiau = SubElementField::from_uniform_per_component(
-    /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
-    /// # let mat = MatRead { field: &materiau, cell: 0 };
-    /// assert_eq!(mat.get("A_t")?, 0.8);
-    /// // Une constante absente est une erreur, pas un zéro silencieux.
-    /// assert!(mat.get("sigma_y").is_err());
+    /// #     fes.get(0)?, mazars::MATERIAL.iter().map(|s| s.to_string()).collect(),
+    /// #     &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0])?;
+    /// let idx = materiau.resolve_components(mazars::MATERIAL, "material")?;
+    /// let mat = MatRead { row: materiau.point_values(0, 0)?, idx: &idx };
+    /// assert_eq!(mat.get(2), 1e-4); // eps_d0, troisième du contrat
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn get(&self, name: &str) -> Result<f64> {
-        self.field.value(self.cell, 0, name)
+    pub fn get(&self, k: usize) -> f64 {
+        self.row[self.idx[k] as usize]
     }
 }
 
@@ -410,7 +430,9 @@ impl MatRead<'_> {
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let materiau = SubElementField::from_uniform_per_component(
 /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
-/// # let mat = MatRead { field: &materiau, cell: 0 };
+/// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+/// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+/// # let mat = MatRead { row: materiau.point_values(0, 0).unwrap(), idx: &idx_mat };
 /// // La partie positive, dont se servent les lois pour séparer traction
 /// // et compression.
 /// assert_eq!((law::pos(3.0), law::pos(-3.0)), (3.0, 0.0));

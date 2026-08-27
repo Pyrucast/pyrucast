@@ -19,7 +19,7 @@ use crate::aggregate::Aggregate;
 use crate::containers::element_field::ElementField;
 use crate::containers::field::SubField;
 use crate::containers::finite_element_space::FiniteElementSpace;
-use crate::error::{PyrucastError, Result};
+use crate::error::Result;
 use crate::handle::Handle;
 use crate::models::kernel;
 use crate::ops::element_field::gradient::AXES;
@@ -104,18 +104,17 @@ pub fn thermal_strain(
             (s.space_dim(), s.is_axisymmetric())
         };
 
-        // Fail fast with an actionable message if the temperature lacks its
-        // component (the material zone was already selected on `alpha`).
-        if !temp_sub
+        // Where the two values sit, resolved **once** for the zone — which is
+        // also the check that they are there at all, with a message naming the
+        // field rather than a bare component name.
+        let i_temp = temp_sub
             .read()
-            .components()
-            .iter()
-            .any(|c| c == TEMPERATURE)
-        {
-            return Err(PyrucastError::Message(format!(
-                "thermal_strain: the temperature field carries no '{TEMPERATURE}' component"
-            )));
-        }
+            .resolve_components(&[TEMPERATURE], "thermal_strain: temperature")?[0]
+            as usize;
+        let i_alpha = mat_sub
+            .read()
+            .resolve_components(&[ALPHA], "thermal_strain: material")?[0]
+            as usize;
 
         // Strain entries eps_<ai><aj> for i ≤ j; the diagonal (i == j) carries α·ΔT.
         let mut names = Vec::with_capacity(space_dim * (space_dim + 1) / 2);
@@ -138,13 +137,11 @@ pub fn thermal_strain(
         let sf = kernel::element_pointwise(
             sub,
             &temp_sub,
+            None,
             Some(&mat_sub),
             names,
-            |geom, input, material, g, out| {
-                let cell = geom.cell;
-                let material = material.expect("thermal_strain supplies a material field");
-                let d_temp = input.value(cell, g, TEMPERATURE)? - t_ref;
-                let eps_th = material.value(cell, g, ALPHA)? * d_temp;
+            |_geom, _g, input, _prev, material, out| {
+                let eps_th = material[i_alpha] * (input[i_temp] - t_ref);
                 for (c, &(i, j)) in pairs.iter().enumerate() {
                     out[c] = if i == j { eps_th } else { 0.0 };
                 }

@@ -33,6 +33,12 @@ use crate::models::plasticity::law::{MatParams, PlasticStep, PrevState};
 use crate::models::tensor::Kinematics;
 use crate::models::tensor::{deviator, von_mises_stress};
 
+/// Positions in this law's material contract, `["E", "nu", "sigma_y"(, "H")]` —
+/// the order the law declares, and therefore the order the zone layout resolves.
+const SIGMA_Y: usize = 2;
+/// The hardening modulus, which only the hardening variant carries.
+const H: usize = 3;
+
 /// Radial return onto `q = σ_y + H·p`.
 ///
 /// `hardening` is `H`; pass `0.0` for the perfect law. Returns the updated
@@ -58,9 +64,11 @@ use crate::models::tensor::{deviator, von_mises_stress};
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let materiau = SubElementField::from_uniform_per_component(
 /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "sigma_y".into()], &[210000.0, 0.3, 250.0]).unwrap();
-/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+/// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+/// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-/// #                         vars: Vec::new() };
+/// #                         vars: &[] };
 /// // Sans écrouissage (`hardening = 0`), la projection ramène **exactement**
 /// // q sur σ_y, et la déformation plastique est purement déviatorique.
 /// let trial = [400.0, 0.0, 0.0, 0.0, 0.0, 0.0];
@@ -80,7 +88,7 @@ pub fn return_map(
     mat: &MatParams,
     hardening: f64,
 ) -> Result<PlasticStep> {
-    let sigma_y0 = mat.get("sigma_y")?;
+    let sigma_y0 = mat.get(SIGMA_Y);
     let q = von_mises_stress(trial);
     let yield_now = sigma_y0 + hardening * prev.p;
     let f = q - yield_now;
@@ -148,9 +156,11 @@ pub fn return_map(
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let materiau = SubElementField::from_uniform_per_component(
 /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "sigma_y".into()], &[210000.0, 0.3, 250.0]).unwrap();
-/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+/// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+/// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-/// #                         vars: Vec::new() };
+/// #                         vars: &[] };
 /// // Sous le seuil, la tangente cohérente **est** la tangente élastique.
 /// let sous = [100.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 /// let d = plasticity::von_mises::tangent(&sous, &mat, 0.0, 0.0);
@@ -164,7 +174,7 @@ pub fn return_map(
 /// ```
 pub fn tangent(trial: &[f64; 6], mat: &MatParams, hardening: f64, p_prev: f64) -> [[f64; 6]; 6] {
     let (lambda, mu) = (mat.lambda, mat.mu);
-    let sigma_y0 = mat.get("sigma_y").unwrap_or(0.0);
+    let sigma_y0 = mat.get(SIGMA_Y);
     let q = von_mises_stress(trial);
     let yield_now = sigma_y0 + hardening * p_prev;
     if q <= yield_now || q == 0.0 {
@@ -253,7 +263,7 @@ impl PlasticLawKind for Isotropic {
         mat: &MatParams,
         _dt: f64,
     ) -> Result<PlasticStep> {
-        return_map(trial, prev, mat, mat.get("H")?)
+        return_map(trial, prev, mat, mat.get(H))
     }
 
     fn analytic_tangent(
@@ -262,7 +272,7 @@ impl PlasticLawKind for Isotropic {
         prev: &PrevState,
         mat: &MatParams,
     ) -> Option<Result<[[f64; 6]; 6]>> {
-        Some(mat.get("H").map(|h| tangent(trial, mat, h, prev.p)))
+        Some(Ok(tangent(trial, mat, mat.get(H), prev.p)))
     }
 }
 

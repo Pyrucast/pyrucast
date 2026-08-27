@@ -49,10 +49,11 @@ use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::elasticity::{self};
 use crate::models::owned_components;
-use crate::models::plasticity::prev_opt;
+use crate::models::plasticity::law::MAX_INTERNAL_VARS;
 use crate::models::tensor::Kinematics;
 use crate::models::tensor::{dual_name, primal_name};
 use crate::models::tensor::{stress_names, voigt_stress};
+use crate::models::ZoneLayout;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use law::{DamageLaw, MatRead};
 use serde::{Deserialize, Serialize};
@@ -346,32 +347,49 @@ impl Domain for Damage {
 
     /// One damage step at a Gauss point. Output layout = stress (Voigt, `v`) +
     /// the reported `damage` + the law's own internal variables.
+    fn deformation_reads(&self) -> Vec<String> {
+        elasticity::strain_reads(self.space_dim, self.kinematics)
+    }
+
+    /// The law's own internal variables — `κ` for Mazars, one per direction for
+    /// a woven composite — read back from what this physics wrote last step.
+    fn state_reads(&self) -> Vec<String> {
+        self.law.internal_names()
+    }
+
     fn integrate_point(
         &self,
-        geom: &CellGeom,
-        deformation: &SubElementField,
-        prev: &SubElementField,
-        material: Option<&SubElementField>,
-        g: usize,
+        _geom: &CellGeom,
+        _g: usize,
+        lay: &ZoneLayout,
+        deformation: &[f64],
+        prev: &[f64],
+        material: &[f64],
         _dt: f64,
         out: &mut [f64],
     ) -> Result<()> {
-        let mat = material.expect("Damage declares a material_fespace ⇒ material is supplied");
-        let (cell, d) = (geom.cell, self.space_dim);
-        let read = MatRead { field: mat, cell };
-        // End-of-step strain ε(B); the law's history from `prev` (absent on the
-        // first step, where every variable starts at zero).
-        let eps = read_strain(deformation, cell, g, d, read.get("nu")?, self.kinematics)?;
+        let d = self.space_dim;
+        let read = MatRead {
+            row: material,
+            idx: &lay.material,
+        };
+        // `nu` is the second component of every damage contract.
+        let eps = read_strain(
+            deformation,
+            &lay.deformation,
+            d,
+            read.get(1),
+            self.kinematics,
+        );
         // Always present: the state at rest is materialized once, before the
         // first step, so no law has to recognise « no state yet » here.
-        let prev_vars: Vec<f64> = self
-            .law
-            .internal_names()
-            .iter()
-            .map(|n| prev_opt(prev, cell, g, n))
-            .collect();
+        let mut vars = [0.0_f64; MAX_INTERNAL_VARS];
+        let n_vars = lay.state.len();
+        for (k, v) in vars[..n_vars].iter_mut().enumerate() {
+            *v = prev[lay.state[k] as usize];
+        }
 
-        let update = self.law.update(&eps, &prev_vars, &read, d)?;
+        let update = self.law.update(&eps, &vars[..n_vars], &read, d)?;
         let v = stress_names(d, self.kinematics).len();
         for r in 0..v {
             out[r] = voigt_stress(&update.sigma, d, self.kinematics, r);
@@ -392,34 +410,32 @@ impl Domain for Damage {
 
 // ─── Field <-> array plumbing ────────────────────────────────────────────────
 
-/// Reconstruct the full 3-D tensor strain. Plane strain forces `ε_zz = 0`;
-/// plane stress sets `ε_zz = -ν/(1-ν)(ε_xx+ε_yy)` (the elastic-damaged
-/// out-of-plane strain, since the `(1-D)` factor cancels in `σ_zz = 0`).
+/// The full 3-D strain a damage law sees, from the deformation row.
+///
+/// Plane stress derives the out-of-plane `ε_zz` from the in-plane pair (there is
+/// no law solve here — damage is secant); axisymmetry reads the *measured* hoop.
 fn read_strain(
-    f: &SubElementField,
-    cell: usize,
-    g: usize,
+    deformation: &[f64],
+    idx: &[u32],
     space_dim: usize,
     nu: f64,
     kinematics: Kinematics,
-) -> Result<[f64; 6]> {
+) -> [f64; 6] {
     let mut eps = [0.0; 6];
-    if space_dim == 2 {
-        eps[0] = f.value(cell, g, "eps_xx")?;
-        eps[1] = f.value(cell, g, "eps_yy")?;
-        eps[5] = f.value(cell, g, "eps_xy")?;
-        if kinematics == Kinematics::PlaneStress {
-            eps[2] = -nu / (1.0 - nu) * (eps[0] + eps[1]);
-        } else if kinematics.is_axisymmetric() {
-            // The hoop ε_θθ = u_r/r is measured by `deformation`, not assumed.
-            eps[2] = f.value(cell, g, "eps_zz")?;
-        }
+    let slots: &[usize] = if space_dim == 2 && kinematics.is_axisymmetric() {
+        &[0, 1, 2, 5]
+    } else if space_dim == 2 {
+        &[0, 1, 5]
     } else {
-        for (k, suf) in ["xx", "yy", "zz", "yz", "xz", "xy"].iter().enumerate() {
-            eps[k] = f.value(cell, g, &format!("eps_{suf}"))?;
-        }
+        &[0, 1, 2, 3, 4, 5]
+    };
+    for (r, &slot) in slots.iter().enumerate() {
+        eps[slot] = deformation[idx[r] as usize];
     }
-    Ok(eps)
+    if space_dim == 2 && kinematics == Kinematics::PlaneStress {
+        eps[2] = -nu / (1.0 - nu) * (eps[0] + eps[1]);
+    }
+    eps
 }
 
 // ─── Unit tests ──────────────────────────────────────────────────────────────

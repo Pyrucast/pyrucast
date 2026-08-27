@@ -1037,11 +1037,21 @@ impl<'a> CellGeom<'a> {
 
 /// Integrate a point-local constitutive law over `fespace`, in parallel.
 ///
-/// `point(geom, input, material, g, out)` is a pure sequential kernel: for the
-/// cell `geom.cell` at Gauss point `g`, it reads the deformation (+ `VAR0`) from
-/// `input` and the material from `material` (both borrowed in place), and writes
-/// the `out_components.len()` output values into `out`. `material` is `Some` iff
-/// the physics declared a material FE subspace.
+/// `point(geom, g, input, prev, material, out)` is a pure sequential kernel: for
+/// the cell `geom.cell` at Gauss point `g` it receives **the row of that point**
+/// in each input field — a borrowed slice of the field's own buffer, never a
+/// copy — and writes the `out_components.len()` output values into `out`.
+///
+/// Rows, not fields, because a kernel that receives a field ends up searching it
+/// by name at every point. The row is contiguous (the buffer is
+/// cell-major/Gauss-major/component-minor), so slicing it is index arithmetic;
+/// the caller resolves *which* index means what once per zone
+/// ([`crate::models::ZoneLayout`]).
+///
+/// The three input fields are checked **here**, once, to span the same cells and
+/// Gauss points as `fespace` — a field built by hand can disagree, and the
+/// parallel loop below indexes without asking. An absent `prev`/`material`
+/// yields an empty row, which a physics that declared none never indexes.
 ///
 /// The **element-field-input** driver, mirrored by `nodal_pointwise` (which
 /// reads a nodal field instead). Backs the constitutive integration
@@ -1075,9 +1085,9 @@ impl<'a> CellGeom<'a> {
 /// // Un noyau **au point de Gauss** : la loi de comportement en est un —
 /// // lire la déformation et le matériau, écrire la contrainte.
 /// let sortie = kernel::element_pointwise(
-///     &zone, &entree, None, vec!["sig".into()],
-///     |_geom, champ, _mat, g, slot| {
-///         slot[0] = 3.0 * champ.get(0, g, 0)?;
+///     &zone, &entree, None, None, vec!["sig".into()],
+///     |_geom, _g, ligne, _prev, _mat, slot| {
+///         slot[0] = 3.0 * ligne[0];
 ///         Ok(())
 ///     },
 /// )?;
@@ -1087,10 +1097,10 @@ impl<'a> CellGeom<'a> {
 pub fn element_pointwise(
     fespace: &Handle<SubFiniteElementSpace>,
     input: &Handle<SubElementField>,
+    prev: Option<&Handle<SubElementField>>,
     material: Option<&Handle<SubElementField>>,
     out_components: Vec<String>,
-    point: impl Fn(&CellGeom, &SubElementField, Option<&SubElementField>, usize, &mut [f64]) -> Result<()>
-        + Sync,
+    point: impl Fn(&CellGeom, usize, &[f64], &[f64], &[f64], &mut [f64]) -> Result<()> + Sync,
 ) -> Result<SubElementField> {
     let out_stride = out_components.len();
     let mut out = SubElementField::new(fespace.clone(), out_components)?;
@@ -1103,15 +1113,54 @@ pub fn element_pointwise(
     let coords_h = sm.coords();
     let coords = coords_h.read();
     let fin = input.read();
+    let prev_guard = prev.map(|h| h.read());
     let mat_guard = material.map(|h| h.read());
 
     let rd = RefData::snapshot(&fe)?;
     let n_gauss = rd.n_gauss;
+    let n_cells = fe.cell_count()?;
     let conn: &[NodeId] = sm.connectivity();
     let rd_ref: &RefData = &rd;
     let coords_ref: &Coords = &coords;
-    let in_ref: &SubElementField = &fin;
-    let mat_ref: Option<&SubElementField> = mat_guard.as_deref();
+
+    // The shape of every input, settled **once**. Below this the loop slices
+    // rows by arithmetic alone: a field that spans other cells or another
+    // quadrature would silently read the wrong point, so it is refused here,
+    // where the message can say which field and by how much.
+    fn rows<'f>(
+        f: &'f SubElementField,
+        what: &str,
+        n_cells: usize,
+        n_gauss: usize,
+    ) -> Result<(&'f [f64], usize)> {
+        if f.cell_count() != n_cells || f.gauss_count() != n_gauss {
+            return Err(PyrucastError::Message(format!(
+                "{what}: {} cells × {} Gauss points, but this FE subspace has {} × {}",
+                f.cell_count(),
+                f.gauss_count(),
+                n_cells,
+                n_gauss
+            )));
+        }
+        Ok((f.values(), f.component_count()))
+    }
+    let (in_vals, in_stride) = rows(&fin, "deformation", n_cells, n_gauss)?;
+    let (prev_vals, prev_stride) = match prev_guard.as_deref() {
+        Some(p) => rows(p, "previous state", n_cells, n_gauss)?,
+        None => (&[][..], 0),
+    };
+    let (mat_vals, mat_stride) = match mat_guard.as_deref() {
+        Some(m) => rows(m, "material", n_cells, n_gauss)?,
+        None => (&[][..], 0),
+    };
+
+    // The row of `(cell, g)`: contiguous, so a start offset and a stride. A
+    // stride of zero (an absent input) lands on the empty range of an empty
+    // buffer, so the loop below needs no test for it.
+    fn row(vals: &[f64], stride: usize, n_gauss: usize, cell: usize, g: usize) -> &[f64] {
+        let start = (cell * n_gauss + g) * stride;
+        &vals[start..start + stride]
+    }
 
     out.values_mut()
         .par_chunks_mut(n_gauss * out_stride)
@@ -1121,7 +1170,14 @@ pub fn element_pointwise(
             let geom = CellGeom::new(rd_ref, coords_ref, conn, cell)?;
             for g in 0..n_gauss {
                 let slot = &mut ochunk[g * out_stride..(g + 1) * out_stride];
-                point(&geom, in_ref, mat_ref, g, slot)?;
+                point(
+                    &geom,
+                    g,
+                    row(in_vals, in_stride, n_gauss, cell, g),
+                    row(prev_vals, prev_stride, n_gauss, cell, g),
+                    row(mat_vals, mat_stride, n_gauss, cell, g),
+                    slot,
+                )?;
             }
             Ok(())
         })?;

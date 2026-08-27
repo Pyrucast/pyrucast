@@ -56,6 +56,7 @@ use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::beam::{bending_4x4, mass_4x4, BeamModel};
 use crate::models::owned_components;
+use crate::models::ZoneLayout;
 use crate::models::{frame, frame3d, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use serde::{Deserialize, Serialize};
 
@@ -323,39 +324,49 @@ impl Domain for Timoshenko {
 
     /// The section forces from the generalised strains — a **linear** law, as
     /// for every structural element.
+    fn deformation_reads(&self) -> Vec<String> {
+        owned_components(match self.model {
+            BeamModel::Planar1d => &["kappa", "gamma"][..],
+            BeamModel::Frame2d => &["eps", "kappa", "gamma"][..],
+            BeamModel::Frame3d => {
+                &["eps", "kappa_y", "kappa_z", "torsion", "gamma_y", "gamma_z"][..]
+            }
+        })
+    }
+
     fn integrate_point(
         &self,
-        geom: &CellGeom,
-        input: &SubElementField,
-        _prev: &SubElementField,
-        material: Option<&SubElementField>,
-        g: usize,
+        _geom: &CellGeom,
+        _g: usize,
+        lay: &ZoneLayout,
+        deformation: &[f64],
+        _prev: &[f64],
+        material: &[f64],
         _dt: f64,
         out: &mut [f64],
     ) -> Result<()> {
-        let mat = material.expect("Timoshenko declares a material_fespace");
-        let cell = geom.cell;
-        let v = |c| mat.value(cell, 0, c);
-        let e = v("E")?;
-        let gg = v("G")?;
-        let read_in = |name: &str| input.value(cell, g, name);
+        let m = |k: usize| material[lay.material[k] as usize];
+        let e = |k: usize| deformation[lay.deformation[k] as usize];
         match self.model {
+            // [E, I, G, A_s] × [κ, γ]
             BeamModel::Planar1d => {
-                out[0] = e * v("I")? * read_in("kappa")?;
-                out[1] = gg * v("A_s")? * read_in("gamma")?;
+                out[0] = m(0) * m(1) * e(0); // E·I·κ
+                out[1] = m(2) * m(3) * e(1); // G·A_s·γ
             }
+            // [E, A, I, G, A_s] × [ε, κ, γ]
             BeamModel::Frame2d => {
-                out[0] = e * v("A")? * read_in("eps")?;
-                out[1] = e * v("I")? * read_in("kappa")?;
-                out[2] = gg * v("A_s")? * read_in("gamma")?;
+                out[0] = m(0) * m(1) * e(0); // E·A·ε
+                out[1] = m(0) * m(2) * e(1); // E·I·κ
+                out[2] = m(3) * m(4) * e(2); // G·A_s·γ
             }
+            // [E, A, I_y, I_z, J, G, A_sy, A_sz] × [ε, κ_y, κ_z, torsion, γ_y, γ_z]
             BeamModel::Frame3d => {
-                out[0] = e * v("A")? * read_in("eps")?;
-                out[1] = e * v("I_y")? * read_in("kappa_y")?;
-                out[2] = e * v("I_z")? * read_in("kappa_z")?;
-                out[3] = gg * v("J")? * read_in("torsion")?;
-                out[4] = gg * v("A_sy")? * read_in("gamma_y")?;
-                out[5] = gg * v("A_sz")? * read_in("gamma_z")?;
+                out[0] = m(0) * m(1) * e(0); // E·A·ε
+                out[1] = m(0) * m(2) * e(1); // E·I_y·κ_y
+                out[2] = m(0) * m(3) * e(2); // E·I_z·κ_z
+                out[3] = m(5) * m(4) * e(3); // G·J·torsion
+                out[4] = m(5) * m(6) * e(4); // G·A_sy·γ_y
+                out[5] = m(5) * m(7) * e(5); // G·A_sz·γ_z
             }
         }
         Ok(())

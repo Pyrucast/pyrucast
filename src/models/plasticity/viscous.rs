@@ -51,6 +51,36 @@ use crate::models::plasticity::law::{PlasticLawKind, TENSOR_SUFFIXES};
 use crate::models::tensor::Kinematics;
 use crate::models::tensor::{deviator, i1, von_mises_stress};
 
+/// Positions in each law's own material contract. Every one opens with
+/// `["E", "nu", …]`, so the law-specific constants start at 2.
+///
+/// Norton — `["E", "nu", "K", "n"]`.
+const NORTON_K: usize = 2;
+const NORTON_N: usize = 3;
+/// Lemaitre — `["E", "nu", "K", "N", "M"]`.
+const LEMAITRE_K: usize = 2;
+const LEMAITRE_N: usize = 3;
+const LEMAITRE_M: usize = 4;
+/// Blackburn — `["E", "nu", "A_1", "alpha_1", "r_1", "B_s", "beta_s"]`.
+const BLACKBURN_A1: usize = 2;
+const BLACKBURN_ALPHA1: usize = 3;
+const BLACKBURN_R1: usize = 4;
+const BLACKBURN_BS: usize = 5;
+const BLACKBURN_BETAS: usize = 6;
+/// Chaboche — `["E", "nu", "k", "K", "n", "C_1", "gamma_1", "b", "Q"]`, which the
+/// Lemaitre-Chaboche contract extends with `["S", "s", "D_c"]`. The shared head
+/// is identical in both, so these positions serve the two laws.
+const CHABOCHE_K0: usize = 2;
+const CHABOCHE_K: usize = 3;
+const CHABOCHE_N: usize = 4;
+const CHABOCHE_C1: usize = 5;
+const CHABOCHE_GAMMA1: usize = 6;
+const CHABOCHE_B: usize = 7;
+const CHABOCHE_Q: usize = 8;
+const CHABOCHE_S_PAR: usize = 9;
+const CHABOCHE_S_EXP: usize = 10;
+const CHABOCHE_D_C: usize = 11;
+
 /// Solve `R(Δp) = Δp − dt·rate(Δp) = 0` for the plastic multiplier.
 ///
 /// Newton with a numerical derivative, bracketed and backed by bisection. The
@@ -80,9 +110,11 @@ use crate::models::tensor::{deviator, i1, von_mises_stress};
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let materiau = SubElementField::from_uniform_per_component(
 /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "K".into(), "n".into()], &[210000.0, 0.3, 300.0, 4.0]).unwrap();
-/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+/// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+/// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-/// #                         vars: Vec::new() };
+/// #                         vars: &[] };
 /// // Une bissection plutôt qu'un Newton : le résidu est monotone, et un
 /// // Newton non gardé dépasserait vers un multiplicateur négatif ou
 /// // partirait à l'infini sur une loi raide.
@@ -233,9 +265,11 @@ fn scale_deviator(
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let materiau = SubElementField::from_uniform_per_component(
 /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "K".into(), "n".into()], &[210000.0, 0.3, 300.0, 4.0]).unwrap();
-/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+/// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+/// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-/// #                         vars: Vec::new() };
+/// #                         vars: &[] };
 /// // Fluage secondaire : **aucun seuil**, la moindre contrainte coule.
 /// let trial = [100.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 /// let pas = plasticity::viscous::norton(&trial, &repos, &mat, 1.0)?;
@@ -248,8 +282,8 @@ fn scale_deviator(
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn norton(trial: &[f64; 6], prev: &PrevState, mat: &MatParams, dt: f64) -> Result<PlasticStep> {
-    let k = require_positive(PlasticLaw::CreepNorton, "K", mat.get("K")?)?;
-    let n = mat.get("n")?;
+    let k = require_positive(PlasticLaw::CreepNorton, "K", mat.get(NORTON_K))?;
+    let n = mat.get(NORTON_N);
     radial_creep(PlasticLaw::CreepNorton, trial, prev, mat, dt, |q, _p| {
         Ok((q / k).powf(n))
     })
@@ -286,9 +320,11 @@ pub fn norton(trial: &[f64; 6], prev: &PrevState, mat: &MatParams, dt: f64) -> R
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let materiau = SubElementField::from_uniform_per_component(
 /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "K".into(), "N".into(), "M".into()], &[210000.0, 0.3, 300.0, 4.0, 0.2]).unwrap();
-/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+/// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+/// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-/// #                         vars: Vec::new() };
+/// #                         vars: &[] };
 /// // Fluage primaire par écrouissage en déformation : le taux décroît à
 /// // mesure que `p` s'accumule, d'où un fluage qui **ralentit**.
 /// let trial = [200.0, 0.0, 0.0, 0.0, 0.0, 0.0];
@@ -306,9 +342,9 @@ pub fn lemaitre(
     mat: &MatParams,
     dt: f64,
 ) -> Result<PlasticStep> {
-    let k = require_positive(PlasticLaw::CreepLemaitre, "K", mat.get("K")?)?;
-    let n = mat.get("N")?;
-    let m = mat.get("M")?;
+    let k = require_positive(PlasticLaw::CreepLemaitre, "K", mat.get(LEMAITRE_K))?;
+    let n = mat.get(LEMAITRE_N);
+    let m = mat.get(LEMAITRE_M);
     const FLOOR: f64 = 1e-12;
     radial_creep(PlasticLaw::CreepLemaitre, trial, prev, mat, dt, |q, p| {
         Ok((q / k).powf(n) * p.max(FLOOR).powf(-m))
@@ -352,9 +388,11 @@ pub fn lemaitre(
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let materiau = SubElementField::from_uniform_per_component(
 /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "A_1".into(), "alpha_1".into(), "r_1".into(), "B_s".into(), "beta_s".into()], &[210000.0, 0.3, 0.0001, 0.001, 1.0, 1e-06, 0.001]).unwrap();
-/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+/// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+/// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-/// #                         vars: vec![0.0] };
+/// #                         vars: &[0.0] };
 /// // Un étage primaire **saturant** plus un étage secondaire constant. La
 /// // déformation primaire est suivie comme variable interne propre, ce qui
 /// // est la seule façon d'intégrer juste sous charge variable.
@@ -370,9 +408,9 @@ pub fn blackburn(
     mat: &MatParams,
     dt: f64,
 ) -> Result<PlasticStep> {
-    let (a, alpha) = (mat.get("A_1")?, mat.get("alpha_1")?);
-    let r = mat.get("r_1")?;
-    let (b, beta) = (mat.get("B_s")?, mat.get("beta_s")?);
+    let (a, alpha) = (mat.get(BLACKBURN_A1), mat.get(BLACKBURN_ALPHA1));
+    let r = mat.get(BLACKBURN_R1);
+    let (b, beta) = (mat.get(BLACKBURN_BS), mat.get(BLACKBURN_BETAS));
     let p_prim_a = prev.var(0);
 
     let q_tr = von_mises_stress(trial);
@@ -452,9 +490,11 @@ pub fn blackburn(
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let materiau = SubElementField::from_uniform_per_component(
 /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "k".into(), "K".into(), "n".into(), "C_1".into(), "gamma_1".into(), "b".into(), "Q".into()], &[210000.0, 0.3, 100.0, 300.0, 4.0, 10000.0, 100.0, 10.0, 50.0]).unwrap();
-/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+/// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+/// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-/// #                         vars: vec![0.0; 8] };
+/// #                         vars: &[0.0; 8] };
 /// // Écrouissages cinématique (Armstrong-Frederick) et isotrope : l'état
 /// // porte une contrainte cinématique **tensorielle** et un traînage.
 /// let trial = [400.0, 0.0, 0.0, 0.0, 0.0, 0.0];
@@ -475,11 +515,11 @@ pub fn chaboche(
     } else {
         PlasticLaw::ViscoplasticChaboche
     };
-    let k0 = mat.get("k")?;
-    let k_visc = require_positive(law, "K", mat.get("K")?)?;
-    let n = mat.get("n")?;
-    let (c, gamma) = (mat.get("C_1")?, mat.get("gamma_1")?);
-    let (b, q_sat) = (mat.get("b")?, mat.get("Q")?);
+    let k0 = mat.get(CHABOCHE_K0);
+    let k_visc = require_positive(law, "K", mat.get(CHABOCHE_K))?;
+    let n = mat.get(CHABOCHE_N);
+    let (c, gamma) = (mat.get(CHABOCHE_C1), mat.get(CHABOCHE_GAMMA1));
+    let (b, q_sat) = (mat.get(CHABOCHE_B), mat.get(CHABOCHE_Q));
 
     // State at A: the back stress (6), the isotropic drag (1), the damage (1).
     let x_a: [f64; 6] = std::array::from_fn(|i| prev.var(i));
@@ -536,9 +576,9 @@ pub fn chaboche(
     vars.push(r_end(dp));
     if damage {
         // Lemaitre's damage law: the elastic energy release rate drives it.
-        let s_par = require_positive(law, "S", mat.get("S")?)?;
-        let s_exp = mat.get("s")?;
-        let d_c = mat.get("D_c")?;
+        let s_par = require_positive(law, "S", mat.get(CHABOCHE_S_PAR))?;
+        let s_exp = mat.get(CHABOCHE_S_EXP);
+        let d_c = mat.get(CHABOCHE_D_C);
         // Y = σ̃_eq²·R_v/(2E); the triaxiality function R_v is taken at its
         // deviatoric value, the usual simplification for a proportional path.
         let sigma_eq = von_mises_stress(&sigma) / one_minus_d;

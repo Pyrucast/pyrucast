@@ -53,6 +53,7 @@ use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::symmetry::{self, MaterialSymmetry};
+use crate::models::ZoneLayout;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use serde::{Deserialize, Serialize};
 
@@ -458,25 +459,31 @@ impl Domain for Fick {
     }
 
     /// Fick's law: weak-form flux `D·∇c` at one Gauss point.
+    fn deformation_reads(&self) -> Vec<String> {
+        gradient_components(self.space_dim, &self.species)
+    }
+
     fn integrate_point(
         &self,
         geom: &CellGeom,
-        input: &SubElementField,
-        _prev: &SubElementField,
-        material: Option<&SubElementField>,
-        g: usize,
+        _g: usize,
+        lay: &ZoneLayout,
+        deformation: &[f64],
+        _prev: &[f64],
+        material: &[f64],
         _dt: f64,
         out: &mut [f64],
     ) -> Result<()> {
-        let mat = material.expect("Fick declares a material_fespace ⇒ material is supplied");
-        let (cell, space_dim) = (geom.cell, geom.space_dim);
-        let names = gradient_components(space_dim, &self.species);
-        let prefix = format!("D_{}", self.species);
-        let d3 = symmetry::transport_tensor(mat, cell, g, self.symmetry, space_dim, &prefix)?;
+        let space_dim = geom.space_dim;
+        let d3 = symmetry::transport_tensor_from(
+            |k| material[lay.material[k] as usize],
+            self.symmetry,
+            space_dim,
+        )?;
         for a in 0..space_dim {
             let mut acc = 0.0;
             for b in 0..space_dim {
-                acc += d3[(a, b)] * input.value(cell, g, &names[b])?;
+                acc += d3[(a, b)] * deformation[lay.deformation[b] as usize];
             }
             out[a] = acc;
         }

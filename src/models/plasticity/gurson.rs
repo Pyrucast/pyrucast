@@ -61,6 +61,15 @@ use crate::models::plasticity::law::{
 use crate::models::tensor::Kinematics;
 use crate::models::tensor::{i1, von_mises_stress};
 
+/// Positions in this law's material contract,
+/// `["E", "nu", "sigma_y", "q_1", "q_2", "q_3", "f_0", "f_c", "f_f"]`.
+const SIGMA_Y: usize = 2;
+const Q_1: usize = 3;
+const Q_2: usize = 4;
+const Q_3: usize = 5;
+const F_C: usize = 7;
+const F_F: usize = 8;
+
 /// The **effective** porosity of Tvergaard and Needleman — `f` below the
 /// coalescence threshold, accelerating to `1/q₁` at failure above it.
 fn effective_porosity(f: f64, q1: f64, f_c: f64, f_f: f64) -> f64 {
@@ -93,9 +102,11 @@ fn effective_porosity(f: f64, q1: f64, f_c: f64, f_f: f64) -> f64 {
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let materiau = SubElementField::from_uniform_per_component(
 /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "sigma_y".into(), "q_1".into(), "q_2".into(), "q_3".into(), "f_0".into(), "f_c".into(), "f_f".into()], &[210000.0, 0.3, 250.0, 1.5, 1.0, 2.25, 0.001, 0.15, 0.25]).unwrap();
-/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+/// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+/// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-/// #                         vars: vec![0.001] };
+/// #                         vars: &[0.001] };
 /// // La porosité **rétrécit** la surface de charge : à contrainte égale, un
 /// // métal plus poreux est plus près de céder.
 /// let s = [200.0, 0.0, 0.0, 0.0, 0.0, 0.0];
@@ -105,9 +116,9 @@ fn effective_porosity(f: f64, q1: f64, f_c: f64, f_f: f64) -> f64 {
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn yield_function(sigma: &[f64; 6], f: f64, mat: &MatParams) -> Result<f64> {
-    let sigma_y = require_positive(PlasticLaw::Gurson, "sigma_y", mat.get("sigma_y")?)?;
-    let (q1, q2, q3) = (mat.get("q_1")?, mat.get("q_2")?, mat.get("q_3")?);
-    let (f_c, f_f) = (mat.get("f_c")?, mat.get("f_f")?);
+    let sigma_y = require_positive(PlasticLaw::Gurson, "sigma_y", mat.get(SIGMA_Y))?;
+    let (q1, q2, q3) = (mat.get(Q_1), mat.get(Q_2), mat.get(Q_3));
+    let (f_c, f_f) = (mat.get(F_C), mat.get(F_F));
     let f_star = effective_porosity(f, q1, f_c, f_f);
 
     let q = von_mises_stress(sigma);
@@ -154,9 +165,11 @@ fn numerical_normal(sigma: &[f64; 6], f: f64, mat: &MatParams, scale: f64) -> Re
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let materiau = SubElementField::from_uniform_per_component(
 /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "sigma_y".into(), "q_1".into(), "q_2".into(), "q_3".into(), "f_0".into(), "f_c".into(), "f_f".into()], &[210000.0, 0.3, 250.0, 1.5, 1.0, 2.25, 0.001, 0.15, 0.25]).unwrap();
-/// # let mat = MatParams::new(&materiau, 0).unwrap();
+/// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+/// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+/// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
-/// #                         vars: vec![0.001] };
+/// #                         vars: &[0.001] };
 /// // La porosité **est** l'état : elle croît avec l'écoulement, et c'est
 /// // elle qui mène à la rupture ductile.
 /// let trial = [800.0, 400.0, 400.0, 0.0, 0.0, 0.0];
@@ -167,7 +180,7 @@ fn numerical_normal(sigma: &[f64; 6], f: f64, mat: &MatParams, scale: f64) -> Re
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn return_map(trial: &[f64; 6], prev: &PrevState, mat: &MatParams) -> Result<PlasticStep> {
-    let sigma_y = mat.get("sigma_y")?;
+    let sigma_y = mat.get(SIGMA_Y);
     // The porosity at A — the law's own variable, always carried: the state at
     // rest is seeded with `f_0` by `initial_internal_sources`, so there is no
     // « first step » to recognise here. A material starting as a perfect solid
@@ -211,7 +224,7 @@ pub fn return_map(trial: &[f64; 6], prev: &PrevState, mat: &MatParams) -> Result
         // The normal's trace is non-zero — the `cosh` sees to that — which is
         // why a porous law dilates where von Mises cannot.
         let dev_vol = dlambda * (n[0] + n[1] + n[2]);
-        f = (f + (1.0 - f) * dev_vol).clamp(0.0, mat.get("f_f")?);
+        f = (f + (1.0 - f) * dev_vol).clamp(0.0, mat.get(F_F));
         p += dlambda.abs();
     }
 

@@ -43,6 +43,13 @@ use crate::models::symmetry;
 use crate::models::tensor::Kinematics;
 use nalgebra::Matrix3;
 
+/// Positions in this law's material contract, [`MATERIAL_2D`] / [`MATERIAL_3D`]:
+/// `E`, `nu`, then three `(eps_0, eps_c, d_max)` triplets, then the weave frame.
+const E: usize = 0;
+const NU: usize = 1;
+/// Where the frame components start — after the nine directional constants.
+const FRAME_AT: usize = 11;
+
 /// The law's material contract: the elastic constants, then a threshold, a
 /// characteristic strain and a saturation per direction — plus the material
 /// frame, which the assembler resolves like any other component.
@@ -65,7 +72,9 @@ use nalgebra::Matrix3;
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let materiau = SubElementField::from_uniform_per_component(
 /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_0_1".into(), "eps_c_1".into(), "d_max_1".into(), "eps_0_2".into(), "eps_c_2".into(), "d_max_2".into(), "eps_0_3".into(), "eps_c_3".into(), "d_max_3".into(), "V1X".into(), "V1Y".into()], &[200000.0, 0.2, 0.0001, 0.01, 0.9, 0.0001, 0.01, 0.9, 0.0001, 0.01, 0.9, 1.0, 0.0]).unwrap();
-/// # let mat = MatRead { field: &materiau, cell: 0 };
+/// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+/// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+/// # let mat = MatRead { row: materiau.point_values(0, 0).unwrap(), idx: &idx_mat };
 /// // Trois directions de tissage, chacune avec son seuil, sa saturation et
 /// // son endommagement maximal — plus l'axe du repère matériau.
 /// assert!(damage::sic_sic::MATERIAL_2D.contains(&"V1X"));
@@ -96,7 +105,9 @@ pub const MATERIAL_2D: &[&str] = &[
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let materiau = SubElementField::from_uniform_per_component(
 /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_0_1".into(), "eps_c_1".into(), "d_max_1".into(), "eps_0_2".into(), "eps_c_2".into(), "d_max_2".into(), "eps_0_3".into(), "eps_c_3".into(), "d_max_3".into(), "V1X".into(), "V1Y".into()], &[200000.0, 0.2, 0.0001, 0.01, 0.9, 0.0001, 0.01, 0.9, 0.0001, 0.01, 0.9, 1.0, 0.0]).unwrap();
-/// # let mat = MatRead { field: &materiau, cell: 0 };
+/// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+/// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+/// # let mat = MatRead { row: materiau.point_values(0, 0).unwrap(), idx: &idx_mat };
 /// // En 3-D, le repère demande deux axes ; le troisième est V1 × V2.
 /// assert!(damage::sic_sic::MATERIAL_3D.contains(&"V2X"));
 /// assert!(damage::sic_sic::MATERIAL_3D.len() > damage::sic_sic::MATERIAL_2D.len());
@@ -130,7 +141,9 @@ pub const MATERIAL_3D: &[&str] = &[
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let materiau = SubElementField::from_uniform_per_component(
 /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_0_1".into(), "eps_c_1".into(), "d_max_1".into(), "eps_0_2".into(), "eps_c_2".into(), "d_max_2".into(), "eps_0_3".into(), "eps_c_3".into(), "d_max_3".into(), "V1X".into(), "V1Y".into()], &[200000.0, 0.2, 0.0001, 0.01, 0.9, 0.0001, 0.01, 0.9, 0.0001, 0.01, 0.9, 1.0, 0.0]).unwrap();
-/// # let mat = MatRead { field: &materiau, cell: 0 };
+/// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
+/// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
+/// # let mat = MatRead { row: materiau.point_values(0, 0).unwrap(), idx: &idx_mat };
 /// // Un endommagement **par direction de tissage** : l'état en porte six,
 /// // trois seuils et trois endommagements.
 /// let u = damage::sic_sic::update(&[1e-3, 0.0, 0.0, 0.0, 0.0, 0.0], &[0.0; 6], &mat, 2)?;
@@ -146,12 +159,12 @@ pub fn update(
     mat: &MatRead,
     space_dim: usize,
 ) -> Result<DamageUpdate> {
-    let e = mat.get("E")?;
-    let nu = mat.get("nu")?;
+    let e = mat.get(E);
+    let nu = mat.get(NU);
     let (lambda, mu) = lame(e, nu);
 
     // The weave directions — the same frame an orthotropic elasticity would use.
-    let r = symmetry::frame_rotation(mat.field, mat.cell, space_dim)?;
+    let r = symmetry::frame_rotation(|k| mat.get(k), FRAME_AT, space_dim)?;
 
     // The strain in the material axes: `ε_mat = Rᵀ ε R`.
     let eps_global = Matrix3::new(
@@ -167,9 +180,11 @@ pub fn update(
         let driver = pos(eps_mat[(i, i)]);
         let kappa = prev.get(i).copied().unwrap_or(0.0).max(driver);
         kappas[i] = kappa;
-        let eps_0 = mat.get(&format!("eps_0_{}", i + 1))?;
-        let eps_c = mat.get(&format!("eps_c_{}", i + 1))?.max(1e-30);
-        let d_max = mat.get(&format!("d_max_{}", i + 1))?;
+        // The i-th `(eps_0, eps_c, d_max)` triplet, right after `E`, `nu`.
+        let triplet = 2 + 3 * i;
+        let eps_0 = mat.get(triplet);
+        let eps_c = mat.get(triplet + 1).max(1e-30);
+        let d_max = mat.get(triplet + 2);
         damages[i] = if kappa > eps_0 {
             (d_max * (1.0 - (-(kappa - eps_0) / eps_c).exp())).clamp(0.0, 1.0 - 1e-12)
         } else {

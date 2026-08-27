@@ -51,6 +51,7 @@ use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::owned_components;
+use crate::models::ZoneLayout;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use serde::{Deserialize, Serialize};
 
@@ -360,33 +361,42 @@ impl Domain for Bernoulli {
 
     /// The section forces from the generalised strains — a **linear** law, as it
     /// is for every structural element: `N = EA·ε`, `M = EI·κ`, `T = GJ·φ'`.
+    fn deformation_reads(&self) -> Vec<String> {
+        owned_components(match self.model {
+            BeamModel::Planar1d => &["kappa"][..],
+            BeamModel::Frame2d => &["eps", "kappa"][..],
+            BeamModel::Frame3d => &["eps", "kappa_y", "kappa_z", "torsion"][..],
+        })
+    }
+
     fn integrate_point(
         &self,
-        geom: &CellGeom,
-        input: &SubElementField,
-        _prev: &SubElementField,
-        material: Option<&SubElementField>,
-        g: usize,
+        _geom: &CellGeom,
+        _g: usize,
+        lay: &ZoneLayout,
+        deformation: &[f64],
+        _prev: &[f64],
+        material: &[f64],
         _dt: f64,
         out: &mut [f64],
     ) -> Result<()> {
-        let mat = material.expect("Bernoulli declares a material_fespace");
-        let cell = geom.cell;
-        let e = mat.value(cell, 0, "E")?;
-        let read_in = |name: &str| input.value(cell, g, name);
+        // Both orders are this physics' own: `material_of` for the constants,
+        // `deformation_reads` for the section strains.
+        let m = |k: usize| material[lay.material[k] as usize];
+        let e = |k: usize| deformation[lay.deformation[k] as usize];
         match self.model {
             BeamModel::Planar1d => {
-                out[0] = e * mat.value(cell, 0, "I")? * read_in("kappa")?;
+                out[0] = m(0) * m(1) * e(0); // E·I·κ
             }
             BeamModel::Frame2d => {
-                out[0] = e * mat.value(cell, 0, "A")? * read_in("eps")?;
-                out[1] = e * mat.value(cell, 0, "I")? * read_in("kappa")?;
+                out[0] = m(0) * m(1) * e(0); // E·A·ε
+                out[1] = m(0) * m(2) * e(1); // E·I·κ
             }
             BeamModel::Frame3d => {
-                out[0] = e * mat.value(cell, 0, "A")? * read_in("eps")?;
-                out[1] = e * mat.value(cell, 0, "I_y")? * read_in("kappa_y")?;
-                out[2] = e * mat.value(cell, 0, "I_z")? * read_in("kappa_z")?;
-                out[3] = mat.value(cell, 0, "G")? * mat.value(cell, 0, "J")? * read_in("torsion")?;
+                out[0] = m(0) * m(1) * e(0); // E·A·ε
+                out[1] = m(0) * m(2) * e(1); // E·I_y·κ_y
+                out[2] = m(0) * m(3) * e(2); // E·I_z·κ_z
+                out[3] = m(5) * m(4) * e(3); // G·J·torsion
             }
         }
         Ok(())

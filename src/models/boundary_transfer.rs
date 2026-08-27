@@ -52,6 +52,7 @@ use crate::models::transfer::{
     coefficient_indices, coefficient_name, exchange_matrix, flux_name, internal_force,
     material_contract, physics_slice,
 };
+use crate::models::ZoneLayout;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use serde::{Deserialize, Serialize};
 
@@ -258,21 +259,24 @@ impl Domain for BoundaryTransfer {
     /// interpolated field. This is what the assembled film matrix integrates
     /// (`∫ N_i·flux = (K·a)_i`); the ambient part `h·a_ext` lives in the load,
     /// not here. No internal state.
+    fn deformation_reads(&self) -> Vec<String> {
+        self.components.iter().map(|(p, _)| p.clone()).collect()
+    }
+
     fn integrate_point(
         &self,
-        geom: &CellGeom,
-        input: &SubElementField,
-        _prev: &SubElementField,
-        material: Option<&SubElementField>,
-        g: usize,
+        _geom: &CellGeom,
+        _g: usize,
+        lay: &ZoneLayout,
+        deformation: &[f64],
+        _prev: &[f64],
+        material: &[f64],
         _dt: f64,
         out: &mut [f64],
     ) -> Result<()> {
-        let mat = material.expect("BoundaryTransfer declares a material_fespace");
-        let cell = geom.cell;
-        for (v, (primal, _)) in self.components.iter().enumerate() {
-            let h = mat.value(cell, g, &coefficient_name(primal))?;
-            out[v] = h * input.value(cell, g, primal)?;
+        for v in 0..self.components.len() {
+            let h = material[lay.material[v] as usize];
+            out[v] = h * deformation[lay.deformation[v] as usize];
         }
         Ok(())
     }

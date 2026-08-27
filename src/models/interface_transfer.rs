@@ -73,6 +73,7 @@ use crate::models::transfer::{
     coefficient_indices, coefficient_name, exchange_matrix, flux_name, internal_force, jump_name,
     material_contract, physics_slice,
 };
+use crate::models::ZoneLayout;
 use crate::models::{
     CellGeom, Contribution, CouplingLayout, Domain, MatrixKind, MatrixLayout, Physics, SubModelKind,
 };
@@ -337,21 +338,24 @@ impl Domain for InterfaceTransfer {
 
     /// The exchanged flux density `h·(a₁ − a₂)` at one Gauss point, from the jump
     /// supplied as input (`jump_<primal>`), one transferred quantity at a time.
+    fn deformation_reads(&self) -> Vec<String> {
+        self.components.iter().map(|(p, _)| jump_name(p)).collect()
+    }
+
     fn integrate_point(
         &self,
-        geom: &CellGeom,
-        input: &SubElementField,
-        _prev: &SubElementField,
-        material: Option<&SubElementField>,
-        g: usize,
+        _geom: &CellGeom,
+        _g: usize,
+        lay: &ZoneLayout,
+        deformation: &[f64],
+        _prev: &[f64],
+        material: &[f64],
         _dt: f64,
         out: &mut [f64],
     ) -> Result<()> {
-        let mat = material.expect("InterfaceTransfer declares a material_fespace");
-        let cell = geom.cell;
-        for (v, (primal, _)) in self.components.iter().enumerate() {
-            let h = mat.value(cell, g, &coefficient_name(primal))?;
-            out[v] = h * input.value(cell, g, &jump_name(primal))?;
+        for v in 0..self.components.len() {
+            let h = material[lay.material[v] as usize];
+            out[v] = h * deformation[lay.deformation[v] as usize];
         }
         Ok(())
     }

@@ -66,8 +66,9 @@ use crate::models::owned_components;
 use crate::models::tensor::Kinematics;
 use crate::models::tensor::{dual_name, primal_name};
 use crate::models::tensor::{stress_names, voigt_stress};
+use crate::models::ZoneLayout;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
-use law::{MatParams, PlasticLaw, PrevState};
+use law::{MatParams, PlasticLaw, PrevState, MAX_INTERNAL_VARS};
 use serde::{Deserialize, Serialize};
 
 /// Full 3-D tensor component suffixes, in the internal state order
@@ -478,40 +479,67 @@ impl Domain for Plasticity {
     /// stress (Voigt, `v`) + plastic strain `eps_p` (full 3-D tensor, 6) +
     /// cumulated plastic strain `p` (1) + echoed strain `ε(B)` (full 3-D, 6)
     /// [+ `sigma_zz` in 2-D], matching `stress_names ++ state_names ++ echo_names`.
+    fn deformation_reads(&self) -> Vec<String> {
+        elasticity::strain_reads(self.space_dim, self.kinematics)
+    }
+
+    /// What the law reads back from the state at A: the echoed strain ε(A), the
+    /// stress σ(A) (the Voigt dual plus the echoed `σ_zz` of the plane models),
+    /// the plastic strain ε_p(A), the cumulated `p`, then the law's own
+    /// variables — a **subset of what this same physics wrote** last step, so a
+    /// missing one is a real inconsistency, caught once per zone.
+    fn state_reads(&self) -> Vec<String> {
+        let d = self.space_dim;
+        let mut v: Vec<String> = TENSOR_SUFFIXES.iter().map(|s| format!("eps_{s}")).collect();
+        v.extend(stress_names(d, self.kinematics));
+        if echoes_sigma_zz(d, self.kinematics) {
+            v.push("sigma_zz".into());
+        }
+        v.extend(state_names());
+        v.extend(self.law.internal_names());
+        v
+    }
+
     fn integrate_point(
         &self,
-        geom: &CellGeom,
-        deformation: &SubElementField,
-        prev: &SubElementField,
-        material: Option<&SubElementField>,
-        g: usize,
+        _geom: &CellGeom,
+        _g: usize,
+        lay: &ZoneLayout,
+        deformation: &[f64],
+        prev: &[f64],
+        material: &[f64],
         dt: f64,
         out: &mut [f64],
     ) -> Result<()> {
-        let mat = material.expect("Plasticity declares a material_fespace ⇒ material is supplied");
-        let (cell, d) = (geom.cell, self.space_dim);
-        let params = MatParams::new(mat, cell)?;
+        let d = self.space_dim;
+        let params = MatParams::new(material, &lay.material, &lay.optional_material);
 
         // End-of-step strain ε(B).
-        let eps_b = read_strain(deformation, cell, g, d, self.kinematics)?;
-        // Converged state at A from `prev` (all zero on the first step, where A
-        // is the reference configuration: σ(A)=0, ε(A)=0, ε_p(A)=0, p(A)=0).
+        let eps_b = read_tensor(
+            deformation,
+            &lay.deformation,
+            strain_slots(d, self.kinematics),
+        );
+
+        // The state at A, in `state_reads` order: ε(A), σ(A), ε_p(A), p, then
+        // the law's own variables.
+        let n_stress = stress_slots(d, self.kinematics).len();
+        let (i_sigma, i_eps_p, i_p, i_vars) = (6, 6 + n_stress, 12 + n_stress, 13 + n_stress);
+        let mut vars = [0.0_f64; MAX_INTERNAL_VARS];
+        let n_vars = lay.state.len() - i_vars;
+        for (k, v) in vars[..n_vars].iter_mut().enumerate() {
+            *v = prev[lay.state[i_vars + k] as usize];
+        }
         let prev_state = PrevState {
-            eps: read_prev_strain(prev, cell, g),
-            sigma: read_prev_stress(prev, cell, g),
-            eps_p: read_prev_plastic_strain(prev, cell, g),
-            p: prev_opt(prev, cell, g, "p"),
-            // The law's own variables, in the order it declared them. Always
-            // present: the state at rest is built once by `initial_state`, which
-            // seeds a law whose variable starts from a material constant
-            // (Gurson's porosity `f_0`). No law has to tell « no state yet »
-            // from « state that is zero » here.
-            vars: self
-                .law
-                .internal_names()
-                .iter()
-                .map(|n| prev_opt(prev, cell, g, n))
-                .collect(),
+            eps: read_tensor(prev, &lay.state[..6], &[0, 1, 2, 3, 4, 5]),
+            sigma: read_tensor(
+                prev,
+                &lay.state[i_sigma..],
+                stress_slots(d, self.kinematics),
+            ),
+            eps_p: read_tensor(prev, &lay.state[i_eps_p..], &[0, 1, 2, 3, 4, 5]),
+            p: prev[lay.state[i_p] as usize],
+            vars: &vars[..n_vars],
         };
 
         let (step, eps_b_full) = self.law.as_law().incremental_step(
@@ -522,7 +550,7 @@ impl Domain for Plasticity {
             dt,
         )?;
 
-        let v = stress_names(d, self.kinematics).len();
+        let v = n_stress - usize::from(echoes_sigma_zz(d, self.kinematics));
         for r in 0..v {
             out[r] = voigt_stress(&step.sigma, d, self.kinematics, r);
         }
@@ -551,10 +579,11 @@ impl Domain for Plasticity {
             .law
             .as_law()
             .consistent_tangent(&eps_b_full, &prev_state, &params, dt)?;
-        let dv = crate::models::symmetry::reduce_to_model(&d3, self.kinematics);
+        let mut dv = [[0.0_f64; 6]; 6];
+        let n = crate::models::symmetry::reduce_to_model_into(&d3, self.kinematics, &mut dv);
         let mut idx = base;
-        for i in 0..dv.len() {
-            for j in i..dv.len() {
+        for i in 0..n {
+            for j in i..n {
                 out[idx] = dv[i][j];
                 idx += 1;
             }
@@ -571,69 +600,49 @@ impl Domain for Plasticity {
 
 // ─── Field <-> array plumbing ────────────────────────────────────────────────
 
-/// Read a component, returning `0.0` when it is absent (first step has no state).
-pub(crate) fn read_opt(f: &SubElementField, cell: usize, g: usize, name: &str) -> f64 {
-    if f.component_index(name).is_some() {
-        f.value(cell, g, name).unwrap_or(0.0)
-    } else {
-        0.0
-    }
-}
-
 /// Reconstruct the full 3-D **tensor** strain from the deformation input.
 /// Plane strain forces the out-of-plane components to zero; plane stress leaves
 /// `eps_zz` as the trial elastic guess (it is overwritten by the return map).
-fn read_strain(
-    f: &SubElementField,
-    cell: usize,
-    g: usize,
-    space_dim: usize,
-    kinematics: Kinematics,
-) -> Result<[f64; 6]> {
-    let mut eps = [0.0; 6];
-    if space_dim == 2 {
-        eps[0] = f.value(cell, g, "eps_xx")?;
-        eps[1] = f.value(cell, g, "eps_yy")?;
-        eps[5] = f.value(cell, g, "eps_xy")?;
-        if kinematics.is_axisymmetric() {
-            // The hoop ε_θθ = u_r/r is **measured**, not assumed: `deformation`
-            // produces it on a body of revolution. So ε(B) is fully known here
-            // — no plane assumption, no out-of-plane solve.
-            eps[2] = f.value(cell, g, "eps_zz")?;
-        }
-        // eps_yz/xz stay 0 (axial symmetry ⇒ no orthoradial shear); for the
-        // plane models eps_zz also stays 0 (plane strain) or is solved later
-        // (plane stress).
+/// Which slots of the full 3-D tensor the **strain** of this kinematics spans,
+/// in the order [`crate::models::elasticity::strain_reads`] declares them.
+///
+/// Plane models span `[xx, yy, xy]`; axisymmetry adds the *measured* hoop
+/// `θθ`; a solid spans all six. The slots left out stay zero — `ε_yz`/`ε_xz`
+/// vanish by axial symmetry, and `ε_zz` is either zero (plane strain) or solved
+/// by the law (plane stress).
+fn strain_slots(space_dim: usize, kinematics: Kinematics) -> &'static [usize] {
+    if space_dim == 2 && kinematics.is_axisymmetric() {
+        &[0, 1, 2, 5]
+    } else if space_dim == 2 {
+        &[0, 1, 5]
     } else {
-        for (k, suf) in TENSOR_SUFFIXES.iter().enumerate() {
-            eps[k] = f.value(cell, g, &format!("eps_{suf}"))?;
-        }
+        &[0, 1, 2, 3, 4, 5]
     }
-    Ok(eps)
 }
 
-/// Read a component from the optional previous-state field `prev`, defaulting to
-/// `0.0` when there is no previous step (`None`) or the component is absent.
-pub(crate) fn prev_opt(prev: &SubElementField, cell: usize, g: usize, name: &str) -> f64 {
-    read_opt(prev, cell, g, name)
+/// Which slots of the full 3-D tensor the **stress** carried by the state spans:
+/// the Voigt dual of the kinematics, plus the echoed `σ_zz` of the plane models.
+/// The rest is zero by the plane assumptions.
+fn stress_slots(space_dim: usize, kinematics: Kinematics) -> &'static [usize] {
+    if space_dim == 2 && kinematics.is_axisymmetric() {
+        &[0, 1, 2, 5]
+    } else if space_dim == 2 {
+        &[0, 1, 5, 2] // [xx, yy, xy] then the echoed zz
+    } else {
+        &[0, 1, 2, 3, 4, 5]
+    }
 }
 
-/// Full 3-D strain `ε(A)` echoed by the previous step (zero on the first step).
-fn read_prev_strain(prev: &SubElementField, cell: usize, g: usize) -> [f64; 6] {
-    std::array::from_fn(|k| prev_opt(prev, cell, g, &format!("eps_{}", TENSOR_SUFFIXES[k])))
-}
-
-/// Full 3-D stress `σ(A)` from the previous step. Each Voigt slot is read by
-/// name: `sigma_zz` comes from the 2-D echo (or the 3-D dual), and the shear
-/// `sigma_yz`/`sigma_xz` are absent in 2-D (⇒ `0.0`), exactly the plane
-/// assumptions.
-fn read_prev_stress(prev: &SubElementField, cell: usize, g: usize) -> [f64; 6] {
-    std::array::from_fn(|k| prev_opt(prev, cell, g, &format!("sigma_{}", TENSOR_SUFFIXES[k])))
-}
-
-/// Previous plastic strain tensor `ε_p(A)` (VAR0), defaulting to zero.
-fn read_prev_plastic_strain(prev: &SubElementField, cell: usize, g: usize) -> [f64; 6] {
-    std::array::from_fn(|k| prev_opt(prev, cell, g, &format!("eps_p_{}", TENSOR_SUFFIXES[k])))
+/// Scatter a row's values into a full 3-D tensor, by slot.
+///
+/// The one shape every state read takes: `idx` says where each component sits in
+/// the row (resolved once for the zone), `slots` where it belongs in the tensor.
+fn read_tensor(row: &[f64], idx: &[u32], slots: &[usize]) -> [f64; 6] {
+    let mut t = [0.0_f64; 6];
+    for (r, &slot) in slots.iter().enumerate() {
+        t[slot] = row[idx[r] as usize];
+    }
+    t
 }
 
 /// Map a `(i, j)` tensor pair to its index in [`TENSOR_SUFFIXES`]; kept for

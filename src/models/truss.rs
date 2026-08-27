@@ -23,6 +23,7 @@ use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::owned_components;
 use crate::models::tensor::{dual_name, primal_name};
+use crate::models::ZoneLayout;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use serde::{Deserialize, Serialize};
 
@@ -262,31 +263,37 @@ impl Domain for Truss {
 
     /// Axial force `N = E·A·ε_axial` at one Gauss point, with `ε_axial = cᵀ ε c`
     /// and `c` the cell's unit direction cosine (from its node coordinates).
+    fn deformation_reads(&self) -> Vec<String> {
+        strain_names(self.space_dim)
+    }
+
     fn integrate_point(
         &self,
         geom: &CellGeom,
-        input: &SubElementField,
-        _prev: &SubElementField,
-        material: Option<&SubElementField>,
-        g: usize,
+        _g: usize,
+        lay: &ZoneLayout,
+        deformation: &[f64],
+        _prev: &[f64],
+        material: &[f64],
         _dt: f64,
         out: &mut [f64],
     ) -> Result<()> {
-        let mat = material.expect("Truss declares a material_fespace ⇒ material is supplied");
-        let (cell, d) = (geom.cell, self.space_dim);
+        let d = self.space_dim;
         let c = cell_cosine(geom, d)?;
-        let strain = strain_names(d);
-        // (i,j) → flat strain-component index (symmetric, i ≤ j).
+        // (i,j) → flat strain-component index (symmetric, i ≤ j), the order
+        // `strain_names` declares and therefore the order of `lay.deformation`.
         let comp_index = |i: usize, j: usize| -> usize {
             let (i, j) = if i <= j { (i, j) } else { (j, i) };
             (0..i).map(|r| d - r).sum::<usize>() + (j - i)
         };
-        let e = mat.value(cell, 0, "E")?;
-        let a = mat.value(cell, 0, "A")?;
+        let (e, a) = (
+            material[lay.material[0] as usize],
+            material[lay.material[1] as usize],
+        );
         let mut eps_axial = 0.0;
         for i in 0..d {
             for j in 0..d {
-                let eps_ij = input.value(cell, g, &strain[comp_index(i, j)])?;
+                let eps_ij = deformation[lay.deformation[comp_index(i, j)] as usize];
                 eps_axial += c[i] * eps_ij * c[j];
             }
         }
