@@ -1761,49 +1761,64 @@ pub fn element_block_triplets_per_cell(
     // in **local** indices. Order within a cell is li,di,lj,pj; cells are
     // concatenated in order below ⇒ identical triplet stream regardless of
     // thread count (bit-for-bit result).
+    // Per-thread scratch: the geometry list, the element matrix and the two
+    // position lists are rebuilt for every cell, and allocating them there cost
+    // four `Vec` per cell.
     let per_cell: Vec<Vec<(usize, usize, f64)>> = (0..n_cells)
         .into_par_iter()
         .with_min_len((MIN_PARALLEL_LEN / n_nodes.max(1)).max(1))
-        .map(|cell| -> Result<Vec<(usize, usize, f64)>> {
-            let geoms: Vec<CellGeom> = rds_ref
-                .iter()
-                .map(|rd| CellGeom::new(rd, coords_ref, conn, cell))
-                .collect();
-            let mut ke = vec![0.0_f64; ke_len];
-            element(&geoms, mat_ref, state_ref, &mut ke)?;
+        .map_init(
+            || {
+                (
+                    Vec::with_capacity(rds_ref.len()),
+                    vec![0.0_f64; ke_len],
+                    Vec::with_capacity(n_nodes),
+                    Vec::with_capacity(n_nodes),
+                )
+            },
+            |(geoms, ke, rpos, cpos), cell| -> Result<Vec<(usize, usize, f64)>> {
+                geoms.clear();
+                geoms.extend(
+                    rds_ref
+                        .iter()
+                        .map(|rd| CellGeom::new(rd, coords_ref, conn, cell)),
+                );
+                ke.fill(0.0);
+                element(geoms, mat_ref, state_ref, ke)?;
 
-            let ids = &conn[cell * n_nodes..(cell + 1) * n_nodes];
-            let mut rpos = Vec::with_capacity(n_nodes);
-            let mut cpos = Vec::with_capacity(n_nodes);
-            for &nid in ids {
-                rpos.push(*row_pos.get(&nid).ok_or_else(|| {
-                    PyrucastError::Message(format!(
-                        "element_block_triplets: node {nid:?} not in row support"
-                    ))
-                })? as usize);
-                cpos.push(*col_pos.get(&nid).ok_or_else(|| {
-                    PyrucastError::Message(format!(
-                        "element_block_triplets: node {nid:?} not in col support"
-                    ))
-                })? as usize);
-            }
+                let ids = &conn[cell * n_nodes..(cell + 1) * n_nodes];
+                rpos.clear();
+                cpos.clear();
+                for &nid in ids {
+                    rpos.push(*row_pos.get(&nid).ok_or_else(|| {
+                        PyrucastError::Message(format!(
+                            "element_block_triplets: node {nid:?} not in row support"
+                        ))
+                    })? as usize);
+                    cpos.push(*col_pos.get(&nid).ok_or_else(|| {
+                        PyrucastError::Message(format!(
+                            "element_block_triplets: node {nid:?} not in col support"
+                        ))
+                    })? as usize);
+                }
 
-            let mut trips = Vec::with_capacity(ke_len);
-            for li in 0..n_nodes {
-                for di in 0..n_dual {
-                    let r = li * n_dual + di;
-                    let ri = ordering.to_index(rpos[li], di, n_row_nodes, n_dual);
-                    for lj in 0..n_nodes {
-                        for pj in 0..n_primal {
-                            let c = lj * n_primal + pj;
-                            let ci = ordering.to_index(cpos[lj], pj, n_col_nodes, n_primal);
-                            trips.push((ri, ci, ke[r * n_cols_loc + c]));
+                let mut trips = Vec::with_capacity(ke_len);
+                for li in 0..n_nodes {
+                    for di in 0..n_dual {
+                        let r = li * n_dual + di;
+                        let ri = ordering.to_index(rpos[li], di, n_row_nodes, n_dual);
+                        for lj in 0..n_nodes {
+                            for pj in 0..n_primal {
+                                let c = lj * n_primal + pj;
+                                let ci = ordering.to_index(cpos[lj], pj, n_col_nodes, n_primal);
+                                trips.push((ri, ci, ke[r * n_cols_loc + c]));
+                            }
                         }
                     }
                 }
-            }
-            Ok(trips)
-        })
+                Ok(trips)
+            },
+        )
         .collect::<Result<_>>()?;
 
     Ok((nrows, ncols, per_cell))
@@ -2350,14 +2365,19 @@ pub fn scatter_to_nodes(
         unique.len() * n_dual,
         coloring,
         (MIN_PARALLEL_LEN / n_nodes.max(1)).max(1),
-        || vec![0.0_f64; fe_len],
-        |cell, fe_cell, out| {
-            let geoms: Vec<CellGeom> = rds_ref
-                .iter()
-                .map(|rd| CellGeom::new(rd, coords_ref, conn, cell))
-                .collect();
+        // The scratch carries both the element vector and the geometry list:
+        // rebuilding the latter per cell allocated a `Vec` per cell of every
+        // call, for a list that is almost always one element long.
+        || (vec![0.0_f64; fe_len], Vec::with_capacity(rds_ref.len())),
+        |cell, (fe_cell, geoms), out| {
+            geoms.clear();
+            geoms.extend(
+                rds_ref
+                    .iter()
+                    .map(|rd| CellGeom::new(rd, coords_ref, conn, cell)),
+            );
             fe_cell.iter_mut().for_each(|v| *v = 0.0);
-            element(&geoms, fe_cell)?;
+            element(geoms, fe_cell)?;
             let ids = &conn[cell * n_nodes..(cell + 1) * n_nodes];
             for (li, &nid) in ids.iter().enumerate() {
                 let node_slot = *slot_of.get(&nid).ok_or_else(|| {
