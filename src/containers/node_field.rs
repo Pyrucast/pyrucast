@@ -1449,6 +1449,63 @@ impl NodeFieldView {
                 zone.component_value_at(ni, component)
             })
     }
+
+    /// Resolve `components` against every zone of this view — **once**, for the
+    /// whole gather that follows.
+    ///
+    /// Row `z` of the result gives, for zone `z`, the position of each requested
+    /// component, or [`ABSENT_COMPONENT`](crate::containers::field::ABSENT_COMPONENT)
+    /// where that zone does not carry it. Without this, a gather compares
+    /// component *names* at every node of every cell, which is the same string
+    /// comparison repeated for a property of the zone.
+    pub(crate) fn resolve_reads(&self, components: &[String]) -> Vec<Vec<u32>> {
+        self.inner
+            .zones
+            .iter()
+            .map(|zone| {
+                components
+                    .iter()
+                    .map(|c| {
+                        zone.component_index(c)
+                            .map_or(crate::containers::field::ABSENT_COMPONENT, |i| i as u32)
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+
+    /// Gather the requested components for `nodes` into `out`, node-major — the
+    /// form a per-cell kernel wants.
+    ///
+    /// One pass per **cell** instead of one lookup per (Gauss point, component,
+    /// node): the values of a cell's nodes do not change between its Gauss
+    /// points. `reads` comes from [`resolve_reads`](Self::resolve_reads), so no
+    /// component name is compared here — only the `NodeId` of each node is
+    /// looked up, which is the one thing that genuinely varies per cell.
+    ///
+    /// A `(node, component)` no zone defines reads as **zero**, the house
+    /// convention for nodal fields, shared with
+    /// [`NodeField::gather`](NodeField::gather) and
+    /// [`crate::ops::node_field::restrict`]: a field defined on part of a mesh
+    /// is a normal thing, not an error.
+    pub(crate) fn gather_cell(&self, nodes: &[NodeId], reads: &[Vec<u32>], out: &mut [f64]) {
+        let n = reads.first().map_or(0, |r| r.len());
+        out.fill(0.0);
+        for (k, &nid) in nodes.iter().enumerate() {
+            for ((zone, support), idx) in self.inner.zones.iter().zip(&self.supports).zip(reads) {
+                let Some(&ni) = support.node_index().get(&nid) else {
+                    continue;
+                };
+                let stride = zone.components.len();
+                for (c, &ci) in idx.iter().enumerate() {
+                    if ci != crate::containers::field::ABSENT_COMPONENT {
+                        out[k * n + c] = zone.values[ni * stride + ci as usize];
+                    }
+                }
+                break; // first zone defining the node wins, as `value_opt` does
+            }
+        }
+    }
 }
 
 // ─── Unit tests ─────────────────────────────────────────────────────────────

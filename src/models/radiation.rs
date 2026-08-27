@@ -255,17 +255,22 @@ impl SubModelKind for Radiation {
     /// Internal nodal fluxes `q_i = ∫ N_i · flux dΓ` — weighted by `N`, not by
     /// `Bᵀ`, as for convection: the integrand is a flux **density** on the
     /// boundary, not a gradient-conjugate quantity.
+    fn internal_force_reads(&self) -> Vec<String> {
+        vec![OUTPUT_FLUX.to_string()]
+    }
+
     fn internal_force_element(
         &self,
         geoms: &[CellGeom],
         stress: &SubElementField,
+        lay: &[u32],
         fe: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
         for g in 0..geom.n_gauss {
             let shape = geom.n_at_g(g)?;
             let w = geom.det_j_w(g)?;
-            let flux = stress.value(geom.cell, g, OUTPUT_FLUX)?;
+            let flux = stress.get(geom.cell, g, lay[0] as usize)?;
             for i in 0..geom.n_nodes {
                 fe[i] += shape[i] * flux * w;
             }

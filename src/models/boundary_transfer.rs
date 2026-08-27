@@ -203,13 +203,21 @@ impl SubModelKind for BoundaryTransfer {
     /// Internal nodal fluxes `q_i = ∫ N_i · flux dΓ` — the **`N`-weighted**
     /// boundary counterpart of the `Bᵀ` continuum default. For this linear law it
     /// equals `(K·a)_i`, so it fits the « internal forces == K·u » invariant.
+    fn internal_force_reads(&self) -> Vec<String> {
+        self.components
+            .iter()
+            .map(|(p, _)| crate::models::transfer::flux_name(p))
+            .collect()
+    }
+
     fn internal_force_element(
         &self,
         geoms: &[CellGeom],
         stress: &SubElementField,
+        lay: &[u32],
         fe: &mut [f64],
     ) -> Result<()> {
-        internal_force(&geoms[0], stress, &self.components, fe)
+        internal_force(&geoms[0], stress, lay, fe)
     }
 
     fn physics(&self) -> &'static [Physics] {

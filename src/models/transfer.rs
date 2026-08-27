@@ -312,12 +312,13 @@ pub fn exchange_matrix(
 /// #     zone.clone(), vec!["h_T".into()], &[2.0]).unwrap());
 /// # let flux = SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["flux_T".into()], &[1.0])?;
-/// # let paires = vec![("T".to_string(), "q".to_string())];
 /// # let fe = std::sync::Mutex::new(vec![0.0; 2]);
-/// // ∫ Nᵀ · flux dΓ — le résidu d'une loi de transfert, du côté nodal.
+/// // ∫ Nᵀ · flux dΓ — le résidu d'une loi de transfert, du côté nodal. Les
+/// // composantes lues sont résolues **une fois**, avant la boucle.
+/// let lay = flux.resolve_components(&["flux_T"], "flux")?;
 /// // Une densité unité sur un segment de longueur 1 se partage en deux.
 /// pyrucast::models::kernel::reduce_cells(&zone, |geom| {
-///     transfer::internal_force(geom, &flux, &paires, &mut fe.lock().unwrap())?;
+///     transfer::internal_force(geom, &flux, &lay, &mut fe.lock().unwrap())?;
 ///     Ok(0.0)
 /// })?;
 /// assert!((fe.lock().unwrap().iter().sum::<f64>() - 1.0).abs() < 1e-12);
@@ -326,19 +327,18 @@ pub fn exchange_matrix(
 pub fn internal_force(
     geom: &CellGeom,
     stress: &SubElementField,
-    components: &[(String, String)],
+    lay: &[u32],
     fe: &mut [f64],
 ) -> Result<()> {
-    let n_vars = components.len();
-    let fluxes: Vec<usize> = components
-        .iter()
-        .map(|(primal, _)| stress.component_index_or_err(&flux_name(primal)))
-        .collect::<Result<_>>()?;
+    let n_vars = lay.len();
+    let stride = stress.component_count();
+    let values = stress.values();
     for g in 0..geom.n_gauss {
         let shape = geom.n_at_g(g)?;
         let w = geom.det_j_w(g)?;
-        for (v, &comp) in fluxes.iter().enumerate() {
-            let flux_w = stress.get(geom.cell, g, comp)? * w;
+        let start = (geom.cell * geom.n_gauss + g) * stride;
+        for (v, &comp) in lay.iter().enumerate() {
+            let flux_w = values[start + comp as usize] * w;
             for i in 0..geom.n_nodes {
                 fe[i * n_vars + v] += shape[i] * flux_w;
             }

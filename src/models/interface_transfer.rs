@@ -290,13 +290,21 @@ impl SubModelKind for InterfaceTransfer {
     /// Internal fluxes `q_i = ∫ N_i · flux dΓ` — weighted by `N`, not by `Bᵀ`,
     /// exactly as for convection: the interface integrand is a flux **density**,
     /// not a gradient-conjugate quantity.
+    fn internal_force_reads(&self) -> Vec<String> {
+        self.components
+            .iter()
+            .map(|(p, _)| crate::models::transfer::flux_name(p))
+            .collect()
+    }
+
     fn internal_force_element(
         &self,
         geoms: &[CellGeom],
         stress: &SubElementField,
+        lay: &[u32],
         fe: &mut [f64],
     ) -> Result<()> {
-        internal_force(&geoms[0], stress, &self.components, fe)
+        internal_force(&geoms[0], stress, lay, fe)
     }
 
     fn label(&self) -> &'static str {

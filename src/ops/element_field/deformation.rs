@@ -108,18 +108,18 @@ pub fn deformation(u: &NodeField, fespace: &FiniteElementSpace) -> Result<Elemen
             names.push("eps_zz".to_string());
         }
         // Point kernel: ε_ij = ½(∂u_i/∂x_j + ∂u_j/∂x_i) with ∂u_i/∂x_j = Σ_k u_i(k)·∂N_k/∂x_j.
-        let sf = kernel::nodal_pointwise(sub, &view, names, |geom, field, g, out| {
+        // `dofs` holds the cell's displacements, node-major: the driver
+        // gathered them once, so the Gauss loop is arithmetic alone.
+        let nc = components.len();
+        let sf = kernel::nodal_pointwise(sub, &view, &components, names, |geom, g, dofs, out| {
             let dn_dx = geom.dn_dx(g)?;
-            let ids = geom.node_ids();
             let sd = geom.space_dim;
             for (c, &(i, j)) in pairs.iter().enumerate() {
                 let mut dij = 0.0; // ∂u_i/∂x_j
                 let mut dji = 0.0; // ∂u_j/∂x_i
                 for k in 0..geom.n_nodes {
-                    let u_i = field.value(ids[k], &components[i])?;
-                    let u_j = field.value(ids[k], &components[j])?;
-                    dij += u_i * dn_dx[k * sd + j];
-                    dji += u_j * dn_dx[k * sd + i];
+                    dij += dofs[k * nc + i] * dn_dx[k * sd + j];
+                    dji += dofs[k * nc + j] * dn_dx[k * sd + i];
                 }
                 out[c] = 0.5 * (dij + dji);
             }
@@ -128,7 +128,7 @@ pub fn deformation(u: &NodeField, fespace: &FiniteElementSpace) -> Result<Elemen
                 let n = geom.field_n_at_g(g)?;
                 let mut u_r = 0.0;
                 for k in 0..geom.n_nodes {
-                    u_r += field.value(ids[k], &components[0])? * n[k];
+                    u_r += dofs[k * nc] * n[k];
                 }
                 out[pairs.len()] = u_r / geom.radius(g)?;
             }

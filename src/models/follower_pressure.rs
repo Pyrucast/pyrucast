@@ -248,21 +248,25 @@ impl SubModelKind for FollowerPressure {
 
     /// The consistent nodal load `f_{i,a} = ∫_Γ N_i · t_a dΓ`, integrated on the
     /// **reference** surface — the traction already carries the area change.
+    fn internal_force_reads(&self) -> Vec<String> {
+        traction_names(self.space_dim)
+    }
+
     fn internal_force_element(
         &self,
         geoms: &[CellGeom],
         stress: &SubElementField,
+        lay: &[u32],
         fe: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
         let d = self.space_dim;
-        let names = traction_names(d);
         for g in 0..geom.n_gauss {
             let shape = geom.n_at_g(g)?;
             let w = geom.det_j_w(g)?;
             for i in 0..geom.n_nodes {
-                for (a, name) in names.iter().enumerate() {
-                    fe[i * d + a] += shape[i] * stress.value(geom.cell, g, name)? * w;
+                for (a, &comp) in lay.iter().enumerate() {
+                    fe[i * d + a] += shape[i] * stress.get(geom.cell, g, comp as usize)? * w;
                 }
             }
         }

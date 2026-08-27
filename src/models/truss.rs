@@ -203,16 +203,21 @@ impl SubModelKind for Truss {
     /// `c`. `N` is element-constant (linear bar), read at the first Gauss point;
     /// the closed form mirrors [`element_stiffness`]'s analytic treatment (a
     /// SEG2 in space has no square isoparametric Jacobian).
+    fn internal_force_reads(&self) -> Vec<String> {
+        vec!["n".to_string()]
+    }
+
     fn internal_force_element(
         &self,
         geoms: &[CellGeom],
         stress: &SubElementField,
+        lay: &[u32],
         fe: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
         let d = self.space_dim;
         let c = cell_cosine(geom, d)?;
-        let n = stress.value(geom.cell, 0, "n")?;
+        let n = stress.get(geom.cell, 0, lay[0] as usize)?;
         for a in 0..d {
             fe[a] = -n * c[a]; // node A
             fe[d + a] = n * c[a]; // node B

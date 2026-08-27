@@ -80,16 +80,16 @@ pub fn gradient(field: &NodeField, fespace: &FiniteElementSpace) -> Result<Eleme
         }
         // Point kernel: ∂(comp)/∂x_a = Σ_i f_i · ∂N_i/∂x_a, laid out
         // component-major then axis (grad_<comp>_x, grad_<comp>_y, …).
-        let sf = kernel::nodal_pointwise(sub, &view, names, |geom, field, g, out| {
+        let nc = components.len();
+        let sf = kernel::nodal_pointwise(sub, &view, &components, names, |geom, g, dofs, out| {
             let dn_dx = geom.dn_dx(g)?;
-            let ids = geom.node_ids();
             let sd = geom.space_dim;
             let mut oc = 0;
-            for comp in &components {
+            for c in 0..nc {
                 for a in 0..sd {
                     let mut grad = 0.0;
                     for i in 0..geom.n_nodes {
-                        grad += field.value(ids[i], comp)? * dn_dx[i * sd + a];
+                        grad += dofs[i * nc + c] * dn_dx[i * sd + a];
                     }
                     out[oc] = grad;
                     oc += 1;

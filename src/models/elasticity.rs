@@ -21,6 +21,7 @@
 //! Material components `E` (Young) and `nu` (Poisson).
 
 use crate::containers::element_field::SubElementField;
+use crate::containers::field::SubField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
@@ -847,13 +848,21 @@ pub fn element_geometric(geom: &CellGeom, stress: &SubElementField, ke: &mut [f6
     let n_nodes = geom.n_nodes;
     let d = geom.space_dim;
     let dofs = d * n_nodes;
+    // Resolved once for the element, not once per Gauss point.
+    let names = crate::models::stress_matrix_reads(d);
+    let refs: Vec<&str> = names.iter().map(String::as_str).collect();
+    let lay = stress.resolve_components(&refs, "stress")?;
+    let stride = stress.component_count();
+    let values = stress.values();
     for g in 0..geom.n_gauss {
         let dn = geom.dn_dx(g)?; // [i * d + c]
         let w = geom.det_j_w(g)?;
-        let sig = crate::models::voigt_stress_matrix(stress, geom.cell, g, d)?; // [c * d + e]
-                                                                                // On a body of revolution the hoop strain's own non-linear part,
-                                                                                // ½(u_r/r)², contributes `σ_θθ N_i N_j / r²` on the radial diagonal —
-                                                                                // the initial-stress counterpart of the `N_i / r` row of `B`.
+        let start = (geom.cell * geom.n_gauss + g) * stride;
+        let mut sig = [0.0_f64; 9]; // [c * d + e]
+        crate::models::voigt_stress_matrix(&values[start..start + stride], &lay, d, &mut sig);
+        // On a body of revolution the hoop strain's own non-linear part,
+        // ½(u_r/r)², contributes `σ_θθ N_i N_j / r²` on the radial diagonal —
+        // the initial-stress counterpart of the `N_i / r` row of `B`.
         let hoop = if geom.axisymmetric {
             let r = geom.radius(g)?;
             Some((

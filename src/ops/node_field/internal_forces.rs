@@ -23,6 +23,7 @@
 
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::ElementField;
+use crate::containers::field::SubField;
 use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::containers::model::Model;
 use crate::containers::node_field::NodeField;
@@ -154,11 +155,18 @@ pub fn internal_forces_continuum(
         let dual_vars: Vec<String> = (0..space_dim).map(|a| format!("f_{}", AXES[a])).collect();
         let stress = stresses.sub_for_fespace(sub)?;
         let stress_guard = stress.read();
+        // Resolved once for the zone, before the parallel region.
+        let mut names = crate::models::stress_matrix_reads(space_dim);
+        if sub.read().is_axisymmetric() {
+            names.push("sigma_zz".to_string());
+        }
+        let refs: Vec<&str> = names.iter().map(String::as_str).collect();
+        let lay = stress_guard.resolve_components(&refs, "stress")?;
         let sub_nf = kernel::scatter_to_nodes(
             std::slice::from_ref(sub),
             &support,
             dual_vars,
-            |geoms, fe| continuum_internal_force_element(geoms, &stress_guard, fe),
+            |geoms, fe| continuum_internal_force_element(geoms, &stress_guard, &lay, fe),
         )?;
         out.add_sub(Handle::new(sub_nf))?;
     }

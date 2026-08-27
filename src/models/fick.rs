@@ -389,22 +389,26 @@ impl SubModelKind for Fick {
 
     /// Internal nodal fluxes `j_i = ∫ ∇N_i · flux dx` — `Bᵀ` applied to the
     /// weak-form flux, as in conduction. Single dual variable, so `fe[i]` per node.
+    fn internal_force_reads(&self) -> Vec<String> {
+        flux_components(self.space_dim, &self.species)
+    }
+
     fn internal_force_element(
         &self,
         geoms: &[CellGeom],
         stress: &SubElementField,
+        lay: &[u32],
         fe: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
         let d = geom.space_dim;
-        let names = flux_components(d, &self.species);
         for g in 0..geom.n_gauss {
             let dn = geom.dn_dx(g)?;
             let w = geom.det_j_w(g)?;
             for i in 0..geom.n_nodes {
                 let mut s = 0.0;
                 for a in 0..d {
-                    s += dn[i * d + a] * stress.value(geom.cell, g, &names[a])?;
+                    s += dn[i * d + a] * stress.get(geom.cell, g, lay[a] as usize)?;
                 }
                 fe[i] += s * w;
             }

@@ -845,13 +845,32 @@ pub trait SubModelKind: Sync {
     /// (`sigma_xx`, `sigma_xy`, …). A displacement physics (elasticity, Mazars,
     /// plasticity) gets it for free; a physics whose dual is not a displacement
     /// vector (heat, bar, beam) overrides it.
+    /// Components this internal-force kernel reads from the state field, in the
+    /// slot order its indices assume — the counterpart of
+    /// [`Domain::deformation_reads`] on the `Bᵀσ` side.
+    ///
+    /// Default: the continuum stress tensor, plus the hoop `σ_θθ` on a body of
+    /// revolution, matching the default kernel below.
+    fn internal_force_reads(&self) -> Vec<String> {
+        let Some(layout) = self.stiffness_layout() else {
+            return Vec::new();
+        };
+        let space_dim = layout.fespaces[0].read().space_dim();
+        let mut names = stress_matrix_reads(space_dim);
+        if layout.fespaces[0].read().is_axisymmetric() {
+            names.push("sigma_zz".to_string());
+        }
+        names
+    }
+
     fn internal_force_element(
         &self,
         geoms: &[CellGeom],
         stress: &SubElementField,
+        lay: &[u32],
         fe: &mut [f64],
     ) -> Result<()> {
-        continuum_internal_force_element(geoms, stress, fe)
+        continuum_internal_force_element(geoms, stress, lay, fe)
     }
 
     /// Internal nodal forces `f = ∫ Bᵀ σ dΩ` of this physics (Cast3m `BSIG`),
@@ -874,11 +893,15 @@ pub trait SubModelKind: Sync {
             )));
         };
         let stress_guard = stress.read();
+        // Resolved once for the zone, before the parallel region.
+        let names = self.internal_force_reads();
+        let refs: Vec<&str> = names.iter().map(String::as_str).collect();
+        let lay = stress_guard.resolve_components(&refs, "stress")?;
         kernel::scatter_to_nodes(
             &layout.fespaces,
             &layout.support,
             layout.dual_vars,
-            |geoms, fe| self.internal_force_element(geoms, &stress_guard, fe),
+            |geoms, fe| self.internal_force_element(geoms, &stress_guard, &lay, fe),
         )
     }
 
@@ -1563,20 +1586,27 @@ pub trait Domain: Sync {
 pub(crate) fn continuum_internal_force_element(
     geoms: &[CellGeom],
     stress: &SubElementField,
+    lay: &[u32],
     fe: &mut [f64],
 ) -> Result<()> {
     let geom = &geoms[0];
     let d = geom.space_dim;
     let n_nodes = geom.n_nodes;
+    let stride = stress.component_count();
+    let values = stress.values();
     for g in 0..geom.n_gauss {
         let dn = geom.dn_dx(g)?; // [i * d + b]
         let w = geom.det_j_w(g)?;
-        let sig = voigt_stress_matrix(stress, geom.cell, g, d)?; // [a * d + b]
-                                                                 // `sigma_zz` is the hoop stress and only exists on a body of revolution.
+        let start = (geom.cell * geom.n_gauss + g) * stride;
+        let row = &values[start..start + stride];
+        let mut sig = [0.0_f64; 9]; // [a * d + b]
+        voigt_stress_matrix(row, lay, d, &mut sig);
+        // `sigma_zz` is the hoop stress and only exists on a body of revolution.
         let hoop = if geom.axisymmetric {
             Some((
                 geom.n_at_g(g)?,
-                stress.value(geom.cell, g, "sigma_zz")? / geom.radius(g)?,
+                // The hoop closes the continuum's read list.
+                row[lay[lay.len() - 1] as usize] / geom.radius(g)?,
             ))
         } else {
             None
@@ -1602,22 +1632,32 @@ pub(crate) fn continuum_internal_force_element(
 /// matrix `[a * d + b]`. Backs the continuum-mechanics
 /// [`SubModelKind::internal_force_element`] default; reads by component name, so a
 /// state field carrying extra `VAR1` components (Mazars) is handled transparently.
-pub(crate) fn voigt_stress_matrix(
-    stress: &SubElementField,
-    cell: usize,
-    g: usize,
-    d: usize,
-) -> Result<Vec<f64>> {
-    let mut sig = vec![0.0_f64; d * d];
+pub(crate) fn stress_matrix_reads(space_dim: usize) -> Vec<String> {
+    let mut names = Vec::with_capacity(space_dim * (space_dim + 1) / 2);
+    for i in 0..space_dim {
+        for j in i..space_dim {
+            names.push(format!("sigma_{}{}", VOIGT_AXES[i], VOIGT_AXES[j]));
+        }
+    }
+    names
+}
+
+/// The symmetric stress tensor of one Gauss point, from its row.
+///
+/// `idx` gives the position of each [`stress_matrix_reads`] name, resolved once
+/// per zone; the tensor lands in a caller-owned `d × d` buffer. Neither the
+/// names nor the buffer are built here: this runs once per Gauss point of every
+/// cell, and it used to spend a `format!` per component doing it.
+pub(crate) fn voigt_stress_matrix(row: &[f64], idx: &[u32], d: usize, sig: &mut [f64; 9]) {
+    let mut k = 0;
     for i in 0..d {
         for j in i..d {
-            let name = format!("sigma_{}{}", VOIGT_AXES[i], VOIGT_AXES[j]);
-            let v = stress.value(cell, g, &name)?;
+            let v = row[idx[k] as usize];
+            k += 1;
             sig[i * d + j] = v;
             sig[j * d + i] = v; // symmetric
         }
     }
-    Ok(sig)
 }
 
 /// Declare a physics' **parent-level operator** and its Python twin, from a

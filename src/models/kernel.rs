@@ -1204,8 +1204,9 @@ pub fn element_pointwise(
 pub(crate) fn nodal_pointwise(
     fespace: &Handle<SubFiniteElementSpace>,
     field: &NodeFieldView,
+    reads: &[String],
     out_components: Vec<String>,
-    point: impl Fn(&CellGeom, &NodeFieldView, usize, &mut [f64]) -> Result<()> + Sync,
+    point: impl Fn(&CellGeom, usize, &[f64], &mut [f64]) -> Result<()> + Sync,
 ) -> Result<SubElementField> {
     let out_stride = out_components.len();
     let mut out = SubElementField::new(fespace.clone(), out_components)?;
@@ -1223,20 +1224,45 @@ pub(crate) fn nodal_pointwise(
     let rd_ref: &RefData = &rd;
     let coords_ref: &Coords = &coords;
 
+    // The components each zone carries, resolved **once** — the gather below
+    // compares no name.
+    let reads_idx = field.resolve_reads(reads);
+
+    // The gather buffer is a fixed-size array, so a cell costs no allocation.
+    // The bound is checked here, once: the largest element carries twenty nodes
+    // (HEX20) and no producer reads more than three components per node.
+    let n_dofs = rd.n_nodes * reads.len();
+    if n_dofs > MAX_CELL_DOFS {
+        return Err(PyrucastError::Message(format!(
+            "nodal_pointwise: {} nodes × {} components exceeds the {MAX_CELL_DOFS} \
+             values a cell's gather buffer holds",
+            rd.n_nodes,
+            reads.len()
+        )));
+    }
+
     out.values_mut()
         .par_chunks_mut(n_gauss * out_stride)
         .with_min_len((MIN_PARALLEL_LEN / n_gauss.max(1)).max(1))
         .enumerate()
         .try_for_each(|(cell, ochunk)| -> Result<()> {
             let geom = CellGeom::new(rd_ref, coords_ref, conn, cell)?;
+            // The cell's nodal values, read **once** — they do not change from
+            // one Gauss point of the cell to the next.
+            let mut dofs = [0.0_f64; MAX_CELL_DOFS];
+            field.gather_cell(geom.node_ids(), &reads_idx, &mut dofs[..n_dofs]);
             for g in 0..n_gauss {
                 let slot = &mut ochunk[g * out_stride..(g + 1) * out_stride];
-                point(&geom, field, g, slot)?;
+                point(&geom, g, &dofs[..n_dofs], slot)?;
             }
             Ok(())
         })?;
     Ok(out)
 }
+
+/// The most values a cell's gather buffer holds: twenty nodes (HEX20) times
+/// three components, the widest a geometric producer reads.
+const MAX_CELL_DOFS: usize = 64;
 
 /// Assemble one stiffness block by a per-cell element-matrix kernel, in
 /// parallel.
