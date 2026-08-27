@@ -82,6 +82,14 @@ pub const TENSOR_SUFFIXES: [&str; 6] = ["xx", "yy", "zz", "yz", "xz", "xy"];
 /// It bounds a **stack** buffer in the constitutive kernel, which is why it is a
 /// constant rather than a `Vec`'s length: the state at a Gauss point is read
 /// into an array, not allocated.
+/// ```
+/// # use pyrucast::models::plasticity::law::{PlasticLaw, MAX_INTERNAL_VARS};
+/// // Elle borne l'état interne de toutes les lois — la plus fournie est la
+/// // viscoplasticité de Chaboche endommageable.
+/// assert!(PlasticLaw::ALL
+///     .iter()
+///     .all(|l| l.internal_names().len() <= MAX_INTERNAL_VARS));
+/// ```
 pub const MAX_INTERNAL_VARS: usize = 8;
 
 /// Which yield surface and flow rule an elastoplastic kinematics obeys.
@@ -794,10 +802,34 @@ impl<'a> MatParams<'a> {
         }
     }
 
-    /// The `k`-th component of this law's
-    /// [`material_components`](PlasticLawKind::material_components), for this
-    /// cell. No name, no search, no `Result`: the component's presence was
+    /// The `k`-th component of this law's own material contract, for this cell. No name, no search, no `Result`: the component's presence was
     /// settled when the layout was resolved.
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::plasticity::law::{MatParams, PlasticLaw};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
+    /// let materiau = SubElementField::from_uniform_per_component(
+    ///     fes.get(0)?, vec!["E".into(), "nu".into(), "sigma_y".into()],
+    ///     &[210_000.0, 0.3, 250.0])?;
+    /// let idx = materiau.resolve_components(
+    ///     PlasticLaw::Perfect.material_components(), "material")?;
+    /// let m = MatParams::new(materiau.point_values(0, 0)?, &idx, &[]);
+    /// // Le contrat de la loi est `["E", "nu", "sigma_y"]`.
+    /// assert_eq!(m.get(2), 250.0);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn get(&self, k: usize) -> f64 {
         self.row[self.idx[k] as usize]
     }
@@ -808,6 +840,36 @@ impl<'a> MatParams<'a> {
     ///
     /// Absence is a fact of the **zone**, settled when the layout was resolved:
     /// the branch here is on a resolved index, never on a name.
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::plasticity::law::{MatParams, PlasticLaw};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
+    /// # use pyrucast::containers::field::ABSENT_COMPONENT;
+    /// let materiau = SubElementField::from_uniform_per_component(
+    ///     fes.get(0)?, vec!["E".into(), "nu".into(), "sigma_y".into(), "H".into()],
+    ///     &[210_000.0, 0.3, 250.0, 1_000.0])?;
+    /// let idx = materiau.resolve_components(
+    ///     PlasticLaw::Perfect.material_components(), "material")?;
+    /// // Deux facultatives : `H`, fournie, et `rho`, absente.
+    /// let opt = materiau.resolve_optional_components(&["H", "rho"]);
+    /// let m = MatParams::new(materiau.point_values(0, 0)?, &idx, &opt);
+    /// assert_eq!(m.optional(0, 0.0), 1_000.0);
+    /// assert_eq!(m.optional(1, 7_800.0), 7_800.0); // le défaut
+    /// assert_eq!(opt[1], ABSENT_COMPONENT);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
     pub fn optional(&self, k: usize, default: f64) -> f64 {
         match self.opt_idx[k] {
             crate::containers::field::ABSENT_COMPONENT => default,

@@ -223,6 +223,29 @@ impl<S: Any + Send + Sync> FieldView<S> {
 /// `u32::MAX` and not `Option<u32>`: the table is read in the innermost loop of
 /// every physics, and a sentinel keeps it a flat `&[u32]` — one cache line for a
 /// whole tensor's worth of slots.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
+/// let mat = SubElementField::from_uniform_per_component(
+///     fes.get(0)?, vec!["E".into(), "nu".into()], &[210_000.0, 0.3])?;
+/// // `rho` n'a pas été fourni : la table le dit une fois pour la zone.
+/// let table = mat.resolve_optional_components(&["rho"]);
+/// assert_eq!(table[0], pyrucast::containers::field::ABSENT_COMPONENT);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub const ABSENT_COMPONENT: u32 = u32::MAX;
 
 /// One homogeneous block of field values.

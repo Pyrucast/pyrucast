@@ -1276,6 +1276,20 @@ pub fn owned_components(names: &[&str]) -> Vec<String> {
 /// built by hand, in another order or missing a component, is refused by
 /// [`Domain::zone_layout`] with a message naming the field and the gap — instead
 /// of silently feeding a permuted tensor to the law.
+/// ```
+/// # use pyrucast::models::ZoneLayout;
+/// // Une table dit où lire, pas quoi lire : la physique déclare son ordre
+/// // canonique, la zone le traduit en positions.
+/// let lay = ZoneLayout {
+///     deformation: vec![2, 0, 1],
+///     state: Vec::new(),
+///     material: vec![0, 1],
+///     optional_material: Vec::new(),
+/// };
+/// let ligne = [10.0, 20.0, 30.0];
+/// // La première composante de la convention est en troisième position.
+/// assert_eq!(ligne[lay.deformation[0] as usize], 30.0);
+/// ```
 pub struct ZoneLayout {
     /// Position of each [`Domain::deformation_reads`] component.
     pub deformation: Vec<u32>,
@@ -1286,8 +1300,7 @@ pub struct ZoneLayout {
     pub material: Vec<u32>,
     /// Position of each **optional** material component, in
     /// [`Domain::optional_material_components`] order;
-    /// [`ABSENT_COMPONENT`](crate::containers::field::ABSENT_COMPONENT) where
-    /// the caller supplied none.
+    /// [`ABSENT_COMPONENT`] where the caller supplied none.
     pub optional_material: Vec<u32>,
 }
 
@@ -1415,7 +1428,7 @@ pub trait Domain: Sync {
     /// **Provided**, and rarely worth redefining. Required components must be
     /// present (a missing one names itself in the error); optional material
     /// components may be absent, marked
-    /// [`ABSENT_COMPONENT`](crate::containers::field::ABSENT_COMPONENT).
+    /// [`ABSENT_COMPONENT`].
     fn zone_layout(
         &self,
         deformation: &SubElementField,

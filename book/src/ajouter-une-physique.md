@@ -176,19 +176,30 @@ pub trait SubModelKind: Sync {
 // capacité, car le matériau paramètre la loi (σ = D(E,ν):ε, M = E·I·κ, …).
 pub trait Domain: Sync {
     fn material_fespace(&self) -> Handle<SubFiniteElementSpace>;
-    fn material_components(&self) -> Option<&'static [&'static str]> { None }
+    // Les constantes exigées, dans l'ordre où le noyau les indexera ;
+    // une liste vide dit « aucune composante contrainte » :
+    fn material_components(&self) -> Vec<String> { Vec::new() }
     // Composantes acceptées mais non exigées (alpha…) — cf. plus bas :
     fn optional_material_components(&self) -> &'static [&'static str] { &[] }
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace>;
-    fn behavior_output_components(&self) -> Result<Vec<String>>;
-    // La loi de comportement en UN point de Gauss, montage incrémental A → B :
-    fn integrate_point(&self, geom: &CellGeom, deformation: &SubElementField,
-        prev: Option<&SubElementField>, material: Option<&SubElementField>,
-        g: usize, dt: Option<f64>, out: &mut [f64]) -> Result<()>;
+    fn behavior_output_components(&self) -> Vec<String>;
+    // Ce que le noyau lit, dans l'ordre de ses indices :
+    fn deformation_reads(&self) -> Vec<String>;
+    fn state_reads(&self) -> Vec<String> { Vec::new() }
+    // L'état au repos, et la question « cette loi exige-t-elle un pas de
+    // temps ? » — posées une fois, pas au point de Gauss :
+    fn initial_state(&self, material: &SubElementField) -> Result<SubElementField> { /* fourni : des zéros */ }
+    fn requires_dt(&self) -> bool { false }
+    // La loi de comportement en UN point de Gauss, montage incrémental A → B.
+    // Chaque entrée est LA LIGNE de ce point, empruntée au tampon du champ ;
+    // `lay` dit où chaque composante s'y trouve (résolu une fois par zone) :
+    fn integrate_point(&self, geom: &CellGeom, g: usize, lay: &ZoneLayout,
+        deformation: &[f64], prev: &[f64], material: &[f64],
+        dt: f64, out: &mut [f64]) -> Result<()>;
     fn integrate_behavior(&self, deformation: &Handle<SubElementField>,
-        prev: Option<&Handle<SubElementField>>,
+        prev: &Handle<SubElementField>,
         material: Option<&Handle<SubElementField>>,
-        dt: Option<f64>) -> Result<SubElementField> { /* fourni : pilote integrate_point */ }
+        dt: f64) -> Result<SubElementField> { /* fourni : résout la zone, pilote integrate_point */ }
 }
 pub trait Constraint {
     fn multiplier_mesh(&self) -> &Mesh;
@@ -205,10 +216,21 @@ sous-trait **et** redéfinir le seam correspondant pour rendre `Some(self)` :
   `material_fespace()` (+ `material_components()`) — l'assembleur
   (`src/ops/matrix.rs`) sélectionne et valide le `SubElementField`
   automatiquement ; `behavior_fespace()` + `behavior_output_components()` +
-  `integrate_point(...)`, la loi de constitution **en un point de Gauss**.
-  `integrate_behavior` est **fourni** : il pilote ce noyau en parallèle sur toutes
-  les cellules. Matériau et comportement vont **ensemble** : même un élément
-  linéaire (barre, poutre) a un comportement, simplement trivial (`N = E·A·ε`).
+  `deformation_reads()` + `integrate_point(...)`, la loi de constitution **en un
+  point de Gauss**. `integrate_behavior` est **fourni** : il résout la zone, puis
+  pilote ce noyau en parallèle sur toutes les cellules. Matériau et comportement
+  vont **ensemble** : même un élément linéaire (barre, poutre) a un comportement,
+  simplement trivial (`N = E·A·ε`).
+
+  **Deux invariants tiennent dans ce noyau**, et ils décident de la forme du
+  reste : aucun test que l'amont a déjà tranché — présence d'une composante,
+  forme d'un champ, `Option` à déballer — et aucune allocation dynamique. Un
+  noyau conforme s'écrit sans un seul `?` sur ses lectures. Ce que l'auteur
+  déclare (`deformation_reads`, `state_reads`, `material_components`) est
+  exactement ce qui permet cela : la convention est traduite en positions **une
+  fois par zone**, dans `zone_layout`, où un champ fabriqué à la main dans un
+  autre ordre est refusé avec un message qui nomme le champ et l'écart. Les
+  branchements qui restent sont ceux de la physique.
 - **Contrainte** (multiplicateurs de Lagrange) : `impl Constraint`
   (`multiplier_mesh()` + `relations()`) + `as_constraint()`.
   `SubModel::multiplier_nodes()` et `multiplier_mesh()` en découlent. C'est le

@@ -444,8 +444,8 @@ impl Domain for Plasticity {
     }
 
     /// Zero everywhere, **except** the internal variables a law starts from a
-    /// material constant — Gurson's porosity `f_0`, declared by
-    /// [`PlasticLawKind::initial_internal_sources`](law::PlasticLawKind::initial_internal_sources).
+    /// material constant — Gurson's porosity `f_0`, which the law declares
+    /// through `initial_internal_sources`.
     ///
     /// Seeding them here, once per zone before the first step, is what lets the
     /// return map read `prev.var(0)` unconditionally: no law has to recognise a

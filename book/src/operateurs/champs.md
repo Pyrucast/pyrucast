@@ -187,7 +187,7 @@ physique. Ils produisent l'`ElementField` que le
 [comportement](comportement.md) (`integrate_behavior`) consomme ensuite. Ils
 partagent tous le même moteur parallèle : le driver `nodal_pointwise`
 (déterministe bit-à-bit, cf. [Parallélisme](../developper/parallelisme.md)),
-pendant nodal de `integrate_pointwise`.
+pendant nodal de `element_pointwise`.
 
 ### `interp_to_gauss(field, fespace)` → `ElementField`
 

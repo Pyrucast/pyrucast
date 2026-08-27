@@ -16,10 +16,34 @@ pures**.
 - Le module [`parallel`](#) ré-exporte le prelude rayon et fixe la politique de
   grain (`MIN_PARALLEL_LEN`, via `with_min_len`) : les petits problèmes restent
   effectivement séquentiels, sans surcoût de threads.
-- Les **drivers** de `models::kernel` (`integrate_pointwise`, `assemble_block`)
+- Les **drivers** de `models::kernel` (`element_pointwise`, `nodal_pointwise`,
+  `assemble_block`)
   sont les seuls porteurs de rayon côté physiques. Ils tiennent les guards de
   lecture, parallélisent par cellule et appellent un noyau pur fourni par la
   physique. Voir [Ajouter une physique](../ajouter-une-physique.md).
+
+## Ce qu'un noyau au point d'intégration n'a pas le droit de faire
+
+Un noyau au point de Gauss tourne des dizaines de millions de fois dans une
+résolution non linéaire. Deux invariants l'encadrent :
+
+1. **Aucun test que l'amont a déjà tranché** — la présence d'une composante, la
+   forme d'un champ, une `Option` à déballer. Les branchements qui restent sont
+   ceux de la **physique** (l'essai élastique qui plastifie ou non).
+2. **Aucune allocation dynamique** — ni `Vec`, ni `String`, ni `format!`, ni
+   structure intermédiaire construite par point.
+
+La vérification n'est pas supprimée, elle est **déplacée** : un champ peut avoir
+été fabriqué à la main, on contrôle donc ses composantes *et leur ordre* une fois
+par zone, avant la région parallèle (`Domain::zone_layout`,
+`kernel::element_pointwise`), avec un message qui nomme le champ et l'écart. Le
+noyau reçoit alors **la ligne** de son point — une tranche empruntée du tampon —
+et une table d'indices : il indexe et calcule, rien d'autre. Un noyau conforme
+s'écrit sans un seul `?` sur ses lectures, ce qui rend la règle vérifiable à
+l'œil.
+
+Ce que cela vaut : sur la poutre console élasto-plastique 400×80, ~55 % du temps
+CPU partait dans la résolution de noms, le `format!`, le hachage et l'allocateur.
 
 ## Zéro-copie
 

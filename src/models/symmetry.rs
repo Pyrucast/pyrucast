@@ -717,8 +717,37 @@ pub fn elastic_constitutive(
 /// writing into a caller-owned buffer and returning the Voigt size `v`.
 ///
 /// The form a constitutive kernel calls: `idx` gives the position of each
-/// component of [`elasticity::material_contract`] in `material`, resolved once
+/// component of the symmetry's material contract in `material`, resolved once
 /// per zone, so this reads by index and allocates nothing.
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
+/// # use pyrucast::models::tensor::Kinematics;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
+/// // Un matériau rangé à l'envers : la table absorbe l'écart d'ordre.
+/// let mat = SubElementField::from_uniform_per_component(
+///     fes.get(0)?, vec!["nu".into(), "E".into()], &[0.3, 210_000.0])?;
+/// let idx = mat.resolve_components(&["E", "nu"], "material")?;
+/// let mut d = [[0.0_f64; 6]; 6];
+/// let v = symmetry::elastic_constitutive_into(
+///     mat.point_values(0, 0)?, &idx, MaterialSymmetry::Isotropic,
+///     Kinematics::PlaneStress, 2, &mut d)?;
+/// assert_eq!(v, 3);
+/// assert!((d[0][0] - 210_000.0 / (1.0 - 0.09)).abs() < 1e-6);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn elastic_constitutive_into(
     material: &[f64],
     idx: &[u32],
@@ -806,6 +835,19 @@ pub fn reduce_to_model(d3: &[[f64; 6]; 6], kinematics: Kinematics) -> Vec<Vec<f6
 /// The allocating shape above builds two levels of `Vec` for a matrix of at most
 /// thirty-six numbers, which is nothing once per assembly and a great deal once
 /// per Gauss point of every iteration.
+/// ```
+/// # use pyrucast::models::{elasticity, symmetry};
+/// # use pyrucast::models::tensor::Kinematics;
+/// // La même réduction que `reduce_to_model`, sur la pile.
+/// let d3 = symmetry::orthotropic_from_constants(
+///     [210e3, 210e3, 210e3], [0.3, 0.3, 0.3], [80_769.0, 80_769.0, 80_769.0])?;
+/// let mut d = [[0.0_f64; 6]; 6];
+/// let v = symmetry::reduce_to_model_into(&d3, Kinematics::PlaneStrain, &mut d);
+/// assert_eq!(v, 3);
+/// let attendu = symmetry::reduce_to_model(&d3, Kinematics::PlaneStrain);
+/// assert_eq!(d[0][..v], attendu[0][..]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn reduce_to_model_into(
     d3: &[[f64; 6]; 6],
     kinematics: Kinematics,
@@ -1003,6 +1045,14 @@ pub fn transport_tensor(
 /// constants, then the frame.
 ///
 /// The form a constitutive kernel calls: no name, no allocation.
+/// ```
+/// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
+/// // Isotrope : une seule constante, et le tenseur est diagonal.
+/// let k3 = symmetry::transport_tensor_from(|_| 1.5, MaterialSymmetry::Isotropic, 2)?;
+/// assert_eq!(k3[(0, 0)], 1.5);
+/// assert_eq!(k3[(0, 1)], 0.0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub fn transport_tensor_from(
     v: impl Fn(usize) -> f64,
     symmetry: MaterialSymmetry,

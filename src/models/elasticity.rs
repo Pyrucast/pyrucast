@@ -471,6 +471,17 @@ pub fn constitutive(e: f64, nu: f64, kinematics: Kinematics, space_dim: usize) -
 /// The form a constitutive kernel calls: at most thirty-six numbers, on the
 /// stack. Building two levels of `Vec` for them is nothing once per assembly and
 /// a great deal once per Gauss point of every iteration.
+/// ```
+/// # use pyrucast::models::elasticity;
+/// # use pyrucast::models::tensor::Kinematics;
+/// // La même matrice que `constitutive`, écrite sur la pile : `v` dit
+/// // combien de lignes et de colonnes ont été remplies.
+/// let mut d = [[0.0_f64; 6]; 6];
+/// let v = elasticity::constitutive_into(210_000.0, 0.3, Kinematics::PlaneStress, 2, &mut d);
+/// assert_eq!(v, 3);
+/// let attendu = elasticity::constitutive(210_000.0, 0.3, Kinematics::PlaneStress, 2);
+/// assert_eq!(d[0][..v], attendu[0][..]);
+/// ```
 pub fn constitutive_into(
     e: f64,
     nu: f64,
