@@ -44,11 +44,11 @@
 //! costs them seven extra internal variables.
 
 use crate::error::{PyrucastError, Result};
-use crate::models::elasticity::ElasticityModel;
 use crate::models::plasticity::law::{
     require_positive, MatParams, PlasticLaw, PlasticStep, PrevState,
 };
 use crate::models::plasticity::law::{PlasticLawKind, TENSOR_SUFFIXES};
+use crate::models::tensor::Kinematics;
 use crate::models::tensor::{deviator, i1, von_mises_stress};
 
 /// Solve `R(Δp) = Δp − dt·rate(Δp) = 0` for the plastic multiplier.
@@ -752,7 +752,7 @@ crate::physics_operator! {
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -760,12 +760,12 @@ crate::physics_operator! {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// let m = model::creep_norton(&fes, ElasticityModel::PlaneStrain)?;
+    /// let m = model::creep_norton(&fes, Kinematics::PlaneStrain)?;
     /// assert_eq!(m.primal_vars()?, vec!["u_x".to_string(), "u_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn creep_norton(fes, model: ElasticityModel) = crate::ops::model::plasticity_with_law, PlasticLaw::CreepNorton;
-    python: "`model.creep_norton(fespace, model)` — Norton-Odqvist secondary creep,\n`ṗ = (q/K)^n`. Material `E`, `nu`, `K`, `n`.\n\nThere is **no yield threshold**: any stress creeps, however slowly. Like\nevery rate-dependent law it needs the time increment —\n`integrate_behavior(..., dt=...)` — and raises without one, because\nintegrating a creep law as if it were instantaneous would give a\nplausible wrong answer."
+    pub fn creep_norton(fes, kinematics: Kinematics) = crate::ops::model::plasticity_with_law, PlasticLaw::CreepNorton;
+    python: "`kinematics.creep_norton(fespace, kinematics)` — Norton-Odqvist secondary creep,\n`ṗ = (q/K)^n`. Material `E`, `nu`, `K`, `n`.\n\nThere is **no yield threshold**: any stress creeps, however slowly. Like\nevery rate-dependent law it needs the time increment —\n`integrate_behavior(..., dt=...)` — and raises without one, because\nintegrating a creep law as if it were instantaneous would give a\nplausible wrong answer."
 }
 
 crate::physics_operator! {
@@ -784,7 +784,7 @@ crate::physics_operator! {
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -792,12 +792,12 @@ crate::physics_operator! {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// let m = model::creep_blackburn(&fes, ElasticityModel::PlaneStrain)?;
+    /// let m = model::creep_blackburn(&fes, Kinematics::PlaneStrain)?;
     /// assert_eq!(m.primal_vars()?, vec!["u_x".to_string(), "u_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn creep_blackburn(fes, model: ElasticityModel) = crate::ops::model::plasticity_with_law, PlasticLaw::CreepBlackburn;
-    python: "`model.creep_blackburn(fespace, model)` — a **saturating primary** creep\nstage plus a steady secondary one, with Blackburn's `sinh` stress\ndependence (which spans decades of stress where a power law cannot).\nMaterial `E`, `nu`, `A_1`, `alpha_1`, `r_1`, `B_s`, `beta_s`.\n\nThe primary strain is tracked as its own internal variable (`p_prim`), so\nthe law integrates correctly under a varying load."
+    pub fn creep_blackburn(fes, kinematics: Kinematics) = crate::ops::model::plasticity_with_law, PlasticLaw::CreepBlackburn;
+    python: "`kinematics.creep_blackburn(fespace, kinematics)` — a **saturating primary** creep\nstage plus a steady secondary one, with Blackburn's `sinh` stress\ndependence (which spans decades of stress where a power law cannot).\nMaterial `E`, `nu`, `A_1`, `alpha_1`, `r_1`, `B_s`, `beta_s`.\n\nThe primary strain is tracked as its own internal variable (`p_prim`), so\nthe law integrates correctly under a varying load."
 }
 
 crate::physics_operator! {
@@ -816,7 +816,7 @@ crate::physics_operator! {
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -824,12 +824,12 @@ crate::physics_operator! {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// let m = model::creep_lemaitre(&fes, ElasticityModel::PlaneStrain)?;
+    /// let m = model::creep_lemaitre(&fes, Kinematics::PlaneStrain)?;
     /// assert_eq!(m.primal_vars()?, vec!["u_x".to_string(), "u_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn creep_lemaitre(fes, model: ElasticityModel) = crate::ops::model::plasticity_with_law, PlasticLaw::CreepLemaitre;
-    python: "`model.creep_lemaitre(fespace, model)` — Lemaitre primary creep by\n**strain** hardening, `ṗ = (q/K)^N · p^(−M)`. Material `E`, `nu`, `K`,\n`N`, `M`.\n\nThe accumulated strain itself slows the flow, producing a decelerating\nprimary stage with no explicit time dependence — which is what makes it\nusable under a varying load, where a time-hardening form would be wrong."
+    pub fn creep_lemaitre(fes, kinematics: Kinematics) = crate::ops::model::plasticity_with_law, PlasticLaw::CreepLemaitre;
+    python: "`kinematics.creep_lemaitre(fespace, kinematics)` — Lemaitre primary creep by\n**strain** hardening, `ṗ = (q/K)^N · p^(−M)`. Material `E`, `nu`, `K`,\n`N`, `M`.\n\nThe accumulated strain itself slows the flow, producing a decelerating\nprimary stage with no explicit time dependence — which is what makes it\nusable under a varying load, where a time-hardening form would be wrong."
 }
 
 crate::physics_operator! {
@@ -850,7 +850,7 @@ crate::physics_operator! {
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -858,12 +858,12 @@ crate::physics_operator! {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// let m = model::viscoplasticity_chaboche(&fes, ElasticityModel::PlaneStrain)?;
+    /// let m = model::viscoplasticity_chaboche(&fes, Kinematics::PlaneStrain)?;
     /// assert_eq!(m.primal_vars()?, vec!["u_x".to_string(), "u_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn viscoplasticity_chaboche(fes, model: ElasticityModel) = crate::ops::model::plasticity_with_law, PlasticLaw::ViscoplasticChaboche;
-    python: "`model.viscoplasticity_chaboche(fespace, model)` — a Norton flow on the\nshifted overstress `J(σ − X) − R − k`, with Armstrong-Frederick kinematic\nhardening and saturating isotropic hardening. Material `E`, `nu`, `k`,\n`K`, `n`, `C_1`, `gamma_1`, `b`, `Q`.\n\nThe back stress `X` is what makes the law usable under **cyclic**\nloading: it translates the yield surface, so reverse yielding happens\nearly — the Bauschinger effect, which no isotropic law can produce. It\ncosts seven internal variables (`X_xx…X_xy`, `R`)."
+    pub fn viscoplasticity_chaboche(fes, kinematics: Kinematics) = crate::ops::model::plasticity_with_law, PlasticLaw::ViscoplasticChaboche;
+    python: "`kinematics.viscoplasticity_chaboche(fespace, kinematics)` — a Norton flow on the\nshifted overstress `J(σ − X) − R − k`, with Armstrong-Frederick kinematic\nhardening and saturating isotropic hardening. Material `E`, `nu`, `k`,\n`K`, `n`, `C_1`, `gamma_1`, `b`, `Q`.\n\nThe back stress `X` is what makes the law usable under **cyclic**\nloading: it translates the yield surface, so reverse yielding happens\nearly — the Bauschinger effect, which no isotropic law can produce. It\ncosts seven internal variables (`X_xx…X_xy`, `R`)."
 }
 
 crate::physics_operator! {
@@ -883,7 +883,7 @@ crate::physics_operator! {
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -891,12 +891,12 @@ crate::physics_operator! {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// let m = model::viscoplasticity_lemaitre_chaboche(&fes, ElasticityModel::PlaneStrain)?;
+    /// let m = model::viscoplasticity_lemaitre_chaboche(&fes, Kinematics::PlaneStrain)?;
     /// assert_eq!(m.primal_vars()?, vec!["u_x".to_string(), "u_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn viscoplasticity_lemaitre_chaboche(fes, model: ElasticityModel) = crate::ops::model::plasticity_with_law, PlasticLaw::ViscoplasticLemaitreChaboche;
-    python: "`model.viscoplasticity_lemaitre_chaboche(fespace, model)` — Chaboche\nviscoplasticity coupled to Lemaitre's ductile **damage**: the flow is\ndriven by the effective stress `σ/(1−D)`, and `Ḋ = (Y/S)^s·ṗ`. Material\nas above, plus `S`, `s`, `D_c`.\n\nA damaged material flows faster, which damages it more — the coupling\nthat produces tertiary creep and, at `D_c`, rupture. Adds `damage` to the\ninternal state."
+    pub fn viscoplasticity_lemaitre_chaboche(fes, kinematics: Kinematics) = crate::ops::model::plasticity_with_law, PlasticLaw::ViscoplasticLemaitreChaboche;
+    python: "`kinematics.viscoplasticity_lemaitre_chaboche(fespace, kinematics)` — Chaboche\nviscoplasticity coupled to Lemaitre's ductile **damage**: the flow is\ndriven by the effective stress `σ/(1−D)`, and `Ḋ = (Y/S)^s·ṗ`. Material\nas above, plus `S`, `s`, `D_c`.\n\nA damaged material flows faster, which damages it more — the coupling\nthat produces tertiary creep and, at `D_c`, rupture. Adds `damage` to the\ninternal state."
 }
 
 /// The internal-variable names of a Chaboche-family law: the back stress

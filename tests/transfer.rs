@@ -31,7 +31,7 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
-use pyrucast::models::elasticity::ElasticityModel;
+use pyrucast::models::tensor::Kinematics;
 use pyrucast::models::Physics;
 use pyrucast::ops::mesh;
 use pyrucast::ops::model;
@@ -93,7 +93,7 @@ fn each_direction_carries_its_own_stiffness() -> Result<()> {
     // different stiffnesses; the left edge is held.
     let right = edge_fespace(&grid, &coords, n, idx)?;
     let mut model =
-        model::elasticity(&fes, ElasticityModel::PlaneStress)?.union(&model::boundary_transfer(
+        model::elasticity(&fes, Kinematics::PlaneStress)?.union(&model::boundary_transfer(
             &right,
             vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
             Physics::Mechanical,
@@ -210,7 +210,7 @@ fn free_face_displacement(n: usize, h: f64) -> Result<f64> {
     let right = edge_fespace(&grid, &coords, n, idx)?;
 
     let mut model =
-        model::elasticity(&fes, ElasticityModel::PlaneStress)?.union(&model::boundary_transfer(
+        model::elasticity(&fes, Kinematics::PlaneStress)?.union(&model::boundary_transfer(
             &right,
             vec![("u_x".into(), "f_x".into())],
             Physics::Mechanical,

@@ -14,7 +14,7 @@ use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
-use pyrucast::models::elasticity::ElasticityModel;
+use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::model;
 use pyrucast::Result;
 
@@ -34,7 +34,7 @@ fn unit_quad() -> Result<(FiniteElementSpace, [Node; 4])> {
 fn geometric_stiffness_uniaxial_stress_unit_quad() -> Result<()> {
     const SIG: f64 = 3.0;
     let (fes, n) = unit_quad()?;
-    let model = model::elasticity(&fes, ElasticityModel::PlaneStress)?;
+    let model = model::elasticity(&fes, Kinematics::PlaneStress)?;
     let materials =
         pyrucast::ops::element_field::material_field(&model, &[("E", 1.0), ("nu", 0.3)])?;
 
@@ -70,7 +70,7 @@ fn geometric_stiffness_uniaxial_stress_unit_quad() -> Result<()> {
 fn geometric_stiffness_is_symmetric() -> Result<()> {
     const SIG: f64 = 2.0;
     let (fes, n) = unit_quad()?;
-    let model = model::elasticity(&fes, ElasticityModel::PlaneStress)?;
+    let model = model::elasticity(&fes, Kinematics::PlaneStress)?;
     let materials =
         pyrucast::ops::element_field::material_field(&model, &[("E", 1.0), ("nu", 0.3)])?;
     let stress_sub = SubElementField::from_uniform_per_component(

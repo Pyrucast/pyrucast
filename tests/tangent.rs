@@ -12,7 +12,7 @@ use pyrucast::containers::model::{Model, SubModel};
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
-use pyrucast::models::elasticity::ElasticityModel;
+use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field::behavior::integrate;
 use pyrucast::ops::element_field::deformation;
 use pyrucast::ops::element_field::material_field;
@@ -130,14 +130,14 @@ fn plastic_disp_2d() -> [f64; 8] {
 #[test]
 fn tangent_matches_fd_plane_strain() -> Result<()> {
     let (fes, n) = unit_quad()?;
-    let model = plasticity_model(&fes, ElasticityModel::PlaneStrain)?;
+    let model = plasticity_model(&fes, Kinematics::PlaneStrain)?;
     check_tangent_fd(&model, &fes, &n, 2, &plastic_disp_2d())
 }
 
 #[test]
 fn tangent_matches_fd_plane_stress() -> Result<()> {
     let (fes, n) = unit_quad()?;
-    let model = plasticity_model(&fes, ElasticityModel::PlaneStress)?;
+    let model = plasticity_model(&fes, Kinematics::PlaneStress)?;
     check_tangent_fd(&model, &fes, &n, 2, &plastic_disp_2d())
 }
 
@@ -157,7 +157,7 @@ fn tangent_matches_fd_axisymmetric() -> Result<()> {
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
     mesh.add_cell(&nodes.iter().map(|n| n.id()).collect::<Vec<_>>())?;
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
-    let model = plasticity_model(&fes, ElasticityModel::Axisymmetric)?;
+    let model = plasticity_model(&fes, Kinematics::Axisymmetric)?;
 
     // Past-yield radial + axial displacement (the hoop strain u_r/r is large
     // here, so the θθ component genuinely drives the return map).
@@ -190,7 +190,7 @@ fn tangent_matches_fd_solid_hex() -> Result<()> {
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::HEX8));
     mesh.add_cell(&nodes.iter().map(|n| n.id()).collect::<Vec<_>>())?;
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
-    let model = plasticity_model(&fes, ElasticityModel::Solid)?;
+    let model = plasticity_model(&fes, Kinematics::Full3D)?;
 
     // Multiaxial past-yield displacement.
     let mut base = vec![0.0; nodes.len() * 3];
@@ -202,7 +202,7 @@ fn tangent_matches_fd_solid_hex() -> Result<()> {
     check_tangent_fd(&model, &fes, &nodes, 3, &base)
 }
 
-fn plasticity_model(fes: &FiniteElementSpace, model: ElasticityModel) -> Result<Model> {
+fn plasticity_model(fes: &FiniteElementSpace, model: Kinematics) -> Result<Model> {
     let mut m = Model::empty();
     m.add_sub(Handle::new(SubModel::plasticity_perfect(
         fes.get(0)?,
@@ -217,7 +217,7 @@ fn plasticity_model(fes: &FiniteElementSpace, model: ElasticityModel) -> Result<
 fn elastic_regime_tangent_equals_stiffness() -> Result<()> {
     use pyrucast::ops::matrix::stiffness;
     let (fes, n) = unit_quad()?;
-    let model = plasticity_model(&fes, ElasticityModel::PlaneStrain)?;
+    let model = plasticity_model(&fes, Kinematics::PlaneStrain)?;
     let materials = material_field(&model, &[("E", 70_000.0), ("nu", 0.3), ("sigma_y", 200.0)])?;
 
     // Tiny displacement ⇒ everywhere elastic.

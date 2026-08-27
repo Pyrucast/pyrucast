@@ -4,11 +4,11 @@ use super::spanning;
 use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
-use crate::models::elasticity::ElasticityModel;
 use crate::models::symmetry::MaterialSymmetry;
+use crate::models::tensor::Kinematics;
 
 /// Linear-elasticity `Model` spanning **every** subspace of `fes` (same
-/// 2-D/3-D `model` for all). Parent-level operator; material
+/// 2-D/3-D `kinematics` for all). Parent-level operator; material
 /// (`E`, `nu`) is supplied at assembly time.
 ///
 /// ```
@@ -19,7 +19,7 @@ use crate::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::containers::model::{Model, SubModel};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::models::{Physics, RelationSense};
 /// # use pyrucast::ops::mesh;
@@ -34,12 +34,12 @@ use crate::models::symmetry::MaterialSymmetry;
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// let m = model::elasticity(&fes, ElasticityModel::PlaneStress)?;
+/// let m = model::elasticity(&fes, Kinematics::PlaneStress)?;
 /// assert_eq!(m.dual_vars()?, vec!["f_x".to_string(), "f_y".to_string()]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn elasticity(fes: &FiniteElementSpace, model: ElasticityModel) -> Result<Model> {
-    elasticity_with_symmetry(fes, model, MaterialSymmetry::Isotropic)
+pub fn elasticity(fes: &FiniteElementSpace, kinematics: Kinematics) -> Result<Model> {
+    elasticity_with_symmetry(fes, kinematics, MaterialSymmetry::Isotropic)
 }
 
 /// Linear-elasticity `Model` spanning **every** subspace of `fes`, with an
@@ -55,7 +55,7 @@ pub fn elasticity(fes: &FiniteElementSpace, model: ElasticityModel) -> Result<Mo
 /// # use pyrucast::containers::model::{Model, SubModel};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::models::{Physics, RelationSense};
 /// # use pyrucast::ops::mesh;
@@ -71,16 +71,16 @@ pub fn elasticity(fes: &FiniteElementSpace, model: ElasticityModel) -> Result<Mo
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// let m = model::elasticity_with_symmetry(
-///     &fes, ElasticityModel::PlaneStress, MaterialSymmetry::Orthotropic)?;
+///     &fes, Kinematics::PlaneStress, MaterialSymmetry::Orthotropic)?;
 /// assert_eq!(m.len(), fes.len());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn elasticity_with_symmetry(
     fes: &FiniteElementSpace,
-    model: ElasticityModel,
+    kinematics: Kinematics,
     symmetry: MaterialSymmetry,
 ) -> Result<Model> {
     spanning(fes, |zone| {
-        SubModel::elasticity_with_symmetry(zone, model, symmetry)
+        SubModel::elasticity_with_symmetry(zone, kinematics, symmetry)
     })
 }

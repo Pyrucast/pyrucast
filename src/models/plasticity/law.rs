@@ -19,7 +19,7 @@
 //!   finite differences otherwise.
 //!
 //! State is always carried in **full 3-D** (six `eps_p_*` and a cumulated `p`)
-//! whatever the 2-D model, which keeps every return map identical across plane
+//! whatever the 2-D kinematics, which keeps every return map identical across plane
 //! stress / plane strain / axisymmetric / solid: only the projections in and out
 //! differ.
 //!
@@ -61,9 +61,9 @@
 
 use crate::containers::element_field::SubElementField;
 use crate::error::{PyrucastError, Result};
-use crate::models::elasticity::ElasticityModel;
 use crate::models::elasticity::{elastic_stress, lame};
 use crate::models::tensor::symmetrise;
+use crate::models::tensor::Kinematics;
 use serde::{Deserialize, Serialize};
 
 /// Full 3-D tensor component suffixes, in the internal state order
@@ -77,7 +77,7 @@ use serde::{Deserialize, Serialize};
 /// ```
 pub const TENSOR_SUFFIXES: [&str; 6] = ["xx", "yy", "zz", "yz", "xz", "xy"];
 
-/// Which yield surface and flow rule an elastoplastic model obeys.
+/// Which yield surface and flow rule an elastoplastic kinematics obeys.
 ///
 /// An attribute of the plasticity physics, not a physics of its own: the DOFs,
 /// the elastic operator, the internal state and the incremental montage are the
@@ -249,10 +249,10 @@ pub(crate) trait PlasticLawKind: Sync {
         eps_b: &[f64; 6],
         prev: &PrevState,
         mat: &MatParams,
-        model: ElasticityModel,
+        kinematics: Kinematics,
         dt: Option<f64>,
     ) -> Result<(PlasticStep, [f64; 6])> {
-        if model == ElasticityModel::PlaneStress {
+        if kinematics == Kinematics::PlaneStress {
             return self.plane_stress_step(eps_b, prev, mat, dt);
         }
         // Solid / plane strain / axisymmetric: ε(B) is fully prescribed.
@@ -393,7 +393,7 @@ pub(crate) trait PlasticLawKind: Sync {
 
 impl PlasticLaw {
     /// The behaviour behind this identity — **the only `match` per law**, on
-    /// the model of [`SubModel::as_kind`](crate::containers::model::SubModel::as_kind).
+    /// the kinematics of [`SubModel::as_kind`](crate::containers::model::SubModel::as_kind).
     /// The enum is what an archive stores; the trait is what the physics calls.
     pub(crate) fn as_law(self) -> &'static dyn PlasticLawKind {
         match self {

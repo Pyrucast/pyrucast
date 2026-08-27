@@ -82,8 +82,8 @@ use crate::containers::model::SubModel;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
-use crate::models::elasticity::{dual_name, primal_name};
 use crate::models::owned_components;
+use crate::models::tensor::{dual_name, primal_name};
 use crate::models::{
     CellGeom, Contribution, Domain, MatrixKind, MatrixLayout, Physics, SubModelKind,
 };
@@ -373,7 +373,7 @@ crate::physics_operator! {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;

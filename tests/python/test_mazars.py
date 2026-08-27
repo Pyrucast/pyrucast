@@ -72,7 +72,7 @@ def test_mazars_damages_in_tension():
 
 def test_mazars_rejects_inconsistent_model():
     _c, _n, fes = _unit_quad()
-    for bad in ("solid", "nonsense"):
+    for bad in ("full_3d", "nonsense"):
         try:
             pyrucast.model.mazars(fes, bad)
         except (ValueError, RuntimeError):

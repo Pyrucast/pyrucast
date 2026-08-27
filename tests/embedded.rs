@@ -17,7 +17,7 @@ use pyrucast::containers::model::{Model, SubModel};
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
-use pyrucast::models::elasticity::ElasticityModel;
+use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::matrix::stiffness;
 use pyrucast::ops::mesh::barycenter;
 use pyrucast::ops::model;
@@ -179,7 +179,7 @@ fn immersed_node_follows_host_displacement_field() -> Result<()> {
             Default::default(),
         )
     };
-    let mut model = model::elasticity(&fes, ElasticityModel::Solid)?;
+    let mut model = model::elasticity(&fes, Kinematics::Full3D)?;
     model = model.union(&clamp(&[0, 3, 4, 7], "u_x", "f_x")?)?;
     model = model.union(&clamp(&[0, 1, 4, 5], "u_y", "f_y")?)?;
     model = model.union(&clamp(&[0, 1, 2, 3], "u_z", "f_z")?)?;
@@ -270,7 +270,7 @@ fn embedded_per_component_offset() -> Result<()> {
             Default::default(),
         )
     };
-    let mut model = model::elasticity(&fes, ElasticityModel::Solid)?;
+    let mut model = model::elasticity(&fes, Kinematics::Full3D)?;
     model = model.union(&clamp(&[0, 3, 4, 7], "u_x", "f_x")?)?;
     model = model.union(&clamp(&[0, 1, 4, 5], "u_y", "f_y")?)?;
     model = model.union(&clamp(&[0, 1, 2, 3], "u_z", "f_z")?)?;

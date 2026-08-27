@@ -96,7 +96,7 @@ assert p >= 0.0
 
 fes, u, _ = _cube_3d()
 # ANCHOR: drucker_prager
-model = pyrucast.model.drucker_prager(fes, "solid")
+model = pyrucast.model.drucker_prager(fes, "full_3d")
 materials = pyrucast.element_field.material_field(
     model,
     [("E", 20_000.0), ("nu", 0.2), ("friction", 0.3), ("k", 30.0), ("psi", 0.1)],
@@ -114,7 +114,7 @@ assert k_t.n_rows() == k_t.n_cols()
 
 fes, u, _ = _cube_3d()
 # ANCHOR: creep_norton
-model = pyrucast.model.creep_norton(fes, "solid")
+model = pyrucast.model.creep_norton(fes, "full_3d")
 materials = pyrucast.element_field.material_field(
     model, [("E", 150_000.0), ("nu", 0.3), ("K", 400.0), ("n", 5.0)]
 )
@@ -171,7 +171,7 @@ assert kappa >= 0.0
 
 fes, u, _ = _cube_3d()
 # ANCHOR: damage_tc
-model = pyrucast.model.damage_tc(fes, "solid")
+model = pyrucast.model.damage_tc(fes, "full_3d")
 materials = pyrucast.element_field.material_field(
     model,
     [

@@ -126,8 +126,8 @@ use crate::containers::mesh::Mesh;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
-use crate::models::elasticity::ElasticityModel;
 use crate::models::symmetry::MaterialSymmetry;
+use crate::models::tensor::Kinematics;
 use crate::models::{
     bernoulli, boundary_transfer, contact, damage, dirichlet, elasticity, embedded, fick,
     follower_pressure, heat_conduction, interface_transfer, mpc, plasticity, radiation, shell,
@@ -180,7 +180,7 @@ fn insert_relation_value(
 /// # use pyrucast::containers::model::{Model, SubModel};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::models::{Physics, RelationSense};
 /// # use pyrucast::ops::mesh;
@@ -270,7 +270,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -327,7 +327,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -362,7 +362,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -413,7 +413,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -459,7 +459,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -496,7 +496,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -510,16 +510,16 @@ impl SubModel {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// let m = SubModel::elasticity(zone.clone(), ElasticityModel::PlaneStress)?;
+    /// let m = SubModel::elasticity(zone.clone(), Kinematics::PlaneStress)?;
     /// assert_eq!(m.primal_vars(), vec!["u_x".to_string(), "u_y".to_string()]);
     /// assert_eq!(m.dual_vars(), vec!["f_x".to_string(), "f_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn elasticity(
         fespace: Handle<SubFiniteElementSpace>,
-        model: ElasticityModel,
+        kinematics: Kinematics,
     ) -> Result<Self> {
-        Self::elasticity_with_symmetry(fespace, model, MaterialSymmetry::Isotropic)
+        Self::elasticity_with_symmetry(fespace, kinematics, MaterialSymmetry::Isotropic)
     }
 
     /// Linear elasticity with an explicit material symmetry — orthotropic and
@@ -534,7 +534,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -551,17 +551,17 @@ impl SubModel {
     /// // Isotrope : `E` et `nu`. Orthotrope : les modules par direction et les
     /// // axes du matériau, tous portés par le champ matériau.
     /// let m = SubModel::elasticity_with_symmetry(
-    ///     zone.clone(), ElasticityModel::PlaneStress, MaterialSymmetry::Orthotropic)?;
+    ///     zone.clone(), Kinematics::PlaneStress, MaterialSymmetry::Orthotropic)?;
     /// assert!(m.material_components().unwrap().len() > 2);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn elasticity_with_symmetry(
         fespace: Handle<SubFiniteElementSpace>,
-        model: ElasticityModel,
+        kinematics: Kinematics,
         symmetry: MaterialSymmetry,
     ) -> Result<Self> {
         Ok(SubModel::Elasticity(elasticity::Elasticity::with_symmetry(
-            fespace, model, symmetry,
+            fespace, kinematics, symmetry,
         )?))
     }
 
@@ -577,7 +577,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -614,7 +614,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -657,7 +657,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -692,7 +692,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -760,7 +760,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -801,7 +801,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -850,7 +850,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -865,15 +865,15 @@ impl SubModel {
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// // Von Mises sans écrouissage : `sigma_y` en plus de l'élasticité.
-    /// let m = SubModel::plasticity_perfect(zone.clone(), ElasticityModel::PlaneStrain)?;
+    /// let m = SubModel::plasticity_perfect(zone.clone(), Kinematics::PlaneStrain)?;
     /// assert!(m.material_components().unwrap().contains(&"sigma_y".to_string()));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn plasticity_perfect(
         fespace: Handle<SubFiniteElementSpace>,
-        model: ElasticityModel,
+        kinematics: Kinematics,
     ) -> Result<Self> {
-        Self::plasticity_with_law(fespace, model, plasticity::law::PlasticLaw::Perfect)
+        Self::plasticity_with_law(fespace, kinematics, plasticity::law::PlasticLaw::Perfect)
     }
 
     /// Elastoplasticity with an explicit yield law — the general form.
@@ -888,7 +888,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -905,17 +905,17 @@ impl SubModel {
     /// # use pyrucast::models::plasticity::law::PlasticLaw;
     /// // La loi d'écrouissage **déclare elle-même** le matériau qu'elle exige.
     /// let m = SubModel::plasticity_with_law(
-    ///     zone.clone(), ElasticityModel::PlaneStrain, PlasticLaw::Perfect)?;
+    ///     zone.clone(), Kinematics::PlaneStrain, PlasticLaw::Perfect)?;
     /// assert!(m.has_behavior());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn plasticity_with_law(
         fespace: Handle<SubFiniteElementSpace>,
-        model: ElasticityModel,
+        kinematics: Kinematics,
         law: plasticity::law::PlasticLaw,
     ) -> Result<Self> {
         Ok(SubModel::Plasticity(plasticity::Plasticity::with_law(
-            fespace, model, law,
+            fespace, kinematics, law,
         )?))
     }
 
@@ -931,7 +931,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -945,13 +945,13 @@ impl SubModel {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// let m = SubModel::mazars(zone.clone(), ElasticityModel::PlaneStress)?;
+    /// let m = SubModel::mazars(zone.clone(), Kinematics::PlaneStress)?;
     /// let mat = m.material_components().unwrap();
     /// assert!(mat.contains(&"eps_d0".to_string()));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn mazars(fespace: Handle<SubFiniteElementSpace>, model: ElasticityModel) -> Result<Self> {
-        Self::damage_with_law(fespace, model, damage::law::DamageLaw::Mazars)
+    pub fn mazars(fespace: Handle<SubFiniteElementSpace>, kinematics: Kinematics) -> Result<Self> {
+        Self::damage_with_law(fespace, kinematics, damage::law::DamageLaw::Mazars)
     }
 
     /// Damage with an explicit law — Mazars, the tension/compression pair, or the
@@ -965,7 +965,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -981,17 +981,17 @@ impl SubModel {
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # use pyrucast::models::damage::law::DamageLaw;
     /// let m = SubModel::damage_with_law(
-    ///     zone.clone(), ElasticityModel::PlaneStress, DamageLaw::Mazars)?;
+    ///     zone.clone(), Kinematics::PlaneStress, DamageLaw::Mazars)?;
     /// assert_eq!(m.physics(), &[Physics::Mechanical]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn damage_with_law(
         fespace: Handle<SubFiniteElementSpace>,
-        model: ElasticityModel,
+        kinematics: Kinematics,
         law: damage::law::DamageLaw,
     ) -> Result<Self> {
         Ok(SubModel::Mazars(damage::Damage::with_law(
-            fespace, model, law,
+            fespace, kinematics, law,
         )?))
     }
 
@@ -1007,7 +1007,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -1057,7 +1057,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -1120,7 +1120,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -1181,7 +1181,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -1250,7 +1250,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -1306,7 +1306,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -1320,7 +1320,7 @@ impl SubModel {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// let m = SubModel::elasticity(zone.clone(), ElasticityModel::PlaneStress)?;
+    /// let m = SubModel::elasticity(zone.clone(), Kinematics::PlaneStress)?;
     /// // L'appariement est **positionnel** : primal_vars[i] ↔ dual_vars[i].
     /// assert_eq!(m.dual_of("u_x"), Some("f_x".into()));
     /// assert_eq!(m.dual_of("T"), None);
@@ -1348,7 +1348,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -1394,7 +1394,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -1458,7 +1458,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -1555,7 +1555,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -1662,7 +1662,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -1699,7 +1699,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -1713,7 +1713,7 @@ impl SubModel {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// let m = SubModel::elasticity(zone.clone(), ElasticityModel::PlaneStress)?;
+    /// let m = SubModel::elasticity(zone.clone(), Kinematics::PlaneStress)?;
     /// assert_eq!(m.material_components(), Some(vec!["E".to_string(), "nu".to_string()]));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -1735,7 +1735,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -1751,7 +1751,7 @@ impl SubModel {
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// // La dilatation thermique est **facultative** : sans `alpha`, le modèle
     /// // s'assemble sans elle.
-    /// let m = SubModel::elasticity(zone.clone(), ElasticityModel::PlaneStress)?;
+    /// let m = SubModel::elasticity(zone.clone(), Kinematics::PlaneStress)?;
     /// assert!(m.optional_material_components().contains(&"alpha"));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -1772,7 +1772,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -1804,7 +1804,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -1840,7 +1840,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -1874,7 +1874,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -1911,7 +1911,7 @@ impl SubModel {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -2010,7 +2010,7 @@ impl crate::dump::Dump for SubModel {
 /// # use pyrucast::containers::model::{Model, SubModel};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::models::{Physics, RelationSense};
 /// # use pyrucast::ops::mesh;
@@ -2095,7 +2095,7 @@ impl Model {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -2168,7 +2168,7 @@ impl Model {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -2215,7 +2215,7 @@ impl Model {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -2230,7 +2230,7 @@ impl Model {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// let m = model::elasticity(&fes, ElasticityModel::PlaneStress)?;
+    /// let m = model::elasticity(&fes, Kinematics::PlaneStress)?;
     /// // Le dual conjugué, cherché sur l'ensemble des sous-modèles.
     /// assert_eq!(m.dual_of("u_y")?, Some("f_y".into()));
     /// assert_eq!(m.dual_of("T")?, None);
@@ -2260,7 +2260,7 @@ impl Model {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -2301,7 +2301,7 @@ impl Model {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -2361,7 +2361,7 @@ impl Model {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -2378,7 +2378,7 @@ impl Model {
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// // L'union des primales de tous les sous-modèles, dédupliquée.
     /// let m = model::heat_conduction(&fes)?
-    ///     .union(&model::elasticity(&fes, ElasticityModel::PlaneStress)?)?;
+    ///     .union(&model::elasticity(&fes, Kinematics::PlaneStress)?)?;
     /// assert_eq!(m.primal_vars()?,
     ///            vec!["T".to_string(), "u_x".to_string(), "u_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -2403,7 +2403,7 @@ impl Model {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -2419,7 +2419,7 @@ impl Model {
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// let m = model::heat_conduction(&fes)?
-    ///     .union(&model::elasticity(&fes, ElasticityModel::PlaneStress)?)?;
+    ///     .union(&model::elasticity(&fes, Kinematics::PlaneStress)?)?;
     /// assert_eq!(m.dual_vars()?,
     ///            vec!["q".to_string(), "f_x".to_string(), "f_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -2452,7 +2452,7 @@ impl Model {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -2505,7 +2505,7 @@ impl Model {
     /// # use pyrucast::containers::model::{Model, SubModel};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::models::{Physics, RelationSense};
     /// # use pyrucast::ops::mesh;
@@ -2521,7 +2521,7 @@ impl Model {
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// let m = model::heat_conduction(&fes)?
-    ///     .union(&model::elasticity(&fes, ElasticityModel::PlaneStress)?)?;
+    ///     .union(&model::elasticity(&fes, Kinematics::PlaneStress)?)?;
     /// // Extraire une physique du modèle multi-physique — les sous-modèles
     /// // sont **partagés**, pas copiés.
     /// assert_eq!(m.filter(Physics::Thermal)?.primal_vars()?, vec!["T".to_string()]);

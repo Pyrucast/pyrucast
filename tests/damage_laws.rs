@@ -24,8 +24,8 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::damage::law::DamageLaw;
-use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::models::plasticity::law::PlasticLaw;
+use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field::{behavior::integrate, deformation, material_field};
 use pyrucast::ops::model;
 use pyrucast::Result;
@@ -288,13 +288,13 @@ struct Cube {
 impl Cube {
     fn damage(law: DamageLaw, material: &[(&str, f64)]) -> Result<Self> {
         Self::build(material, |fes| {
-            model::damage_with_law(fes, ElasticityModel::Solid, law)
+            model::damage_with_law(fes, Kinematics::Full3D, law)
         })
     }
 
     fn plastic(law: PlasticLaw, material: &[(&str, f64)]) -> Result<Self> {
         Self::build(material, |fes| {
-            model::plasticity_with_law(fes, ElasticityModel::Solid, law)
+            model::plasticity_with_law(fes, Kinematics::Full3D, law)
         })
     }
 

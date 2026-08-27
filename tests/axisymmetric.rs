@@ -10,7 +10,7 @@
 //!   volumes, masses, distributed loads and the thermal conductivity follow
 //!   without any mechanics involved;
 //! - the **hoop strain** `ε_θθ = u_r / r`, carried by
-//!   [`ElasticityModel::Axisymmetric`], which the meridian gradient cannot
+//!   [`Kinematics::Axisymmetric`], which the meridian gradient cannot
 //!   express.
 //!
 //! Reference solution: the Lamé thick-walled cylinder under internal pressure.
@@ -24,7 +24,7 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
-use pyrucast::models::elasticity::ElasticityModel;
+use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::model;
 
 use pyrucast::handle::Handle;
@@ -118,7 +118,7 @@ fn integral_measures_the_revolved_volume() -> Result<()> {
 fn mass_matrix_weighs_the_whole_ring() -> Result<()> {
     const RHO: f64 = 7800.0;
     let (_grid, _mesh, fes) = annulus(1.0, 3.0, 2.0, 4, 2)?;
-    let model = model::elasticity(&fes, ElasticityModel::Axisymmetric)?;
+    let model = model::elasticity(&fes, Kinematics::Axisymmetric)?;
     let materials = pyrucast::ops::element_field::material_field(
         &model,
         &[("E", 1.0), ("nu", 0.3), ("rho", RHO)],
@@ -318,7 +318,7 @@ fn lame_case(nr: usize, quadratic: bool) -> Result<(f64, f64)> {
         })
         .cloned()
         .collect();
-    let mut model = model::elasticity(&fes, ElasticityModel::Axisymmetric)?;
+    let mut model = model::elasticity(&fes, Kinematics::Axisymmetric)?;
     model = model.union(&clamp(&ends, "u_y", "f_y")?)?;
     let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("nu", NU)])?;
 
@@ -430,7 +430,7 @@ fn internal_forces_match_stiffness_times_displacement() -> Result<()> {
     let (grid, _mesh, fes) = annulus(1.0, 2.5, 1.0, 4, 3)?;
     let support = Handle::new(SubMesh::poi1_from_nodes(&grid)?);
 
-    let model = model::elasticity(&fes, ElasticityModel::Axisymmetric)?;
+    let model = model::elasticity(&fes, Kinematics::Axisymmetric)?;
     let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("nu", NU)])?;
 
     // An arbitrary, non-rigid displacement field.
@@ -557,7 +557,7 @@ fn heat_conduction_through_a_hollow_cylinder_is_logarithmic() -> Result<()> {
 #[test]
 fn model_and_geometry_must_agree() -> Result<()> {
     let (_grid, _mesh, axi) = annulus(1.0, 2.0, 1.0, 1, 1)?;
-    let err = model::elasticity(&axi, ElasticityModel::PlaneStrain).unwrap_err();
+    let err = model::elasticity(&axi, Kinematics::PlaneStrain).unwrap_err();
     assert!(format!("{err}").contains("axisymmetric geometry"));
 
     // And the axisymmetric model on a plain Cartesian geometry.
@@ -568,18 +568,18 @@ fn model_and_geometry_must_agree() -> Result<()> {
     let mut plane = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
     plane.add_cell(&[a.id(), b.id(), c.id()])?;
     let plane_fes = FiniteElementSpace::lagrange1(&plane)?;
-    let err = model::elasticity(&plane_fes, ElasticityModel::Axisymmetric).unwrap_err();
+    let err = model::elasticity(&plane_fes, Kinematics::Axisymmetric).unwrap_err();
     assert!(format!("{err}").contains("requires an axisymmetric geometry"));
 
     // The same two-way rule holds for the non-linear laws.
     for err in [
-        model::plasticity_perfect(&axi, ElasticityModel::PlaneStrain).unwrap_err(),
-        model::mazars(&axi, ElasticityModel::PlaneStrain).unwrap_err(),
+        model::plasticity_perfect(&axi, Kinematics::PlaneStrain).unwrap_err(),
+        model::mazars(&axi, Kinematics::PlaneStrain).unwrap_err(),
     ] {
         assert!(format!("{err}").contains("axisymmetric geometry"));
     }
-    assert!(model::plasticity_perfect(&axi, ElasticityModel::Axisymmetric).is_ok());
-    assert!(model::mazars(&axi, ElasticityModel::Axisymmetric).is_ok());
+    assert!(model::plasticity_perfect(&axi, Kinematics::Axisymmetric).is_ok());
+    assert!(model::mazars(&axi, Kinematics::Axisymmetric).is_ok());
     Ok(())
 }
 
@@ -601,9 +601,9 @@ fn a_boundary_mesh_is_not_a_solid() -> Result<()> {
         line.add_cell(&[a.id(), b.id()])?;
         let fes = FiniteElementSpace::lagrange1(&line)?;
         let model = if axisymmetric {
-            ElasticityModel::Axisymmetric
+            Kinematics::Axisymmetric
         } else {
-            ElasticityModel::PlaneStrain
+            Kinematics::PlaneStrain
         };
         for err in [
             model::elasticity(&fes, model).unwrap_err(),
@@ -636,7 +636,7 @@ fn nonlinear_cell(
             .collect::<Result<_>>()?;
         let mut m = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
         m.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>())?;
-        (m, ElasticityModel::Axisymmetric)
+        (m, Kinematics::Axisymmetric)
     } else {
         let coords = Handle::new(Coords::new(3)?);
         let n: Vec<Node> = [
@@ -654,7 +654,7 @@ fn nonlinear_cell(
         .collect::<Result<_>>()?;
         let mut m = Mesh::from_submesh(SubMesh::new(coords, ElementType::HEX8));
         m.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>())?;
-        (m, ElasticityModel::Solid)
+        (m, Kinematics::Full3D)
     };
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
     let model = match kind {

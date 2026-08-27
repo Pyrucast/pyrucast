@@ -91,10 +91,10 @@
 
 use super::law::PlasticLawKind;
 use crate::error::Result;
-use crate::models::elasticity::ElasticityModel;
 use crate::models::plasticity::law::{
     require_positive, MatParams, PlasticLaw, PlasticStep, PrevState,
 };
+use crate::models::tensor::Kinematics;
 use crate::models::tensor::{deviator, i1, von_mises_stress};
 
 /// The nine parameters of the general surface.
@@ -289,7 +289,7 @@ pub fn return_map(trial: &[f64; 6], prev: &PrevState, mat: &MatParams) -> Result
 /// Without hardening the surface is fixed and the condition is **linear** —
 /// `∂g/∂σ` maps through the elastic operator to `3μδ` on the deviator and
 /// `9Kψ` on the trace — so the multiplier is a quotient and no iteration
-/// happens. That is the path every non-hardening model takes, unchanged.
+/// happens. That is the path every non-hardening kinematics takes, unchanged.
 ///
 /// With hardening the surface moves as the multiplier grows, and the condition
 /// becomes non-linear in it. A safeguarded Newton solves it: the linear solution
@@ -417,7 +417,7 @@ impl PlasticLawKind for DruckerPrager {
     }
 
     /// The general surface is nine numbers, six of which default to the simple
-    /// cone: they ride the optional channel so a three-parameter model stays
+    /// cone: they ride the optional channel so a three-parameter kinematics stays
     /// writable in three numbers.
     fn optional_material_components(&self) -> &'static [&'static str] {
         &[
@@ -465,7 +465,7 @@ crate::physics_operator! {
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -473,10 +473,10 @@ crate::physics_operator! {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// let m = model::drucker_prager(&fes, ElasticityModel::PlaneStrain)?;
+    /// let m = model::drucker_prager(&fes, Kinematics::PlaneStrain)?;
     /// assert_eq!(m.primal_vars()?, vec!["u_x".to_string(), "u_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn drucker_prager(fes, model: ElasticityModel) = crate::ops::model::plasticity_with_law, PlasticLaw::DruckerPrager;
-    python: "`model.drucker_prager(fespace, model)` — pressure-sensitive plasticity\nwith **non-associated** flow: `f = q + α·I₁ − k`, plastic potential\n`g = q + ψ·I₁`. Material `E`, `nu`, `alpha` (friction), `k` (cohesion),\n`psi` (dilatancy).\n\n`ψ = α` recovers associated flow; `ψ < α` is the usual choice for soils\nand rocks, whose measured dilatancy is far below what friction alone\nwould imply. A non-associated law has a **non-symmetric** tangent.\nReturns beyond the cone's apex (`I₁ = k/α`) collapse onto the tip."
+    pub fn drucker_prager(fes, kinematics: Kinematics) = crate::ops::model::plasticity_with_law, PlasticLaw::DruckerPrager;
+    python: "`kinematics.drucker_prager(fespace, kinematics)` — pressure-sensitive plasticity\nwith **non-associated** flow: `f = q + α·I₁ − k`, plastic potential\n`g = q + ψ·I₁`. Material `E`, `nu`, `alpha` (friction), `k` (cohesion),\n`psi` (dilatancy).\n\n`ψ = α` recovers associated flow; `ψ < α` is the usual choice for soils\nand rocks, whose measured dilatancy is far below what friction alone\nwould imply. A non-associated law has a **non-symmetric** tangent.\nReturns beyond the cone's apex (`I₁ = k/α`) collapse onto the tip."
 }

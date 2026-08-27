@@ -23,7 +23,7 @@ use crate::handle::Handle;
 /// # use pyrucast::containers::model::Model;
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::models::RelationSense;
 /// # use pyrucast::ops::{element_field, mesh};
 /// # use pyrucast::ops::model;
@@ -35,7 +35,7 @@ use crate::handle::Handle;
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// let meca = model::elasticity(&fes, ElasticityModel::PlaneStress)?;
+/// let meca = model::elasticity(&fes, Kinematics::PlaneStress)?;
 /// // Les composantes **requises** doivent toutes être là ; les
 /// // **facultatives** — `alpha`, la dilatation — ne sont gardées que si on
 /// // les donne, et à la suite. Le reste est écarté.
@@ -112,7 +112,7 @@ pub fn sub_material_field(
 /// # use pyrucast::containers::model::Model;
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::models::RelationSense;
 /// # use pyrucast::ops::{element_field, mesh};
 /// # use pyrucast::ops::model;
@@ -170,7 +170,7 @@ pub fn material_field(
 /// # use pyrucast::containers::model::Model;
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::models::RelationSense;
 /// # use pyrucast::ops::{element_field, mesh};
 /// # use pyrucast::ops::model;
@@ -185,7 +185,7 @@ pub fn material_field(
 /// // Une liste **par sous-modèle**, quand deux physiques cohabitent et
 /// // n'attendent pas les mêmes constantes.
 /// let modele = model::heat_conduction(&fes)?
-///     .union(&model::elasticity(&fes, ElasticityModel::PlaneStress)?)?;
+///     .union(&model::elasticity(&fes, Kinematics::PlaneStress)?)?;
 /// let mat = element_field::material_field_per_sub_model(
 ///     &modele, &[&[("k", 1.0)], &[("E", 210e3), ("nu", 0.3)]])?;
 /// assert_eq!(mat.len(), 2);
@@ -354,7 +354,7 @@ mod tests {
 
     /// Elasticity on a single TRI3 (plane stress).
     fn single_elasticity_sub() -> (Handle<Coords>, SubModel) {
-        use crate::models::elasticity::ElasticityModel;
+        use crate::models::tensor::Kinematics;
         let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
@@ -362,7 +362,7 @@ mod tests {
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
         mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        let el = SubModel::elasticity(fes.get(0).unwrap(), ElasticityModel::PlaneStress).unwrap();
+        let el = SubModel::elasticity(fes.get(0).unwrap(), Kinematics::PlaneStress).unwrap();
         (coords, el)
     }
 

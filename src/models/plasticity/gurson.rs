@@ -19,7 +19,7 @@
 //!
 //! Voids do not weaken a material gradually all the way to failure — beyond a
 //! critical porosity they **coalesce**, and the collapse accelerates sharply.
-//! Tvergaard and Needleman model that by feeding the surface an *effective*
+//! Tvergaard and Needleman kinematics that by feeding the surface an *effective*
 //! porosity:
 //!
 //! ```text
@@ -28,7 +28,7 @@
 //! ```
 //!
 //! which reaches `1/q₁` — where the surface has shrunk to nothing — at the
-//! failure porosity `f_f`. Without this the model predicts a far too ductile
+//! failure porosity `f_f`. Without this the kinematics predicts a far too ductile
 //! material.
 //!
 //! ## Growth
@@ -55,10 +55,10 @@
 use super::law::PlasticLawKind;
 use crate::error::{PyrucastError, Result};
 use crate::models::elasticity::elastic_stress;
-use crate::models::elasticity::ElasticityModel;
 use crate::models::plasticity::law::{
     require_positive, MatParams, PlasticLaw, PlasticStep, PrevState,
 };
+use crate::models::tensor::Kinematics;
 use crate::models::tensor::{i1, von_mises_stress};
 
 /// The **effective** porosity of Tvergaard and Needleman — `f` below the
@@ -285,7 +285,7 @@ crate::physics_operator! {
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -293,10 +293,10 @@ crate::physics_operator! {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// let m = model::gurson(&fes, ElasticityModel::PlaneStrain)?;
+    /// let m = model::gurson(&fes, Kinematics::PlaneStrain)?;
     /// assert_eq!(m.primal_vars()?, vec!["u_x".to_string(), "u_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn gurson(fes, model: ElasticityModel) = crate::ops::model::plasticity_with_law, PlasticLaw::Gurson;
-    python: "`model.gurson(fespace, model)` — Gurson-Tvergaard-Needleman plasticity\nof a **porous** metal, where the porosity shrinks the yield surface.\nMaterial `E`, `nu`, `sigma_y`, `q_1`, `q_2`, `q_3`, `f_0`, `f_c`, `f_f`.\n\nA ductile metal fails because voids grow and coalesce, not because a\nstress is reached. The `cosh` term makes the surface **pressure\nsensitive**, so voids grow under triaxial tension and close under\ncompression — which a J2 law cannot express, and which is why it can\nnever predict ductile rupture. Beyond `f_c` the effective porosity\naccelerates towards `1/q_1`, modelling coalescence.\n\nThe porosity is exposed as the internal variable `porosity`, starting\nfrom `f_0`. Void **nucleation** is not modelled — only growth."
+    pub fn gurson(fes, kinematics: Kinematics) = crate::ops::model::plasticity_with_law, PlasticLaw::Gurson;
+    python: "`kinematics.gurson(fespace, kinematics)` — Gurson-Tvergaard-Needleman plasticity\nof a **porous** metal, where the porosity shrinks the yield surface.\nMaterial `E`, `nu`, `sigma_y`, `q_1`, `q_2`, `q_3`, `f_0`, `f_c`, `f_f`.\n\nA ductile metal fails because voids grow and coalesce, not because a\nstress is reached. The `cosh` term makes the surface **pressure\nsensitive**, so voids grow under triaxial tension and close under\ncompression — which a J2 law cannot express, and which is why it can\nnever predict ductile rupture. Beyond `f_c` the effective porosity\naccelerates towards `1/q_1`, modelling coalescence.\n\nThe porosity is exposed as the internal variable `porosity`, starting\nfrom `f_0`. Void **nucleation** is not modelled — only growth."
 }

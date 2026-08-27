@@ -24,7 +24,7 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
-use pyrucast::models::elasticity::ElasticityModel;
+use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field::{deformation, interp_to_gauss, thermal_strain};
 use pyrucast::ops::mesh;
 use pyrucast::ops::model;
@@ -87,7 +87,7 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
     let left: Vec<Node> = (0..=NY).map(|j| grid[idx(0, j)].clone()).collect();
     let right: Vec<Node> = (0..=NY).map(|j| grid[idx(NX, j)].clone()).collect();
     let bottom: Vec<Node> = (0..=NX).map(|i| grid[idx(i, 0)].clone()).collect();
-    let mut model = model::elasticity(&fes, ElasticityModel::PlaneStress)?;
+    let mut model = model::elasticity(&fes, Kinematics::PlaneStress)?;
     model = model.union(&clamp(&left, "u_x", "f_x")?)?;
     model = model.union(&clamp(&right, "u_x", "f_x")?)?;
     model = model.union(&clamp(&bottom, "u_y", "f_y")?)?;
@@ -192,12 +192,12 @@ fn thermal_expansion_reaches_plasticity_and_damage() -> Result<()> {
     for (label, model, values) in [
         (
             "plasticity",
-            model::plasticity_perfect(&fes, ElasticityModel::PlaneStress)?,
+            model::plasticity_perfect(&fes, Kinematics::PlaneStress)?,
             vec![("E", E), ("nu", NU), ("sigma_y", SIGMA_Y), ("alpha", ALPHA)],
         ),
         (
             "damage",
-            model::mazars(&fes, ElasticityModel::PlaneStress)?,
+            model::mazars(&fes, Kinematics::PlaneStress)?,
             vec![
                 ("E", E),
                 ("nu", NU),

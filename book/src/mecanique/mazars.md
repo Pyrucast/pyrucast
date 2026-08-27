@@ -71,7 +71,7 @@ facteur `(1−D)` se simplifie dans `σ_zz = 0`).
   d'incrément, seul `kappa` est historique.
 - **sortie du `COMP`** (= `prev` du pas suivant) : contrainte (`sigma_*`),
   `damage` (le scalaire `D`), et `kappa` mis à jour.
-- **modèles** : `plane_stress`, `plane_strain`, `axisymmetric` (2-D) et `solid`
+- **modèles** : `plane_stress`, `plane_strain`, `axisymmetric` (2-D) et `full_3d`
   (3-D).
 
 ## Axisymétrie

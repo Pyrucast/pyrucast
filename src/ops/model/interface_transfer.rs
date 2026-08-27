@@ -24,7 +24,7 @@ use crate::models::Physics;
 /// # use pyrucast::containers::model::{Model, SubModel};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::models::{Physics, RelationSense};
 /// # use pyrucast::ops::mesh;

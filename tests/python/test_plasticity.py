@@ -88,7 +88,7 @@ def test_plasticity_elastic_below_yield():
 
 def test_plasticity_rejects_inconsistent_model():
     _c, _n, fes = _unit_quad()
-    for bad in ("solid", "nonsense"):
+    for bad in ("full_3d", "nonsense"):
         try:
             pyrucast.model.plasticity_perfect(fes, bad)
         except (ValueError, RuntimeError):

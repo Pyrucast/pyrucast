@@ -67,8 +67,8 @@ def test_elasticity_rejects_inconsistent_model():
     mesh = pyrucast.Mesh(c, "TRI3")
     mesh.unit().add_cell([a, b, d])
     fes = pyrucast.FiniteElementSpace(mesh)
-    # 2-D space cannot be "solid", and "nonsense" is not a model.
-    for bad in ("solid", "nonsense"):
+    # 2-D space cannot be "full_3d", and "nonsense" is not a model.
+    for bad in ("full_3d", "nonsense"):
         try:
             pyrucast.model.elasticity(fes, bad)
         except (ValueError, RuntimeError):

@@ -44,7 +44,7 @@ use crate::ops::element_field::gradient::AXES;
 /// # use pyrucast::containers::node_field::NodeField;
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::ops::{element_field, geom, mesh, node_field};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]

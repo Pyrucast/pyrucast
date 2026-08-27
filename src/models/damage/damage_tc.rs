@@ -2,7 +2,7 @@
 //!
 //! Mazars blends its two branches into a single scalar `D`. That is economical,
 //! but it means a material damaged in compression is equally damaged in tension:
-//! the model cannot represent a crack that **closes** and carries load again.
+//! the kinematics cannot represent a crack that **closes** and carries load again.
 //!
 //! Damage TC (Faria-Oliver-Cervera) keeps the two apart:
 //!
@@ -36,8 +36,8 @@ use super::law::DamageLawKind;
 use crate::error::Result;
 use crate::models::damage::law::DamageLaw;
 use crate::models::damage::law::{pos, DamageUpdate, MatRead};
-use crate::models::elasticity::ElasticityModel;
 use crate::models::elasticity::{elastic_stress, lame};
+use crate::models::tensor::Kinematics;
 use nalgebra::Matrix3;
 
 /// The law's material contract.
@@ -252,7 +252,7 @@ crate::physics_operator! {
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -260,10 +260,10 @@ crate::physics_operator! {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// let m = model::damage_tc(&fes, ElasticityModel::PlaneStrain)?;
+    /// let m = model::damage_tc(&fes, Kinematics::PlaneStrain)?;
     /// assert_eq!(m.primal_vars()?, vec!["u_x".to_string(), "u_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn damage_tc(fes, model: ElasticityModel) = crate::ops::model::damage_with_law, DamageLaw::DamageTc;
-    python: "`model.damage_tc(fespace, model)` — **two** damage variables, tension\nand compression apart: `σ = (1−d⁺)σ̃⁺ + (1−d⁻)σ̃⁻`. Material `E`, `nu`,\n`f_t`, `f_c`, `A_t`, `A_c`.\n\nMazars blends its two branches into one scalar, so a material damaged in\ncompression is equally damaged in tension and a crack that **closes**\ncannot carry load again. Keeping the two apart recovers the compressive\nstiffness on closure — the unilateral effect — which is what makes the\nlaw usable under cyclic loading. State: `r_plus`, `r_minus`, `d_plus`,\n`d_minus`."
+    pub fn damage_tc(fes, kinematics: Kinematics) = crate::ops::model::damage_with_law, DamageLaw::DamageTc;
+    python: "`kinematics.damage_tc(fespace, kinematics)` — **two** damage variables, tension\nand compression apart: `σ = (1−d⁺)σ̃⁺ + (1−d⁻)σ̃⁻`. Material `E`, `nu`,\n`f_t`, `f_c`, `A_t`, `A_c`.\n\nMazars blends its two branches into one scalar, so a material damaged in\ncompression is equally damaged in tension and a crack that **closes**\ncannot carry load again. Keeping the two apart recovers the compressive\nstiffness on closure — the unilateral effect — which is what makes the\nlaw usable under cyclic loading. State: `r_plus`, `r_minus`, `d_plus`,\n`d_minus`."
 }

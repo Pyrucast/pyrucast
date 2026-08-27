@@ -147,10 +147,10 @@ pub trait Named: Copy + Sized + 'static {
 /// as such.
 ///
 /// ```
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::named::Named;
 /// // Le trait est la seule chose que la macro demande au type.
-/// assert_eq!(ElasticityModel::from_name("SOLID"), Some(ElasticityModel::Solid));
+/// assert_eq!(Kinematics::from_name("SOLID"), Some(Kinematics::Full3D));
 /// ```
 #[macro_export]
 macro_rules! named_enum {
@@ -186,7 +186,7 @@ named_enum!(
     crate::atoms::QuadratureRule,
     crate::models::Physics,
     crate::models::damage::law::DamageLaw,
-    crate::models::elasticity::ElasticityModel,
+    crate::models::tensor::Kinematics,
     crate::models::plasticity::law::PlasticLaw,
     crate::models::shell::ShellModel,
     crate::models::symmetry::MaterialSymmetry,

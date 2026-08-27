@@ -80,7 +80,7 @@ retour radial.
   l'écho de `ε(B)` full-3-D (plus `sigma_zz` pour les modèles **plans** en 2-D,
   dont le dual de Voigt l'omet) pour que `prev` soit complet. Le prédicteur
   élastique est `σ_trial = σ(A) + C:(ε(B) − ε(A))`.
-- **modèles** : `plane_stress`, `plane_strain`, `axisymmetric` (2-D) et `solid`
+- **modèles** : `plane_stress`, `plane_strain`, `axisymmetric` (2-D) et `full_3d`
   (3-D).
 
 ## Axisymétrie

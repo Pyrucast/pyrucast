@@ -5,7 +5,7 @@
 //! Voigt convention, with **engineering** shear `γ = 2ε` and stress in the
 //! matching order:
 //!
-//! | model | Voigt vector |
+//! | kinematics | Voigt vector |
 //! |---|---|
 //! | plane stress / plane strain | `[εxx, εyy, γxy]` |
 //! | axisymmetric | `[εrr, εzz, εθθ, γrz]`, named `[εxx, εyy, εzz, γxy]` |
@@ -29,11 +29,10 @@ use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::owned_components;
 use crate::models::symmetry::{self, MaterialSymmetry};
+use crate::models::tensor::{dual_name, primal_name, stress_names, Kinematics};
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use serde::{Deserialize, Serialize};
 
-/// Axis suffixes for the vector components, indexed by spatial direction.
-const AXES: [&str; 3] = ["x", "y", "z"];
 /// Material components required by **isotropic** linear elasticity.
 const MATERIAL_COMPONENTS: &[&str] = &["E", "nu"];
 /// Orthotropic constants plus the in-plane material axis (2-D).
@@ -72,98 +71,13 @@ fn material_contract(symmetry: MaterialSymmetry, space_dim: usize) -> &'static [
     }
 }
 
-/// Which 2-D assumption (or 3-D solid) to use for the constitutive matrix.
-///
-/// ```
-/// # use pyrucast::models::elasticity::{self, ElasticityModel};
-/// // La cinématique choisie décide du nombre de composantes de Voigt.
-/// assert_eq!(elasticity::constitutive(210e3, 0.3, ElasticityModel::PlaneStress, 2).len(), 3);
-/// assert_eq!(elasticity::constitutive(210e3, 0.3, ElasticityModel::Axisymmetric, 2).len(), 4);
-/// assert_eq!(elasticity::constitutive(210e3, 0.3, ElasticityModel::Solid, 3).len(), 6);
-/// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ElasticityModel {
-    /// 2-D plane stress (thin plate loaded in its plane).
-    PlaneStress,
-    /// 2-D plane strain (long prismatic body, `εzz = 0`).
-    PlaneStrain,
-    /// 2-D meridian plane of a body of revolution: four Voigt components, the
-    /// hoop strain `ε_θθ = u_r / r` among them. Requires an axisymmetric
-    /// geometry.
-    Axisymmetric,
-    /// Full 3-D solid.
-    Solid,
-}
-
-impl ElasticityModel {
-    /// Whether this model carries the hoop (θθ) component — i.e. is
-    /// [`Axisymmetric`](Self::Axisymmetric).
-    ///
-    /// ```
-    /// # use pyrucast::models::elasticity::{self, ElasticityModel};
-    /// // Seul le plan méridien d'un corps de révolution porte la déformation
-    /// // orthoradiale ε_θθ = u_r / r.
-    /// assert!(ElasticityModel::Axisymmetric.is_axisymmetric());
-    /// assert!(!ElasticityModel::PlaneStrain.is_axisymmetric());
-    /// ```
-    pub fn is_axisymmetric(self) -> bool {
-        self == Self::Axisymmetric
-    }
-}
-
-impl crate::named::Named for ElasticityModel {
-    const LABEL: &'static str = "elasticity model";
-    const VALUES: &'static [Self] = &[
-        Self::PlaneStress,
-        Self::PlaneStrain,
-        Self::Axisymmetric,
-        Self::Solid,
-    ];
-
-    fn name(self) -> &'static str {
-        match self {
-            Self::PlaneStress => "plane_stress",
-            Self::PlaneStrain => "plane_strain",
-            Self::Axisymmetric => "axisymmetric",
-            Self::Solid => "solid",
-        }
-    }
-}
-
-pub(crate) fn primal_name(a: usize) -> String {
-    format!("u_{}", AXES[a])
-}
-pub(crate) fn dual_name(a: usize) -> String {
-    format!("f_{}", AXES[a])
-}
 /// Voigt component count: 3 in 2-D plane, **4** axisymmetric (the hoop joins
 /// them), 6 in 3-D.
-fn voigt_size(space_dim: usize, model: ElasticityModel) -> usize {
-    match (space_dim, model) {
-        (2, ElasticityModel::Axisymmetric) => 4,
+fn voigt_size(space_dim: usize, kinematics: Kinematics) -> usize {
+    match (space_dim, kinematics) {
+        (2, Kinematics::Axisymmetric) => 4,
         (2, _) => 3,
         _ => 6,
-    }
-}
-/// Stress component names in Voigt order. Axisymmetric names the hoop `θθ`
-/// component `sigma_zz`, after Cast3M (`x = r`, `y = z`).
-fn stress_names(space_dim: usize, model: ElasticityModel) -> Vec<String> {
-    match (space_dim, model) {
-        (2, ElasticityModel::Axisymmetric) => vec![
-            "sigma_xx".into(),
-            "sigma_yy".into(),
-            "sigma_zz".into(),
-            "sigma_xy".into(),
-        ],
-        (2, _) => vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_xy".into()],
-        _ => vec![
-            "sigma_xx".into(),
-            "sigma_yy".into(),
-            "sigma_zz".into(),
-            "sigma_yz".into(),
-            "sigma_xz".into(),
-            "sigma_xy".into(),
-        ],
     }
 }
 
@@ -200,7 +114,7 @@ pub(crate) fn check_continuum_dimensions(
 /// isotropic default, the orthotropic or anisotropic constants plus the material
 /// axes otherwise (see [`crate::models::symmetry`]).
 ///
-/// Two orthogonal axes: `model` is the **kinematic** hypothesis (plane stress,
+/// Two orthogonal axes: `kinematics` is the **kinematic** hypothesis (plane stress,
 /// plane strain, axisymmetric, solid) and `symmetry` is the **material** one.
 /// They combine freely — an orthotropic axisymmetric body is as ordinary as an
 /// isotropic plane one.
@@ -221,8 +135,9 @@ pub(crate) fn check_continuum_dimensions(
 /// # let maillage = Mesh::from_submesh(sm);
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # use pyrucast::models::elasticity::{Elasticity, ElasticityModel};
-/// let e = Elasticity::new(zone.clone(), ElasticityModel::PlaneStress)?;
+/// # use pyrucast::models::elasticity::Elasticity;
+/// # use pyrucast::models::tensor::Kinematics;
+/// let e = Elasticity::new(zone.clone(), Kinematics::PlaneStress)?;
 /// assert_eq!(e.material_components(), Some(vec!["E".to_string(), "nu".to_string()]));
 /// // La dilatation thermique est **facultative** : sans `alpha`, le modèle
 /// // s'assemble sans elle.
@@ -235,13 +150,13 @@ pub struct Elasticity {
     /// POI1 support over the subspace's unique nodes (row/col support).
     pub(crate) support: Handle<SubMesh>,
     pub(crate) space_dim: usize,
-    pub(crate) model: ElasticityModel,
+    pub(crate) kinematics: Kinematics,
     pub(crate) symmetry: MaterialSymmetry,
 }
 
 impl Elasticity {
     /// **Isotropic** linear elasticity on an FE subspace, with the given
-    /// 2-D/3-D model. Errors if `model` is inconsistent with the space dimension.
+    /// 2-D/3-D kinematics. Errors if `kinematics` is inconsistent with the space dimension.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -259,16 +174,17 @@ impl Elasticity {
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// # use pyrucast::models::elasticity::{Elasticity, ElasticityModel};
-    /// let e = Elasticity::new(zone.clone(), ElasticityModel::PlaneStress)?;
+    /// # use pyrucast::models::elasticity::Elasticity;
+    /// # use pyrucast::models::tensor::Kinematics;
+    /// let e = Elasticity::new(zone.clone(), Kinematics::PlaneStress)?;
     /// assert_eq!(e.material_components(), Some(vec!["E".to_string(), "nu".to_string()]));
     /// // La dilatation thermique est **facultative** : sans `alpha`, le modèle
     /// // s'assemble sans elle.
     /// assert!(e.optional_material_components().contains(&"alpha"));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn new(fespace: Handle<SubFiniteElementSpace>, model: ElasticityModel) -> Result<Self> {
-        Self::with_symmetry(fespace, model, MaterialSymmetry::Isotropic)
+    pub fn new(fespace: Handle<SubFiniteElementSpace>, kinematics: Kinematics) -> Result<Self> {
+        Self::with_symmetry(fespace, kinematics, MaterialSymmetry::Isotropic)
     }
 
     /// Linear elasticity with an explicit material symmetry — the general
@@ -290,18 +206,20 @@ impl Elasticity {
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// # use pyrucast::models::elasticity::{Elasticity, ElasticityModel};
+    /// # use pyrucast::models::elasticity::Elasticity;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// // Le constructeur général : une symétrie orthotrope élargit le contrat
     /// // matériau, qui porte alors les modules **et** les axes.
     /// let o = Elasticity::with_symmetry(
-    ///     zone.clone(), ElasticityModel::PlaneStress, MaterialSymmetry::Orthotropic)?;
+    ///     zone.clone(), Kinematics::PlaneStress, MaterialSymmetry::Orthotropic)?;
     /// assert!(o.material_components().unwrap().len() > 2);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
+    /// # use pyrucast::models::tensor::Kinematics;
     pub fn with_symmetry(
         fespace: Handle<SubFiniteElementSpace>,
-        model: ElasticityModel,
+        kinematics: Kinematics,
         symmetry: MaterialSymmetry,
     ) -> Result<Self> {
         let (submesh, space_dim, ref_dim, axisymmetric) = {
@@ -315,31 +233,31 @@ impl Elasticity {
         };
         check_continuum_dimensions("Elasticity", space_dim, ref_dim)?;
         #[allow(clippy::match_like_matches_macro)]
-        let ok = match (space_dim, model) {
-            (2, ElasticityModel::PlaneStress | ElasticityModel::PlaneStrain) => true,
-            (2, ElasticityModel::Axisymmetric) => true,
-            (3, ElasticityModel::Solid) => true,
+        let ok = match (space_dim, kinematics) {
+            (2, Kinematics::PlaneStress | Kinematics::PlaneStrain) => true,
+            (2, Kinematics::Axisymmetric) => true,
+            (3, Kinematics::Full3D) => true,
             _ => false,
         };
         if !ok {
             return Err(PyrucastError::Message(format!(
-                "Elasticity: model {model:?} is incompatible with a {space_dim}-D space \
-                 (2-D ⇒ plane_stress|plane_strain|axisymmetric, 3-D ⇒ solid)"
+                "Elasticity: kinematics {kinematics:?} is incompatible with a {space_dim}-D space \
+                 (2-D ⇒ plane_stress|plane_strain|axisymmetric, 3-D ⇒ full_3d)"
             )));
         }
-        // The model and the geometry must agree **both ways**: the 2πr measure
-        // comes from the Coords while the hoop row comes from the model, so a
+        // The kinematics and the geometry must agree **both ways**: the 2πr measure
+        // comes from the Coords while the hoop row comes from the kinematics, so a
         // mismatch would silently mix a plane constitutive law with a revolved
         // measure (or the reverse) and quietly produce wrong results.
-        if axisymmetric != model.is_axisymmetric() {
+        if axisymmetric != kinematics.is_axisymmetric() {
             return Err(PyrucastError::Message(if axisymmetric {
                 format!(
-                    "Elasticity: model {model:?} on an axisymmetric geometry — a body of \
-                     revolution requires the `axisymmetric` model (its integrals already \
+                    "Elasticity: kinematics {kinematics:?} on an axisymmetric geometry — a body of \
+                     revolution requires the `axisymmetric` kinematics (its integrals already \
                      carry the 2πr factor)"
                 )
             } else {
-                "Elasticity: the `axisymmetric` model requires an axisymmetric geometry \
+                "Elasticity: the `axisymmetric` kinematics requires an axisymmetric geometry \
                  (build the Coords with Coords::axisymmetric)"
                     .into()
             }));
@@ -349,7 +267,7 @@ impl Elasticity {
             fespace,
             support,
             space_dim,
-            model,
+            kinematics,
             symmetry,
         })
     }
@@ -416,7 +334,7 @@ impl SubModelKind for Elasticity {
     ) -> Result<()> {
         let geom = &geoms[0];
         let mat = material.expect("Elasticity declares a material_fespace ⇒ material is supplied");
-        element_stiffness(geom, mat, self.model, self.symmetry, ke)
+        element_stiffness(geom, mat, self.kinematics, self.symmetry, ke)
     }
 
     fn element_matrix(
@@ -427,7 +345,7 @@ impl SubModelKind for Elasticity {
     ) -> Result<()> {
         let geom = &geoms[0];
         let mat = material.expect("Elasticity declares a material_fespace ⇒ material is supplied");
-        element_stiffness(geom, mat, self.model, self.symmetry, ke)
+        element_stiffness(geom, mat, self.kinematics, self.symmetry, ke)
     }
 
     fn element_mass(
@@ -456,7 +374,7 @@ impl SubModelKind for Elasticity {
         format!(
             "SubModel<Elasticity({:?}, {})>\n  primal var(s): {primal}\n  dual var(s):   {dual}\n  \
              support: {n} node(s)",
-            self.model, self.symmetry
+            self.kinematics, self.symmetry
         )
     }
 }
@@ -486,7 +404,7 @@ impl Domain for Elasticity {
     }
 
     fn behavior_output_components(&self) -> Result<Vec<String>> {
-        Ok(stress_names(self.space_dim, self.model))
+        Ok(stress_names(self.space_dim, self.kinematics))
     }
 
     /// Linear stress σ = D·ε at one Gauss point (material constants per cell).
@@ -502,8 +420,8 @@ impl Domain for Elasticity {
     ) -> Result<()> {
         let mat = material.expect("Elasticity declares a material_fespace ⇒ material is supplied");
         let (cell, d) = (geom.cell, self.space_dim);
-        let dmat = symmetry::elastic_constitutive(mat, cell, self.symmetry, self.model, d)?;
-        let strain = voigt_strain(&|name| input.value(cell, g, name), d, self.model)?;
+        let dmat = symmetry::elastic_constitutive(mat, cell, self.symmetry, self.kinematics, d)?;
+        let strain = voigt_strain(&|name| input.value(cell, g, name), d, self.kinematics)?;
         for (r, drow) in dmat.iter().enumerate() {
             out[r] = drow.iter().zip(&strain).map(|(dv, s)| dv * s).sum();
         }
@@ -511,23 +429,25 @@ impl Domain for Elasticity {
     }
 }
 
-/// Isotropic constitutive (Voigt) matrix `D` from `E`, `nu` and the model.
+/// Isotropic constitutive (Voigt) matrix `D` from `E`, `nu` and the kinematics.
 ///
 /// ```
-/// # use pyrucast::models::elasticity::{self, ElasticityModel};
+/// # use pyrucast::models::tensor::Kinematics;
+/// # use pyrucast::models::elasticity::{self};
 /// // Contraintes planes : σ_zz = 0, la souplesse hors plan est condensée.
 /// // Déformations planes : ε_zz = 0, le matériau est plus **raide**.
-/// let cp = elasticity::constitutive(210e3, 0.3, ElasticityModel::PlaneStress, 2);
-/// let dp = elasticity::constitutive(210e3, 0.3, ElasticityModel::PlaneStrain, 2);
+/// let cp = elasticity::constitutive(210e3, 0.3, Kinematics::PlaneStress, 2);
+/// let dp = elasticity::constitutive(210e3, 0.3, Kinematics::PlaneStrain, 2);
 /// assert!(dp[0][0] > cp[0][0]);
 /// // En contraintes planes, D₀₀ = E/(1−ν²).
 /// assert!((cp[0][0] - 210e3 / (1.0 - 0.09)).abs() < 1e-6);
 /// // Le bloc de cisaillement vaut μ dans les deux cas (Voigt de l'ingénieur).
 /// assert!((cp[2][2] - dp[2][2]).abs() < 1e-6);
 /// ```
-pub fn constitutive(e: f64, nu: f64, model: ElasticityModel, space_dim: usize) -> Vec<Vec<f64>> {
-    match (space_dim, model) {
-        (2, ElasticityModel::PlaneStress) => {
+/// # use pyrucast::models::tensor::Kinematics;
+pub fn constitutive(e: f64, nu: f64, kinematics: Kinematics, space_dim: usize) -> Vec<Vec<f64>> {
+    match (space_dim, kinematics) {
+        (2, Kinematics::PlaneStress) => {
             let c = e / (1.0 - nu * nu);
             vec![
                 vec![c, c * nu, 0.0],
@@ -535,7 +455,7 @@ pub fn constitutive(e: f64, nu: f64, model: ElasticityModel, space_dim: usize) -
                 vec![0.0, 0.0, c * (1.0 - nu) / 2.0],
             ]
         }
-        (2, ElasticityModel::PlaneStrain) => {
+        (2, Kinematics::PlaneStrain) => {
             let c = e / ((1.0 + nu) * (1.0 - 2.0 * nu));
             vec![
                 vec![c * (1.0 - nu), c * nu, 0.0],
@@ -543,7 +463,7 @@ pub fn constitutive(e: f64, nu: f64, model: ElasticityModel, space_dim: usize) -
                 vec![0.0, 0.0, c * (1.0 - 2.0 * nu) / 2.0],
             ]
         }
-        (2, ElasticityModel::Axisymmetric) => {
+        (2, Kinematics::Axisymmetric) => {
             // Voigt order [rr, zz, θθ, rz]: the three normal directions are
             // mutually orthogonal, so the 3×3 normal block is the isotropic one
             // (as in plane strain, with θθ restored) and `rz` is the lone shear.
@@ -580,9 +500,9 @@ pub fn constitutive(e: f64, nu: f64, model: ElasticityModel, space_dim: usize) -
 fn voigt_strain(
     eps: &dyn Fn(&str) -> Result<f64>,
     space_dim: usize,
-    model: ElasticityModel,
+    kinematics: Kinematics,
 ) -> Result<Vec<f64>> {
-    if space_dim == 2 && model.is_axisymmetric() {
+    if space_dim == 2 && kinematics.is_axisymmetric() {
         // [εrr, εzz, εθθ, γrz] — the hoop `eps_zz` is produced by
         // `ops::element_field::deformation` on an axisymmetric space.
         Ok(vec![
@@ -620,7 +540,7 @@ fn b_matrix(
 ) -> Vec<Vec<f64>> {
     let v = match hoop {
         Some(_) => 4,
-        None => voigt_size(space_dim, ElasticityModel::PlaneStrain),
+        None => voigt_size(space_dim, Kinematics::PlaneStrain),
     };
     let dofs = space_dim * n_nodes;
     let mut b = vec![vec![0.0; dofs]; v];
@@ -663,6 +583,7 @@ fn b_matrix(
 /// (their iteration operator is the elastic stiffness).
 ///
 /// ```
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::SubElementField;
@@ -672,7 +593,7 @@ fn b_matrix(
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::{self, ElasticityModel};
+/// # use pyrucast::models::elasticity::{self};
 /// # use pyrucast::models::kernel::assemble_block;
 /// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
@@ -695,7 +616,7 @@ fn b_matrix(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
 ///     DofOrdering::NodesThenVars, true, Some(&mat), None,
 ///     |geoms, m, _s, ke| elasticity::element_stiffness(
-///         &geoms[0], m.unwrap(), ElasticityModel::PlaneStress,
+///         &geoms[0], m.unwrap(), Kinematics::PlaneStress,
 ///         MaterialSymmetry::Isotropic, ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
@@ -705,7 +626,7 @@ fn b_matrix(
 pub fn element_stiffness(
     geom: &CellGeom,
     material: &SubElementField,
-    model: ElasticityModel,
+    kinematics: Kinematics,
     symmetry: MaterialSymmetry,
     ke: &mut [f64],
 ) -> Result<()> {
@@ -713,11 +634,11 @@ pub fn element_stiffness(
     let space_dim = geom.space_dim;
     let dofs = space_dim * n_nodes;
     // Constants read at Gauss 0 — constant material per cell.
-    let d = symmetry::elastic_constitutive(material, geom.cell, symmetry, model, space_dim)?;
+    let d = symmetry::elastic_constitutive(material, geom.cell, symmetry, kinematics, space_dim)?;
     let v = d.len();
     for g in 0..geom.n_gauss {
         // On a body of revolution the hoop row needs `N` and `r` at this point.
-        let hoop = if model.is_axisymmetric() {
+        let hoop = if kinematics.is_axisymmetric() {
             Some((geom.n_at_g(g)?, geom.radius(g)?))
         } else {
             None
@@ -766,7 +687,7 @@ pub fn element_stiffness(
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::{self, ElasticityModel};
+/// # use pyrucast::models::elasticity::{self};
 /// # use pyrucast::models::kernel::assemble_block;
 /// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
@@ -838,7 +759,7 @@ pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64])
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::{self, ElasticityModel};
+/// # use pyrucast::models::elasticity::{self};
 /// # use pyrucast::models::kernel::assemble_block;
 /// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
@@ -914,22 +835,23 @@ pub fn element_geometric(geom: &CellGeom, stress: &SubElementField, ke: &mut [f6
 
 /// Names of the **consistent-tangent** state components a non-linear physics
 /// (plasticity, Mazars) emits: the upper triangle of the symmetric `v×v`
-/// algorithmic modulus `D_alg` in the model's engineering-Voigt order, named
+/// algorithmic modulus `D_alg` in the kinematics's engineering-Voigt order, named
 /// `ktan_{i}_{j}` for `i ≤ j`. `v = 3` in 2-D plane, `4` axisymmetric, `6` in
 /// 3-D — so 6, 10 or 21 names.
 /// The tangent assembler reads them back with [`read_tangent_matrix`].
 ///
 /// ```
-/// # use pyrucast::models::elasticity::{self, ElasticityModel};
+/// # use pyrucast::models::tensor::Kinematics;
+/// # use pyrucast::models::elasticity::{self};
 /// // Le triangle supérieur d'un module symétrique v×v : 6, 10 ou 21 noms.
-/// assert_eq!(elasticity::tangent_component_names(2, ElasticityModel::PlaneStress).len(), 6);
-/// assert_eq!(elasticity::tangent_component_names(2, ElasticityModel::Axisymmetric).len(), 10);
-/// assert_eq!(elasticity::tangent_component_names(3, ElasticityModel::Solid).len(), 21);
-/// assert_eq!(elasticity::tangent_component_names(2, ElasticityModel::PlaneStress)[0],
+/// assert_eq!(elasticity::tangent_component_names(2, Kinematics::PlaneStress).len(), 6);
+/// assert_eq!(elasticity::tangent_component_names(2, Kinematics::Axisymmetric).len(), 10);
+/// assert_eq!(elasticity::tangent_component_names(3, Kinematics::Full3D).len(), 21);
+/// assert_eq!(elasticity::tangent_component_names(2, Kinematics::PlaneStress)[0],
 ///            "ktan_0_0");
 /// ```
-pub fn tangent_component_names(space_dim: usize, model: ElasticityModel) -> Vec<String> {
-    let v = voigt_size(space_dim, model);
+pub fn tangent_component_names(space_dim: usize, kinematics: Kinematics) -> Vec<String> {
+    let v = voigt_size(space_dim, kinematics);
     let mut names = Vec::with_capacity(v * (v + 1) / 2);
     for i in 0..v {
         for j in i..v {
@@ -943,6 +865,7 @@ pub fn tangent_component_names(space_dim: usize, model: ElasticityModel) -> Vec<
 /// the `ktan_{i}_{j}` state components emitted by the constitutive integrator.
 ///
 /// ```
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::SubElementField;
@@ -952,7 +875,7 @@ pub fn tangent_component_names(space_dim: usize, model: ElasticityModel) -> Vec<
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::{self, ElasticityModel};
+/// # use pyrucast::models::elasticity::{self};
 /// # use pyrucast::models::kernel::assemble_block;
 /// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
@@ -967,8 +890,8 @@ pub fn tangent_component_names(space_dim: usize, model: ElasticityModel) -> Vec<
 /// #                vec!["u_x".to_string(), "u_y".to_string()]);
 /// // Le producteur écrit `ktan_i_j`, le consommateur les relit ici : c'est
 /// // tout le contrat entre l'intégrateur constitutif et l'assembleur.
-/// let noms = elasticity::tangent_component_names(2, ElasticityModel::PlaneStress);
-/// let d0 = elasticity::constitutive(210e3, 0.3, ElasticityModel::PlaneStress, 2);
+/// let noms = elasticity::tangent_component_names(2, Kinematics::PlaneStress);
+/// let d0 = elasticity::constitutive(210e3, 0.3, Kinematics::PlaneStress, 2);
 /// let mut etat = SubElementField::new(zone.clone(), noms.clone())?;
 /// let mut k = 0;
 /// for i in 0..3 {
@@ -978,7 +901,7 @@ pub fn tangent_component_names(space_dim: usize, model: ElasticityModel) -> Vec<
 ///     }
 /// }
 /// // Relu, le module est **symétrique** et identique à ce qu'on a écrit.
-/// let d = elasticity::read_tangent_matrix(&etat, 0, 0, 2, ElasticityModel::PlaneStress)?;
+/// let d = elasticity::read_tangent_matrix(&etat, 0, 0, 2, Kinematics::PlaneStress)?;
 /// assert_eq!(d, d0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -987,9 +910,9 @@ pub fn read_tangent_matrix(
     cell: usize,
     g: usize,
     space_dim: usize,
-    model: ElasticityModel,
+    kinematics: Kinematics,
 ) -> Result<Vec<Vec<f64>>> {
-    let v = voigt_size(space_dim, model);
+    let v = voigt_size(space_dim, kinematics);
     let mut d = vec![vec![0.0; v]; v];
     for i in 0..v {
         for j in i..v {
@@ -1008,6 +931,7 @@ pub fn read_tangent_matrix(
 /// share it — only the `D_alg` they produce differs.
 ///
 /// ```
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::SubElementField;
@@ -1017,7 +941,7 @@ pub fn read_tangent_matrix(
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::{self, ElasticityModel};
+/// # use pyrucast::models::elasticity::{self};
 /// # use pyrucast::models::kernel::assemble_block;
 /// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
@@ -1034,8 +958,8 @@ pub fn read_tangent_matrix(
 /// // partagent ce noyau, seul le module algorithmique qu'elles produisent
 /// // diffère. Avec le module **élastique** en entrée, on retrouve la
 /// // raideur élastique.
-/// # let noms = elasticity::tangent_component_names(2, ElasticityModel::PlaneStress);
-/// # let d0 = elasticity::constitutive(210e3, 0.3, ElasticityModel::PlaneStress, 2);
+/// # let noms = elasticity::tangent_component_names(2, Kinematics::PlaneStress);
+/// # let d0 = elasticity::constitutive(210e3, 0.3, Kinematics::PlaneStress, 2);
 /// # let mut e = SubElementField::new(zone.clone(), noms.clone())?;
 /// # let mut k = 0;
 /// # for i in 0..3 { for j in i..3 { e.set_uniform(&noms[k], d0[i][j])?; k += 1; } }
@@ -1047,13 +971,13 @@ pub fn read_tangent_matrix(
 ///     std::slice::from_ref(&zone), &support, &support, duals.clone(), primals.clone(),
 ///     DofOrdering::NodesThenVars, true, None, Some(&etat),
 ///     |geoms, _m, s, ke| elasticity::element_tangent_from_state(
-///         &geoms[0], s.unwrap(), ElasticityModel::PlaneStress, ke),
+///         &geoms[0], s.unwrap(), Kinematics::PlaneStress, ke),
 /// )?;
 /// let raideur = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
 ///     DofOrdering::NodesThenVars, true, Some(&mat), None,
 ///     |geoms, m, _s, ke| elasticity::element_stiffness(
-///         &geoms[0], m.unwrap(), ElasticityModel::PlaneStress,
+///         &geoms[0], m.unwrap(), Kinematics::PlaneStress,
 ///         MaterialSymmetry::Isotropic, ke),
 /// )?;
 /// assert_eq!(tangente.dense(), raideur.dense());
@@ -1062,22 +986,22 @@ pub fn read_tangent_matrix(
 pub fn element_tangent_from_state(
     geom: &CellGeom,
     state: &SubElementField,
-    model: ElasticityModel,
+    kinematics: Kinematics,
     ke: &mut [f64],
 ) -> Result<()> {
     let n_nodes = geom.n_nodes;
     let space_dim = geom.space_dim;
     let dofs = space_dim * n_nodes;
-    let v = voigt_size(space_dim, model);
+    let v = voigt_size(space_dim, kinematics);
     for g in 0..geom.n_gauss {
         // Same hoop row as `element_stiffness` on a body of revolution.
-        let hoop = if model.is_axisymmetric() {
+        let hoop = if kinematics.is_axisymmetric() {
             Some((geom.n_at_g(g)?, geom.radius(g)?))
         } else {
             None
         };
         let b = b_matrix(&geom.dn_dx(g)?, n_nodes, space_dim, hoop);
-        let d = read_tangent_matrix(state, geom.cell, g, space_dim, model)?;
+        let d = read_tangent_matrix(state, geom.cell, g, space_dim, kinematics)?;
         // DB = D·B (voigt × dofs), then Kᵉ += Bᵀ (DB) · |J| w.
         let mut db = vec![vec![0.0; dofs]; v];
         for (r, dbr) in db.iter_mut().enumerate() {
@@ -1157,6 +1081,7 @@ pub fn elastic_stress(eps: &[f64; 6], lambda: f64, mu: f64) -> [f64; 6] {
 /// assert!((d[3][3] - mu).abs() < 1e-9);
 /// assert!((d[0][0] - (lambda + 2.0 * mu)).abs() < 1e-9);
 /// ```
+/// # use pyrucast::models::tensor::Kinematics;
 pub fn elastic_tangent(lambda: f64, mu: f64) -> [[f64; 6]; 6] {
     let mut c = [[0.0; 6]; 6];
     for i in 0..3 {
@@ -1181,7 +1106,7 @@ mod tests {
     use crate::coords::Coords;
     use crate::handle::Handle;
 
-    fn unit_quad(model: ElasticityModel) -> Elasticity {
+    fn unit_quad(kinematics: Kinematics) -> Elasticity {
         let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
@@ -1190,12 +1115,12 @@ mod tests {
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
         mesh.add_cell(&[a.id(), b.id(), c.id(), d.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        Elasticity::new(fes.get(0).unwrap(), model).unwrap()
+        Elasticity::new(fes.get(0).unwrap(), kinematics).unwrap()
     }
 
     #[test]
     fn vars_and_model_validation() {
-        let el = unit_quad(ElasticityModel::PlaneStress);
+        let el = unit_quad(Kinematics::PlaneStress);
         assert_eq!(el.primal_vars(), vec!["u_x", "u_y"]);
         assert_eq!(el.dual_vars(), vec!["f_x", "f_y"]);
         // 2-D space cannot be Solid.
@@ -1206,13 +1131,13 @@ mod tests {
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
         mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        assert!(Elasticity::new(fes.get(0).unwrap(), ElasticityModel::Solid).is_err());
+        assert!(Elasticity::new(fes.get(0).unwrap(), Kinematics::Full3D).is_err());
     }
 
     #[test]
     fn plane_stress_constitutive_known_values() {
         let (e, nu) = (1.0, 0.25);
-        let d = constitutive(e, nu, ElasticityModel::PlaneStress, 2);
+        let d = constitutive(e, nu, Kinematics::PlaneStress, 2);
         let c = e / (1.0 - nu * nu);
         assert!((d[0][0] - c).abs() < 1e-12);
         assert!((d[0][1] - c * nu).abs() < 1e-12);
@@ -1225,7 +1150,7 @@ mod tests {
     #[test]
     fn integrate_behavior_plane_stress_uniaxial() {
         let (e, nu, eps0) = (210.0, 0.3, 0.001);
-        let el = unit_quad(ElasticityModel::PlaneStress);
+        let el = unit_quad(Kinematics::PlaneStress);
         let mut mat =
             SubElementField::new(el.fespace.clone(), vec!["E".into(), "nu".into()]).unwrap();
         mat.set_uniform("E", e).unwrap();
@@ -1255,7 +1180,7 @@ mod tests {
     /// kernel (zero row sums per axis).
     #[test]
     fn element_stiffness_symmetric_and_rigid_body_free() {
-        let el = unit_quad(ElasticityModel::PlaneStrain);
+        let el = unit_quad(Kinematics::PlaneStrain);
         let mut mat =
             SubElementField::new(el.fespace.clone(), vec!["E".into(), "nu".into()]).unwrap();
         mat.set_uniform("E", 200.0).unwrap();

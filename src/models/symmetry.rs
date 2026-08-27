@@ -1,7 +1,7 @@
 //! Material symmetry — **isotropic**, **orthotropic**, **anisotropic**.
 //!
 //! Symmetry is an axis of its own, orthogonal to the kinematic hypothesis
-//! ([`ElasticityModel`]) and to the physics: elasticity, heat conduction and
+//! ([`Kinematics`]) and to the physics: elasticity, heat conduction and
 //! Fickian diffusion all read their coefficients through this module. A physics
 //! stores a [`MaterialSymmetry`] and asks here for its constitutive matrix; it
 //! never parses a frame or inverts a compliance itself.
@@ -30,7 +30,7 @@
 //! 1. build the coefficient tensor **in the material axes** (where orthotropy is
 //!    diagonal and the anisotropic constants are given);
 //! 2. rotate it to the global axes;
-//! 3. reduce it to the model (plane stress / plane strain / axisymmetric / solid).
+//! 3. reduce it to the kinematics (plane stress / plane strain / axisymmetric / solid).
 //!
 //! The rotation of the elastic tensor goes through the **fourth-order tensor**
 //! `C_ijkl`, not through a 6×6 Bond matrix. It costs `3⁸` multiply-adds once per
@@ -46,14 +46,15 @@
 
 use crate::containers::element_field::SubElementField;
 use crate::error::{PyrucastError, Result};
-use crate::models::elasticity::{self, ElasticityModel};
+use crate::models::elasticity::{self};
+use crate::models::tensor::Kinematics;
 use nalgebra::{Matrix3, Vector3};
 use serde::{Deserialize, Serialize};
 
 /// Which material symmetry the coefficients of a physics obey.
 ///
 /// Mirrors Cast3M, where `ISOTROPE` / `ORTHOTROPE` / `ANISOTROPE` qualifies the
-/// **material** of a formulation rather than naming a different model — hence an
+/// **material** of a formulation rather than naming a different kinematics — hence an
 /// axis carried by the existing physics, not three duplicated ones.
 ///
 /// ```
@@ -65,7 +66,7 @@ use serde::{Deserialize, Serialize};
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -107,7 +108,7 @@ impl MaterialSymmetry {
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
     /// # use pyrucast::named::Named;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
@@ -145,7 +146,7 @@ impl MaterialSymmetry {
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -195,7 +196,7 @@ impl std::fmt::Display for MaterialSymmetry {
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -223,7 +224,7 @@ pub const FRAME_2D: [&str; 2] = ["V1X", "V1Y"];
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -253,7 +254,7 @@ pub const FRAME_3D: [&str; 6] = ["V1X", "V1Y", "V1Z", "V2X", "V2Y", "V2Z"];
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -287,7 +288,7 @@ pub fn frame_components(symmetry: MaterialSymmetry, space_dim: usize) -> &'stati
 /// In 3-D, `V1` and `V2` are orthonormalised by Gram-Schmidt and the third axis
 /// closes a right-handed frame. In 2-D only `V1` is read: the second axis is its
 /// in-plane normal and the third is the out-of-plane direction, which keeps the
-/// hoop direction of an axisymmetric model as a material axis — as it must be.
+/// hoop direction of an axisymmetric kinematics as a material axis — as it must be.
 ///
 /// Errors on a degenerate frame (a null `V1`, or a `V2` parallel to it), which
 /// would otherwise produce a silently meaningless material.
@@ -301,7 +302,7 @@ pub fn frame_components(symmetry: MaterialSymmetry, space_dim: usize) -> &'stati
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -447,7 +448,7 @@ fn rotate_tensor(c: &Tensor4, r: &Matrix3<f64>) -> Tensor4 {
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -487,7 +488,7 @@ pub fn rotate_voigt(d: &[[f64; 6]; 6], r: &Matrix3<f64>) -> [[f64; 6]; 6] {
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -522,7 +523,7 @@ pub const ORTHOTROPIC_ELASTIC: [&str; 9] = [
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -573,7 +574,7 @@ fn orthotropic_stiffness(material: &SubElementField, cell: usize) -> Result<[[f6
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -655,7 +656,7 @@ fn anisotropic_stiffness(material: &SubElementField, cell: usize) -> Result<[[f6
 }
 
 /// The constitutive (Voigt) matrix of a cell, in **global** axes and reduced to
-/// `model` — the single entry point every mechanical kernel uses.
+/// `kinematics` — the single entry point every mechanical kernel uses.
 ///
 /// Isotropy short-circuits to [`elasticity::constitutive`], keeping its exact
 /// closed forms (and therefore the exact numbers of every assembly that predates
@@ -671,7 +672,7 @@ fn anisotropic_stiffness(material: &SubElementField, cell: usize) -> Result<[[f6
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -688,7 +689,7 @@ fn anisotropic_stiffness(material: &SubElementField, cell: usize) -> Result<[[f6
 /// // L'unique porte d'entrée des noyaux mécaniques. L'isotropie
 /// // court-circuite vers les formes closes, donc rien ne bouge pour elle.
 /// let d = symmetry::elastic_constitutive(
-///     &iso, 0, MaterialSymmetry::Isotropic, ElasticityModel::PlaneStress, 2)?;
+///     &iso, 0, MaterialSymmetry::Isotropic, Kinematics::PlaneStress, 2)?;
 /// assert_eq!(d.len(), 3);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -696,14 +697,14 @@ pub fn elastic_constitutive(
     material: &SubElementField,
     cell: usize,
     symmetry: MaterialSymmetry,
-    model: ElasticityModel,
+    kinematics: Kinematics,
     space_dim: usize,
 ) -> Result<Vec<Vec<f64>>> {
     if symmetry == MaterialSymmetry::Isotropic {
         return Ok(elasticity::constitutive(
             material.value(cell, 0, "E")?,
             material.value(cell, 0, "nu")?,
-            model,
+            kinematics,
             space_dim,
         ));
     }
@@ -713,10 +714,10 @@ pub fn elastic_constitutive(
         MaterialSymmetry::Isotropic => unreachable!("handled above"),
     };
     let r = frame_rotation(material, cell, space_dim)?;
-    Ok(reduce_to_model(&rotate_voigt(&d_mat, &r), model))
+    Ok(reduce_to_model(&rotate_voigt(&d_mat, &r), kinematics))
 }
 
-/// Reduce a full-3-D engineering-Voigt matrix to the model's `v×v` matrix: the
+/// Reduce a full-3-D engineering-Voigt matrix to the kinematics's `v×v` matrix: the
 /// `[xx, yy, xy]` block for plane strain, its **static condensation** on `ε_zz`
 /// (so `σ_zz = 0`) for plane stress, the `[rr, zz, θθ, rz]` block for
 /// axisymmetric, the full `6×6` for the solid.
@@ -734,7 +735,7 @@ pub fn elastic_constitutive(
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -750,33 +751,33 @@ pub fn elastic_constitutive(
 /// // la 6×6 — d'où son partage avec les tangentes non linéaires.
 /// let d = symmetry::orthotropic_from_constants(
 ///     [210e3, 210e3, 210e3], [0.3, 0.3, 0.3], [80769.0, 80769.0, 80769.0])?;
-/// assert_eq!(symmetry::reduce_to_model(&d, ElasticityModel::PlaneStrain).len(), 3);
-/// assert_eq!(symmetry::reduce_to_model(&d, ElasticityModel::Solid).len(), 6);
+/// assert_eq!(symmetry::reduce_to_model(&d, Kinematics::PlaneStrain).len(), 3);
+/// assert_eq!(symmetry::reduce_to_model(&d, Kinematics::Full3D).len(), 6);
 /// // Contraintes planes : condensation statique sur ε_zz, donc σ_zz = 0 —
 /// // le terme (0,0) y est plus **petit** qu'en déformations planes.
-/// let cp = symmetry::reduce_to_model(&d, ElasticityModel::PlaneStress);
-/// let dp = symmetry::reduce_to_model(&d, ElasticityModel::PlaneStrain);
+/// let cp = symmetry::reduce_to_model(&d, Kinematics::PlaneStress);
+/// let dp = symmetry::reduce_to_model(&d, Kinematics::PlaneStrain);
 /// assert!(cp[0][0] < dp[0][0]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn reduce_to_model(d3: &[[f64; 6]; 6], model: ElasticityModel) -> Vec<Vec<f64>> {
+pub fn reduce_to_model(d3: &[[f64; 6]; 6], kinematics: Kinematics) -> Vec<Vec<f64>> {
     /// Where each axisymmetric Voigt slot `[rr, zz, θθ, rz]` sits in the 3-D order.
     const AXI_TO_3D: [usize; 4] = [0, 1, 2, 5];
     /// The in-plane slots `[xx, yy, xy]`.
     const PLANE: [usize; 3] = [0, 1, 5];
-    match model {
+    match kinematics {
         // Axisymmetric: the plain [rr, zz, θθ, rz] sub-block. No condensation —
         // all four strains are prescribed (the hoop is measured, not assumed).
-        ElasticityModel::Axisymmetric => AXI_TO_3D
+        Kinematics::Axisymmetric => AXI_TO_3D
             .iter()
             .map(|&i| AXI_TO_3D.iter().map(|&j| d3[i][j]).collect())
             .collect(),
-        ElasticityModel::Solid => d3.iter().map(|r| r.to_vec()).collect(),
-        ElasticityModel::PlaneStrain => PLANE
+        Kinematics::Full3D => d3.iter().map(|r| r.to_vec()).collect(),
+        Kinematics::PlaneStrain => PLANE
             .iter()
             .map(|&i| PLANE.iter().map(|&j| d3[i][j]).collect())
             .collect(),
-        ElasticityModel::PlaneStress => {
+        Kinematics::PlaneStress => {
             // Condense the out-of-plane normal `zz` (index 2) so σ_zz = 0:
             // D2[i][j] = D3[i][j] − D3[i][2]·D3[2][j]/D3[2][2].
             let z = 2usize;
@@ -804,7 +805,7 @@ pub fn reduce_to_model(d3: &[[f64; 6]; 6], model: ElasticityModel) -> Vec<Vec<f6
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -841,7 +842,7 @@ pub fn orthotropic_scalar(prefix: &str) -> [String; 3] {
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -887,7 +888,7 @@ pub fn anisotropic_scalar(prefix: &str) -> [String; 6] {
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -957,7 +958,7 @@ mod tests {
     }
 
     fn isotropic_6x6(e: f64, nu: f64) -> [[f64; 6]; 6] {
-        let d = elasticity::constitutive(e, nu, ElasticityModel::Solid, 3);
+        let d = elasticity::constitutive(e, nu, Kinematics::Full3D, 3);
         let mut out = [[0.0; 6]; 6];
         for (i, row) in d.iter().enumerate() {
             out[i].copy_from_slice(row);
@@ -1059,8 +1060,8 @@ mod tests {
         // Condensing the solid stiffness on ε_zz must give back the closed-form
         // plane-stress matrix.
         let (e, nu) = (210e9, 0.3);
-        let reduced = reduce_to_model(&isotropic_6x6(e, nu), ElasticityModel::PlaneStress);
-        let expect = elasticity::constitutive(e, nu, ElasticityModel::PlaneStress, 2);
+        let reduced = reduce_to_model(&isotropic_6x6(e, nu), Kinematics::PlaneStress);
+        let expect = elasticity::constitutive(e, nu, Kinematics::PlaneStress, 2);
         for i in 0..3 {
             for j in 0..3 {
                 assert!(

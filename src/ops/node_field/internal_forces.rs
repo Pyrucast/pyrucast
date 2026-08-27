@@ -54,7 +54,7 @@ const AXES: [&str; 3] = ["x", "y", "z"];
 /// # use pyrucast::containers::node_field::NodeField;
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::ops::{element_field, geom, mesh, node_field};
 /// # use pyrucast::ops::model;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
@@ -68,7 +68,7 @@ const AXES: [&str; 3] = ["x", "y", "z"];
 /// # let support = mesh::poi1_from_nodes(&n).unwrap();
 /// // La forme qui passe par le **modèle** : chaque sous-modèle y apporte
 /// // son propre opérateur, une barre n'ayant pas le Bᵀ d'un continuum.
-/// # let modele = model::elasticity(&fes, ElasticityModel::PlaneStress)?;
+/// # let modele = model::elasticity(&fes, Kinematics::PlaneStress)?;
 /// # let mut s = ElementField::new(&fes,
 /// #     vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_xy".into()])?;
 /// # s.get(0)?.write().set_uniform("sigma_xx", 100.0)?;
@@ -117,7 +117,7 @@ pub fn internal_forces(stresses: &ElementField, model: &Model) -> Result<NodeFie
 /// # use pyrucast::containers::node_field::NodeField;
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::ops::{element_field, geom, mesh, node_field};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
@@ -176,7 +176,7 @@ mod tests {
     use crate::containers::model::SubModel;
     use crate::containers::node_field::{NodeField, SubNodeField};
     use crate::coords::Coords;
-    use crate::models::elasticity::ElasticityModel;
+    use crate::models::tensor::Kinematics;
     use crate::ops::element_field::behavior::integrate;
     use crate::ops::element_field::deformation;
     use crate::ops::element_field::material_field;
@@ -196,7 +196,7 @@ mod tests {
         let mut model = Model::empty();
         model
             .add_sub(Handle::new(
-                SubModel::elasticity(fes.get(0).unwrap(), ElasticityModel::PlaneStress).unwrap(),
+                SubModel::elasticity(fes.get(0).unwrap(), Kinematics::PlaneStress).unwrap(),
             ))
             .unwrap();
         let materials = material_field(&model, &[("E", 210.0), ("nu", 0.3)]).unwrap();
@@ -246,7 +246,7 @@ mod tests {
         let mut model = Model::empty();
         model
             .add_sub(Handle::new(
-                SubModel::elasticity(fes.get(0).unwrap(), ElasticityModel::PlaneStrain).unwrap(),
+                SubModel::elasticity(fes.get(0).unwrap(), Kinematics::PlaneStrain).unwrap(),
             ))
             .unwrap();
         let materials = material_field(&model, &[("E", 70.0), ("nu", 0.25)]).unwrap();

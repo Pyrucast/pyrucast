@@ -66,7 +66,7 @@ use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
-use pyrucast::models::elasticity::ElasticityModel;
+use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field::behavior::integrate;
 use pyrucast::ops::element_field::deformation;
 use pyrucast::ops::element_field::mask;
@@ -143,7 +143,7 @@ fn main() -> Result<()> {
 
     // ── Modèle : plasticité (contraintes planes) + encastrement (Dirichlet) ──
     println!("▸ Modèle : plasticité J2 (contraintes planes) + encastrement…");
-    let mut model = model::plasticity_perfect(&fes, ElasticityModel::PlaneStress)?;
+    let mut model = model::plasticity_perfect(&fes, Kinematics::PlaneStress)?;
 
     model = model.union(&model::dirichlet(
         "u_x".into(),

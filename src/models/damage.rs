@@ -47,10 +47,12 @@ use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
-use crate::models::elasticity::{self, ElasticityModel};
-use crate::models::elasticity::{dual_name, primal_name};
+use crate::models::elasticity::{self};
 use crate::models::owned_components;
-use crate::models::plasticity::{prev_opt, voigt_stress};
+use crate::models::plasticity::prev_opt;
+use crate::models::tensor::Kinematics;
+use crate::models::tensor::{dual_name, primal_name};
+use crate::models::tensor::{stress_names, voigt_stress};
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use law::{DamageLaw, MatRead};
 use serde::{Deserialize, Serialize};
@@ -76,9 +78,9 @@ use serde::{Deserialize, Serialize};
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # use pyrucast::models::damage::Damage;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// // Mazars par défaut : un seuil et deux branches, traction et compression.
-/// let d = Damage::new(zone.clone(), ElasticityModel::PlaneStress)?;
+/// let d = Damage::new(zone.clone(), Kinematics::PlaneStress)?;
 /// assert!(d.material_components().unwrap().contains(&"eps_d0".to_string()));
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -88,7 +90,7 @@ pub struct Damage {
     /// POI1 support over the subspace's unique nodes (row/col support).
     pub(crate) support: Handle<SubMesh>,
     pub(crate) space_dim: usize,
-    pub(crate) model: ElasticityModel,
+    pub(crate) kinematics: Kinematics,
     pub(crate) law: DamageLaw,
 }
 
@@ -112,19 +114,19 @@ impl Damage {
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # use pyrucast::models::damage::Damage;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// // Mazars par défaut : un seuil et deux branches, traction et compression.
-    /// let d = Damage::new(zone.clone(), ElasticityModel::PlaneStress)?;
+    /// let d = Damage::new(zone.clone(), Kinematics::PlaneStress)?;
     /// assert!(d.material_components().unwrap().contains(&"eps_d0".to_string()));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn new(fespace: Handle<SubFiniteElementSpace>, model: ElasticityModel) -> Result<Self> {
-        Self::with_law(fespace, model, DamageLaw::Mazars)
+    pub fn new(fespace: Handle<SubFiniteElementSpace>, kinematics: Kinematics) -> Result<Self> {
+        Self::with_law(fespace, kinematics, DamageLaw::Mazars)
     }
 
     /// Damage with an explicit law, on an FE subspace with the given 2-D/3-D
-    /// model. Errors if
-    /// `model` is inconsistent with the space dimension (same rule as
+    /// kinematics. Errors if
+    /// `kinematics` is inconsistent with the space dimension (same rule as
     /// [`crate::models::elasticity::Elasticity::new`]).
     ///
     /// ```
@@ -145,17 +147,17 @@ impl Damage {
     /// # let zone = fes.get(0).unwrap();
     /// # use pyrucast::models::damage::{Damage};
     /// # use pyrucast::models::damage::law::{DamageLaw};
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// // La loi explicite. Damage-TC suit deux endommagements, donc réclame
     /// // deux résistances là où Mazars n'en demande qu'une.
     /// let tc = Damage::with_law(
-    ///     zone.clone(), ElasticityModel::PlaneStress, DamageLaw::DamageTc)?;
+    ///     zone.clone(), Kinematics::PlaneStress, DamageLaw::DamageTc)?;
     /// assert!(tc.material_components().unwrap().contains(&"f_t".to_string()));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn with_law(
         fespace: Handle<SubFiniteElementSpace>,
-        model: ElasticityModel,
+        kinematics: Kinematics,
         law: DamageLaw,
     ) -> Result<Self> {
         let (submesh, space_dim, ref_dim, axisymmetric) = {
@@ -169,27 +171,27 @@ impl Damage {
         };
         crate::models::elasticity::check_continuum_dimensions("Damage", space_dim, ref_dim)?;
         #[allow(clippy::match_like_matches_macro)]
-        let ok = match (space_dim, model) {
-            (2, ElasticityModel::PlaneStress | ElasticityModel::PlaneStrain) => true,
-            (2, ElasticityModel::Axisymmetric) => true,
-            (3, ElasticityModel::Solid) => true,
+        let ok = match (space_dim, kinematics) {
+            (2, Kinematics::PlaneStress | Kinematics::PlaneStrain) => true,
+            (2, Kinematics::Axisymmetric) => true,
+            (3, Kinematics::Full3D) => true,
             _ => false,
         };
         if !ok {
             return Err(PyrucastError::Message(format!(
-                "Damage: model {model:?} is incompatible with a {space_dim}-D space \
-                 (2-D ⇒ plane_stress|plane_strain|axisymmetric, 3-D ⇒ solid)"
+                "Damage: kinematics {kinematics:?} is incompatible with a {space_dim}-D space \
+                 (2-D ⇒ plane_stress|plane_strain|axisymmetric, 3-D ⇒ full_3d)"
             )));
         }
         // Same two-way agreement as `Elasticity::new`.
-        if axisymmetric != model.is_axisymmetric() {
+        if axisymmetric != kinematics.is_axisymmetric() {
             return Err(PyrucastError::Message(if axisymmetric {
                 format!(
-                    "Damage: model {model:?} on an axisymmetric geometry — a body of \
-                     revolution requires the `axisymmetric` model"
+                    "Damage: kinematics {kinematics:?} on an axisymmetric geometry — a body of \
+                     revolution requires the `axisymmetric` kinematics"
                 )
             } else {
-                "Damage: the `axisymmetric` model requires an axisymmetric geometry \
+                "Damage: the `axisymmetric` kinematics requires an axisymmetric geometry \
                  (build the Coords with Coords::axisymmetric)"
                     .into()
             }));
@@ -199,7 +201,7 @@ impl Damage {
             fespace,
             support,
             space_dim,
-            model,
+            kinematics,
             law,
         })
     }
@@ -254,7 +256,7 @@ impl SubModelKind for Damage {
         elasticity::element_stiffness(
             geom,
             mat,
-            self.model,
+            self.kinematics,
             crate::models::symmetry::MaterialSymmetry::Isotropic,
             ke,
         )
@@ -298,7 +300,7 @@ impl SubModelKind for Damage {
         format!(
             "SubModel<Damage({:?}, {})>\n  primal var(s): {primal}\n  dual var(s):   {dual}\n  \
              support: {n} node(s)",
-            self.model, self.law
+            self.kinematics, self.law
         )
     }
 }
@@ -337,7 +339,7 @@ impl Domain for Damage {
     }
 
     fn behavior_output_components(&self) -> Result<Vec<String>> {
-        let mut comps = stress_names(self.space_dim, self.model);
+        let mut comps = stress_names(self.space_dim, self.kinematics);
         comps.push("damage".into());
         // The law's own history and per-direction damages.
         comps.extend(self.law.internal_names());
@@ -361,7 +363,7 @@ impl Domain for Damage {
         let read = MatRead { field: mat, cell };
         // End-of-step strain ε(B); the law's history from `prev` (absent on the
         // first step, where every variable starts at zero).
-        let eps = read_strain(deformation, cell, g, d, read.get("nu")?, self.model)?;
+        let eps = read_strain(deformation, cell, g, d, read.get("nu")?, self.kinematics)?;
         // Left **empty** on the first step, where `prev` is `None`, so a law can
         // tell « no state yet » from « state that is zero ».
         let prev_vars: Vec<f64> = match prev {
@@ -375,9 +377,9 @@ impl Domain for Damage {
         };
 
         let update = self.law.update(&eps, &prev_vars, &read, d)?;
-        let v = stress_names(d, self.model).len();
+        let v = stress_names(d, self.kinematics).len();
         for r in 0..v {
-            out[r] = voigt_stress(&update.sigma, d, self.model, r);
+            out[r] = voigt_stress(&update.sigma, d, self.kinematics, r);
         }
         out[v] = update.damage;
         for (i, value) in update.vars.iter().enumerate() {
@@ -404,16 +406,16 @@ fn read_strain(
     g: usize,
     space_dim: usize,
     nu: f64,
-    model: ElasticityModel,
+    kinematics: Kinematics,
 ) -> Result<[f64; 6]> {
     let mut eps = [0.0; 6];
     if space_dim == 2 {
         eps[0] = f.value(cell, g, "eps_xx")?;
         eps[1] = f.value(cell, g, "eps_yy")?;
         eps[5] = f.value(cell, g, "eps_xy")?;
-        if model == ElasticityModel::PlaneStress {
+        if kinematics == Kinematics::PlaneStress {
             eps[2] = -nu / (1.0 - nu) * (eps[0] + eps[1]);
-        } else if model.is_axisymmetric() {
+        } else if kinematics.is_axisymmetric() {
             // The hoop ε_θθ = u_r/r is measured by `deformation`, not assumed.
             eps[2] = f.value(cell, g, "eps_zz")?;
         }
@@ -427,30 +429,6 @@ fn read_strain(
 
 // ─── Unit tests ──────────────────────────────────────────────────────────────
 
-/// Stress component names in Voigt order (matching [`crate::models::elasticity`]).
-fn stress_names(space_dim: usize, model: ElasticityModel) -> Vec<String> {
-    if space_dim == 2 && model.is_axisymmetric() {
-        // [rr, zz, θθ, rz] — the hoop is `zz`, Cast3M naming.
-        vec![
-            "sigma_xx".into(),
-            "sigma_yy".into(),
-            "sigma_zz".into(),
-            "sigma_xy".into(),
-        ]
-    } else if space_dim == 2 {
-        vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_xy".into()]
-    } else {
-        vec![
-            "sigma_xx".into(),
-            "sigma_yy".into(),
-            "sigma_zz".into(),
-            "sigma_yz".into(),
-            "sigma_xz".into(),
-            "sigma_xy".into(),
-        ]
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -462,7 +440,7 @@ mod tests {
     use crate::coords::Coords;
     use crate::handle::Handle;
 
-    fn unit_quad(model: ElasticityModel) -> Damage {
+    fn unit_quad(kinematics: Kinematics) -> Damage {
         let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
@@ -471,7 +449,7 @@ mod tests {
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
         mesh.add_cell(&[a.id(), b.id(), c.id(), dd.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        Damage::new(fes.get(0).unwrap(), model).unwrap()
+        Damage::new(fes.get(0).unwrap(), kinematics).unwrap()
     }
 
     fn material(mz: &Damage) -> Handle<SubElementField> {
@@ -502,7 +480,7 @@ mod tests {
 
     #[test]
     fn vars_and_material() {
-        let mz = unit_quad(ElasticityModel::PlaneStress);
+        let mz = unit_quad(Kinematics::PlaneStress);
         assert_eq!(mz.primal_vars(), vec!["u_x", "u_y"]);
         assert_eq!(mz.dual_vars(), vec!["f_x", "f_y"]);
         assert_eq!(
@@ -515,7 +493,7 @@ mod tests {
     /// the linear plane-stress stress.
     #[test]
     fn undamaged_below_threshold() {
-        let mz = unit_quad(ElasticityModel::PlaneStress);
+        let mz = unit_quad(Kinematics::PlaneStress);
         let mat = material(&mz);
         let eps0 = 1e-5; // < eps_d0 = 1e-4
         let strain = strain_field(&mz, eps0);
@@ -534,7 +512,7 @@ mod tests {
     /// stress is reduced below the elastic prediction.
     #[test]
     fn damages_in_tension() {
-        let mz = unit_quad(ElasticityModel::PlaneStress);
+        let mz = unit_quad(Kinematics::PlaneStress);
         let mat = material(&mz);
         let eps0 = 5e-4; // > eps_d0
         let strain = strain_field(&mz, eps0);
@@ -556,7 +534,7 @@ mod tests {
     /// reduce κ, and does not heal damage.
     #[test]
     fn kappa_is_monotone() {
-        let mz = unit_quad(ElasticityModel::PlaneStress);
+        let mz = unit_quad(Kinematics::PlaneStress);
         let mat = material(&mz);
         // Load to 5e-4.
         let s1 = strain_field(&mz, 5e-4);
@@ -594,7 +572,7 @@ mod tests {
         mesh.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>())
             .unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        let mz = Damage::new(fes.get(0).unwrap(), ElasticityModel::Solid).unwrap();
+        let mz = Damage::new(fes.get(0).unwrap(), Kinematics::Full3D).unwrap();
         let mat = material(&mz);
         let mut s = SubElementField::new(
             mz.fespace.clone(),

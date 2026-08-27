@@ -26,7 +26,7 @@
 //! out-of-plane `σ_zz`) so it is a complete `prev` for the next step.
 //!
 //! State is always carried in **full 3-D** (six `eps_p_*` components) regardless
-//! of the 2-D/3-D model, which keeps the radial return identical across plane
+//! of the 2-D/3-D kinematics, which keeps the radial return identical across plane
 //! stress / plane strain / axisymmetric / solid; only the input strain
 //! reconstruction and the output stress projection differ.
 //!
@@ -60,9 +60,11 @@ use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
-use crate::models::elasticity::{self, ElasticityModel};
-use crate::models::elasticity::{dual_name, primal_name};
+use crate::models::elasticity::{self};
 use crate::models::owned_components;
+use crate::models::tensor::Kinematics;
+use crate::models::tensor::{dual_name, primal_name};
+use crate::models::tensor::{stress_names, voigt_stress};
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use law::{MatParams, PlasticLaw, PrevState};
 use serde::{Deserialize, Serialize};
@@ -72,37 +74,6 @@ use serde::{Deserialize, Serialize};
 use crate::models::plasticity::law::TENSOR_SUFFIXES;
 /// Index pairs `(i, j)` matching [`TENSOR_SUFFIXES`].
 const TENSOR_PAIRS: [(usize, usize); 6] = [(0, 0), (1, 1), (2, 2), (1, 2), (0, 2), (0, 1)];
-
-/// Where each **axisymmetric** Voigt slot `[rr, zz, θθ, rz]` sits in the full
-/// 3-D order [`TENSOR_SUFFIXES`] (`[xx, yy, zz, yz, xz, xy]`). The whole
-/// axisymmetric specialisation of this law is this one index map: the state and
-/// the radial return stay full 3-D, only the projection in and out changes.
-const AXI_TO_3D: [usize; 4] = [0, 1, 2, 5];
-
-/// Stress component names in Voigt order for the given space dimension —
-/// matching [`crate::models::elasticity`] so downstream code is uniform.
-fn stress_names(space_dim: usize, model: ElasticityModel) -> Vec<String> {
-    if space_dim == 2 && model.is_axisymmetric() {
-        // [rr, zz, θθ, rz] — the hoop is `zz`, Cast3M naming.
-        vec![
-            "sigma_xx".into(),
-            "sigma_yy".into(),
-            "sigma_zz".into(),
-            "sigma_xy".into(),
-        ]
-    } else if space_dim == 2 {
-        vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_xy".into()]
-    } else {
-        vec![
-            "sigma_xx".into(),
-            "sigma_yy".into(),
-            "sigma_zz".into(),
-            "sigma_yz".into(),
-            "sigma_xz".into(),
-            "sigma_xy".into(),
-        ]
-    }
-}
 
 /// Internal-state component names: plastic strain tensor `eps_p_*` (six,
 /// always 3-D) followed by the cumulated plastic strain `p`.
@@ -120,9 +91,9 @@ fn state_names() -> Vec<String> {
 /// recoverable next step) and — in 2-D only — the out-of-plane stress `sigma_zz`
 /// that the Voigt dual omits (so `σ(A)` is fully recoverable). In 3-D the Voigt
 /// dual already carries all six stresses.
-fn echo_names(space_dim: usize, model: ElasticityModel) -> Vec<String> {
+fn echo_names(space_dim: usize, kinematics: Kinematics) -> Vec<String> {
     let mut v: Vec<String> = TENSOR_SUFFIXES.iter().map(|s| format!("eps_{s}")).collect();
-    if echoes_sigma_zz(space_dim, model) {
+    if echoes_sigma_zz(space_dim, kinematics) {
         v.push("sigma_zz".into());
     }
     v
@@ -132,8 +103,8 @@ fn echo_names(space_dim: usize, model: ElasticityModel) -> Vec<String> {
 /// need it: their Voigt dual stops at `[xx, yy, xy]`. Axisymmetric already
 /// carries `sigma_zz` (the hoop) in its dual, so echoing it would emit the same
 /// component name twice.
-fn echoes_sigma_zz(space_dim: usize, model: ElasticityModel) -> bool {
-    space_dim == 2 && !model.is_axisymmetric()
+fn echoes_sigma_zz(space_dim: usize, kinematics: Kinematics) -> bool {
+    space_dim == 2 && !kinematics.is_axisymmetric()
 }
 
 /// Perfect von Mises plasticity on an FE subspace.
@@ -148,7 +119,7 @@ fn echoes_sigma_zz(space_dim: usize, model: ElasticityModel) -> bool {
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::models::Domain;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -161,7 +132,7 @@ fn echoes_sigma_zz(space_dim: usize, model: ElasticityModel) -> bool {
 /// # use pyrucast::models::plasticity::law::PlasticLaw;
 /// // La physique élastoplastique d'une zone : sa loi décide du matériau
 /// // qu'elle réclame et de l'état qu'elle porte.
-/// let p = Plasticity::new(zone.clone(), ElasticityModel::PlaneStrain)?;
+/// let p = Plasticity::new(zone.clone(), Kinematics::PlaneStrain)?;
 /// assert!(p.material_components().unwrap().contains(&"sigma_y".to_string()));
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -171,7 +142,7 @@ pub struct Plasticity {
     /// POI1 support over the subspace's unique nodes (row/col support).
     pub(crate) support: Handle<SubMesh>,
     pub(crate) space_dim: usize,
-    pub(crate) model: ElasticityModel,
+    pub(crate) kinematics: Kinematics,
     pub(crate) law: PlasticLaw,
 }
 
@@ -186,7 +157,7 @@ impl Plasticity {
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::Domain;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -198,16 +169,16 @@ impl Plasticity {
     /// # use pyrucast::models::plasticity::Plasticity;
     /// // Von Mises **parfaite** : la loi par défaut, celle avec laquelle cette
     /// // physique est née.
-    /// let p = Plasticity::new(zone.clone(), ElasticityModel::PlaneStrain)?;
+    /// let p = Plasticity::new(zone.clone(), Kinematics::PlaneStrain)?;
     /// assert_eq!(p.material_components().unwrap().len(), 3); // E, nu, sigma_y
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn new(fespace: Handle<SubFiniteElementSpace>, model: ElasticityModel) -> Result<Self> {
-        Self::with_law(fespace, model, PlasticLaw::Perfect)
+    pub fn new(fespace: Handle<SubFiniteElementSpace>, kinematics: Kinematics) -> Result<Self> {
+        Self::with_law(fespace, kinematics, PlasticLaw::Perfect)
     }
 
     /// Elastoplasticity with an explicit yield law, on an FE subspace with the
-    /// given 2-D/3-D model. Errors if `model` is inconsistent with the space
+    /// given 2-D/3-D kinematics. Errors if `kinematics` is inconsistent with the space
     /// dimension (same rule as
     /// [`crate::models::elasticity::Elasticity::new`]).
     ///
@@ -218,7 +189,7 @@ impl Plasticity {
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::Domain;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -232,16 +203,16 @@ impl Plasticity {
     /// // La loi explicite, et le contrôle de cohérence entre la cinématique et
     /// // la dimension de l'espace.
     /// let p = Plasticity::with_law(
-    ///     zone.clone(), ElasticityModel::PlaneStrain, PlasticLaw::Isotropic)?;
+    ///     zone.clone(), Kinematics::PlaneStrain, PlasticLaw::Isotropic)?;
     /// assert!(p.material_components().unwrap().contains(&"H".to_string()));
     /// // Un modèle solide sur une zone 2-D est refusé.
     /// assert!(Plasticity::with_law(
-    ///     zone.clone(), ElasticityModel::Solid, PlasticLaw::Perfect).is_err());
+    ///     zone.clone(), Kinematics::Full3D, PlasticLaw::Perfect).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn with_law(
         fespace: Handle<SubFiniteElementSpace>,
-        model: ElasticityModel,
+        kinematics: Kinematics,
         law: PlasticLaw,
     ) -> Result<Self> {
         let (submesh, space_dim, ref_dim, axisymmetric) = {
@@ -255,28 +226,28 @@ impl Plasticity {
         };
         elasticity::check_continuum_dimensions("Plasticity", space_dim, ref_dim)?;
         #[allow(clippy::match_like_matches_macro)]
-        let ok = match (space_dim, model) {
-            (2, ElasticityModel::PlaneStress | ElasticityModel::PlaneStrain) => true,
-            (2, ElasticityModel::Axisymmetric) => true,
-            (3, ElasticityModel::Solid) => true,
+        let ok = match (space_dim, kinematics) {
+            (2, Kinematics::PlaneStress | Kinematics::PlaneStrain) => true,
+            (2, Kinematics::Axisymmetric) => true,
+            (3, Kinematics::Full3D) => true,
             _ => false,
         };
         if !ok {
             return Err(PyrucastError::Message(format!(
-                "Plasticity: model {model:?} is incompatible with a {space_dim}-D space \
-                 (2-D ⇒ plane_stress|plane_strain|axisymmetric, 3-D ⇒ solid)"
+                "Plasticity: kinematics {kinematics:?} is incompatible with a {space_dim}-D space \
+                 (2-D ⇒ plane_stress|plane_strain|axisymmetric, 3-D ⇒ full_3d)"
             )));
         }
         // Same two-way agreement as `Elasticity::new`: the 2πr measure comes
-        // from the geometry, the hoop component from the model.
-        if axisymmetric != model.is_axisymmetric() {
+        // from the geometry, the hoop component from the kinematics.
+        if axisymmetric != kinematics.is_axisymmetric() {
             return Err(PyrucastError::Message(if axisymmetric {
                 format!(
-                    "Plasticity: model {model:?} on an axisymmetric geometry — a body of \
-                     revolution requires the `axisymmetric` model"
+                    "Plasticity: kinematics {kinematics:?} on an axisymmetric geometry — a body of \
+                     revolution requires the `axisymmetric` kinematics"
                 )
             } else {
-                "Plasticity: the `axisymmetric` model requires an axisymmetric geometry \
+                "Plasticity: the `axisymmetric` kinematics requires an axisymmetric geometry \
                  (build the Coords with Coords::axisymmetric)"
                     .into()
             }));
@@ -286,7 +257,7 @@ impl Plasticity {
             fespace,
             support,
             space_dim,
-            model,
+            kinematics,
             law,
         })
     }
@@ -344,7 +315,7 @@ impl SubModelKind for Plasticity {
         elasticity::element_stiffness(
             geom,
             mat,
-            self.model,
+            self.kinematics,
             crate::models::symmetry::MaterialSymmetry::Isotropic,
             ke,
         )
@@ -389,7 +360,7 @@ impl SubModelKind for Plasticity {
     ) -> Result<()> {
         let geom = &geoms[0];
         let st = state.expect("consistent tangent requires the behaviour state (D_alg)");
-        elasticity::element_tangent_from_state(geom, st, self.model, ke)
+        elasticity::element_tangent_from_state(geom, st, self.kinematics, ke)
     }
 
     fn physics(&self) -> &'static [Physics] {
@@ -407,7 +378,7 @@ impl SubModelKind for Plasticity {
         format!(
             "SubModel<Plasticity({:?})>\n  primal var(s): {primal}\n  dual var(s):   {dual}\n  \
              support: {n} node(s)",
-            self.model
+            self.kinematics
         )
     }
 }
@@ -445,7 +416,7 @@ impl Domain for Plasticity {
         // A law may accept constitutive parameters it can do without. The
         // general Drucker-Prager surface is nine numbers, of which six default
         // to the simple cone — see [`crate::models::plasticity::drucker_prager`].
-        // They ride the optional channel so that a three-parameter model stays
+        // They ride the optional channel so that a three-parameter kinematics stays
         // writable in three numbers.
         self.law.as_law().optional_material_components()
     }
@@ -455,9 +426,9 @@ impl Domain for Plasticity {
     }
 
     fn behavior_output_components(&self) -> Result<Vec<String>> {
-        let mut comps = stress_names(self.space_dim, self.model);
+        let mut comps = stress_names(self.space_dim, self.kinematics);
         comps.extend(state_names());
-        comps.extend(echo_names(self.space_dim, self.model));
+        comps.extend(echo_names(self.space_dim, self.kinematics));
         // The law's **own** internal variables (a back stress, a damage…), which
         // is how a law grows its state without any other file changing.
         comps.extend(self.law.internal_names());
@@ -465,7 +436,7 @@ impl Domain for Plasticity {
         // the tangent assembler (`crate::ops::matrix::tangent`).
         comps.extend(elasticity::tangent_component_names(
             self.space_dim,
-            self.model,
+            self.kinematics,
         ));
         Ok(comps)
     }
@@ -489,7 +460,7 @@ impl Domain for Plasticity {
         let params = MatParams::new(mat, cell)?;
 
         // End-of-step strain ε(B).
-        let eps_b = read_strain(deformation, cell, g, d, self.model)?;
+        let eps_b = read_strain(deformation, cell, g, d, self.kinematics)?;
         // Converged state at A from `prev` (all zero on the first step, where A
         // is the reference configuration: σ(A)=0, ε(A)=0, ε_p(A)=0, p(A)=0).
         let prev_state = PrevState {
@@ -512,14 +483,17 @@ impl Domain for Plasticity {
             },
         };
 
-        let (step, eps_b_full) =
-            self.law
-                .as_law()
-                .incremental_step(&eps_b, &prev_state, &params, self.model, dt)?;
+        let (step, eps_b_full) = self.law.as_law().incremental_step(
+            &eps_b,
+            &prev_state,
+            &params,
+            self.kinematics,
+            dt,
+        )?;
 
-        let v = stress_names(d, self.model).len();
+        let v = stress_names(d, self.kinematics).len();
         for r in 0..v {
-            out[r] = voigt_stress(&step.sigma, d, self.model, r);
+            out[r] = voigt_stress(&step.sigma, d, self.kinematics, r);
         }
         out[v..v + 6].copy_from_slice(&step.eps_p); // ε_p(B)
         out[v + 6] = step.p; // p(B)
@@ -529,7 +503,7 @@ impl Domain for Plasticity {
         // The plane 2-D duals omit σ_zz; echo it so σ(A) is fully recoverable.
         // Axisymmetric already carries it (the hoop), so it must not be echoed.
         let mut base = v + 13;
-        if echoes_sigma_zz(d, self.model) {
+        if echoes_sigma_zz(d, self.kinematics) {
             out[base] = step.sigma[2];
             base += 1;
         }
@@ -546,7 +520,7 @@ impl Domain for Plasticity {
             .law
             .as_law()
             .consistent_tangent(&eps_b_full, &prev_state, &params, dt)?;
-        let dv = crate::models::symmetry::reduce_to_model(&d3, self.model);
+        let dv = crate::models::symmetry::reduce_to_model(&d3, self.kinematics);
         let mut idx = base;
         for i in 0..dv.len() {
             for j in i..dv.len() {
@@ -583,14 +557,14 @@ fn read_strain(
     cell: usize,
     g: usize,
     space_dim: usize,
-    model: ElasticityModel,
+    kinematics: Kinematics,
 ) -> Result<[f64; 6]> {
     let mut eps = [0.0; 6];
     if space_dim == 2 {
         eps[0] = f.value(cell, g, "eps_xx")?;
         eps[1] = f.value(cell, g, "eps_yy")?;
         eps[5] = f.value(cell, g, "eps_xy")?;
-        if model.is_axisymmetric() {
+        if kinematics.is_axisymmetric() {
             // The hoop ε_θθ = u_r/r is **measured**, not assumed: `deformation`
             // produces it on a body of revolution. So ε(B) is fully known here
             // — no plane assumption, no out-of-plane solve.
@@ -631,27 +605,6 @@ fn read_prev_plastic_strain(prev: Option<&SubElementField>, cell: usize, g: usiz
     std::array::from_fn(|k| prev_opt(prev, cell, g, &format!("eps_p_{}", TENSOR_SUFFIXES[k])))
 }
 
-/// Project the full 3-D stress to the model's Voigt slot `r`.
-/// 2-D order is `[xx, yy, xy]`; 3-D is the full `[xx, yy, zz, yz, xz, xy]`.
-pub(crate) fn voigt_stress(
-    sigma: &[f64; 6],
-    space_dim: usize,
-    model: ElasticityModel,
-    r: usize,
-) -> f64 {
-    if space_dim == 2 && model.is_axisymmetric() {
-        sigma[AXI_TO_3D[r]]
-    } else if space_dim == 2 {
-        match r {
-            0 => sigma[0],
-            1 => sigma[1],
-            _ => sigma[5],
-        }
-    } else {
-        sigma[r]
-    }
-}
-
 /// Map a `(i, j)` tensor pair to its index in [`TENSOR_SUFFIXES`]; kept for
 /// readers cross-checking the layout against [`TENSOR_PAIRS`].
 #[allow(dead_code)]
@@ -676,7 +629,7 @@ mod tests {
     use crate::handle::Handle;
     use crate::models::tensor;
 
-    fn unit_quad(model: ElasticityModel) -> Plasticity {
+    fn unit_quad(kinematics: Kinematics) -> Plasticity {
         let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
@@ -685,7 +638,7 @@ mod tests {
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
         mesh.add_cell(&[a.id(), b.id(), c.id(), dd.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        Plasticity::new(fes.get(0).unwrap(), model).unwrap()
+        Plasticity::new(fes.get(0).unwrap(), kinematics).unwrap()
     }
 
     fn unit_hex() -> Plasticity {
@@ -705,7 +658,7 @@ mod tests {
         mesh.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>())
             .unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        Plasticity::new(fes.get(0).unwrap(), ElasticityModel::Solid).unwrap()
+        Plasticity::new(fes.get(0).unwrap(), Kinematics::Full3D).unwrap()
     }
 
     fn material(pl: &Plasticity, e: f64, nu: f64, sy: f64) -> Handle<SubElementField> {
@@ -722,7 +675,7 @@ mod tests {
 
     #[test]
     fn vars_and_model_validation() {
-        let pl = unit_quad(ElasticityModel::PlaneStrain);
+        let pl = unit_quad(Kinematics::PlaneStrain);
         assert_eq!(pl.primal_vars(), vec!["u_x", "u_y"]);
         assert_eq!(pl.dual_vars(), vec!["f_x", "f_y"]);
         assert_eq!(
@@ -799,7 +752,7 @@ mod tests {
     /// matches the linear plane-stress solution.
     #[test]
     fn plane_stress_zero_out_of_plane_and_matches_elastic() {
-        let pl = unit_quad(ElasticityModel::PlaneStress);
+        let pl = unit_quad(Kinematics::PlaneStress);
         let (e, nu, sy) = (210_000.0, 0.3, 1e9); // huge σ_y ⇒ stays elastic
         let mat = material(&pl, e, nu, sy);
         let eps0 = 1e-3;
@@ -941,7 +894,7 @@ mod tests {
     /// The elastic stiffness block is reused from elasticity: symmetric.
     #[test]
     fn stiffness_is_elastic_and_symmetric() {
-        let pl = unit_quad(ElasticityModel::PlaneStrain);
+        let pl = unit_quad(Kinematics::PlaneStrain);
         let mat = material(&pl, 200.0, 0.3, 250.0);
         let blocks = pl.build_stiffness_blocks(Some(&mat)).unwrap();
         let k = &blocks[0];

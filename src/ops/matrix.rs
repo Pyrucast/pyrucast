@@ -349,7 +349,7 @@ pub fn mass(model: &Model, materials: &ElementField) -> Result<Matrix> {
 /// # use pyrucast::containers::model::Model;
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::ops::{element_field, matrix};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
@@ -357,7 +357,7 @@ pub fn mass(model: &Model, materials: &ElementField) -> Result<Matrix> {
 /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
 /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id(), n[3].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-/// # let model = model::elasticity(&fes, ElasticityModel::PlaneStress).unwrap();
+/// # let model = model::elasticity(&fes, Kinematics::PlaneStress).unwrap();
 /// # let materials =
 /// #     element_field::material_field(&model, &[("E", 210.0), ("nu", 0.3)]).unwrap();
 /// # use pyrucast::aggregate::Aggregate;
@@ -395,7 +395,7 @@ pub fn geometric(model: &Model, materials: &ElementField, stress: &ElementField)
 /// # use pyrucast::containers::model::Model;
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::ops::{element_field, matrix};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
@@ -403,7 +403,7 @@ pub fn geometric(model: &Model, materials: &ElementField, stress: &ElementField)
 /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
 /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id(), n[3].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-/// # let model = model::elasticity(&fes, ElasticityModel::PlaneStress).unwrap();
+/// # let model = model::elasticity(&fes, Kinematics::PlaneStress).unwrap();
 /// # let materials =
 /// #     element_field::material_field(&model, &[("E", 210.0), ("nu", 0.3)]).unwrap();
 /// # use pyrucast::aggregate::Aggregate;

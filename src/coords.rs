@@ -212,7 +212,7 @@ impl Coords {
     /// Every FE space built over this geometry integrates over the full ring
     /// (`dΩ = 2πr |J| dξ`); mechanics additionally gains the hoop strain
     /// `ε_θθ = u_r / r` through
-    /// [`ElasticityModel::Axisymmetric`](crate::models::elasticity::ElasticityModel::Axisymmetric).
+    /// [`Kinematics::Axisymmetric`](crate::models::tensor::Kinematics::Axisymmetric).
     ///
     /// ```
     /// use pyrucast::coords::Coords;

@@ -94,7 +94,7 @@ D = c\begin{bmatrix}
 \end{bmatrix};
 \\]
 
-- **`solid`** (3-D), même \\( c \\), avec le module de cisaillement
+- **`full_3d`** (3-D), même \\( c \\), avec le module de cisaillement
   \\( G = c\\,\tfrac{1-2\nu}{2} \\) :
 
 \\[
@@ -225,7 +225,7 @@ par [`lump`](../operateurs/assemblage.md).
   champ matériau mais jamais exigé pour un assemblage purement élastique.
 - **comportement** (`COMP`) : `σ = D ε` (convention tenseur → ingénieur
   `γ = 2ε`), à partir de la déformation `ε` (op [`deformation`](../operateurs/champs.md)).
-- **modèles** : `plane_stress`, `plane_strain`, `axisymmetric` (2-D) et `solid`
+- **modèles** : `plane_stress`, `plane_strain`, `axisymmetric` (2-D) et `full_3d`
   (3-D).
 
 ## Mise en donnée (Rust, testé)

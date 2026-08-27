@@ -36,7 +36,7 @@ def main():
     host = pyrucast.Mesh(c, "HEX8")
     host.unit().add_cell(nodes)
     fes = pyrucast.FiniteElementSpace(host)
-    model = pyrucast.model.elasticity(fes, "solid")
+    model = pyrucast.model.elasticity(fes, "full_3d")
 
     # Appuis de symétrie sur les trois faces passant par l'origine.
     def clamp(ids, var, dual):

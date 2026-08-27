@@ -4,8 +4,8 @@ use super::spanning;
 use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
-use crate::models::elasticity::ElasticityModel;
 use crate::models::plasticity::law::PlasticLaw;
+use crate::models::tensor::Kinematics;
 
 /// Elastoplastic `Model` spanning **every** subspace of `fes`, with an
 /// explicit yield law (von Mises perfect or hardening, Drucker-Prager,
@@ -20,7 +20,7 @@ use crate::models::plasticity::law::PlasticLaw;
 /// # use pyrucast::containers::model::{Model, SubModel};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity::ElasticityModel;
+/// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::models::{Physics, RelationSense};
 /// # use pyrucast::ops::mesh;
@@ -37,14 +37,16 @@ use crate::models::plasticity::law::PlasticLaw;
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # use pyrucast::models::plasticity::law::PlasticLaw;
 /// let m = model::plasticity_with_law(
-///     &fes, ElasticityModel::PlaneStrain, PlasticLaw::Perfect)?;
+///     &fes, Kinematics::PlaneStrain, PlasticLaw::Perfect)?;
 /// assert_eq!(m.len(), fes.len());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn plasticity_with_law(
     fes: &FiniteElementSpace,
-    model: ElasticityModel,
+    kinematics: Kinematics,
     law: PlasticLaw,
 ) -> Result<Model> {
-    spanning(fes, |zone| SubModel::plasticity_with_law(zone, model, law))
+    spanning(fes, |zone| {
+        SubModel::plasticity_with_law(zone, kinematics, law)
+    })
 }

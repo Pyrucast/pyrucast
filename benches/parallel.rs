@@ -34,7 +34,7 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
-use pyrucast::models::elasticity::ElasticityModel;
+use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field;
 use pyrucast::ops::element_field::material_field;
 use pyrucast::ops::solver::lu::{solve, solve_with_options, SolveMethod, SolveOptions};
@@ -81,7 +81,7 @@ struct Grid {
 /// the plane and axisymmetric variants share the **exact same geometry** — a
 /// translation leaves the Cartesian Jacobian untouched, so it costs the plane
 /// case nothing and makes the two directly comparable.
-fn elasticity_grid_with(n: usize, model_kind: ElasticityModel) -> Grid {
+fn elasticity_grid_with(n: usize, model_kind: Kinematics) -> Grid {
     let coords = Handle::new(if model_kind.is_axisymmetric() {
         Coords::axisymmetric().unwrap()
     } else {
@@ -133,7 +133,7 @@ fn elasticity_grid_with(n: usize, model_kind: ElasticityModel) -> Grid {
 
 /// Plane-stress elasticity on an `n × n` QUA4 grid — the default case.
 fn elasticity_grid(n: usize) -> Grid {
-    elasticity_grid_with(n, ElasticityModel::PlaneStress)
+    elasticity_grid_with(n, Kinematics::PlaneStress)
 }
 
 /// A strictly diagonally-dominant (hence non-singular) 5-point-Laplacian-like
@@ -219,8 +219,8 @@ fn bench_assembly(c: &mut Criterion) {
 /// instead of three.
 fn bench_integrate(c: &mut Criterion) {
     for (tag, kind) in [
-        ("plane", ElasticityModel::PlaneStrain),
-        ("axisymmetric", ElasticityModel::Axisymmetric),
+        ("plane", Kinematics::PlaneStrain),
+        ("axisymmetric", Kinematics::Axisymmetric),
     ] {
         let g = elasticity_grid_with(INTEGRATE_N, kind);
         c.bench_function(
@@ -259,8 +259,8 @@ fn bench_integrate(c: &mut Criterion) {
 /// run of the *same* size, not against those figures.
 fn bench_axisymmetric(c: &mut Criterion) {
     for (tag, kind) in [
-        ("plane", ElasticityModel::PlaneStrain),
-        ("axisymmetric", ElasticityModel::Axisymmetric),
+        ("plane", Kinematics::PlaneStrain),
+        ("axisymmetric", Kinematics::Axisymmetric),
     ] {
         let g = elasticity_grid_with(ASSEMBLY_N, kind);
         let state = pyrucast::ops::element_field::behavior::integrate(

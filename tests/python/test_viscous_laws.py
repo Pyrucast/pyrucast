@@ -55,7 +55,7 @@ def _von_mises(sub):
 def test_a_viscous_law_refuses_to_integrate_without_dt():
     """Integrating a creep law as if it were instantaneous must not be silent."""
     c, nodes, fes = _cube()
-    model = pyrucast.model.creep_norton(fes, "solid")
+    model = pyrucast.model.creep_norton(fes, "full_3d")
     materials = pyrucast.element_field.material_field(model, NORTON)
     strain = _strain(c, nodes, fes, 2e-3)
     with pytest.raises(RuntimeError, match="rate-dependent"):
@@ -64,7 +64,7 @@ def test_a_viscous_law_refuses_to_integrate_without_dt():
 
 def test_holding_a_strain_relaxes_the_stress():
     c, nodes, fes = _cube()
-    model = pyrucast.model.creep_norton(fes, "solid")
+    model = pyrucast.model.creep_norton(fes, "full_3d")
     materials = pyrucast.element_field.material_field(model, NORTON)
     strain = _strain(c, nodes, fes, 2e-3)
 
@@ -97,14 +97,14 @@ def test_each_viscous_law_declares_its_own_material():
         ],
     }
     for name, expected in contracts.items():
-        model = getattr(pyrucast.model, name)(fes, "solid")
+        model = getattr(pyrucast.model, name)(fes, "full_3d")
         assert model[0].material_components() == expected, name
 
 
 def test_chaboche_carries_a_back_stress_in_its_state():
     """Seven extra internal variables is what cyclic capability costs."""
     c, nodes, fes = _cube()
-    model = pyrucast.model.viscoplasticity_chaboche(fes, "solid")
+    model = pyrucast.model.viscoplasticity_chaboche(fes, "full_3d")
     materials = pyrucast.element_field.material_field(
         model,
         [
@@ -131,7 +131,7 @@ def test_chaboche_carries_a_back_stress_in_its_state():
 
 def test_lemaitre_chaboche_adds_damage():
     c, nodes, fes = _cube()
-    model = pyrucast.model.viscoplasticity_lemaitre_chaboche(fes, "solid")
+    model = pyrucast.model.viscoplasticity_lemaitre_chaboche(fes, "full_3d")
     materials = pyrucast.element_field.material_field(
         model,
         [

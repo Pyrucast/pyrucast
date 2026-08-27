@@ -28,9 +28,9 @@
 use super::law::PlasticLawKind;
 use crate::error::Result;
 use crate::models::elasticity::elastic_tangent;
-use crate::models::elasticity::ElasticityModel;
 use crate::models::plasticity::law::PlasticLaw;
 use crate::models::plasticity::law::{MatParams, PlasticStep, PrevState};
+use crate::models::tensor::Kinematics;
 use crate::models::tensor::{deviator, von_mises_stress};
 
 /// Radial return onto `q = σ_y + H·p`.
@@ -276,9 +276,9 @@ impl PlasticLawKind for Isotropic {
 
 crate::physics_operator! {
     /// [`model::plasticity_perfect`](crate::ops::model::plasticity_perfect()) — **perfect** (non-hardening)
-    /// von Mises elastoplasticity spanning every subspace of `fespace`. `model`
+    /// von Mises elastoplasticity spanning every subspace of `fespace`. `kinematics`
     /// is `"plane_stress"` / `"plane_strain"` / `"axisymmetric"` (2-D) or
-    /// `"solid"` (3-D). Same DOFs as elasticity (`u_x, u_y(, u_z)`); material
+    /// `"full_3d"` (3-D). Same DOFs as elasticity (`u_x, u_y(, u_z)`); material
     /// (`E`, `nu`, `sigma_y`) is supplied at assembly / integration time. The
     /// behaviour integration (`COMP`) carries the plastic-strain +
     /// cumulated-`p` internal state (`VAR0`→`VAR1`) and emits the consistent
@@ -291,7 +291,7 @@ crate::physics_operator! {
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -299,12 +299,12 @@ crate::physics_operator! {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// let m = model::plasticity_perfect(&fes, ElasticityModel::PlaneStrain)?;
+    /// let m = model::plasticity_perfect(&fes, Kinematics::PlaneStrain)?;
     /// assert_eq!(m.primal_vars()?, vec!["u_x".to_string(), "u_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn plasticity_perfect(fes, model: ElasticityModel) = crate::ops::model::plasticity_with_law, PlasticLaw::Perfect;
-    python: "`model.plasticity_perfect(fespace, model)` — **perfect** (non-hardening)\nvon Mises elastoplasticity spanning every subspace of `fespace`. `model`\nis `\"plane_stress\"` / `\"plane_strain\"` / `\"axisymmetric\"` (2-D) or\n`\"solid\"` (3-D). Same DOFs as elasticity (`u_x, u_y(, u_z)`); material\n(`E`, `nu`, `sigma_y`) is supplied at assembly / integration time. The\nbehaviour integration (`COMP`) carries the plastic-strain +\ncumulated-`p` internal state (`VAR0`→`VAR1`) and emits the consistent\ntangent `D_alg`."
+    pub fn plasticity_perfect(fes, kinematics: Kinematics) = crate::ops::model::plasticity_with_law, PlasticLaw::Perfect;
+    python: "`kinematics.plasticity_perfect(fespace, kinematics)` — **perfect** (non-hardening)\nvon Mises elastoplasticity spanning every subspace of `fespace`. `kinematics`\nis `\"plane_stress\"` / `\"plane_strain\"` / `\"axisymmetric\"` (2-D) or\n`\"solid\"` (3-D). Same DOFs as elasticity (`u_x, u_y(, u_z)`); material\n(`E`, `nu`, `sigma_y`) is supplied at assembly / integration time. The\nbehaviour integration (`COMP`) carries the plastic-strain +\ncumulated-`p` internal state (`VAR0`→`VAR1`) and emits the consistent\ntangent `D_alg`."
 }
 
 crate::physics_operator! {
@@ -320,7 +320,7 @@ crate::physics_operator! {
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity::ElasticityModel;
+    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -328,10 +328,10 @@ crate::physics_operator! {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// let m = model::plasticity_isotropic(&fes, ElasticityModel::PlaneStrain)?;
+    /// let m = model::plasticity_isotropic(&fes, Kinematics::PlaneStrain)?;
     /// assert_eq!(m.primal_vars()?, vec!["u_x".to_string(), "u_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn plasticity_isotropic(fes, model: ElasticityModel) = crate::ops::model::plasticity_with_law, PlasticLaw::Isotropic;
-    python: "`model.plasticity_isotropic(fespace, model)` — von Mises with **linear\nisotropic hardening**, `σ_y(p) = σ_y + H·p`. Material `E`, `nu`,\n`sigma_y`, `H`; everything else as `plasticity_perfect` (`H = 0` would\ngive it back exactly)."
+    pub fn plasticity_isotropic(fes, kinematics: Kinematics) = crate::ops::model::plasticity_with_law, PlasticLaw::Isotropic;
+    python: "`kinematics.plasticity_isotropic(fespace, kinematics)` — von Mises with **linear\nisotropic hardening**, `σ_y(p) = σ_y + H·p`. Material `E`, `nu`,\n`sigma_y`, `H`; everything else as `plasticity_perfect` (`H = 0` would\ngive it back exactly)."
 }

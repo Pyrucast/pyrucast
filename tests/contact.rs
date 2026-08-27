@@ -17,7 +17,7 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
-use pyrucast::models::elasticity::ElasticityModel;
+use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::mesh;
 use pyrucast::ops::model;
 use pyrucast::ops::node_field::FluxDensity;
@@ -116,7 +116,7 @@ fn two_blocks() -> Result<TwoBlocks> {
     let all_nodes: Vec<Node> = bottom.iter().chain(top.iter()).cloned().collect();
     let bottom_edge: Vec<Node> = (0..=N).map(|i| bottom[idx(i, 0)].clone()).collect();
 
-    let mut model = model::elasticity(&fes, ElasticityModel::PlaneStress)?;
+    let mut model = model::elasticity(&fes, Kinematics::PlaneStress)?;
     model = model.union(&clamp(&all_nodes, "u_x", "f_x")?)?;
     model = model.union(&clamp(&bottom_edge, "u_y", "f_y")?)?;
     model = model.union(&contact)?;
@@ -313,7 +313,7 @@ fn contact_3d_two_cubes() -> Result<()> {
 
     // Uniaxial column: u_x = u_y = 0 everywhere, u_z = 0 at the base.
     let all_nodes: Vec<Node> = bottom.iter().chain(top.iter()).cloned().collect();
-    let mut model = model::elasticity(&fes, ElasticityModel::Solid)?;
+    let mut model = model::elasticity(&fes, Kinematics::Full3D)?;
     model = model.union(&clamp(&all_nodes, "u_x", "f_x")?)?;
     model = model.union(&clamp(&all_nodes, "u_y", "f_y")?)?;
     model = model.union(&clamp(&bottom[0..4], "u_z", "f_z")?)?;
