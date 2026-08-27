@@ -310,8 +310,8 @@ impl Domain for Truss {
 /// Unit direction cosine vector `c = (x_B − x_A)/L` of one `SEG2` cell, from its
 /// two node coordinates.
 fn cell_cosine(geom: &CellGeom, space_dim: usize) -> Result<Vec<f64>> {
-    let xa = geom.node_coord(0)?;
-    let xb = geom.node_coord(1)?;
+    let xa = geom.node_coord(0);
+    let xb = geom.node_coord(1);
     let d: Vec<f64> = (0..space_dim).map(|a| xb[a] - xa[a]).collect();
     let len = d.iter().map(|v| v * v).sum::<f64>().sqrt();
     Ok(d.iter().map(|v| v / len).collect())
@@ -365,8 +365,8 @@ pub fn element_stiffness(
     let side = 2 * sd;
     let c = cell_cosine(geom, sd)?;
     let len = {
-        let xa = geom.node_coord(0)?;
-        let xb = geom.node_coord(1)?;
+        let xa = geom.node_coord(0);
+        let xb = geom.node_coord(1);
         (0..sd).map(|a| (xb[a] - xa[a]).powi(2)).sum::<f64>().sqrt()
     };
     let k_ax = material.value(geom.cell, 0, "E")? * material.value(geom.cell, 0, "A")? / len;
@@ -385,8 +385,8 @@ pub fn element_stiffness(
 
 /// Length of one `SEG2` cell from its two node coordinates.
 fn cell_length(geom: &CellGeom, space_dim: usize) -> Result<f64> {
-    let xa = geom.node_coord(0)?;
-    let xb = geom.node_coord(1)?;
+    let xa = geom.node_coord(0);
+    let xb = geom.node_coord(1);
     Ok((0..space_dim)
         .map(|a| (xb[a] - xa[a]).powi(2))
         .sum::<f64>()

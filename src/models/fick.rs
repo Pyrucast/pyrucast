@@ -397,7 +397,7 @@ impl SubModelKind for Fick {
         for g in 0..geom.n_gauss {
             let dn = &mut dn_buf[..geom.n_nodes * d];
             geom.dn_dx(g, dn)?;
-            let w = geom.det_j_w(g)?;
+            let w = geom.det_j_w(g);
             for i in 0..geom.n_nodes {
                 let mut s = 0.0;
                 for a in 0..d {
@@ -554,7 +554,7 @@ pub fn element_stiffness(
     for g in 0..geom.n_gauss {
         let dn = &mut dn_buf[..n_nodes * geom.space_dim];
         geom.dn_dx(g, dn)?;
-        let det_j_w = geom.det_j_w(g)?;
+        let det_j_w = geom.det_j_w(g);
         match &tensor {
             None => {
                 let d = material.value(geom.cell, g, &format!("D_{species}"))?;
@@ -633,7 +633,7 @@ pub fn element_storage(geom: &CellGeom, material: &SubElementField, ke: &mut [f6
     })?;
     for g in 0..geom.n_gauss {
         let n = geom.n_at_g(g);
-        let det_j_w = geom.det_j_w(g)?;
+        let det_j_w = geom.det_j_w(g);
         for i in 0..n_nodes {
             for j in 0..n_nodes {
                 ke[i * n_nodes + j] += poro * n[i] * n[j] * det_j_w;

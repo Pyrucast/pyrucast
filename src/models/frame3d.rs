@@ -227,8 +227,8 @@ pub fn element_stiffness(
     ke: &mut [f64],
 ) -> Result<()> {
     let cell = geom.cell;
-    let xa = geom.node_coord(0)?;
-    let xb = geom.node_coord(1)?;
+    let xa = geom.node_coord(0);
+    let xb = geom.node_coord(1);
     let d = [xb[0] - xa[0], xb[1] - xa[1], xb[2] - xa[2]];
     let l = norm(d);
     // [E·A, G·J, E, I_y, I_z, G, A_sy, A_sz].
@@ -362,8 +362,8 @@ fn local_geometric(n: f64, l: f64) -> [[f64; 12]; 12] {
 /// ```
 pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64]) -> Result<()> {
     let cell = geom.cell;
-    let xa = geom.node_coord(0)?;
-    let xb = geom.node_coord(1)?;
+    let xa = geom.node_coord(0);
+    let xb = geom.node_coord(1);
     let d = [xb[0] - xa[0], xb[1] - xa[1], xb[2] - xa[2]];
     let l = norm(d);
     let rho = material.value(cell, 0, "rho").map_err(|_| {
@@ -426,8 +426,8 @@ pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64])
 /// ```
 pub fn element_geometric(geom: &CellGeom, state: &SubElementField, ke: &mut [f64]) -> Result<()> {
     let cell = geom.cell;
-    let xa = geom.node_coord(0)?;
-    let xb = geom.node_coord(1)?;
+    let xa = geom.node_coord(0);
+    let xb = geom.node_coord(1);
     let d = [xb[0] - xa[0], xb[1] - xa[1], xb[2] - xa[2]];
     let l = norm(d);
     let n = state.value(cell, 0, "N")?;

@@ -269,7 +269,7 @@ impl SubModelKind for Radiation {
         let geom = &geoms[0];
         for g in 0..geom.n_gauss {
             let shape = geom.n_at_g(g);
-            let w = geom.det_j_w(g)?;
+            let w = geom.det_j_w(g);
             let flux = stress.get(geom.cell, g, lay[0] as usize)?;
             for i in 0..geom.n_nodes {
                 fe[i] += shape[i] * flux * w;
@@ -372,7 +372,7 @@ fn surface_mass(
     let n_nodes = geom.n_nodes;
     for g in 0..geom.n_gauss {
         let shape = geom.n_at_g(g);
-        let w = geom.det_j_w(g)? * coeff(g)?;
+        let w = geom.det_j_w(g) * coeff(g)?;
         for i in 0..n_nodes {
             for j in 0..n_nodes {
                 ke[i * n_nodes + j] += shape[i] * shape[j] * w;

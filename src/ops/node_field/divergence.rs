@@ -118,7 +118,7 @@ fn divergence_element(geoms: &[CellGeom], field: &SubElementField, fe: &mut [f64
     for g in 0..geom.n_gauss {
         let dn = &mut dn_buf[..geom.n_nodes * d]; // [i * d + a]
         geom.dn_dx(g, dn)?;
-        let det_j_w = geom.det_j_w(g)?;
+        let det_j_w = geom.det_j_w(g);
         for i in 0..geom.n_nodes {
             let mut grad_dot_f = 0.0;
             for (a, comp) in comps.iter().enumerate() {

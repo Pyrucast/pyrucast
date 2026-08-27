@@ -263,7 +263,7 @@ pub fn exchange_matrix(
     for g in 0..row_geom.n_gauss {
         let row_shape = row_geom.n_at_g(g);
         let col_shape = col_geom.n_at_g(g);
-        let w = row_geom.det_j_w(g)?;
+        let w = row_geom.det_j_w(g);
         for (v, &comp) in coefficients.iter().enumerate() {
             let hw = sign * material.get(row_geom.cell, g, comp)? * w;
             if hw == 0.0 {
@@ -335,7 +335,7 @@ pub fn internal_force(
     let values = stress.values();
     for g in 0..geom.n_gauss {
         let shape = geom.n_at_g(g);
-        let w = geom.det_j_w(g)?;
+        let w = geom.det_j_w(g);
         let start = (geom.cell * geom.n_gauss + g) * stride;
         for (v, &comp) in lay.iter().enumerate() {
             let flux_w = values[start + comp as usize] * w;

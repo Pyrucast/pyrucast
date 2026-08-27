@@ -445,6 +445,49 @@ impl Coords {
         Ok(&self.configs[self.active][s..s + d])
     }
 
+    /// Check that **every** id of `ids` names a live node — the whole-list form
+    /// of the test [`position`](Self::position) does one node at a time.
+    ///
+    /// A driver calls this once for a cell connectivity, before its parallel
+    /// region, and then reads positions with
+    /// [`position_alive`](Self::position_alive): the same guarantee, paid once
+    /// per zone instead of once per node of every cell of every call.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// let coords = Handle::new(Coords::new(2)?);
+    /// let a = Node::create_in(coords.clone(), &[0.0, 1.0])?;
+    /// let b = Node::create_in(coords.clone(), &[2.0, 3.0])?;
+    /// coords.read().ensure_all_alive(&[a.id(), b.id()])?;
+    /// // Un nœud collecté est refusé — et il l'est **avant** la boucle.
+    /// drop(a);
+    /// coords.write().gc();
+    /// assert!(coords.read().ensure_all_alive(&[b.id()]).is_ok());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn ensure_all_alive(&self, ids: &[NodeId]) -> Result<()> {
+        for &id in ids {
+            self.ensure_alive(id)?;
+        }
+        Ok(())
+    }
+
+    /// The position of a node **already known to be live**.
+    ///
+    /// The unchecked twin of [`position`](Self::position), for a caller that
+    /// validated its whole node list with
+    /// [`ensure_all_alive`](Self::ensure_all_alive). Reading a dead or unknown
+    /// id here panics on the slice bounds rather than returning an error: the
+    /// contract is the caller's, and it is a cheap one to honour — one pass over
+    /// a connectivity, once per zone.
+    pub(crate) fn position_alive(&self, id: NodeId) -> &[f64] {
+        let d = self.dim as usize;
+        let s = id.0 as usize * d;
+        &self.configs[self.active][s..s + d]
+    }
+
     /// Set the coordinates of a node in the active configuration.
     ///
     /// ```

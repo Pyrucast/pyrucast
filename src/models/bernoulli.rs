@@ -182,7 +182,7 @@ impl Bernoulli {
     /// The cell's length and its unit direction, from the node coordinates.
     fn axis(&self, geom: &CellGeom) -> Result<(f64, Vec<f64>)> {
         let d = geom.space_dim;
-        let (a, b) = (geom.node_coord(0)?.to_vec(), geom.node_coord(1)?.to_vec());
+        let (a, b) = (geom.node_coord(0).to_vec(), geom.node_coord(1).to_vec());
         let delta: Vec<f64> = (0..d).map(|i| b[i] - a[i]).collect();
         let l = delta.iter().map(|v| v * v).sum::<f64>().sqrt();
         if l <= f64::EPSILON {
@@ -425,7 +425,7 @@ fn bending_4x4(geom: &CellGeom, ei: f64) -> Result<Vec<Vec<f64>>> {
     for g in 0..geom.n_gauss {
         let n = geom.field_d2n_dx2(g, &mut b_buf)?;
         let b = &b_buf[..n];
-        let w = geom.det_j_w(g)?;
+        let w = geom.det_j_w(g);
         for a in 0..4 {
             for c in 0..4 {
                 k[a][c] += ei * b[a] * b[c] * w;
@@ -599,7 +599,7 @@ fn congruent(local: &[Vec<f64>], t: &[Vec<f64>], ke: &mut [f64], side: usize) {
 /// derivation of its own — it is the `Φ → 0` end of one.
 fn planar_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64]) -> Result<()> {
     let cell = geom.cell;
-    let (xa, xb) = (geom.node_coord(0)?, geom.node_coord(1)?);
+    let (xa, xb) = (geom.node_coord(0), geom.node_coord(1));
     let l = (xb[0] - xa[0]).abs();
     let rho = material.value(cell, 0, "rho").map_err(|_| {
         PyrucastError::Message(

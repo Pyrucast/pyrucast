@@ -155,7 +155,7 @@ pub fn flux(
                 let mut n_buf = [0.0_f64; MAX_CELL_DOFS];
                 let shape = geom.field_n_at_g(g, &mut n_buf)?;
                 let phi = densities.as_deref().map_or(uniform, |d| d[cell][g]);
-                let w = geom.det_j_w(g)? * phi;
+                let w = geom.det_j_w(g) * phi;
                 for i in 0..geom.n_nodes {
                     fe[i] += shape[i] * w;
                 }

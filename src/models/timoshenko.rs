@@ -382,7 +382,7 @@ impl Domain for Timoshenko {
 /// The exact bending stiffness of a 1-D beam, on `[w_A, θ_A, w_B, θ_B]`.
 fn planar_stiffness(geom: &CellGeom, material: &SubElementField, ke: &mut [f64]) -> Result<()> {
     let cell = geom.cell;
-    let (xa, xb) = (geom.node_coord(0)?, geom.node_coord(1)?);
+    let (xa, xb) = (geom.node_coord(0), geom.node_coord(1));
     let l = (xb[0] - xa[0]).abs();
     if l <= f64::EPSILON {
         return Err(PyrucastError::Message(format!(
@@ -406,7 +406,7 @@ fn planar_stiffness(geom: &CellGeom, material: &SubElementField, ke: &mut [f64])
 /// This is the *linear* element's mass, kept as it was; see the module note.
 fn planar_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64]) -> Result<()> {
     let cell = geom.cell;
-    let (xa, xb) = (geom.node_coord(0)?, geom.node_coord(1)?);
+    let (xa, xb) = (geom.node_coord(0), geom.node_coord(1));
     let l = (xb[0] - xa[0]).abs();
     let rho = material.value(cell, 0, "rho").map_err(|_| {
         PyrucastError::Message(

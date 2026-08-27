@@ -320,27 +320,30 @@ impl<'a> CellGeom<'a> {
     /// noyau(&|geom| {
     ///     // Les coordonnées sont rassemblées **paresseusement** : un noyau
     ///     // purement local ne les paie pas.
-    ///     assert_eq!(geom.node_coord(1)?, &[2.0, 0.0]);
+    ///     assert_eq!(geom.node_coord(1), &[2.0, 0.0]);
     ///     Ok(())
     /// })?;
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn node_coord(&self, local: usize) -> Result<&[f64]> {
-        self.coords.position(self.node_ids()[local])
+    pub fn node_coord(&self, local: usize) -> &[f64] {
+        self.coords.position_alive(self.node_ids()[local])
     }
 
     /// Fill the lazy `cell_coords` cache on first use (gather from the held
     /// `Coords`, no store access).
-    fn ensure_cell_coords(&self) -> Result<()> {
+    fn ensure_cell_coords(&self) {
         let mut cc = self.cell_coords.borrow_mut();
         if cc.is_none() {
             let mut v = Vec::with_capacity(self.n_nodes * self.space_dim);
             for &id in self.node_ids() {
-                v.extend_from_slice(self.coords.position(id)?);
+                // Live-ness was settled for the whole connectivity before the
+                // parallel region (`Coords::ensure_all_alive`), so this reads
+                // without asking again — once per node of every cell of every
+                // call is a great many times to re-prove one fact.
+                v.extend_from_slice(self.coords.position_alive(id));
             }
             *cc = Some(v);
         }
-        Ok(())
     }
 
     /// `∂N_i/∂x_a` at Gauss point `g`, flat layout `[i * space_dim + a]`.
@@ -388,7 +391,7 @@ impl<'a> CellGeom<'a> {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn dn_dx(&self, g: usize, out: &mut [f64]) -> Result<()> {
-        self.ensure_cell_coords()?;
+        self.ensure_cell_coords();
         let cc = self.cell_coords.borrow();
         let cc = cc.as_ref().unwrap();
         let dn = &self.rd.dn_ref[g];
@@ -697,7 +700,7 @@ impl<'a> CellGeom<'a> {
                 self.rd.ref_dim
             )));
         }
-        let (a, b) = (self.node_coord(0)?.to_vec(), self.node_coord(1)?.to_vec());
+        let (a, b) = (self.node_coord(0).to_vec(), self.node_coord(1).to_vec());
         if self.space_dim == 1 {
             return Ok((b[0] - a[0]) / 2.0);
         }
@@ -746,14 +749,14 @@ impl<'a> CellGeom<'a> {
     ///     // La règle du TRI3 place ses points aux **milieux des arêtes** :
     ///     // le premier est donc sur le bord, en (1, 0).
     ///     let mut x = [0.0_f64; 2];
-    ///     geom.x_at_g(0, &mut x)?;
+    ///     geom.x_at_g(0, &mut x);
     ///     assert_eq!(x, [1.0, 0.0]);
     ///     Ok(())
     /// })?;
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn x_at_g(&self, g: usize, out: &mut [f64]) -> Result<()> {
-        self.ensure_cell_coords()?;
+    pub fn x_at_g(&self, g: usize, out: &mut [f64]) {
+        self.ensure_cell_coords();
         let cc = self.cell_coords.borrow();
         let cc = cc.as_ref().unwrap();
         let n = &self.rd.n_ref[g];
@@ -764,7 +767,6 @@ impl<'a> CellGeom<'a> {
                 *xa += n[i] * cc[i * d + a];
             }
         }
-        Ok(())
     }
 
     /// Radius `r` at Gauss point `g` — the first physical coordinate, on an
@@ -805,7 +807,7 @@ impl<'a> CellGeom<'a> {
     ///         assert!(geom.axisymmetric);
     ///         // `x = r` : le rayon est l'abscisse du point de Gauss.
     ///         let mut x = [0.0_f64; 2];
-    ///         geom.x_at_g(0, &mut x)?;
+    ///         geom.x_at_g(0, &mut x);
     ///         assert_eq!(geom.radius(0)?, x[0]);
     ///         Ok(())
     ///     },
@@ -820,7 +822,7 @@ impl<'a> CellGeom<'a> {
                     .into(),
             ));
         }
-        self.ensure_cell_coords()?;
+        self.ensure_cell_coords();
         let cc = self.cell_coords.borrow();
         Ok(Self::radius_from(
             cc.as_ref().unwrap(),
@@ -891,14 +893,14 @@ impl<'a> CellGeom<'a> {
     ///     // une surface, une pour une ligne. Elles arrivent à plat,
     ///     // `out[k * space_dim + a]`.
     ///     let mut t = [0.0_f64; 4];
-    ///     geom.tangents(0, &mut t)?;
+    ///     geom.tangents(0, &mut t);
     ///     assert!(t[..4].iter().any(|v| *v != 0.0));
     ///     Ok(())
     /// })?;
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn tangents(&self, g: usize, out: &mut [f64]) -> Result<()> {
-        self.ensure_cell_coords()?;
+    pub fn tangents(&self, g: usize, out: &mut [f64]) {
+        self.ensure_cell_coords();
         let cc = self.cell_coords.borrow();
         let cc = cc.as_ref().unwrap();
         let (d, r) = (self.space_dim, self.rd.ref_dim);
@@ -912,7 +914,6 @@ impl<'a> CellGeom<'a> {
                 out[k * d + a] = jac[a * r + k];
             }
         }
-        Ok(())
     }
 
     /// The (unnormalised) normal of a boundary cell from its tangents — the
@@ -1052,7 +1053,7 @@ impl<'a> CellGeom<'a> {
             )));
         }
         let mut tan = [0.0_f64; MAX_JACOBIAN];
-        self.tangents(g, &mut tan)?;
+        self.tangents(g, &mut tan);
         Self::normal_from_tangents(&tan, r, d, out)?;
         let norm = out[..d].iter().map(|v| v * v).sum::<f64>().sqrt();
         if norm <= f64::EPSILON {
@@ -1111,14 +1112,14 @@ impl<'a> CellGeom<'a> {
     ///     // **L'unique endroit** où se décide la mesure d'intégration : ici
     ///     // |J|·w, et 2πr·|J|·w en révolution. C'est ce qui permet à toute
     ///     // physique d'intégrer sur l'anneau complet sans rien changer.
-    ///     let aire: f64 = (0..geom.n_gauss).map(|g| geom.det_j_w(g).unwrap()).sum();
+    ///     let aire: f64 = (0..geom.n_gauss).map(|g| geom.det_j_w(g)).sum();
     ///     assert!((aire - 2.0).abs() < 1e-12); // l'aire du triangle
     ///     Ok(())
     /// })?;
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn det_j_w(&self, g: usize) -> Result<f64> {
-        self.ensure_cell_coords()?;
+    pub fn det_j_w(&self, g: usize) -> f64 {
+        self.ensure_cell_coords();
         let cc = self.cell_coords.borrow();
         let cc = cc.as_ref().unwrap();
         let dn = &self.rd.dn_ref[g];
@@ -1136,10 +1137,10 @@ impl<'a> CellGeom<'a> {
         // returns here having paid nothing else. The revolved path reuses the
         // borrow above, so it allocates nothing either.
         if !self.axisymmetric {
-            return Ok(w);
+            return w;
         }
         let r = Self::radius_from(cc, &self.rd.n_ref[g], self.n_nodes, self.space_dim);
-        Ok(w * std::f64::consts::TAU * r)
+        w * std::f64::consts::TAU * r
     }
 }
 
@@ -1231,6 +1232,9 @@ pub fn element_pointwise(
     let n_gauss = rd.n_gauss;
     let n_cells = fe.cell_count()?;
     let conn: &[NodeId] = sm.connectivity();
+    // Every node of the connectivity, checked live **once** — the cell
+    // geometry then reads coordinates without asking again.
+    coords.ensure_all_alive(conn)?;
     let rd_ref: &RefData = &rd;
     let coords_ref: &Coords = &coords;
 
@@ -1329,6 +1333,9 @@ pub(crate) fn nodal_pointwise(
     let rd = RefData::snapshot(&fe)?;
     let n_gauss = rd.n_gauss;
     let conn: &[NodeId] = sm.connectivity();
+    // Every node of the connectivity, checked live **once** — the cell
+    // geometry then reads coordinates without asking again.
+    coords.ensure_all_alive(conn)?;
     let rd_ref: &RefData = &rd;
     let coords_ref: &Coords = &coords;
 
@@ -1504,7 +1511,7 @@ pub fn assemble_block(
 /// let (nr, nc, trips): kernel::BlockTriplets = kernel::element_block_triplets(
 ///     std::slice::from_ref(&zone), &support, &support, 1, 1,
 ///     DofOrdering::NodesThenVars, &mat, None,
-///     |geoms, _m, _s, ke| { ke[0] = geoms[0].det_j_w(0)?; Ok(()) },
+///     |geoms, _m, _s, ke| { ke[0] = geoms[0].det_j_w(0); Ok(()) },
 /// )?;
 /// assert_eq!((nr, nc), (3, 3));
 /// assert!(!trips.is_empty());
@@ -1552,7 +1559,7 @@ pub type BlockTriplets = (usize, usize, Vec<(usize, usize, f64)>);
 /// let (nr, nc, trips): kernel::BlockTriplets = kernel::element_block_triplets(
 ///     std::slice::from_ref(&zone), &support, &support, 1, 1,
 ///     DofOrdering::NodesThenVars, &mat, None,
-///     |geoms, _m, _s, ke| { ke[0] = geoms[0].det_j_w(0)?; Ok(()) },
+///     |geoms, _m, _s, ke| { ke[0] = geoms[0].det_j_w(0); Ok(()) },
 /// )?;
 /// assert_eq!((nr, nc), (3, 3));
 /// assert!(!trips.is_empty());
@@ -1621,7 +1628,7 @@ pub fn element_block_triplets(
 ///     kernel::element_block_triplets_per_cell(
 ///         std::slice::from_ref(&zone), &support, &support, 1, 1,
 ///         DofOrdering::NodesThenVars, &mat, None,
-///         |geoms, _m, _s, ke| { ke[0] = geoms[0].det_j_w(0)?; Ok(()) },
+///         |geoms, _m, _s, ke| { ke[0] = geoms[0].det_j_w(0); Ok(()) },
 ///     )?;
 /// assert_eq!((nr, nc), (3, 3));
 /// assert_eq!(par_maille.len(), 1); // une maille
@@ -1673,7 +1680,7 @@ pub type BlockTripletsPerCell = (usize, usize, Vec<Vec<(usize, usize, f64)>>);
 ///     kernel::element_block_triplets_per_cell(
 ///         std::slice::from_ref(&zone), &support, &support, 1, 1,
 ///         DofOrdering::NodesThenVars, &mat, None,
-///         |geoms, _m, _s, ke| { ke[0] = geoms[0].det_j_w(0)?; Ok(()) },
+///         |geoms, _m, _s, ke| { ke[0] = geoms[0].det_j_w(0); Ok(()) },
 ///     )?;
 /// assert_eq!((nr, nc), (3, 3));
 /// assert_eq!(par_maille.len(), 1); // une maille
@@ -1720,6 +1727,9 @@ pub fn element_block_triplets_per_cell(
     let n_cells = fe.cell_count()?;
     let n_nodes = rds[0].n_nodes;
     let conn: &[NodeId] = sm.connectivity();
+    // Every node of the connectivity, checked live **once** — the cell
+    // geometry then reads coordinates without asking again.
+    coords.ensure_all_alive(conn)?;
     let rds_ref: &[RefData] = &rds;
     let coords_ref: &Coords = &coords;
     let mat_ref: &SubElementField = &mat_guard;
@@ -2001,7 +2011,7 @@ fn check_conforming(
 ///     &support, &support, 1, 1, DofOrdering::NodesThenVars, &mat,
 ///     |lignes, colonnes, _m, ke| {
 ///         assert_eq!(lignes.len(), colonnes.len());
-///         ke[0] = lignes[0].det_j_w(0)?;
+///         ke[0] = lignes[0].det_j_w(0);
 ///         Ok(())
 ///     },
 /// )?;
@@ -2036,6 +2046,10 @@ pub fn coupling_block_triplets_per_cell(
 
     let row_conn: &[NodeId] = row_sm.connectivity();
     let col_conn: &[NodeId] = col_sm.connectivity();
+    // Both connectivities, checked live **once** — the cell geometries then read
+    // coordinates without asking again.
+    row_coords.ensure_all_alive(row_conn)?;
+    col_coords.ensure_all_alive(col_conn)?;
     let (n_cells, n_row_nodes_cell, n_col_nodes_cell) =
         check_conforming(&row_fe, &col_fe, row_conn, col_conn)?;
 
@@ -2269,7 +2283,7 @@ fn local_positions(ids: &[NodeId], pos: &HashMap<NodeId, u32>, side: &str) -> Re
 ///     std::slice::from_ref(&zone), &support, vec!["q".into()],
 ///     |geoms, fe| {
 ///         for (i, slot) in fe.iter_mut().enumerate() {
-///             *slot = geoms[0].det_j_w(0)? * (i as f64);
+///             *slot = geoms[0].det_j_w(0) * (i as f64);
 ///         }
 ///         Ok(())
 ///     },
@@ -2310,6 +2324,9 @@ pub fn scatter_to_nodes(
     let n_cells = fe.cell_count()?;
     let n_nodes = rds[0].n_nodes;
     let conn: &[NodeId] = sm.connectivity();
+    // Every node of the connectivity, checked live **once** — the cell
+    // geometry then reads coordinates without asking again.
+    coords.ensure_all_alive(conn)?;
     let rds_ref: &[RefData] = &rds;
     let coords_ref: &Coords = &coords;
     let fe_len = n_nodes * n_dual;
@@ -2405,7 +2422,7 @@ pub fn scatter_to_nodes(
 /// // Une réduction sur les mailles : l'aire du maillage, par exemple, se
 /// // lit comme la somme des mesures d'intégration.
 /// let aire = kernel::reduce_cells(&zone, |geom| {
-///     (0..geom.n_gauss).map(|g| geom.det_j_w(g)).sum()
+///     Ok((0..geom.n_gauss).map(|g| geom.det_j_w(g)).sum())
 /// })?;
 /// assert!((aire - 2.0).abs() < 1e-12);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -2424,6 +2441,9 @@ pub fn reduce_cells(
     let n_cells = fe.cell_count()?;
     let n_nodes = rd.n_nodes;
     let conn: &[NodeId] = sm.connectivity();
+    // Every node of the connectivity, checked live **once** — the cell
+    // geometry then reads coordinates without asking again.
+    coords.ensure_all_alive(conn)?;
     let rd_ref: &RefData = &rd;
     let coords_ref: &Coords = &coords;
 
@@ -2473,13 +2493,13 @@ mod tests {
     #[test]
     fn det_j_w_carries_the_revolution_measure() {
         let plane = reduce_cells(&one_quad(1.0, 2.0, false), |geom| {
-            (0..geom.n_gauss).map(|g| geom.det_j_w(g)).sum()
+            Ok((0..geom.n_gauss).map(|g| geom.det_j_w(g)).sum())
         })
         .unwrap();
         assert!((plane - 1.0).abs() < 1e-12, "plane area {plane} ≠ 1");
 
         let revolved = reduce_cells(&one_quad(1.0, 2.0, true), |geom| {
-            (0..geom.n_gauss).map(|g| geom.det_j_w(g)).sum()
+            Ok((0..geom.n_gauss).map(|g| geom.det_j_w(g)).sum())
         })
         .unwrap();
         let expected = std::f64::consts::PI * (2.0_f64.powi(2) - 1.0);
@@ -2499,7 +2519,7 @@ mod tests {
                 assert!(r > 0.0 && r < 1.0, "radius {r} outside (0, 1)");
                 // radius is the first physical coordinate, and z stays in [0, 1].
                 let mut x = [0.0_f64; 2];
-                geom.x_at_g(g, &mut x)?;
+                geom.x_at_g(g, &mut x);
                 assert!((x[0] - r).abs() < 1e-15);
                 assert!(x[1] > 0.0 && x[1] < 1.0);
             }

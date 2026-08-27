@@ -303,7 +303,7 @@ pub fn element_stiffness(
     membrane_and_drilling(geom, &frame, e, nu, h, &mut local)?;
     for g in 0..geom.n_gauss {
         let bb = bending_b(geom, &p, &cx, &cy, g)?;
-        accumulate(&mut local, &bb, &db, geom.det_j_w(g)?, side);
+        accumulate(&mut local, &bb, &db, geom.det_j_w(g), side);
     }
 
     to_global(&local, &frame, n, ke);

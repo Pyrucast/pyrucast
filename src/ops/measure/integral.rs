@@ -97,7 +97,7 @@ pub fn integral(field: &NodeField, fespace: &FiniteElementSpace, component: &str
                 for i in 0..geom.n_nodes {
                     fg += vals[&ids[i]] * n[i];
                 }
-                acc += fg * geom.det_j_w(g)?;
+                acc += fg * geom.det_j_w(g);
             }
             Ok(acc)
         })?;
@@ -161,7 +161,7 @@ pub fn integral_element(field: &ElementField, component: &str) -> Result<f64> {
         total += kernel::reduce_cells(&fespace, |geom| {
             let mut acc = 0.0;
             for g in 0..geom.n_gauss {
-                acc += s.value(geom.cell, g, component)? * geom.det_j_w(g)?;
+                acc += s.value(geom.cell, g, component)? * geom.det_j_w(g);
             }
             Ok(acc)
         })?;

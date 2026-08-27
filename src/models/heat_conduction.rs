@@ -366,7 +366,7 @@ impl SubModelKind for HeatConduction {
         for g in 0..geom.n_gauss {
             let dn = &mut dn_buf[..geom.n_nodes * d];
             geom.dn_dx(g, dn)?; // [i * d + a]
-            let w = geom.det_j_w(g)?;
+            let w = geom.det_j_w(g);
             for i in 0..geom.n_nodes {
                 let mut s = 0.0;
                 for a in 0..d {
@@ -524,7 +524,7 @@ pub fn element_stiffness(
     for g in 0..geom.n_gauss {
         let dn = &mut dn_buf[..n_nodes * geom.space_dim];
         geom.dn_dx(g, dn)?;
-        let det_j_w = geom.det_j_w(g)?;
+        let det_j_w = geom.det_j_w(g);
         match &tensor {
             None => {
                 let k = material.value(geom.cell, g, MATERIAL_COMPONENT)?;
@@ -612,7 +612,7 @@ pub fn element_capacity(geom: &CellGeom, material: &SubElementField, ke: &mut [f
     let rho_cp = rho * cp;
     for g in 0..geom.n_gauss {
         let n = geom.n_at_g(g);
-        let w = geom.det_j_w(g)? * rho_cp;
+        let w = geom.det_j_w(g) * rho_cp;
         for i in 0..n_nodes {
             for j in 0..n_nodes {
                 ke[i * n_nodes + j] += n[i] * n[j] * w;

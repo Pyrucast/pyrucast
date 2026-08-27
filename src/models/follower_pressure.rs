@@ -263,7 +263,7 @@ impl SubModelKind for FollowerPressure {
         let d = self.space_dim;
         for g in 0..geom.n_gauss {
             let shape = geom.n_at_g(g);
-            let w = geom.det_j_w(g)?;
+            let w = geom.det_j_w(g);
             for i in 0..geom.n_nodes {
                 for (a, &comp) in lay.iter().enumerate() {
                     fe[i * d + a] += shape[i] * stress.get(geom.cell, g, comp as usize)? * w;
@@ -350,7 +350,7 @@ impl Domain for FollowerPressure {
         // Both live on the stack: a surface cell has at most two tangents in 3-D.
         let n_tan = d - 1;
         let mut reference = [0.0_f64; 6];
-        geom.tangents(g, &mut reference[..n_tan * d])?;
+        geom.tangents(g, &mut reference[..n_tan * d]);
         let mut deformed = [0.0_f64; 6];
         for k in 0..n_tan {
             for i in 0..d {

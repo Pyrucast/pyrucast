@@ -131,8 +131,8 @@ pub fn element_stiffness(
     ke: &mut [f64],
 ) -> Result<()> {
     let cell = geom.cell;
-    let xa = geom.node_coord(0)?;
-    let xb = geom.node_coord(1)?;
+    let xa = geom.node_coord(0);
+    let xb = geom.node_coord(1);
     let (dx, dy) = (xb[0] - xa[0], xb[1] - xa[1]);
     let l = (dx * dx + dy * dy).sqrt();
     let (c, s) = (dx / l, dy / l);
@@ -202,8 +202,8 @@ fn local_geometric(n: f64, l: f64) -> [[f64; 6]; 6] {
 
 /// Length + direction cosines of one frame `SEG2` cell.
 fn cell_frame(geom: &CellGeom) -> Result<(f64, f64, f64)> {
-    let xa = geom.node_coord(0)?;
-    let xb = geom.node_coord(1)?;
+    let xa = geom.node_coord(0);
+    let xb = geom.node_coord(1);
     let (dx, dy) = (xb[0] - xa[0], xb[1] - xa[1]);
     let l = (dx * dx + dy * dy).sqrt();
     Ok((l, dx / l, dy / l))

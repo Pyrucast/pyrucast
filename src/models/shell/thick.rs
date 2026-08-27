@@ -228,7 +228,7 @@ pub fn element_stiffness(
     // ── Bending: full quadrature, on the independent fibre rotation ────────
     for g in 0..full.n_gauss {
         let dn = local_derivatives(full, &frame, g)?;
-        let w = full.det_j_w(g)?;
+        let w = full.det_j_w(g);
 
         // Bending `κ` on (θ_x, θ_y) — local DOFs 6i+3, 6i+4.
         let mut bb = vec![vec![0.0; side]; 3];
@@ -247,7 +247,7 @@ pub fn element_stiffness(
     for g in 0..reduced.n_gauss {
         let dn = local_derivatives(reduced, &frame, g)?;
         let shape = reduced.n_at_g(g);
-        let w = reduced.det_j_w(g)?;
+        let w = reduced.det_j_w(g);
         // `γ` on (w, θ_x, θ_y) — local DOFs 6i+2, 6i+3, 6i+4.
         let mut bs = vec![vec![0.0; side]; 2];
         for i in 0..n {

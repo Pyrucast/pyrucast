@@ -477,9 +477,9 @@ impl Domain for Shell {
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn local_frame(geom: &CellGeom) -> Result<[[f64; 3]; 3]> {
-    let p0 = geom.node_coord(0)?.to_vec();
-    let p1 = geom.node_coord(1)?.to_vec();
-    let p2 = geom.node_coord(2)?.to_vec();
+    let p0 = geom.node_coord(0).to_vec();
+    let p1 = geom.node_coord(1).to_vec();
+    let p2 = geom.node_coord(2).to_vec();
     let a: [f64; 3] = std::array::from_fn(|i| p1[i] - p0[i]);
     let b: [f64; 3] = std::array::from_fn(|i| p2[i] - p0[i]);
     let cross = [
@@ -618,10 +618,10 @@ pub fn local_derivatives(
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn local_coords(geom: &CellGeom, frame: &[[f64; 3]; 3]) -> Result<Vec<[f64; 2]>> {
-    let origin = geom.node_coord(0)?.to_vec();
+    let origin = geom.node_coord(0).to_vec();
     (0..geom.n_nodes)
         .map(|i| {
-            let p = geom.node_coord(i)?;
+            let p = geom.node_coord(i);
             let d: [f64; 3] = std::array::from_fn(|k| p[k] - origin[k]);
             Ok([
                 (0..3).map(|k| d[k] * frame[0][k]).sum(),
@@ -701,7 +701,7 @@ pub fn membrane_and_drilling(
     for g in 0..geom.n_gauss {
         let dn = local_derivatives(geom, frame, g)?;
         let shape = geom.n_at_g(g);
-        let w = geom.det_j_w(g)?;
+        let w = geom.det_j_w(g);
 
         // Membrane `ε` on (u, v) — local DOFs 6i+0, 6i+1.
         let mut bm = vec![vec![0.0; side]; 3];

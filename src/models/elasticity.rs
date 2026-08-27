@@ -723,7 +723,7 @@ pub fn element_stiffness(
                 db[r][c] = acc;
             }
         }
-        let w = geom.det_j_w(g)?;
+        let w = geom.det_j_w(g);
         for r in 0..dofs {
             for c in 0..dofs {
                 let mut acc = 0.0;
@@ -793,7 +793,7 @@ pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64])
     })?;
     for g in 0..geom.n_gauss {
         let n = geom.n_at_g(g);
-        let w = geom.det_j_w(g)? * rho;
+        let w = geom.det_j_w(g) * rho;
         for i in 0..n_nodes {
             for j in 0..n_nodes {
                 let m = n[i] * n[j] * w;
@@ -876,7 +876,7 @@ pub fn element_geometric(geom: &CellGeom, stress: &SubElementField, ke: &mut [f6
     for g in 0..geom.n_gauss {
         let dn = &mut dn_buf[..n_nodes * d]; // [i * d + c]
         geom.dn_dx(g, dn)?;
-        let w = geom.det_j_w(g)?;
+        let w = geom.det_j_w(g);
         let start = (geom.cell * geom.n_gauss + g) * stride;
         let mut sig = [0.0_f64; 9]; // [c * d + e]
         crate::models::voigt_stress_matrix(&values[start..start + stride], &lay, d, &mut sig);
@@ -1097,7 +1097,7 @@ pub fn element_tangent_from_state(
                 *dbrc = acc;
             }
         }
-        let w = geom.det_j_w(g)?;
+        let w = geom.det_j_w(g);
         for r in 0..dofs {
             for c in 0..dofs {
                 let mut acc = 0.0;
