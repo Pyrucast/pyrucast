@@ -23,7 +23,7 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
-use pyrucast::models::damage::DamageLaw;
+use pyrucast::models::damage::law::DamageLaw;
 use pyrucast::models::elasticity::ElasticityModel;
 use pyrucast::models::plasticity::law::PlasticLaw;
 use pyrucast::ops::element_field::{behavior::integrate, deformation, material_field};

@@ -34,10 +34,11 @@
 //! along its tows. A law that let the damage reach one would predict a collapse
 //! that does not happen.
 
-use super::DamageLawKind;
+use super::law::DamageLawKind;
 use crate::error::Result;
-use crate::models::damage::DamageLaw;
-use crate::models::damage::{lame, pos, DamageUpdate, MatRead};
+use crate::models::damage::law::DamageLaw;
+use crate::models::damage::law::{pos, DamageUpdate, MatRead};
+use crate::models::elasticity::lame;
 use crate::models::elasticity::ElasticityModel;
 use crate::models::symmetry;
 use nalgebra::Matrix3;
@@ -54,7 +55,8 @@ use nalgebra::Matrix3;
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::damage::{self, DamageLaw, MatRead};
+/// # use pyrucast::models::damage::{self};
+/// # use pyrucast::models::damage::law::{DamageLaw, MatRead};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -84,7 +86,8 @@ pub const MATERIAL_2D: &[&str] = &[
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::damage::{self, DamageLaw, MatRead};
+/// # use pyrucast::models::damage::{self};
+/// # use pyrucast::models::damage::law::{DamageLaw, MatRead};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -117,7 +120,8 @@ pub const MATERIAL_3D: &[&str] = &[
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::damage::{self, DamageLaw, MatRead};
+/// # use pyrucast::models::damage::{self};
+/// # use pyrucast::models::damage::law::{DamageLaw, MatRead};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();

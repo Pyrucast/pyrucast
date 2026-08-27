@@ -4,7 +4,7 @@ use super::spanning;
 use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
-use crate::models::damage::DamageLaw;
+use crate::models::damage::law::DamageLaw;
 use crate::models::elasticity::ElasticityModel;
 
 /// Damage `Model` spanning **every** subspace of `fes`, with an explicit
@@ -34,7 +34,7 @@ use crate::models::elasticity::ElasticityModel;
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # use pyrucast::models::damage::DamageLaw;
+/// # use pyrucast::models::damage::law::DamageLaw;
 /// let m = model::damage_with_law(&fes, ElasticityModel::PlaneStress, DamageLaw::Mazars)?;
 /// assert_eq!(m.len(), fes.len());
 /// # Ok::<(), pyrucast::PyrucastError>(())

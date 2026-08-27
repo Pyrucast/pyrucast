@@ -82,6 +82,7 @@ use crate::containers::model::SubModel;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
+use crate::models::elasticity::{dual_name, primal_name};
 use crate::models::owned_components;
 use crate::models::{
     CellGeom, Contribution, Domain, MatrixKind, MatrixLayout, Physics, SubModelKind,
@@ -117,12 +118,6 @@ pub const MATERIAL_COMPONENT: &str = "p";
 /// Material contract returned by [`Domain::material_components`].
 const MATERIAL_COMPONENTS: &[&str] = &[MATERIAL_COMPONENT];
 
-fn primal_name(a: usize) -> String {
-    format!("u_{}", AXES[a])
-}
-fn dual_name(a: usize) -> String {
-    format!("f_{}", AXES[a])
-}
 /// Behaviour-**output** components: the referential traction.
 fn traction_names(space_dim: usize) -> Vec<String> {
     (0..space_dim).map(|a| format!("t_{}", AXES[a])).collect()

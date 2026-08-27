@@ -130,10 +130,10 @@ impl crate::named::Named for ElasticityModel {
     }
 }
 
-fn primal_name(a: usize) -> String {
+pub(crate) fn primal_name(a: usize) -> String {
     format!("u_{}", AXES[a])
 }
-fn dual_name(a: usize) -> String {
+pub(crate) fn dual_name(a: usize) -> String {
     format!("f_{}", AXES[a])
 }
 /// Voigt component count: 3 in 2-D plane, **4** axisymmetric (the hoop joins

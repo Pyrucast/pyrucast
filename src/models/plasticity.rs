@@ -61,13 +61,12 @@ use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::elasticity::{self, ElasticityModel};
+use crate::models::elasticity::{dual_name, primal_name};
 use crate::models::owned_components;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use law::{MatParams, PlasticLaw, PrevState};
 use serde::{Deserialize, Serialize};
 
-/// Axis suffixes for the vector components, indexed by spatial direction.
-const AXES: [&str; 3] = ["x", "y", "z"];
 /// Full 3-D tensor component suffixes, in the internal state order
 /// `[xx, yy, zz, yz, xz, xy]` (off-diagonals are **tensor** strains, `ε_ij`).
 use crate::models::plasticity::law::TENSOR_SUFFIXES;
@@ -79,13 +78,6 @@ const TENSOR_PAIRS: [(usize, usize); 6] = [(0, 0), (1, 1), (2, 2), (1, 2), (0, 2
 /// axisymmetric specialisation of this law is this one index map: the state and
 /// the radial return stay full 3-D, only the projection in and out changes.
 const AXI_TO_3D: [usize; 4] = [0, 1, 2, 5];
-
-fn primal_name(a: usize) -> String {
-    format!("u_{}", AXES[a])
-}
-fn dual_name(a: usize) -> String {
-    format!("f_{}", AXES[a])
-}
 
 /// Stress component names in Voigt order for the given space dimension —
 /// matching [`crate::models::elasticity`] so downstream code is uniform.
@@ -575,7 +567,7 @@ impl Domain for Plasticity {
 // ─── Field <-> array plumbing ────────────────────────────────────────────────
 
 /// Read a component, returning `0.0` when it is absent (first step has no state).
-fn read_opt(f: &SubElementField, cell: usize, g: usize, name: &str) -> f64 {
+pub(crate) fn read_opt(f: &SubElementField, cell: usize, g: usize, name: &str) -> f64 {
     if f.component_index(name).is_some() {
         f.value(cell, g, name).unwrap_or(0.0)
     } else {
@@ -617,7 +609,7 @@ fn read_strain(
 
 /// Read a component from the optional previous-state field `prev`, defaulting to
 /// `0.0` when there is no previous step (`None`) or the component is absent.
-fn prev_opt(prev: Option<&SubElementField>, cell: usize, g: usize, name: &str) -> f64 {
+pub(crate) fn prev_opt(prev: Option<&SubElementField>, cell: usize, g: usize, name: &str) -> f64 {
     prev.map_or(0.0, |f| read_opt(f, cell, g, name))
 }
 
@@ -641,7 +633,12 @@ fn read_prev_plastic_strain(prev: Option<&SubElementField>, cell: usize, g: usiz
 
 /// Project the full 3-D stress to the model's Voigt slot `r`.
 /// 2-D order is `[xx, yy, xy]`; 3-D is the full `[xx, yy, zz, yz, xz, xy]`.
-fn voigt_stress(sigma: &[f64; 6], space_dim: usize, model: ElasticityModel, r: usize) -> f64 {
+pub(crate) fn voigt_stress(
+    sigma: &[f64; 6],
+    space_dim: usize,
+    model: ElasticityModel,
+    r: usize,
+) -> f64 {
     if space_dim == 2 && model.is_axisymmetric() {
         sigma[AXI_TO_3D[r]]
     } else if space_dim == 2 {

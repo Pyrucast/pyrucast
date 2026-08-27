@@ -32,11 +32,12 @@
 //! `r₀⁺ = f_t/√E` and `r₀⁻ = f_c/√E` are the thresholds; `A_t` and `A_c` set how
 //! fast each branch softens.
 
-use super::DamageLawKind;
+use super::law::DamageLawKind;
 use crate::error::Result;
-use crate::models::damage::DamageLaw;
-use crate::models::damage::{elastic_stress, lame, pos, DamageUpdate, MatRead};
+use crate::models::damage::law::DamageLaw;
+use crate::models::damage::law::{pos, DamageUpdate, MatRead};
 use crate::models::elasticity::ElasticityModel;
+use crate::models::elasticity::{elastic_stress, lame};
 use nalgebra::Matrix3;
 
 /// The law's material contract.
@@ -49,7 +50,8 @@ use nalgebra::Matrix3;
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::damage::{self, DamageLaw, MatRead};
+/// # use pyrucast::models::damage::{self};
+/// # use pyrucast::models::damage::law::{DamageLaw, MatRead};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -80,7 +82,8 @@ pub const MATERIAL: &[&str] = &["E", "nu", "f_t", "f_c", "A_t", "A_c"];
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::damage::{self, DamageLaw, MatRead};
+/// # use pyrucast::models::damage::{self};
+/// # use pyrucast::models::damage::law::{DamageLaw, MatRead};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();

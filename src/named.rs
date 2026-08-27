@@ -185,7 +185,7 @@ named_enum!(
     crate::atoms::Interpolation,
     crate::atoms::QuadratureRule,
     crate::models::Physics,
-    crate::models::damage::DamageLaw,
+    crate::models::damage::law::DamageLaw,
     crate::models::elasticity::ElasticityModel,
     crate::models::plasticity::law::PlasticLaw,
     crate::models::shell::ShellModel,

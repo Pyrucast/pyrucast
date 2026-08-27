@@ -951,7 +951,7 @@ impl SubModel {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn mazars(fespace: Handle<SubFiniteElementSpace>, model: ElasticityModel) -> Result<Self> {
-        Self::damage_with_law(fespace, model, damage::DamageLaw::Mazars)
+        Self::damage_with_law(fespace, model, damage::law::DamageLaw::Mazars)
     }
 
     /// Damage with an explicit law — Mazars, the tension/compression pair, or the
@@ -979,7 +979,7 @@ impl SubModel {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// # use pyrucast::models::damage::DamageLaw;
+    /// # use pyrucast::models::damage::law::DamageLaw;
     /// let m = SubModel::damage_with_law(
     ///     zone.clone(), ElasticityModel::PlaneStress, DamageLaw::Mazars)?;
     /// assert_eq!(m.physics(), &[Physics::Mechanical]);
@@ -988,7 +988,7 @@ impl SubModel {
     pub fn damage_with_law(
         fespace: Handle<SubFiniteElementSpace>,
         model: ElasticityModel,
-        law: damage::DamageLaw,
+        law: damage::law::DamageLaw,
     ) -> Result<Self> {
         Ok(SubModel::Mazars(damage::Damage::with_law(
             fespace, model, law,

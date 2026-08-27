@@ -21,6 +21,7 @@ use crate::containers::model::SubModel;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
+use crate::models::elasticity::{dual_name, primal_name};
 use crate::models::owned_components;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use serde::{Deserialize, Serialize};
@@ -30,14 +31,6 @@ pub(crate) const AXES: [&str; 3] = ["x", "y", "z"];
 /// Material components required by the truss physics.
 const MATERIAL_COMPONENTS: &[&str] = &["E", "A"];
 
-/// Primal (displacement) component name for axis `a`: `u_x`, `u_y`, `u_z`.
-fn primal_name(a: usize) -> String {
-    format!("u_{}", AXES[a])
-}
-/// Dual (force) component name for axis `a`: `f_x`, `f_y`, `f_z`.
-fn dual_name(a: usize) -> String {
-    format!("f_{}", AXES[a])
-}
 /// Strain-tensor component names (`eps_xx`, `eps_xy`, …) for `i ≤ j`, matching
 /// what [`crate::ops::element_field::deformation`] produces — the behaviour input.
 fn strain_names(space_dim: usize) -> Vec<String> {
