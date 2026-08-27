@@ -167,32 +167,32 @@ impl SubModelKind for Truss {
     fn element_matrix(
         &self,
         geoms: &[CellGeom],
-        material: Option<&SubElementField>,
+        material: &SubElementField,
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
-        element_stiffness(geom, material.expect("Truss requires a material field"), ke)
+        element_stiffness(geom, material, ke)
     }
 
     fn element_mass(
         &self,
         geoms: &[CellGeom],
-        material: Option<&SubElementField>,
+        material: &SubElementField,
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
-        element_mass(geom, material.expect("Truss requires a material field"), ke)
+        element_mass(geom, material, ke)
     }
 
     fn element_geometric(
         &self,
         geoms: &[CellGeom],
-        _material: Option<&SubElementField>,
-        state: Option<&SubElementField>,
+        _material: &SubElementField,
+        state: &SubElementField,
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
-        let stress = state.expect("truss geometric stiffness requires the axial force `n`");
+        let stress = state;
         element_geometric(geom, stress, ke)
     }
 
@@ -348,8 +348,8 @@ fn cell_cosine(geom: &CellGeom, space_dim: usize) -> Result<Vec<f64>> {
 /// let (duals, primals) = ddl();
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
-///     DofOrdering::NodesThenVars, true, Some(&mat), None,
-///     |geoms, m, s, ke| truss::element_stiffness(&geoms[0], m.unwrap(), ke),
+///     DofOrdering::NodesThenVars, true, &mat, None,
+///     |geoms, m, s, ke| truss::element_stiffness(&geoms[0], m, ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
 /// // Une barre libre est singulière : la translation d'ensemble ne coûte rien.
@@ -424,8 +424,8 @@ fn cell_length(geom: &CellGeom, space_dim: usize) -> Result<f64> {
 /// let (duals, primals) = ddl();
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
-///     DofOrdering::NodesThenVars, true, Some(&mat), None,
-///     |geoms, m, s, ke| truss::element_mass(&geoms[0], m.unwrap(), ke),
+///     DofOrdering::NodesThenVars, true, &mat, None,
+///     |geoms, m, s, ke| truss::element_mass(&geoms[0], m, ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
 /// // La masse cohérente somme à ρ·A·L par direction : ici deux fois 0,06.
@@ -486,7 +486,7 @@ pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64])
 /// let (duals, primals) = ddl();
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
-///     DofOrdering::NodesThenVars, true, None, Some(&mat),
+///     DofOrdering::NodesThenVars, true, &mat, Some(&mat),
 ///     |geoms, m, s, ke| truss::element_geometric(&geoms[0], s.unwrap(), ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
@@ -569,7 +569,7 @@ mod tests {
         let (e, area) = (210.0, 2.0);
         let (truss, a, b, len, c) = inclined_bar(e, area, 3.0, 4.0);
         let mat = material(&truss, e, area);
-        let blocks = truss.build_stiffness_blocks(Some(&mat)).unwrap();
+        let blocks = truss.build_stiffness_blocks(&mat).unwrap();
         let k = &blocks[0];
         let k_ax = e * area / len;
         let tol = 1e-9;
@@ -599,7 +599,7 @@ mod tests {
         let strain = Handle::new(strain);
 
         let out = truss
-            .integrate_behavior(&strain, &rest(&truss, &mat), Some(&mat), 0.0)
+            .integrate_behavior(&strain, &rest(&truss, &mat), &mat, 0.0)
             .unwrap();
         assert_eq!(out.components(), &["n".to_string()]);
         let expected = e * area * eps0;

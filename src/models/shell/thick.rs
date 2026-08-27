@@ -192,8 +192,8 @@ pub fn shear_factor(material: &SubElementField, cell: usize) -> f64 {
 /// let (duals, primals) = ddl();
 /// let bloc = assemble_block(
 ///     &[zone.clone(), zone.clone()], &support, &support, duals, primals,
-///     DofOrdering::NodesThenVars, true, Some(&mat), None,
-///     |geoms, m, _s, ke| thick::element_stiffness(&geoms[0], &geoms[1], m.unwrap(), ke),
+///     DofOrdering::NodesThenVars, true, &mat, None,
+///     |geoms, m, _s, ke| thick::element_stiffness(&geoms[0], &geoms[1], m, ke),
 /// )?;
 /// // Le bloc porte les six DDL de chaque nœud : 18 × 18 sur un TRI3.
 /// assert_eq!((bloc.n_rows(), bloc.n_cols()), (18, 18));
@@ -246,7 +246,7 @@ pub fn element_stiffness(
     // ── Transverse shear: reduced quadrature, against locking ──────────────
     for g in 0..reduced.n_gauss {
         let dn = local_derivatives(reduced, &frame, g)?;
-        let shape = reduced.n_at_g(g)?;
+        let shape = reduced.n_at_g(g);
         let w = reduced.det_j_w(g)?;
         // `γ` on (w, θ_x, θ_y) — local DOFs 6i+2, 6i+3, 6i+4.
         let mut bs = vec![vec![0.0; side]; 2];

@@ -269,8 +269,8 @@ fn bending_b(
 /// let (duals, primals) = ddl();
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
-///     DofOrdering::NodesThenVars, true, Some(&mat), None,
-///     |geoms, m, _s, ke| kirchhoff::element_stiffness(&geoms[0], m.unwrap(), ke),
+///     DofOrdering::NodesThenVars, true, &mat, None,
+///     |geoms, m, _s, ke| kirchhoff::element_stiffness(&geoms[0], m, ke),
 /// )?;
 /// // Le bloc porte les six DDL de chaque nœud : 18 × 18 sur un TRI3.
 /// assert_eq!((bloc.n_rows(), bloc.n_cols()), (18, 18));

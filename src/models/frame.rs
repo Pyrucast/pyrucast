@@ -113,8 +113,8 @@ fn matmul(a: &[[f64; 6]; 6], b: &[[f64; 6]; 6]) -> [[f64; 6]; 6] {
 /// let (duals, primals) = ddl();
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
-///     DofOrdering::NodesThenVars, true, Some(&mat), None,
-///     |geoms, m, s, ke| frame::element_stiffness(&geoms[0], m.unwrap(), ke),
+///     DofOrdering::NodesThenVars, true, &mat, None,
+///     |geoms, m, s, ke| frame::element_stiffness(&geoms[0], m, ke),
 /// )?;
 /// // Portique plan : axial et flexion, ramenés aux axes globaux.
 /// assert_eq!((bloc.n_rows(), bloc.n_cols()), (6, 6));
@@ -238,8 +238,8 @@ fn cell_frame(geom: &CellGeom) -> Result<(f64, f64, f64)> {
 /// let (duals, primals) = ddl();
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
-///     DofOrdering::NodesThenVars, true, Some(&mat), None,
-///     |geoms, m, s, ke| frame::element_mass(&geoms[0], m.unwrap(), ke),
+///     DofOrdering::NodesThenVars, true, &mat, None,
+///     |geoms, m, s, ke| frame::element_mass(&geoms[0], m, ke),
 /// )?;
 /// assert_eq!((bloc.n_rows(), bloc.n_cols()), (6, 6));
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -297,7 +297,7 @@ pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64])
 /// let (duals, primals) = ddl();
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
-///     DofOrdering::NodesThenVars, true, None, Some(&mat),
+///     DofOrdering::NodesThenVars, true, &mat, Some(&mat),
 ///     |geoms, m, s, ke| frame::element_geometric(&geoms[0], s.unwrap(), ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();

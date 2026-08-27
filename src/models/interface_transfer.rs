@@ -263,11 +263,11 @@ impl SubModelKind for InterfaceTransfer {
     fn element_matrix(
         &self,
         geoms: &[CellGeom],
-        material: Option<&SubElementField>,
+        material: &SubElementField,
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
-        let mat = material.expect("InterfaceTransfer declares a material_fespace");
+        let mat = material;
         let coefficients = coefficient_indices(mat, &self.components)?;
         exchange_matrix(geom, geom, mat, &coefficients, 1.0, ke)
     }
@@ -279,10 +279,10 @@ impl SubModelKind for InterfaceTransfer {
         _kind: MatrixKind,
         row_geoms: &[CellGeom],
         col_geoms: &[CellGeom],
-        material: Option<&SubElementField>,
+        material: &SubElementField,
         ke: &mut [f64],
     ) -> Result<()> {
-        let mat = material.expect("InterfaceTransfer declares a material_fespace");
+        let mat = material;
         let coefficients = coefficient_indices(mat, &self.components)?;
         exchange_matrix(&row_geoms[0], &col_geoms[0], mat, &coefficients, -1.0, ke)
     }

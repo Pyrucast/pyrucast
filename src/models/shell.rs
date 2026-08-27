@@ -302,10 +302,10 @@ impl SubModelKind for Shell {
     fn element_matrix(
         &self,
         geoms: &[CellGeom],
-        material: Option<&SubElementField>,
+        material: &SubElementField,
         ke: &mut [f64],
     ) -> Result<()> {
-        let mat = material.expect("Shell declares a material_fespace");
+        let mat = material;
         match self.model {
             ShellModel::Thick => thick::element_stiffness(&geoms[0], &geoms[1], mat, ke),
             ShellModel::Kirchhoff => kirchhoff::element_stiffness(&geoms[0], mat, ke),
@@ -700,7 +700,7 @@ pub fn membrane_and_drilling(
 
     for g in 0..geom.n_gauss {
         let dn = local_derivatives(geom, frame, g)?;
-        let shape = geom.n_at_g(g)?;
+        let shape = geom.n_at_g(g);
         let w = geom.det_j_w(g)?;
 
         // Membrane `ε` on (u, v) — local DOFs 6i+0, 6i+1.

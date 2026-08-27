@@ -327,30 +327,21 @@ impl SubModelKind for HeatConduction {
     fn element_matrix(
         &self,
         geoms: &[CellGeom],
-        material: Option<&SubElementField>,
+        material: &SubElementField,
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
-        element_stiffness(
-            geom,
-            material.expect("HeatConduction requires a material field"),
-            self.symmetry,
-            ke,
-        )
+        element_stiffness(geom, material, self.symmetry, ke)
     }
 
     fn element_mass(
         &self,
         geoms: &[CellGeom],
-        material: Option<&SubElementField>,
+        material: &SubElementField,
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
-        element_capacity(
-            geom,
-            material.expect("HeatConduction requires a material field"),
-            ke,
-        )
+        element_capacity(geom, material, ke)
     }
 
     /// Internal nodal fluxes `q_i = ∫ ∇N_i · flux dx` of one cell — `Bᵀ` applied
@@ -498,9 +489,9 @@ impl Domain for HeatConduction {
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support,
 ///     vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
-///     Some(&mat), None,
+///     &mat, None,
 ///     |geoms, m, _s, ke| heat_conduction::element_stiffness(
-///         &geoms[0], m.unwrap(), MaterialSymmetry::Isotropic, ke),
+///         &geoms[0], m, MaterialSymmetry::Isotropic, ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
 /// assert!(total.abs() < 1e-9);
@@ -598,8 +589,8 @@ pub fn element_stiffness(
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support,
 ///     vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
-///     Some(&mat), None,
-///     |geoms, m, _s, ke| heat_conduction::element_capacity(&geoms[0], m.unwrap(), ke),
+///     &mat, None,
+///     |geoms, m, _s, ke| heat_conduction::element_capacity(&geoms[0], m, ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
 /// assert!((total - 3.0 * 4.0 * 0.5).abs() < 1e-9);
@@ -620,7 +611,7 @@ pub fn element_capacity(geom: &CellGeom, material: &SubElementField, ke: &mut [f
     })?;
     let rho_cp = rho * cp;
     for g in 0..geom.n_gauss {
-        let n = geom.n_at_g(g)?;
+        let n = geom.n_at_g(g);
         let w = geom.det_j_w(g)? * rho_cp;
         for i in 0..n_nodes {
             for j in 0..n_nodes {
@@ -688,7 +679,7 @@ mod tests {
         let mat = Handle::new(mat);
 
         let flux = hc
-            .integrate_behavior(&def, &rest(&hc, &mat), Some(&mat), 0.0)
+            .integrate_behavior(&def, &rest(&hc, &mat), &mat, 0.0)
             .unwrap();
         assert_eq!(flux.components(), &["flux_x".to_string()]);
         let expected = k * grad;

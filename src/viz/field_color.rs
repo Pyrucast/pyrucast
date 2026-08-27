@@ -290,7 +290,7 @@ impl FitOperator {
             // has to vary along what is drawn. This is a picture, not a computed
             // field value, so it stays defined even where a formulation owns its
             // interpolation and refuses to interpolate for a computation.
-            let row = s.n_at_g(g)?;
+            let row = s.n_at_g(g);
             let w = s.gauss_weight(g)?;
             for i in 0..npc {
                 a[(g, i)] = row[i];

@@ -363,29 +363,19 @@ impl SubModelKind for Fick {
     fn element_matrix(
         &self,
         geoms: &[CellGeom],
-        material: Option<&SubElementField>,
+        material: &SubElementField,
         ke: &mut [f64],
     ) -> Result<()> {
-        element_stiffness(
-            &geoms[0],
-            material.expect("Fick requires a material field"),
-            self.symmetry,
-            &self.species,
-            ke,
-        )
+        element_stiffness(&geoms[0], material, self.symmetry, &self.species, ke)
     }
 
     fn element_mass(
         &self,
         geoms: &[CellGeom],
-        material: Option<&SubElementField>,
+        material: &SubElementField,
         ke: &mut [f64],
     ) -> Result<()> {
-        element_storage(
-            &geoms[0],
-            material.expect("Fick requires a material field"),
-            ke,
-        )
+        element_storage(&geoms[0], material, ke)
     }
 
     /// Internal nodal fluxes `j_i = ∫ ∇N_i · flux dx` — `Bᵀ` applied to the
@@ -529,9 +519,9 @@ impl Domain for Fick {
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support,
 ///     vec!["j_H2".into()], vec!["c_H2".into()], DofOrdering::NodesThenVars, true,
-///     Some(&mat), None,
+///     &mat, None,
 ///     |geoms, m, _s, ke| fick::element_stiffness(
-///         &geoms[0], m.unwrap(), MaterialSymmetry::Isotropic, "H2", ke),
+///         &geoms[0], m, MaterialSymmetry::Isotropic, "H2", ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
 /// assert!(total.abs() < 1e-9); // une concentration uniforme ne diffuse pas
@@ -626,8 +616,8 @@ pub fn element_stiffness(
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support,
 ///     vec!["j_H2".into()], vec!["c_H2".into()], DofOrdering::NodesThenVars, true,
-///     Some(&mat), None,
-///     |geoms, m, _s, ke| fick::element_storage(&geoms[0], m.unwrap(), ke),
+///     &mat, None,
+///     |geoms, m, _s, ke| fick::element_storage(&geoms[0], m, ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
 /// assert!((total - 3.0 * 0.5).abs() < 1e-9);
@@ -642,7 +632,7 @@ pub fn element_storage(geom: &CellGeom, material: &SubElementField, ke: &mut [f6
         )
     })?;
     for g in 0..geom.n_gauss {
-        let n = geom.n_at_g(g)?;
+        let n = geom.n_at_g(g);
         let det_j_w = geom.det_j_w(g)?;
         for i in 0..n_nodes {
             for j in 0..n_nodes {

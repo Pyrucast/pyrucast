@@ -91,7 +91,7 @@ impl PySubFiniteElementSpace {
 
     /// `N_i(ξ_g)` at the `g`-th Gauss point (flat, length `nodes_per_cell`).
     fn n_at_g(&self, g: usize) -> PyResult<Vec<f64>> {
-        Ok(self.handle.read().n_at_g(g)?.to_vec())
+        Ok(self.handle.read().n_at_g(g).to_vec())
     }
 
     /// `∂N_i/∂ξ_j(ξ_g)` at the `g`-th Gauss point.

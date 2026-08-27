@@ -138,7 +138,7 @@ pub fn thermal_strain(
             sub,
             &temp_sub,
             None,
-            Some(&mat_sub),
+            &mat_sub,
             names,
             |_geom, _g, input, _prev, material, out| {
                 let eps_th = material[i_alpha] * (input[i_temp] - t_ref);

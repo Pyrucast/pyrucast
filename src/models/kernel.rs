@@ -180,12 +180,16 @@ fn scale_slope_slots_into(row: &[f64], j: f64, out: &mut [f64]) {
 /// # let support = zone.read().submesh().read().to_poi1().unwrap();
 /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
 /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
-/// # // une physique.
+/// # // une physique. Ce noyau-ci ne lit aucun matériau, mais l'assembleur en
+/// # // veut un : on en donne un qui ne sert à rien plutôt qu'une `Option`.
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+/// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
 /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
 /// #     assemble_block(
 /// #         std::slice::from_ref(&zone), &support, &support,
 /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
-/// #         None, None,
+/// #         &mat, None,
 /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
 /// #     ).map(|_| ())
 /// # };
@@ -220,8 +224,8 @@ pub struct CellGeom<'a> {
 }
 
 impl<'a> CellGeom<'a> {
-    fn new(rd: &'a RefData, coords: &'a Coords, conn: &'a [NodeId], cell: usize) -> Result<Self> {
-        Ok(Self {
+    fn new(rd: &'a RefData, coords: &'a Coords, conn: &'a [NodeId], cell: usize) -> Self {
+        Self {
             rd,
             coords,
             conn,
@@ -231,7 +235,7 @@ impl<'a> CellGeom<'a> {
             n_gauss: rd.n_gauss,
             space_dim: rd.space_dim,
             axisymmetric: rd.axisymmetric,
-        })
+        }
     }
 
     /// Global node ids of this cell, in connectivity order.
@@ -255,12 +259,16 @@ impl<'a> CellGeom<'a> {
     /// # let support = zone.read().submesh().read().to_poi1().unwrap();
     /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
     /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
-    /// # // une physique.
+    /// # // une physique. Ce noyau-ci ne lit aucun matériau, mais l'assembleur en
+    /// # // veut un : on en donne un qui ne sert à rien plutôt qu'une `Option`.
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+    /// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
     /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
     /// #     assemble_block(
     /// #         std::slice::from_ref(&zone), &support, &support,
     /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
-    /// #         None, None,
+    /// #         &mat, None,
     /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
     /// #     ).map(|_| ())
     /// # };
@@ -296,12 +304,16 @@ impl<'a> CellGeom<'a> {
     /// # let support = zone.read().submesh().read().to_poi1().unwrap();
     /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
     /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
-    /// # // une physique.
+    /// # // une physique. Ce noyau-ci ne lit aucun matériau, mais l'assembleur en
+    /// # // veut un : on en donne un qui ne sert à rien plutôt qu'une `Option`.
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+    /// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
     /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
     /// #     assemble_block(
     /// #         std::slice::from_ref(&zone), &support, &support,
     /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
-    /// #         None, None,
+    /// #         &mat, None,
     /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
     /// #     ).map(|_| ())
     /// # };
@@ -352,12 +364,16 @@ impl<'a> CellGeom<'a> {
     /// # let support = zone.read().submesh().read().to_poi1().unwrap();
     /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
     /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
-    /// # // une physique.
+    /// # // une physique. Ce noyau-ci ne lit aucun matériau, mais l'assembleur en
+    /// # // veut un : on en donne un qui ne sert à rien plutôt qu'une `Option`.
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+    /// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
     /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
     /// #     assemble_block(
     /// #         std::slice::from_ref(&zone), &support, &support,
     /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
-    /// #         None, None,
+    /// #         &mat, None,
     /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
     /// #     ).map(|_| ())
     /// # };
@@ -409,23 +425,27 @@ impl<'a> CellGeom<'a> {
     /// # let support = zone.read().submesh().read().to_poi1().unwrap();
     /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
     /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
-    /// # // une physique.
+    /// # // une physique. Ce noyau-ci ne lit aucun matériau, mais l'assembleur en
+    /// # // veut un : on en donne un qui ne sert à rien plutôt qu'une `Option`.
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+    /// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
     /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
     /// #     assemble_block(
     /// #         std::slice::from_ref(&zone), &support, &support,
     /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
-    /// #         None, None,
+    /// #         &mat, None,
     /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
     /// #     ).map(|_| ())
     /// # };
     /// noyau(&|geom| {
-    ///     assert!((geom.n_at_g(0)?.iter().sum::<f64>() - 1.0).abs() < 1e-12);
+    ///     assert!((geom.n_at_g(0).iter().sum::<f64>() - 1.0).abs() < 1e-12);
     ///     Ok(())
     /// })?;
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn n_at_g(&self, g: usize) -> Result<&[f64]> {
-        Ok(&self.rd.n_ref[g])
+    pub fn n_at_g(&self, g: usize) -> &[f64] {
+        &self.rd.n_ref[g]
     }
 
     /// Reference coordinates `ξ_g` of Gauss point `g`, of length `ref_dim`.
@@ -454,12 +474,16 @@ impl<'a> CellGeom<'a> {
     /// # let support = zone.read().submesh().read().to_poi1().unwrap();
     /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
     /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
-    /// # // une physique.
+    /// # // une physique. Ce noyau-ci ne lit aucun matériau, mais l'assembleur en
+    /// # // veut un : on en donne un qui ne sert à rien plutôt qu'une `Option`.
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+    /// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
     /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
     /// #     assemble_block(
     /// #         std::slice::from_ref(&zone), &support, &support,
     /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
-    /// #         None, None,
+    /// #         &mat, None,
     /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
     /// #     ).map(|_| ())
     /// # };
@@ -504,12 +528,16 @@ impl<'a> CellGeom<'a> {
     /// # let support = zone.read().submesh().read().to_poi1().unwrap();
     /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
     /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
-    /// # // une physique.
+    /// # // une physique. Ce noyau-ci ne lit aucun matériau, mais l'assembleur en
+    /// # // veut un : on en donne un qui ne sert à rien plutôt qu'une `Option`.
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+    /// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
     /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
     /// #     assemble_block(
     /// #         std::slice::from_ref(&zone), &support, &support,
     /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
-    /// #         None, None,
+    /// #         &mat, None,
     /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
     /// #     ).map(|_| ())
     /// # };
@@ -552,12 +580,16 @@ impl<'a> CellGeom<'a> {
     /// # let support = zone.read().submesh().read().to_poi1().unwrap();
     /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
     /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
-    /// # // une physique.
+    /// # // une physique. Ce noyau-ci ne lit aucun matériau, mais l'assembleur en
+    /// # // veut un : on en donne un qui ne sert à rien plutôt qu'une `Option`.
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+    /// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
     /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
     /// #     assemble_block(
     /// #         std::slice::from_ref(&zone), &support, &support,
     /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
-    /// #         None, None,
+    /// #         &mat, None,
     /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
     /// #     ).map(|_| ())
     /// # };
@@ -696,12 +728,16 @@ impl<'a> CellGeom<'a> {
     /// # let support = zone.read().submesh().read().to_poi1().unwrap();
     /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
     /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
-    /// # // une physique.
+    /// # // une physique. Ce noyau-ci ne lit aucun matériau, mais l'assembleur en
+    /// # // veut un : on en donne un qui ne sert à rien plutôt qu'une `Option`.
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+    /// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
     /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
     /// #     assemble_block(
     /// #         std::slice::from_ref(&zone), &support, &support,
     /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
-    /// #         None, None,
+    /// #         &mat, None,
     /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
     /// #     ).map(|_| ())
     /// # };
@@ -757,10 +793,13 @@ impl<'a> CellGeom<'a> {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
     /// # let zone = fes.get(0)?;
     /// # let support = zone.read().submesh().read().to_poi1()?;
+    /// # let mat_bidon = Handle::new(
+    /// #     pyrucast::containers::element_field::SubElementField::from_uniform_per_component(
+    /// #         zone.clone(), vec!["k".into()], &[1.0]).unwrap());
     /// assemble_block(
     ///     std::slice::from_ref(&zone), &support, &support,
     ///     vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
-    ///     None, None,
+    ///     &mat_bidon, None,
     ///     |geoms, _m, _s, _ke| {
     ///         let geom = &geoms[0];
     ///         assert!(geom.axisymmetric);
@@ -834,12 +873,16 @@ impl<'a> CellGeom<'a> {
     /// # let support = zone.read().submesh().read().to_poi1().unwrap();
     /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
     /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
-    /// # // une physique.
+    /// # // une physique. Ce noyau-ci ne lit aucun matériau, mais l'assembleur en
+    /// # // veut un : on en donne un qui ne sert à rien plutôt qu'une `Option`.
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+    /// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
     /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
     /// #     assemble_block(
     /// #         std::slice::from_ref(&zone), &support, &support,
     /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
-    /// #         None, None,
+    /// #         &mat, None,
     /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
     /// #     ).map(|_| ())
     /// # };
@@ -900,12 +943,16 @@ impl<'a> CellGeom<'a> {
     /// # let support = zone.read().submesh().read().to_poi1().unwrap();
     /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
     /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
-    /// # // une physique.
+    /// # // une physique. Ce noyau-ci ne lit aucun matériau, mais l'assembleur en
+    /// # // veut un : on en donne un qui ne sert à rien plutôt qu'une `Option`.
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+    /// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
     /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
     /// #     assemble_block(
     /// #         std::slice::from_ref(&zone), &support, &support,
     /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
-    /// #         None, None,
+    /// #         &mat, None,
     /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
     /// #     ).map(|_| ())
     /// # };
@@ -1047,12 +1094,16 @@ impl<'a> CellGeom<'a> {
     /// # let support = zone.read().submesh().read().to_poi1().unwrap();
     /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
     /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
-    /// # // une physique.
+    /// # // une physique. Ce noyau-ci ne lit aucun matériau, mais l'assembleur en
+    /// # // veut un : on en donne un qui ne sert à rien plutôt qu'une `Option`.
+    /// # use pyrucast::containers::element_field::SubElementField;
+    /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+    /// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
     /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
     /// #     assemble_block(
     /// #         std::slice::from_ref(&zone), &support, &support,
     /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
-    /// #         None, None,
+    /// #         &mat, None,
     /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
     /// #     ).map(|_| ())
     /// # };
@@ -1136,13 +1187,16 @@ impl<'a> CellGeom<'a> {
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let mat_bidon = Handle::new(
+/// #     pyrucast::containers::element_field::SubElementField::from_uniform_per_component(
+/// #         zone.clone(), vec!["k".into()], &[1.0]).unwrap());
 /// # let mut entree = SubElementField::new(zone.clone(), vec!["eps".into()])?;
 /// # entree.set_uniform("eps", 2.0)?;
 /// # let entree = Handle::new(entree);
 /// // Un noyau **au point de Gauss** : la loi de comportement en est un —
 /// // lire la déformation et le matériau, écrire la contrainte.
 /// let sortie = kernel::element_pointwise(
-///     &zone, &entree, None, None, vec!["sig".into()],
+///     &zone, &entree, None, &mat_bidon, vec!["sig".into()],
 ///     |_geom, _g, ligne, _prev, _mat, slot| {
 ///         slot[0] = 3.0 * ligne[0];
 ///         Ok(())
@@ -1155,7 +1209,7 @@ pub fn element_pointwise(
     fespace: &Handle<SubFiniteElementSpace>,
     input: &Handle<SubElementField>,
     prev: Option<&Handle<SubElementField>>,
-    material: Option<&Handle<SubElementField>>,
+    material: &Handle<SubElementField>,
     out_components: Vec<String>,
     point: impl Fn(&CellGeom, usize, &[f64], &[f64], &[f64], &mut [f64]) -> Result<()> + Sync,
 ) -> Result<SubElementField> {
@@ -1171,7 +1225,7 @@ pub fn element_pointwise(
     let coords = coords_h.read();
     let fin = input.read();
     let prev_guard = prev.map(|h| h.read());
-    let mat_guard = material.map(|h| h.read());
+    let mat_guard = material.read();
 
     let rd = RefData::snapshot(&fe)?;
     let n_gauss = rd.n_gauss;
@@ -1206,10 +1260,7 @@ pub fn element_pointwise(
         Some(p) => rows(p, "previous state", n_cells, n_gauss)?,
         None => (&[][..], 0),
     };
-    let (mat_vals, mat_stride) = match mat_guard.as_deref() {
-        Some(m) => rows(m, "material", n_cells, n_gauss)?,
-        None => (&[][..], 0),
-    };
+    let (mat_vals, mat_stride) = rows(&mat_guard, "material", n_cells, n_gauss)?;
 
     // The row of `(cell, g)`: contiguous, so a start offset and a stride. A
     // stride of zero (an absent input) lands on the empty range of an empty
@@ -1224,7 +1275,7 @@ pub fn element_pointwise(
         .with_min_len((MIN_PARALLEL_LEN / n_gauss.max(1)).max(1))
         .enumerate()
         .try_for_each(|(cell, ochunk)| -> Result<()> {
-            let geom = CellGeom::new(rd_ref, coords_ref, conn, cell)?;
+            let geom = CellGeom::new(rd_ref, coords_ref, conn, cell);
             for g in 0..n_gauss {
                 let slot = &mut ochunk[g * out_stride..(g + 1) * out_stride];
                 point(
@@ -1303,7 +1354,7 @@ pub(crate) fn nodal_pointwise(
         .with_min_len((MIN_PARALLEL_LEN / n_gauss.max(1)).max(1))
         .enumerate()
         .try_for_each(|(cell, ochunk)| -> Result<()> {
-            let geom = CellGeom::new(rd_ref, coords_ref, conn, cell)?;
+            let geom = CellGeom::new(rd_ref, coords_ref, conn, cell);
             // The cell's nodal values, read **once** — they do not change from
             // one Gauss point of the cell to the next.
             let mut dofs = [0.0_f64; MAX_CELL_DOFS];
@@ -1354,13 +1405,16 @@ pub(crate) const MAX_CELL_DOFS: usize = 64;
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # let mat_bidon = Handle::new(
+/// #     pyrucast::containers::element_field::SubElementField::from_uniform_per_component(
+/// #         zone.clone(), vec!["k".into()], &[1.0]).unwrap());
 /// // Le pilote appelle un noyau **pur et séquentiel** par maille ; la
 /// // parallélisation, l'emprunt zéro-copie et le rangement en COO sont à
 /// // lui. Ici, une matrice identité locale.
 /// let bloc = kernel::assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support,
 ///     vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
-///     None, None,
+///     &mat_bidon, None,
 ///     |geoms, _m, _s, ke| {
 ///         let npc = geoms[0].n_nodes;
 ///         for i in 0..npc {
@@ -1382,14 +1436,9 @@ pub fn assemble_block(
     primal_vars: Vec<String>,
     ordering: DofOrdering,
     symmetric: bool,
-    material: Option<&Handle<SubElementField>>,
+    material: &Handle<SubElementField>,
     state: Option<&Handle<SubElementField>>,
-    element: impl Fn(
-            &[CellGeom],
-            Option<&SubElementField>,
-            Option<&SubElementField>,
-            &mut [f64],
-        ) -> Result<()>
+    element: impl Fn(&[CellGeom], &SubElementField, Option<&SubElementField>, &mut [f64]) -> Result<()>
         + Sync,
 ) -> Result<SubMatrix> {
     let (nrows, ncols, trips) = element_block_triplets(
@@ -1446,11 +1495,15 @@ pub fn assemble_block(
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # // Ce noyau ne lit aucun matériau ; l'assembleur en veut un, on lui en
+/// # // donne un qui ne sert à rien plutôt qu'une `Option` à déballer.
+/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+/// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
 /// // Ce que rend `element_block_triplets` : la taille du bloc et ses
 /// // triplets, en numérotation **locale** au bloc.
 /// let (nr, nc, trips): kernel::BlockTriplets = kernel::element_block_triplets(
 ///     std::slice::from_ref(&zone), &support, &support, 1, 1,
-///     DofOrdering::NodesThenVars, None, None,
+///     DofOrdering::NodesThenVars, &mat, None,
 ///     |geoms, _m, _s, ke| { ke[0] = geoms[0].det_j_w(0)?; Ok(()) },
 /// )?;
 /// assert_eq!((nr, nc), (3, 3));
@@ -1490,11 +1543,15 @@ pub type BlockTriplets = (usize, usize, Vec<(usize, usize, f64)>);
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # // Ce noyau ne lit aucun matériau ; l'assembleur en veut un, on lui en
+/// # // donne un qui ne sert à rien plutôt qu'une `Option` à déballer.
+/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+/// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
 /// // Ce que rend `element_block_triplets` : la taille du bloc et ses
 /// // triplets, en numérotation **locale** au bloc.
 /// let (nr, nc, trips): kernel::BlockTriplets = kernel::element_block_triplets(
 ///     std::slice::from_ref(&zone), &support, &support, 1, 1,
-///     DofOrdering::NodesThenVars, None, None,
+///     DofOrdering::NodesThenVars, &mat, None,
 ///     |geoms, _m, _s, ke| { ke[0] = geoms[0].det_j_w(0)?; Ok(()) },
 /// )?;
 /// assert_eq!((nr, nc), (3, 3));
@@ -1508,14 +1565,9 @@ pub fn element_block_triplets(
     n_dual: usize,
     n_primal: usize,
     ordering: DofOrdering,
-    material: Option<&Handle<SubElementField>>,
+    material: &Handle<SubElementField>,
     state: Option<&Handle<SubElementField>>,
-    element: impl Fn(
-            &[CellGeom],
-            Option<&SubElementField>,
-            Option<&SubElementField>,
-            &mut [f64],
-        ) -> Result<()>
+    element: impl Fn(&[CellGeom], &SubElementField, Option<&SubElementField>, &mut [f64]) -> Result<()>
         + Sync,
 ) -> Result<BlockTriplets> {
     let (nrows, ncols, per_cell) = element_block_triplets_per_cell(
@@ -1559,12 +1611,16 @@ pub fn element_block_triplets(
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # // Ce noyau ne lit aucun matériau ; l'assembleur en veut un, on lui en
+/// # // donne un qui ne sert à rien plutôt qu'une `Option` à déballer.
+/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+/// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
 /// // La même chose, **groupée par maille** : ce que consomme l'assembleur
 /// // global pour verser droit dans le CSR sans matérialiser de valeurs.
 /// let (nr, nc, par_maille): kernel::BlockTripletsPerCell =
 ///     kernel::element_block_triplets_per_cell(
 ///         std::slice::from_ref(&zone), &support, &support, 1, 1,
-///         DofOrdering::NodesThenVars, None, None,
+///         DofOrdering::NodesThenVars, &mat, None,
 ///         |geoms, _m, _s, ke| { ke[0] = geoms[0].det_j_w(0)?; Ok(()) },
 ///     )?;
 /// assert_eq!((nr, nc), (3, 3));
@@ -1607,12 +1663,16 @@ pub type BlockTripletsPerCell = (usize, usize, Vec<Vec<(usize, usize, f64)>>);
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # // Ce noyau ne lit aucun matériau ; l'assembleur en veut un, on lui en
+/// # // donne un qui ne sert à rien plutôt qu'une `Option` à déballer.
+/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+/// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
 /// // La même chose, **groupée par maille** : ce que consomme l'assembleur
 /// // global pour verser droit dans le CSR sans matérialiser de valeurs.
 /// let (nr, nc, par_maille): kernel::BlockTripletsPerCell =
 ///     kernel::element_block_triplets_per_cell(
 ///         std::slice::from_ref(&zone), &support, &support, 1, 1,
-///         DofOrdering::NodesThenVars, None, None,
+///         DofOrdering::NodesThenVars, &mat, None,
 ///         |geoms, _m, _s, ke| { ke[0] = geoms[0].det_j_w(0)?; Ok(()) },
 ///     )?;
 /// assert_eq!((nr, nc), (3, 3));
@@ -1626,14 +1686,9 @@ pub fn element_block_triplets_per_cell(
     n_dual: usize,
     n_primal: usize,
     ordering: DofOrdering,
-    material: Option<&Handle<SubElementField>>,
+    material: &Handle<SubElementField>,
     state: Option<&Handle<SubElementField>>,
-    element: impl Fn(
-            &[CellGeom],
-            Option<&SubElementField>,
-            Option<&SubElementField>,
-            &mut [f64],
-        ) -> Result<()>
+    element: impl Fn(&[CellGeom], &SubElementField, Option<&SubElementField>, &mut [f64]) -> Result<()>
         + Sync,
 ) -> Result<BlockTripletsPerCell> {
     let primary = fespaces.first().ok_or_else(|| {
@@ -1644,7 +1699,7 @@ pub fn element_block_triplets_per_cell(
     let sm = submesh.read();
     let coords_h = sm.coords();
     let coords = coords_h.read();
-    let mat_guard = material.map(|h| h.read());
+    let mat_guard = material.read();
     let state_guard = state.map(|h| h.read());
 
     // Reference data of every subspace, snapshotted once (they share the submesh
@@ -1667,7 +1722,7 @@ pub fn element_block_triplets_per_cell(
     let conn: &[NodeId] = sm.connectivity();
     let rds_ref: &[RefData] = &rds;
     let coords_ref: &Coords = &coords;
-    let mat_ref: Option<&SubElementField> = mat_guard.as_deref();
+    let mat_ref: &SubElementField = &mat_guard;
     let state_ref: Option<&SubElementField> = state_guard.as_deref();
 
     let n_cols_loc = n_nodes * n_primal;
@@ -1703,7 +1758,7 @@ pub fn element_block_triplets_per_cell(
             let geoms: Vec<CellGeom> = rds_ref
                 .iter()
                 .map(|rd| CellGeom::new(rd, coords_ref, conn, cell))
-                .collect::<Result<_>>()?;
+                .collect();
             let mut ke = vec![0.0_f64; ke_len];
             element(&geoms, mat_ref, state_ref, &mut ke)?;
 
@@ -1934,11 +1989,16 @@ fn check_conforming(
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # // Ce noyau ne lit aucun matériau ; l'assembleur en veut un, on lui en
+/// # // donne un qui ne sert à rien plutôt qu'une `Option` à déballer.
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+/// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
 /// // Les valeurs du bloc de couplage, groupées par maille — le noyau y
 /// // reçoit **deux** jeux de `CellGeom`, un par côté.
 /// let (nr, nc, par_maille) = kernel::coupling_block_triplets_per_cell(
 ///     std::slice::from_ref(&zone), std::slice::from_ref(&zone),
-///     &support, &support, 1, 1, DofOrdering::NodesThenVars, None,
+///     &support, &support, 1, 1, DofOrdering::NodesThenVars, &mat,
 ///     |lignes, colonnes, _m, ke| {
 ///         assert_eq!(lignes.len(), colonnes.len());
 ///         ke[0] = lignes[0].det_j_w(0)?;
@@ -1958,9 +2018,8 @@ pub fn coupling_block_triplets_per_cell(
     n_dual: usize,
     n_primal: usize,
     ordering: DofOrdering,
-    material: Option<&Handle<SubElementField>>,
-    element: impl Fn(&[CellGeom], &[CellGeom], Option<&SubElementField>, &mut [f64]) -> Result<()>
-        + Sync,
+    material: &Handle<SubElementField>,
+    element: impl Fn(&[CellGeom], &[CellGeom], &SubElementField, &mut [f64]) -> Result<()> + Sync,
 ) -> Result<BlockTripletsPerCell> {
     let row_primary = row_fespaces.first().ok_or_else(|| {
         PyrucastError::Message("coupling_block_triplets_per_cell: no row FE subspace".into())
@@ -1973,7 +2032,7 @@ pub fn coupling_block_triplets_per_cell(
     let (row_sm, col_sm) = (row_sm_h.read(), col_sm_h.read());
     let (row_coords_h, col_coords_h) = (row_sm.coords(), col_sm.coords());
     let (row_coords, col_coords) = (row_coords_h.read(), col_coords_h.read());
-    let mat_guard = material.map(|h| h.read());
+    let mat_guard = material.read();
 
     let row_conn: &[NodeId] = row_sm.connectivity();
     let col_conn: &[NodeId] = col_sm.connectivity();
@@ -2002,7 +2061,7 @@ pub fn coupling_block_triplets_per_cell(
     let ke_len = (n_row_nodes_cell * n_dual) * n_cols_loc;
     let (row_rds_ref, col_rds_ref) = (&row_rds[..], &col_rds[..]);
     let (row_coords_ref, col_coords_ref): (&Coords, &Coords) = (&row_coords, &col_coords);
-    let mat_ref: Option<&SubElementField> = mat_guard.as_deref();
+    let mat_ref: &SubElementField = &mat_guard;
 
     let per_cell: Vec<Vec<(usize, usize, f64)>> = (0..n_cells)
         .into_par_iter()
@@ -2011,11 +2070,11 @@ pub fn coupling_block_triplets_per_cell(
             let row_geoms: Vec<CellGeom> = row_rds_ref
                 .iter()
                 .map(|rd| CellGeom::new(rd, row_coords_ref, row_conn, cell))
-                .collect::<Result<_>>()?;
+                .collect();
             let col_geoms: Vec<CellGeom> = col_rds_ref
                 .iter()
                 .map(|rd| CellGeom::new(rd, col_coords_ref, col_conn, cell))
-                .collect::<Result<_>>()?;
+                .collect();
             let mut ke = vec![0.0_f64; ke_len];
             element(&row_geoms, &col_geoms, mat_ref, &mut ke)?;
 
@@ -2279,7 +2338,7 @@ pub fn scatter_to_nodes(
             let geoms: Vec<CellGeom> = rds_ref
                 .iter()
                 .map(|rd| CellGeom::new(rd, coords_ref, conn, cell))
-                .collect::<Result<_>>()?;
+                .collect();
             fe_cell.iter_mut().for_each(|v| *v = 0.0);
             element(&geoms, fe_cell)?;
             let ids = &conn[cell * n_nodes..(cell + 1) * n_nodes];
@@ -2372,7 +2431,7 @@ pub fn reduce_cells(
         .into_par_iter()
         .with_min_len((MIN_PARALLEL_LEN / n_nodes.max(1)).max(1))
         .map(|c| -> Result<f64> {
-            let geom = CellGeom::new(rd_ref, coords_ref, conn, c)?;
+            let geom = CellGeom::new(rd_ref, coords_ref, conn, c);
             cell(&geom)
         })
         .try_reduce(|| 0.0, |a, b| Ok(a + b))

@@ -208,8 +208,8 @@ fn transpose(a: &[[f64; 12]; 12]) -> [[f64; 12]; 12] {
 /// let (duals, primals) = ddl();
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
-///     DofOrdering::NodesThenVars, true, Some(&mat), None,
-///     |geoms, m, s, ke| frame3d::element_stiffness(&geoms[0], m.unwrap(), ke),
+///     DofOrdering::NodesThenVars, true, &mat, None,
+///     |geoms, m, s, ke| frame3d::element_stiffness(&geoms[0], m, ke),
 /// )?;
 /// // Portique spatial : axial, torsion et flexion autour de deux axes
 /// // principaux — six DDL par nœud.
@@ -354,8 +354,8 @@ fn local_geometric(n: f64, l: f64) -> [[f64; 12]; 12] {
 /// let (duals, primals) = ddl();
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
-///     DofOrdering::NodesThenVars, true, Some(&mat), None,
-///     |geoms, m, s, ke| frame3d::element_mass(&geoms[0], m.unwrap(), ke),
+///     DofOrdering::NodesThenVars, true, &mat, None,
+///     |geoms, m, s, ke| frame3d::element_mass(&geoms[0], m, ke),
 /// )?;
 /// assert_eq!((bloc.n_rows(), bloc.n_cols()), (12, 12));
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -417,7 +417,7 @@ pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64])
 /// let (duals, primals) = ddl();
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
-///     DofOrdering::NodesThenVars, true, None, Some(&mat),
+///     DofOrdering::NodesThenVars, true, &mat, Some(&mat),
 ///     |geoms, m, s, ke| frame3d::element_geometric(&geoms[0], s.unwrap(), ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();

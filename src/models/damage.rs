@@ -247,13 +247,13 @@ impl SubModelKind for Damage {
     fn element_matrix(
         &self,
         geoms: &[CellGeom],
-        material: Option<&SubElementField>,
+        material: &SubElementField,
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
         // Iteration operator = elastic (undamaged) stiffness. Reuse the
         // elasticity element kernel; it reads only `E` and `nu`.
-        let mat = material.expect("Damage requires a material field");
+        let mat = material;
         elasticity::element_stiffness(
             geom,
             mat,
@@ -266,23 +266,23 @@ impl SubModelKind for Damage {
     fn element_mass(
         &self,
         geoms: &[CellGeom],
-        material: Option<&SubElementField>,
+        material: &SubElementField,
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
-        let mat = material.expect("Damage requires a material field");
+        let mat = material;
         elasticity::element_mass(geom, mat, ke)
     }
 
     fn element_geometric(
         &self,
         geoms: &[CellGeom],
-        _material: Option<&SubElementField>,
-        state: Option<&SubElementField>,
+        _material: &SubElementField,
+        state: &SubElementField,
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
-        let stress = state.expect("geometric stiffness requires the current stress field");
+        let stress = state;
         elasticity::element_geometric(geom, stress, ke)
     }
 
@@ -512,7 +512,7 @@ mod tests {
         let eps0 = 1e-5; // < eps_d0 = 1e-4
         let strain = strain_field(&mz, eps0);
         let out = mz
-            .integrate_behavior(&strain, &rest(&mz, &mat), Some(&mat), 0.0)
+            .integrate_behavior(&strain, &rest(&mz, &mat), &mat, 0.0)
             .unwrap();
         let (e, nu) = (30_000.0, 0.2);
         let c = e / (1.0 - nu * nu);
@@ -531,7 +531,7 @@ mod tests {
         let eps0 = 5e-4; // > eps_d0
         let strain = strain_field(&mz, eps0);
         let out = mz
-            .integrate_behavior(&strain, &rest(&mz, &mat), Some(&mat), 0.0)
+            .integrate_behavior(&strain, &rest(&mz, &mat), &mat, 0.0)
             .unwrap();
         let (e, nu) = (30_000.0, 0.2);
         let c = e / (1.0 - nu * nu);
@@ -553,7 +553,7 @@ mod tests {
         // Load to 5e-4.
         let s1 = strain_field(&mz, 5e-4);
         let st1 = mz
-            .integrate_behavior(&s1, &rest(&mz, &mat), Some(&mat), 0.0)
+            .integrate_behavior(&s1, &rest(&mz, &mat), &mat, 0.0)
             .unwrap();
         let k1 = st1.value(0, 0, "kappa").unwrap();
         let d1 = st1.value(0, 0, "damage").unwrap();
@@ -561,7 +561,7 @@ mod tests {
         // Unload to 2e-4, feeding the step-1 state (κ) via `prev`.
         let prev = Handle::new(st1);
         let s2 = strain_field(&mz, 2e-4);
-        let st2 = mz.integrate_behavior(&s2, &prev, Some(&mat), 0.0).unwrap();
+        let st2 = mz.integrate_behavior(&s2, &prev, &mat, 0.0).unwrap();
         assert!((st2.value(0, 0, "kappa").unwrap() - k1).abs() < 1e-12);
         // Damage unchanged on unloading (same κ).
         assert!((st2.value(0, 0, "damage").unwrap() - d1).abs() < 1e-9);
@@ -599,7 +599,7 @@ mod tests {
         s.set_uniform("eps_xx", 5e-4).unwrap();
         let s = Handle::new(s);
         let out = mz
-            .integrate_behavior(&s, &rest(&mz, &mat), Some(&mat), 0.0)
+            .integrate_behavior(&s, &rest(&mz, &mat), &mat, 0.0)
             .unwrap();
         for g in 0..out.gauss_count() {
             assert!(out.value(0, g, "damage").unwrap() > 0.0);

@@ -191,11 +191,11 @@ impl SubModelKind for BoundaryTransfer {
     fn element_matrix(
         &self,
         geoms: &[CellGeom],
-        material: Option<&SubElementField>,
+        material: &SubElementField,
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
-        let mat = material.expect("BoundaryTransfer requires a material field");
+        let mat = material;
         let coefficients = coefficient_indices(mat, &self.components)?;
         exchange_matrix(geom, geom, mat, &coefficients, 1.0, ke)
     }

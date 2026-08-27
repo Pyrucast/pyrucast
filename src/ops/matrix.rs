@@ -560,7 +560,16 @@ mod tests {
                 for c in phys.contributions(MatrixKind::Stiffness, material.as_ref())? {
                     match c {
                         Contribution::Computed(_) => {
-                            blocks.extend(phys.build_stiffness_blocks(material.as_ref())?);
+                            // A computed contribution comes from a physics with
+                            // an element kernel, which declares a material FE
+                            // subspace: resolved above, required here.
+                            let mat = material.as_ref().ok_or_else(|| {
+                                crate::error::PyrucastError::Message(format!(
+                                    "{}: a computed stiffness needs material data",
+                                    phys.label()
+                                ))
+                            })?;
+                            blocks.extend(phys.build_stiffness_blocks(mat)?);
                         }
                         Contribution::Literal(bs) => blocks.extend(bs),
                         // The literal path exists as the bit-for-bit equivalence

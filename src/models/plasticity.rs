@@ -304,7 +304,7 @@ impl SubModelKind for Plasticity {
     fn element_matrix(
         &self,
         geoms: &[CellGeom],
-        material: Option<&SubElementField>,
+        material: &SubElementField,
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
@@ -313,7 +313,7 @@ impl SubModelKind for Plasticity {
         // separate operator — see [`element_tangent`](Self::element_tangent) and
         // [`crate::ops::matrix::tangent`]. Reuse the elasticity element kernel
         // verbatim; it reads only `E` and `nu` from the material.
-        let mat = material.expect("Plasticity requires a material field");
+        let mat = material;
         elasticity::element_stiffness(
             geom,
             mat,
@@ -326,23 +326,23 @@ impl SubModelKind for Plasticity {
     fn element_mass(
         &self,
         geoms: &[CellGeom],
-        material: Option<&SubElementField>,
+        material: &SubElementField,
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
-        let mat = material.expect("Plasticity requires a material field");
+        let mat = material;
         elasticity::element_mass(geom, mat, ke)
     }
 
     fn element_geometric(
         &self,
         geoms: &[CellGeom],
-        _material: Option<&SubElementField>,
-        state: Option<&SubElementField>,
+        _material: &SubElementField,
+        state: &SubElementField,
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
-        let stress = state.expect("geometric stiffness requires the current stress field");
+        let stress = state;
         elasticity::element_geometric(geom, stress, ke)
     }
 
@@ -356,12 +356,12 @@ impl SubModelKind for Plasticity {
     fn element_tangent(
         &self,
         geoms: &[CellGeom],
-        _material: Option<&SubElementField>,
-        state: Option<&SubElementField>,
+        _material: &SubElementField,
+        state: &SubElementField,
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
-        let st = state.expect("consistent tangent requires the behaviour state (D_alg)");
+        let st = state;
         elasticity::element_tangent_from_state(geom, st, self.kinematics, ke)
     }
 
@@ -746,7 +746,7 @@ mod tests {
         strain.set_uniform("eps_xx", 1e-4).unwrap();
         let strain = Handle::new(strain);
         let out = pl
-            .integrate_behavior(&strain, &rest(&pl, &mat), Some(&mat), 0.0)
+            .integrate_behavior(&strain, &rest(&pl, &mat), &mat, 0.0)
             .unwrap();
         // Confined uniaxial *strain* (only ε_xx ≠ 0): σ_xx = (λ+2μ)·ε.
         let (lambda, mu) = elasticity::lame(e, nu);
@@ -774,7 +774,7 @@ mod tests {
         strain.set_uniform("eps_xx", 1e-2).unwrap();
         let strain = Handle::new(strain);
         let out = pl
-            .integrate_behavior(&strain, &rest(&pl, &mat), Some(&mat), 0.0)
+            .integrate_behavior(&strain, &rest(&pl, &mat), &mat, 0.0)
             .unwrap();
         for g in 0..out.gauss_count() {
             let s = [
@@ -810,7 +810,7 @@ mod tests {
         strain.set_uniform("eps_xx", eps0).unwrap();
         let strain = Handle::new(strain);
         let out = pl
-            .integrate_behavior(&strain, &rest(&pl, &mat), Some(&mat), 0.0)
+            .integrate_behavior(&strain, &rest(&pl, &mat), &mat, 0.0)
             .unwrap();
         // Linear plane stress uniaxial-strain: σ_xx = E/(1-ν²)·ε, σ_yy = ν·σ_xx.
         let c = e / (1.0 - nu * nu);
@@ -841,7 +841,7 @@ mod tests {
         let mat = material(&pl, e, nu, sy);
         // First load past yield (prev = None ⇒ reference config A).
         let st1 = pl
-            .integrate_behavior(&uniaxial(&pl, 5e-3), &rest(&pl, &mat), Some(&mat), 0.0)
+            .integrate_behavior(&uniaxial(&pl, 5e-3), &rest(&pl, &mat), &mat, 0.0)
             .unwrap();
         let p1 = st1.value(0, 0, "p").unwrap();
         assert!(p1 > 0.0);
@@ -850,7 +850,7 @@ mod tests {
         // output), *not* merged into the deformation field.
         let prev = Handle::new(st1);
         let st2 = pl
-            .integrate_behavior(&uniaxial(&pl, 6e-3), &prev, Some(&mat), 0.0)
+            .integrate_behavior(&uniaxial(&pl, 6e-3), &prev, &mat, 0.0)
             .unwrap();
         // Cumulated plastic strain only grows.
         assert!(st2.value(0, 0, "p").unwrap() >= p1);
@@ -869,7 +869,7 @@ mod tests {
 
         // Single step 0 → ε_final.
         let single = pl
-            .integrate_behavior(&uniaxial(&pl, eps_final), &rest(&pl, &mat), Some(&mat), 0.0)
+            .integrate_behavior(&uniaxial(&pl, eps_final), &rest(&pl, &mat), &mat, 0.0)
             .unwrap();
 
         // Ten proportional increments, threading `prev` — which starts at the
@@ -879,7 +879,7 @@ mod tests {
         for i in 1..=nsteps {
             let val = eps_final * i as f64 / nsteps as f64;
             let out = pl
-                .integrate_behavior(&uniaxial(&pl, val), &prev, Some(&mat), 0.0)
+                .integrate_behavior(&uniaxial(&pl, val), &prev, &mat, 0.0)
                 .unwrap();
             prev = Handle::new(out);
         }
@@ -907,7 +907,7 @@ mod tests {
 
         // Load well past yield.
         let loaded = Handle::new(
-            pl.integrate_behavior(&uniaxial(&pl, 1e-2), &rest(&pl, &mat), Some(&mat), 0.0)
+            pl.integrate_behavior(&uniaxial(&pl, 1e-2), &rest(&pl, &mat), &mat, 0.0)
                 .unwrap(),
         );
         let p1 = loaded.read().value(0, 0, "p").unwrap();
@@ -915,7 +915,7 @@ mod tests {
 
         // Small unload (still far past yield), threading the loaded state as `prev`.
         let unloaded = pl
-            .integrate_behavior(&uniaxial(&pl, 9.9e-3), &loaded, Some(&mat), 0.0)
+            .integrate_behavior(&uniaxial(&pl, 9.9e-3), &loaded, &mat, 0.0)
             .unwrap();
         // Elastic: p unchanged.
         assert!(
@@ -943,7 +943,7 @@ mod tests {
     fn stiffness_is_elastic_and_symmetric() {
         let pl = unit_quad(Kinematics::PlaneStrain);
         let mat = material(&pl, 200.0, 0.3, 250.0);
-        let blocks = pl.build_stiffness_blocks(Some(&mat)).unwrap();
+        let blocks = pl.build_stiffness_blocks(&mat).unwrap();
         let k = &blocks[0];
         let nodes: Vec<NodeId> = pl.support.read().connectivity().to_vec();
         for &ni in &nodes {

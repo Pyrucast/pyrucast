@@ -317,12 +317,12 @@ impl SubModelKind for Elasticity {
     fn element_geometric(
         &self,
         geoms: &[CellGeom],
-        _material: Option<&SubElementField>,
-        state: Option<&SubElementField>,
+        _material: &SubElementField,
+        state: &SubElementField,
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
-        let stress = state.expect("geometric stiffness requires the current stress field");
+        let stress = state;
         element_geometric(geom, stress, ke)
     }
 
@@ -334,34 +334,34 @@ impl SubModelKind for Elasticity {
     fn element_tangent(
         &self,
         geoms: &[CellGeom],
-        material: Option<&SubElementField>,
-        _state: Option<&SubElementField>,
+        material: &SubElementField,
+        _state: &SubElementField,
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
-        let mat = material.expect("Elasticity declares a material_fespace ⇒ material is supplied");
+        let mat = material;
         element_stiffness(geom, mat, self.kinematics, self.symmetry, ke)
     }
 
     fn element_matrix(
         &self,
         geoms: &[CellGeom],
-        material: Option<&SubElementField>,
+        material: &SubElementField,
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
-        let mat = material.expect("Elasticity declares a material_fespace ⇒ material is supplied");
+        let mat = material;
         element_stiffness(geom, mat, self.kinematics, self.symmetry, ke)
     }
 
     fn element_mass(
         &self,
         geoms: &[CellGeom],
-        material: Option<&SubElementField>,
+        material: &SubElementField,
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
-        let mat = material.expect("Elasticity declares a material_fespace ⇒ material is supplied");
+        let mat = material;
         element_mass(geom, mat, ke)
     }
 
@@ -680,9 +680,9 @@ fn b_matrix(
 /// let (duals, primals) = vars();
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
-///     DofOrdering::NodesThenVars, true, Some(&mat), None,
+///     DofOrdering::NodesThenVars, true, &mat, None,
 ///     |geoms, m, _s, ke| elasticity::element_stiffness(
-///         &geoms[0], m.unwrap(), Kinematics::PlaneStress,
+///         &geoms[0], m, Kinematics::PlaneStress,
 ///         MaterialSymmetry::Isotropic, ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
@@ -705,7 +705,7 @@ pub fn element_stiffness(
     for g in 0..geom.n_gauss {
         // On a body of revolution the hoop row needs `N` and `r` at this point.
         let hoop = if kinematics.is_axisymmetric() {
-            Some((geom.n_at_g(g)?, geom.radius(g)?))
+            Some((geom.n_at_g(g), geom.radius(g)?))
         } else {
             None
         };
@@ -775,8 +775,8 @@ pub fn element_stiffness(
 /// let (duals, primals) = vars();
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
-///     DofOrdering::NodesThenVars, true, Some(&mat), None,
-///     |geoms, m, _s, ke| elasticity::element_mass(&geoms[0], m.unwrap(), ke),
+///     DofOrdering::NodesThenVars, true, &mat, None,
+///     |geoms, m, _s, ke| elasticity::element_mass(&geoms[0], m, ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
 /// assert!((total - 2.0 * 0.5 * 2.0).abs() < 1e-9);
@@ -792,7 +792,7 @@ pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64])
         )
     })?;
     for g in 0..geom.n_gauss {
-        let n = geom.n_at_g(g)?;
+        let n = geom.n_at_g(g);
         let w = geom.det_j_w(g)? * rho;
         for i in 0..n_nodes {
             for j in 0..n_nodes {
@@ -844,13 +844,17 @@ pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64])
 /// #     zone.clone(),
 /// #     vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_xy".into()],
 /// #     &[100.0, 0.0, 0.0])?);
+/// # // La raideur géométrique ne lit aucun matériau ; l'assembleur en veut
+/// # // un, on lui en donne un qui ne sert à rien plutôt qu'une Option.
+/// # let bidon = Handle::new(SubElementField::from_uniform_per_component(
+/// #     zone.clone(), vec!["E".into(), "nu".into()], &[210_000.0, 0.3])?);
 /// // La raideur **géométrique**, celle du flambement : elle vient de l'état
 /// // de contrainte, non du matériau. Sous traction elle est définie
 /// // positive ; c'est son signe qui décide de la charge critique.
 /// let (duals, primals) = vars();
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
-///     DofOrdering::NodesThenVars, true, None, Some(&etat),
+///     DofOrdering::NodesThenVars, true, &bidon, Some(&etat),
 ///     |geoms, _m, s, ke| elasticity::element_geometric(&geoms[0], s.unwrap(), ke),
 /// )?;
 /// // Elle est singulière elle aussi : les modes rigides n'y coûtent rien.
@@ -882,7 +886,7 @@ pub fn element_geometric(geom: &CellGeom, stress: &SubElementField, ke: &mut [f6
         let hoop = if geom.axisymmetric {
             let r = geom.radius(g)?;
             Some((
-                geom.n_at_g(g)?,
+                geom.n_at_g(g),
                 stress.value(geom.cell, g, "sigma_zz")? / (r * r),
             ))
         } else {
@@ -1047,15 +1051,15 @@ pub fn read_tangent_matrix(
 /// let (duals, primals) = vars();
 /// let tangente = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals.clone(), primals.clone(),
-///     DofOrdering::NodesThenVars, true, None, Some(&etat),
+///     DofOrdering::NodesThenVars, true, &mat, Some(&etat),
 ///     |geoms, _m, s, ke| elasticity::element_tangent_from_state(
 ///         &geoms[0], s.unwrap(), Kinematics::PlaneStress, ke),
 /// )?;
 /// let raideur = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
-///     DofOrdering::NodesThenVars, true, Some(&mat), None,
+///     DofOrdering::NodesThenVars, true, &mat, None,
 ///     |geoms, m, _s, ke| elasticity::element_stiffness(
-///         &geoms[0], m.unwrap(), Kinematics::PlaneStress,
+///         &geoms[0], m, Kinematics::PlaneStress,
 ///         MaterialSymmetry::Isotropic, ke),
 /// )?;
 /// assert_eq!(tangente.dense(), raideur.dense());
@@ -1074,7 +1078,7 @@ pub fn element_tangent_from_state(
     for g in 0..geom.n_gauss {
         // Same hoop row as `element_stiffness` on a body of revolution.
         let hoop = if kinematics.is_axisymmetric() {
-            Some((geom.n_at_g(g)?, geom.radius(g)?))
+            Some((geom.n_at_g(g), geom.radius(g)?))
         } else {
             None
         };
@@ -1252,7 +1256,7 @@ mod tests {
         let strain = Handle::new(strain);
 
         let out = el
-            .integrate_behavior(&strain, &rest(&el, &mat), Some(&mat), 0.0)
+            .integrate_behavior(&strain, &rest(&el, &mat), &mat, 0.0)
             .unwrap();
         let c = e / (1.0 - nu * nu);
         for g in 0..out.gauss_count() {
@@ -1272,7 +1276,7 @@ mod tests {
         mat.set_uniform("E", 200.0).unwrap();
         mat.set_uniform("nu", 0.3).unwrap();
         let mat = Handle::new(mat);
-        let blocks = el.build_stiffness_blocks(Some(&mat)).unwrap();
+        let blocks = el.build_stiffness_blocks(&mat).unwrap();
         let k = &blocks[0];
         let nodes: Vec<NodeId> = el.support.read().connectivity().to_vec();
         let tol = 1e-9;

@@ -226,11 +226,11 @@ impl SubModelKind for Timoshenko {
     fn element_matrix(
         &self,
         geoms: &[CellGeom],
-        material: Option<&SubElementField>,
+        material: &SubElementField,
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
-        let mat = material.expect("Timoshenko declares a material_fespace");
+        let mat = material;
         match self.model {
             BeamModel::Planar1d => planar_stiffness(geom, mat, ke),
             BeamModel::Frame2d => frame::element_stiffness(geom, mat, ke),
@@ -241,11 +241,11 @@ impl SubModelKind for Timoshenko {
     fn element_mass(
         &self,
         geoms: &[CellGeom],
-        material: Option<&SubElementField>,
+        material: &SubElementField,
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
-        let mat = material.expect("Timoshenko declares a material_fespace");
+        let mat = material;
         match self.model {
             BeamModel::Planar1d => planar_mass(geom, mat, ke),
             BeamModel::Frame2d => frame::element_mass(geom, mat, ke),
@@ -256,12 +256,12 @@ impl SubModelKind for Timoshenko {
     fn element_geometric(
         &self,
         geoms: &[CellGeom],
-        _material: Option<&SubElementField>,
-        state: Option<&SubElementField>,
+        _material: &SubElementField,
+        state: &SubElementField,
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
-        let stress = state.expect("the geometric stiffness requires the axial force `N`");
+        let stress = state;
         match self.model {
             BeamModel::Planar1d => Err(PyrucastError::Message(
                 "Timoshenko: a pure-bending beam carries no axial force, so it has no geometric \
@@ -507,7 +507,7 @@ mod tests {
         // 1-D: the bare block.
         let (beam, a, _) = one_beam(&[0.0], &[l]);
         let mat = material(&beam, &[("E", e), ("I", i), ("G", g), ("A_s", a_s)]);
-        let k = &beam.build_stiffness_blocks(Some(&mat)).unwrap()[0];
+        let k = &beam.build_stiffness_blocks(&mat).unwrap()[0];
         assert!((k.get(a, "f_w", a, "w") - series).abs() < 1e-9);
 
         // 2-D: the same block, rotated, and decoupled from the axial term.
@@ -516,7 +516,7 @@ mod tests {
             &frame,
             &[("E", e), ("A", 4.0), ("I", i), ("G", g), ("A_s", a_s)],
         );
-        let k = &frame.build_stiffness_blocks(Some(&mat)).unwrap()[0];
+        let k = &frame.build_stiffness_blocks(&mat).unwrap()[0];
         assert!((k.get(a2, "f_y", a2, "u_y") - series).abs() < 1e-9);
         assert!((k.get(a2, "f_x", a2, "u_x") - e * 4.0 / l).abs() < 1e-9);
         assert!(k.get(a2, "f_x", a2, "u_y").abs() < 1e-9);
@@ -533,7 +533,7 @@ mod tests {
             &frame,
             &[("E", e), ("A", area), ("I", 2.0), ("G", 5.0), ("A_s", 2.0)],
         );
-        let k = &frame.build_stiffness_blocks(Some(&mat)).unwrap()[0];
+        let k = &frame.build_stiffness_blocks(&mat).unwrap()[0];
         assert!((k.get(a, "f_y", a, "u_y") - e * area / l).abs() < 1e-9);
         assert!(k.get(a, "f_y", a, "u_x").abs() < 1e-9);
     }

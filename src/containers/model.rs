@@ -1943,7 +1943,7 @@ impl SubModel {
         &self,
         deformation: &Handle<SubElementField>,
         prev: &Handle<SubElementField>,
-        material: Option<&Handle<SubElementField>>,
+        material: &Handle<SubElementField>,
         dt: f64,
     ) -> Result<SubElementField> {
         self.as_kind()

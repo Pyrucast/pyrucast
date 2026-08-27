@@ -223,11 +223,11 @@ impl SubModelKind for Radiation {
     fn element_matrix(
         &self,
         geoms: &[CellGeom],
-        material: Option<&SubElementField>,
+        material: &SubElementField,
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
-        let mat = material.expect("Radiation declares a material_fespace");
+        let mat = material;
         surface_mass(geom, ke, |g| {
             let (sigma, emis) = (
                 sigma_of(mat, geom.cell, g)?,
@@ -243,12 +243,12 @@ impl SubModelKind for Radiation {
     fn element_tangent(
         &self,
         geoms: &[CellGeom],
-        _material: Option<&SubElementField>,
-        state: Option<&SubElementField>,
+        _material: &SubElementField,
+        state: &SubElementField,
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
-        let st = state.expect("the radiation tangent requires the current state field");
+        let st = state;
         surface_mass(geom, ke, |g| st.value(geom.cell, g, OUTPUT_TANGENT))
     }
 
@@ -268,7 +268,7 @@ impl SubModelKind for Radiation {
     ) -> Result<()> {
         let geom = &geoms[0];
         for g in 0..geom.n_gauss {
-            let shape = geom.n_at_g(g)?;
+            let shape = geom.n_at_g(g);
             let w = geom.det_j_w(g)?;
             let flux = stress.get(geom.cell, g, lay[0] as usize)?;
             for i in 0..geom.n_nodes {
@@ -371,7 +371,7 @@ fn surface_mass(
 ) -> Result<()> {
     let n_nodes = geom.n_nodes;
     for g in 0..geom.n_gauss {
-        let shape = geom.n_at_g(g)?;
+        let shape = geom.n_at_g(g);
         let w = geom.det_j_w(g)? * coeff(g)?;
         for i in 0..n_nodes {
             for j in 0..n_nodes {

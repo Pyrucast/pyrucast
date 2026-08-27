@@ -262,7 +262,7 @@ impl SubModelKind for FollowerPressure {
         let geom = &geoms[0];
         let d = self.space_dim;
         for g in 0..geom.n_gauss {
-            let shape = geom.n_at_g(g)?;
+            let shape = geom.n_at_g(g);
             let w = geom.det_j_w(g)?;
             for i in 0..geom.n_nodes {
                 for (a, &comp) in lay.iter().enumerate() {

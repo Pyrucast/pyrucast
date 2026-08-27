@@ -115,20 +115,22 @@ pub fn integrate(
             None => None,
         };
 
+        // A physics with a behaviour declares a material FE subspace, so the
+        // zone above always resolves one: the question is settled here, once,
+        // and nothing below asks it again.
+        let mat = material.as_ref().ok_or_else(|| {
+            PyrucastError::Message(format!(
+                "{}: a behaviour without material data cannot be integrated",
+                h.read().as_kind().label()
+            ))
+        })?;
+
         // The state at A. A caller with nothing to hand over — the first step —
         // gets the **rest state**, materialized here, once for the whole zone.
         // Below this line the state always exists, so no physics has to ask.
         let prev_zone = match prev {
             Some(p) => p.sub_for_fespace(&beh_fespace)?,
-            None => {
-                let mat = material.as_ref().ok_or_else(|| {
-                    PyrucastError::Message(format!(
-                        "{}: a behaviour without material data cannot build its rest state",
-                        h.read().as_kind().label()
-                    ))
-                })?;
-                Handle::new(h.read().initial_state(mat)?)
-            }
+            None => Handle::new(h.read().initial_state(mat)?),
         };
 
         // A rate-dependent law with no increment is refused here, before a
@@ -147,7 +149,7 @@ pub fn integrate(
             }
         };
 
-        let state = sub.integrate_behavior(&input, &prev_zone, material.as_ref(), dt)?;
+        let state = sub.integrate_behavior(&input, &prev_zone, mat, dt)?;
         drop(sub);
         out.add_sub(Handle::new(state))?;
     }

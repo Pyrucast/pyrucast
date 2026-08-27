@@ -240,9 +240,9 @@ pub fn coefficient_indices(
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support,
 ///     vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
-///     Some(&mat), None,
+///     &mat, None,
 ///     |geoms, m, _s, ke| {
-///         transfer::exchange_matrix(&geoms[0], &geoms[0], m.unwrap(), &idx, 1.0, ke)
+///         transfer::exchange_matrix(&geoms[0], &geoms[0], m, &idx, 1.0, ke)
 ///     },
 /// )?;
 /// // La somme des entrées vaut h × la longueur du segment.
@@ -261,8 +261,8 @@ pub fn exchange_matrix(
     let n_vars = coefficients.len();
     let row_stride = col_geom.n_nodes * n_vars;
     for g in 0..row_geom.n_gauss {
-        let row_shape = row_geom.n_at_g(g)?;
-        let col_shape = col_geom.n_at_g(g)?;
+        let row_shape = row_geom.n_at_g(g);
+        let col_shape = col_geom.n_at_g(g);
         let w = row_geom.det_j_w(g)?;
         for (v, &comp) in coefficients.iter().enumerate() {
             let hw = sign * material.get(row_geom.cell, g, comp)? * w;
@@ -334,7 +334,7 @@ pub fn internal_force(
     let stride = stress.component_count();
     let values = stress.values();
     for g in 0..geom.n_gauss {
-        let shape = geom.n_at_g(g)?;
+        let shape = geom.n_at_g(g);
         let w = geom.det_j_w(g)?;
         let start = (geom.cell * geom.n_gauss + g) * stride;
         for (v, &comp) in lay.iter().enumerate() {

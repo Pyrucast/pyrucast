@@ -262,6 +262,16 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix
                 // stays lock-free while it runs in parallel over cells.
                 let sm = recipe.submodel.read();
                 let phys = sm.as_kind();
+                // A computed block exists only for a physics with an element
+                // kernel, and such a physics declares a material FE subspace:
+                // the question is settled here, once per block, so the per-cell
+                // kernels below receive the field itself.
+                let material = recipe.material.as_ref().ok_or_else(|| {
+                    PyrucastError::Message(format!(
+                        "{}: a computed matrix block needs material data",
+                        phys.label()
+                    ))
+                })?;
                 // Per-cell triplets so the value stream lines up cell-for-cell
                 // with the precomputed slots (same `(li,di,lj,pj)` order).
                 let (_, _, per_cell) = if recipe.col_fespaces.is_empty() {
@@ -272,7 +282,7 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix
                         blk.dual_vars().len(),
                         blk.primal_vars().len(),
                         blk.ordering(),
-                        recipe.material.as_ref(),
+                        material,
                         recipe.state.as_ref(),
                         |geoms, m, state, ke| phys.matrix_element(recipe.kind, geoms, m, state, ke),
                     )?
@@ -285,7 +295,7 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix
                         blk.dual_vars().len(),
                         blk.primal_vars().len(),
                         blk.ordering(),
-                        recipe.material.as_ref(),
+                        material,
                         |row_geoms, col_geoms, m, ke| {
                             phys.coupling_element(recipe.kind, row_geoms, col_geoms, m, ke)
                         },
@@ -397,6 +407,16 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatr
             Some(recipe) => {
                 let sm = recipe.submodel.read();
                 let phys = sm.as_kind();
+                // A computed block exists only for a physics with an element
+                // kernel, and such a physics declares a material FE subspace:
+                // the question is settled here, once per block, so the per-cell
+                // kernels below receive the field itself.
+                let material = recipe.material.as_ref().ok_or_else(|| {
+                    PyrucastError::Message(format!(
+                        "{}: a computed matrix block needs material data",
+                        phys.label()
+                    ))
+                })?;
                 // Element matrices, evaluated in parallel, one triplet list per
                 // cell (grouping needed for the colour-driven scatter).
                 let (_, _, per_cell) = if recipe.col_fespaces.is_empty() {
@@ -407,7 +427,7 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatr
                         blk.dual_vars().len(),
                         blk.primal_vars().len(),
                         blk.ordering(),
-                        recipe.material.as_ref(),
+                        material,
                         recipe.state.as_ref(),
                         |geoms, m, state, ke| phys.matrix_element(recipe.kind, geoms, m, state, ke),
                     )?
@@ -420,7 +440,7 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatr
                         blk.dual_vars().len(),
                         blk.primal_vars().len(),
                         blk.ordering(),
-                        recipe.material.as_ref(),
+                        material,
                         |row_geoms, col_geoms, m, ke| {
                             phys.coupling_element(recipe.kind, row_geoms, col_geoms, m, ke)
                         },

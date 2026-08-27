@@ -30,7 +30,7 @@
 
 use crate::atoms::NodeId;
 use crate::containers::element_field::SubElementField;
-use crate::containers::field::{SubField, ABSENT_COMPONENT};
+use crate::containers::field::SubField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::{Mesh, SubMesh};
@@ -602,7 +602,7 @@ pub trait SubModelKind: Sync {
     fn element_matrix(
         &self,
         _geoms: &[CellGeom],
-        _material: Option<&SubElementField>,
+        _material: &SubElementField,
         _ke: &mut [f64],
     ) -> Result<()> {
         Err(PyrucastError::Message(format!(
@@ -618,7 +618,7 @@ pub trait SubModelKind: Sync {
     fn element_mass(
         &self,
         _geoms: &[CellGeom],
-        _material: Option<&SubElementField>,
+        _material: &SubElementField,
         _ke: &mut [f64],
     ) -> Result<()> {
         Err(PyrucastError::Message(format!(
@@ -633,8 +633,8 @@ pub trait SubModelKind: Sync {
     fn element_geometric(
         &self,
         _geoms: &[CellGeom],
-        _material: Option<&SubElementField>,
-        _state: Option<&SubElementField>,
+        _material: &SubElementField,
+        _state: &SubElementField,
         _ke: &mut [f64],
     ) -> Result<()> {
         Err(PyrucastError::Message(format!(
@@ -649,8 +649,8 @@ pub trait SubModelKind: Sync {
     fn element_tangent(
         &self,
         _geoms: &[CellGeom],
-        _material: Option<&SubElementField>,
-        _state: Option<&SubElementField>,
+        _material: &SubElementField,
+        _state: &SubElementField,
         _ke: &mut [f64],
     ) -> Result<()> {
         Err(PyrucastError::Message(format!(
@@ -674,7 +674,7 @@ pub trait SubModelKind: Sync {
         _kind: MatrixKind,
         _row_geoms: &[CellGeom],
         _col_geoms: &[CellGeom],
-        _material: Option<&SubElementField>,
+        _material: &SubElementField,
         _ke: &mut [f64],
     ) -> Result<()> {
         Err(PyrucastError::Message(format!(
@@ -695,15 +695,31 @@ pub trait SubModelKind: Sync {
         &self,
         kind: MatrixKind,
         geoms: &[CellGeom],
-        material: Option<&SubElementField>,
+        material: &SubElementField,
         state: Option<&SubElementField>,
         ke: &mut [f64],
     ) -> Result<()> {
+        // The state exists for the two kinds that read it and for no other:
+        // **that** is what the `Option` says, and it dies here rather than in
+        // each kernel below. The material is not optional at all — a physics
+        // with an element kernel declares a material FE subspace.
+        let with_state = |what: &str| -> Result<&SubElementField> {
+            state.ok_or_else(|| {
+                PyrucastError::Message(format!(
+                    "{}: the {what} matrix reads a state field, and none was supplied",
+                    self.label()
+                ))
+            })
+        };
         match kind {
             MatrixKind::Stiffness => self.element_matrix(geoms, material, ke),
             MatrixKind::Mass => self.element_mass(geoms, material, ke),
-            MatrixKind::Geometric => self.element_geometric(geoms, material, state, ke),
-            MatrixKind::Tangent => self.element_tangent(geoms, material, state, ke),
+            MatrixKind::Geometric => {
+                self.element_geometric(geoms, material, with_state("geometric")?, ke)
+            }
+            MatrixKind::Tangent => {
+                self.element_tangent(geoms, material, with_state("tangent")?, ke)
+            }
         }
     }
 
@@ -732,7 +748,16 @@ pub trait SubModelKind: Sync {
     ) -> Result<Vec<Contribution>> {
         Ok(match self.matrix_layout(kind) {
             Some(layout) => vec![Contribution::Computed(layout)],
+            // Here the `Option` earns its keep: a **constraint** sub-model has
+            // no material at all, and that is what distinguishes it from a
+            // domain. Below this line the question is settled.
             None if kind == MatrixKind::Stiffness => {
+                let material = material.ok_or_else(|| {
+                    PyrucastError::Message(format!(
+                        "{}: a stiffness assembled cell by cell needs material data",
+                        self.label()
+                    ))
+                })?;
                 vec![Contribution::Literal(
                     self.build_stiffness_blocks(material)?,
                 )]
@@ -753,10 +778,7 @@ pub trait SubModelKind: Sync {
     /// the bit-for-bit reference of the computed (scatter) path. A sub-model
     /// with **no** layout does not touch this method — it overrides
     /// [`contributions`](Self::contributions) instead (see `Dirichlet`).
-    fn build_stiffness_blocks(
-        &self,
-        material: Option<&Handle<SubElementField>>,
-    ) -> Result<Vec<SubMatrix>> {
+    fn build_stiffness_blocks(&self, material: &Handle<SubElementField>) -> Result<Vec<SubMatrix>> {
         let Some(layout) = self.stiffness_layout() else {
             return Err(PyrucastError::Message(format!(
                 "{}: build_stiffness_blocks has no default without a \
@@ -1434,7 +1456,7 @@ pub trait Domain: Sync {
         &self,
         deformation: &SubElementField,
         prev: &SubElementField,
-        material: Option<&SubElementField>,
+        material: &SubElementField,
     ) -> Result<ZoneLayout> {
         let def_names = self.deformation_reads();
         let state_names = self.state_reads();
@@ -1445,17 +1467,9 @@ pub trait Domain: Sync {
         Ok(ZoneLayout {
             deformation: deformation.resolve_components(&def_refs, "deformation")?,
             state: prev.resolve_components(&state_refs, "previous state")?,
-            // A physics that declares no material gets empty tables, which it
-            // never indexes — there is no field to resolve against, and none to
-            // invent either.
-            material: match material {
-                Some(m) => m.resolve_components(&mat_refs, "material")?,
-                None => Vec::new(),
-            },
-            optional_material: match material {
-                Some(m) => m.resolve_optional_components(self.optional_material_components()),
-                None => vec![ABSENT_COMPONENT; self.optional_material_components().len()],
-            },
+            material: material.resolve_components(&mat_refs, "material")?,
+            optional_material: material
+                .resolve_optional_components(self.optional_material_components()),
         })
     }
 
@@ -1561,17 +1575,14 @@ pub trait Domain: Sync {
         &self,
         deformation: &Handle<SubElementField>,
         prev: &Handle<SubElementField>,
-        material: Option<&Handle<SubElementField>>,
+        material: &Handle<SubElementField>,
         dt: f64,
     ) -> Result<SubElementField> {
         let fespace = self.behavior_fespace();
         let out_components = self.behavior_output_components();
         // One resolution per zone, against the fields actually handed over —
         // which is also where a hand-built field is refused.
-        let lay = {
-            let mat_guard = material.map(|h| h.read());
-            self.zone_layout(&deformation.read(), &prev.read(), mat_guard.as_deref())?
-        };
+        let lay = self.zone_layout(&deformation.read(), &prev.read(), &material.read())?;
         kernel::element_pointwise(
             &fespace,
             deformation,
@@ -1620,7 +1631,7 @@ pub(crate) fn continuum_internal_force_element(
         // `sigma_zz` is the hoop stress and only exists on a body of revolution.
         let hoop = if geom.axisymmetric {
             Some((
-                geom.n_at_g(g)?,
+                geom.n_at_g(g),
                 // The hoop closes the continuum's read list.
                 row[lay[lay.len() - 1] as usize] / geom.radius(g)?,
             ))
