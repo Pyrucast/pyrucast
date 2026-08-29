@@ -1159,8 +1159,13 @@ impl<'a> CellGeom<'a> {
 ///
 /// The three input fields are checked **here**, once, to span the same cells and
 /// Gauss points as `fespace` — a field built by hand can disagree, and the
-/// parallel loop below indexes without asking. An absent `prev`/`material`
-/// yields an empty row, which a physics that declared none never indexes.
+/// parallel loop below indexes without asking.
+///
+/// A producer with no previous state — a *geometric* one, such as
+/// [`crate::ops::element_field::thermal_strain`](fn@crate::ops::element_field::thermal_strain)
+/// — passes any field it has at hand: the row is sliced and never indexed. That
+/// is cheaper to read than an `Option` whose `None` meant « this argument is
+/// unused », which is not what an `Option` is for.
 ///
 /// The **element-field-input** driver, mirrored by `nodal_pointwise` (which
 /// reads a nodal field instead). Backs the constitutive integration
@@ -1195,9 +1200,11 @@ impl<'a> CellGeom<'a> {
 /// # entree.set_uniform("eps", 2.0)?;
 /// # let entree = Handle::new(entree);
 /// // Un noyau **au point de Gauss** : la loi de comportement en est un —
-/// // lire la déformation et le matériau, écrire la contrainte.
+/// // lire la déformation et le matériau, écrire la contrainte. Ce noyau-ci
+/// // ne lit ni état antérieur ni matériau : on lui en passe qui ne serviront
+/// // pas, plutôt que des `Option` à déballer.
 /// let sortie = kernel::element_pointwise(
-///     &zone, &entree, None, &mat_bidon, vec!["sig".into()],
+///     &zone, &entree, &entree, &mat_bidon, vec!["sig".into()],
 ///     |_geom, _g, ligne, _prev, _mat, slot| {
 ///         slot[0] = 3.0 * ligne[0];
 ///         Ok(())
@@ -1209,7 +1216,7 @@ impl<'a> CellGeom<'a> {
 pub fn element_pointwise(
     fespace: &Handle<SubFiniteElementSpace>,
     input: &Handle<SubElementField>,
-    prev: Option<&Handle<SubElementField>>,
+    prev: &Handle<SubElementField>,
     material: &Handle<SubElementField>,
     out_components: Vec<String>,
     point: impl Fn(&CellGeom, usize, &[f64], &[f64], &[f64], &mut [f64]) -> Result<()> + Sync,
@@ -1225,7 +1232,7 @@ pub fn element_pointwise(
     let coords_h = sm.coords();
     let coords = coords_h.read();
     let fin = input.read();
-    let prev_guard = prev.map(|h| h.read());
+    let prev_guard = prev.read();
     let mat_guard = material.read();
 
     let rd = RefData::snapshot(&fe)?;
@@ -1260,10 +1267,7 @@ pub fn element_pointwise(
         Ok((f.values(), f.component_count()))
     }
     let (in_vals, in_stride) = rows(&fin, "deformation", n_cells, n_gauss)?;
-    let (prev_vals, prev_stride) = match prev_guard.as_deref() {
-        Some(p) => rows(p, "previous state", n_cells, n_gauss)?,
-        None => (&[][..], 0),
-    };
+    let (prev_vals, prev_stride) = rows(&prev_guard, "previous state", n_cells, n_gauss)?;
     let (mat_vals, mat_stride) = rows(&mat_guard, "material", n_cells, n_gauss)?;
 
     // The row of `(cell, g)`: contiguous, so a start offset and a stride. A
@@ -2361,8 +2365,11 @@ pub fn scatter_to_nodes(
     // vector on a per-thread scratch buffer (no per-cell heap alloc, no
     // materialisation of the whole element set) and scatters it straight into the
     // node slots.
-    let flat = colored_scatter(
-        unique.len() * n_dual,
+    // The field first, so the scatter accumulates straight into its buffer:
+    // one write lock held for the call, and no intermediate vector.
+    let mut out_field = SubNodeField::from_poi1(support, dual_vars)?;
+    colored_scatter(
+        out_field.values_mut(),
         coloring,
         (MIN_PARALLEL_LEN / n_nodes.max(1)).max(1),
         // The scratch carries both the element vector and the geometry list:
@@ -2394,15 +2401,11 @@ pub fn scatter_to_nodes(
         },
     )?;
 
-    // `flat` was accumulated at `slot_of[nid] * n_dual + di`, and `slot_of` is
-    // the position in the support's own connectivity — which is exactly how the
-    // field below indexes its rows. Same layout, so the write-back is a copy,
-    // not a lookup per (node, component): on a 400×80 mesh that loop used to
-    // take a read lock, hash a `NodeId` and search a component name sixty-five
-    // thousand times per call.
-    let mut out = SubNodeField::from_poi1(support, dual_vars)?;
-    out.values_mut().copy_from_slice(&flat);
-    Ok(out)
+    // Nothing to write back: the scatter accumulated at
+    // `slot_of[nid] * n_dual + di`, and `slot_of` is the position in the
+    // support's own connectivity — exactly how the field indexes its rows. The
+    // buffer it filled **is** the field's.
+    Ok(out_field)
 }
 
 /// Parallel **scalar reduction over the cells** of `fespace` — the reduction

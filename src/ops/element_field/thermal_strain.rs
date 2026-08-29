@@ -137,7 +137,10 @@ pub fn thermal_strain(
         let sf = kernel::element_pointwise(
             sub,
             &temp_sub,
-            None,
+            // Thermal expansion reads no previous state: `α·ΔT` depends on the
+            // temperature and the material, on nothing that happened before.
+            // The driver wants a field, so it gets one it will never index.
+            &temp_sub,
             &mat_sub,
             names,
             |_geom, _g, input, _prev, material, out| {

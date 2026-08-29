@@ -74,7 +74,7 @@ impl PyElement {
 
     /// `N_i(ξ_g)` at the `g`-th Gauss point (length `nodes_per_cell`).
     fn n_at_g(&self, g: usize) -> PyResult<Vec<f64>> {
-        Ok(self.inner.n_at_g(g))
+        Ok(self.inner.n_at_g(g)?)
     }
 
     /// `∂N_i/∂ξ_j(ξ_g)` at the `g`-th Gauss point.

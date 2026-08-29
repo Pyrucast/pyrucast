@@ -450,7 +450,7 @@ impl Coords {
     ///
     /// A driver calls this once for a cell connectivity, before its parallel
     /// region, and then reads positions with
-    /// [`position_alive`](Self::position_alive): the same guarantee, paid once
+    /// `position_alive`: the same guarantee, paid once
     /// per zone instead of once per node of every cell of every call.
     ///
     /// ```

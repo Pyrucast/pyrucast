@@ -122,7 +122,8 @@ pub(crate) fn add_atomic(a: &AtomicU64, v: f64) {
 /// // couleur, les mailles touchent des cases **disjointes** : `add` ne
 /// // court jamais.
 /// let couleurs = vec![vec![0, 1]];
-/// let v = parallel::colored_scatter(2, &couleurs, 1, || (), |cell, _s, out| {
+/// let mut v = vec![0.0; 2];
+/// parallel::colored_scatter(&mut v, &couleurs, 1, || (), |cell, _s, out| {
 ///     out.add(cell, 1.0);
 ///     Ok(())
 /// })?;
@@ -143,7 +144,8 @@ impl Scatter<'_> {
     /// // même case doivent donc être de trois couleurs : c'est exactement ce
     /// // que le coloriage garantit, et sans quoi les additions se perdraient.
     /// let couleurs = vec![vec![0], vec![1], vec![2]];
-    /// let v = parallel::colored_scatter(1, &couleurs, 1, || (), |_cell, _s, out| {
+    /// let mut v = vec![0.0; 1];
+    /// parallel::colored_scatter(&mut v, &couleurs, 1, || (), |_cell, _s, out| {
     ///     out.add(0, 2.0);
     ///     Ok(())
     /// })?;
@@ -181,7 +183,8 @@ impl Scatter<'_> {
 /// // fixe — couleur croissante, puis ordre des mailles — quel que soit
 /// // `RAYON_NUM_THREADS`.
 /// let couleurs = vec![vec![0, 2], vec![1]];
-/// let v = parallel::colored_scatter(3, &couleurs, 1, || 0usize, |cell, tampon, out| {
+/// let mut v = vec![0.0; 3];
+/// parallel::colored_scatter(&mut v, &couleurs, 1, || 0usize, |cell, tampon, out| {
 ///     *tampon += 1; // un état par tâche, réutilisé d'une maille à l'autre
 ///     out.add(cell, (cell + 1) as f64);
 ///     Ok(())
@@ -190,13 +193,20 @@ impl Scatter<'_> {
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn colored_scatter<S>(
-    n_slots: usize,
+    slots: &mut [f64],
     coloring: &[Vec<usize>],
     min_len: usize,
     init: impl Fn() -> S + Sync + Send,
     cell: impl Fn(usize, &mut S, &Scatter) -> Result<()> + Sync,
-) -> Result<Vec<f64>> {
-    let values: Vec<AtomicU64> = (0..n_slots).map(|_| AtomicU64::new(0)).collect();
+) -> Result<()> {
+    // The accumulation itself needs shared atomic slots — that is what lets two
+    // cells of one colour write side by side without a lock and without
+    // `unsafe`. It is the one staging buffer this scatter cannot do without.
+    //
+    // The **result**, though, lands straight in the caller's own buffer: the
+    // caller holds it under its write lock for the whole call, so there is no
+    // reason to build a second `Vec<f64>` and copy it over.
+    let values: Vec<AtomicU64> = (0..slots.len()).map(|_| AtomicU64::new(0)).collect();
     let out = Scatter { values: &values };
     for color in coloring {
         color
@@ -204,8 +214,8 @@ pub fn colored_scatter<S>(
             .with_min_len(min_len)
             .try_for_each_init(&init, |scratch, &c| cell(c, scratch, &out))?;
     }
-    Ok(values
-        .into_iter()
-        .map(|a| f64::from_bits(a.into_inner()))
-        .collect())
+    for (slot, a) in slots.iter_mut().zip(values) {
+        *slot = f64::from_bits(a.into_inner());
+    }
+    Ok(())
 }

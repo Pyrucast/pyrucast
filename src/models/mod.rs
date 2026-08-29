@@ -1323,7 +1323,8 @@ pub struct ZoneLayout {
     pub material: Vec<u32>,
     /// Position of each **optional** material component, in
     /// [`Domain::optional_material_components`] order;
-    /// [`ABSENT_COMPONENT`] where the caller supplied none.
+    /// [`ABSENT_COMPONENT`](crate::containers::field::ABSENT_COMPONENT) where
+    /// the caller supplied none.
     pub optional_material: Vec<u32>,
 }
 
@@ -1451,7 +1452,7 @@ pub trait Domain: Sync {
     /// **Provided**, and rarely worth redefining. Required components must be
     /// present (a missing one names itself in the error); optional material
     /// components may be absent, marked
-    /// [`ABSENT_COMPONENT`].
+    /// [`ABSENT_COMPONENT`](crate::containers::field::ABSENT_COMPONENT).
     fn zone_layout(
         &self,
         deformation: &SubElementField,
@@ -1586,7 +1587,7 @@ pub trait Domain: Sync {
         kernel::element_pointwise(
             &fespace,
             deformation,
-            Some(prev),
+            prev,
             material,
             out_components,
             |geom, g, def, prev, mat, out| {
