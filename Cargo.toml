@@ -24,6 +24,8 @@ exclude = [
     # Dev-only tooling and internal notes, irrelevant to a crates.io consumer.
     ".claude/", ".github/", "recall.config.json", "script/",
     ".git-blame-ignore-revs", "ROADMAP.md", "CONVENTIONS.md",
+    # Code retiré temporairement, gardé pour être remis : ni compilé, ni publié.
+    "archive/",
 ]
 
 [lib]

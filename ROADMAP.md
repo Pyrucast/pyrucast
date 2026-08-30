@@ -89,7 +89,7 @@ interpolation, quadrature, codes VTK/gmsh, familles. Un unique `match`,
 `SubModel::as_kind()` côté physiques : ajouter un élément coûte un fichier et
 deux variantes, et aucun consommateur générique ne change.
 
-## Physiques — 17 sous-modèles
+## Physiques — 16 sous-modèles
 
 Thermique : `HeatConduction`, `BoundaryTransfer` (échange de surface avec une
 ambiante — film thermique, transfert de masse, ou fondation élastique selon les
@@ -118,9 +118,7 @@ transverse, 1-D / plan / spatial, exacte aux nœuds par interpolation d'Hermite)
 `Shell` (**formulation en attribut** : Reissner-Mindlin à cisaillement
 sous-intégré contre le blocage, ou Kirchhoff discret DKT/DKQ qui n'a aucun
 cisaillement à bloquer ; six DDL par nœud, vrillage lié à la rotation de
-membrane, membrane et vrillage partagés par les deux), `FollowerPressure` (charge dont la direction
-tourne avec la surface, bâtie sur les tangentes déformées et non sur Nanson —
-`I + ∇_s u` n'est pas un gradient de transformation sur une variété). Contraintes : `Dirichlet`, `Mpc`,
+membrane, membrane et vrillage partagés par les deux). Contraintes : `Dirichlet`, `Mpc`,
 `Embedded` (baignage), `Contact` (nœud-surface, unilatéral).
 Dilatation thermique non couplée (`thermal_strain`, `alpha` en composante
 matériau facultative — acceptée par l'élasticité, la plasticité et
@@ -139,6 +137,14 @@ exacts.
 
 Le coût d'ajout d'une physique est **O(1) fichier** : une struct + un
 `impl SubModelKind`, deux lignes de câblage.
+
+`FollowerPressure` (charge dont la direction tourne avec la surface, bâtie sur
+les tangentes déformées et non sur Nanson — `I + ∇_s u` n'est pas un gradient de
+transformation sur une variété) est **retirée temporairement** : seule physique
+sans matrice, elle empruntait un `stiffness_layout` pour déclarer sa géométrie
+d'intégration. Code et points de réintégration dans
+[`archive/pression-suiveuse.md`](archive/pression-suiveuse.md) ; à remettre avec
+une capacité « charge » distincte de `Domain`.
 
 ## Assemblage
 

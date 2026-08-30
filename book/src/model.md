@@ -112,7 +112,6 @@ opérateurs qui les déclarent et leurs variables, vus du `Model` :
 | `truss(fes)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, A` | [Barre](mecanique/truss.md) |
 | `elasticity(fes, model)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, nu` | [Élasticité](mecanique/elasticite.md) |
 | `elasticity_with_symmetry(fes, model, sym)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E_1…G_23` / `C_11…C_66` + repère | [Orthotropie](mecanique/orthotropie.md) |
-| `follower_pressure(fes)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `p` | [Pression suiveuse](mecanique/pression-suiveuse.md) |
 | `plasticity_perfect(fes, model)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, nu, sigma_y` | [Plasticité](mecanique/plasticite.md) |
 | `plasticity_with_law(fes, model, law)` | idem | idem | selon la loi | [Lois d'écoulement](mecanique/lois-plastiques.md), [Fluage](mecanique/fluage.md) |
 | `bernoulli(fes, model)` | selon la configuration | idem | `E, I` (+ `A`, `I_y…`) | [Euler-Bernoulli](mecanique/bernoulli.md) |
@@ -150,7 +149,7 @@ de physique » là où les capacités répondent à « domaine ou contrainte » 
 
 | Nature (`Physics`) | Physiques |
 |---|---|
-| `Mechanical` | `truss`, `elasticity`, `plasticity`, `mazars`, `bernoulli`, `timoshenko`, `shell`, `follower_pressure` |
+| `Mechanical` | `truss`, `elasticity`, `plasticity`, `mazars`, `bernoulli`, `timoshenko`, `shell` |
 | `Thermal`    | `heat_conduction`, `convection`, `radiation`, `interface_transfer` (variante `thermal`) |
 | `Constraint` | `dirichlet`, `mpc`, `embedded`, `contact` |
 | `Other`      | nature « autre / rien » explicite (aucune physique de base ne la déclare) |

@@ -60,7 +60,6 @@ __all__ = [
     "extrude",
     "fick",
     "flux",
-    "follower_pressure",
     "from_gmsh_arrays",
     "from_live_nodes",
     "geometric",
@@ -2944,8 +2943,8 @@ def consolidate_node(field: NodeField) -> NodeField:
 
 def contact(slave: Mesh, master: Mesh, components: typing.Sequence[tuple[builtins.str, builtins.str]], multiplier: typing.Optional[builtins.str] = None, imposed_value: typing.Optional[builtins.str] = None) -> Model:
     r"""
-    `model.contact(slave, master, components, multiplier=None,
-    imposed_value=None)` — node-to-surface contact (a single sub-model):
+    `kinematics.contact(slave, master, components, multiplier=None,
+    imposed_value=None)` — node-to-surface contact (a single sub-kinematics):
     prevent the nodes of `slave` from penetrating the oriented `master`
     surface mesh, one **unilateral** relation (`≥`) per slave node.
     
@@ -2956,7 +2955,7 @@ def contact(slave: Mesh, master: Mesh, components: typing.Sequence[tuple[builtin
     body. `components` is a list of `(variable, target_dual)` pairs — one
     per space dimension, in ambient order (e.g.
     `[("u_x","f_x"), ("u_y","f_y")]`); find each `target_dual` with
-    `model.dual_of(variable)`. `multiplier` / `imposed_value` override the
+    `kinematics.dual_of(variable)`. `multiplier` / `imposed_value` override the
     derived names `lambda_contact` / `contact_gap`.
     
     Solve with `solve_unilateral`; build the initial-gap right-hand side
@@ -3002,9 +3001,9 @@ def cosh(field: typing.Any) -> typing.Any:
     Element-wise hyperbolic cosine of a field.
     """
 
-def creep_blackburn(fespace: FiniteElementSpace, model: builtins.str) -> Model:
+def creep_blackburn(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
     r"""
-    `model.creep_blackburn(fespace, model)` — a **saturating primary** creep
+    `kinematics.creep_blackburn(fespace, kinematics)` — a **saturating primary** creep
     stage plus a steady secondary one, with Blackburn's `sinh` stress
     dependence (which spans decades of stress where a power law cannot).
     Material `E`, `nu`, `A_1`, `alpha_1`, `r_1`, `B_s`, `beta_s`.
@@ -3013,9 +3012,9 @@ def creep_blackburn(fespace: FiniteElementSpace, model: builtins.str) -> Model:
     the law integrates correctly under a varying load.
     """
 
-def creep_lemaitre(fespace: FiniteElementSpace, model: builtins.str) -> Model:
+def creep_lemaitre(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
     r"""
-    `model.creep_lemaitre(fespace, model)` — Lemaitre primary creep by
+    `kinematics.creep_lemaitre(fespace, kinematics)` — Lemaitre primary creep by
     **strain** hardening, `ṗ = (q/K)^N · p^(−M)`. Material `E`, `nu`, `K`,
     `N`, `M`.
     
@@ -3024,9 +3023,9 @@ def creep_lemaitre(fespace: FiniteElementSpace, model: builtins.str) -> Model:
     usable under a varying load, where a time-hardening form would be wrong.
     """
 
-def creep_norton(fespace: FiniteElementSpace, model: builtins.str) -> Model:
+def creep_norton(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
     r"""
-    `model.creep_norton(fespace, model)` — Norton-Odqvist secondary creep,
+    `kinematics.creep_norton(fespace, kinematics)` — Norton-Odqvist secondary creep,
     `ṗ = (q/K)^n`. Material `E`, `nu`, `K`, `n`.
     
     There is **no yield threshold**: any stress creeps, however slowly. Like
@@ -3036,9 +3035,9 @@ def creep_norton(fespace: FiniteElementSpace, model: builtins.str) -> Model:
     plausible wrong answer.
     """
 
-def damage_sic_sic(fespace: FiniteElementSpace, model: builtins.str) -> Model:
+def damage_sic_sic(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
     r"""
-    `model.damage_sic_sic(fespace, model)` — **orthotropic** damage of a
+    `kinematics.damage_sic_sic(fespace, kinematics)` — **orthotropic** damage of a
     woven SiC/SiC ceramic-matrix composite: one damage per weave direction.
     Material `E`, `nu`, then `eps_0_i`, `eps_c_i`, `d_max_i` for `i = 1..3`,
     plus the material axes (`V1X, V1Y[, V1Z, V2X…]`).
@@ -3054,9 +3053,9 @@ def damage_sic_sic(fespace: FiniteElementSpace, model: builtins.str) -> Model:
     predict a collapse that does not happen. State: `kappa_1..3`, `d_1..3`.
     """
 
-def damage_tc(fespace: FiniteElementSpace, model: builtins.str) -> Model:
+def damage_tc(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
     r"""
-    `model.damage_tc(fespace, model)` — **two** damage variables, tension
+    `kinematics.damage_tc(fespace, kinematics)` — **two** damage variables, tension
     and compression apart: `σ = (1−d⁺)σ̃⁺ + (1−d⁻)σ̃⁻`. Material `E`, `nu`,
     `f_t`, `f_c`, `A_t`, `A_c`.
     
@@ -3081,9 +3080,9 @@ def deformation(u: NodeField, fespace: FiniteElementSpace) -> ElementField:
 
 def dirichlet(imposed_variable: builtins.str, target_dual: builtins.str, imposed_mesh: Mesh, multiplier_mesh: Mesh, multiplier: typing.Optional[builtins.str] = None, imposed_value: typing.Optional[builtins.str] = None, sense: typing.Optional[builtins.str] = None) -> Model:
     r"""
-    `model.dirichlet(imposed_variable, target_dual, imposed_mesh,
+    `kinematics.dirichlet(imposed_variable, target_dual, imposed_mesh,
     multiplier_mesh, multiplier=None, imposed_value=None, sense="=")` —
-    Dirichlet constraint model (a single sub-model) imposed via Lagrange
+    Dirichlet constraint kinematics (a single sub-kinematics) imposed via Lagrange
     multipliers.
     
     `imposed_variable` is the constrained primary variable (e.g. `"T"`);
@@ -3096,8 +3095,8 @@ def dirichlet(imposed_variable: builtins.str, target_dual: builtins.str, imposed
     `imposed_<imposed_variable>`. The imposed value `u_d` is written by the
     user in the load field at the multiplier node's `imposed_value`
     component. `sense` (`"="`, `">="` or `"<="`, default `"="`) turns the
-    constraint unilateral (`u ≥ u_d` / `u ≤ u_d`) — such a model is solved
-    with `solve_unilateral`. See the model chapter of the book for the full
+    constraint unilateral (`u ≥ u_d` / `u ≤ u_d`) — such a kinematics is solved
+    with `solve_unilateral`. See the kinematics chapter of the book for the full
     semantics.
     """
 
@@ -3117,9 +3116,9 @@ def divergence(field: ElementField) -> NodeField:
     Returns a `NodeField` with a single `"div"` component (one zone per subspace).
     """
 
-def drucker_prager(fespace: FiniteElementSpace, model: builtins.str) -> Model:
+def drucker_prager(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
     r"""
-    `model.drucker_prager(fespace, model)` — pressure-sensitive plasticity
+    `kinematics.drucker_prager(fespace, kinematics)` — pressure-sensitive plasticity
     with **non-associated** flow: `f = q + α·I₁ − k`, plastic potential
     `g = q + ψ·I₁`. Material `E`, `nu`, `alpha` (friction), `k` (cohesion),
     `psi` (dilatancy).
@@ -3130,16 +3129,16 @@ def drucker_prager(fespace: FiniteElementSpace, model: builtins.str) -> Model:
     Returns beyond the cone's apex (`I₁ = k/α`) collapse onto the tip.
     """
 
-def elasticity(fespace: FiniteElementSpace, model: builtins.str, symmetry: typing.Optional[builtins.str] = None) -> Model:
+def elasticity(fespace: FiniteElementSpace, kinematics: builtins.str, symmetry: typing.Optional[builtins.str] = None) -> Model:
     r"""
-    `model.elasticity(fespace, model, symmetry=None)` — linear-elasticity
-    model spanning every subspace of `fespace`. `model` is `"plane_stress"`,
-    `"plane_strain"` or `"axisymmetric"` (2-D), or `"solid"` (3-D). DOFs are
+    `kinematics.elasticity(fespace, kinematics, symmetry=None)` — linear-elasticity
+    kinematics spanning every subspace of `fespace`. `kinematics` is `"plane_stress"`,
+    `"plane_strain"` or `"axisymmetric"` (2-D), or `"full_3d"` (3-D). DOFs are
     the vector displacement `u_x, u_y(, u_z)`; material is supplied at
     assembly time.
     
     `"axisymmetric"` requires a geometry built with `Coords.axisymmetric()`
-    (`x = r`, `y = z`): the hoop strain `ε_θθ = u_r / r` comes from the model,
+    (`x = r`, `y = z`): the hoop strain `ε_θθ = u_r / r` comes from the kinematics,
     the `2πr` integration measure from the geometry, and the two must agree.
     
     `symmetry` is the **material** axis, independent of the kinematic one:
@@ -3165,16 +3164,16 @@ def elements_on(mesh: Mesh, points: Mesh, strict: builtins.bool = True) -> Mesh:
 
 def embedded(immersed: Mesh, host: Mesh, components: typing.Sequence[tuple[builtins.str, builtins.str]], multipliers: typing.Optional[typing.Sequence[builtins.str]] = None, imposed_values: typing.Optional[typing.Sequence[builtins.str]] = None, tol: typing.Optional[builtins.float] = None) -> Model:
     r"""
-    `model.embedded(immersed, host, components, multipliers=None,
+    `kinematics.embedded(immersed, host, components, multipliers=None,
     imposed_values=None, tol=None)` — embedded (immersed) constraint (a
-    single sub-model) tying each node of `immersed` to the interpolation of
+    single sub-kinematics) tying each node of `immersed` to the interpolation of
     `host` at that node, via Lagrange multipliers.
     
     `immersed` and `host` are meshes sharing one Coords (e.g. a bar
     « baignée » in a volume). `components` is a list of `(variable,
     target_dual)` pairs — the field components to tie (e.g.
     `[("u_x","f_x"), ("u_y","f_y"), ("u_z","f_z")]`); find each `target_dual`
-    with `model.dual_of(variable)`. The coupling weights are the host shape
+    with `kinematics.dual_of(variable)`. The coupling weights are the host shape
     functions at each immersed node, computed once at build by locating the
     node in the host (an immersed node outside the host is an error).
     `multipliers` / `imposed_values` override the per-component derived names
@@ -3208,15 +3207,15 @@ def extrude(mesh: Mesh, direction: typing.Sequence[builtins.float], n_layers: bu
 
 def fick(fespace: FiniteElementSpace, species: builtins.str, symmetry: typing.Optional[builtins.str] = None) -> Model:
     r"""
-    `model.fick(fespace, species, symmetry=None)` — Fickian diffusion of one
+    `kinematics.fick(fespace, species, symmetry=None)` — Fickian diffusion of one
     named **species**, spanning every subspace of `fespace`.
     
     Every name carries the species: DOFs are `c_<species>` (primal) and
     `j_<species>` (dual), the diffusivity is `D_<species>`, the reported flux
     `j_<species>_x…`. Two species therefore share a mesh without colliding —
     and no bare `c` can be mistaken for anything else. Its physics nature is
-    `"diffusion"`, so `model.filter("diffusion")` isolates it from a thermal
-    or mechanical model it is composed with.
+    `"diffusion"`, so `kinematics.filter("diffusion")` isolates it from a thermal
+    or mechanical kinematics it is composed with.
     
     `symmetry` is `"isotropic"` (the default), `"orthotropic"` or
     `"anisotropic"`, selecting the diffusivity the material field must carry:
@@ -3237,26 +3236,6 @@ def flux(fespace: SubFiniteElementSpace, density: typing.Any, component: builtin
     `SubElementField` (per-Gauss density). The element measure comes from the
     FE subspace, so a `SEG2` edge in a 2-D mesh integrates as a line, a surface
     mesh as an area.
-    """
-
-def follower_pressure(fespace: FiniteElementSpace) -> Model:
-    r"""
-    `model.follower_pressure(fespace)` — a pressure that **turns with the
-    surface** it acts on, on a *boundary* `fespace` (an edge mesh in 2-D, a
-    surface mesh in 3-D). Material: `p`, the pressure.
-    
-    Unlike a dead load built once with `flux(...)`, its direction depends on
-    the current displacement, so it is recomputed at each residual
-    evaluation:
-    
-    ```text
-    u → element_field.gradient → integrate_behavior → node_field.internal_forces
-    ```
-    
-    It contributes **no matrix** — only internal forces. A positive `p`
-    pushes *against* the boundary mesh's own normal, which follows its
-    winding: orienting the boundary outwards gives the usual compressive
-    sign.
     """
 
 def from_gmsh_arrays(coords: Coords, node_tags: typing.Any, node_coords: typing.Any, blocks: typing.Any) -> dict:
@@ -3384,9 +3363,9 @@ def grid_surface2(contour: Mesh, element_type: builtins.str, size: typing.Option
     `size`, `band` and `relax` mean what they mean for `grid_surface`.
     """
 
-def gurson(fespace: FiniteElementSpace, model: builtins.str) -> Model:
+def gurson(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
     r"""
-    `model.gurson(fespace, model)` — Gurson-Tvergaard-Needleman plasticity
+    `kinematics.gurson(fespace, kinematics)` — Gurson-Tvergaard-Needleman plasticity
     of a **porous** metal, where the porosity shrinks the yield surface.
     Material `E`, `nu`, `sigma_y`, `q_1`, `q_2`, `q_3`, `f_0`, `f_c`, `f_f`.
     
@@ -3403,11 +3382,11 @@ def gurson(fespace: FiniteElementSpace, model: builtins.str) -> Model:
 
 def heat_conduction(fespace: FiniteElementSpace, symmetry: typing.Optional[builtins.str] = None) -> Model:
     r"""
-    `model.heat_conduction(fespace, symmetry=None)` — heat-conduction model
+    `kinematics.heat_conduction(fespace, symmetry=None)` — heat-conduction kinematics
     spanning **every** subspace of `fespace` (one zone per subspace). A
     single-subspace space gives the unit case; several give one zone
     each. Compose heterogeneous physics with `|`:
-    `model.heat_conduction(fes) | model.dirichlet(...)`.
+    `kinematics.heat_conduction(fes) | kinematics.dirichlet(...)`.
     
     `symmetry` is `"isotropic"` (the default), `"orthotropic"` or
     `"anisotropic"`, and selects which conductivity the material field must
@@ -3450,7 +3429,7 @@ def integrate_behavior(model: Model, deformation: ElementField, materials: Eleme
 
 def interface_transfer(side_a: FiniteElementSpace, side_b: FiniteElementSpace, components: typing.Sequence[tuple[builtins.str, builtins.str]], physics: builtins.str, tol: typing.Optional[builtins.float] = None) -> Model:
     r"""
-    `model.interface_transfer(side_a, side_b, kind=None, tol=None)` — the
+    `kinematics.interface_transfer(side_a, side_b, kind=None, tol=None)` — the
     exchange law `j·n = h(c₁ − c₂)` across an interface between two bodies
     that do **not** share their nodes. `kind` is `"mass"` (the default:
     concentration `c`, flux `j`, nature `"diffusion"`) or `"thermal"` (a
@@ -3603,10 +3582,10 @@ def material_field_per_sub_model(model: Model, components_and_values_per_sub_mod
     sub-model (typical for Dirichlet).
     """
 
-def mazars(fespace: FiniteElementSpace, model: builtins.str) -> Model:
+def mazars(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
     r"""
-    `model.mazars(fespace, model)` — Mazars isotropic damage spanning every
-    subspace of `fespace`. `model` is `"plane_stress"` / `"plane_strain"` /
+    `kinematics.mazars(fespace, kinematics)` — Mazars isotropic damage spanning every
+    subspace of `fespace`. `kinematics` is `"plane_stress"` / `"plane_strain"` /
     `"axisymmetric"` (2-D) or `"solid"` (3-D). Same DOFs as elasticity; material
     (`E`, `nu`, `eps_d0`, `A_t`, `B_t`, `A_c`, `B_c`) is supplied at
     assembly / integration time. The behaviour integration (`COMP`) carries
@@ -3656,19 +3635,19 @@ def merge_triangles(mesh: Mesh) -> Mesh:
 
 def mpc(terms: typing.Sequence[tuple[Mesh, builtins.str, builtins.str, builtins.float]], multiplier_mesh: Mesh, multiplier: typing.Optional[builtins.str] = None, imposed_value: typing.Optional[builtins.str] = None, sense: typing.Optional[builtins.str] = None) -> Model:
     r"""
-    `model.mpc(terms, multiplier_mesh, multiplier=None, imposed_value=None,
-    sense="=")` — multi-point constraint (a single sub-model) imposing, per
+    `kinematics.mpc(terms, multiplier_mesh, multiplier=None, imposed_value=None,
+    sense="=")` — multi-point constraint (a single sub-kinematics) imposing, per
     relation, `Σₖ aₖ·u(nodeₖ, varₖ) = g` via Lagrange multipliers.
     
     `terms` is a list of `(mesh, variable, target_dual, coefficient)` tuples:
     each `mesh` is a POI1 mesh (one node per relation), paired
     element-for-element with the others and with `multiplier_mesh` (relation
     `r` = cell `r` of every mesh). Find `target_dual` with
-    `model.dual_of(variable)`. `multiplier` / `imposed_value` override the
+    `kinematics.dual_of(variable)`. `multiplier` / `imposed_value` override the
     derived names `lambda_mpc` / `mpc_rhs`. The right-hand side `g` is written
     by the user in the load field at the multiplier node's `imposed_value`
     component (default `0`). `sense` (`"="`, `">="` or `"<="`, default `"="`)
-    turns the relations unilateral (`Σ aₖ·uₖ ≥ g` / `≤ g`) — such a model is
+    turns the relations unilateral (`Σ aₖ·uₖ ≥ g` / `≤ g`) — such a kinematics is
     solved with `solve_unilateral`. See the constraints chapter of the book.
     """
 
@@ -3685,9 +3664,9 @@ def orient(mesh: Mesh) -> Mesh:
     a fresh mesh sharing the input's nodes.
     """
 
-def ottosen(fespace: FiniteElementSpace, model: builtins.str) -> Model:
+def ottosen(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
     r"""
-    `model.ottosen(fespace, model)` — Ottosen's four-parameter criterion for
+    `kinematics.ottosen(fespace, kinematics)` — Ottosen's four-parameter criterion for
     concrete, whose strength depends on the pressure **and** on the Lode
     angle (so tension and compression differ). Material `E`, `nu`, `a`, `b`,
     `k_1`, `k_2`, `sigma_c`.
@@ -3770,18 +3749,18 @@ def pave_volume(envelope: Mesh, layers: builtins.int = 1, thickness: typing.Opti
     none, so without them the mesh could not be conforming.
     """
 
-def plasticity_isotropic(fespace: FiniteElementSpace, model: builtins.str) -> Model:
+def plasticity_isotropic(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
     r"""
-    `model.plasticity_isotropic(fespace, model)` — von Mises with **linear
+    `kinematics.plasticity_isotropic(fespace, kinematics)` — von Mises with **linear
     isotropic hardening**, `σ_y(p) = σ_y + H·p`. Material `E`, `nu`,
     `sigma_y`, `H`; everything else as `plasticity_perfect` (`H = 0` would
     give it back exactly).
     """
 
-def plasticity_perfect(fespace: FiniteElementSpace, model: builtins.str) -> Model:
+def plasticity_perfect(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
     r"""
-    `model.plasticity_perfect(fespace, model)` — **perfect** (non-hardening)
-    von Mises elastoplasticity spanning every subspace of `fespace`. `model`
+    `kinematics.plasticity_perfect(fespace, kinematics)` — **perfect** (non-hardening)
+    von Mises elastoplasticity spanning every subspace of `fespace`. `kinematics`
     is `"plane_stress"` / `"plane_strain"` / `"axisymmetric"` (2-D) or
     `"solid"` (3-D). Same DOFs as elasticity (`u_x, u_y(, u_z)`); material
     (`E`, `nu`, `sigma_y`) is supplied at assembly / integration time. The
@@ -4445,9 +4424,9 @@ def truss(fespace: FiniteElementSpace) -> Model:
     coordinates. Material (`E`, `A`) is supplied at assembly time.
     """
 
-def viscoplasticity_chaboche(fespace: FiniteElementSpace, model: builtins.str) -> Model:
+def viscoplasticity_chaboche(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
     r"""
-    `model.viscoplasticity_chaboche(fespace, model)` — a Norton flow on the
+    `kinematics.viscoplasticity_chaboche(fespace, kinematics)` — a Norton flow on the
     shifted overstress `J(σ − X) − R − k`, with Armstrong-Frederick kinematic
     hardening and saturating isotropic hardening. Material `E`, `nu`, `k`,
     `K`, `n`, `C_1`, `gamma_1`, `b`, `Q`.
@@ -4458,9 +4437,9 @@ def viscoplasticity_chaboche(fespace: FiniteElementSpace, model: builtins.str) -
     costs seven internal variables (`X_xx…X_xy`, `R`).
     """
 
-def viscoplasticity_lemaitre_chaboche(fespace: FiniteElementSpace, model: builtins.str) -> Model:
+def viscoplasticity_lemaitre_chaboche(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
     r"""
-    `model.viscoplasticity_lemaitre_chaboche(fespace, model)` — Chaboche
+    `kinematics.viscoplasticity_lemaitre_chaboche(fespace, kinematics)` — Chaboche
     viscoplasticity coupled to Lemaitre's ductile **damage**: the flow is
     driven by the effective stress `σ/(1−D)`, and `Ḋ = (Y/S)^s·ṗ`. Material
     as above, plus `S`, `s`, `D_c`.

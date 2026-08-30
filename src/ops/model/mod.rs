@@ -9,8 +9,7 @@
 //! by building a `SubModel` and attaching it by hand.
 //!
 //! - *field physics* — [`heat_conduction()`], [`fick()`], [`radiation()`],
-//!   [`follower_pressure()`], [`boundary_transfer()`],
-//!   [`interface_transfer()`];
+//!   [`boundary_transfer()`], [`interface_transfer()`];
 //! - *solid mechanics* — [`elasticity()`], [`plasticity_with_law()`],
 //!   [`damage_with_law()`] and their named shorthands;
 //! - *structural elements* — [`truss()`], [`bernoulli()`], [`timoshenko()`],
@@ -72,7 +71,6 @@ pub use crate::models::boundary_transfer::boundary_transfer;
 pub use crate::models::damage::damage_tc::damage_tc;
 pub use crate::models::damage::mazars::mazars;
 pub use crate::models::damage::sic_sic::damage_sic_sic;
-pub use crate::models::follower_pressure::follower_pressure;
 pub use crate::models::plasticity::drucker_prager::drucker_prager;
 pub use crate::models::plasticity::gurson::gurson;
 pub use crate::models::plasticity::ottosen::ottosen;

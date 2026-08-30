@@ -130,8 +130,8 @@ use crate::models::symmetry::MaterialSymmetry;
 use crate::models::tensor::Kinematics;
 use crate::models::{
     bernoulli, boundary_transfer, contact, damage, dirichlet, elasticity, embedded, fick,
-    follower_pressure, heat_conduction, interface_transfer, mpc, plasticity, radiation, shell,
-    timoshenko, truss, Constraint, MatrixKind, Physics, RelationSense, SubModelKind,
+    heat_conduction, interface_transfer, mpc, plasticity, radiation, shell, timoshenko, truss,
+    Constraint, MatrixKind, Physics, RelationSense, SubModelKind,
 };
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -246,9 +246,6 @@ pub enum SubModel {
     /// Radiation to infinity (Stefan-Boltzmann boundary) — see
     /// [`radiation::Radiation`].
     Radiation(radiation::Radiation),
-    /// Follower pressure on a boundary — see
-    /// [`follower_pressure::FollowerPressure`].
-    FollowerPressure(follower_pressure::FollowerPressure),
     /// Euler-Bernoulli beam (1-D, plane frame, space frame) — see
     /// [`bernoulli::Bernoulli`].
     Bernoulli(bernoulli::Bernoulli),
@@ -306,7 +303,6 @@ impl SubModel {
             SubModel::Fick(p) => p,
             SubModel::InterfaceTransfer(p) => p,
             SubModel::Radiation(p) => p,
-            SubModel::FollowerPressure(p) => p,
             SubModel::Bernoulli(p) => p,
             SubModel::Shell(p) => p,
         }
@@ -746,46 +742,6 @@ impl SubModel {
     /// ```
     pub fn shell(fespace: Handle<SubFiniteElementSpace>, model: shell::ShellModel) -> Result<Self> {
         Ok(SubModel::Shell(shell::Shell::new(fespace, model)?))
-    }
-
-    /// Follower-pressure sub-model on a **boundary** FE subspace — a pressure
-    /// that turns with the surface it acts on. The pressure `p` is supplied at
-    /// assembly time. See [`follower_pressure::FollowerPressure::new`].
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::{Model, SubModel};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::tensor::Kinematics;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::models::{Physics, RelationSense};
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let maillage = Mesh::from_submesh(sm);
-    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// # let mut bord = SubMesh::new(coords.clone(), ElementType::SEG2);
-    /// # bord.add_cell(&[n[0].id(), n[1].id()])?;
-    /// # let fes_bord = FiniteElementSpace::lagrange1(&Mesh::from_submesh(bord))?;
-    /// // Une pression qui tourne avec la surface sur laquelle elle s'exerce.
-    /// let m = SubModel::follower_pressure(fes_bord.get(0)?)?;
-    /// assert_eq!(m.physics(), &[Physics::Mechanical]);
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn follower_pressure(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
-        Ok(SubModel::FollowerPressure(
-            follower_pressure::FollowerPressure::new(fespace)?,
-        ))
     }
 
     /// Interface-exchange sub-model between two **conforming** boundary FE

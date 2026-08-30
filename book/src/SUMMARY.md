@@ -31,7 +31,6 @@
     - [Barre / treillis](mecanique/truss.md)
     - [Élasticité linéaire](mecanique/elasticite.md)
     - [Élasticité orthotrope et anisotrope](mecanique/orthotropie.md)
-    - [Pression suiveuse](mecanique/pression-suiveuse.md)
     - [Plasticité parfaite (von Mises)](mecanique/plasticite.md)
     - [Lois d'écoulement plastique](mecanique/lois-plastiques.md)
     - [Fluage et viscoplasticité](mecanique/fluage.md)

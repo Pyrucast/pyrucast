@@ -120,10 +120,6 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
         models::radiation::radiation_py::radiation,
         m
     )?)?;
-    m.add_function(wrap_pyfunction!(
-        models::follower_pressure::follower_pressure_py::follower_pressure,
-        m
-    )?)?;
     m.add_function(wrap_pyfunction!(py::ops::model::interface_transfer, m)?)?;
     m.add_function(wrap_pyfunction!(
         models::boundary_transfer::boundary_transfer_py::boundary_transfer,

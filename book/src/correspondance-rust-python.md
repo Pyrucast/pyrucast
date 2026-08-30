@@ -241,7 +241,6 @@ un sujet qu'on transforme.
 | `radiation(fes: &FiniteElementSpace) -> Model` | `radiation(fespace) -> Model` |
 | `boundary_transfer(fes, components: Vec<(String, String)>, physics: Physics) -> Model` | `boundary_transfer(fespace, components, physics) -> Model` |
 | `interface_transfer(side_a, side_b, components, physics: Physics, tol: f64) -> Model` | `interface_transfer(side_a, side_b, components, physics, tol=None) -> Model` |
-| `follower_pressure(fes: &FiniteElementSpace) -> Model` | `follower_pressure(fespace) -> Model` |
 | `truss(fes: &FiniteElementSpace) -> Model` | `truss(fespace) -> Model` |
 | `elasticity(fes, model: ElasticityModel) -> Model` | `elasticity(fespace, model, symmetry=None) -> Model` |
 | `elasticity_with_symmetry(fes, model, symmetry: MaterialSymmetry) -> Model` | *idem, via `symmetry=`* |

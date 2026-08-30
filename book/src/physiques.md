@@ -45,7 +45,6 @@ dédié pour un modèle piloté par le comportement) ; l'ordre reste identique.
   - [Barre / treillis](mecanique/truss.md)
   - [Élasticité linéaire](mecanique/elasticite.md)
   - [Élasticité orthotrope et anisotrope](mecanique/orthotropie.md)
-  - [Pression suiveuse](mecanique/pression-suiveuse.md)
   - [Plasticité parfaite (von Mises)](mecanique/plasticite.md)
   - [Lois d'écoulement plastique](mecanique/lois-plastiques.md) — écrouissage
     isotrope, Drucker-Prager, Ottosen
@@ -86,8 +85,8 @@ comportement, et la particularité de calcul qui la distingue.
 
 Ils se lisent **en colonnes**. Une case remplie dit que la physique déclare ce
 terme et que l'assembleur l'appelle ; un tiret dit qu'elle n'y contribue rien —
-et **ce n'est pas un manque**. `matrix.mass(...)` sur un modèle contenant une
-pression suiveuse voit simplement qu'elle n'a pas de masse.
+et **ce n'est pas un manque**. `matrix.mass(...)` sur un modèle contenant un
+échange de bord voit simplement qu'il n'a pas de masse.
 
 Les **tags** donnés sous chaque nom sont les chaînes exactes que prennent les
 opérateurs (`from_name`) : c'est ce qu'on écrit, pas une paraphrase.
@@ -114,7 +113,6 @@ opérateurs (`from_name`) : c'est ce qu'on écrit, pas une paraphrase.
 | [`elasticity`](mecanique/elasticite.md)<br>`plane_stress` `plane_strain` `axisymmetric` `full_3d` · `isotropic` `orthotropic` `anisotropic` | **analytique**<br>c'est `K` | oui | oui | `σ = D·ε` | Loi linéaire, donc **la tangente *est* la rigidité**. Symétrie matériau iso/ortho/aniso : le repère d'orthotropie passe par des vecteurs du champ matériau, et la rotation du tenseur se fait à l'**ordre 4** plutôt que par une matrice de Bond. |
 | [`plasticity`](mecanique/lois-plastiques.md) — 10 lois<br>`perfect` `isotropic` `drucker_prager` `ottosen` `gurson` `creep_norton` `creep_blackburn` `creep_lemaitre` `viscoplastic_chaboche` `viscoplastic_lemaitre_chaboche` | **analytique** ×2<br>**perturbation** ×8 | oui | oui | `σ`, `ε_p`, `p`<br>+ variables de la loi<br>+ `D_alg` (`ktan_i_j`) | La loi d'écoulement est un **attribut**. Tangente analytique pour les deux lois von Mises, **par perturbation** pour les huit autres — et toujours **symétrisée**. Les cinq lois visqueuses (Norton, Blackburn, Lemaitre, Chaboche…) **erronent sans `dt`** plutôt que d'intégrer comme si le temps n'existait pas. |
 | [`damage`](mecanique/endommagement.md) — 3 lois<br>`mazars` `damage_tc` `sic_sic` | *aucune* | oui | oui | `σ`, `damage`<br>+ histoire de la loi | **Pas de tangente**, délibérément : l'opérateur d'itération reste la rigidité **non endommagée**. Damage TC porte deux histoires indépendantes — c'est ce qui laisse une fissure refermée reprendre toute sa charge, ce qu'un scalaire ne peut pas. |
-| [`follower_pressure`](mecanique/pression-suiveuse.md) | — | — | — | traction `−p·n(u)` | **Aucune matrice** : ses `contributions` sont vides pour tous les genres. Toute son action passe par les forces internes, recalculées à chaque résidu. **Seule physique sensible au sens de parcours** du maillage de bord — l'orientation est la déclaration de ce qui est « dehors ». |
 
 ### Mécanique — structurel, efforts de section, `filter("mechanical")`
 
@@ -172,9 +170,9 @@ projection.
 la mécanique des milieux continus, `f_i = ∫ ∂N_i/∂x · σ`. Une physique dont la
 duale n'est pas un vecteur déplacement le redéfinit : la thermique et la
 diffusion appliquent `Bᵀ` à un flux scalaire, tandis que la convection, le
-rayonnement, le transfert d'interface et la **pression suiveuse** pondèrent par
-`N` et non par `Bᵀ` — leur intégrande est une densité surfacique, pas une
-grandeur conjuguée d'un gradient.
+rayonnement et le transfert d'interface pondèrent par `N` et non par `Bᵀ` —
+leur intégrande est une densité surfacique, pas une grandeur conjuguée d'un
+gradient.
 
 **La tangente stockée est symétrique.** `D_alg` transite par le champ d'état sous
 forme de **triangle supérieur** (`ktan_i_j`, i ≤ j) et est relue en miroir : le

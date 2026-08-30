@@ -244,25 +244,3 @@ materials = pyrucast.element_field.material_field(
 k = pyrucast.matrix.stiffness(model, materials)
 # ANCHOR_END: coques
 assert k.n_rows() == k.n_cols()
-
-# ── Pression suiveuse ───────────────────────────────────────────────────────
-
-
-# ── pression suiveuse ──────────────────────────────────────
-
-c = pyrucast.Coords(2)
-n = [c.add_node(p) for p in ([0.0, 0.0], [1.0, 0.0])]
-maillage_de_bord = pyrucast.Mesh(c, "SEG2")
-maillage_de_bord.unit().add_cell(n)
-u = pyrucast.NodeField(pyrucast.mesh.poi1_from_nodes(n), ["u_x", "u_y"])
-# ANCHOR: pression_suiveuse
-bord = pyrucast.FiniteElementSpace(maillage_de_bord)
-charge = pyrucast.model.follower_pressure(bord)
-materials = pyrucast.element_field.material_field(charge, [("p", 1.0e5)])
-
-# À chaque itération : la direction se recalcule depuis le déplacement courant.
-gradient = pyrucast.element_field.gradient(u, bord)
-traction = pyrucast.element_field.integrate_behavior(charge, gradient, materials)
-f = pyrucast.node_field.internal_forces(traction, charge)
-# ANCHOR_END: pression_suiveuse
-assert f.node_count() == 2

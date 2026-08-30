@@ -253,4 +253,4 @@ LIAISON;PALIER_FLUIDE RHODE_LI;Palier fluide (modèle de Rhode & Li);—;—;—
 LIAISON;COUPLAGE DEPLACEMENT / VITESSE;Couplage en déplacement ou en vitesse (base modale);—;—;—
 LIAISON;POLYNOMIALE;Liaison polynomiale (base modale);—;—;—
 LIAISON;NEWMARK MODAL;Liaison de Newmark en base modale (PASAPAS uniquement);—;—;—
-CHARGEMENT;PRESSION;Chargement de pression sur une surface orientée;mechanical;—;model.follower_pressure (p) — charge suiveuse, direction recalculée à chaque résidu
+CHARGEMENT;PRESSION;Chargement de pression sur une surface orientée;mechanical;—;—
