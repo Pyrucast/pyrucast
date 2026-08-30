@@ -126,6 +126,20 @@ pub(crate) fn voigt_stress(
     }
 }
 
+/// How many stress components [`stress_names`] lists — the same answer without
+/// building the list.
+///
+/// A behaviour kernel needs the *count* at every Gauss point (to know where its
+/// state variables start) and never the names; allocating a `Vec<String>` to
+/// read its length was one allocation per point.
+pub(crate) fn stress_count(space_dim: usize, kinematics: Kinematics) -> usize {
+    match (space_dim, kinematics) {
+        (2, Kinematics::Axisymmetric) => 4,
+        (2, _) => 3,
+        _ => 6,
+    }
+}
+
 pub(crate) fn stress_names(space_dim: usize, kinematics: Kinematics) -> Vec<String> {
     match (space_dim, kinematics) {
         (2, Kinematics::Axisymmetric) => vec![

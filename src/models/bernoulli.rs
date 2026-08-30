@@ -182,10 +182,15 @@ impl Bernoulli {
     }
 
     /// The cell's length and its unit direction, from the node coordinates.
-    fn axis(&self, geom: &CellGeom) -> Result<(f64, Vec<f64>)> {
+    fn axis(&self, geom: &CellGeom) -> Result<(f64, [f64; 3])> {
         let d = geom.space_dim;
-        let (a, b) = (geom.node_coord(0).to_vec(), geom.node_coord(1).to_vec());
-        let delta: Vec<f64> = (0..d).map(|i| b[i] - a[i]).collect();
+        // Deux emprunts immuables coexistent : rien à recopier, et la direction
+        // tient dans trois nombres.
+        let (a, b) = (geom.node_coord(0), geom.node_coord(1));
+        let mut delta = [0.0_f64; 3];
+        for i in 0..d {
+            delta[i] = b[i] - a[i];
+        }
         let l = delta.iter().map(|v| v * v).sum::<f64>().sqrt();
         if l <= f64::EPSILON {
             return Err(PyrucastError::Message(format!(
@@ -193,7 +198,10 @@ impl Bernoulli {
                 geom.cell
             )));
         }
-        Ok((l, delta.iter().map(|v| v / l).collect()))
+        for v in &mut delta {
+            *v /= l;
+        }
+        Ok((l, delta))
     }
 }
 
@@ -458,8 +466,8 @@ impl Domain for Bernoulli {
 /// it leaves one source of truth, and it makes the declared interpolation
 /// **load-bearing**. A basis that was wrong would now produce a wrong stiffness
 /// and fail the beam tests, where before it could have been anything at all.
-fn bending_4x4(geom: &CellGeom, ei: f64) -> Result<Vec<Vec<f64>>> {
-    let mut k = vec![vec![0.0_f64; 4]; 4];
+fn bending_4x4(geom: &CellGeom, ei: f64) -> Result<[[f64; 4]; 4]> {
+    let mut k = [[0.0_f64; 4]; 4];
     let mut b_buf = [0.0_f64; MAX_CELL_DOFS];
     for g in 0..geom.n_gauss {
         let n = geom.field_d2n_dx2(g, &mut b_buf)?;
@@ -475,8 +483,8 @@ fn bending_4x4(geom: &CellGeom, ei: f64) -> Result<Vec<Vec<f64>>> {
 }
 
 /// Plane frame, local DOFs `[u'_A, w'_A, θ_A, u'_B, w'_B, θ_B]`.
-fn plane_frame(geom: &CellGeom, ea: f64, ei: f64, l: f64) -> Result<Vec<Vec<f64>>> {
-    let mut k = vec![vec![0.0; 6]; 6];
+fn plane_frame(geom: &CellGeom, ea: f64, ei: f64, l: f64) -> Result<[[f64; 6]; 6]> {
+    let mut k = [[0.0_f64; 6]; 6];
     let ka = ea / l;
     k[0][0] = ka;
     k[3][3] = ka;
@@ -503,8 +511,8 @@ fn space_frame(
     ei_z: f64,
     gj: f64,
     l: f64,
-) -> Result<Vec<Vec<f64>>> {
-    let mut k = vec![vec![0.0; 12]; 12];
+) -> Result<[[f64; 12]; 12]> {
+    let mut k = [[0.0_f64; 12]; 12];
     // Axial, on u_A (0) and u_B (6).
     let ka = ea / l;
     k[0][0] = ka;
@@ -542,8 +550,8 @@ fn space_frame(
 
 /// The 2-D rotation `T` (6×6) mapping global DOFs to local, per node
 /// `[[c, s, 0], [−s, c, 0], [0, 0, 1]]`.
-fn rotation_2d(c: f64, s: f64) -> Vec<Vec<f64>> {
-    let mut t = vec![vec![0.0; 6]; 6];
+fn rotation_2d(c: f64, s: f64) -> [[f64; 6]; 6] {
+    let mut t = [[0.0_f64; 6]; 6];
     for node in 0..2 {
         let o = node * 3;
         t[o][o] = c;
@@ -562,7 +570,7 @@ fn rotation_2d(c: f64, s: f64) -> Vec<Vec<f64>> {
 /// within a thousandth of vertical), so no orientation data is needed — sound
 /// for a symmetric section, and the same convention
 /// [`frame3d`](crate::models::frame3d) uses.
-fn rotation_3d(dir: &[f64]) -> Vec<Vec<f64>> {
+fn rotation_3d(dir: &[f64]) -> [[f64; 12]; 12] {
     let x = [dir[0], dir[1], dir[2]];
     let reference = if x[2].abs() > 0.999 {
         [0.0, 1.0, 0.0]
@@ -584,7 +592,7 @@ fn rotation_3d(dir: &[f64]) -> Vec<Vec<f64>> {
     let z = cross(x, y);
     let r = [x, y, z];
 
-    let mut t = vec![vec![0.0; 12]; 12];
+    let mut t = [[0.0_f64; 12]; 12];
     for block in 0..4 {
         let o = block * 3;
         for i in 0..3 {
@@ -597,7 +605,7 @@ fn rotation_3d(dir: &[f64]) -> Vec<Vec<f64>> {
 }
 
 /// Copy a dense local matrix into the flat row-major `ke`.
-fn copy(local: &[Vec<f64>], ke: &mut [f64], side: usize) {
+fn copy<const N: usize>(local: &[[f64; N]; N], ke: &mut [f64], side: usize) {
     for i in 0..side {
         for j in 0..side {
             ke[i * side + j] += local[i][j];
@@ -606,10 +614,16 @@ fn copy(local: &[Vec<f64>], ke: &mut [f64], side: usize) {
 }
 
 /// `ke += Tᵀ · local · T` — the local matrix carried to the global axes.
-fn congruent(local: &[Vec<f64>], t: &[Vec<f64>], ke: &mut [f64], side: usize) {
+fn congruent<const N: usize>(
+    local: &[[f64; N]; N],
+    t: &[[f64; N]; N],
+    ke: &mut [f64],
+    side: usize,
+) {
     // `local · T` first, then `Tᵀ · (…)`: two matrix products rather than a
     // triple loop, and the intermediate is what a reader can check by eye.
-    let mut lt = vec![vec![0.0; side]; side];
+    // Il vit sur la pile : une poutre en assemblait un par maille.
+    let mut lt = [[0.0_f64; N]; N];
     for i in 0..side {
         for j in 0..side {
             let mut acc = 0.0;

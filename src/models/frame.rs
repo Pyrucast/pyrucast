@@ -24,7 +24,7 @@
 //! mesh. What remains is what is genuinely two-dimensional: the local closed
 //! forms and the rotation that carries them to the global axes.
 
-use crate::error::Result;
+use crate::error::{PyrucastError, Result};
 use crate::models::CellGeom;
 
 /// Local 6×6 frame stiffness (DOFs `[u'_A, w'_A, θ_A, u'_B, w'_B, θ_B]`) from
@@ -201,6 +201,14 @@ fn cell_frame(geom: &CellGeom) -> Result<(f64, f64, f64)> {
     let xb = geom.node_coord(1);
     let (dx, dy) = (xb[0] - xa[0], xb[1] - xa[1]);
     let l = (dx * dx + dy * dy).sqrt();
+    // Le `Result` gardait le vide : on divisait par `l` sans le tester, et une
+    // maille dégénérée rendait `Ok(NaN, NaN, NaN)`. Maintenant il garde.
+    if l <= f64::EPSILON {
+        return Err(PyrucastError::Message(format!(
+            "Frame: cell {} has zero length",
+            geom.cell
+        )));
+    }
     Ok((l, dx / l, dy / l))
 }
 

@@ -111,12 +111,7 @@ pub fn return_map(
         sigma[i] = if i < 3 { s_new + mean } else { s_new };
         eps_p[i] += factor * s_trial[i];
     }
-    Ok(PlasticStep {
-        sigma,
-        eps_p,
-        p: prev.p + dp,
-        vars: Vec::new(),
-    })
+    Ok(PlasticStep::new(sigma, eps_p, prev.p + dp, &[]))
 }
 
 /// The consistent tangent `D_alg = ∂σ(B)/∂ε(B)` of the radial return, evaluated

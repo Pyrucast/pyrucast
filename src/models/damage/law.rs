@@ -6,6 +6,7 @@
 //! `plasticity/law.rs`.
 
 use crate::error::Result;
+use crate::models::plasticity::law::MAX_INTERNAL_VARS;
 use serde::{Deserialize, Serialize};
 /// Which damage law a [`Damage`](super::Damage) sub-model obeys.
 ///
@@ -322,7 +323,7 @@ impl std::fmt::Display for DamageLaw {
 /// // `damage` est un **résumé** pour la visualisation ; l'état est `vars`.
 /// // Une loi à plusieurs endommagements y rapporte le pire.
 /// let u = DamageLaw::Mazars.update(&[1e-3, 0.0, 0.0, 0.0, 0.0, 0.0], &[0.0], &mat, 2)?;
-/// assert_eq!(u.vars.len(), DamageLaw::Mazars.internal_names().len());
+/// assert_eq!(u.internal().len(), DamageLaw::Mazars.internal_names().len());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub struct DamageUpdate {
@@ -332,7 +333,47 @@ pub struct DamageUpdate {
     /// `vars`; a law with several damages reports the worst here.
     pub damage: f64,
     /// The law's internal variables, in [`DamageLaw::internal_names`] order.
-    pub vars: Vec<f64>,
+    pub vars: [f64; MAX_INTERNAL_VARS],
+    /// How many of `vars` this law actually carries — the rest is padding.
+    pub n_vars: usize,
+}
+
+impl DamageUpdate {
+    /// An update carrying `vars` as its history.
+    ///
+    /// Fixed-size and on the **stack**: a damage law runs at every Gauss point
+    /// of every cell, so a `Vec` here was one allocation per point for a
+    /// handful of numbers.
+    ///
+    /// ```
+    /// # use pyrucast::models::damage::law::DamageUpdate;
+    /// // Une histoire à deux variables, et rien d'alloué pour la porter.
+    /// let u = DamageUpdate::new([0.0; 6], 0.4, &[1e-4, 0.4]);
+    /// assert_eq!(u.damage, 0.4);
+    /// assert_eq!(u.internal(), &[1e-4, 0.4]);
+    /// ```
+    pub fn new(sigma: [f64; 6], damage: f64, vars: &[f64]) -> Self {
+        let mut v = [0.0_f64; MAX_INTERNAL_VARS];
+        v[..vars.len()].copy_from_slice(vars);
+        Self {
+            sigma,
+            damage,
+            vars: v,
+            n_vars: vars.len(),
+        }
+    }
+
+    /// The history variables this update carries — the live prefix of `vars`.
+    ///
+    /// ```
+    /// # use pyrucast::models::damage::law::DamageUpdate;
+    /// // Une loi sans histoire en rend une tranche vide, non un `Vec`.
+    /// let u = DamageUpdate::new([0.0; 6], 0.0, &[]);
+    /// assert!(u.internal().is_empty());
+    /// ```
+    pub fn internal(&self) -> &[f64] {
+        &self.vars[..self.n_vars]
+    }
 }
 
 /// A cell's material, read by name — the same shape every law wants.

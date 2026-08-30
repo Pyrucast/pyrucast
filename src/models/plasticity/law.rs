@@ -1050,7 +1050,9 @@ pub struct PlasticStep {
     pub p: f64,
     /// The law's own internal variables at B, in [`PlasticLaw::internal_names`]
     /// order.
-    pub vars: Vec<f64>,
+    pub vars: [f64; MAX_INTERNAL_VARS],
+    /// How many of `vars` this law actually carries — the rest is padding.
+    pub n_vars: usize,
 }
 
 impl PlasticStep {
@@ -1087,12 +1089,44 @@ impl PlasticStep {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn elastic(trial: &[f64; 6], prev: &PrevState) -> Self {
+        Self::new(*trial, prev.eps_p, prev.p, prev.vars)
+    }
+
+    /// A step carrying `vars` as its internal state.
+    ///
+    /// The array is **fixed-size and lives on the stack**: a return mapping runs
+    /// at every Gauss point of every cell, so a `Vec` here was one allocation
+    /// per point for a handful of numbers. [`PrevState`] had always read them
+    /// through a slice; this closes the asymmetry.
+    ///
+    /// ```
+    /// # use pyrucast::models::plasticity::law::PlasticStep;
+    /// // Deux variables internes, et rien d'alloué pour les porter.
+    /// let pas = PlasticStep::new([0.0; 6], [0.0; 6], 0.0, &[0.3, 1.5]);
+    /// assert_eq!(pas.internal(), &[0.3, 1.5]);
+    /// ```
+    pub fn new(sigma: [f64; 6], eps_p: [f64; 6], p: f64, vars: &[f64]) -> Self {
+        let mut v = [0.0_f64; MAX_INTERNAL_VARS];
+        v[..vars.len()].copy_from_slice(vars);
         Self {
-            sigma: *trial,
-            eps_p: prev.eps_p,
-            p: prev.p,
-            vars: prev.vars.to_vec(),
+            sigma,
+            eps_p,
+            p,
+            vars: v,
+            n_vars: vars.len(),
         }
+    }
+
+    /// The internal variables this step carries — the live prefix of `vars`.
+    ///
+    /// ```
+    /// # use pyrucast::models::plasticity::law::PlasticStep;
+    /// // Une loi sans variable interne en rend une tranche vide, non un `Vec`.
+    /// let pas = PlasticStep::new([0.0; 6], [0.0; 6], 0.0, &[]);
+    /// assert!(pas.internal().is_empty());
+    /// ```
+    pub fn internal(&self) -> &[f64] {
+        &self.vars[..self.n_vars]
     }
 }
 

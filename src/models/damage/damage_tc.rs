@@ -111,8 +111,8 @@ pub const MATERIAL: &[&str] = &["E", "nu", "f_t", "f_c", "A_t", "A_c"];
 /// let traction = damage::damage_tc::update(&[1e-3, 0.0, 0.0, 0.0, 0.0, 0.0], &[0.0; 4], &mat)?;
 /// let compression =
 ///     damage::damage_tc::update(&[-1e-3, 0.0, 0.0, 0.0, 0.0, 0.0], &[0.0; 4], &mat)?;
-/// assert_eq!(traction.vars.len(), 4); // r⁺, r⁻, d⁺, d⁻
-/// assert!(traction.vars[2] > compression.vars[2]); // d⁺ : la traction seule
+/// assert_eq!(traction.internal().len(), 4); // r⁺, r⁻, d⁺, d⁻
+/// assert!(traction.internal()[2] > compression.internal()[2]); // d⁺ : la traction seule
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn update(eps: &[f64; 6], prev: &[f64], mat: &MatRead) -> Result<DamageUpdate> {
@@ -208,13 +208,13 @@ pub fn update(eps: &[f64; 6], prev: &[f64], mat: &MatRead) -> Result<DamageUpdat
         degraded[(0, 1)],
     ];
 
-    Ok(DamageUpdate {
+    // The reported scalar is the worse of the two — a summary for
+    // visualisation, not the state, which is the four below.
+    Ok(DamageUpdate::new(
         sigma,
-        // The reported scalar is the worse of the two — a summary for
-        // visualisation, not the state, which is the pair below.
-        damage: d_plus.max(d_minus),
-        vars: vec![r_plus, r_minus, d_plus, d_minus],
-    })
+        d_plus.max(d_minus),
+        &[r_plus, r_minus, d_plus, d_minus],
+    ))
 }
 
 /// Damage-TC — separate tension and compression damages.

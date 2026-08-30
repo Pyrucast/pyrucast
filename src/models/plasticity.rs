@@ -511,10 +511,10 @@ impl Domain for Plasticity {
             base += 1;
         }
         // The law's own internal variables, right after the common state.
-        for (i, value) in step.vars.iter().enumerate() {
+        for (i, value) in step.internal().iter().enumerate() {
             out[base + i] = *value;
         }
-        base += step.vars.len();
+        base += step.n_vars;
 
         // Consistent tangent D_alg at the converged step, evaluated at the solved
         // ε(B) (which carries the plane-stress ε_zz). Emitted (upper triangle)

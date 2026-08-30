@@ -47,7 +47,7 @@ use crate::error::{PyrucastError, Result};
 use crate::models::plasticity::law::{
     require_positive, MatParams, PlasticLaw, PlasticStep, PrevState,
 };
-use crate::models::plasticity::law::{PlasticLawKind, TENSOR_SUFFIXES};
+use crate::models::plasticity::law::{PlasticLawKind, MAX_INTERNAL_VARS, TENSOR_SUFFIXES};
 use crate::models::tensor::Kinematics;
 use crate::models::tensor::{deviator, i1, von_mises_stress};
 
@@ -207,7 +207,7 @@ fn radial_creep(
     let dp = solve_multiplier(law, dt, upper.max(1e-12), |dp| {
         rate((q_tr - 3.0 * mat.mu * dp).max(0.0), prev.p + dp)
     })?;
-    Ok(scale_deviator(trial, prev, mat, dp, q_tr, Vec::new()))
+    Ok(scale_deviator(trial, prev, mat, dp, q_tr, &[]))
 }
 
 /// Build the returned state from a solved multiplier, scaling the trial
@@ -218,7 +218,7 @@ fn scale_deviator(
     mat: &MatParams,
     dp: f64,
     q_tr: f64,
-    vars: Vec<f64>,
+    vars: &[f64],
 ) -> PlasticStep {
     let s_tr = deviator(trial);
     let mean = i1(trial) / 3.0;
@@ -231,12 +231,7 @@ fn scale_deviator(
         sigma[i] = if i < 3 { s_new + mean } else { s_new };
         eps_p[i] += factor * s_tr[i];
     }
-    PlasticStep {
-        sigma,
-        eps_p,
-        p: prev.p + dp,
-        vars,
-    }
+    PlasticStep::new(sigma, eps_p, prev.p + dp, vars)
 }
 
 // ─── Norton ─────────────────────────────────────────────────────────────────
@@ -398,8 +393,8 @@ pub fn lemaitre(
 /// // est la seule façon d'intégrer juste sous charge variable.
 /// let trial = [200.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 /// let pas = plasticity::viscous::blackburn(&trial, &repos, &mat, 1.0)?;
-/// assert_eq!(pas.vars.len(), 1); // p_prim
-/// assert!(pas.vars[0] > 0.0);
+/// assert_eq!(pas.internal().len(), 1); // p_prim
+/// assert!(pas.internal()[0] > 0.0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn blackburn(
@@ -433,7 +428,7 @@ pub fn blackburn(
         mat,
         dp,
         q_tr,
-        vec![primary_end(q_end)],
+        &[primary_end(q_end)],
     ))
 }
 
@@ -500,7 +495,7 @@ pub fn blackburn(
 /// let trial = [400.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 /// let pas = plasticity::viscous::chaboche(&trial, &repos, &mat, 1.0, false)?;
 /// assert!(pas.p > 0.0);
-/// assert_eq!(pas.vars.len(), PlasticLaw::ViscoplasticChaboche.internal_names().len());
+/// assert_eq!(pas.internal().len(), PlasticLaw::ViscoplasticChaboche.internal_names().len());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn chaboche(
@@ -572,8 +567,13 @@ pub fn chaboche(
         eps_p[i] += dp * dir[i];
     }
 
-    let mut vars: Vec<f64> = x_new.to_vec();
-    vars.push(r_end(dp));
+    // Les variables internes s'assemblent sur la pile : la contrainte
+    // cinématique, l'écrouissage isotrope, puis l'endommagement s'il y en a.
+    let mut vars = [0.0_f64; MAX_INTERNAL_VARS];
+    let mut n = x_new.len();
+    vars[..n].copy_from_slice(&x_new);
+    vars[n] = r_end(dp);
+    n += 1;
     if damage {
         // Lemaitre's damage law: the elastic energy release rate drives it.
         let s_par = require_positive(law, "S", mat.get(CHABOCHE_S_PAR))?;
@@ -585,14 +585,10 @@ pub fn chaboche(
         let young = mat.mu * (3.0 * mat.lambda + 2.0 * mat.mu) / (mat.lambda + mat.mu);
         let y = sigma_eq * sigma_eq / (2.0 * young);
         let d_new = (d_a + (y / s_par).powf(s_exp) * dp).min(d_c.max(0.0));
-        vars.push(d_new);
+        vars[n] = d_new;
+        n += 1;
     }
-    Ok(PlasticStep {
-        sigma,
-        eps_p,
-        p: prev.p + dp,
-        vars,
-    })
+    Ok(PlasticStep::new(sigma, eps_p, prev.p + dp, &vars[..n]))
 }
 
 /// Norton-Odqvist secondary creep, `ṗ = (q/K)^n`.

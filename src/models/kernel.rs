@@ -713,7 +713,9 @@ impl<'a> CellGeom<'a> {
                 self.rd.ref_dim
             )));
         }
-        let (a, b) = (self.node_coord(0).to_vec(), self.node_coord(1).to_vec());
+        // Deux emprunts immuables coexistent : la copie ne servait à rien, et
+        // elle coûtait deux allocations **par point de Gauss** sur une poutre C¹.
+        let (a, b) = (self.node_coord(0), self.node_coord(1));
         if self.space_dim == 1 {
             return Ok((b[0] - a[0]) / 2.0);
         }

@@ -44,6 +44,11 @@ const MATERIAL_COMPONENTS: &[&str] = &["E", "nu"];
 /// [`thermal_strain`](fn@crate::ops::element_field::thermal_strain), and the
 /// density, which only the mass matrix wants. The order is the contract —
 /// `ElementLayout::optional_material` resolves it slot for slot.
+/// Six lignes de Voigt sur la largeur d'une maille — la forme des tampons `B` et
+/// `D·B`. Sur la **pile** : un point de Gauss n'alloue rien, et six `Vec` par
+/// point, c'est ce que coûtait la version précédente.
+type VoigtRows = [[f64; MAX_CELL_DOFS]; 6];
+
 const OPTIONAL_COMPONENTS: &[&str] = &["alpha", "rho"];
 /// Position of `rho` in [`OPTIONAL_COMPONENTS`].
 const RHO_SLOT: usize = 1;
@@ -620,18 +625,21 @@ pub(crate) fn read_voigt_strain(
 /// `hoop` carries the axisymmetric extra: `Some((N, r))` — the shape values and
 /// the radius at the Gauss point — adds the fourth row `ε_θθ = Σ_i N_i u_{r,i} / r`
 /// and orders the rows `[rr, zz, θθ, rz]`. `None` gives the plane / solid `B`.
-fn b_matrix(
+fn b_matrix_into(
     dn_dx: &[f64],
     n_nodes: usize,
     space_dim: usize,
     hoop: Option<(&[f64], f64)>,
-) -> Vec<Vec<f64>> {
+    b: &mut VoigtRows,
+) -> usize {
     let v = match hoop {
         Some(_) => 4,
         None => voigt_size(space_dim, Kinematics::PlaneStrain),
     };
     let dofs = space_dim * n_nodes;
-    let mut b = vec![vec![0.0; dofs]; v];
+    for row in b[..v].iter_mut() {
+        row[..dofs].fill(0.0);
+    }
     let dn = |i: usize, a: usize| dn_dx[i * space_dim + a];
     for i in 0..n_nodes {
         if let Some((n, r)) = hoop {
@@ -660,7 +668,7 @@ fn b_matrix(
             b[5][cy] = dn(i, 0);
         }
     }
-    b
+    v
 }
 
 /// Element kernel: local stiffness `K_e = Σ_g (Bᵀ D B) |J| w` of one cell,
@@ -739,6 +747,12 @@ pub fn element_stiffness(
         space_dim,
         &mut d,
     )?;
+    // Les trois tampons vivent **hors** de la boucle : un point de Gauss ne
+    // doit rien allouer, et `B` comme `D·B` sont de taille fixe une fois la
+    // maille connue.
+    let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
+    let mut b: VoigtRows = [[0.0; MAX_CELL_DOFS]; 6];
+    let mut db: VoigtRows = [[0.0; MAX_CELL_DOFS]; 6];
     for g in 0..geom.n_gauss {
         // On a body of revolution the hoop row needs `N` and `r` at this point.
         let hoop = if kinematics.is_axisymmetric() {
@@ -746,11 +760,15 @@ pub fn element_stiffness(
         } else {
             None
         };
-        let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
         geom.dn_dx(g, &mut dn_buf[..n_nodes * space_dim])?;
-        let b = b_matrix(&dn_buf[..n_nodes * space_dim], n_nodes, space_dim, hoop);
+        b_matrix_into(
+            &dn_buf[..n_nodes * space_dim],
+            n_nodes,
+            space_dim,
+            hoop,
+            &mut b,
+        );
         // DB = D·B  (voigt × dofs).
-        let mut db = vec![vec![0.0; dofs]; v];
         for r in 0..v {
             for c in 0..dofs {
                 let mut acc = 0.0;
@@ -1109,14 +1127,15 @@ pub fn read_tangent_matrix(
     Ok(d)
 }
 
-/// [`read_tangent_matrix`] **by index** — the form the tangent kernel calls.
+/// [`read_tangent_matrix`] **by index, into a caller-owned buffer** — the form
+/// the tangent kernel calls.
 ///
 /// `lay` gives the position of each `ktan_i_j` in the state row, in the
 /// upper-triangle order [`tangent_component_names`] declares, resolved once per
 /// zone. Reading by name at each Gauss point cost a `format!` and a string
-/// search per entry, for a table the zone already knew.
-fn read_tangent_matrix_by(row: &[f64], lay: &[u32], v: usize) -> Vec<Vec<f64>> {
-    let mut d = vec![vec![0.0; v]; v];
+/// search per entry, for a table the zone already knew — and the matrix itself
+/// cost `v + 1` allocations where a fixed `6×6` on the pile does.
+fn read_tangent_matrix_into(row: &[f64], lay: &[u32], v: usize, d: &mut [[f64; 6]; 6]) {
     let mut k = 0;
     for i in 0..v {
         for j in i..v {
@@ -1126,7 +1145,6 @@ fn read_tangent_matrix_by(row: &[f64], lay: &[u32], v: usize) -> Vec<Vec<f64>> {
             k += 1;
         }
     }
-    d
 }
 
 /// Element kernel: local **consistent tangent** `K_t = Σ_g Bᵀ D_alg B |J| w` of
@@ -1208,6 +1226,11 @@ pub fn element_tangent_from_state(
     let space_dim = geom.space_dim;
     let dofs = space_dim * n_nodes;
     let v = voigt_size(space_dim, kinematics);
+    // Mêmes tampons de pile que `element_stiffness`, hors de la boucle.
+    let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
+    let mut b: VoigtRows = [[0.0; MAX_CELL_DOFS]; 6];
+    let mut db: VoigtRows = [[0.0; MAX_CELL_DOFS]; 6];
+    let mut d = [[0.0_f64; 6]; 6];
     for g in 0..geom.n_gauss {
         // Same hoop row as `element_stiffness` on a body of revolution.
         let hoop = if kinematics.is_axisymmetric() {
@@ -1215,19 +1238,23 @@ pub fn element_tangent_from_state(
         } else {
             None
         };
-        let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
         geom.dn_dx(g, &mut dn_buf[..n_nodes * space_dim])?;
-        let b = b_matrix(&dn_buf[..n_nodes * space_dim], n_nodes, space_dim, hoop);
-        let d = read_tangent_matrix_by(state.row(geom.cell, g), &lay.state, v);
+        b_matrix_into(
+            &dn_buf[..n_nodes * space_dim],
+            n_nodes,
+            space_dim,
+            hoop,
+            &mut b,
+        );
+        read_tangent_matrix_into(state.row(geom.cell, g), &lay.state, v, &mut d);
         // DB = D·B (voigt × dofs), then Kᵉ += Bᵀ (DB) · |J| w.
-        let mut db = vec![vec![0.0; dofs]; v];
-        for (r, dbr) in db.iter_mut().enumerate() {
-            for (c, dbrc) in dbr.iter_mut().enumerate() {
+        for r in 0..v {
+            for c in 0..dofs {
                 let mut acc = 0.0;
                 for w in 0..v {
                     acc += d[r][w] * b[w][c];
                 }
-                *dbrc = acc;
+                db[r][c] = acc;
             }
         }
         let w = geom.det_j_w(g);

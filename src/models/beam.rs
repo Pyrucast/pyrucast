@@ -169,18 +169,18 @@ impl std::fmt::Display for BeamModel {
 /// // Avec cisaillement, elle s'assouplit.
 /// assert!(beam::bending_4x4(2.0, Some(1.0), 1.0)[0][0] < k[0][0]);
 /// ```
-pub fn bending_4x4(ei: f64, gas: Option<f64>, l: f64) -> Vec<Vec<f64>> {
+pub fn bending_4x4(ei: f64, gas: Option<f64>, l: f64) -> [[f64; 4]; 4] {
     // `Φ` is the ratio of bending to shear compliance.
     let phi = phi(ei, gas, l);
     let c = ei / (l * l * l * (1.0 + phi));
     let (l2, k1, k2) = (l * l, 12.0 * c, 6.0 * l * c);
     let k3 = (4.0 + phi) * l2 * c;
     let k4 = (2.0 - phi) * l2 * c;
-    vec![
-        vec![k1, k2, -k1, k2],
-        vec![k2, k3, -k2, k4],
-        vec![-k1, -k2, k1, -k2],
-        vec![k2, k4, -k2, k3],
+    [
+        [k1, k2, -k1, k2],
+        [k2, k3, -k2, k4],
+        [-k1, -k2, k1, -k2],
+        [k2, k4, -k2, k3],
     ]
 }
 
@@ -254,9 +254,9 @@ const GAUSS_01: [(f64, f64); 4] = [
 ///     .map(|(i, j)| m[i][j]).sum();
 /// assert!((masse - 6.0).abs() < 1e-9);
 /// ```
-pub fn mass_4x4(rho_a: f64, rho_i: f64, ei: f64, gas: Option<f64>, l: f64) -> Vec<Vec<f64>> {
+pub fn mass_4x4(rho_a: f64, rho_i: f64, ei: f64, gas: Option<f64>, l: f64) -> [[f64; 4]; 4] {
     let phi = phi(ei, gas, l);
-    let mut m = vec![vec![0.0_f64; 4]; 4];
+    let mut m = [[0.0_f64; 4]; 4];
     for (xi, w) in GAUSS_01 {
         let (n_w, n_t) = shape_functions(phi, l, xi);
         let dx = w * l; // dx = L dξ

@@ -52,7 +52,8 @@ use crate::containers::element_field::SubElementField;
 use crate::containers::field::ABSENT_COMPONENT;
 use crate::error::Result;
 use crate::models::shell::{
-    accumulate, local_derivatives, local_frame, membrane_and_drilling, to_global,
+    accumulate, local_derivatives_into, local_frame, membrane_and_drilling, to_global, ShellMatrix,
+    ShellNodes2, ShellRows2, ShellRows3, MAX_SHELL_DOFS,
 };
 use crate::models::{CellGeom, ElementLayout};
 
@@ -246,18 +247,24 @@ pub fn element_stiffness(
     let ds = shear_law(e, nu, h, shear_factor(row, lay));
 
     let frame = local_frame(full)?;
-    let mut local = vec![vec![0.0_f64; side]; side];
+    // Toute la matrice tient sur la pile : `Shell::new` a déjà refusé tout
+    // élément plus large qu'un QUA4.
+    let mut local: ShellMatrix = [0.0; MAX_SHELL_DOFS * MAX_SHELL_DOFS];
 
     // ── Membrane and drilling: the part shared with every formulation ──────
     membrane_and_drilling(full, &frame, e, nu, h, &mut local)?;
 
     // ── Bending: full quadrature, on the independent fibre rotation ────────
+    let mut dn: ShellNodes2 = [[0.0; 2]; 4];
+    let mut bb: ShellRows3 = [[0.0; MAX_SHELL_DOFS]; 3];
     for g in 0..full.n_gauss {
-        let dn = local_derivatives(full, &frame, g)?;
+        local_derivatives_into(full, &frame, g, &mut dn)?;
         let w = full.det_j_w(g);
 
         // Bending `κ` on (θ_x, θ_y) — local DOFs 6i+3, 6i+4.
-        let mut bb = vec![vec![0.0; side]; 3];
+        for row in bb.iter_mut() {
+            row[..side].fill(0.0);
+        }
         for i in 0..n {
             let (dx, dy) = (dn[i][0], dn[i][1]);
             let (tx, ty) = (6 * i + 3, 6 * i + 4);
@@ -270,12 +277,15 @@ pub fn element_stiffness(
     }
 
     // ── Transverse shear: reduced quadrature, against locking ──────────────
+    let mut bs: ShellRows2 = [[0.0; MAX_SHELL_DOFS]; 2];
     for g in 0..reduced.n_gauss {
-        let dn = local_derivatives(reduced, &frame, g)?;
+        local_derivatives_into(reduced, &frame, g, &mut dn)?;
         let shape = reduced.n_at_g(g);
         let w = reduced.det_j_w(g);
         // `γ` on (w, θ_x, θ_y) — local DOFs 6i+2, 6i+3, 6i+4.
-        let mut bs = vec![vec![0.0; side]; 2];
+        for row in bs.iter_mut() {
+            row[..side].fill(0.0);
+        }
         for i in 0..n {
             let (dx, dy) = (dn[i][0], dn[i][1]);
             let (wz, tx, ty) = (6 * i + 2, 6 * i + 3, 6 * i + 4);
@@ -290,7 +300,7 @@ pub fn element_stiffness(
                     continue;
                 }
                 for b in 0..side {
-                    local[a][b] += ds * row[a] * row[b] * w;
+                    local[a * MAX_SHELL_DOFS + b] += ds * row[a] * row[b] * w;
                 }
             }
         }

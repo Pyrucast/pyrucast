@@ -57,7 +57,8 @@ use crate::atoms::ElementType;
 use crate::containers::element_field::SubElementField;
 use crate::error::{PyrucastError, Result};
 use crate::models::shell::{
-    accumulate, local_coords, local_frame, membrane_and_drilling, to_global,
+    accumulate, local_coords_into, local_frame, membrane_and_drilling, to_global, ShellMatrix,
+    ShellNodes2, ShellRows3, MAX_SHELL_DOFS,
 };
 use crate::models::{CellGeom, ElementLayout};
 
@@ -95,7 +96,10 @@ fn side_coeffs(p: &[[f64; 2]], i: usize, j: usize, cell: usize) -> Result<SideCo
 
 /// The elimination of one rotation, as a matrix on the quadratic shape
 /// functions: `[degree of freedom][shape function]`.
-type Elimination = Vec<Vec<f64>>;
+/// Les deux matrices d'élimination d'un DKT/DKQ : `3n` degrés de liberté de
+/// coque vers `2n` fonctions de forme du champ de rotation. `n ≤ 4`, donc au
+/// plus `12 × 8` — sur la **pile**, comme tout ce qu'une maille manipule.
+type Elimination = [[f64; 8]; 12];
 
 /// The two rotations as linear forms in the quadratic shape functions:
 /// `β_x = Σ_m N_m · (Σ_q C_x[q][m] u_q)`, and the same for `β_y`.
@@ -111,14 +115,13 @@ type Elimination = Vec<Vec<f64>>;
 /// written or kept consistent with the first.
 fn constraint_matrices(p: &[[f64; 2]], cell: usize) -> Result<(Elimination, Elimination)> {
     let n = p.len();
-    let n_shape = 2 * n;
-    let n_dof = 3 * n;
-    let sides = (0..n)
-        .map(|k| side_coeffs(p, k, (k + 1) % n, cell))
-        .collect::<Result<Vec<_>>>()?;
+    let mut sides = [SideCoeffs::default(); 4];
+    for (k, side) in sides[..n].iter_mut().enumerate() {
+        *side = side_coeffs(p, k, (k + 1) % n, cell)?;
+    }
 
-    let mut cx = vec![vec![0.0; n_shape]; n_dof];
-    let mut cy = vec![vec![0.0; n_shape]; n_dof];
+    let mut cx: Elimination = [[0.0; 8]; 12];
+    let mut cy: Elimination = [[0.0; 8]; 12];
     for corner in 0..n {
         // The two sides meeting at this corner: the one it starts (where it is
         // the `i` end of `x_ij`) and the one it ends.
@@ -167,21 +170,30 @@ fn element_pair(n: usize, cell: usize) -> Result<(ElementType, ElementType)> {
 /// `κ = [∂β_x/∂x, ∂β_y/∂y, ∂β_x/∂y + ∂β_y/∂x]`, the same convention as
 /// [Reissner-Mindlin](super::thick) — only the way `β` depends on the degrees of
 /// freedom differs.
+#[allow(clippy::too_many_arguments)]
 fn bending_b(
     geom: &CellGeom,
     p: &[[f64; 2]],
-    cx: &[Vec<f64>],
-    cy: &[Vec<f64>],
+    cx: &Elimination,
+    cy: &Elimination,
+    pair: (ElementType, ElementType),
     g: usize,
-) -> Result<Vec<Vec<f64>>> {
+    b: &mut ShellRows3,
+) -> Result<()> {
     let n = p.len();
     let cell = geom.cell;
-    let (linear, quadratic) = element_pair(n, cell)?;
+    // Le couple d'éléments est un fait de la **maille**, tranché une fois par
+    // `element_stiffness` — le redemander à chaque point de Gauss reprouvait
+    // ce que l'appelant venait d'établir.
+    let (linear, quadratic) = pair;
     let xi = geom.gauss_xi(g)?;
 
     // The Jacobian of the **geometry**, in the element's own plane: a flat facet
     // is a plane map, so this is an ordinary 2×2 — no manifold pseudo-inverse.
-    let dn_geom = linear.as_kind().dshape(xi);
+    // `dshape_into` writes into the stack: `dshape` allocated a `Vec` at each
+    // Gauss point, twice.
+    let mut dn_geom = [0.0_f64; 8];
+    linear.as_kind().dshape_into(xi, &mut dn_geom[..2 * n]);
     let mut j = [[0.0_f64; 2]; 2];
     for (i, node) in p.iter().enumerate() {
         for (a, &coord) in node.iter().enumerate() {
@@ -202,10 +214,15 @@ fn bending_b(
         [-j[1][0] / det, j[0][0] / det],
     ];
 
-    let dn_rot = quadratic.as_kind().dshape(xi);
+    let mut dn_rot = [0.0_f64; 16];
     let n_shape = 2 * n;
+    quadratic
+        .as_kind()
+        .dshape_into(xi, &mut dn_rot[..2 * n_shape]);
     let side = 6 * n;
-    let mut b = vec![vec![0.0; side]; 3];
+    for row in b.iter_mut() {
+        row[..side].fill(0.0);
+    }
     for corner in 0..n {
         for (slot, &shell_dof) in [6 * corner + 2, 6 * corner + 3, 6 * corner + 4]
             .iter()
@@ -213,7 +230,7 @@ fn bending_b(
         {
             let q = 3 * corner + slot;
             // `∂β/∂ξ_k` for this degree of freedom, then carried to `x` and `y`.
-            let dref = |c: &[Vec<f64>], k: usize| -> f64 {
+            let dref = |c: &Elimination, k: usize| -> f64 {
                 (0..n_shape).map(|m| c[q][m] * dn_rot[m * 2 + k]).sum()
             };
             let (bx_xi, bx_eta) = (dref(cx, 0), dref(cx, 1));
@@ -228,7 +245,7 @@ fn bending_b(
             b[2][shell_dof] = bx_dy + by_dx;
         }
     }
-    Ok(b)
+    Ok(())
 }
 
 /// The local element stiffness of one discrete-Kirchhoff facet, carried to the
@@ -303,14 +320,18 @@ pub fn element_stiffness(
     let db = bending_law(e, nu, h);
 
     let frame = local_frame(geom)?;
-    let p = local_coords(geom, &frame)?;
-    element_pair(n, cell)?;
-    let (cx, cy) = constraint_matrices(&p, cell)?;
+    let mut p: ShellNodes2 = [[0.0; 2]; 4];
+    local_coords_into(geom, &frame, &mut p);
+    let p = &p[..n];
+    // Le couple linéaire/quadratique, tranché **une fois** pour la maille.
+    let pair = element_pair(n, cell)?;
+    let (cx, cy) = constraint_matrices(p, cell)?;
 
-    let mut local = vec![vec![0.0_f64; side]; side];
+    let mut local: ShellMatrix = [0.0; MAX_SHELL_DOFS * MAX_SHELL_DOFS];
     membrane_and_drilling(geom, &frame, e, nu, h, &mut local)?;
+    let mut bb: ShellRows3 = [[0.0; MAX_SHELL_DOFS]; 3];
     for g in 0..geom.n_gauss {
-        let bb = bending_b(geom, &p, &cx, &cy, g)?;
+        bending_b(geom, p, &cx, &cy, pair, g, &mut bb)?;
         accumulate(&mut local, &bb, &db, geom.det_j_w(g), side);
     }
 
@@ -411,7 +432,7 @@ mod tests {
                     [2.0 * xi[0] - 0.5, 2.0 * xi[1] - 0.5]
                 };
                 let sh = quadratic.as_kind().shape(&point);
-                let beta = |c: &Vec<Vec<f64>>| -> f64 {
+                let beta = |c: &Elimination| -> f64 {
                     (0..3 * n)
                         .map(|q| u[q] * (0..2 * n).map(|m| c[q][m] * sh[m]).sum::<f64>())
                         .sum()

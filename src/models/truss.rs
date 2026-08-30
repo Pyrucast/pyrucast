@@ -186,8 +186,9 @@ impl SubModelKind for Truss {
     ) -> Result<()> {
         let geom = &geoms[0];
         let d = self.space_dim;
-        let c = cell_cosine(geom, d)?;
-        let n = stress.get(geom.cell, 0, lay[0] as usize)?;
+        let mut c = [0.0_f64; 3];
+        cell_cosine(geom, d, &mut c)?;
+        let n = stress.row(geom.cell, 0)[lay[0] as usize];
         for a in 0..d {
             fe[a] = -n * c[a]; // node A
             fe[d + a] = n * c[a]; // node B
@@ -254,7 +255,9 @@ impl Domain for Truss {
         out: &mut [f64],
     ) -> Result<()> {
         let d = self.space_dim;
-        let c = cell_cosine(geom, d)?;
+        // Sur la pile : ce noyau tourne à chaque point de Gauss.
+        let mut c = [0.0_f64; 3];
+        cell_cosine(geom, d, &mut c)?;
         // (i,j) → flat strain-component index (symmetric, i ≤ j), the order
         // `strain_names` declares and therefore the order of `lay.deformation`.
         let comp_index = |i: usize, j: usize| -> usize {
@@ -318,12 +321,26 @@ impl Domain for Truss {
 
 /// Unit direction cosine vector `c = (x_B − x_A)/L` of one `SEG2` cell, from its
 /// two node coordinates.
-fn cell_cosine(geom: &CellGeom, space_dim: usize) -> Result<Vec<f64>> {
+fn cell_cosine(geom: &CellGeom, space_dim: usize, out: &mut [f64; 3]) -> Result<f64> {
     let xa = geom.node_coord(0);
     let xb = geom.node_coord(1);
-    let d: Vec<f64> = (0..space_dim).map(|a| xb[a] - xa[a]).collect();
-    let len = d.iter().map(|v| v * v).sum::<f64>().sqrt();
-    Ok(d.iter().map(|v| v / len).collect())
+    for a in 0..space_dim {
+        out[a] = xb[a] - xa[a];
+    }
+    let len = out[..space_dim].iter().map(|v| v * v).sum::<f64>().sqrt();
+    // Le `Result` gardait le vide : on divisait par `len` sans jamais le
+    // tester, et une maille dégénérée rendait `Ok(NaN)` — un résultat faux
+    // qui traversait tout l'assemblage. Maintenant il garde quelque chose.
+    if len <= f64::EPSILON {
+        return Err(crate::error::PyrucastError::Message(format!(
+            "Truss: cell {} has zero length",
+            geom.cell
+        )));
+    }
+    for v in &mut out[..space_dim] {
+        *v /= len;
+    }
+    Ok(len)
 }
 
 /// Element kernel: local truss stiffness `K_e = (E·A/L)·[[c⊗c,−c⊗c],…]` of one
@@ -377,12 +394,9 @@ pub fn element_stiffness(
 ) -> Result<()> {
     let sd = geom.space_dim;
     let side = 2 * sd;
-    let c = cell_cosine(geom, sd)?;
-    let len = {
-        let xa = geom.node_coord(0);
-        let xb = geom.node_coord(1);
-        (0..sd).map(|a| (xb[a] - xa[a]).powi(2)).sum::<f64>().sqrt()
-    };
+    // Les cosinus directeurs **et** la longueur, d'un seul parcours.
+    let mut c = [0.0_f64; 3];
+    let len = cell_cosine(geom, sd, &mut c)?;
     // `E` then `A`, in the order `MATERIAL_COMPONENTS` declares.
     let row = material.row(geom.cell, 0);
     let k_ax = row[lay.material[0] as usize] * row[lay.material[1] as usize] / len;
@@ -400,15 +414,6 @@ pub fn element_stiffness(
 }
 
 /// Length of one `SEG2` cell from its two node coordinates.
-fn cell_length(geom: &CellGeom, space_dim: usize) -> Result<f64> {
-    let xa = geom.node_coord(0);
-    let xb = geom.node_coord(1);
-    Ok((0..space_dim)
-        .map(|a| (xb[a] - xa[a]).powi(2))
-        .sum::<f64>()
-        .sqrt())
-}
-
 /// Element kernel: local **consistent mass** of one bar,
 ///   `M[(i,a),(j,b)] = δ_ab · (ρ A L / 6) · (2 if i==j else 1)`
 /// (the linear-element mass `(ρAL/6)[[2,1],[1,2]]` on each translation
@@ -464,7 +469,8 @@ pub fn element_mass(
 ) -> Result<()> {
     let sd = geom.space_dim;
     let side = 2 * sd;
-    let len = cell_length(geom, sd)?;
+    let mut c = [0.0_f64; 3];
+    let len = cell_cosine(geom, sd, &mut c)?;
     let row = material.row(geom.cell, 0);
     // `rho` is the bar's only optional component: without it there is no mass.
     let rho = match lay.optional_material[0] {
@@ -541,8 +547,8 @@ pub fn element_geometric(
 ) -> Result<()> {
     let sd = geom.space_dim;
     let side = 2 * sd;
-    let c = cell_cosine(geom, sd)?;
-    let len = cell_length(geom, sd)?;
+    let mut c = [0.0_f64; 3];
+    let len = cell_cosine(geom, sd, &mut c)?;
     let k = state.row(geom.cell, 0)[lay.state[0] as usize] / len;
     for ii in 0..2 {
         for jj in 0..2 {

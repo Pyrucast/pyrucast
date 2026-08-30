@@ -175,8 +175,8 @@ fn numerical_normal(sigma: &[f64; 6], f: f64, mat: &MatParams, scale: f64) -> Re
 /// let trial = [800.0, 400.0, 400.0, 0.0, 0.0, 0.0];
 /// let pas = plasticity::gurson::return_map(&trial, &repos, &mat)?;
 /// assert!(pas.p > 0.0);
-/// assert_eq!(pas.vars.len(), 1);
-/// assert!(pas.vars[0] >= repos.vars[0]); // la porosité ne décroît pas
+/// assert_eq!(pas.internal().len(), 1);
+/// assert!(pas.internal()[0] >= repos.vars[0]); // la porosité ne décroît pas
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn return_map(trial: &[f64; 6], prev: &PrevState, mat: &MatParams) -> Result<PlasticStep> {
@@ -189,7 +189,8 @@ pub fn return_map(trial: &[f64; 6], prev: &PrevState, mat: &MatParams) -> Result
 
     if yield_function(trial, f_a, mat)? <= 0.0 {
         let mut step = PlasticStep::elastic(trial, prev);
-        step.vars = vec![f_a];
+        step.vars[0] = f_a;
+        step.n_vars = 1;
         return Ok(step);
     }
 
@@ -235,12 +236,7 @@ pub fn return_map(trial: &[f64; 6], prev: &PrevState, mat: &MatParams) -> Result
                 .into(),
         ));
     }
-    Ok(PlasticStep {
-        sigma,
-        eps_p,
-        p,
-        vars: vec![f],
-    })
+    Ok(PlasticStep::new(sigma, eps_p, p, &[f]))
 }
 
 /// Gurson-Tvergaard-Needleman porous plasticity.

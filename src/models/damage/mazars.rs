@@ -195,7 +195,7 @@ pub const MATERIAL: &[&str] = &["E", "nu", "eps_d0", "A_t", "B_t", "A_c", "B_c"]
 /// let charge = damage::mazars::update(&grand, &[0.0], &mat)?;
 /// let petit = [1e-5, 0.0, 0.0, 0.0, 0.0, 0.0];
 /// let decharge = damage::mazars::update(&petit, &charge.vars, &mat)?;
-/// assert_eq!(decharge.vars[0], charge.vars[0]);
+/// assert_eq!(decharge.internal()[0], charge.internal()[0]);
 /// // `damage` est recalculé depuis κ, d'où l'égalité à l'arrondi près.
 /// assert!((decharge.damage - charge.damage).abs() < 1e-12);
 /// // La contrainte, elle, retombe : la raideur est celle du matériau
@@ -215,11 +215,7 @@ pub fn update(eps: &[f64; 6], prev: &[f64], mat: &MatRead) -> Result<DamageUpdat
     };
     let kappa_old = prev.first().copied().unwrap_or(0.0);
     let (sigma, damage, kappa) = mazars_update(eps, kappa_old, &p);
-    Ok(DamageUpdate {
-        sigma,
-        damage,
-        vars: vec![kappa],
-    })
+    Ok(DamageUpdate::new(sigma, damage, &[kappa]))
 }
 
 /// Mazars isotropic damage — the classical concrete law.

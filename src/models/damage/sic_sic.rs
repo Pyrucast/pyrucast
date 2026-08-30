@@ -147,10 +147,10 @@ pub const MATERIAL_3D: &[&str] = &[
 /// // Un endommagement **par direction de tissage** : l'état en porte six,
 /// // trois seuils et trois endommagements.
 /// let u = damage::sic_sic::update(&[1e-3, 0.0, 0.0, 0.0, 0.0, 0.0], &[0.0; 6], &mat, 2)?;
-/// assert_eq!(u.vars.len(), 6);
+/// assert_eq!(u.internal().len(), 6);
 /// // Une traction selon le premier axe n'endommage que celui-là.
-/// assert!(u.vars[3] > 0.0);
-/// assert_eq!(u.vars[4], 0.0);
+/// assert!(u.internal()[3] > 0.0);
+/// assert_eq!(u.internal()[4], 0.0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn update(
@@ -220,14 +220,14 @@ pub fn update(
         sigma_global[(0, 1)],
     ];
 
-    Ok(DamageUpdate {
+    // A scalar summary for visualisation; the state is the six below.
+    Ok(DamageUpdate::new(
         sigma,
-        // A scalar summary for visualisation; the state is the three below.
-        damage: damages.iter().cloned().fold(0.0_f64, f64::max),
-        vars: vec![
+        damages.iter().cloned().fold(0.0_f64, f64::max),
+        &[
             kappas[0], kappas[1], kappas[2], damages[0], damages[1], damages[2],
         ],
-    })
+    ))
 }
 
 /// SiC/SiC — orthotropic damage, three directions.

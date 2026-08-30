@@ -52,7 +52,7 @@ use crate::models::owned_components;
 use crate::models::plasticity::law::MAX_INTERNAL_VARS;
 use crate::models::tensor::Kinematics;
 use crate::models::tensor::{dual_name, primal_name};
-use crate::models::tensor::{stress_names, voigt_stress};
+use crate::models::tensor::{stress_count, stress_names, voigt_stress};
 use crate::models::ZoneLayout;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use crate::models::{ElementLayout, MatrixKind};
@@ -349,12 +349,12 @@ impl Domain for Damage {
         }
 
         let update = self.law.update(&eps, &vars[..n_vars], &read, d)?;
-        let v = stress_names(d, self.kinematics).len();
+        let v = stress_count(d, self.kinematics);
         for r in 0..v {
             out[r] = voigt_stress(&update.sigma, d, self.kinematics, r);
         }
         out[v] = update.damage;
-        for (i, value) in update.vars.iter().enumerate() {
+        for (i, value) in update.internal().iter().enumerate() {
             out[v + 1 + i] = *value;
         }
         Ok(())

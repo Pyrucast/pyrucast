@@ -74,6 +74,20 @@ const PRIMAL: [&str; 6] = ["u_x", "u_y", "u_z", "r_x", "r_y", "r_z"];
 const DUAL: [&str; 6] = ["f_x", "f_y", "f_z", "m_x", "m_y", "m_z"];
 /// Required material: the elastic constants and the thickness.
 const MATERIAL_COMPONENTS: &[&str] = &["E", "nu", "h"];
+
+/// La largeur maximale d'une coque : quatre nœuds (QUA4) à six DDL. `Shell::new`
+/// refuse tout autre élément que TRI3 ou QUA4, donc la borne est acquise à la
+/// construction — et tous les tampons d'un noyau tiennent sur la **pile**.
+pub(crate) const MAX_SHELL_DOFS: usize = 24;
+
+/// Une matrice de coque, `MAX_SHELL_DOFS²` à plat.
+pub(crate) type ShellMatrix = [f64; MAX_SHELL_DOFS * MAX_SHELL_DOFS];
+/// Trois lignes d'opérateur (membrane, flexion) sur la largeur d'une coque.
+pub(crate) type ShellRows3 = [[f64; MAX_SHELL_DOFS]; 3];
+/// Deux lignes d'opérateur (cisaillement transverse).
+pub(crate) type ShellRows2 = [[f64; MAX_SHELL_DOFS]; 2];
+/// Les dérivées locales aux nœuds d'une coque.
+pub(crate) type ShellNodes2 = [[f64; 2]; 4];
 /// The generalised forces a shell behaviour reports: membrane, bending, and —
 /// where the formulation has one — transverse shear.
 const BEHAVIOR: [&str; 8] = [
@@ -478,9 +492,8 @@ impl Domain for Shell {
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn local_frame(geom: &CellGeom) -> Result<[[f64; 3]; 3]> {
-    let p0 = geom.node_coord(0).to_vec();
-    let p1 = geom.node_coord(1).to_vec();
-    let p2 = geom.node_coord(2).to_vec();
+    // Trois emprunts immuables coexistent : rien à recopier.
+    let (p0, p1, p2) = (geom.node_coord(0), geom.node_coord(1), geom.node_coord(2));
     let a: [f64; 3] = std::array::from_fn(|i| p1[i] - p0[i]);
     let b: [f64; 3] = std::array::from_fn(|i| p2[i] - p0[i]);
     let cross = [
@@ -515,61 +528,23 @@ pub fn local_frame(geom: &CellGeom) -> Result<[[f64; 3]; 3]> {
 /// plane, so projecting it on `e₁`, `e₂` is exactly the local derivative — no
 /// inverse, no second Jacobian.
 ///
-/// ```
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::element_field::SubElementField;
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::matrix::DofOrdering;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::kernel::{assemble_block, reduce_cells};
-/// # use pyrucast::models::shell;
-/// # let coords = Handle::new(Coords::new(3).unwrap());
-/// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
-/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
-/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
-/// #     zone.clone(), vec!["E".into(), "nu".into(), "h".into()],
-/// #     &[210_000.0, 0.3, 0.01]).unwrap());
-/// # let ddl = || (vec!["f_x".to_string(), "f_y".to_string(), "f_z".to_string(),
-/// #                    "m_x".to_string(), "m_y".to_string(), "m_z".to_string()],
-/// #               vec!["u_x".to_string(), "u_y".to_string(), "u_z".to_string(),
-/// #                    "r_x".to_string(), "r_y".to_string(), "r_z".to_string()]);
-/// // Le gradient tangentiel est **déjà** dans le plan : le projeter sur
-/// // e₁, e₂ suffit — ni inverse, ni second jacobien.
-/// reduce_cells(&zone, |geom| {
-///     let f = shell::local_frame(geom)?;
-///     let d = shell::local_derivatives(geom, &f, 0)?;
-///     assert_eq!(d.len(), 3);
-///     // Partition de l'unité dérivée : les gradients somment à zéro.
-///     assert!((d[0][0] + d[1][0] + d[2][0]).abs() < 1e-12);
-///     Ok(0.0)
-/// })?;
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn local_derivatives(
+pub(crate) fn local_derivatives_into(
     geom: &CellGeom,
     frame: &[[f64; 3]; 3],
     g: usize,
-) -> Result<Vec<[f64; 2]>> {
+    out: &mut ShellNodes2,
+) -> Result<()> {
     let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
     let dn = &mut dn_buf[..geom.n_nodes * geom.space_dim];
     geom.dn_dx(g, dn)?;
-    Ok((0..geom.n_nodes)
-        .map(|i| {
-            let grad = [dn[i * 3], dn[i * 3 + 1], dn[i * 3 + 2]];
-            [
-                (0..3).map(|k| grad[k] * frame[0][k]).sum(),
-                (0..3).map(|k| grad[k] * frame[1][k]).sum(),
-            ]
-        })
-        .collect())
+    for (i, o) in out[..geom.n_nodes].iter_mut().enumerate() {
+        let grad = [dn[i * 3], dn[i * 3 + 1], dn[i * 3 + 2]];
+        *o = [
+            (0..3).map(|k| grad[k] * frame[0][k]).sum(),
+            (0..3).map(|k| grad[k] * frame[1][k]).sum(),
+        ];
+    }
+    Ok(())
 }
 
 /// The node coordinates in the element's own plane, `[i] = (x, y)`.
@@ -580,56 +555,16 @@ pub fn local_derivatives(
 /// reference element — a discrete-Kirchhoff element, whose side coefficients are
 /// built from edge lengths and directions.
 ///
-/// ```
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::element_field::SubElementField;
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::matrix::DofOrdering;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::kernel::{assemble_block, reduce_cells};
-/// # use pyrucast::models::shell;
-/// # let coords = Handle::new(Coords::new(3).unwrap());
-/// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
-/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
-/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
-/// #     zone.clone(), vec!["E".into(), "nu".into(), "h".into()],
-/// #     &[210_000.0, 0.3, 0.01]).unwrap());
-/// # let ddl = || (vec!["f_x".to_string(), "f_y".to_string(), "f_z".to_string(),
-/// #                    "m_x".to_string(), "m_y".to_string(), "m_z".to_string()],
-/// #               vec!["u_x".to_string(), "u_y".to_string(), "u_z".to_string(),
-/// #                    "r_x".to_string(), "r_y".to_string(), "r_z".to_string()]);
-/// // Le premier nœud est l'origine, la première arête l'axe x : une
-/// // facette plane tient en deux nombres par nœud, ce dont a besoin une
-/// // formulation écrite sur la **géométrie** — un Kirchhoff discret.
-/// reduce_cells(&zone, |geom| {
-///     let f = shell::local_frame(geom)?;
-///     let p = shell::local_coords(geom, &f)?;
-///     assert_eq!(p[0], [0.0, 0.0]);
-///     assert!((p[1][0] - 1.0).abs() < 1e-12 && p[1][1].abs() < 1e-12);
-///     Ok(0.0)
-/// })?;
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn local_coords(geom: &CellGeom, frame: &[[f64; 3]; 3]) -> Result<Vec<[f64; 2]>> {
-    let origin = geom.node_coord(0).to_vec();
-    (0..geom.n_nodes)
-        .map(|i| {
-            let p = geom.node_coord(i);
-            let d: [f64; 3] = std::array::from_fn(|k| p[k] - origin[k]);
-            Ok([
-                (0..3).map(|k| d[k] * frame[0][k]).sum(),
-                (0..3).map(|k| d[k] * frame[1][k]).sum(),
-            ])
-        })
-        .collect()
+pub(crate) fn local_coords_into(geom: &CellGeom, frame: &[[f64; 3]; 3], out: &mut ShellNodes2) {
+    let origin = geom.node_coord(0);
+    for (i, o) in out[..geom.n_nodes].iter_mut().enumerate() {
+        let p = geom.node_coord(i);
+        let d: [f64; 3] = std::array::from_fn(|k| p[k] - origin[k]);
+        *o = [
+            (0..3).map(|k| d[k] * frame[0][k]).sum(),
+            (0..3).map(|k| d[k] * frame[1][k]).sum(),
+        ];
+    }
 }
 
 /// Weight of the drilling constraint, relative to `G·h`.
@@ -646,68 +581,35 @@ const DRILLING_WEIGHT: f64 = 1e-3;
 ///
 /// `local` is the `6 n × 6 n` matrix in the element frame, accumulated into.
 ///
-/// ```
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::element_field::SubElementField;
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::matrix::DofOrdering;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::kernel::{assemble_block, reduce_cells};
-/// # use pyrucast::models::shell;
-/// # let coords = Handle::new(Coords::new(3).unwrap());
-/// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
-/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
-/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
-/// #     zone.clone(), vec!["E".into(), "nu".into(), "h".into()],
-/// #     &[210_000.0, 0.3, 0.01]).unwrap());
-/// # let ddl = || (vec!["f_x".to_string(), "f_y".to_string(), "f_z".to_string(),
-/// #                    "m_x".to_string(), "m_y".to_string(), "m_z".to_string()],
-/// #               vec!["u_x".to_string(), "u_y".to_string(), "u_z".to_string(),
-/// #                    "r_x".to_string(), "r_y".to_string(), "r_z".to_string()]);
-/// // La part que toute formulation de facette plane partage : elle ne doit
-/// // rien à la théorie de flexion. Accumulée dans la matrice locale 6n×6n.
-/// reduce_cells(&zone, |geom| {
-///     let f = shell::local_frame(geom)?;
-///     let mut local = vec![vec![0.0; 18]; 18];
-///     shell::membrane_and_drilling(geom, &f, 210_000.0, 0.3, 0.01, &mut local)?;
-///     // Les DDL de translation dans le plan sont chargés…
-///     assert!(local[0][0] > 0.0);
-///     // …et rien n'a touché la flèche hors plan, qui relève de la flexion.
-///     assert_eq!(local[2][2], 0.0);
-///     Ok(0.0)
-/// })?;
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn membrane_and_drilling(
+pub(crate) fn membrane_and_drilling(
     geom: &CellGeom,
     frame: &[[f64; 3]; 3],
     e: f64,
     nu: f64,
     h: f64,
-    local: &mut [Vec<f64>],
+    local: &mut ShellMatrix,
 ) -> Result<()> {
     let n = geom.n_nodes;
     let side = 6 * n;
     let dm = thick::membrane_law(e, nu, h);
     let g_mod = e / (2.0 * (1.0 + nu));
 
+    // Trois tampons, hors de la boucle de Gauss et sur la pile.
+    let mut dn: ShellNodes2 = [[0.0; 2]; 4];
+    let mut bm: ShellRows3 = [[0.0; MAX_SHELL_DOFS]; 3];
+    let mut bd = [0.0_f64; MAX_SHELL_DOFS];
     for g in 0..geom.n_gauss {
-        let dn = local_derivatives(geom, frame, g)?;
+        local_derivatives_into(geom, frame, g, &mut dn)?;
         let shape = geom.n_at_g(g);
         let w = geom.det_j_w(g);
 
-        // Membrane `ε` on (u, v) — local DOFs 6i+0, 6i+1.
-        let mut bm = vec![vec![0.0; side]; 3];
-        // Drilling residual `θ_z − ω_z` on (u, v, θ_z).
-        let mut bd = vec![0.0; side];
+        // Membrane `ε` on (u, v) — local DOFs 6i+0, 6i+1 — and the drilling
+        // residual `θ_z − ω_z` on (u, v, θ_z). Both are rewritten in full at
+        // each point, so the previous point leaves nothing behind.
+        for row in bm.iter_mut() {
+            row[..side].fill(0.0);
+        }
+        bd[..side].fill(0.0);
         for i in 0..n {
             let (dx, dy) = (dn[i][0], dn[i][1]);
             let (u, v, tz) = (6 * i, 6 * i + 1, 6 * i + 5);
@@ -729,7 +631,7 @@ pub fn membrane_and_drilling(
                 continue;
             }
             for b in 0..side {
-                local[a][b] += kd * bd[a] * bd[b];
+                local[a * MAX_SHELL_DOFS + b] += kd * bd[a] * bd[b];
             }
         }
     }
@@ -738,26 +640,20 @@ pub fn membrane_and_drilling(
 
 /// `local += Bᵀ D B · w` for a 3-component strain.
 ///
-/// ```
-/// # use pyrucast::models::shell::{self, ShellModel};
-/// // `local += Bᵀ D B · w`. Avec B = I sur les trois premières colonnes et
-/// // D l'identité, on retrouve `w` sur la diagonale.
-/// let mut local = vec![vec![0.0; 3]; 3];
-/// let b: Vec<Vec<f64>> = (0..3)
-///     .map(|k| (0..3).map(|j| if j == k { 1.0 } else { 0.0 }).collect())
-///     .collect();
-/// let d = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
-/// shell::accumulate(&mut local, &b, &d, 2.0, 3);
-/// assert_eq!(local[1][1], 2.0);
-/// assert_eq!(local[0][1], 0.0);
-/// ```
-pub fn accumulate(local: &mut [Vec<f64>], b: &[Vec<f64>], d: &[[f64; 3]; 3], w: f64, side: usize) {
+pub(crate) fn accumulate(
+    local: &mut ShellMatrix,
+    b: &ShellRows3,
+    d: &[[f64; 3]; 3],
+    w: f64,
+    side: usize,
+) {
     // `D B` first: three rows, so the inner loop stays short and the intermediate
-    // is what a reader can check against the law above.
-    let mut db = vec![vec![0.0; side]; 3];
-    for (r, row) in db.iter_mut().enumerate() {
-        for (c, e) in row.iter_mut().enumerate() {
-            *e = (0..3).map(|k| d[r][k] * b[k][c]).sum();
+    // is what a reader can check against the law above. It lives on the stack —
+    // this runs at every Gauss point of every cell.
+    let mut db: ShellRows3 = [[0.0; MAX_SHELL_DOFS]; 3];
+    for r in 0..3 {
+        for c in 0..side {
+            db[r][c] = (0..3).map(|k| d[r][k] * b[k][c]).sum();
         }
     }
     for a in 0..side {
@@ -767,7 +663,7 @@ pub fn accumulate(local: &mut [Vec<f64>], b: &[Vec<f64>], d: &[[f64; 3]; 3], w: 
         }
         for bcol in 0..side {
             let acc: f64 = (0..3).map(|k| b[k][a] * db[k][bcol]).sum();
-            local[a][bcol] += acc * w;
+            local[a * MAX_SHELL_DOFS + bcol] += acc * w;
         }
     }
 }
@@ -775,18 +671,12 @@ pub fn accumulate(local: &mut [Vec<f64>], b: &[Vec<f64>], d: &[[f64; 3]; 3], w: 
 /// Carry a local element matrix to the global axes: `ke += Tᵀ K_loc T`, with `T`
 /// block-diagonal, the local triad on each translation and rotation triplet.
 ///
-/// ```
-/// # use pyrucast::models::shell::{self, ShellModel};
-/// // `ke += Tᵀ K_loc T`, T bloc-diagonale : la triade locale sur chaque
-/// // triplet de translation et de rotation. Repère identité ⇒ recopie.
-/// let identite = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
-/// let mut local = vec![vec![0.0; 6]; 6];
-/// local[0][0] = 5.0;
-/// let mut ke = vec![0.0; 36];
-/// shell::to_global(&local, &identite, 1, &mut ke);
-/// assert_eq!(ke[0], 5.0);
-/// ```
-pub fn to_global(local: &[Vec<f64>], frame: &[[f64; 3]; 3], n_nodes: usize, ke: &mut [f64]) {
+pub(crate) fn to_global(
+    local: &ShellMatrix,
+    frame: &[[f64; 3]; 3],
+    n_nodes: usize,
+    ke: &mut [f64],
+) {
     let side = 6 * n_nodes;
     // `T` maps global DOFs to local: its rows are the local axes.
     let t = |row: usize, col: usize| -> f64 {
@@ -796,17 +686,17 @@ pub fn to_global(local: &[Vec<f64>], frame: &[[f64; 3]; 3], n_nodes: usize, ke: 
         }
         frame[row % 3][col % 3]
     };
-    let mut lt = vec![vec![0.0; side]; side];
+    let mut lt: ShellMatrix = [0.0; MAX_SHELL_DOFS * MAX_SHELL_DOFS];
     for i in 0..side {
         for j in 0..side {
             let mut acc = 0.0;
             for k in 0..side {
                 let tkj = t(k, j);
                 if tkj != 0.0 {
-                    acc += local[i][k] * tkj;
+                    acc += local[i * MAX_SHELL_DOFS + k] * tkj;
                 }
             }
-            lt[i][j] = acc;
+            lt[i * MAX_SHELL_DOFS + j] = acc;
         }
     }
     for i in 0..side {
@@ -815,7 +705,7 @@ pub fn to_global(local: &[Vec<f64>], frame: &[[f64; 3]; 3], n_nodes: usize, ke: 
             for k in 0..side {
                 let tki = t(k, i);
                 if tki != 0.0 {
-                    acc += tki * lt[k][j];
+                    acc += tki * lt[k * MAX_SHELL_DOFS + j];
                 }
             }
             ke[i * side + j] += acc;
@@ -849,4 +739,105 @@ crate::physics_operator! {
     /// ```
     pub fn shell(fes, model: ShellModel) via SubModel::shell;
     python: "`model.shell(fespace, model)` — a **shell**: a surface carrying membrane\nforces and bending moments, on a TRI3/QUA4 mesh in 3-D. Material `E`,\n`nu`, `h` (thickness), plus an optional `rho`.\n\n| `model` | transverse shear | when |\n|---|---|---|\n| `\"thick\"` | yes, integrated **reduced** | the general case |\n| `\"kirchhoff\"` | imposed zero at discrete points | thin shells |\n\nSix DOFs per node (`u_x…u_z, r_x…r_z`), as for `frame3d`, so a shell and\na space frame share nodes directly. The sixth — the **drilling** rotation\nabout the normal — is tied to the membrane's own in-plane rotation, which\nremoves the singularity a flat facet would otherwise have without\nresisting a rigid rotation of that facet.\n\n`\"thick\"` (Reissner-Mindlin) integrates the transverse shear at\n**reduced** quadrature: at full quadrature it would overwhelm the bending\nterm by `1/h²` as the shell thins and the element would refuse to bend at\nall (shear locking). It takes an optional `k_s`, the shear-correction\nfactor (`5/6` by default).\n\n`\"kirchhoff\"` (DKT on a triangle, DKQ on a quadrangle) has no transverse\nshear at all: `γ = 0` is imposed at the corners and along each side, so\nthe thin limit is exact by construction and there is nothing left to\nlock. It reports six generalised forces rather than eight — a thin plate\nhas no constitutive `Q`, only a reaction."
+}
+
+// ─── Unit tests ──────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::aggregate::Aggregate;
+    use crate::atoms::{ElementType, Node};
+    use crate::containers::finite_element_space::FiniteElementSpace;
+    use crate::containers::mesh::{Mesh, SubMesh};
+    use crate::coords::Coords;
+    use crate::handle::Handle;
+    use crate::models::kernel::reduce_cells;
+
+    /// Le triangle unité dans le plan `z = 0` — la facette la plus simple.
+    fn facette() -> Handle<SubFiniteElementSpace> {
+        let coords = Handle::new(Coords::new(3).unwrap());
+        let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
+            .iter()
+            .map(|p| Node::create_in(coords.clone(), p).unwrap())
+            .collect();
+        let mut sm = SubMesh::new(coords, ElementType::TRI3);
+        sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+        FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))
+            .unwrap()
+            .get(0)
+            .unwrap()
+    }
+
+    /// `local += Bᵀ D B · w` : avec `B = I` sur trois colonnes et `D = I`, on
+    /// retrouve `w` sur la diagonale.
+    #[test]
+    fn accumulate_is_b_transpose_d_b() {
+        let mut local: ShellMatrix = [0.0; MAX_SHELL_DOFS * MAX_SHELL_DOFS];
+        let mut b: ShellRows3 = [[0.0; MAX_SHELL_DOFS]; 3];
+        for (k, row) in b.iter_mut().enumerate() {
+            row[k] = 1.0;
+        }
+        let d = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+        accumulate(&mut local, &b, &d, 2.0, 3);
+        assert_eq!(local[MAX_SHELL_DOFS + 1], 2.0);
+        assert_eq!(local[1], 0.0);
+    }
+
+    /// `ke += Tᵀ K_loc T` : un repère identité recopie la matrice locale.
+    #[test]
+    fn to_global_on_the_identity_frame_copies() {
+        let identite = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+        let mut local: ShellMatrix = [0.0; MAX_SHELL_DOFS * MAX_SHELL_DOFS];
+        local[0] = 5.0;
+        let mut ke = vec![0.0; 36];
+        to_global(&local, &identite, 1, &mut ke);
+        assert_eq!(ke[0], 5.0);
+    }
+
+    /// Le gradient tangentiel est **déjà** dans le plan : le projeter sur
+    /// `e₁`, `e₂` suffit — ni inverse, ni second jacobien. Et la partition de
+    /// l'unité dérivée fait que les gradients somment à zéro.
+    #[test]
+    fn local_derivatives_sum_to_zero() {
+        reduce_cells(&facette(), |geom| {
+            let f = local_frame(geom)?;
+            let mut d: ShellNodes2 = [[0.0; 2]; 4];
+            local_derivatives_into(geom, &f, 0, &mut d)?;
+            assert!((d[0][0] + d[1][0] + d[2][0]).abs() < 1e-12);
+            Ok(0.0)
+        })
+        .unwrap();
+    }
+
+    /// Le premier nœud est l'origine, la première arête l'axe `x` : une facette
+    /// plane tient en deux nombres par nœud.
+    #[test]
+    fn local_coords_put_the_first_edge_on_x() {
+        reduce_cells(&facette(), |geom| {
+            let f = local_frame(geom)?;
+            let mut p: ShellNodes2 = [[0.0; 2]; 4];
+            local_coords_into(geom, &f, &mut p);
+            assert_eq!(p[0], [0.0, 0.0]);
+            assert!((p[1][0] - 1.0).abs() < 1e-12 && p[1][1].abs() < 1e-12);
+            Ok(0.0)
+        })
+        .unwrap();
+    }
+
+    /// La part que toute formulation de facette plane partage : elle charge les
+    /// DDL de translation dans le plan, et ne touche pas à la flèche hors plan,
+    /// qui relève de la flexion.
+    #[test]
+    fn membrane_and_drilling_leaves_the_bending_alone() {
+        reduce_cells(&facette(), |geom| {
+            let f = local_frame(geom)?;
+            let mut local: ShellMatrix = [0.0; MAX_SHELL_DOFS * MAX_SHELL_DOFS];
+            membrane_and_drilling(geom, &f, 210_000.0, 0.3, 0.01, &mut local)?;
+            assert!(local[0] > 0.0);
+            assert_eq!(local[2 * MAX_SHELL_DOFS + 2], 0.0);
+            Ok(0.0)
+        })
+        .unwrap();
+    }
 }

@@ -217,12 +217,7 @@ pub fn return_map(trial: &[f64; 6], prev: &PrevState, mat: &MatParams) -> Result
                 .into(),
         ));
     }
-    Ok(PlasticStep {
-        sigma,
-        eps_p,
-        p,
-        vars: Vec::new(),
-    })
+    Ok(PlasticStep::new(sigma, eps_p, p, &[]))
 }
 
 /// Ottosen's four-parameter criterion for concrete.

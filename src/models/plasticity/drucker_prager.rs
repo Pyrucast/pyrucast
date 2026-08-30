@@ -278,12 +278,7 @@ pub fn return_map(trial: &[f64; 6], prev: &PrevState, mat: &MatParams) -> Result
                 eps_p[i] += p.psi * dlambda;
             }
         }
-        return Ok(PlasticStep {
-            sigma,
-            eps_p,
-            p: prev.p + dlambda,
-            vars: Vec::new(),
-        });
+        return Ok(PlasticStep::new(sigma, eps_p, prev.p + dlambda, &[]));
     }
 
     // Apex return: the flank solution would push the equivalent stress negative,
@@ -388,12 +383,7 @@ fn apex_return(
             eps_p[i] += vol_drop;
         }
     }
-    Ok(PlasticStep {
-        sigma,
-        eps_p,
-        p: prev.p + dp,
-        vars: Vec::new(),
-    })
+    Ok(PlasticStep::new(sigma, eps_p, prev.p + dp, &[]))
 }
 
 // ─── On the tangent ─────────────────────────────────────────────────────────
