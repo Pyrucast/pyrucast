@@ -46,8 +46,16 @@ bash script/check_all.sh
 step "check_clippy (quatre jeux de features)"
 bash script/check_clippy.sh
 
+# Le dépôt vert ne dit rien du **paquet**. `cargo package` déballe le .crate
+# dans target/package et le compile : c'est la seule passe qui voie ce que
+# `exclude` a emporté. La 0.5.0 a été taguée puis refusée par `cargo publish`
+# pour cette raison — un motif `archive/` non ancré emportait `src/archive/`,
+# module que `lib.rs` déclare —, et rien ici ne l'avait vu.
+step "cargo package (le paquet déballé compile)"
+cargo package --quiet
+
 echo
-echo "OK: tout est vert, sans warning."
+echo "OK: tout est vert, sans warning, paquet compris."
 
 # ── 2. Nouveau numéro de version ────────────────────────────────────────────
 current="$(sed -nE 's/^version = "(.*)"/\1/p' Cargo.toml | head -1)"

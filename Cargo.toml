@@ -18,14 +18,21 @@ readme = "README.md"
 repository = "https://github.com/Pyrucast/pyrucast"
 # Only the Rust crate matters to crates.io consumers; the mdbook source,
 # the Python companion package and teaching material are irrelevant there.
+# Les motifs de répertoire sont **ancrés** par une barre oblique initiale :
+# sans elle, `exclude` se lit comme un `.gitignore` et emporte tout répertoire
+# du même nom, si profond soit-il.
 exclude = [
-    "book/", "python/", "formation/", "tests/python/", "examples/*.py",
+    "/book/", "/python/", "/formation/", "tests/python/", "examples/*.py",
     "profile.json.gz", "opérateur_castem.csv", "modèle_castem.csv",
     # Dev-only tooling and internal notes, irrelevant to a crates.io consumer.
-    ".claude/", ".github/", "recall.config.json", "script/",
+    "/.claude/", "/.github/", "recall.config.json", "/script/",
     ".git-blame-ignore-revs", "ROADMAP.md", "CONVENTIONS.md",
     # Code retiré temporairement, gardé pour être remis : ni compilé, ni publié.
-    "archive/",
+    # C'est ce motif-là qui a fait échouer la publication de la 0.5.0 : non
+    # ancré, il emportait aussi `src/archive/`, le module d'archivage que
+    # `lib.rs` déclare — le paquet ne compilait plus une fois déballé (E0583),
+    # alors que le dépôt, lui, compilait très bien.
+    "/archive/",
 ]
 
 [lib]
