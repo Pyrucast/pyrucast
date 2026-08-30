@@ -26,8 +26,8 @@ use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteEleme
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
-use crate::models::kernel;
 use crate::models::kernel::MAX_CELL_DOFS;
+use crate::models::kernel::{self, CellGeom};
 
 /// Per-Gauss flux density consumed by [`flux`].
 ///
@@ -128,57 +128,74 @@ fn subspace_flux(
     // il en faut une, et c'est un fait de la zone.
     kernel::require_field_basis(fespace, "shape values")?;
     let submesh = fespace.read().submesh();
+    // Avant tout verrou de lecture long : `to_poi1` prend le verrou d'écriture
+    // du `Coords`.
+    let support = submesh.read().to_poi1()?;
+    let dual = vec![component.to_string()];
 
-    // Flux density: a bare constant, or the field's single component snapshotted
-    // once (its guard cannot cross the parallel region). The component count is
-    // checked here, for the zone; the copy below then reads **by index**, where
-    // it used to search the name again at every (cell, point).
-    let (uniform, densities): (f64, Option<Vec<f64>>) = match density {
-        FluxDensity::Uniform(v) => (*v, None),
+    // `f_i = Σ_g φ · N_i · |J| w`, scattered to the nodes by the shared
+    // colour-parallel driver — this is a mass-like `N`-weighted instance of the
+    // same nodal integrate-and-scatter as the `Bᵀ` operators. The two densities
+    // are two **kernels**, not one kernel and a test: what the density is gets
+    // settled here, for the zone, and the Gauss loop only reads.
+    match density {
+        FluxDensity::Uniform(phi) => {
+            let phi = *phi;
+            kernel::scatter_to_nodes(
+                std::slice::from_ref(fespace),
+                &support,
+                dual,
+                |geoms, fe| {
+                    flux_element(&geoms[0], |_| phi, fe);
+                    Ok(())
+                },
+            )
+        }
         FluxDensity::Field(field) => {
             // L'agrégat porte une densité par zone ; l'opérateur n'en intègre
             // qu'une — celle qui vit sur le sous-espace demandé.
             let zone = field.sub_for_fespace(fespace)?;
             let f = zone.read();
-            let comps = f.components();
-            if comps.len() != 1 {
+            let n_comps = f.components().len();
+            if n_comps != 1 {
                 return Err(PyrucastError::Message(format!(
-                    "flux: la densité par champ doit avoir exactement une composante (en a {})",
-                    comps.len()
+                    "flux: la densité par champ doit avoir exactement une composante (en a {n_comps})"
                 )));
             }
             // Une seule composante : le tampon du champ **est** la densité,
-            // ligne pour ligne. Plus de `Vec` de `Vec`, plus de recherche.
-            (0.0, Some(f.values().to_vec()))
+            // ligne pour ligne — aucune colonne à résoudre, aucune copie. Le
+            // guard est tenu à travers la région parallèle, comme pour `Bᵀ`.
+            let phi = f.values();
+            kernel::scatter_to_nodes(
+                std::slice::from_ref(fespace),
+                &support,
+                dual,
+                |geoms, fe| {
+                    let geom = &geoms[0];
+                    let base = geom.cell * geom.n_gauss;
+                    flux_element(geom, |g| phi[base + g], fe);
+                    Ok(())
+                },
+            )
         }
-    };
+    }
+}
 
-    // `f_i = Σ_g φ · N_i · |J| w`, scattered to the nodes: the density is captured
-    // by the element closure (a plain snapshot, borrowed in place) and the shared
-    // driver owns the colour-parallel scatter — this is a mass-like `N`-weighted
-    // instance of the same nodal integrate-and-scatter as the `Bᵀ` operators.
-    let support = submesh.read().to_poi1()?;
-    kernel::scatter_to_nodes(
-        std::slice::from_ref(fespace),
-        &support,
-        vec![component.to_string()],
-        |geoms, fe| {
-            let geom = &geoms[0];
-            let cell = geom.cell;
-            for g in 0..geom.n_gauss {
-                let mut n_buf = [0.0_f64; MAX_CELL_DOFS];
-                let shape = geom.field_n_at_g(g, &mut n_buf);
-                let phi = densities
-                    .as_deref()
-                    .map_or(uniform, |d| d[cell * geom.n_gauss + g]);
-                let w = geom.det_j_w(g) * phi;
-                for i in 0..geom.n_nodes {
-                    fe[i] += shape[i] * w;
-                }
-            }
-            Ok(())
-        },
-    )
+/// Element kernel of the distributed load: `fe[i] = Σ_g φ_g N_i(ξ_g) |J|_g w_g`,
+/// the single output component per node (`n_dual = 1`).
+///
+/// `phi` reads the density at the Gauss point of index `g` — a constant or the
+/// field's column, chosen once by the caller, so the loop below carries no test
+/// and allocates nothing.
+fn flux_element(geom: &CellGeom, phi: impl Fn(usize) -> f64, fe: &mut [f64]) {
+    let mut n_buf = [0.0_f64; MAX_CELL_DOFS];
+    for g in 0..geom.n_gauss {
+        let shape = geom.field_n_at_g(g, &mut n_buf);
+        let w = geom.det_j_w(g) * phi(g);
+        for i in 0..geom.n_nodes {
+            fe[i] += shape[i] * w;
+        }
+    }
 }
 
 // ─── Unit tests ──────────────────────────────────────────────────────────────
