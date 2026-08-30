@@ -27,12 +27,10 @@
 //! connectivity back.
 
 use crate::aggregate::Aggregate;
-use crate::atoms::Node;
 use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
-use std::collections::HashMap;
 
 /// Copy `mesh` into a fresh mesh, applying `f` to every node's coordinates.
 ///
@@ -51,40 +49,90 @@ pub(super) fn map_coords(
 ) -> Result<Mesh> {
     let coords = mesh.coords()?;
 
-    // One fresh node per distinct source node (first-seen order is irrelevant
-    // here since the map is keyed by the original id).
-    let mut fresh: HashMap<NodeId, NodeId> = HashMap::new();
+    // Distinct source nodes, ascending, through a dense bitmap: `NodeId` is
+    // already an index into the `Coords`, so nothing has to be hashed. The
+    // bitmap spans the **window** the mesh actually uses, not the whole
+    // `Coords`: a block copied out of a much bigger cloud pays for itself.
+    let (mut lo, mut hi) = (u32::MAX, 0u32);
     for sm in mesh {
         for &id in sm.read().connectivity() {
-            if let std::collections::hash_map::Entry::Vacant(e) = fresh.entry(id) {
-                let old = coords.read().position(id)?.to_vec();
-                let new_coord = f(&old)?;
-                let node = Node::create_in(coords.clone(), &new_coord)?;
-                e.insert(node.id());
-            }
+            lo = lo.min(id.0);
+            hi = hi.max(id.0);
         }
+    }
+    let span = if lo > hi { 0 } else { (hi - lo + 1) as usize };
+    let mut referenced = vec![false; span];
+    for sm in mesh {
+        for &id in sm.read().connectivity() {
+            referenced[(id.0 - lo) as usize] = true;
+        }
+    }
+    let sources: Vec<NodeId> = (0..span as u32)
+        .filter(|&i| referenced[i as usize])
+        .map(|i| NodeId(lo + i))
+        .collect();
+
+    // The images are computed **before** a single node is created, so a
+    // failing `f` leaves no orphan behind.
+    let dim = coords.read().dim() as usize;
+    let mut flat: Vec<f64> = Vec::with_capacity(sources.len() * dim);
+    {
+        let c = coords.read();
+        for &id in &sources {
+            let moved = f(c.position(id)?)?;
+            if moved.len() != dim {
+                return Err(PyrucastError::Message(format!(
+                    "map_coords: the transform returned {} coordinates in a {dim}-D mesh",
+                    moved.len()
+                )));
+            }
+            flat.extend_from_slice(&moved);
+        }
+    }
+    // One fresh node per distinct source node (so nodes shared between cells
+    // stay shared), created in a single locked pass: ids come out contiguous.
+    let first = coords.write().add_nodes(&flat)?.start;
+    // `old → new`, dense again. The fresh nodes each hold one unit from
+    // `add_nodes`; the connectivity takes its own below, and that initial one
+    // is given back at the end.
+    let mut fresh = vec![0u32; span];
+    for (k, &id) in sources.iter().enumerate() {
+        fresh[(id.0 - lo) as usize] = first + k as u32;
     }
 
     let mut result = Mesh::empty();
     for sm_handle in mesh {
         let (et, color, conn) = {
             let s = sm_handle.read();
-            (s.element_type(), s.face_color(), s.connectivity().to_vec())
-        };
-        let mut new_sm = SubMesh::new(coords.clone(), et);
-        new_sm.set_face_color(color);
-        let npc = et.nodes_per_cell();
-        let perm = et.reversal_permutation();
-        for chunk in conn.chunks(npc) {
-            let mapped: Vec<NodeId> = if reverse {
-                perm.iter().map(|&i| fresh[&chunk[i]]).collect()
+            let et = s.element_type();
+            let npc = et.nodes_per_cell();
+            let perm = et.reversal_permutation();
+            let conn: Vec<NodeId> = if reverse {
+                s.connectivity()
+                    .chunks(npc)
+                    .flat_map(|cell| {
+                        perm.iter()
+                            .map(|&i| NodeId(fresh[(cell[i].0 - lo) as usize]))
+                    })
+                    .collect()
             } else {
-                chunk.iter().map(|id| fresh[id]).collect()
+                s.connectivity()
+                    .iter()
+                    .map(|&id| NodeId(fresh[(id.0 - lo) as usize]))
+                    .collect()
             };
-            new_sm.add_cell(&mapped)?;
-        }
+            (et, s.face_color(), conn)
+        };
+        let mut new_sm = SubMesh::from_connectivity(coords.clone(), et, conn)?;
+        new_sm.set_face_color(color);
         result.add_sub(Handle::new(new_sm))?;
     }
+
+    // The connectivity owns the fresh nodes now; hand back the unit
+    // `add_nodes` handed us. A node the copy never referenced cannot exist —
+    // they all come from a connectivity.
+    let owned: Vec<NodeId> = (first..first + sources.len() as u32).map(NodeId).collect();
+    coords.write().decref_all(&owned)?;
     Ok(result)
 }
 
@@ -448,7 +496,7 @@ pub fn symmetry_plane(mesh: &Mesh, a: &[f64], b: &[f64], c: &[f64]) -> Result<Me
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::atoms::ElementType;
+    use crate::atoms::{ElementType, Node};
     use crate::coords::Coords;
     use crate::handle::Handle;
     use std::f64::consts::PI;
