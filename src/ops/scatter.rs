@@ -289,16 +289,15 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix
                     let state = recipe.state.as_ref().map(|h| h.read());
                     domain.element_layout(recipe.kind, &mat, state.as_deref())?
                 };
-                // Per-cell triplets so the value stream lines up cell-for-cell
-                // with the precomputed slots (same `(li,di,lj,pj)` order).
-                let (_, _, per_cell) = if recipe.col_fespaces.is_empty() {
-                    kernel::element_block_triplets_per_cell(
+                // Values only: `ke` comes out row-major, which is exactly the
+                // order the precomputed slots were built in. Asking for the
+                // `(row, col)` of each entry here would be asking for indices
+                // the pattern already holds — and then dropping them.
+                let (cell_values, ke_len) = if recipe.col_fespaces.is_empty() {
+                    kernel::element_block_values_per_cell(
                         &recipe.fespaces,
-                        blk.row_support(),
-                        blk.col_support(),
                         blk.dual_vars().len(),
                         blk.primal_vars().len(),
-                        blk.ordering(),
                         material,
                         recipe.state.as_ref(),
                         |geoms, m, state, ke| {
@@ -306,20 +305,18 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix
                         },
                     )?
                 } else {
-                    kernel::coupling_block_triplets_per_cell(
+                    kernel::coupling_block_values_per_cell(
                         &recipe.fespaces,
                         &recipe.col_fespaces,
-                        blk.row_support(),
-                        blk.col_support(),
                         blk.dual_vars().len(),
                         blk.primal_vars().len(),
-                        blk.ordering(),
                         material,
                         |row_geoms, col_geoms, m, ke| {
                             domain.coupling_element(recipe.kind, row_geoms, col_geoms, m, &lay, ke)
                         },
                     )?
                 };
+                let per_cell = cell_values.chunks(ke_len.max(1));
                 let slots = match &pattern.block_slots[bi] {
                     BlockSlots::Computed(s) => s,
                     BlockSlots::Literal(_) => {
@@ -329,8 +326,8 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix
                     }
                 };
                 let factor = blk.factor();
-                for (cell, cell_slots) in per_cell.iter().zip(slots) {
-                    for (&(_, _, v), &slot) in cell.iter().zip(cell_slots) {
+                for (cell, cell_slots) in per_cell.zip(slots) {
+                    for (&v, &slot) in cell.iter().zip(cell_slots) {
                         values[slot] += v * factor;
                     }
                 }
@@ -453,16 +450,13 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatr
                     let state = recipe.state.as_ref().map(|h| h.read());
                     domain.element_layout(recipe.kind, &mat, state.as_deref())?
                 };
-                // Element matrices, evaluated in parallel, one triplet list per
-                // cell (grouping needed for the colour-driven scatter).
-                let (_, _, per_cell) = if recipe.col_fespaces.is_empty() {
-                    kernel::element_block_triplets_per_cell(
+                // Element matrices, evaluated in parallel — values only, sliced
+                // cell by cell for the colour-driven scatter.
+                let (cell_values, ke_len) = if recipe.col_fespaces.is_empty() {
+                    kernel::element_block_values_per_cell(
                         &recipe.fespaces,
-                        blk.row_support(),
-                        blk.col_support(),
                         blk.dual_vars().len(),
                         blk.primal_vars().len(),
-                        blk.ordering(),
                         material,
                         recipe.state.as_ref(),
                         |geoms, m, state, ke| {
@@ -470,20 +464,18 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatr
                         },
                     )?
                 } else {
-                    kernel::coupling_block_triplets_per_cell(
+                    kernel::coupling_block_values_per_cell(
                         &recipe.fespaces,
                         &recipe.col_fespaces,
-                        blk.row_support(),
-                        blk.col_support(),
                         blk.dual_vars().len(),
                         blk.primal_vars().len(),
-                        blk.ordering(),
                         material,
                         |row_geoms, col_geoms, m, ke| {
                             domain.coupling_element(recipe.kind, row_geoms, col_geoms, m, &lay, ke)
                         },
                     )?
                 };
+                let per_cell = cell_values.chunks(ke_len.max(1));
                 let slots = match &pattern.block_slots[bi] {
                     BlockSlots::Computed(s) => s,
                     BlockSlots::Literal(_) => {
@@ -509,12 +501,13 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatr
                     // Scatter colour by colour: within a colour, cells write disjoint
                     // slots ⇒ the parallel atomic stores never race. Slots are
                     // precomputed (indexed cell-for-cell, entry-for-entry).
+                    let per_cell: Vec<&[f64]> = per_cell.collect();
                     for color in coloring {
                         color
                             .par_iter()
                             .with_min_len(MIN_PARALLEL_LEN)
                             .for_each(|&cell| {
-                                for (&(_, _, v), &slot) in per_cell[cell].iter().zip(&slots[cell]) {
+                                for (&v, &slot) in per_cell[cell].iter().zip(&slots[cell]) {
                                     add_atomic(&values[slot], v * factor);
                                 }
                             });
@@ -526,8 +519,8 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatr
                     // in parallel above; only the scatter is serial, as for a
                     // literal block. An interface carries a boundary mesh's worth
                     // of cells, so this costs nothing worth a two-sided colouring.
-                    for (cell_trips, cell_slots) in per_cell.iter().zip(slots) {
-                        for (&(_, _, v), &slot) in cell_trips.iter().zip(cell_slots) {
+                    for (cell_values, cell_slots) in per_cell.zip(slots) {
+                        for (&v, &slot) in cell_values.iter().zip(cell_slots) {
                             add_atomic(&values[slot], v * factor);
                         }
                     }

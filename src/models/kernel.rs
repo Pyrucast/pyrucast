@@ -1947,32 +1947,37 @@ pub fn element_block_pattern(
     let row_pos = pos_map(&row_nodes);
     let col_pos = pos_map(&col_nodes);
 
+    // La position de chaque nœud de la connectivité, d'un seul parcours.
+    let lookup = |pos: &HashMap<NodeId, u32>, side: &str| -> Result<Vec<u32>> {
+        conn.iter()
+            .map(|nid| {
+                pos.get(nid).copied().ok_or_else(|| {
+                    PyrucastError::Message(format!(
+                        "element_block_pattern: node {nid:?} not in {side} support"
+                    ))
+                })
+            })
+            .collect()
+    };
+    let row_slot = lookup(&row_pos, "row")?;
+    let col_slot = lookup(&col_pos, "col")?;
+    let (row_slot, col_slot): (&[u32], &[u32]) = (&row_slot, &col_slot);
+
     let per_cell: Vec<Vec<(usize, usize)>> = (0..n_cells)
         .into_par_iter()
         .with_min_len((MIN_PARALLEL_LEN / n_nodes.max(1)).max(1))
         .map(|cell| -> Result<Vec<(usize, usize)>> {
-            let ids = &conn[cell * n_nodes..(cell + 1) * n_nodes];
-            let mut rpos = Vec::with_capacity(n_nodes);
-            let mut cpos = Vec::with_capacity(n_nodes);
-            for &nid in ids {
-                rpos.push(*row_pos.get(&nid).ok_or_else(|| {
-                    PyrucastError::Message(format!(
-                        "element_block_pattern: node {nid:?} not in row support"
-                    ))
-                })? as usize);
-                cpos.push(*col_pos.get(&nid).ok_or_else(|| {
-                    PyrucastError::Message(format!(
-                        "element_block_pattern: node {nid:?} not in col support"
-                    ))
-                })? as usize);
-            }
+            let base = cell * n_nodes;
+            let rpos = &row_slot[base..base + n_nodes];
+            let cpos = &col_slot[base..base + n_nodes];
             let mut pairs = Vec::with_capacity(n_nodes * n_dual * n_nodes * n_primal);
             for li in 0..n_nodes {
                 for di in 0..n_dual {
-                    let ri = ordering.to_index(rpos[li], di, n_row_nodes, n_dual);
+                    let ri = ordering.to_index(rpos[li] as usize, di, n_row_nodes, n_dual);
                     for lj in 0..n_nodes {
                         for pj in 0..n_primal {
-                            let ci = ordering.to_index(cpos[lj], pj, n_col_nodes, n_primal);
+                            let ci =
+                                ordering.to_index(cpos[lj] as usize, pj, n_col_nodes, n_primal);
                             pairs.push((ri, ci));
                         }
                     }
@@ -2162,6 +2167,230 @@ pub fn coupling_block_triplets_per_cell(
     Ok((nrows, ncols, per_cell))
 }
 
+/// The element matrices of a block, **values only**, cell after cell — the form
+/// the *computed* assembly path consumes.
+///
+/// Returns the concatenated `ke` of every cell (row-major, `ke_len` values each)
+/// and that stride. It needs neither support, nor DOF ordering, nor index maps:
+/// the triplet stream of [`element_block_triplets_per_cell`] emits `ke` in
+/// exactly this order, and the computed path pairs it position-for-position with
+/// the slots [`crate::ops::scatter`] resolved once. Asking for the `(row, col)`
+/// of each entry only to drop them cost three times the memory — 13,8 ko per
+/// cell on a 3-D mechanical HEX8 — plus a `to_index` and two hash lookups per
+/// entry, at every assembly.
+///
+/// The *literal* path still wants triplets: it has no pattern to pair with.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::kernel;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
+/// # let zone = fes.get(0)?;
+/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+/// #     zone.clone(), vec!["k".into()], &[1.0])?);
+/// // Un noyau qui écrit l'identité : on retrouve `ke` en ligne-major,
+/// // maille après maille, et rien d'autre — ni ligne, ni colonne.
+/// let (valeurs, ke_len) = kernel::element_block_values_per_cell(
+///     std::slice::from_ref(&zone), 1, 1, &mat, None,
+///     |geoms, _m, _s, ke| {
+///         let n = geoms[0].n_nodes;
+///         for i in 0..n {
+///             ke[i * n + i] = 1.0;
+///         }
+///         Ok(())
+///     },
+/// )?;
+/// assert_eq!(ke_len, 3 * 3); // un TRI3, une variable de chaque côté
+/// assert_eq!(valeurs.len(), ke_len); // une seule maille
+/// assert_eq!(valeurs[0], 1.0);
+/// assert_eq!(valeurs[1], 0.0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
+pub fn element_block_values_per_cell(
+    fespaces: &[Handle<SubFiniteElementSpace>],
+    n_dual: usize,
+    n_primal: usize,
+    material: &Handle<SubElementField>,
+    state: Option<&Handle<SubElementField>>,
+    element: impl Fn(&[CellGeom], &SubElementField, Option<&SubElementField>, &mut [f64]) -> Result<()>
+        + Sync,
+) -> Result<(Vec<f64>, usize)> {
+    let primary = fespaces.first().ok_or_else(|| {
+        PyrucastError::Message("element_block_values_per_cell: no FE subspace".into())
+    })?;
+    let fe = primary.read();
+    let submesh = fe.submesh();
+    let sm = submesh.read();
+    let coords_h = sm.coords();
+    let coords = coords_h.read();
+    let mat_guard = material.read();
+    let state_guard = state.map(|h| h.read());
+
+    let mut rds = Vec::with_capacity(fespaces.len());
+    rds.push(RefData::snapshot(&fe)?);
+    for h in &fespaces[1..] {
+        let f = h.read();
+        if !f.submesh().same_object(&submesh) {
+            return Err(PyrucastError::Message(
+                "element_block_values_per_cell: all FE subspaces of a block must share one submesh"
+                    .into(),
+            ));
+        }
+        rds.push(RefData::snapshot(&f)?);
+    }
+
+    let n_cells = fe.cell_count()?;
+    let n_nodes = rds[0].n_nodes;
+    let conn: &[NodeId] = sm.connectivity();
+    coords.ensure_all_alive(conn)?;
+    let rds_ref: &[RefData] = &rds;
+    let coords_ref: &Coords = &coords;
+    let mat_ref: &SubElementField = &mat_guard;
+    let state_ref: Option<&SubElementField> = state_guard.as_deref();
+
+    let ke_len = (n_nodes * n_dual) * (n_nodes * n_primal);
+    // One flat buffer, written by disjoint chunks: each cell owns its own slice,
+    // so the result is bit-for-bit independent of the thread count.
+    let mut values = vec![0.0_f64; n_cells * ke_len];
+    values
+        .par_chunks_mut(ke_len.max(1))
+        .with_min_len((MIN_PARALLEL_LEN / n_nodes.max(1)).max(1))
+        .enumerate()
+        .try_for_each_init(
+            || Vec::with_capacity(rds_ref.len()),
+            |geoms, (cell, ke)| -> Result<()> {
+                geoms.clear();
+                geoms.extend(
+                    rds_ref
+                        .iter()
+                        .map(|rd| CellGeom::new(rd, coords_ref, conn, cell)),
+                );
+                element(geoms, mat_ref, state_ref, ke)
+            },
+        )?;
+    Ok((values, ke_len))
+}
+
+/// [`element_block_values_per_cell`] for an **inter-mesh coupling** block.
+///
+/// Same contract: the concatenated `ke` of every facing cell pair, row-major,
+/// and its stride.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::kernel;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # sm.add_cell(&[n[0].id(), n[1].id()])?;
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
+/// # let zone = fes.get(0)?;
+/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+/// #     zone.clone(), vec!["h".into()], &[1.0])?);
+/// // Une interface conforme avec elle-même : deux SEG2 en vis-à-vis.
+/// let (valeurs, ke_len) = kernel::coupling_block_values_per_cell(
+///     std::slice::from_ref(&zone), std::slice::from_ref(&zone), 1, 1, &mat,
+///     |row_geoms, _col_geoms, _m, ke| {
+///         ke[0] = row_geoms[0].det_j_w(0);
+///         Ok(())
+///     },
+/// )?;
+/// assert_eq!(ke_len, 2 * 2); // deux nœuds de chaque côté
+/// assert!(valeurs[0] > 0.0);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
+pub fn coupling_block_values_per_cell(
+    row_fespaces: &[Handle<SubFiniteElementSpace>],
+    col_fespaces: &[Handle<SubFiniteElementSpace>],
+    n_dual: usize,
+    n_primal: usize,
+    material: &Handle<SubElementField>,
+    element: impl Fn(&[CellGeom], &[CellGeom], &SubElementField, &mut [f64]) -> Result<()> + Sync,
+) -> Result<(Vec<f64>, usize)> {
+    let row_primary = row_fespaces.first().ok_or_else(|| {
+        PyrucastError::Message("coupling_block_values_per_cell: no row FE subspace".into())
+    })?;
+    let col_primary = col_fespaces.first().ok_or_else(|| {
+        PyrucastError::Message("coupling_block_values_per_cell: no column FE subspace".into())
+    })?;
+    let (row_fe, col_fe) = (row_primary.read(), col_primary.read());
+    let (row_sm_h, col_sm_h) = (row_fe.submesh(), col_fe.submesh());
+    let (row_sm, col_sm) = (row_sm_h.read(), col_sm_h.read());
+    let (row_coords_h, col_coords_h) = (row_sm.coords(), col_sm.coords());
+    let (row_coords, col_coords) = (row_coords_h.read(), col_coords_h.read());
+    let mat_guard = material.read();
+
+    let row_conn: &[NodeId] = row_sm.connectivity();
+    let col_conn: &[NodeId] = col_sm.connectivity();
+    row_coords.ensure_all_alive(row_conn)?;
+    col_coords.ensure_all_alive(col_conn)?;
+    let (n_cells, n_row_nodes_cell, n_col_nodes_cell) =
+        check_conforming(&row_fe, &col_fe, row_conn, col_conn)?;
+
+    let mut row_rds = vec![RefData::snapshot(&row_fe)?];
+    for h in &row_fespaces[1..] {
+        row_rds.push(RefData::snapshot(&h.read())?);
+    }
+    let mut col_rds = vec![RefData::snapshot(&col_fe)?];
+    for h in &col_fespaces[1..] {
+        col_rds.push(RefData::snapshot(&h.read())?);
+    }
+    let (row_rds_ref, col_rds_ref) = (&row_rds[..], &col_rds[..]);
+    let (row_coords_ref, col_coords_ref): (&Coords, &Coords) = (&row_coords, &col_coords);
+    let mat_ref: &SubElementField = &mat_guard;
+
+    let ke_len = (n_row_nodes_cell * n_dual) * (n_col_nodes_cell * n_primal);
+    let mut values = vec![0.0_f64; n_cells * ke_len];
+    values
+        .par_chunks_mut(ke_len.max(1))
+        .with_min_len((MIN_PARALLEL_LEN / n_row_nodes_cell.max(1)).max(1))
+        .enumerate()
+        .try_for_each_init(
+            || {
+                (
+                    Vec::with_capacity(row_rds_ref.len()),
+                    Vec::with_capacity(col_rds_ref.len()),
+                )
+            },
+            |(row_geoms, col_geoms), (cell, ke)| -> Result<()> {
+                row_geoms.clear();
+                row_geoms.extend(
+                    row_rds_ref
+                        .iter()
+                        .map(|rd| CellGeom::new(rd, row_coords_ref, row_conn, cell)),
+                );
+                col_geoms.clear();
+                col_geoms.extend(
+                    col_rds_ref
+                        .iter()
+                        .map(|rd| CellGeom::new(rd, col_coords_ref, col_conn, cell)),
+                );
+                element(row_geoms, col_geoms, mat_ref, ke)
+            },
+        )?;
+    Ok((values, ke_len))
+}
+
 /// The **symbolic** structure of an inter-mesh block — the coupling counterpart
 /// of [`element_block_pattern`], carrying no geometry and evaluating no kernel.
 ///
@@ -2215,25 +2444,22 @@ pub fn coupling_block_pattern(
     let row_pos = position_map(&row_nodes);
     let col_pos = position_map(&col_nodes);
 
+    // Les deux connectivités, d'un seul parcours chacune.
+    let row_slot = local_positions(row_conn, &row_pos, "row")?;
+    let col_slot = local_positions(col_conn, &col_pos, "column")?;
+    let (row_slot, col_slot): (&[usize], &[usize]) = (&row_slot, &col_slot);
+
     let per_cell: Vec<Vec<(usize, usize)>> = (0..n_cells)
         .into_par_iter()
         .with_min_len((MIN_PARALLEL_LEN / n_row_nodes_cell.max(1)).max(1))
         .map(|cell| -> Result<Vec<(usize, usize)>> {
-            let rpos = local_positions(
-                &row_conn[cell * n_row_nodes_cell..(cell + 1) * n_row_nodes_cell],
-                &row_pos,
-                "row",
-            )?;
-            let cpos = local_positions(
-                &col_conn[cell * n_col_nodes_cell..(cell + 1) * n_col_nodes_cell],
-                &col_pos,
-                "column",
-            )?;
+            let rpos = &row_slot[cell * n_row_nodes_cell..(cell + 1) * n_row_nodes_cell];
+            let cpos = &col_slot[cell * n_col_nodes_cell..(cell + 1) * n_col_nodes_cell];
             let mut pairs = Vec::with_capacity(rpos.len() * n_dual * cpos.len() * n_primal);
-            for &rl in &rpos {
+            for &rl in rpos {
                 for di in 0..n_dual {
                     let ri = ordering.to_index(rl, di, n_row_support, n_dual);
-                    for &cl in &cpos {
+                    for &cl in cpos {
                         for pj in 0..n_primal {
                             pairs.push((ri, ordering.to_index(cl, pj, n_col_support, n_primal)));
                         }

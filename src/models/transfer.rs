@@ -249,6 +249,11 @@ pub fn exchange_matrix(
 /// the continuum default would be wrong here. For a linear law this equals
 /// `(K·u)_i`, which is the invariant the internal forces must satisfy.
 ///
+/// It **cannot fail**: the zone settled the shape of every read before the
+/// parallel region, so this slices rows and adds. The `Result` is the trait's,
+/// not its own — [`crate::models::SubModelKind::internal_force_element`] returns
+/// one because other implementers need it.
+///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
