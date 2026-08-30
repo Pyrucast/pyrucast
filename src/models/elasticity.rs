@@ -756,7 +756,7 @@ pub fn element_stiffness(
     for g in 0..geom.n_gauss {
         // On a body of revolution the hoop row needs `N` and `r` at this point.
         let hoop = if kinematics.is_axisymmetric() {
-            Some((geom.n_at_g(g), geom.radius(g)?))
+            Some((geom.n_at_g(g), geom.radius(g)))
         } else {
             None
         };
@@ -967,7 +967,7 @@ pub fn element_geometric(
         // ½(u_r/r)², contributes `σ_θθ N_i N_j / r²` on the radial diagonal —
         // the initial-stress counterpart of the `N_i / r` row of `B`.
         let hoop = if geom.axisymmetric {
-            let r = geom.radius(g)?;
+            let r = geom.radius(g);
             // The hoop closes the read list, exactly as it does for `Bᵀσ`.
             Some((geom.n_at_g(g), row[lay[lay.len() - 1] as usize] / (r * r)))
         } else {
@@ -1234,7 +1234,7 @@ pub fn element_tangent_from_state(
     for g in 0..geom.n_gauss {
         // Same hoop row as `element_stiffness` on a body of revolution.
         let hoop = if kinematics.is_axisymmetric() {
-            Some((geom.n_at_g(g), geom.radius(g)?))
+            Some((geom.n_at_g(g), geom.radius(g)))
         } else {
             None
         };

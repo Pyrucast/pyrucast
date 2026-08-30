@@ -186,7 +186,7 @@ fn bending_b(
     // `element_stiffness` — le redemander à chaque point de Gauss reprouvait
     // ce que l'appelant venait d'établir.
     let (linear, quadratic) = pair;
-    let xi = geom.gauss_xi(g)?;
+    let xi = geom.gauss_xi(g);
 
     // The Jacobian of the **geometry**, in the element's own plane: a flat facet
     // is a plane map, so this is an ordinary 2×2 — no manifold pseudo-inverse.

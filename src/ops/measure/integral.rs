@@ -76,6 +76,9 @@ pub fn integral(field: &NodeField, fespace: &FiniteElementSpace, component: &str
     for sub_h in fespace {
         let submesh = sub_h.read().submesh();
         let conn: Vec<NodeId> = submesh.read().connectivity().to_vec();
+        // Cette intégrale interpole le champ nodal : il lui faut une base de
+        // champ, et c'est un fait de la zone.
+        kernel::require_field_basis(sub_h, "shape values")?;
 
         // Gather this subspace's nodal values for `component` once (serial), so
         // the parallel per-cell kernel does O(1) look-ups and never re-reads the
@@ -99,7 +102,7 @@ pub fn integral(field: &NodeField, fespace: &FiniteElementSpace, component: &str
             let mut acc = 0.0;
             for g in 0..geom.n_gauss {
                 let mut n_buf = [0.0_f64; MAX_CELL_DOFS];
-                let n = geom.field_n_at_g(g, &mut n_buf)?; // field shape values N_i(ξ_g)
+                let n = geom.field_n_at_g(g, &mut n_buf); // field shape values N_i(ξ_g)
                 let mut fg = 0.0;
                 for i in 0..geom.n_nodes {
                     fg += cell_vals[i] * n[i];

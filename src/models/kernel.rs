@@ -66,6 +66,50 @@ use crate::parallel::*;
 use nalgebra_sparse::CooMatrix;
 use std::collections::HashMap;
 
+/// Refuse a subspace that declares **no field basis** — the guard an operator
+/// that *interpolates a field* owes its caller, stated once for the zone.
+///
+/// A `MODEL_EMBEDDED` subspace (a Timoshenko beam) leaves the interpolation to
+/// its own formulation, so it has no shape values to lend and no curvature to
+/// build; asking `CellGeom` for them would hand back the **geometric** basis,
+/// which is a wrong answer rather than a refused one. Whether the question makes
+/// sense is a property of the subspace, so it is settled here, before anything
+/// is driven — the accessors themselves then only compute.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::{FiniteElementSpace, Interpolation};
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::kernel;
+/// # let coords = Handle::new(Coords::new(1).unwrap());
+/// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+/// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+/// # let mut sm = SubMesh::new(coords, ElementType::SEG2);
+/// # sm.add_cell(&[a.id(), b.id()])?;
+/// # let maillage = Mesh::from_submesh(sm);
+/// // Un espace de Lagrange interpole : la question a un sens.
+/// let lagrange = FiniteElementSpace::lagrange1(&maillage)?;
+/// assert!(kernel::require_field_basis(&lagrange.get(0)?, "shape values").is_ok());
+/// // Un espace MODEL_EMBEDDED laisse l'interpolation à sa formulation.
+/// let poutre = FiniteElementSpace::new(&maillage, Interpolation::ModelEmbedded)?;
+/// let err = kernel::require_field_basis(&poutre.get(0)?, "shape values").unwrap_err();
+/// assert!(format!("{err}").contains("MODEL_EMBEDDED"));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
+pub fn require_field_basis(fespace: &Handle<SubFiniteElementSpace>, what: &str) -> Result<()> {
+    if fespace.read().interpolation().is_model_embedded() {
+        return Err(PyrucastError::Message(format!(
+            "this FE subspace is MODEL_EMBEDDED — it declares no field basis, so it has no \
+             {what}. Its formulation owns the interpolation, so evaluating a field inside one \
+             of its elements is that formulation's business."
+        )));
+    }
+    Ok(())
+}
+
 /// Reference-element data of an FE subspace, snapshotted **once** before the
 /// parallel loop (it would otherwise re-read the store on every call — through
 /// `element_type()` — and serialise all threads on the global store lock).
@@ -504,22 +548,13 @@ impl<'a> CellGeom<'a> {
     /// #     ).map(|_| ())
     /// # };
     /// noyau(&|geom| {
-    ///     assert_eq!(geom.gauss_xi(0)?.len(), 2); // dans l'élément de référence
+    ///     assert_eq!(geom.gauss_xi(0).len(), 2); // dans l'élément de référence
     ///     Ok(())
     /// })?;
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn gauss_xi(&self, g: usize) -> Result<&[f64]> {
-        self.rd
-            .gauss_xi
-            .get(g)
-            .map(|v| v.as_slice())
-            .ok_or_else(|| {
-                PyrucastError::Message(format!(
-                    "CellGeom: Gauss point {g} out of range ({} points)",
-                    self.n_gauss
-                ))
-            })
+    pub fn gauss_xi(&self, g: usize) -> &[f64] {
+        &self.rd.gauss_xi[g]
     }
 
     /// Number of **field** shape functions — `n_nodes` for a Lagrange space,
@@ -613,22 +648,30 @@ impl<'a> CellGeom<'a> {
     ///     // Le tampon ne sert qu'aux bases C¹ : ici la méthode prête
     ///     // directement la ligne déjà en mémoire.
     ///     let mut buf = [0.0_f64; 8];
-    ///     assert_eq!(geom.field_n_at_g(0, &mut buf)?.len(), geom.shape_count());
+    ///     assert_eq!(geom.field_n_at_g(0, &mut buf).len(), geom.shape_count());
     ///     Ok(())
     /// })?;
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn field_n_at_g<'s>(&'s self, g: usize, scratch: &'s mut [f64]) -> Result<&'s [f64]> {
-        self.reject_if_model_embedded("shape values")?;
+    pub fn field_n_at_g<'s>(&'s self, g: usize, scratch: &'s mut [f64]) -> &'s [f64] {
+        // Whether the subspace *has* a field basis is a fact of the zone, and it
+        // is the **operator** that must have settled it: see
+        // [`require_field_basis`], which the interpolating operators call once
+        // before driving anything.
+        debug_assert!(
+            !self.rd.model_embedded,
+            "CellGeom::field_n_at_g on a MODEL_EMBEDDED subspace — call \
+             kernel::require_field_basis once for the zone"
+        );
         // The common case: the field basis **is** the geometric one, already in
         // reference data. Lending it beats copying it at every Gauss point.
         if self.rd.field_n_ref.is_empty() {
-            return Ok(&self.rd.n_ref[g]);
+            return &self.rd.n_ref[g];
         }
-        let j = self.segment_jacobian()?;
+        let j = self.segment_jacobian();
         let row = &self.rd.field_n_ref[g];
         scale_slope_slots_into(row, j, &mut scratch[..row.len()]);
-        Ok(&scratch[..row.len()])
+        &scratch[..row.len()]
     }
 
     /// Field second derivatives `∂²N_i/∂x²` at Gauss point `g`, acting on
@@ -646,38 +689,39 @@ impl<'a> CellGeom<'a> {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::finite_element_space::{FiniteElementSpace, Interpolation};
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::kernel::{self, assemble_block};
-    /// # let coords = Handle::new(Coords::new(3).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
+    /// # use pyrucast::models::kernel;
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[2.0]).unwrap();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+    /// # sm.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
     /// // Les dérivées secondes **physiques**, ce qu'exige la courbure d'une
-    /// // poutre. Réservées aux espaces C¹ sur un segment : ailleurs, une
-    /// // erreur nommée plutôt qu'un zéro.
-    /// kernel::reduce_cells(&zone, |geom| {
+    /// // poutre. Réservées aux espaces C¹ sur un segment — `Bernoulli::new`
+    /// // refuse tout autre espace, et c'est là que la question se tranche,
+    /// // une fois, plutôt qu'à chaque point de Gauss.
+    /// let hermite = FiniteElementSpace::new(&maillage, Interpolation::Hermite3)?;
+    /// kernel::reduce_cells(&hermite.get(0)?, |geom| {
     ///     let mut buf = [0.0_f64; 8];
-    ///     assert!(geom.field_d2n_dx2(0, &mut buf).is_err()); // TRI3 Lagrange
+    ///     // Quatre fonctions de forme : deux valeurs, deux pentes.
+    ///     assert_eq!(geom.field_d2n_dx2(0, &mut buf), 4);
     ///     Ok(0.0)
     /// })?;
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn field_d2n_dx2(&self, g: usize, out: &mut [f64]) -> Result<usize> {
-        self.reject_if_model_embedded("second derivatives")?;
-        if self.rd.field_d2n_ref.is_empty() {
-            return Err(PyrucastError::Message(
-                "CellGeom: this subspace has no C¹ field basis, so no curvature operator".into(),
-            ));
-        }
-        let j = self.segment_jacobian()?;
+    pub fn field_d2n_dx2(&self, g: usize, out: &mut [f64]) -> usize {
+        // A curvature operator exists only under a C¹ interpolation, and that is
+        // settled at construction: `Bernoulli::new` refuses a non-Hermite
+        // subspace, which is the only physics asking for one.
+        debug_assert!(
+            !self.rd.field_d2n_ref.is_empty(),
+            "CellGeom::field_d2n_dx2 on a subspace with no C¹ field basis"
+        );
+        let j = self.segment_jacobian();
         // `J` scales the slope columns to physical DOFs, `J⁻²` maps the
         // reference second derivative to a physical one.
         let row = &self.rd.field_d2n_ref[g];
@@ -685,20 +729,7 @@ impl<'a> CellGeom<'a> {
         for v in &mut out[..row.len()] {
             *v /= j * j;
         }
-        Ok(row.len())
-    }
-
-    /// The guard the field accessors share — see
-    /// [`SubFiniteElementSpace`].
-    fn reject_if_model_embedded(&self, what: &str) -> Result<()> {
-        if self.rd.model_embedded {
-            return Err(PyrucastError::Message(format!(
-                "CellGeom: this subspace is MODEL_EMBEDDED — it declares no field basis, so it \
-                 has no {what}. Its formulation owns the interpolation, so evaluating a field \
-                 inside one of its elements is that formulation's business."
-            )));
-        }
-        Ok(())
+        row.len()
     }
 
     /// `J = ∂x/∂ξ` of a straight segment: **signed** in a 1-D space (where the
@@ -706,21 +737,22 @@ impl<'a> CellGeom<'a> {
     /// nodes run backwards must flip it), and the arc length `L/2` when the
     /// segment is embedded in a plane or in space — there the consumer has
     /// already rotated into a local axis running from node 0 to node 1.
-    fn segment_jacobian(&self) -> Result<f64> {
-        if self.rd.ref_dim != 1 {
-            return Err(PyrucastError::Message(format!(
-                "CellGeom: a C¹ basis needs a 1-D reference element, got ref_dim {}",
-                self.rd.ref_dim
-            )));
-        }
+    fn segment_jacobian(&self) -> f64 {
+        // Une base C¹ vit sur un élément de référence 1-D. Ce n'est pas une
+        // donnée à vérifier ici : `Bernoulli::new` refuse un espace non-Hermite,
+        // et `RefData::snapshot` n'a de tables C¹ que pour un tel espace.
+        debug_assert_eq!(
+            self.rd.ref_dim, 1,
+            "a C¹ basis needs a 1-D reference element"
+        );
         // Deux emprunts immuables coexistent : la copie ne servait à rien, et
         // elle coûtait deux allocations **par point de Gauss** sur une poutre C¹.
         let (a, b) = (self.node_coord(0), self.node_coord(1));
         if self.space_dim == 1 {
-            return Ok((b[0] - a[0]) / 2.0);
+            return (b[0] - a[0]) / 2.0;
         }
         let l2: f64 = (0..self.space_dim).map(|i| (b[i] - a[i]).powi(2)).sum();
-        Ok(l2.sqrt() / 2.0)
+        l2.sqrt() / 2.0
     }
 
     /// Physical coordinates of Gauss point `g`, `x_a = Σ_i N_i(ξ_g) · x_{i,a}`
@@ -823,28 +855,26 @@ impl<'a> CellGeom<'a> {
     ///         // `x = r` : le rayon est l'abscisse du point de Gauss.
     ///         let mut x = [0.0_f64; 2];
     ///         geom.x_at_g(0, &mut x);
-    ///         assert_eq!(geom.radius(0)?, x[0]);
+    ///         assert_eq!(geom.radius(0), x[0]);
     ///         Ok(())
     ///     },
     /// )?;
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn radius(&self, g: usize) -> Result<f64> {
-        if !self.axisymmetric {
-            return Err(PyrucastError::Message(
-                "CellGeom::radius: the geometry is not axisymmetric (build the Coords \
-                 with Coords::axisymmetric)"
-                    .into(),
-            ));
-        }
+    pub fn radius(&self, g: usize) -> f64 {
+        debug_assert!(
+            self.axisymmetric,
+            "CellGeom::radius on a Cartesian geometry: `axisymmetric` says whether \
+             asking makes sense, and it is a fact of the zone"
+        );
         self.ensure_cell_coords();
         let cc = self.cell_coords.borrow();
-        Ok(Self::radius_from(
+        Self::radius_from(
             cc.as_ref().unwrap(),
             &self.rd.n_ref[g],
             self.n_nodes,
             self.space_dim,
-        ))
+        )
     }
 
     /// `r = Σ_i N_i x_i` from already-borrowed cell coordinates — the scalar
@@ -977,10 +1007,8 @@ impl<'a> CellGeom<'a> {
     /// // la **norme** des tangentes, elle n'est pas normalisée ;
     /// // [`normal`](Self::normal) s'en charge.
     /// let mut nu = [0.0_f64; 2];
-    /// CellGeom::normal_from_tangents(&[2.0, 0.0], 1, 2, &mut nu)?;
+    /// CellGeom::normal_from_tangents(&[2.0, 0.0], 1, 2, &mut nu);
     /// assert_eq!(nu, [0.0, -2.0]);
-    /// // Une ou deux tangentes, pas davantage.
-    /// assert!(CellGeom::normal_from_tangents(&[], 0, 2, &mut nu).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn normal_from_tangents(
@@ -988,25 +1016,22 @@ impl<'a> CellGeom<'a> {
         n_tangents: usize,
         space_dim: usize,
         out: &mut [f64],
-    ) -> Result<()> {
+    ) {
         let t = |k: usize, a: usize| tangents[k * space_dim + a];
-        match n_tangents {
-            1 => {
-                out[0] = t(0, 1);
-                out[1] = -t(0, 0);
-            }
-            2 => {
-                out[0] = t(0, 1) * t(1, 2) - t(0, 2) * t(1, 1);
-                out[1] = t(0, 2) * t(1, 0) - t(0, 0) * t(1, 2);
-                out[2] = t(0, 0) * t(1, 1) - t(0, 1) * t(1, 0);
-            }
-            n => {
-                return Err(PyrucastError::Message(format!(
-                    "normal_from_tangents: a normal needs 1 tangent (2-D) or 2 (3-D), got {n}"
-                )))
-            }
+        // Une normale se prend sur un bord : une tangente en 2-D, deux en 3-D.
+        // `CellGeom::normal` l'établit pour la zone avant d'appeler.
+        debug_assert!(
+            n_tangents == 1 || n_tangents == 2,
+            "a normal needs 1 tangent (2-D) or 2 (3-D)"
+        );
+        if n_tangents == 1 {
+            out[0] = t(0, 1);
+            out[1] = -t(0, 0);
+        } else {
+            out[0] = t(0, 1) * t(1, 2) - t(0, 2) * t(1, 1);
+            out[1] = t(0, 2) * t(1, 0) - t(0, 0) * t(1, 2);
+            out[2] = t(0, 0) * t(1, 1) - t(0, 1) * t(1, 0);
         }
-        Ok(())
     }
 
     /// Unit **normal** of a boundary cell at Gauss point `g`, in the reference
@@ -1060,16 +1085,19 @@ impl<'a> CellGeom<'a> {
     /// ```
     pub fn normal(&self, g: usize, out: &mut [f64]) -> Result<()> {
         let (d, r) = (self.space_dim, self.rd.ref_dim);
-        if r + 1 != d {
+        // Cette fonction rend un `Result` de toute façon — la normale nulle est
+        // un fait du point — donc la précondition de forme, elle, y reste : elle
+        // n'aurait nulle part ailleurs où vivre, et elle ne coûte rien ici.
+        if d < 2 || r + 1 != d {
             return Err(PyrucastError::Message(format!(
                 "CellGeom::normal: a {r}-D cell in a {d}-D space has no normal — a normal is \
                  defined on a boundary (a {}-D cell here)",
-                d - 1
+                d.saturating_sub(1)
             )));
         }
         let mut tan = [0.0_f64; MAX_JACOBIAN];
         self.tangents(g, &mut tan);
-        Self::normal_from_tangents(&tan, r, d, out)?;
+        Self::normal_from_tangents(&tan, r, d, out);
         let norm = out[..d].iter().map(|v| v * v).sum::<f64>().sqrt();
         if norm <= f64::EPSILON {
             return Err(PyrucastError::Message(format!(
@@ -2794,7 +2822,7 @@ mod tests {
     fn radius_is_positive_even_on_a_cell_touching_the_axis() {
         reduce_cells(&one_quad(0.0, 1.0, true), |geom| {
             for g in 0..geom.n_gauss {
-                let r = geom.radius(g)?;
+                let r = geom.radius(g);
                 assert!(r > 0.0 && r < 1.0, "radius {r} outside (0, 1)");
                 // radius is the first physical coordinate, and z stays in [0, 1].
                 let mut x = [0.0_f64; 2];
@@ -2807,10 +2835,14 @@ mod tests {
         .unwrap();
     }
 
-    /// `radius` is meaningless without the revolution hypothesis, and says so.
+    /// `radius` is meaningless without the revolution hypothesis. Ce n'est pas
+    /// une donnée à valider mais une faute de programmation : `axisymmetric` est
+    /// public sur `CellGeom`, et dit si la question a un sens. Le `debug_assert`
+    /// l'attrape en développement, sans peser sur la production ni forcer un
+    /// `Result` que le noyau devrait dérouler à chaque point de Gauss.
     #[test]
-    fn radius_rejects_a_cartesian_geometry() {
-        let err = reduce_cells(&one_quad(1.0, 2.0, false), |geom| geom.radius(0)).unwrap_err();
-        assert!(format!("{err}").contains("not axisymmetric"));
+    #[should_panic(expected = "Cartesian geometry")]
+    fn radius_is_a_programming_error_on_a_cartesian_geometry() {
+        reduce_cells(&one_quad(1.0, 2.0, false), |geom| Ok(geom.radius(0))).unwrap();
     }
 }

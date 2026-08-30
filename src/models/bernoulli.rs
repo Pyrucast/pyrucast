@@ -470,7 +470,7 @@ fn bending_4x4(geom: &CellGeom, ei: f64) -> Result<[[f64; 4]; 4]> {
     let mut k = [[0.0_f64; 4]; 4];
     let mut b_buf = [0.0_f64; MAX_CELL_DOFS];
     for g in 0..geom.n_gauss {
-        let n = geom.field_d2n_dx2(g, &mut b_buf)?;
+        let n = geom.field_d2n_dx2(g, &mut b_buf);
         let b = &b_buf[..n];
         let w = geom.det_j_w(g);
         for a in 0..4 {

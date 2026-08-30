@@ -45,7 +45,7 @@
 
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
-use crate::containers::field::Field;
+use crate::containers::field::{Field, SubField};
 use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
 use crate::containers::node_field::{NodeField, NodeFieldView};
 use crate::coords::Coords;
@@ -180,9 +180,24 @@ fn subspace_beam_deformation(
         fespace.clone(),
         out_comps.iter().map(|s| s.to_string()).collect(),
     )?;
+    // Les constantes de section, situées **une fois pour la zone** : un plan de
+    // flexion en 1-D/2-D, deux en 3-D. Elles étaient cherchées par nom à chaque
+    // point de Gauss de chaque maille.
+    let slots: Vec<BendingSlots> = if space_dim == 3 {
+        vec![
+            BendingSlots::resolve(&mat, "I_z", "A_sy")?,
+            BendingSlots::resolve(&mat, "I_y", "A_sz")?,
+        ]
+    } else {
+        vec![BendingSlots::resolve(&mat, "I", "A_s")?]
+    };
+
     let n_cells = conn.len() / n_nodes;
     for cell in 0..n_cells {
         let ids = &conn[cell * n_nodes..(cell + 1) * n_nodes];
+        // La ligne matériau de la maille : elle ne change pas d'un point de
+        // Gauss au suivant.
+        let row = mat.row(cell, 0);
         // Nodal DOFs and coordinates of the two endpoints.
         let xa = coords.position(ids[0])?;
         let xb = coords.position(ids[1])?;
@@ -206,9 +221,9 @@ fn subspace_beam_deformation(
             // [0, 1].
             let t = 0.5 * (xi + 1.0);
             let strains = match space_dim {
-                1 => strains_1d(&mat, cell, xa, xb, &da, &db, t)?,
-                2 => strains_2d(&mat, cell, xa, xb, &da, &db, t)?,
-                _ => strains_3d(&mat, cell, xa, xb, &da, &db, t)?,
+                1 => strains_1d(&slots, row, xa, xb, &da, &db, t)?,
+                2 => strains_2d(&slots, row, xa, xb, &da, &db, t)?,
+                _ => strains_3d(&slots, row, xa, xb, &da, &db, t)?,
             };
             debug_assert_eq!(strains.len(), n_comp);
             for (c, &v) in strains.iter().enumerate() {
@@ -219,20 +234,49 @@ fn subspace_beam_deformation(
     Ok(field)
 }
 
-/// `Φ` of a bending plane, from the material at this cell.
-fn phi_of(mat: &SubElementField, cell: usize, l: f64, i_name: &str, a_s_name: &str) -> Result<f64> {
-    let ei = mat.value(cell, 0, "E")? * mat.value(cell, 0, i_name)?;
-    // A material carrying **no shear constants** has `Φ = 0`, and that is not a
-    // fallback: each theory declares its own material contract, and
-    // [Bernoulli](crate::models::bernoulli) deliberately asks for neither `G`
-    // nor `A_s`. The absence *is* the statement that there is no shear
-    // compliance — so this operator needs no model to tell the two theories
-    // apart, the material it is handed having already said which.
-    let gas = match (mat.value(cell, 0, "G"), mat.value(cell, 0, a_s_name)) {
-        (Ok(g), Ok(a_s)) => Some(g * a_s),
-        _ => None,
-    };
-    Ok(crate::models::beam::phi(ei, gas, l))
+/// Where a bending plane's section constants sit in the material row, resolved
+/// **once for the zone**.
+///
+/// A material carrying **no shear constants** has `Φ = 0`, and that is not a
+/// fallback: each theory declares its own material contract, and
+/// [Bernoulli](crate::models::bernoulli) deliberately asks for neither `G` nor
+/// `A_s`. The absence *is* the statement that there is no shear compliance — so
+/// this operator needs no model to tell the two theories apart, the material it
+/// is handed having already said which.
+///
+/// Saying it in the layout rather than in the kernel matters twice: the question
+/// is a fact of the zone, and it used to be answered by **swallowing an error**
+/// — any failure at all, a wrong index included, read as « no shear ».
+#[derive(Clone, Copy)]
+struct BendingSlots {
+    e: usize,
+    i: usize,
+    /// `(G, A_s)`, or `None` when the theory declares no shear compliance.
+    shear: Option<(usize, usize)>,
+}
+
+impl BendingSlots {
+    fn resolve(mat: &SubElementField, i_name: &str, a_s_name: &str) -> Result<Self> {
+        let need = |name: &str| -> Result<usize> {
+            mat.component_index(name).ok_or_else(|| {
+                PyrucastError::Message(format!(
+                    "beam_deformation: the material carries no `{name}`"
+                ))
+            })
+        };
+        Ok(Self {
+            e: need("E")?,
+            i: need(i_name)?,
+            shear: mat.component_index("G").zip(mat.component_index(a_s_name)),
+        })
+    }
+
+    /// `Φ`, the ratio of bending to shear compliance, from this cell's row.
+    fn phi(&self, row: &[f64], l: f64) -> f64 {
+        let ei = row[self.e] * row[self.i];
+        let gas = self.shear.map(|(g, a_s)| row[g] * row[a_s]);
+        crate::models::beam::phi(ei, gas, l)
+    }
 }
 
 /// 1-D beam section strains `(kappa, gamma)` at `t = x/L`, from the nodal DOFs
@@ -242,8 +286,8 @@ fn phi_of(mat: &SubElementField, cell: usize, l: f64, i_name: &str, a_s_name: &s
 /// and a pure-bending beam has no direction to stretch along.
 #[allow(clippy::too_many_arguments)]
 fn strains_1d(
-    mat: &SubElementField,
-    cell: usize,
+    slots: &[BendingSlots],
+    row: &[f64],
     xa: &[f64],
     xb: &[f64],
     da: &[f64],
@@ -251,7 +295,7 @@ fn strains_1d(
     t: f64,
 ) -> Result<Vec<f64>> {
     let l = (xb[0] - xa[0]).abs();
-    let ph = phi_of(mat, cell, l, "I", "A_s")?;
+    let ph = slots[0].phi(row, l);
     let d = [da[0], da[1], db[0], db[1]];
     let (kappa, gamma) = crate::models::beam::section_strains(ph, l, &d, t);
     Ok(vec![kappa, gamma])
@@ -264,8 +308,8 @@ fn strains_1d(
 /// field of a bar really is linear.
 #[allow(clippy::too_many_arguments)]
 fn strains_2d(
-    mat: &SubElementField,
-    cell: usize,
+    slots: &[BendingSlots],
+    row: &[f64],
     xa: &[f64],
     xb: &[f64],
     da: &[f64],
@@ -283,7 +327,7 @@ fn strains_2d(
     let (ta, tb) = (da[2], db[2]); // rotation is frame-invariant in 2-D
 
     let eps = (ub - ua) / l;
-    let ph = phi_of(mat, cell, l, "I", "A_s")?;
+    let ph = slots[0].phi(row, l);
     let (kappa, gamma) = crate::models::beam::section_strains(ph, l, &[wa, ta, wb, tb], t);
     Ok(vec![eps, kappa, gamma])
 }
@@ -299,8 +343,8 @@ fn strains_2d(
 /// genuinely linear.
 #[allow(clippy::too_many_arguments)]
 fn strains_3d(
-    mat: &SubElementField,
-    cell: usize,
+    slots: &[BendingSlots],
+    row: &[f64],
     xa: &[f64],
     xb: &[f64],
     da: &[f64],
@@ -320,14 +364,14 @@ fn strains_3d(
 
     // x'-y' plane: deflection v', rotation θz' — the pair maps straight onto the
     // (w, θ) of the shared block, giving `κ_z = θz'_,x` and `γ_y = v'_,x − θz'`.
-    let phi_y = phi_of(mat, cell, l, "I_z", "A_sy")?;
+    let phi_y = slots[0].phi(row, l);
     let (kappa_z, gamma_y) =
         crate::models::beam::section_strains(phi_y, l, &[ua[1], ra[2], ub[1], rb[2]], t);
     // x'-z' plane: the rotation's sign is opposite — a positive θy' bends
     // towards −z — so it is fed negated. The curvature comes back negated with
     // it; the shear does not, `γ_z = w'_,x + θy'` being exactly what the flip
     // produces.
-    let phi_z = phi_of(mat, cell, l, "I_y", "A_sz")?;
+    let phi_z = slots[1].phi(row, l);
     let (minus_kappa_y, gamma_z) =
         crate::models::beam::section_strains(phi_z, l, &[ua[2], -ra[1], ub[2], -rb[1]], t);
     Ok(vec![

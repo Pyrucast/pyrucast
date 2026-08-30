@@ -109,6 +109,9 @@ pub fn flux(
     density: FluxDensity,
     component: &str,
 ) -> Result<SubNodeField> {
+    // Une charge cohérente se répartit par les fonctions de forme du champ :
+    // il en faut une, et c'est un fait de la zone.
+    kernel::require_field_basis(fespace, "shape values")?;
     let submesh = fespace.read().submesh();
 
     // Flux density: a bare constant, or the field's single component snapshotted
@@ -146,7 +149,7 @@ pub fn flux(
             let cell = geom.cell;
             for g in 0..geom.n_gauss {
                 let mut n_buf = [0.0_f64; MAX_CELL_DOFS];
-                let shape = geom.field_n_at_g(g, &mut n_buf)?;
+                let shape = geom.field_n_at_g(g, &mut n_buf);
                 let phi = densities
                     .as_deref()
                     .map_or(uniform, |d| d[cell * geom.n_gauss + g]);

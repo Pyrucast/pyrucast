@@ -79,6 +79,9 @@ pub fn deformation(u: &NodeField, fespace: &FiniteElementSpace) -> Result<Elemen
     let view = u.view()?;
     let mut out = ElementField::empty();
     for sub in fespace {
+        // Cet opérateur interpole : il lui faut une base de champ, et c'est un
+        // fait de la zone, tranché ici plutôt qu'à chaque point de Gauss.
+        kernel::require_field_basis(sub, "shape values")?;
         let (space_dim, axisymmetric) = {
             let s = sub.read();
             (s.space_dim(), s.is_axisymmetric())
@@ -129,12 +132,12 @@ pub fn deformation(u: &NodeField, fespace: &FiniteElementSpace) -> Result<Elemen
             if axisymmetric {
                 // ε_θθ = u_r / r, with u_r interpolated at the Gauss point.
                 let mut n_buf = [0.0_f64; MAX_CELL_DOFS];
-                let n = geom.field_n_at_g(g, &mut n_buf)?;
+                let n = geom.field_n_at_g(g, &mut n_buf);
                 let mut u_r = 0.0;
                 for k in 0..geom.n_nodes {
                     u_r += dofs[k * nc] * n[k];
                 }
-                out[pairs.len()] = u_r / geom.radius(g)?;
+                out[pairs.len()] = u_r / geom.radius(g);
             }
             Ok(())
         })?;

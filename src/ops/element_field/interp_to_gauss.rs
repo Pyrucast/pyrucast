@@ -68,6 +68,9 @@ pub fn interp_to_gauss(field: &NodeField, fespace: &FiniteElementSpace) -> Resul
     let view = field.view()?;
     let mut out = ElementField::empty();
     for sub in fespace {
+        // Cet opérateur interpole : il lui faut une base de champ, et c'est un
+        // fait de la zone, tranché ici plutôt qu'à chaque point de Gauss.
+        kernel::require_field_basis(sub, "shape values")?;
         // Point kernel: value at Gauss g = Σ_i N_i(g) · f_i, per component.
         let nc = components.len();
         let sf = kernel::nodal_pointwise(
@@ -77,7 +80,7 @@ pub fn interp_to_gauss(field: &NodeField, fespace: &FiniteElementSpace) -> Resul
             components.clone(),
             |geom, g, dofs, out| {
                 let mut n_buf = [0.0_f64; MAX_CELL_DOFS];
-                let shape = geom.field_n_at_g(g, &mut n_buf)?;
+                let shape = geom.field_n_at_g(g, &mut n_buf);
                 for (c, o) in out.iter_mut().enumerate().take(nc) {
                     let mut v = 0.0;
                     for i in 0..geom.n_nodes {

@@ -1742,7 +1742,7 @@ pub(crate) fn continuum_internal_force_element(
             Some((
                 geom.n_at_g(g),
                 // The hoop closes the continuum's read list.
-                row[lay[lay.len() - 1] as usize] / geom.radius(g)?,
+                row[lay[lay.len() - 1] as usize] / geom.radius(g),
             ))
         } else {
             None
