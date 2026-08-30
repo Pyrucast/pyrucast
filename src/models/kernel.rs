@@ -123,10 +123,23 @@ impl RefData {
                 field_d2n_ref.push(fe.field_d2n_at_g(g)?.to_vec());
             }
         }
+        // Every kernel sizes its `dN/dx` scratch with `MAX_CELL_DOFS`. The bound is
+        // a property of the *zone*, so it is proved here, once, and named: a wider
+        // element would otherwise overflow a stack slice deep inside a kernel,
+        // where the panic says nothing about which mesh caused it.
+        let n_nodes = fe.nodes_per_cell()?;
+        let space_dim = fe.space_dim();
+        if n_nodes * space_dim > MAX_CELL_DOFS {
+            return Err(PyrucastError::Message(format!(
+                "this FE subspace has {n_nodes} nodes per cell in {space_dim}-D, so a cell needs \
+                 {} values where a kernel's scratch holds {MAX_CELL_DOFS} — raise MAX_CELL_DOFS",
+                n_nodes * space_dim
+            )));
+        }
         Ok(Self {
-            n_nodes: fe.nodes_per_cell()?,
+            n_nodes,
             n_gauss,
-            space_dim: fe.space_dim(),
+            space_dim,
             ref_dim: fe.ref_dim()?,
             axisymmetric: fe.is_axisymmetric(),
             gauss_xi,
@@ -1348,8 +1361,9 @@ pub(crate) fn nodal_pointwise(
     let reads_idx = field.resolve_reads(reads);
 
     // The gather buffer is a fixed-size array, so a cell costs no allocation.
-    // The bound is checked here, once: the largest element carries twenty nodes
-    // (HEX20) and no producer reads more than three components per node.
+    // Its width is `nodes × components read`, which `RefData::snapshot` cannot
+    // know — it only proved `nodes × space_dim` — so the bound is checked here
+    // too, once per zone, against the read list this call was given.
     let n_dofs = rd.n_nodes * reads.len();
     if n_dofs > MAX_CELL_DOFS {
         return Err(PyrucastError::Message(format!(
@@ -1379,11 +1393,14 @@ pub(crate) fn nodal_pointwise(
     Ok(out)
 }
 
-/// The most values a per-cell buffer holds: twenty nodes (HEX20) times three
-/// components — the widest gather, and the widest `dN/dx` a cell can have.
+/// The most values a per-cell buffer holds: twenty-seven nodes (HEX27) times
+/// three components is 81 — the widest gather, and the widest `dN/dx` a cell can
+/// have. Rounded up to leave room for the next element.
 ///
-/// It sizes **stack** buffers, so a Gauss point costs no allocation.
-pub(crate) const MAX_CELL_DOFS: usize = 64;
+/// It sizes **stack** buffers, so a Gauss point costs no allocation. The bound is
+/// enforced once per zone by [`RefData::snapshot`], where a wider element is
+/// refused by name instead of overflowing a slice inside a kernel.
+pub(crate) const MAX_CELL_DOFS: usize = 96;
 
 /// Assemble one stiffness block by a per-cell element-matrix kernel, in
 /// parallel.
