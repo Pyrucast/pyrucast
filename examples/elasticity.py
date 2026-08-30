@@ -68,7 +68,7 @@ def main() -> None:
     for j in range(N):
         right.unit().add_cell([grid[idx(N, j)], grid[idx(N, j + 1)]])
     right_fes = pyrucast.FiniteElementSpace(right)
-    rhs = pyrucast.node_field.flux(right_fes[0], S, "f_x")
+    rhs = pyrucast.node_field.flux(right_fes, S, "f_x")
 
     solution = pyrucast.solver.solve(pyrucast.matrix.stiffness(model, materials), rhs)
 

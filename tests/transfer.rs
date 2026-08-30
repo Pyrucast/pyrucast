@@ -28,7 +28,6 @@ use pyrucast::atoms::{ElementType, Node};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
-use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::tensor::Kinematics;
@@ -109,9 +108,9 @@ fn each_direction_carries_its_own_stiffness() -> Result<()> {
     )?;
 
     // A traction along x, and one along y, applied together.
-    let load_x = pyrucast::ops::node_field::flux(&right.get(0)?, FluxDensity::Uniform(Q), "f_x")?;
-    let load_y = pyrucast::ops::node_field::flux(&right.get(0)?, FluxDensity::Uniform(Q), "f_y")?;
-    let load = (NodeField::from_sub(load_x) + NodeField::from_sub(load_y))?;
+    let load_x = pyrucast::ops::node_field::flux(&right, FluxDensity::Uniform(Q), "f_x")?;
+    let load_y = pyrucast::ops::node_field::flux(&right, FluxDensity::Uniform(Q), "f_y")?;
+    let load = (load_x + load_y)?;
 
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let solution = solve(&k, &load)?;
@@ -226,9 +225,9 @@ fn free_face_displacement(n: usize, h: f64) -> Result<f64> {
         &model,
         &[("E", E), ("nu", NU), ("h_u_x", h)],
     )?;
-    let traction = pyrucast::ops::node_field::flux(&right.get(0)?, FluxDensity::Uniform(Q), "f_x")?;
+    let traction = pyrucast::ops::node_field::flux(&right, FluxDensity::Uniform(Q), "f_x")?;
 
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
-    let solution = solve(&k, &NodeField::from_sub(traction))?;
+    let solution = solve(&k, &traction)?;
     solution.value(grid[idx(n, n / 2)].id(), "u_x")
 }

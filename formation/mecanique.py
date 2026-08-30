@@ -120,7 +120,7 @@ def main() -> None:
     # Effort de la masse suspendue, réparti sur la moitié basse du trou —
     # analogue de FSUR 'MASS' / PRES 'MASS' (Cast3M section 6).
     pression = -MASSE * G / (2.0 * 3.14159265 * RAYON_TROU)
-    effort = pc.node_field.flux(arc_fes[0], pression, "f_y")
+    effort = pc.node_field.flux(arc_fes, pression, "f_y")
 
     K = pc.matrix.stiffness(modele, materiaux)
     # ANCHOR_END: modele_elastique

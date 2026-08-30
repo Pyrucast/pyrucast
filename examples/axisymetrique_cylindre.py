@@ -64,7 +64,7 @@ def main():
     inner = pyrucast.Mesh(c, "SEG2")
     for j in range(NZ):
         inner.unit().add_cell([grid[idx(0, j)], grid[idx(0, j + 1)]])
-    rhs = pyrucast.node_field.flux(pyrucast.FiniteElementSpace(inner)[0], P, "f_x")
+    rhs = pyrucast.node_field.flux(pyrucast.FiniteElementSpace(inner), P, "f_x")
 
     # ── Assemblage + résolution ────────────────────────────────────────────
     k = pyrucast.matrix.stiffness(model, materials)

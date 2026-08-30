@@ -175,7 +175,7 @@ contact = pyrucast.model.contact(slave, master, [("u_x", "f_x"), ("u_y", "f_y")]
 model = elasticite | appuis | contact
 materials = pyrucast.element_field.material_field(model, [("E", 210.0), ("nu", 0.0)])
 
-rhs = pyrucast.node_field.flux(edge_fes[0], -S, "f_y") | model.contact_gaps()
+rhs = pyrucast.node_field.flux(edge_fes, -S, "f_y") | model.contact_gaps()
 solution = pyrucast.solver.solve_unilateral(
     pyrucast.matrix.stiffness(model, materials), model, rhs
 )
@@ -185,7 +185,7 @@ assert solution.node_count() > 0
 
 # ── Le second membre géométrique du contact ─────────────────────────────────
 
-traction = pyrucast.node_field.flux(edge_fes[0], -S, "f_y")
+traction = pyrucast.node_field.flux(edge_fes, -S, "f_y")
 
 # ANCHOR: contact_gaps
 rhs = traction | model.contact_gaps()

@@ -168,7 +168,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `merge(a: &NodeField, b: &NodeField) -> NodeField` | `merge(a, b) -> NodeField` |
 | `consolidate(field: &NodeField) -> NodeField` | `consolidate(field) -> NodeField` |
 | `mask(field: &NodeField, band: &Band, …) -> NodeField` | `mask(field, ge=None, gt=None, le=None, lt=None, components=None) -> NodeField` (champ `0/1` de même structure ; sucre `field >= x`). Accepte aussi un `SubNodeField` |
-| `flux(fespace: &SubFiniteElementSpace, density: FluxDensity, component: &str) -> SubNodeField` | `flux(fespace, density, component) -> NodeField` |
+| `flux(fespace: &FiniteElementSpace, density: FluxDensity, component: &str) -> NodeField` | `flux(fespace, density, component) -> NodeField` |
 | `internal_forces(model: &Model, stresses: &ElementField) -> NodeField` | `internal_forces(stresses, model) -> NodeField` |
 | `internal_forces_continuum(stresses: &ElementField, fespace: &FiniteElementSpace) -> NodeField` | `internal_forces_continuum(stresses, fespace) -> NodeField` |
 

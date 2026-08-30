@@ -232,11 +232,10 @@ fn membrane_stretch(formulation: ShellModel) -> Result<()> {
         edge.add_cell(&[grid[idx(n, j)].id(), grid[idx(n, j + 1)].id()])?;
     }
     let edge_fes = FiniteElementSpace::lagrange1(&edge)?;
-    let traction =
-        pyrucast::ops::node_field::flux(&edge_fes.get(0)?, FluxDensity::Uniform(Q * h), "f_x")?;
+    let traction = pyrucast::ops::node_field::flux(&edge_fes, FluxDensity::Uniform(Q * h), "f_x")?;
 
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
-    let solution = solve(&k, &NodeField::from_sub(traction))?;
+    let solution = solve(&k, &traction)?;
 
     // Uniaxial stress σ = q (the traction per unit thickness), so u(1) = σ·L/E.
     let u = solution.value(grid[idx(n, n)].id(), "u_x")?;
@@ -500,20 +499,11 @@ fn central_deflection(
         pyrucast::ops::element_field::material_field(&model, &[("E", E), ("nu", NU), ("h", h)])?;
 
     // The uniform pressure, as consistent nodal loads on the surface itself.
-    let surface = read_fespace(&fes)?;
-    let load = pyrucast::ops::node_field::flux(&surface, FluxDensity::Uniform(Q), "f_z")?;
+    let load = pyrucast::ops::node_field::flux(&fes, FluxDensity::Uniform(Q), "f_z")?;
     let _ = coords;
 
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
-    let solution = solve(&k, &NodeField::from_sub(load))?;
+    let solution = solve(&k, &load)?;
     // The centre of an even mesh is a node.
     solution.value(grid[idx(n / 2, n / 2)].id(), "u_z")
-}
-
-fn read_fespace(
-    fes: &FiniteElementSpace,
-) -> Result<
-    pyrucast::handle::Handle<pyrucast::containers::finite_element_space::SubFiniteElementSpace>,
-> {
-    fes.get(0)
 }

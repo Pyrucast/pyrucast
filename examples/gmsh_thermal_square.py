@@ -142,7 +142,7 @@ def main() -> None:
 
     # ── 3. Chargement : flux réparti sur le bord gauche + T imposée ──────────
     left_fes = pyrucast.FiniteElementSpace(left)
-    source = pyrucast.node_field.flux(left_fes[0], Q, "q")
+    source = pyrucast.node_field.flux(left_fes, Q, "q")
 
     imposed_mesh = pyrucast.Mesh(coords, "POI1")
     for m in mults:

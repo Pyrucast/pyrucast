@@ -7,8 +7,9 @@
 //! f_i = ∫_Γ φ N_i dΓ  ≈  Σ_cell Σ_g φ(cell,g) · N_i(ξ_g) · |J|_g · w_g
 //! ```
 //!
-//! accumulated per node into a [`SubNodeField`] whose single component is the
-//! model's dual variable (e.g. `"q"` for heat conduction). This is the proper
+//! accumulated per node into a [`NodeField`] — one zone per FE subspace — whose
+//! single component is the model's dual variable (e.g. `"q"` for heat
+//! conduction). This is the proper
 //! way to turn a *distributed* edge or body flux into a right-hand-side
 //! contribution, instead of splitting it onto the nodes by hand. The density is
 //! either a uniform constant or the single component of a per-element field
@@ -18,10 +19,11 @@
 //! works directly: a `SEG2` edge embedded in a 2-D `Coords` integrates as
 //! a line (manifold Jacobian), a surface mesh as an area.
 
-use crate::containers::element_field::SubElementField;
+use crate::aggregate::Aggregate;
+use crate::containers::element_field::ElementField;
 use crate::containers::field::SubField;
-use crate::containers::finite_element_space::SubFiniteElementSpace;
-use crate::containers::node_field::SubNodeField;
+use crate::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
+use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::kernel;
@@ -49,12 +51,11 @@ use crate::models::kernel::MAX_CELL_DOFS;
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-/// # let zone = fes.get(0).unwrap();
 /// # let support = mesh::poi1_from_nodes(&n).unwrap();
 /// # use pyrucast::ops::node_field::flux::FluxDensity;
 /// // Une densité **uniforme**, ou lue point par point dans un champ par
 /// // éléments — le même opérateur sert les deux.
-/// let f = node_field::flux(&zone, FluxDensity::Uniform(3.0), "q")?;
+/// let f = node_field::flux(&fes, FluxDensity::Uniform(3.0), "q")?;
 /// // ∫ Nᵢ dΩ somme à l'aire × densité : ici 2 × 3.
 /// let total: f64 = (0..3).map(|i| f.value(n[i].id(), "q").unwrap()).sum();
 /// assert!((total - 6.0).abs() < 1e-9);
@@ -64,14 +65,16 @@ pub enum FluxDensity<'a> {
     /// Spatially uniform density (same value at every Gauss point).
     Uniform(f64),
     /// Read from the **single** component of a per-element field at each
-    /// `(cell, Gauss)` point. The field must live on the same subspace as the
-    /// one passed to [`flux`].
-    Field(&'a Handle<SubElementField>),
+    /// `(cell, Gauss)` point. The aggregate must hold exactly one zone on
+    /// **each** subspace of the space passed to [`flux`] — that zone is the
+    /// density there.
+    Field(&'a ElementField),
 }
 
 /// Consistent nodal loads of a distributed flux over `fespace` (see the module
-/// docs). Returns a [`SubNodeField`] on the subspace's unique nodes carrying
-/// the single component `component` (the dual variable, e.g. `"q"`).
+/// docs). Returns a [`NodeField`] with one zone per FE subspace, in order, each
+/// on that subspace's unique nodes and carrying the single component
+/// `component` (the dual variable, e.g. `"q"`).
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -93,20 +96,32 @@ pub enum FluxDensity<'a> {
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-/// # let zone = fes.get(0).unwrap();
 /// # let support = mesh::poi1_from_nodes(&n).unwrap();
 /// # use pyrucast::ops::node_field::flux::FluxDensity;
 /// // Le chargement nodal **cohérent** d'un flux réparti : il répartit par
 /// // les fonctions de forme, non à parts égales.
-/// let f = node_field::flux(&zone, FluxDensity::Uniform(3.0), "q")?;
-/// assert_eq!(f.components(), &["q".to_string()]);
+/// let f = node_field::flux(&fes, FluxDensity::Uniform(3.0), "q")?;
+/// assert_eq!(f.get(0)?.read().components(), &["q".to_string()]);
 /// let total: f64 = (0..3).map(|i| f.value(n[i].id(), "q").unwrap()).sum();
 /// assert!((total - 6.0).abs() < 1e-9);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn flux(
-    fespace: &Handle<SubFiniteElementSpace>,
+    fespace: &FiniteElementSpace,
     density: FluxDensity,
+    component: &str,
+) -> Result<NodeField> {
+    let mut out = NodeField::empty();
+    for zone in fespace {
+        out.add_sub(Handle::new(subspace_flux(zone, &density, component)?))?;
+    }
+    Ok(out)
+}
+
+/// Consistent nodal loads of `density` on a single subspace.
+fn subspace_flux(
+    fespace: &Handle<SubFiniteElementSpace>,
+    density: &FluxDensity,
     component: &str,
 ) -> Result<SubNodeField> {
     // Une charge cohérente se répartit par les fonctions de forme du champ :
@@ -119,9 +134,12 @@ pub fn flux(
     // checked here, for the zone; the copy below then reads **by index**, where
     // it used to search the name again at every (cell, point).
     let (uniform, densities): (f64, Option<Vec<f64>>) = match density {
-        FluxDensity::Uniform(v) => (v, None),
+        FluxDensity::Uniform(v) => (*v, None),
         FluxDensity::Field(field) => {
-            let f = field.read();
+            // L'agrégat porte une densité par zone ; l'opérateur n'en intègre
+            // qu'une — celle qui vit sur le sous-espace demandé.
+            let zone = field.sub_for_fespace(fespace)?;
+            let f = zone.read();
             let comps = f.components();
             if comps.len() != 1 {
                 return Err(PyrucastError::Message(format!(
@@ -170,14 +188,13 @@ mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
     use crate::atoms::{ElementType, Node, NodeId};
-    use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
     use crate::handle::Handle;
 
-    /// Lagrange-1 FE subspace over a fresh SEG2 line of `n` equal elements from
+    /// Lagrange-1 FE space over a fresh SEG2 line of `n` equal elements from
     /// `a` to `b` (built on the given coordinates).
-    fn seg2_line(points: &[Vec<f64>]) -> Handle<SubFiniteElementSpace> {
+    fn seg2_line(points: &[Vec<f64>]) -> FiniteElementSpace {
         let coords = Handle::new(Coords::new(points[0].len() as u8).unwrap());
         let nodes: Vec<Node> = points
             .iter()
@@ -187,10 +204,14 @@ mod tests {
         for w in nodes.windows(2) {
             mesh.add_cell(&[w[0].id(), w[1].id()]).unwrap();
         }
-        FiniteElementSpace::lagrange1(&mesh)
-            .unwrap()
-            .get(0)
-            .unwrap()
+        FiniteElementSpace::lagrange1(&mesh).unwrap()
+    }
+
+    /// The node ids of the line, in connectivity order.
+    fn line_nodes(fes: &FiniteElementSpace) -> Vec<NodeId> {
+        let zone = fes.get(0).unwrap();
+        let submesh = zone.read().submesh();
+        submesh.read().connectivity().to_vec()
     }
 
     /// Uniform flux on a 1-D SEG2 line: interior nodes receive `φ·h`, the two
@@ -199,7 +220,7 @@ mod tests {
     fn uniform_flux_consistent_loads_on_seg2_line() {
         // Two elements of length h = 0.5 on [0, 1].
         let fes = seg2_line(&[vec![0.0], vec![0.5], vec![1.0]]);
-        let nodes: Vec<NodeId> = fes.read().submesh().read().connectivity().to_vec();
+        let nodes = line_nodes(&fes);
         // connectivity = [n0, n1, n1, n2] → unique [n0, n1, n2].
         let (n0, n1, n2) = (nodes[0], nodes[1], nodes[3]);
 
@@ -223,7 +244,7 @@ mod tests {
     fn uniform_flux_on_2d_edge_uses_line_measure() {
         // Single vertical edge from (0,0) to (0,1), length 1.
         let fes = seg2_line(&[vec![0.0, 0.0], vec![0.0, 1.0]]);
-        let nodes: Vec<NodeId> = fes.read().submesh().read().connectivity().to_vec();
+        let nodes = line_nodes(&fes);
         let (a, b) = (nodes[0], nodes[1]);
 
         let phi = 10.0;
@@ -242,12 +263,15 @@ mod tests {
     fn field_density_matches_uniform() {
         let fes = seg2_line(&[vec![0.0], vec![0.5], vec![1.0]]);
         let phi = 7.5;
-        let mut field = SubElementField::new(fes.clone(), vec!["phi".into()]).unwrap();
-        field.set_uniform("phi", phi).unwrap();
-        let field = Handle::new(field);
+        let field = ElementField::new(&fes, vec!["phi".into()]).unwrap();
+        field
+            .get(0)
+            .unwrap()
+            .write()
+            .set_uniform("phi", phi)
+            .unwrap();
 
-        let nodes: Vec<NodeId> = fes.read().submesh().read().connectivity().to_vec();
-        let n1 = nodes[1];
+        let n1 = line_nodes(&fes)[1];
         let from_field = flux(&fes, FluxDensity::Field(&field), "q").unwrap();
         let from_uniform = flux(&fes, FluxDensity::Uniform(phi), "q").unwrap();
         assert!(
@@ -260,8 +284,17 @@ mod tests {
     #[test]
     fn multi_component_field_rejected() {
         let fes = seg2_line(&[vec![0.0], vec![1.0]]);
-        let field =
-            Handle::new(SubElementField::new(fes.clone(), vec!["a".into(), "b".into()]).unwrap());
+        let field = ElementField::new(&fes, vec!["a".into(), "b".into()]).unwrap();
+        assert!(flux(&fes, FluxDensity::Field(&field), "q").is_err());
+    }
+
+    /// An aggregate that holds no zone on the subspace is rejected: the
+    /// operator integrates the density of *this* zone, not of another.
+    #[test]
+    fn field_on_another_fespace_rejected() {
+        let fes = seg2_line(&[vec![0.0], vec![1.0]]);
+        let autre = seg2_line(&[vec![0.0], vec![1.0]]);
+        let field = ElementField::new(&autre, vec!["phi".into()]).unwrap();
         assert!(flux(&fes, FluxDensity::Field(&field), "q").is_err());
     }
 }

@@ -84,7 +84,7 @@ def test_lame_thick_cylinder_under_internal_pressure():
     inner = pyrucast.Mesh(c, "SEG2")
     for j in range(NZ):
         inner.unit().add_cell([grid[idx(0, j)], grid[idx(0, j + 1)]])
-    rhs = pyrucast.node_field.flux(pyrucast.FiniteElementSpace(inner)[0], P, "f_x")
+    rhs = pyrucast.node_field.flux(pyrucast.FiniteElementSpace(inner), P, "f_x")
 
     K = pyrucast.matrix.stiffness(model, materials)
     solution = pyrucast.solver.solve(K, rhs)

@@ -132,9 +132,11 @@ f_i = \int_\Gamma \varphi\\, N_i\\, d\Gamma
 \approx \sum_{\text{cell}} \sum_g \varphi(\text{cell}, g)\\, N_i(\xi_g)\\, |J|_g\\, w_g,
 \\]
 
-accumulées par nœud dans un `NodeField` sur la composante **duale** `component`
-(par exemple `"q"` en thermique, `"f_x"` en mécanique). `density` est soit une
-**constante** (flux uniforme), soit un `SubElementField` (densité par élément).
+accumulées par nœud dans un `NodeField` — une zone par sous-espace EF — sur la
+composante **duale** `component` (par exemple `"q"` en thermique, `"f_x"` en
+mécanique). `density` est soit une **constante** (flux uniforme), soit un
+`ElementField` à une seule composante (densité par élément) portant exactement
+une zone sur chaque sous-espace de `fespace`.
 
 La mesure `|J|` venant du sous-espace EF, un **bord** s'intègre directement :
 une arête `SEG2` plongée dans un `Coords` 2-D s'intègre comme une **ligne**

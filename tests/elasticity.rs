@@ -17,7 +17,6 @@ use pyrucast::atoms::{ElementType, Node};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
-use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::tensor::Kinematics;
@@ -89,9 +88,7 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
         right_edge.add_cell(&[grid[idx(N, j)].id(), grid[idx(N, j + 1)].id()])?;
     }
     let right_fes = FiniteElementSpace::lagrange1(&right_edge)?;
-    let traction =
-        pyrucast::ops::node_field::flux(&right_fes.get(0)?, FluxDensity::Uniform(S), "f_x")?;
-    let rhs = NodeField::from_sub(traction);
+    let rhs = pyrucast::ops::node_field::flux(&right_fes, FluxDensity::Uniform(S), "f_x")?;
 
     // ── Assemblage + résolution ────────────────────────────────────────────
     let stiffness = pyrucast::ops::matrix::stiffness(&model, &materials)?;
@@ -167,9 +164,7 @@ fn elasticity_unit_cube_uniaxial_tension() -> Result<()> {
     let mut face = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
     face.add_cell(&[nodes[1].id(), nodes[2].id(), nodes[6].id(), nodes[5].id()])?;
     let face_fes = FiniteElementSpace::lagrange1(&face)?;
-    let traction =
-        pyrucast::ops::node_field::flux(&face_fes.get(0)?, FluxDensity::Uniform(S), "f_x")?;
-    let rhs = NodeField::from_sub(traction);
+    let rhs = pyrucast::ops::node_field::flux(&face_fes, FluxDensity::Uniform(S), "f_x")?;
 
     let solution = solve(&pyrucast::ops::matrix::stiffness(&model, &materials)?, &rhs)?;
 

@@ -97,7 +97,7 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
     }
     let left_fes = FiniteElementSpace::lagrange1(&left_edge)?;
     let source = pyrucast::ops::node_field::flux(
-        &left_fes.get(0)?,
+        &left_fes,
         pyrucast::ops::node_field::FluxDensity::Uniform(Q),
         "q",
     )?;
@@ -114,9 +114,7 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
     }
 
     // Chargement = flux du bord + valeurs imposées (union des zones).
-    let source = NodeField::from_sub(source);
-    let imposed_load = NodeField::from_sub(imposed_load);
-    let rhs = source.union(&imposed_load)?;
+    let rhs = source.union(&NodeField::from_sub(imposed_load))?;
 
     // ── Assemblage + résolution ────────────────────────────────────────────
     let stiffness = pyrucast::ops::matrix::stiffness(&model, &materials)?;

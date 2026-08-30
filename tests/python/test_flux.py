@@ -16,7 +16,7 @@ def test_uniform_flux_consistent_loads_on_seg2_line():
 
     phi = 3.0
     h = 0.5
-    load = pyrucast.node_field.flux(fes[0], phi, "q")
+    load = pyrucast.node_field.flux(fes, phi, "q")
     assert abs(load.value(a, "q") - phi * h / 2) < 1e-12
     assert abs(load.value(b, "q") - phi * h) < 1e-12
     assert abs(load.value(d, "q") - phi * h / 2) < 1e-12
@@ -38,13 +38,13 @@ def test_flux_from_element_field_matches_uniform():
     ef = pyrucast.ElementField(fes, ["phi"])
     ef[0].set_uniform("phi", phi)
 
-    from_field = pyrucast.node_field.flux(fes[0], ef[0], "q")
-    from_uniform = pyrucast.node_field.flux(fes[0], phi, "q")
+    from_field = pyrucast.node_field.flux(fes, ef, "q")
+    from_uniform = pyrucast.node_field.flux(fes, phi, "q")
     assert abs(from_field.value(a, "q") - from_uniform.value(a, "q")) < 1e-12
 
 
 def test_flux_rejects_bad_density():
-    """A density that is neither a float nor a SubElementField is rejected."""
+    """A density that is neither a float nor an ElementField is rejected."""
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
@@ -53,7 +53,7 @@ def test_flux_rejects_bad_density():
     fes = pyrucast.FiniteElementSpace(mesh)
 
     try:
-        pyrucast.node_field.flux(fes[0], "not a density", "q")
+        pyrucast.node_field.flux(fes, "not a density", "q")
     except (ValueError, TypeError):
         pass
     else:

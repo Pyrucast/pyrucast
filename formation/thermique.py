@@ -155,7 +155,7 @@ def main() -> None:
     # FR — Flux imposé sur la face gauche.
     # EN — Imposed flux on the left face.
     gauche_fes = pc.FiniteElementSpace(face_gauche)
-    flux_gauche = pc.node_field.flux(gauche_fes[0], FLUX_IMPOSE, "q")
+    flux_gauche = pc.node_field.flux(gauche_fes, FLUX_IMPOSE, "q")
 
     # FR — Température imposée, posée sur le maillage des multiplicateurs.
     # EN — Imposed temperature, set on the multipliers' mesh.
@@ -226,12 +226,12 @@ def main() -> None:
     # ANCHOR: charges_complet
     # FR — Terme externe de la convection, h·T_ext : le même opérateur `flux`.
     # EN — The convection's external term, h·T_ext: the same `flux` operator.
-    charge_convection = pc.node_field.flux(basse_fes[0], H_CONV * T_EXT, "q")
+    charge_convection = pc.node_field.flux(basse_fes, H_CONV * T_EXT, "q")
 
     # FR — Source volumique : `flux` sur des HEX8, donc une densité volumique.
     # EN — Volume source: `flux` over HEX8 cells, hence a volume density.
     source_fes = pc.FiniteElementSpace(zone_source)
-    charge_source = pc.node_field.flux(source_fes[0], SOURCE_VOLUMIQUE, "q")
+    charge_source = pc.node_field.flux(source_fes, SOURCE_VOLUMIQUE, "q")
     # ANCHOR_END: charges_complet
 
     # ANCHOR: second_membre

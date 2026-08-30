@@ -172,7 +172,7 @@ ailleurs = c.add_node([2.0])
 other_loads = pyrucast.NodeField(pyrucast.mesh.poi1_from_nodes([ailleurs]), ["q"])
 # ANCHOR: flux
 # Flux uniforme Q sur le bord gauche (maillage SEG2), composante duale "q".
-load = pyrucast.node_field.flux(edge_fes.unit(), Q, "q")
+load = pyrucast.node_field.flux(edge_fes, Q, "q")
 rhs = load | other_loads
 # ANCHOR_END: flux
 assert rhs.node_count() > 0

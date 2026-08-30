@@ -14,7 +14,6 @@ use pyrucast::atoms::{ElementType, Node, NodeId};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
-use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::tensor::Kinematics;
@@ -149,9 +148,8 @@ fn patch_test_uniform_pressure_through_contact() -> Result<()> {
         top_edge.add_cell(&[tb.top[idx(i, N)].id(), tb.top[idx(i + 1, N)].id()])?;
     }
     let top_fes = FiniteElementSpace::lagrange1(&top_edge)?;
-    let traction =
-        pyrucast::ops::node_field::flux(&top_fes.get(0)?, FluxDensity::Uniform(-S), "f_y")?;
-    let rhs = NodeField::from_sub(traction).union(&tb.model.contact_gaps()?)?;
+    let traction = pyrucast::ops::node_field::flux(&top_fes, FluxDensity::Uniform(-S), "f_y")?;
+    let rhs = traction.union(&tb.model.contact_gaps()?)?;
 
     let k = pyrucast::ops::matrix::stiffness(&tb.model, &tb.materials)?;
     let solution = unilateral::solve(&k, &tb.model, &rhs)?;
@@ -324,9 +322,8 @@ fn contact_3d_two_cubes() -> Result<()> {
     let mut face = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
     face.add_cell(&[top[4].id(), top[5].id(), top[6].id(), top[7].id()])?;
     let face_fes = FiniteElementSpace::lagrange1(&face)?;
-    let traction =
-        pyrucast::ops::node_field::flux(&face_fes.get(0)?, FluxDensity::Uniform(-S), "f_z")?;
-    let rhs = NodeField::from_sub(traction).union(&model.contact_gaps()?)?;
+    let traction = pyrucast::ops::node_field::flux(&face_fes, FluxDensity::Uniform(-S), "f_z")?;
+    let rhs = traction.union(&model.contact_gaps()?)?;
 
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let solution = unilateral::solve(&k, &model, &rhs)?;

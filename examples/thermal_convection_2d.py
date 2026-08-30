@@ -87,10 +87,10 @@ def main() -> None:
     for j in range(N):
         left_edge.unit().add_cell([grid[idx(0, j)], grid[idx(0, j + 1)]])
     left_fes = pyrucast.FiniteElementSpace(left_edge)
-    source = pyrucast.node_field.flux(left_fes[0], Q, "q")
+    source = pyrucast.node_field.flux(left_fes, Q, "q")
 
     # Convection : la part externe h·T_ext du flux de Robin, via le même `flux`.
-    conv_load = pyrucast.node_field.flux(right_fes[0], H * T_EXT, "q")
+    conv_load = pyrucast.node_field.flux(right_fes, H * T_EXT, "q")
 
     # Chargement = source du bord gauche + charge de convection du bord droit.
     rhs = source | conv_load

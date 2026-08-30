@@ -245,7 +245,7 @@ fn solve_two_squares(h: f64) -> Result<(Geometry, NodeField)> {
     inlet.add_cell(&[geom.left[0].id(), geom.left[3].id()])?;
     let inlet_fes = FiniteElementSpace::lagrange1(&inlet)?;
     let influx = pyrucast::ops::node_field::flux(
-        &inlet_fes.get(0)?,
+        &inlet_fes,
         FluxDensity::Uniform(Q),
         &format!("j_{SPECIES}"),
     )?;
@@ -268,7 +268,7 @@ fn solve_two_squares(h: f64) -> Result<(Geometry, NodeField)> {
         imposed.set_value(*id, &format!("imposed_c_{SPECIES}"), C_RIGHT)?;
     }
 
-    let rhs = NodeField::from_sub(influx).union(&NodeField::from_sub(imposed))?;
+    let rhs = influx.union(&NodeField::from_sub(imposed))?;
     let stiffness = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let solution = solve(&stiffness, &rhs)?;
     Ok((geom, solution))

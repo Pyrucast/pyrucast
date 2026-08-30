@@ -306,9 +306,7 @@ fn solve_traction(
         right_edge.add_cell(&[grid[idx(N, j)].id(), grid[idx(N, j + 1)].id()])?;
     }
     let right_fes = FiniteElementSpace::lagrange1(&right_edge)?;
-    let traction =
-        pyrucast::ops::node_field::flux(&right_fes.get(0)?, FluxDensity::Uniform(S), "f_x")?;
-    let rhs = NodeField::from_sub(traction);
+    let rhs = pyrucast::ops::node_field::flux(&right_fes, FluxDensity::Uniform(S), "f_x")?;
     let stiffness = pyrucast::ops::matrix::stiffness(model, materials)?;
     solve(&stiffness, &rhs)
 }

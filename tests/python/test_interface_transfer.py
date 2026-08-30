@@ -155,7 +155,7 @@ def test_the_field_jumps_by_q_over_h():
     # Uniform flux density on the far-left edge, as consistent nodal loads.
     inlet = pyrucast.Mesh(c, "SEG2")
     inlet.unit().add_cell([left[0], left[3]])
-    rhs = pyrucast.node_field.flux(pyrucast.FiniteElementSpace(inlet)[0], q, "j_H2")
+    rhs = pyrucast.node_field.flux(pyrucast.FiniteElementSpace(inlet), q, "j_H2")
 
     # The imposed concentration, on the two multiplier nodes.
     mult_mesh = model.multiplier_mesh()

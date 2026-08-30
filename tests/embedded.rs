@@ -207,9 +207,7 @@ fn immersed_node_follows_host_displacement_field() -> Result<()> {
     let mut face = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
     face.add_cell(&[nodes[1].id(), nodes[2].id(), nodes[6].id(), nodes[5].id()])?;
     let face_fes = FiniteElementSpace::lagrange1(&face)?;
-    let traction =
-        pyrucast::ops::node_field::flux(&face_fes.get(0)?, FluxDensity::Uniform(S), "f_x")?;
-    let rhs = NodeField::from_sub(traction);
+    let rhs = pyrucast::ops::node_field::flux(&face_fes, FluxDensity::Uniform(S), "f_x")?;
 
     let solution = solve(&stiffness(&model, &materials)?, &rhs)?;
 
@@ -301,9 +299,7 @@ fn embedded_per_component_offset() -> Result<()> {
     let mut face = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
     face.add_cell(&[nodes[1].id(), nodes[2].id(), nodes[6].id(), nodes[5].id()])?;
     let face_fes = FiniteElementSpace::lagrange1(&face)?;
-    let traction =
-        pyrucast::ops::node_field::flux(&face_fes.get(0)?, FluxDensity::Uniform(S), "f_x")?;
-    let mut rhs = NodeField::from_sub(traction);
+    let mut rhs = pyrucast::ops::node_field::flux(&face_fes, FluxDensity::Uniform(S), "f_x")?;
     for sm in &emb_rhs {
         rhs.add_sub(sm.clone())?;
     }

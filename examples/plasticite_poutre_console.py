@@ -110,7 +110,7 @@ def main():
     # ── Charge de référence : cisaillement unitaire (densité −1) sur la face
     #    droite, réparti en efforts nodaux cohérents (op `flux`). ──────────────
     right_fes = pyrucast.FiniteElementSpace(right_edge)
-    load_unit = pyrucast.node_field.flux(right_fes[0], -1.0, "f_y")
+    load_unit = pyrucast.node_field.flux(right_fes, -1.0, "f_y")
 
     # ── Histoire de chargement : une Evolution à valeur CHAMP, tabulée en
     #    pseudo-temps t ∈ [0, 1]. Deux keyframes du champ d'effort nodal — nul en

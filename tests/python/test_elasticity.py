@@ -46,7 +46,7 @@ def test_plane_stress_uniaxial_tension():
     for j in range(N):
         right_edge.unit().add_cell([grid[idx(N, j)], grid[idx(N, j + 1)]])
     right_fes = pyrucast.FiniteElementSpace(right_edge)
-    rhs = pyrucast.node_field.flux(right_fes[0], S, "f_x")
+    rhs = pyrucast.node_field.flux(right_fes, S, "f_x")
 
     K = pyrucast.matrix.stiffness(model, materials)
     solution = pyrucast.solver.solve(K, rhs)

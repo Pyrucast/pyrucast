@@ -30,7 +30,6 @@ use pyrucast::aggregate::Aggregate;
 use pyrucast::atoms::{ElementType, Node};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
-use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::Physics;
@@ -100,7 +99,7 @@ fn thermal_convection_recovers_analytical_solution() -> Result<()> {
     }
     let left_fes = FiniteElementSpace::lagrange1(&left_edge)?;
     let source = pyrucast::ops::node_field::flux(
-        &left_fes.get(0)?,
+        &left_fes,
         pyrucast::ops::node_field::FluxDensity::Uniform(Q),
         "q",
     )?;
@@ -108,12 +107,12 @@ fn thermal_convection_recovers_analytical_solution() -> Result<()> {
     // Convection : la part externe h·T_ext du flux de Robin est un second membre,
     // bâti avec le MÊME opérateur `flux` (densité h·T_ext) — aucune normale.
     let conv_load = pyrucast::ops::node_field::flux(
-        &right_fes.get(0)?,
+        &right_fes,
         pyrucast::ops::node_field::FluxDensity::Uniform(H * T_EXT),
         "q",
     )?;
 
-    let rhs = NodeField::from_sub(source).union(&NodeField::from_sub(conv_load))?;
+    let rhs = source.union(&conv_load)?;
 
     // ── Assemblage + résolution (K rendue définie par le terme de film) ────
     let stiffness = pyrucast::ops::matrix::stiffness(&model, &materials)?;

@@ -101,7 +101,7 @@ def main() -> None:
     # ANCHOR: chargement_contact
     bord_haut = bord_horizontal(mesh_haut, 2.0 + G0)
     bord_haut_fes = pc.FiniteElementSpace(bord_haut)
-    traction = pc.node_field.flux(bord_haut_fes[0], -S, "f_y")
+    traction = pc.node_field.flux(bord_haut_fes, -S, "f_y")
 
     # `contact_gaps()` fournit le second membre du contact — l'équivalent
     # Cast3M de la préparation du problème unilatéral avant RESO.

@@ -66,7 +66,7 @@ def main():
     face = pyrucast.Mesh(c, "QUA4")
     face.unit().add_cell([nodes[1], nodes[2], nodes[6], nodes[5]])
     face_fes = pyrucast.FiniteElementSpace(face)
-    rhs = pyrucast.node_field.flux(face_fes[0], S, "f_x")
+    rhs = pyrucast.node_field.flux(face_fes, S, "f_x")
 
     solution = pyrucast.solver.solve(pyrucast.matrix.stiffness(model, materials), rhs)
 

@@ -210,7 +210,11 @@ fn main() -> Result<()> {
     //    droite, réparti en efforts nodaux cohérents (∫ densité·N dΓ, op `flux`).
     println!("▸ Charge de référence + histoire de chargement…");
     let right_fes = FiniteElementSpace::lagrange1(&right_edge)?;
-    let load_unit = flux(&right_fes.get(0)?, FluxDensity::Uniform(-1.0), "f_y")?;
+    // `flux` rend un agrégat ; l'histoire de chargement se tabule zone par zone.
+    let load_unit = flux(&right_fes, FluxDensity::Uniform(-1.0), "f_y")?
+        .get(0)?
+        .read()
+        .clone();
 
     // ── Histoire de chargement : une Evolution à valeur CHAMP, tabulée en
     //    pseudo-temps t ∈ [0, 1]. Deux keyframes du champ d'effort nodal — nul en

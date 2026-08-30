@@ -831,6 +831,10 @@ class FiniteElementSpace:
         structure. Returns nothing.
         """
     def __len__(self) -> builtins.int: ...
+    def flux(self, density: typing.Any, component: builtins.str) -> NodeField:
+        r"""
+        Voir `pyrucast.node_field.flux`.
+        """
 
 @typing.final
 class Matrix:
@@ -2238,10 +2242,6 @@ class SubFiniteElementSpace:
         Print the full content (third display level) to stdout: values /
         topology, beyond `repr`'s bounded structure. Returns nothing.
         """
-    def flux(self, density: typing.Any, component: builtins.str) -> NodeField:
-        r"""
-        Voir `pyrucast.node_field.flux`.
-        """
 
 @typing.final
 class SubMatrix:
@@ -3225,17 +3225,17 @@ def fick(fespace: FiniteElementSpace, species: builtins.str, symmetry: typing.Op
     medium, not to what diffuses through it.
     """
 
-def flux(fespace: SubFiniteElementSpace, density: typing.Any, component: builtins.str) -> NodeField:
+def flux(fespace: FiniteElementSpace, density: typing.Any, component: builtins.str) -> NodeField:
     r"""
     Consistent nodal loads of a distributed flux over `fespace` — the analogue
     of Cast3m `FLUX` / `PRES`: `∫ density · N_i dΓ`, returned as a `NodeField`
-    carrying the single component `component` (the model's dual variable, e.g.
-    `"q"` for heat conduction).
+    with one zone per FE subspace, each carrying the single component
+    `component` (the model's dual variable, e.g. `"q"` for heat conduction).
     
     `density` is either a **float** (uniform density) or a single-component
-    `SubElementField` (per-Gauss density). The element measure comes from the
-    FE subspace, so a `SEG2` edge in a 2-D mesh integrates as a line, a surface
-    mesh as an area.
+    `ElementField` (per-Gauss density) holding exactly one zone on each subspace
+    of `fespace`. The element measure comes from the FE subspace, so a `SEG2`
+    edge in a 2-D mesh integrates as a line, a surface mesh as an area.
     """
 
 def from_gmsh_arrays(coords: Coords, node_tags: typing.Any, node_coords: typing.Any, blocks: typing.Any) -> dict:

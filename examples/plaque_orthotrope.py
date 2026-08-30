@@ -103,7 +103,7 @@ def resoudre(angle_deg):
     for j in range(N):
         bord.unit().add_cell([grid[j][N], grid[j + 1][N]])
     bord_fes = pyrucast.FiniteElementSpace(bord)
-    rhs = pyrucast.node_field.flux(bord_fes[0], S, "f_x")
+    rhs = pyrucast.node_field.flux(bord_fes, S, "f_x")
 
     solution = pyrucast.solver.solve(pyrucast.matrix.stiffness(model, materials), rhs)
     coin = grid[0][N]  # (1, 0)

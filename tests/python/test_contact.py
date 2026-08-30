@@ -78,7 +78,7 @@ def test_patch_test_uniform_pressure_through_contact():
     for i in range(N):
         top_edge.unit().add_cell([top[idx(i, N)], top[idx(i + 1, N)]])
     edge_fes = pyrucast.FiniteElementSpace(top_edge)
-    traction = pyrucast.node_field.flux(edge_fes[0], -S, "f_y")
+    traction = pyrucast.node_field.flux(edge_fes, -S, "f_y")
     rhs = traction | model.contact_gaps()
 
     k = pyrucast.matrix.stiffness(model, materials)

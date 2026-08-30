@@ -93,7 +93,7 @@ def main() -> None:
 
     # ANCHOR: chargement_evolution
     pression = -FACTEUR_CHARGE * MASSE * G / (2.0 * 3.14159265 * RAYON_TROU)
-    effort_final = pc.node_field.flux(arc_fes[0], pression, "f_y")
+    effort_final = pc.node_field.flux(arc_fes, pression, "f_y")
     charge = pc.Evolution(
         [(0.0, effort_final * 0.0), (1.0, effort_final)], out_of_range="clamp"
     )

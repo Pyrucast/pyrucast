@@ -322,9 +322,9 @@ fn lame_case(nr: usize, quadratic: bool) -> Result<(f64, f64)> {
     model = model.union(&clamp(&ends, "u_y", "f_y")?)?;
     let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("nu", NU)])?;
 
-    let load = pyrucast::ops::node_field::flux(&edge_fes.get(0)?, FluxDensity::Uniform(P), "f_x")?;
+    let load = pyrucast::ops::node_field::flux(&edge_fes, FluxDensity::Uniform(P), "f_x")?;
     let stiffness = pyrucast::ops::matrix::stiffness(&model, &materials)?;
-    let solution = solve(&stiffness, &NodeField::from_sub(load))?;
+    let solution = solve(&stiffness, &load)?;
 
     let (a2, b2) = (A * A, B * B);
     let ca = P * a2 / (b2 - a2);

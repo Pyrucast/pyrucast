@@ -88,7 +88,7 @@ def main() -> None:
     for j in range(N):
         left_edge.unit().add_cell([grid[idx(0, j)], grid[idx(0, j + 1)]])
     left_fes = pyrucast.FiniteElementSpace(left_edge)
-    source = pyrucast.node_field.flux(left_fes[0], Q, "q")
+    source = pyrucast.node_field.flux(left_fes, Q, "q")
 
     # Valeur imposée T = 20 au slot "imposed_T" des nœuds-multiplicateurs.
     imposed_mesh = pyrucast.mesh.poi1_from_nodes(mults)

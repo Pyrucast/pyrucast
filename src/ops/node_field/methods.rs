@@ -13,11 +13,10 @@
 //! symétrique — `a | b` est déjà sa forme.
 
 use crate::containers::element_field::ElementField;
-use crate::containers::finite_element_space::SubFiniteElementSpace;
+use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::containers::mesh::Mesh;
-use crate::containers::node_field::{NodeField, SubNodeField};
+use crate::containers::node_field::NodeField;
 use crate::error::Result;
-use crate::handle::Handle;
 use crate::ops::node_field::FluxDensity;
 
 impl NodeField {
@@ -51,9 +50,9 @@ impl Mesh {
     }
 }
 
-impl Handle<SubFiniteElementSpace> {
+impl FiniteElementSpace {
     /// Voir [`node_field::flux`](fn@crate::ops::node_field::flux).
-    pub fn flux(&self, density: FluxDensity, component: &str) -> Result<SubNodeField> {
+    pub fn flux(&self, density: FluxDensity, component: &str) -> Result<NodeField> {
         crate::ops::node_field::flux(self, density, component)
     }
 }
