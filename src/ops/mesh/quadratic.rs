@@ -10,7 +10,6 @@
 
 use crate::aggregate::Aggregate;
 use crate::atoms::ElementType;
-use crate::atoms::Node;
 use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
@@ -60,12 +59,15 @@ fn quadratic_of(et: ElementType) -> Result<(ElementType, &'static [[usize; 2]])>
 pub fn to_quadratic(mesh: &Mesh) -> Result<Mesh> {
     let coords = mesh.coords()?;
 
-    // One mid-edge node per distinct edge, keyed by the unordered corner-id
-    // pair. Holding the `Node` keeps the creation refcount alive until the
-    // whole build is done (the SubMeshes incref on top via `add_cell`).
-    let mut mid: HashMap<(NodeId, NodeId), Node> = HashMap::new();
+    // The zones of the result, laid out before a single node exists: the
+    // mid-edge nodes are numbered as they are met — one per distinct edge,
+    // keyed by the unordered corner-id pair — and their positions pile up in
+    // one flat buffer, so the whole promotion costs a single `Coords` write.
+    let mut mid: HashMap<(NodeId, NodeId), u32> = HashMap::new();
+    let mut midpoints: Vec<f64> = Vec::new();
+    #[allow(clippy::type_complexity)]
+    let mut zones: Vec<(ElementType, usize, crate::atoms::RgbColor, Vec<NodeId>)> = Vec::new();
 
-    let mut result = Mesh::empty();
     for sm_h in mesh {
         let (et, color, conn) = {
             let s = sm_h.read();
@@ -74,46 +76,60 @@ pub fn to_quadratic(mesh: &Mesh) -> Result<Mesh> {
         let (quad_et, edges) = quadratic_of(et)?;
         let npc = et.nodes_per_cell();
 
-        let mut new_sm = SubMesh::new(coords.clone(), quad_et);
-        new_sm.set_face_color(color);
-
+        let mut out: Vec<NodeId> = Vec::with_capacity(quad_et.nodes_per_cell() * conn.len() / npc);
         for cell in conn.chunks(npc) {
-            let mut nodes: Vec<NodeId> = Vec::with_capacity(quad_et.nodes_per_cell());
-            // Corners first (re-used; `add_cell` will incref them).
-            nodes.extend_from_slice(cell);
-            // Then one mid-edge node per edge, in the quadratic node order.
+            // Corners first (re-used), then one mid-edge node per edge, in
+            // the quadratic node order. A mid node's id is not known yet: it
+            // is stored as its **rank**, offset once the nodes are created.
+            out.extend_from_slice(cell);
             for &[a, b] in edges {
                 let (na, nb) = (cell[a], cell[b]);
                 let key = if na.0 <= nb.0 { (na, nb) } else { (nb, na) };
-                let mid_id = match mid.get(&key) {
-                    Some(node) => node.id(),
+                let rank = match mid.get(&key) {
+                    Some(&rank) => rank,
                     None => {
-                        // Read both corner coordinates (dropping the guard
-                        // before creating, which takes a write lock).
-                        let midpoint: Vec<f64> = {
-                            let c = coords.read();
-                            let ca = c.position(na)?;
-                            let cb = c.position(nb)?;
-                            ca.iter().zip(cb).map(|(&x, &y)| 0.5 * (x + y)).collect()
-                        };
-                        let node = Node::create_in(coords.clone(), &midpoint)?;
-                        let id = node.id();
-                        mid.insert(key, node);
-                        id
+                        let c = coords.read();
+                        let ca = c.position(na)?;
+                        let cb = c.position(nb)?;
+                        midpoints.extend(ca.iter().zip(cb).map(|(&x, &y)| 0.5 * (x + y)));
+                        let rank = mid.len() as u32;
+                        mid.insert(key, rank);
+                        rank
                     }
                 };
-                nodes.push(mid_id);
+                out.push(NodeId(rank));
             }
-            new_sm.add_cell(&nodes)?;
         }
+        zones.push((quad_et, npc, color, out));
+    }
+
+    let first = coords.write().add_nodes(&midpoints)?.start;
+    let mut result = Mesh::empty();
+    for (quad_et, corners, color, mut out) in zones {
+        // Turn the ranks parked in the connectivity into real ids: the
+        // corners of a cell come first — as many as the linear element had —
+        // and the mid-edge nodes after them.
+        for (k, slot) in out.iter_mut().enumerate() {
+            if k % quad_et.nodes_per_cell() >= corners {
+                *slot = NodeId(first + slot.0);
+            }
+        }
+        let mut new_sm = SubMesh::from_connectivity(coords.clone(), quad_et, out)?;
+        new_sm.set_face_color(color);
         result.add_sub(Handle::new(new_sm))?;
     }
+
+    // The zones own the mid-edge nodes now; hand back the unit `add_nodes`
+    // handed us.
+    let owned: Vec<NodeId> = (first..first + mid.len() as u32).map(NodeId).collect();
+    coords.write().decref_all(&owned)?;
     Ok(result)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::atoms::Node;
     use crate::coords::Coords;
     use crate::handle::Handle;
 

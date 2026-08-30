@@ -136,17 +136,20 @@ fn sub_element_submesh(
     let et = smr.element_type();
     let npc = et.nodes_per_cell();
     let conn = smr.connectivity();
-    let mut kept = SubMesh::new(smr.coords(), et);
+    let coords = smr.coords();
+    // The kept cells are gathered whole, then posted in one locked pass.
+    let mut kept: Vec<NodeId> = Vec::new();
     for cell in 0..ncells {
         let pass = (0..ngauss).all(|g| {
             let base = (cell * ngauss + g) * ncomp;
             test.iter().all(|&ci| band.contains(values[base + ci]))
         });
         if pass {
-            kept.add_cell(&conn[cell * npc..(cell + 1) * npc])?;
+            kept.extend_from_slice(&conn[cell * npc..(cell + 1) * npc]);
         }
     }
-    Ok(Some(kept))
+    drop(smr);
+    Ok(Some(SubMesh::from_connectivity(coords, et, kept)?))
 }
 
 // ─── Public operators ───────────────────────────────────────────────────────

@@ -35,7 +35,7 @@
 //! of the mesh meet node for node.
 
 use crate::aggregate::Aggregate;
-use crate::atoms::{ElementType, Node, NodeId, Point3};
+use crate::atoms::{ElementType, NodeId, Point3};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
@@ -43,7 +43,7 @@ use crate::handle::Handle;
 use crate::interrupt::{Cancel, NoCancel};
 use crate::ops::mesh::plaster::front::Front;
 use crate::ops::mesh::plaster::shell::{Facet, Shell};
-use crate::ops::mesh::plaster::{self, smooth};
+use crate::ops::mesh::plaster::smooth;
 use std::collections::HashMap;
 
 /// How deep a capping pyramid's apex sits below its base, as a fraction of the
@@ -171,7 +171,7 @@ pub fn pave_volume_cancellable(
     }
     let coords = envelope.coords()?;
     let shell = Shell::extract(envelope, "pave_volume")?;
-    let mut front = Front::new(shell, coords.clone());
+    let mut front = Front::new(shell);
     if front.volume() <= 0.0 {
         return Err(PyrucastError::Message(format!(
             "pave_volume: the envelope encloses a signed volume of {:.3e}, so its normals \
@@ -211,11 +211,11 @@ pub fn pave_volume_cancellable(
         smooth::smooth(&mut pts, &patch, &inc, SMOOTH_SWEEPS);
         front.fab.pts = pts;
     }
-    // Before anything reads the mesh back out — the core mesher
-    // does, from the node coordinates — the smoothed positions have to be
-    // there. Cap the front from one set of positions and tetrahedralise
-    // against another and the two surfaces simply do not match.
-    write_positions(&coords, &front.fab)?;
+    // Only now do the mesher's own nodes get an identity: the front has
+    // stopped moving them, and the smoothed positions are the ones the core
+    // mesher will read back. Cap the front from one set of positions and
+    // tetrahedralise against another and the two surfaces simply do not match.
+    let grown = front.fab.materialize_nodes(&coords)?;
 
     // ── The junction, and the void it leaves ──────────────────────────────
     //
@@ -226,8 +226,11 @@ pub fn pave_volume_cancellable(
     // position is not, so apexes are looked up by position before being made.
     let id = |v: u32| front.fab.ids[v as usize];
     let tol = front.mean_edge().max(f64::MIN_POSITIVE) * APEX_WELD;
+    // An apex is parked as its **rank**, tagged by the high bit; the whole
+    // set is created in one locked pass once the front has been walked.
+    const RANK: u32 = 1 << 31;
     let mut apexes: HashMap<[i64; 3], NodeId> = HashMap::new();
-    let mut kept: Vec<Node> = Vec::new();
+    let mut apex_coords: Vec<f64> = Vec::new();
     let mut pyramids: Vec<[NodeId; 5]> = Vec::new();
     let mut void: Vec<[NodeId; 3]> = Vec::new();
     for f in &front.facets {
@@ -253,9 +256,8 @@ pub fn pave_volume_cancellable(
                 let apex_id = match apexes.get(&key) {
                     Some(&i) => i,
                     None => {
-                        let a = Node::create_in(coords.clone(), &[apex.x, apex.y, apex.z])?;
-                        let i = a.id();
-                        kept.push(a);
+                        let i = NodeId(RANK | (apex_coords.len() / 3) as u32);
+                        apex_coords.extend_from_slice(&[apex.x, apex.y, apex.z]);
                         apexes.insert(key, i);
                         i
                     }
@@ -291,14 +293,27 @@ pub fn pave_volume_cancellable(
         times[&k] == 1
     });
 
+    // Every apex at once, and the ranks parked above become ids.
+    let first = coords.write().add_nodes(&apex_coords)?.start;
+    let n_apex = (apex_coords.len() / 3) as u32;
+    let resolve = |n: &mut NodeId| {
+        if n.0 & RANK != 0 {
+            *n = NodeId(first + (n.0 & !RANK));
+        }
+    };
+    for p in &mut pyramids {
+        p.iter_mut().for_each(&resolve);
+    }
+    for t in &mut void {
+        t.iter_mut().for_each(&resolve);
+    }
+
     // ── The core ──────────────────────────────────────────────────────────
     let core = if void.is_empty() {
         Mesh::empty()
     } else {
-        let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-        for t in &void {
-            sm.add_cell(t)?;
-        }
+        let conn: Vec<NodeId> = void.iter().flatten().copied().collect();
+        let sm = SubMesh::from_connectivity(coords.clone(), ElementType::TRI3, conn)?;
         let env = Mesh::from_submesh(sm);
         // Strict: the core has to reuse these triangles verbatim, or it would
         // not meet the pyramids node for node.
@@ -313,20 +328,14 @@ pub fn pave_volume_cancellable(
 
     let hexes: Vec<[NodeId; 8]> = front.fab.hexes.iter().map(|c| c.map(id)).collect();
     let prisms: Vec<[NodeId; 6]> = front.fab.prisms.iter().map(|c| c.map(id)).collect();
-    let out = materialize(&coords, hexes, prisms, pyramids, core);
-    drop(kept);
-    out
-}
-
-/// Push the fabric's smoothed positions back into the `Coords`.
-fn write_positions(coords: &Handle<Coords>, fab: &plaster::front::Fabric) -> Result<()> {
-    let mut c = coords.write();
-    for (i, p) in fab.pts.iter().enumerate() {
-        if fab.movable[i] {
-            c.set_position(fab.ids[i], &[p.x, p.y, p.z])?;
-        }
-    }
-    Ok(())
+    let out = materialize(&coords, hexes, prisms, pyramids, core)?;
+    // The pyramids own the apexes now; hand back the unit `add_nodes` gave.
+    // An apex with no pyramid cannot exist — each one was made for its own.
+    // The cells own the apexes and the grown nodes now; hand back the unit
+    // `add_nodes` gave each of them.
+    let owned: Vec<NodeId> = (first..first + n_apex).chain(grown).map(NodeId).collect();
+    coords.write().decref_all(&owned)?;
+    Ok(out)
 }
 
 /// Outward unit normal of a quadrangular facet, by Newell's method so a
@@ -355,22 +364,25 @@ fn materialize(
     core: Mesh,
 ) -> Result<Mesh> {
     let mut mesh = Mesh::empty();
-    let mut push = |et: ElementType, cells: &[&[NodeId]]| -> Result<()> {
-        if cells.is_empty() {
+    let mut push = |et: ElementType, conn: Vec<NodeId>| -> Result<()> {
+        if conn.is_empty() {
             return Ok(());
         }
-        let mut sm = SubMesh::new(coords.clone(), et);
-        for c in cells {
-            sm.add_cell(c)?;
-        }
-        mesh.add_sub(Handle::new(sm))
+        mesh.add_sub(Handle::new(SubMesh::from_connectivity(
+            coords.clone(),
+            et,
+            conn,
+        )?))
     };
-    let h: Vec<&[NodeId]> = hexes.iter().map(|c| c.as_slice()).collect();
-    let p: Vec<&[NodeId]> = prisms.iter().map(|c| c.as_slice()).collect();
-    let y: Vec<&[NodeId]> = pyramids.iter().map(|c| c.as_slice()).collect();
-    push(ElementType::HEX8, &h)?;
-    push(ElementType::PENTA6, &p)?;
-    push(ElementType::PYRA5, &y)?;
+    push(ElementType::HEX8, hexes.iter().flatten().copied().collect())?;
+    push(
+        ElementType::PENTA6,
+        prisms.iter().flatten().copied().collect(),
+    )?;
+    push(
+        ElementType::PYRA5,
+        pyramids.iter().flatten().copied().collect(),
+    )?;
     for sub in &core {
         mesh.add_sub(sub.clone())?;
     }
@@ -388,6 +400,7 @@ fn materialize(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::atoms::Node;
     use crate::coords::Coords;
     use std::collections::HashMap;
 

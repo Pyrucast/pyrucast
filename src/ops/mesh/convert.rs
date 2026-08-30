@@ -75,29 +75,31 @@ pub fn convert(mesh: &Mesh, target: ElementType) -> Result<Mesh> {
 
     let mut result = Mesh::empty();
     for sm_h in mesh {
-        let (src, color, conn) = {
+        // The whole target connectivity is laid out under the read guard —
+        // one allocation, no staging copy — then posted in one locked pass
+        // over the `Coords`.
+        let (color, out) = {
             let s = sm_h.read();
-            (s.element_type(), s.face_color(), s.connectivity().to_vec())
+            let src = s.element_type();
+            let conn = s.connectivity();
+            let out: Vec<NodeId> = if src == target {
+                // Identity: the connectivity travels verbatim.
+                conn.to_vec()
+            } else {
+                let splits = split_of(src, target)?;
+                let npc = src.nodes_per_cell();
+                conn.chunks(npc)
+                    .flat_map(|cell| {
+                        splits
+                            .iter()
+                            .flat_map(move |sub| sub.iter().map(|&i| cell[i]))
+                    })
+                    .collect()
+            };
+            (s.face_color(), out)
         };
-        let mut new_sm = SubMesh::new(coords.clone(), target);
+        let mut new_sm = SubMesh::from_connectivity(coords.clone(), target, out)?;
         new_sm.set_face_color(color);
-
-        if src == target {
-            // Identity: copy the connectivity verbatim.
-            let npc = src.nodes_per_cell();
-            for cell in conn.chunks(npc) {
-                new_sm.add_cell(cell)?;
-            }
-        } else {
-            let splits = split_of(src, target)?;
-            let npc = src.nodes_per_cell();
-            for cell in conn.chunks(npc) {
-                for sub in splits {
-                    let nodes: Vec<NodeId> = sub.iter().map(|&i| cell[i]).collect();
-                    new_sm.add_cell(&nodes)?;
-                }
-            }
-        }
         result.add_sub(Handle::new(new_sm))?;
     }
     Ok(result)

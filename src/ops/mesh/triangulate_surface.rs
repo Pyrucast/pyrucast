@@ -31,7 +31,7 @@
 
 use super::contour::{self, Domain, Frame};
 use crate::aggregate::Aggregate;
-use crate::atoms::{ElementType, Node, NodeId, Point2, Vector2};
+use crate::atoms::{ElementType, NodeId, Point2, Vector2};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
@@ -1771,70 +1771,72 @@ fn materialize(
     element_type: ElementType,
     results: Vec<DomainResult>,
 ) -> Result<Mesh> {
-    let mut tri_sub: Option<SubMesh> = None;
-    let mut quad_sub: Option<SubMesh> = None;
-    let mut kept_nodes: Vec<Node> = Vec::new();
+    // The interior points of every domain are created in one locked pass, and
+    // the two connectivities are laid out before that: a mesher's output is
+    // where a node-at-a-time creation costs the most.
+    let mut interior: Vec<f64> = Vec::new();
+    let mut n_interior = 0u32;
+    let mut tri_conn: Vec<NodeId> = Vec::new();
+    let mut quad_conn: Vec<NodeId> = Vec::new();
+    // An interior point is parked as its **rank**, tagged by the high bit, and
+    // resolved once the cloud exists.
+    const RANK: u32 = 1 << 31;
 
     for r in results {
         let mut flat: Vec<NodeId> = r.boundary_node_ids.clone();
         for p in &r.pts[r.n_boundary..] {
-            let coord = frame.to_world(*p, dim);
-            let node = Node::create_in(coords_handle.clone(), &coord)?;
-            flat.push(node.id());
-            kept_nodes.push(node);
+            interior.extend_from_slice(&frame.to_world(*p, dim));
+            flat.push(NodeId(RANK | n_interior));
+            n_interior += 1;
         }
         match element_type {
             ElementType::TRI3 => {
-                let sub = tri_sub
-                    .get_or_insert_with(|| SubMesh::new(coords_handle.clone(), ElementType::TRI3));
                 for t in &r.tris {
-                    sub.add_cell(&[
-                        flat[t[0] as usize],
-                        flat[t[1] as usize],
-                        flat[t[2] as usize],
-                    ])?;
+                    tri_conn.extend(t.iter().map(|&i| flat[i as usize]));
                 }
             }
             ElementType::QUA4 => {
-                let qsub = quad_sub
-                    .get_or_insert_with(|| SubMesh::new(coords_handle.clone(), ElementType::QUA4));
                 for q in &r.quads {
-                    qsub.add_cell(&[
-                        flat[q[0] as usize],
-                        flat[q[1] as usize],
-                        flat[q[2] as usize],
-                        flat[q[3] as usize],
-                    ])?;
+                    quad_conn.extend(q.iter().map(|&i| flat[i as usize]));
                 }
-                if !r.leftover_tris.is_empty() {
-                    let tsub = tri_sub.get_or_insert_with(|| {
-                        SubMesh::new(coords_handle.clone(), ElementType::TRI3)
-                    });
-                    for t in &r.leftover_tris {
-                        tsub.add_cell(&[
-                            flat[t[0] as usize],
-                            flat[t[1] as usize],
-                            flat[t[2] as usize],
-                        ])?;
-                    }
+                for t in &r.leftover_tris {
+                    tri_conn.extend(t.iter().map(|&i| flat[i as usize]));
                 }
             }
             _ => unreachable!(),
         }
     }
 
+    let first = coords_handle.write().add_nodes(&interior)?.start;
+    let resolve = |conn: &mut Vec<NodeId>| {
+        for slot in conn.iter_mut() {
+            if slot.0 & RANK != 0 {
+                *slot = NodeId(first + (slot.0 & !RANK));
+            }
+        }
+    };
+    resolve(&mut tri_conn);
+    resolve(&mut quad_conn);
+
     let mut mesh = Mesh::empty();
-    if let Some(q) = quad_sub
-        && q.cell_count() > 0
-    {
-        mesh.add_sub(Handle::new(q))?;
+    if !quad_conn.is_empty() {
+        mesh.add_sub(Handle::new(SubMesh::from_connectivity(
+            coords_handle.clone(),
+            ElementType::QUA4,
+            quad_conn,
+        )?))?;
     }
-    if let Some(t) = tri_sub
-        && t.cell_count() > 0
-    {
-        mesh.add_sub(Handle::new(t))?;
+    if !tri_conn.is_empty() {
+        mesh.add_sub(Handle::new(SubMesh::from_connectivity(
+            coords_handle.clone(),
+            ElementType::TRI3,
+            tri_conn,
+        )?))?;
     }
-    drop(kept_nodes);
+    // The zones own the interior nodes now; hand back the unit `add_nodes`
+    // gave. A point no cell used cannot exist — they all come from a triangle.
+    let owned: Vec<NodeId> = (first..first + n_interior).map(NodeId).collect();
+    coords_handle.write().decref_all(&owned)?;
     if mesh.is_empty() {
         return Err(PyrucastError::Message(
             "triangulate_surface: produced no cell".into(),
@@ -1848,6 +1850,7 @@ fn materialize(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::atoms::Node;
     use crate::coords::Coords;
     use crate::handle::Handle;
     use std::collections::HashSet;

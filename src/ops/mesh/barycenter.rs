@@ -19,11 +19,11 @@ use crate::handle::Handle;
 /// submesh is a POI1 submesh with one cell per element of the matching input
 /// submesh, holding a **new** node placed at the element's centroid (the
 /// arithmetic mean of its nodes' coordinates). The nodes are minted in the
-/// input mesh's [`Coords`](crate::coords::Coords);
-/// each output POI1 submesh owns the sole initial refcount of the nodes it
-/// mints (handed over via
-/// [`SubMesh::add_cell_taking`](crate::containers::mesh::SubMesh::add_cell_taking)),
-/// so the nodes live exactly as long as the returned mesh. An empty input
+/// input mesh's [`Coords`](crate::coords::Coords), a whole zone at a time
+/// ([`Coords::add_nodes`](crate::coords::Coords::add_nodes)); each output POI1
+/// submesh then ends up holding the **sole** reference to the nodes it mints —
+/// the initial unit is given back once the cloud owns them — so they live
+/// exactly as long as the returned mesh. An empty input
 /// submesh yields an empty POI1 submesh (the count is preserved); `mesh`
 /// itself is left untouched.
 ///
@@ -61,41 +61,33 @@ pub fn barycenter(mesh: &Mesh) -> Result<Mesh> {
         let npc = element_type.nodes_per_cell();
         let n_cells = conn.len() / npc;
 
-        // Compute every centroid under a read lock, then mint the nodes under
-        // a write lock — two separate critical sections (and `add_cell_taking`
-        // takes its own read lock, so it must run after the write lock drops).
-        let centroids: Vec<Vec<f64>> = {
+        // Compute every centroid under a read lock, then mint the whole cloud
+        // under a write lock — two critical sections for a zone, whatever its
+        // cell count.
+        let centroids: Vec<f64> = {
             let c = coords.read();
-            (0..n_cells)
-                .map(|cell| {
-                    let ids = &conn[cell * npc..(cell + 1) * npc];
-                    let dim = c.position(ids[0])?.len();
-                    let mut centroid = vec![0.0; dim];
-                    for &nid in ids {
-                        for (acc, &x) in centroid.iter_mut().zip(c.position(nid)?) {
-                            *acc += x;
-                        }
+            let dim = c.dim() as usize;
+            let mut buf = Vec::with_capacity(n_cells * dim);
+            for cell in 0..n_cells {
+                let ids = &conn[cell * npc..(cell + 1) * npc];
+                let mut centroid = vec![0.0; dim];
+                for &nid in ids {
+                    for (acc, &x) in centroid.iter_mut().zip(c.position(nid)?) {
+                        *acc += x;
                     }
-                    for x in &mut centroid {
-                        *x /= npc as f64;
-                    }
-                    Ok(centroid)
-                })
-                .collect::<Result<_>>()?
+                }
+                buf.extend(centroid.iter().map(|x| x / npc as f64));
+            }
+            buf
         };
 
-        let new_ids: Vec<NodeId> = {
-            let mut c = coords.write();
-            centroids
-                .iter()
-                .map(|coord| c.add_node(coord))
-                .collect::<Result<_>>()?
-        };
-
-        let mut out_sm = SubMesh::new(coords, ElementType::POI1);
-        for nid in &new_ids {
-            out_sm.add_cell_taking(&[*nid])?;
-        }
+        let new_ids = coords.write().add_nodes(&centroids)?;
+        let cloud: Vec<NodeId> = new_ids.clone().map(NodeId).collect();
+        // The id list *is* the cloud's connectivity: handed over, not copied.
+        let out_sm = SubMesh::from_connectivity(coords.clone(), ElementType::POI1, cloud)?;
+        // The cloud owns its nodes now; hand back the unit `add_nodes` gave.
+        let owned: Vec<NodeId> = new_ids.map(NodeId).collect();
+        coords.write().decref_all(&owned)?;
         result.add_sub(Handle::new(out_sm))?;
     }
     Ok(result)

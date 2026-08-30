@@ -1,6 +1,5 @@
 use crate::aggregate::Aggregate;
 use crate::atoms::ElementType;
-use crate::atoms::Node;
 use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
@@ -138,54 +137,60 @@ fn transfinite_qua4(side1: &Mesh, side2: &Mesh, side3: &Mesh, side4: &Mesh) -> R
     let p01 = &side3_coords[n1];
     let p11 = &side3_coords[0];
 
-    let mut grid: Vec<Vec<Node>> = Vec::with_capacity(n1 + 1);
-    for i in 0..=n1 {
-        let mut col: Vec<Node> = Vec::with_capacity(n2 + 1);
-        for j in 0..=n2 {
-            let node = if j == 0 {
-                Node::acquire(coords.clone(), side1_ids[i])?
-            } else if j == n2 {
-                Node::acquire(coords.clone(), side3_ids[n1 - i])?
-            } else if i == 0 {
-                Node::acquire(coords.clone(), side4_ids[n2 - j])?
-            } else if i == n1 {
-                Node::acquire(coords.clone(), side2_ids[j])?
-            } else {
-                let u = i as f64 / n1 as f64;
-                let v = j as f64 / n2 as f64;
-                let c1 = &side1_coords[i];
-                let c3 = &side3_coords[n1 - i];
-                let c4 = &side4_coords[n2 - j];
-                let c2 = &side2_coords[j];
-                let dim = c1.len();
-                let coord: Vec<f64> = (0..dim)
-                    .map(|d| {
-                        (1.0 - v) * c1[d] + v * c3[d] + (1.0 - u) * c4[d] + u * c2[d]
-                            - ((1.0 - u) * (1.0 - v) * p00[d]
-                                + u * (1.0 - v) * p10[d]
-                                + (1.0 - u) * v * p01[d]
-                                + u * v * p11[d])
-                    })
-                    .collect();
-                Node::create_in(coords.clone(), &coord)?
-            };
-            col.push(node);
+    // Only the **interior** of the patch is new — its border is the four
+    // sides' own nodes. The interior is laid out flat, row by row, and created
+    // in one locked pass over the `Coords`.
+    let mut flat: Vec<f64> = Vec::new();
+    for i in 1..n1 {
+        for j in 1..n2 {
+            let u = i as f64 / n1 as f64;
+            let v = j as f64 / n2 as f64;
+            let c1 = &side1_coords[i];
+            let c3 = &side3_coords[n1 - i];
+            let c4 = &side4_coords[n2 - j];
+            let c2 = &side2_coords[j];
+            flat.extend((0..c1.len()).map(|d| {
+                (1.0 - v) * c1[d] + v * c3[d] + (1.0 - u) * c4[d] + u * c2[d]
+                    - ((1.0 - u) * (1.0 - v) * p00[d]
+                        + u * (1.0 - v) * p10[d]
+                        + (1.0 - u) * v * p01[d]
+                        + u * v * p11[d])
+            }));
         }
-        grid.push(col);
     }
+    let first = coords.write().add_nodes(&flat)?.start;
+    let inner_rows = n1.saturating_sub(1);
+    let inner_cols = n2.saturating_sub(1);
+    // Node at grid position (i, j) — the border tests come first, and in this
+    // order, so a corner belongs to the side that owns it.
+    let at = |i: usize, j: usize| -> NodeId {
+        if j == 0 {
+            side1_ids[i]
+        } else if j == n2 {
+            side3_ids[n1 - i]
+        } else if i == 0 {
+            side4_ids[n2 - j]
+        } else if i == n1 {
+            side2_ids[j]
+        } else {
+            NodeId(first + ((i - 1) * inner_cols + (j - 1)) as u32)
+        }
+    };
 
-    let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
+    let mut conn: Vec<NodeId> = Vec::with_capacity(n1 * n2 * 4);
     for i in 0..n1 {
         for j in 0..n2 {
-            mesh.add_cell(&[
-                grid[i][j].id(),
-                grid[i + 1][j].id(),
-                grid[i + 1][j + 1].id(),
-                grid[i][j + 1].id(),
-            ])?;
+            conn.extend_from_slice(&[at(i, j), at(i + 1, j), at(i + 1, j + 1), at(i, j + 1)]);
         }
     }
-    Ok(mesh)
+    let sm = SubMesh::from_connectivity(coords.clone(), ElementType::QUA4, conn)?;
+    // The patch owns the fresh nodes now; hand back the unit `add_nodes`
+    // handed us.
+    let owned: Vec<NodeId> = (first..first + (inner_rows * inner_cols) as u32)
+        .map(NodeId)
+        .collect();
+    coords.write().decref_all(&owned)?;
+    Ok(Mesh::from_submesh(sm))
 }
 
 /// Ordered node ids and coordinates of a single-submesh `SEG2` line mesh,

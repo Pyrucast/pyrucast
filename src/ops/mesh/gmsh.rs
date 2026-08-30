@@ -74,7 +74,7 @@
 //! and the same mesh taken from memory come out identical, cell for cell.
 
 use crate::aggregate::Aggregate;
-use crate::atoms::{ElementType, Node, NodeId};
+use crate::atoms::{ElementType, NodeId};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
@@ -822,12 +822,16 @@ struct GroupBuilder {
     coords: Handle<Coords>,
     /// How many of gmsh's three coordinates to keep, from the `Coords` itself.
     dim: usize,
-    /// gmsh node tag → materialized node. The `Node` is *kept* here so its
-    /// refcount survives until every submesh has taken its own.
-    node_map: HashMap<u64, Node>,
+    /// gmsh node tag → **rank** of the node in creation order. The nodes
+    /// themselves do not exist yet: their coordinates pile up in `positions`
+    /// and the whole cloud is created in one locked pass by `finish`, so an
+    /// import costs one `Coords` write instead of one per node.
+    node_map: HashMap<u64, u32>,
+    /// Coordinates of the nodes to create, rank by rank, flat.
+    positions: Vec<f64>,
     /// Group names in order of first appearance — the order of the result.
     order: Vec<String>,
-    groups: HashMap<String, (Vec<ElementType>, HashMap<ElementType, SubMesh>)>,
+    groups: HashMap<String, (Vec<ElementType>, HashMap<ElementType, Vec<NodeId>>)>,
     /// One cell's connectivity, permuted. Reused across cells so the hot loop
     /// allocates nothing.
     scratch: Vec<NodeId>,
@@ -840,24 +844,27 @@ impl GroupBuilder {
             coords,
             dim,
             node_map: HashMap::new(),
+            positions: Vec::new(),
             order: Vec::new(),
             groups: HashMap::new(),
             scratch: Vec::new(),
         }
     }
 
-    /// Resolve a gmsh node tag to its pyrucast id, materializing the node at
-    /// its **first** appearance. `xyz` is only called then, so a front-end pays
-    /// for its coordinate lookup once per node rather than once per occurrence.
+    /// Resolve a gmsh node tag to the **rank** its node will have, recording
+    /// its coordinates at the tag's **first** appearance. `xyz` is only called
+    /// then, so a front-end pays for its coordinate lookup once per node
+    /// rather than once per occurrence. The rank becomes a real `NodeId` in
+    /// `finish`, once the whole cloud is created at once.
     fn node_of(&mut self, tag: u64, xyz: impl FnOnce() -> Result<[f64; 3]>) -> Result<NodeId> {
-        if let Some(node) = self.node_map.get(&tag) {
-            return Ok(node.id());
+        if let Some(&rank) = self.node_map.get(&tag) {
+            return Ok(NodeId(rank));
         }
         let p = xyz()?;
-        let node = Node::create_in(self.coords.clone(), &p[..self.dim])?;
-        let id = node.id();
-        self.node_map.insert(tag, node);
-        Ok(id)
+        self.positions.extend_from_slice(&p[..self.dim]);
+        let rank = self.node_map.len() as u32;
+        self.node_map.insert(tag, rank);
+        Ok(NodeId(rank))
     }
 
     /// Add one cell to every group it belongs to. `ids` is in **gmsh** order;
@@ -875,7 +882,6 @@ impl GroupBuilder {
         // Disjoint field borrows: `order` is pushed to from inside the closure
         // that `groups`' entry API runs, so the two cannot go through `self`.
         let Self {
-            coords,
             order,
             groups,
             scratch,
@@ -888,26 +894,49 @@ impl GroupBuilder {
             });
             if !entry.1.contains_key(&et) {
                 entry.0.push(et);
-                entry.1.insert(et, SubMesh::new(coords.clone(), et));
+                entry.1.insert(et, Vec::new());
             }
-            entry.1.get_mut(&et).unwrap().add_cell(scratch)?;
+            entry.1.get_mut(&et).unwrap().extend_from_slice(scratch);
         }
         Ok(())
     }
 
     fn finish(self) -> Result<Vec<(String, Mesh)>> {
         let Self {
-            order, mut groups, ..
+            coords,
+            node_map,
+            positions,
+            order,
+            mut groups,
+            ..
         } = self;
+        // The whole cloud in one locked pass; the ranks parked in the
+        // connectivities become ids by a shift.
+        let first = coords.write().add_nodes(&positions)?.start;
         let mut out = Vec::with_capacity(order.len());
         for name in order {
             let (types, mut by_type) = groups.remove(&name).unwrap();
             let mut mesh = Mesh::empty();
             for et in types {
-                mesh.add_sub(Handle::new(by_type.remove(&et).unwrap()))?;
+                // Shifted in place, then handed over: the connectivity is
+                // never copied.
+                let mut conn = by_type.remove(&et).unwrap();
+                for slot in &mut conn {
+                    *slot = NodeId(first + slot.0);
+                }
+                mesh.add_sub(Handle::new(SubMesh::from_connectivity(
+                    coords.clone(),
+                    et,
+                    conn,
+                )?))?;
             }
             out.push((name, mesh));
         }
+        // The groups own the nodes now; hand back the unit `add_nodes` gave.
+        // A node no group referenced cannot exist — every one of them was
+        // created for a cell.
+        let owned: Vec<NodeId> = (first..first + node_map.len() as u32).map(NodeId).collect();
+        coords.write().decref_all(&owned)?;
         Ok(out)
     }
 }

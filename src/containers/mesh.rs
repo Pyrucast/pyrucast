@@ -155,6 +155,10 @@ impl SubMesh {
     /// occupies `connectivity[i*npc..(i+1)*npc]`, so its length must be a
     /// multiple of the element type's node count.
     ///
+    /// The buffer is **moved in, not copied**: an operator lays out the
+    /// connectivity it is going to produce and hands the vector over, so the
+    /// only pass over it is the one that validates and increfs its nodes.
+    ///
     /// The bulk twin of [`add_cell`](SubMesh::add_cell), and the seam every
     /// operator that produces a big mesh should sit on. `add_cell` takes the
     /// `Coords` write lock and drops the derived caches **once per cell**;
@@ -761,11 +765,10 @@ impl SubMesh {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn poi1_from_node_ids(coords: Handle<Coords>, nodes: &[NodeId]) -> Result<SubMesh> {
-        let mut sm = SubMesh::new(coords, ElementType::POI1);
-        for &nid in nodes {
-            sm.add_cell(&[nid])?;
-        }
-        Ok(sm)
+        // One POI1 cell per id, so the id list *is* the connectivity — and it
+        // costs one lock, not one per node: this is the path every model
+        // construction takes through `to_poi1`.
+        SubMesh::from_connectivity(coords, ElementType::POI1, nodes.to_vec())
     }
 
     /// Canonical POI1 node cloud of this submesh — its nodes **de-duplicated in
@@ -806,7 +809,13 @@ impl SubMesh {
         // the caller's read guard on this submesh — a different slot than the
         // POI1 companion and `Coords` — so no lock inversion (same discipline
         // the previous `Handle::new(sm.read().to_poi1()?)` idiom already relied on).
-        let handle = Handle::new(SubMesh::poi1_from_node_ids(self.coords.clone(), &seen)?);
+        // `seen` is **handed over**, not lent: it is already the companion's
+        // connectivity, one POI1 cell per id.
+        let handle = Handle::new(SubMesh::from_connectivity(
+            self.coords.clone(),
+            ElementType::POI1,
+            seen,
+        )?);
         seal(&handle)?;
         // Memoize. On a race the loser drops its build and everyone reads the
         // winner's slot. Mutating `self` later drops this slot, so what is

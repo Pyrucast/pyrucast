@@ -64,22 +64,26 @@ pub fn elements_on(mesh: &Mesh, points: &Mesh, strict: bool) -> Result<Mesh> {
 
     let mut out = Mesh::empty();
     for sm in mesh {
-        let src = sm.read();
-        let et = src.element_type();
-        let npc = et.nodes_per_cell();
-        let conn = src.connectivity();
-        let mut kept = crate::containers::mesh::SubMesh::new(src.coords(), et);
-        kept.set_face_color(src.face_color());
-        for cell in conn.chunks_exact(npc) {
-            let on = if strict {
-                cell.iter().all(|n| allowed.contains(n))
-            } else {
-                cell.iter().any(|n| allowed.contains(n))
-            };
-            if on {
-                kept.add_cell(cell)?;
+        let (coords, et, color, kept) = {
+            let src = sm.read();
+            let et = src.element_type();
+            let npc = et.nodes_per_cell();
+            // The kept cells are gathered whole, then posted in one locked pass.
+            let mut kept: Vec<crate::atoms::NodeId> = Vec::new();
+            for cell in src.connectivity().chunks_exact(npc) {
+                let on = if strict {
+                    cell.iter().all(|n| allowed.contains(n))
+                } else {
+                    cell.iter().any(|n| allowed.contains(n))
+                };
+                if on {
+                    kept.extend_from_slice(cell);
+                }
             }
-        }
+            (src.coords(), et, src.face_color(), kept)
+        };
+        let mut kept = crate::containers::mesh::SubMesh::from_connectivity(coords, et, kept)?;
+        kept.set_face_color(color);
         out.add_sub(Handle::new(kept))?;
     }
     Ok(out)

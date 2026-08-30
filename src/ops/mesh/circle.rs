@@ -1,5 +1,6 @@
 use crate::atoms::ElementType;
 use crate::atoms::Node;
+use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
 
@@ -87,17 +88,24 @@ pub fn circle(
         center_coords.get(1).copied().unwrap_or(0.0),
         center_coords.get(2).copied().unwrap_or(0.0),
     );
-    let mut nodes: Vec<Node> = Vec::with_capacity(n_elems);
+    // Every node of the ring in one locked pass, then the ring itself.
+    let mut flat: Vec<f64> = Vec::with_capacity(n_elems * dim);
     for i in 0..n_elems {
         let theta = 2.0 * PI * i as f64 / n_elems as f64;
         let p3 = centre + radius * (theta.cos() * u + theta.sin() * v);
-        nodes.push(Node::create_in(coords.clone(), &p3.as_slice()[..dim])?);
+        flat.extend_from_slice(&p3.as_slice()[..dim]);
     }
+    let first = coords.write().add_nodes(&flat)?.start;
+    let at = |i: usize| NodeId(first + i as u32);
 
-    let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
-    for i in 0..n_elems {
-        mesh.add_cell(&[nodes[i].id(), nodes[(i + 1) % n_elems].id()])?;
-    }
+    let conn: Vec<NodeId> = (0..n_elems)
+        .flat_map(|i| [at(i), at((i + 1) % n_elems)])
+        .collect();
+    let sm = SubMesh::from_connectivity(coords.clone(), ElementType::SEG2, conn)?;
+    // The ring owns its nodes now; hand back the unit `add_nodes` gave.
+    let owned: Vec<NodeId> = (first..first + n_elems as u32).map(NodeId).collect();
+    coords.write().decref_all(&owned)?;
+    let mut mesh = Mesh::from_submesh(sm);
 
     if element_type == ElementType::SEG3 {
         mesh = super::to_quadratic(&mesh)?;

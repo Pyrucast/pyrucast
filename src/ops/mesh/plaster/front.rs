@@ -18,7 +18,7 @@
 //!   guard, so a step forced short by a neighbour is not left as a kink.
 
 use super::shell::{Facet, Shell};
-use crate::atoms::{Node, NodeId, Point3, Vector3};
+use crate::atoms::{NodeId, Point3, Vector3};
 use crate::coords::Coords;
 use crate::error::Result;
 use crate::handle::Handle;
@@ -26,24 +26,49 @@ use std::collections::HashMap;
 
 /// Every node and cell the mesher has produced, on flat arrays.
 pub struct Fabric {
-    /// Store identity of each node, `None` until it is created.
+    /// Store identity of each node. A node the mesher grew has **no identity
+    /// yet** while the front advances: it gets one from
+    /// [`Fabric::materialize_nodes`], once its final position is known.
     pub ids: Vec<NodeId>,
     pub pts: Vec<Point3>,
-    /// `false` for a node of the caller's envelope, which never moves.
+    /// `false` for a node of the caller's envelope, which never moves — and
+    /// which therefore already has its identity.
     pub movable: Vec<bool>,
     pub hexes: Vec<[u32; 8]>,
     pub prisms: Vec<[u32; 6]>,
-    kept: Vec<Node>,
 }
 
 impl Fabric {
-    fn add(&mut self, p: Point3, coords: &Handle<Coords>) -> Result<u32> {
-        let node = Node::create_in(coords.clone(), &[p.x, p.y, p.z])?;
-        self.ids.push(node.id());
-        self.kept.push(node);
+    /// Record a node the mesher grew. No `Coords` is touched: the front moves
+    /// its points around for as long as it advances, and a node created here
+    /// would only have to be written again.
+    fn add(&mut self, p: Point3) -> u32 {
+        self.ids.push(NodeId(u32::MAX));
         self.pts.push(p);
         self.movable.push(true);
-        Ok((self.pts.len() - 1) as u32)
+        (self.pts.len() - 1) as u32
+    }
+
+    /// Create, in **one** locked pass, every node the mesher grew, at the
+    /// position it has now — the front is done moving them. Returns the
+    /// contiguous range of the new ids; each holds the one unit `add_nodes`
+    /// gives, which the caller owes back once the cells own them.
+    pub fn materialize_nodes(&mut self, coords: &Handle<Coords>) -> Result<std::ops::Range<u32>> {
+        let mut flat: Vec<f64> = Vec::new();
+        for (i, p) in self.pts.iter().enumerate() {
+            if self.movable[i] {
+                flat.extend_from_slice(&[p.x, p.y, p.z]);
+            }
+        }
+        let range = coords.write().add_nodes(&flat)?;
+        let mut next = range.start;
+        for (i, id) in self.ids.iter_mut().enumerate() {
+            if self.movable[i] {
+                *id = NodeId(next);
+                next += 1;
+            }
+        }
+        Ok(range)
     }
 }
 
@@ -52,7 +77,6 @@ pub struct Front {
     pub fab: Fabric,
     /// Facets of the current front, indexing [`Fabric::pts`].
     pub facets: Vec<Facet>,
-    coords: Handle<Coords>,
 }
 
 /// Fraction of the local room a layer may take. Half lets two fronts
@@ -74,7 +98,7 @@ const FACING: f64 = 0.5;
 
 impl Front {
     /// Start a front from a closed envelope.
-    pub fn new(shell: Shell, coords: Handle<Coords>) -> Front {
+    pub fn new(shell: Shell) -> Front {
         let n = shell.points.len();
         Front {
             fab: Fabric {
@@ -83,10 +107,8 @@ impl Front {
                 movable: vec![false; n],
                 hexes: Vec::new(),
                 prisms: Vec::new(),
-                kept: Vec::new(),
             },
             facets: shell.facets,
-            coords,
         }
     }
 
@@ -332,7 +354,7 @@ impl Front {
         let mut keys: Vec<u32> = fresh.keys().copied().collect();
         keys.sort_unstable();
         for v in keys {
-            let id = self.fab.add(moved[at[&v]], &self.coords)?;
+            let id = self.fab.add(moved[at[&v]]);
             fresh.insert(v, id);
         }
 
@@ -785,6 +807,7 @@ impl PointGrid {
 mod tests {
     use super::*;
     use crate::atoms::ElementType;
+    use crate::atoms::Node;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
     use crate::handle::Handle;
@@ -814,7 +837,7 @@ mod tests {
             sm.add_cell(&[n[f[0]], n[f[1]], n[f[2]], n[f[3]]]).unwrap();
         }
         let shell = Shell::extract(&Mesh::from_submesh(sm), "test").unwrap();
-        Front::new(shell, coords)
+        Front::new(shell)
     }
 
     #[test]
@@ -857,7 +880,7 @@ mod tests {
             sm.add_cell(&[n[f[0]], n[f[1]], n[f[2]]]).unwrap();
         }
         let shell = Shell::extract(&Mesh::from_submesh(sm), "test").unwrap();
-        let front = Front::new(shell, coords);
+        let front = Front::new(shell);
         let ring = front.ring();
         let at: HashMap<u32, usize> = ring.iter().enumerate().map(|(i, &v)| (v, i)).collect();
         let d = front.unit_offsets(&ring);
@@ -955,7 +978,7 @@ mod tests {
             );
         }
         let shell = Shell::extract(&Mesh::from_submesh(sm), "test").unwrap();
-        Front::new(shell, coords)
+        Front::new(shell)
     }
 
     #[test]

@@ -1,5 +1,6 @@
 use crate::atoms::ElementType;
 use crate::atoms::Node;
+use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
 
@@ -111,20 +112,34 @@ pub fn arc(
         .clamp(-1.0, 1.0)
         .acos();
 
-    let mut nodes: Vec<Node> = Vec::with_capacity(n_elems + 1);
-    nodes.push(Node::acquire(coords.clone(), node_a.id())?);
+    // The two ends are the caller's own nodes; the intermediate ones are laid
+    // out flat and created in one locked pass.
+    let mut flat: Vec<f64> = Vec::new();
     for i in 1..n_elems {
         let t = i as f64 / n_elems as f64;
         let phi = t * theta;
         let p3 = centre + radius_a * (phi.cos() * u + phi.sin() * v);
-        nodes.push(Node::create_in(coords.clone(), &p3.as_slice()[..dim])?);
+        flat.extend_from_slice(&p3.as_slice()[..dim]);
     }
-    nodes.push(Node::acquire(coords.clone(), node_b.id())?);
+    let first = coords.write().add_nodes(&flat)?.start;
+    let at = |i: usize| -> NodeId {
+        if i == 0 {
+            node_a.id()
+        } else if i == n_elems {
+            node_b.id()
+        } else {
+            NodeId(first + (i - 1) as u32)
+        }
+    };
 
-    let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
-    for i in 0..n_elems {
-        mesh.add_cell(&[nodes[i].id(), nodes[i + 1].id()])?;
-    }
+    let conn: Vec<NodeId> = (0..n_elems).flat_map(|i| [at(i), at(i + 1)]).collect();
+    let sm = SubMesh::from_connectivity(coords.clone(), ElementType::SEG2, conn)?;
+    // The arc owns the fresh nodes now; hand back the unit `add_nodes` gave.
+    let owned: Vec<NodeId> = (first..first + n_elems.saturating_sub(1) as u32)
+        .map(NodeId)
+        .collect();
+    coords.write().decref_all(&owned)?;
+    let mut mesh = Mesh::from_submesh(sm);
 
     if element_type == ElementType::SEG3 {
         mesh = super::to_quadratic(&mesh)?;

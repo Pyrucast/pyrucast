@@ -1,5 +1,6 @@
 use crate::atoms::ElementType;
 use crate::atoms::Node;
+use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
 
@@ -55,24 +56,37 @@ pub fn line(a: &Node, b: &Node, n_elems: usize, element_type: ElementType) -> Re
         ));
     }
 
-    // n_elems+1 nodes: a, n_elems-1 intermediate, b.
-    let mut nodes: Vec<Node> = Vec::with_capacity(n_elems + 1);
-    nodes.push(Node::acquire(coords.clone(), a.id())?);
+    // n_elems+1 nodes: a, n_elems-1 intermediate, b. The intermediate ones
+    // are laid out flat and created in one locked pass.
+    let mut flat: Vec<f64> = Vec::new();
     for i in 1..n_elems {
         let t = i as f64 / n_elems as f64;
-        let coord: Vec<f64> = coords_a
-            .iter()
-            .zip(coords_b.iter())
-            .map(|(&ca, &cb)| ca + t * (cb - ca))
-            .collect();
-        nodes.push(Node::create_in(coords.clone(), &coord)?);
+        flat.extend(
+            coords_a
+                .iter()
+                .zip(coords_b.iter())
+                .map(|(&ca, &cb)| ca + t * (cb - ca)),
+        );
     }
-    nodes.push(Node::acquire(coords.clone(), b.id())?);
+    let first = coords.write().add_nodes(&flat)?.start;
+    let at = |i: usize| -> NodeId {
+        if i == 0 {
+            a.id()
+        } else if i == n_elems {
+            b.id()
+        } else {
+            NodeId(first + (i - 1) as u32)
+        }
+    };
 
-    let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
-    for i in 0..n_elems {
-        mesh.add_cell(&[nodes[i].id(), nodes[i + 1].id()])?;
-    }
+    let conn: Vec<NodeId> = (0..n_elems).flat_map(|i| [at(i), at(i + 1)]).collect();
+    let sm = SubMesh::from_connectivity(coords.clone(), ElementType::SEG2, conn)?;
+    // The line owns the fresh nodes now; hand back the unit `add_nodes` gave.
+    let owned: Vec<NodeId> = (first..first + n_elems.saturating_sub(1) as u32)
+        .map(NodeId)
+        .collect();
+    coords.write().decref_all(&owned)?;
+    let mut mesh = Mesh::from_submesh(sm);
 
     if element_type == ElementType::SEG3 {
         mesh = super::to_quadratic(&mesh)?;

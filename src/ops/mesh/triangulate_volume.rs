@@ -137,7 +137,7 @@
 //! never mistaken for a flat one.
 
 use crate::aggregate::Aggregate;
-use crate::atoms::{ElementType, Node, NodeId};
+use crate::atoms::{ElementType, NodeId};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::{Cancel, NoCancel};
@@ -577,27 +577,35 @@ fn materialize(
     let given = env.given_node_count();
     let mut ids: Vec<NodeId> = env.node_ids().to_vec();
     ids.resize(points.len(), NodeId(u32::MAX));
-    let mut kept: Vec<Node> = Vec::new();
+    // The Steiner points a cell actually uses, in first-use order, created in
+    // one locked pass: a tetrahedralization emits far too many nodes to pay a
+    // write lock each.
+    let mut fresh: Vec<f64> = Vec::new();
+    let mut ranks: Vec<u32> = Vec::new();
     for v in cells {
         for &i in v {
             if (i as usize) < given || ids[i as usize] != NodeId(u32::MAX) {
                 continue;
             }
-            let node = Node::create_in(coords.clone(), &points[i as usize])?;
-            ids[i as usize] = node.id();
-            kept.push(node);
+            fresh.extend_from_slice(&points[i as usize]);
+            // Parked as a rank, resolved just below.
+            ids[i as usize] = NodeId(ranks.len() as u32);
+            ranks.push(i);
         }
     }
-
-    let mut sub = SubMesh::new(coords.clone(), ElementType::TET4);
-    for v in cells {
-        sub.add_cell(&[
-            ids[v[0] as usize],
-            ids[v[1] as usize],
-            ids[v[2] as usize],
-            ids[v[3] as usize],
-        ])?;
+    let first = coords.write().add_nodes(&fresh)?.start;
+    for &i in &ranks {
+        ids[i as usize] = NodeId(first + ids[i as usize].0);
     }
+
+    let conn: Vec<NodeId> = cells
+        .iter()
+        .flat_map(|v| v.iter().map(|&i| ids[i as usize]))
+        .collect();
+    let sub = SubMesh::from_connectivity(coords.clone(), ElementType::TET4, conn)?;
+    // The mesh owns the fresh nodes now; hand back the unit `add_nodes` gave.
+    let owned: Vec<NodeId> = (first..first + ranks.len() as u32).map(NodeId).collect();
+    coords.write().decref_all(&owned)?;
     let mut out = Mesh::from_submesh(sub);
 
     if !added.is_empty() {
@@ -608,13 +616,13 @@ fn materialize(
             coords, &marks,
         )?))?;
     }
-    drop(kept);
     Ok(out)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::atoms::Node;
     use crate::coords::Coords;
     use crate::handle::Handle;
 

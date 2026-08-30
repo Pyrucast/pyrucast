@@ -58,23 +58,27 @@ pub fn consolidate(mesh: &Mesh) -> Result<Mesh> {
             .transpose()?
             .unwrap_or_default();
 
-        let mut new_sm = SubMesh::new(coords.clone(), et);
-        new_sm.set_face_color(first_color);
-
+        // The surviving cells are gathered whole, then posted in one locked
+        // pass over the `Coords`.
+        let mut kept: Vec<NodeId> = Vec::new();
         let mut seen: HashSet<Vec<NodeId>> = HashSet::new();
         for sm_handle in mesh {
             let sm_et = sm_handle.read().element_type();
             if sm_et != et {
                 continue;
             }
-            let conn = sm_handle.read().connectivity().to_vec();
-            for chunk in conn.chunks(npc) {
+            // Read under the guard: a staging copy here would be paid once
+            // per (zone, element type) pair.
+            let s = sm_handle.read();
+            for chunk in s.connectivity().chunks(npc) {
                 if seen.insert(chunk.to_vec()) {
-                    new_sm.add_cell(chunk)?;
+                    kept.extend_from_slice(chunk);
                 }
             }
         }
 
+        let mut new_sm = SubMesh::from_connectivity(coords.clone(), et, kept)?;
+        new_sm.set_face_color(first_color);
         result.add_sub(Handle::new(new_sm))?;
     }
 

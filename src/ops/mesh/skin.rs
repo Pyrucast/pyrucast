@@ -302,11 +302,17 @@ fn emit_submesh(
     if facets.is_empty() {
         return Ok(());
     }
-    let mut sub = SubMesh::new(coords.clone(), et);
-    for facet in facets {
-        sub.add_cell(&facet.nodes)?;
-    }
-    result.add_sub(Handle::new(sub))?;
+    // One locked pass over the `Coords` for the whole boundary, not one per
+    // facet: a skin has as many cells as the solid has boundary faces.
+    let conn: Vec<crate::atoms::NodeId> = facets
+        .iter()
+        .flat_map(|f| f.nodes.iter().copied())
+        .collect();
+    result.add_sub(Handle::new(SubMesh::from_connectivity(
+        coords.clone(),
+        et,
+        conn,
+    )?))?;
     Ok(())
 }
 

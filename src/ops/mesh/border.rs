@@ -223,20 +223,18 @@ pub fn border(mesh: &Mesh, angle_deg: Option<f64>) -> Result<Mesh> {
 /// Append a **closed** SEG2 loop (segments wrap from the last node back to the
 /// first) as one submesh of `result`.
 fn emit_closed(result: &mut Mesh, coords: &Handle<Coords>, chain: &[NodeId]) -> Result<()> {
-    let mut sub = SubMesh::new(coords.clone(), ElementType::SEG2);
     let n = chain.len();
-    for i in 0..n {
-        sub.add_cell(&[chain[i], chain[(i + 1) % n]])?;
-    }
+    let conn: Vec<NodeId> = (0..n)
+        .flat_map(|i| [chain[i], chain[(i + 1) % n]])
+        .collect();
+    let sub = SubMesh::from_connectivity(coords.clone(), ElementType::SEG2, conn)?;
     result.add_sub(Handle::new(sub))
 }
 
 /// Append an **open** SEG2 polyline (an arête: no wrap-around) as one submesh.
 fn emit_open(result: &mut Mesh, coords: &Handle<Coords>, arc: &[NodeId]) -> Result<()> {
-    let mut sub = SubMesh::new(coords.clone(), ElementType::SEG2);
-    for pair in arc.windows(2) {
-        sub.add_cell(pair)?;
-    }
+    let conn: Vec<NodeId> = arc.windows(2).flatten().copied().collect();
+    let sub = SubMesh::from_connectivity(coords.clone(), ElementType::SEG2, conn)?;
     result.add_sub(Handle::new(sub))
 }
 

@@ -248,15 +248,26 @@ impl Surface {
     /// do — `cleanup` relaxes a handful of rings and leaves the rest of the
     /// mesh exactly where it found it.
     pub(crate) fn to_mesh(&self, op: &str) -> Result<Mesh> {
+        // The nodes a pass actually moved, created in one locked pass.
         let mut ids = self.ids.clone();
-        for (i, id) in ids.iter_mut().enumerate() {
+        let mut moved: Vec<usize> = Vec::new();
+        let mut flat: Vec<f64> = Vec::new();
+        for i in 0..ids.len() {
             if !self.movable[i] || self.pts[i] == self.pts0[i] {
                 continue;
             }
-            let node = Node::create_in(self.coords.clone(), &[self.pts[i].x, self.pts[i].y])?;
-            *id = node.id();
+            flat.extend_from_slice(&[self.pts[i].x, self.pts[i].y]);
+            moved.push(i);
         }
-        self.emit(&ids, op)
+        let first = self.coords.write().add_nodes(&flat)?.start;
+        for (rank, &i) in moved.iter().enumerate() {
+            ids[i] = NodeId(first + rank as u32);
+        }
+        let mesh = self.emit(&ids, op)?;
+        // The relaxed mesh owns them now; hand back the unit `add_nodes` gave.
+        let owned: Vec<NodeId> = (first..first + moved.len() as u32).map(NodeId).collect();
+        self.coords.write().decref_all(&owned)?;
+        Ok(mesh)
     }
 
     /// Build a fresh mesh over the caller's own nodes — for the passes that
@@ -269,26 +280,40 @@ impl Surface {
     fn emit(&self, ids: &[NodeId], op: &str) -> Result<Mesh> {
         let mut mesh = Mesh::empty();
         if !self.quads.is_empty() {
-            let mut sub = SubMesh::new(self.coords.clone(), ElementType::QUA4);
-            for q in &self.quads {
-                let mut c = q.map(|v| ids[v as usize]);
-                if self.clockwise {
-                    c.reverse();
-                }
-                sub.add_cell(&c)?;
-            }
-            mesh.add_sub(Handle::new(sub))?;
+            let conn: Vec<NodeId> = self
+                .quads
+                .iter()
+                .flat_map(|q| {
+                    let mut c = q.map(|v| ids[v as usize]);
+                    if self.clockwise {
+                        c.reverse();
+                    }
+                    c
+                })
+                .collect();
+            mesh.add_sub(Handle::new(SubMesh::from_connectivity(
+                self.coords.clone(),
+                ElementType::QUA4,
+                conn,
+            )?))?;
         }
         if !self.tris.is_empty() {
-            let mut sub = SubMesh::new(self.coords.clone(), ElementType::TRI3);
-            for t in &self.tris {
-                let mut c = t.map(|v| ids[v as usize]);
-                if self.clockwise {
-                    c.reverse();
-                }
-                sub.add_cell(&c)?;
-            }
-            mesh.add_sub(Handle::new(sub))?;
+            let conn: Vec<NodeId> = self
+                .tris
+                .iter()
+                .flat_map(|t| {
+                    let mut c = t.map(|v| ids[v as usize]);
+                    if self.clockwise {
+                        c.reverse();
+                    }
+                    c
+                })
+                .collect();
+            mesh.add_sub(Handle::new(SubMesh::from_connectivity(
+                self.coords.clone(),
+                ElementType::TRI3,
+                conn,
+            )?))?;
         }
         if mesh.is_empty() {
             return Err(PyrucastError::Message(format!("{op}: produced no cell")));

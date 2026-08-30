@@ -12,7 +12,6 @@
 
 use crate::aggregate::Aggregate;
 use crate::atoms::ElementType;
-use crate::atoms::Node;
 use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
@@ -97,49 +96,49 @@ pub fn qua4_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Mes
         .map(|&id| -> Result<Vec<f64>> { Ok(coords.read().position(id)?.to_vec()) })
         .collect::<Result<_>>()?;
 
-    // layers[k][j] = Node at layer k, column j.
-    // Layer 0 = re-acquired mesh_a nodes; layer n_layers = re-acquired mesh_b nodes.
-    let mut layers: Vec<Vec<Node>> = Vec::with_capacity(n_layers + 1);
-
-    layers.push(
-        col_ids_a
-            .iter()
-            .map(|&id| Node::acquire(coords.clone(), id))
-            .collect::<Result<Vec<_>>>()?,
-    );
+    // The intermediate layers — layer 0 is `mesh_a`'s own nodes and layer
+    // `n_layers` is `mesh_b`'s — laid out flat and created in one locked pass:
+    // interpolating a million nodes must not mean a million write locks.
+    let inner = n_layers.saturating_sub(1);
+    let dim = coords.read().dim() as usize;
+    let mut flat: Vec<f64> = Vec::with_capacity(inner * n_cols * dim);
     for k in 1..n_layers {
         let t = k as f64 / n_layers as f64;
-        let layer: Vec<Node> = (0..n_cols)
-            .map(|j| {
-                let coord: Vec<f64> = coords_a[j]
+        for j in 0..n_cols {
+            flat.extend(
+                coords_a[j]
                     .iter()
                     .zip(coords_b[j].iter())
-                    .map(|(&ca, &cb)| ca + t * (cb - ca))
-                    .collect();
-                Node::create_in(coords.clone(), &coord)
-            })
-            .collect::<Result<_>>()?;
-        layers.push(layer);
-    }
-    layers.push(
-        col_ids_b
-            .iter()
-            .map(|&id| Node::acquire(coords.clone(), id))
-            .collect::<Result<Vec<_>>>()?,
-    );
-
-    let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
-    for k in 0..n_layers {
-        for j in 0..n_elems {
-            mesh.add_cell(&[
-                layers[k][j].id(),
-                layers[k][j + 1].id(),
-                layers[k + 1][j + 1].id(),
-                layers[k + 1][j].id(),
-            ])?;
+                    .map(|(&ca, &cb)| ca + t * (cb - ca)),
+            );
         }
     }
-    Ok(mesh)
+    let first = coords.write().add_nodes(&flat)?.start;
+    // Node at layer k, column j.
+    let at = |k: usize, j: usize| -> NodeId {
+        if k == 0 {
+            col_ids_a[j]
+        } else if k == n_layers {
+            col_ids_b[j]
+        } else {
+            NodeId(first + ((k - 1) * n_cols + j) as u32)
+        }
+    };
+
+    let mut conn: Vec<NodeId> = Vec::with_capacity(n_layers * n_elems * 4);
+    for k in 0..n_layers {
+        for j in 0..n_elems {
+            conn.extend_from_slice(&[at(k, j), at(k, j + 1), at(k + 1, j + 1), at(k + 1, j)]);
+        }
+    }
+    let sm = SubMesh::from_connectivity(coords.clone(), ElementType::QUA4, conn)?;
+    // The connectivity owns the fresh nodes now; hand back the unit
+    // `add_nodes` handed us.
+    let owned: Vec<NodeId> = (first..first + (inner * n_cols) as u32)
+        .map(NodeId)
+        .collect();
+    coords.write().decref_all(&owned)?;
+    Ok(Mesh::from_submesh(sm))
 }
 
 // ---------------------------------------------------------------------------
@@ -219,29 +218,26 @@ fn layered(
     let coords = mesh.coords()?;
     let n_cols = cols.ids.len();
 
-    // layers[k][col] = Node at layer k, column col.
-    let mut layers: Vec<Vec<Node>> = Vec::with_capacity(n_layers + 1);
-    layers.push(
-        cols.ids
-            .iter()
-            .map(|&id| Node::acquire(coords.clone(), id))
-            .collect::<Result<Vec<_>>>()?,
-    );
+    // Layer 0 is the source's own nodes; layers 1..=last_created are new, and
+    // a closed sweep comes back onto layer 0 instead of a duplicate. They are
+    // laid out flat and created in one locked pass — a swept solid is where a
+    // node-at-a-time creation costs the most.
     let last_created = if closed { n_layers - 1 } else { n_layers };
+    let mut flat: Vec<f64> = Vec::new();
     for k in 1..=last_created {
-        let layer: Vec<Node> = (0..n_cols)
-            .map(|c| Node::create_in(coords.clone(), &place(&cols.positions[c], k)))
-            .collect::<Result<_>>()?;
-        layers.push(layer);
+        for c in 0..n_cols {
+            flat.extend_from_slice(&place(&cols.positions[c], k));
+        }
     }
-    if closed {
-        layers.push(
-            cols.ids
-                .iter()
-                .map(|&id| Node::acquire(coords.clone(), id))
-                .collect::<Result<Vec<_>>>()?,
-        );
-    }
+    let first = coords.write().add_nodes(&flat)?.start;
+    // Node at layer k, column col.
+    let at = |k: usize, col: usize| -> NodeId {
+        if k == 0 || (closed && k == n_layers) {
+            cols.ids[col]
+        } else {
+            NodeId(first + ((k - 1) * n_cols + col) as u32)
+        }
+    };
 
     let mut result = Mesh::empty();
     for sm_handle in mesh {
@@ -269,36 +265,51 @@ fn layered(
             )));
         }
 
-        let mut sm_out = SubMesh::new(coords.clone(), swept_et);
+        let mut out: Vec<NodeId> =
+            Vec::with_capacity(n_layers * n_cells * swept_et.nodes_per_cell());
         for k in 0..n_layers {
             for ci in 0..n_cells {
                 let cell = &conn[ci * npc..(ci + 1) * npc];
-                let bot: Vec<NodeId> = cell.iter().map(|&id| layers[k][cols.of(id)].id()).collect();
-                let top: Vec<NodeId> = cell
-                    .iter()
-                    .map(|&id| layers[k + 1][cols.of(id)].id())
-                    .collect();
+                let bot = |i: usize| at(k, cols.of(cell[i]));
+                let top = |i: usize| at(k + 1, cols.of(cell[i]));
 
                 match et {
                     ElementType::SEG2 => {
-                        sm_out.add_cell(&[bot[0], bot[1], top[1], top[0]])?;
+                        out.extend_from_slice(&[bot(0), bot(1), top(1), top(0)]);
                     }
                     ElementType::TRI3 => {
-                        sm_out.add_cell(&[bot[0], bot[1], bot[2], top[0], top[1], top[2]])?;
+                        out.extend_from_slice(&[bot(0), bot(1), bot(2), top(0), top(1), top(2)]);
                     }
                     ElementType::QUA4 => {
-                        sm_out.add_cell(&[
-                            bot[0], bot[1], bot[2], bot[3], top[0], top[1], top[2], top[3],
-                        ])?;
+                        out.extend_from_slice(&[
+                            bot(0),
+                            bot(1),
+                            bot(2),
+                            bot(3),
+                            top(0),
+                            top(1),
+                            top(2),
+                            top(3),
+                        ]);
                     }
                     _ => unreachable!(),
                 }
             }
         }
 
-        result.add_sub(Handle::new(sm_out))?;
+        result.add_sub(Handle::new(SubMesh::from_connectivity(
+            coords.clone(),
+            swept_et,
+            out,
+        )?))?;
     }
 
+    // The swept zones own the fresh nodes now; hand back the unit `add_nodes`
+    // handed us.
+    let owned: Vec<NodeId> = (first..first + (last_created * n_cols) as u32)
+        .map(NodeId)
+        .collect();
+    coords.write().decref_all(&owned)?;
     Ok(result)
 }
 
@@ -603,56 +614,67 @@ pub fn solid_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Me
         .map(|&id| -> Result<Vec<f64>> { Ok(coords.read().position(id)?.to_vec()) })
         .collect::<Result<_>>()?;
 
-    // layers[k][col]: layer 0 re-acquires mesh_a nodes, layer n_layers
-    // re-acquires mesh_b nodes, intermediate layers are interpolated.
-    let mut layers: Vec<Vec<Node>> = Vec::with_capacity(n_layers + 1);
-    layers.push(
-        cols_a
-            .iter()
-            .map(|&id| Node::acquire(coords.clone(), id))
-            .collect::<Result<Vec<_>>>()?,
-    );
+    // Layer 0 is `mesh_a`'s own nodes and layer `n_layers` is `mesh_b`'s; the
+    // interpolated layers in between are laid out flat and created in one
+    // locked pass.
+    let inner = n_layers.saturating_sub(1);
+    let mut flat: Vec<f64> = Vec::new();
     for k in 1..n_layers {
         let t = k as f64 / n_layers as f64;
-        let layer: Vec<Node> = (0..n_cols)
-            .map(|c| {
-                let coord: Vec<f64> = base_a[c]
+        for c in 0..n_cols {
+            flat.extend(
+                base_a[c]
                     .iter()
                     .zip(base_b[c].iter())
-                    .map(|(&ca, &cb)| ca + t * (cb - ca))
-                    .collect();
-                Node::create_in(coords.clone(), &coord)
-            })
-            .collect::<Result<_>>()?;
-        layers.push(layer);
+                    .map(|(&ca, &cb)| ca + t * (cb - ca)),
+            );
+        }
     }
-    layers.push(
-        cols_b
-            .iter()
-            .map(|&id| Node::acquire(coords.clone(), id))
-            .collect::<Result<Vec<_>>>()?,
-    );
+    let first = coords.write().add_nodes(&flat)?.start;
+    // Node at layer k, column col.
+    let at = |k: usize, c: usize| -> NodeId {
+        if k == 0 {
+            cols_a[c]
+        } else if k == n_layers {
+            cols_b[c]
+        } else {
+            NodeId(first + ((k - 1) * n_cols + c) as u32)
+        }
+    };
 
     let col = |id: NodeId| *col_map.get(&id).unwrap();
-    let mut sm_out = SubMesh::new(coords, solid_et);
+    let mut out: Vec<NodeId> = Vec::with_capacity(n_layers * n_cells * solid_et.nodes_per_cell());
     for k in 0..n_layers {
         for ci in 0..n_cells {
             let cell = &conn_a[ci * npc..(ci + 1) * npc];
-            let bot: Vec<NodeId> = cell.iter().map(|&id| layers[k][col(id)].id()).collect();
-            let top: Vec<NodeId> = cell.iter().map(|&id| layers[k + 1][col(id)].id()).collect();
+            let bot = |i: usize| at(k, col(cell[i]));
+            let top = |i: usize| at(k + 1, col(cell[i]));
             match et_a {
                 ElementType::TRI3 => {
-                    sm_out.add_cell(&[bot[0], bot[1], bot[2], top[0], top[1], top[2]])?;
+                    out.extend_from_slice(&[bot(0), bot(1), bot(2), top(0), top(1), top(2)]);
                 }
                 ElementType::QUA4 => {
-                    sm_out.add_cell(&[
-                        bot[0], bot[1], bot[2], bot[3], top[0], top[1], top[2], top[3],
-                    ])?;
+                    out.extend_from_slice(&[
+                        bot(0),
+                        bot(1),
+                        bot(2),
+                        bot(3),
+                        top(0),
+                        top(1),
+                        top(2),
+                        top(3),
+                    ]);
                 }
                 _ => unreachable!(),
             }
         }
     }
-
+    let sm_out = SubMesh::from_connectivity(coords.clone(), solid_et, out)?;
+    // The solid owns the fresh nodes now; hand back the unit `add_nodes`
+    // handed us.
+    let owned: Vec<NodeId> = (first..first + (inner * n_cols) as u32)
+        .map(NodeId)
+        .collect();
+    coords.write().decref_all(&owned)?;
     Ok(Mesh::from_submesh(sm_out))
 }

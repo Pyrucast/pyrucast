@@ -97,18 +97,23 @@ pub fn invert(mesh: &Mesh) -> Result<Mesh> {
     let coords = mesh.coords()?;
     let mut result = Mesh::empty();
     for sm_handle in mesh {
-        let (et, color, conn) = {
+        // Read once, write once: the reordered connectivity is built straight
+        // off the submesh's own, with no staging copy in between, then posted
+        // in one locked pass over the `Coords`.
+        let (et, color, reordered) = {
             let s = sm_handle.read();
-            (s.element_type(), s.face_color(), s.connectivity().to_vec())
+            let et = s.element_type();
+            let perm = et.reversal_permutation();
+            let npc = et.nodes_per_cell();
+            let reordered: Vec<NodeId> = s
+                .connectivity()
+                .chunks(npc)
+                .flat_map(|chunk| perm.iter().map(|&i| chunk[i]))
+                .collect();
+            (et, s.face_color(), reordered)
         };
-        let perm = et.reversal_permutation();
-        let npc = et.nodes_per_cell();
-        let mut new_sm = SubMesh::new(coords.clone(), et);
+        let mut new_sm = SubMesh::from_connectivity(coords.clone(), et, reordered)?;
         new_sm.set_face_color(color);
-        for chunk in conn.chunks(npc) {
-            let reordered: Vec<NodeId> = perm.iter().map(|&i| chunk[i]).collect();
-            new_sm.add_cell(&reordered)?;
-        }
         result.add_sub(Handle::new(new_sm))?;
     }
     Ok(result)
@@ -240,23 +245,27 @@ pub fn orient(mesh: &Mesh) -> Result<Mesh> {
     let mut result = Mesh::empty();
     let mut gid = 0usize;
     for sm_handle in mesh {
-        let (et, color, conn) = {
+        // Same as `invert`, cell by cell and with no staging copy: built off
+        // the submesh's own connectivity, posted in one locked pass.
+        let (et, color, oriented) = {
             let s = sm_handle.read();
-            (s.element_type(), s.face_color(), s.connectivity().to_vec())
+            let et = s.element_type();
+            let perm = et.reversal_permutation();
+            let npc = et.nodes_per_cell();
+            let conn = s.connectivity();
+            let mut oriented: Vec<NodeId> = Vec::with_capacity(conn.len());
+            for chunk in conn.chunks(npc) {
+                if flip[gid] {
+                    oriented.extend(perm.iter().map(|&i| chunk[i]));
+                } else {
+                    oriented.extend_from_slice(chunk);
+                }
+                gid += 1;
+            }
+            (et, s.face_color(), oriented)
         };
-        let perm = et.reversal_permutation();
-        let npc = et.nodes_per_cell();
-        let mut new_sm = SubMesh::new(coords.clone(), et);
+        let mut new_sm = SubMesh::from_connectivity(coords.clone(), et, oriented)?;
         new_sm.set_face_color(color);
-        for chunk in conn.chunks(npc) {
-            let reordered: Vec<NodeId> = if flip[gid] {
-                perm.iter().map(|&i| chunk[i]).collect()
-            } else {
-                chunk.to_vec()
-            };
-            new_sm.add_cell(&reordered)?;
-            gid += 1;
-        }
         result.add_sub(Handle::new(new_sm))?;
     }
     Ok(result)

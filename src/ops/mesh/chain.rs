@@ -92,16 +92,18 @@ pub fn chain(mesh: &Mesh) -> Result<Mesh> {
         let order = chain_order(&cells)?;
 
         let perm = et.reversal_permutation();
-        let mut new_sm = SubMesh::new(coords.clone(), et);
-        new_sm.set_face_color(color);
+        // The walk's connectivity is laid out whole, then posted in one locked
+        // pass over the `Coords`.
+        let mut walked: Vec<NodeId> = Vec::with_capacity(conn.len());
         for (cell, reversed) in order {
-            let nodes: Vec<NodeId> = if reversed {
-                perm.iter().map(|&i| cells[cell][i]).collect()
+            if reversed {
+                walked.extend(perm.iter().map(|&i| cells[cell][i]));
             } else {
-                cells[cell].to_vec()
-            };
-            new_sm.add_cell(&nodes)?;
+                walked.extend_from_slice(cells[cell]);
+            }
         }
+        let mut new_sm = SubMesh::from_connectivity(coords.clone(), et, walked)?;
+        new_sm.set_face_color(color);
         result.add_sub(Handle::new(new_sm))?;
     }
     Ok(result)

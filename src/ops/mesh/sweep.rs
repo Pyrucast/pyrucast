@@ -1,6 +1,5 @@
 use crate::aggregate::Aggregate;
 use crate::atoms::ElementType;
-use crate::atoms::Node;
 use crate::atoms::NodeId;
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
@@ -84,12 +83,14 @@ pub(super) fn qua4_to_tri3(mesh: &Mesh) -> Result<Mesh> {
             let s = sm_h.read();
             (s.face_color(), s.connectivity().to_vec())
         };
-        let mut new_sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+        // Two triangles per quad, laid out whole then posted in one locked
+        // pass over the `Coords`.
+        let split: Vec<NodeId> = conn
+            .chunks(4)
+            .flat_map(|cell| [cell[0], cell[1], cell[2], cell[0], cell[2], cell[3]])
+            .collect();
+        let mut new_sm = SubMesh::from_connectivity(coords.clone(), ElementType::TRI3, split)?;
         new_sm.set_face_color(color);
-        for cell in conn.chunks(4) {
-            new_sm.add_cell(&[cell[0], cell[1], cell[2]])?;
-            new_sm.add_cell(&[cell[0], cell[2], cell[3]])?;
-        }
         result.add_sub(Handle::new(new_sm))?;
     }
     Ok(result)
@@ -108,25 +109,38 @@ pub(super) fn qua8_to_qua9(mesh: &Mesh) -> Result<Mesh> {
             let s = sm_h.read();
             (s.face_color(), s.connectivity().to_vec())
         };
-        let mut new_sm = SubMesh::new(coords.clone(), ElementType::QUA9);
-        new_sm.set_face_color(color);
-        for cell in conn.chunks(8) {
-            let center: Vec<f64> = {
-                let c = coords.read();
-                let corners: Vec<Vec<f64>> = cell[..4]
+        // Every centre first — one flat buffer, one `Coords` write — then the
+        // connectivity that references them, in order.
+        let centers: Vec<f64> = {
+            let c = coords.read();
+            let dim = c.dim() as usize;
+            let mut buf = Vec::with_capacity(conn.len() / 8 * dim);
+            for cell in conn.chunks(8) {
+                let corners: Vec<&[f64]> = cell[..4]
                     .iter()
-                    .map(|&id| -> Result<Vec<f64>> { Ok(c.position(id)?.to_vec()) })
+                    .map(|&id| c.position(id))
                     .collect::<Result<_>>()?;
-                let dim = corners[0].len();
-                (0..dim)
-                    .map(|d| corners.iter().map(|p| p[d]).sum::<f64>() / 4.0)
-                    .collect()
-            };
-            let center_node = Node::create_in(coords.clone(), &center)?;
-            let mut nodes: Vec<NodeId> = cell.to_vec();
-            nodes.push(center_node.id());
-            new_sm.add_cell(&nodes)?;
-        }
+                buf.extend((0..dim).map(|d| corners.iter().map(|p| p[d]).sum::<f64>() / 4.0));
+            }
+            buf
+        };
+        let first = coords.write().add_nodes(&centers)?.start;
+        let n_cells = conn.len() / 8;
+        let with_center: Vec<NodeId> = conn
+            .chunks(8)
+            .enumerate()
+            .flat_map(|(ci, cell)| {
+                cell.iter()
+                    .copied()
+                    .chain(std::iter::once(NodeId(first + ci as u32)))
+            })
+            .collect();
+        let mut new_sm =
+            SubMesh::from_connectivity(coords.clone(), ElementType::QUA9, with_center)?;
+        new_sm.set_face_color(color);
+        // The zone owns the centres now; hand back the unit `add_nodes` gave.
+        let owned: Vec<NodeId> = (first..first + n_cells as u32).map(NodeId).collect();
+        coords.write().decref_all(&owned)?;
         result.add_sub(Handle::new(new_sm))?;
     }
     Ok(result)

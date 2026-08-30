@@ -87,8 +87,15 @@ paie, pas la connectivité. Un opérateur qui produit un gros maillage passe don
 par `SubMesh::from_connectivity(coords, type, connectivité)` (côté Rust), qui
 valide et incrémente tout le tableau en une seule prise de verrou — une unité
 par **occurrence**, comme toujours — et par `Coords::add_nodes` pour créer ses
-nœuds d'un coup. C'est la couture qu'empruntent `translate`, `rotate`, les
-symétries, `copy` et `merge_nodes`.
+nœuds d'un coup. **Tous** les opérateurs de maillage l'empruntent : les
+balayages (`sweep`, `extrude`, `revolve`, `sweep_solid`), `transfinite`, les
+copies rigides (`translate`, `rotate`, symétries, `copy`), `merge_nodes`,
+`convert`, `to_quadratic`, `skin`, `border`, `chain`, `orient`, `select`,
+`consolidate`, `barycenter`, `to_poi1`, la lecture gmsh et les mailleurs
+frontaux. Un nœud dont la position n'est pas encore arrêtée — celle qu'un front
+déplace tant qu'il avance, celle qu'un relâchement va lisser — n'est même plus
+créé avant de l'être : il vit comme un rang dans un tableau, et ne devient un
+`NodeId` qu'à la fin.
 
 ## Scellement (connectivité figée après consommation)
 

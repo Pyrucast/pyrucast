@@ -40,7 +40,7 @@ pub mod row;
 pub mod smooth;
 
 use crate::aggregate::Aggregate;
-use crate::atoms::{ElementType, Node, NodeId, Point2};
+use crate::atoms::{ElementType, NodeId, Point2};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
@@ -583,54 +583,60 @@ fn all_cells_are_the_right_way_round(fab: &Fabric, op: &str) -> Result<()> {
 /// `op` names the calling operator and only ever appears in the error.
 pub fn materialize(parsed: &Contour, fabrics: Vec<Fabric>, op: &str) -> Result<Mesh> {
     let coords = &parsed.coords;
-    let mut quad_sub: Option<SubMesh> = None;
-    let mut tri_sub: Option<SubMesh> = None;
-    let mut kept: Vec<Node> = Vec::new();
+    // Interior points are parked as **ranks**, tagged by the high bit, and the
+    // whole cloud is created in one locked pass once every fabric is laid out.
+    const RANK: u32 = 1 << 31;
+    let mut interior: Vec<f64> = Vec::new();
+    let mut n_interior = 0u32;
+    let mut quad_conn: Vec<NodeId> = Vec::new();
+    let mut tri_conn: Vec<NodeId> = Vec::new();
 
     for fab in fabrics {
         let mut flat: Vec<NodeId> = fab.contour_ids.clone();
         for p in &fab.pts[fab.contour_ids.len()..] {
-            let node = Node::create_in(coords.clone(), &parsed.frame.to_world(*p, parsed.dim))?;
-            flat.push(node.id());
-            kept.push(node);
+            interior.extend_from_slice(&parsed.frame.to_world(*p, parsed.dim));
+            flat.push(NodeId(RANK | n_interior));
+            n_interior += 1;
         }
-        if !fab.quads.is_empty() {
-            let sub =
-                quad_sub.get_or_insert_with(|| SubMesh::new(coords.clone(), ElementType::QUA4));
-            for q in &fab.quads {
-                sub.add_cell(&[
-                    flat[q[0] as usize],
-                    flat[q[1] as usize],
-                    flat[q[2] as usize],
-                    flat[q[3] as usize],
-                ])?;
-            }
+        for q in &fab.quads {
+            quad_conn.extend(q.iter().map(|&i| flat[i as usize]));
         }
-        if !fab.tris.is_empty() {
-            let sub =
-                tri_sub.get_or_insert_with(|| SubMesh::new(coords.clone(), ElementType::TRI3));
-            for t in &fab.tris {
-                sub.add_cell(&[
-                    flat[t[0] as usize],
-                    flat[t[1] as usize],
-                    flat[t[2] as usize],
-                ])?;
-            }
+        for t in &fab.tris {
+            tri_conn.extend(t.iter().map(|&i| flat[i as usize]));
         }
     }
 
+    let first = coords.write().add_nodes(&interior)?.start;
+    let resolve = |conn: &mut Vec<NodeId>| {
+        for slot in conn.iter_mut() {
+            if slot.0 & RANK != 0 {
+                *slot = NodeId(first + (slot.0 & !RANK));
+            }
+        }
+    };
+    resolve(&mut quad_conn);
+    resolve(&mut tri_conn);
+
     let mut mesh = Mesh::empty();
-    if let Some(q) = quad_sub
-        && q.cell_count() > 0
-    {
-        mesh.add_sub(Handle::new(q))?;
+    if !quad_conn.is_empty() {
+        mesh.add_sub(Handle::new(SubMesh::from_connectivity(
+            coords.clone(),
+            ElementType::QUA4,
+            quad_conn,
+        )?))?;
     }
-    if let Some(t) = tri_sub
-        && t.cell_count() > 0
-    {
-        mesh.add_sub(Handle::new(t))?;
+    if !tri_conn.is_empty() {
+        mesh.add_sub(Handle::new(SubMesh::from_connectivity(
+            coords.clone(),
+            ElementType::TRI3,
+            tri_conn,
+        )?))?;
     }
-    drop(kept);
+    // The zones own the interior nodes now; hand back the unit `add_nodes`
+    // gave. A point no cell used cannot exist — the fabric only keeps the
+    // points its cells stand on.
+    let owned: Vec<NodeId> = (first..first + n_interior).map(NodeId).collect();
+    coords.write().decref_all(&owned)?;
     if mesh.is_empty() {
         return Err(PyrucastError::Message(format!("{op}: produced no cell")));
     }
