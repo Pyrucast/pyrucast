@@ -30,8 +30,7 @@
 //! taken from a global-Z reference, the two bending planes with their sign
 //! convention, the torsion, and the 12×12 rotation.
 
-use crate::containers::element_field::SubElementField;
-use crate::error::{PyrucastError, Result};
+use crate::error::Result;
 use crate::models::CellGeom;
 
 // ─── Geometry helpers ────────────────────────────────────────────────────────
@@ -209,7 +208,11 @@ fn transpose(a: &[[f64; 12]; 12]) -> [[f64; 12]; 12] {
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
 ///     DofOrdering::NodesThenVars, true, &mat, None,
-///     |geoms, m, s, ke| frame3d::element_stiffness(&geoms[0], m, ke),
+///     // Le noyau prend les constantes de section, pas le champ : c'est la
+///     // physique qui lit son contrat, lui ne fait que les maths.
+///     |geoms, m, s, ke| frame3d::element_stiffness(
+///         &geoms[0], 210000.0 * 0.01, 80000.0 * 2e-05, 210000.0,
+///         1e-05, 1e-05, 80000.0, 0.008, 0.008, ke),
 /// )?;
 /// // Portique spatial : axial, torsion et flexion autour de deux axes
 /// // principaux — six DDL par nœud.
@@ -221,29 +224,24 @@ fn transpose(a: &[[f64; 12]; 12]) -> [[f64; 12]; 12] {
 /// assert!((0..12).all(|i| (0..12).all(|j| (d[i * 12 + j] - d[j * 12 + i]).abs() < 1e-6)));
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
+#[allow(clippy::too_many_arguments)]
 pub fn element_stiffness(
     geom: &CellGeom,
-    material: &SubElementField,
+    ea: f64,
+    gj: f64,
+    e: f64,
+    iy: f64,
+    iz: f64,
+    g: f64,
+    a_sy: f64,
+    a_sz: f64,
     ke: &mut [f64],
 ) -> Result<()> {
-    let cell = geom.cell;
     let xa = geom.node_coord(0);
     let xb = geom.node_coord(1);
     let d = [xb[0] - xa[0], xb[1] - xa[1], xb[2] - xa[2]];
     let l = norm(d);
-    // [E·A, G·J, E, I_y, I_z, G, A_sy, A_sz].
-    let v = |c| material.value(cell, 0, c);
-    let kl = local_stiffness(
-        v("E")? * v("A")?,
-        v("G")? * v("J")?,
-        v("E")?,
-        v("I_y")?,
-        v("I_z")?,
-        v("G")?,
-        v("A_sy")?,
-        v("A_sz")?,
-        l,
-    );
+    let kl = local_stiffness(ea, gj, e, iy, iz, g, a_sy, a_sz, l);
     let t = rotation(&local_axes(d));
     let kg = matmul(&transpose(&t), &matmul(&kl, &t)); // Tᵀ K_loc T
 
@@ -355,34 +353,31 @@ fn local_geometric(n: f64, l: f64) -> [[f64; 12]; 12] {
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
 ///     DofOrdering::NodesThenVars, true, &mat, None,
-///     |geoms, m, s, ke| frame3d::element_mass(&geoms[0], m, ke),
+///     |geoms, m, s, ke| frame3d::element_mass(
+///         &geoms[0], 3.0, 0.01, 1e-05, 1e-05, 210000.0,
+///         Some(80000.0), Some(0.008), Some(0.008), ke),
 /// )?;
 /// assert_eq!((bloc.n_rows(), bloc.n_cols()), (12, 12));
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64]) -> Result<()> {
-    let cell = geom.cell;
+#[allow(clippy::too_many_arguments)]
+pub fn element_mass(
+    geom: &CellGeom,
+    rho: f64,
+    area: f64,
+    iy: f64,
+    iz: f64,
+    e: f64,
+    g: Option<f64>,
+    a_sy: Option<f64>,
+    a_sz: Option<f64>,
+    ke: &mut [f64],
+) -> Result<()> {
     let xa = geom.node_coord(0);
     let xb = geom.node_coord(1);
     let d = [xb[0] - xa[0], xb[1] - xa[1], xb[2] - xa[2]];
     let l = norm(d);
-    let rho = material.value(cell, 0, "rho").map_err(|_| {
-        PyrucastError::Message(
-            "Frame3d mass matrix: material component `rho` (density) is required".into(),
-        )
-    })?;
-    let ml = local_mass(
-        rho,
-        material.value(cell, 0, "A")?,
-        material.value(cell, 0, "I_y")?,
-        material.value(cell, 0, "I_z")?,
-        material.value(cell, 0, "E")?,
-        // Absent shear constants mean `Φ = 0`; see `frame::element_mass`.
-        material.value(cell, 0, "G").ok(),
-        material.value(cell, 0, "A_sy").ok(),
-        material.value(cell, 0, "A_sz").ok(),
-        l,
-    );
+    let ml = local_mass(rho, area, iy, iz, e, g, a_sy, a_sz, l);
     let t = rotation(&local_axes(d));
     write_12x12(ke, &matmul(&transpose(&t), &matmul(&ml, &t)));
     Ok(())
@@ -418,19 +413,17 @@ pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64])
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
 ///     DofOrdering::NodesThenVars, true, &mat, Some(&mat),
-///     |geoms, m, s, ke| frame3d::element_geometric(&geoms[0], s.unwrap(), ke),
+///     |geoms, m, s, ke| frame3d::element_geometric(&geoms[0], 100.0, ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
 /// assert!(total.abs() < 1e-6);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn element_geometric(geom: &CellGeom, state: &SubElementField, ke: &mut [f64]) -> Result<()> {
-    let cell = geom.cell;
+pub fn element_geometric(geom: &CellGeom, n: f64, ke: &mut [f64]) -> Result<()> {
     let xa = geom.node_coord(0);
     let xb = geom.node_coord(1);
     let d = [xb[0] - xa[0], xb[1] - xa[1], xb[2] - xa[2]];
     let l = norm(d);
-    let n = state.value(cell, 0, "N")?;
     let kl = local_geometric(n, l);
     let t = rotation(&local_axes(d));
     write_12x12(ke, &matmul(&transpose(&t), &matmul(&kl, &t)));

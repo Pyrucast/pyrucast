@@ -34,10 +34,10 @@ SubModelKind  (trait de base — le dénominateur commun, co-localisé par physi
 ├── primal_vars / dual_vars
 ├── physics       # ensemble de natures : &[Physics] (Mechanical|Thermal|Constraint|Other)
 ├── as_domain / as_constraint  # seams de capacité (None par défaut) — cf. ci-dessous
-├── element_matrix          # noyau élémentaire (une cellule) — pur & séquentiel
+├── matrix_element          # pont vers les noyaux élémentaires, qui vivent sur Domain
 ├── stiffness_layout        # Some ⇒ bloc CALCULÉ (scatter parallèle) ; None ⇒ littéral
 ├── contributions           # défaut : dérivé du layout ; contraintes rendent leurs C/Cᵀ littéraux
-├── build_stiffness_blocks  # défaut : dérivé de stiffness_layout + element_matrix
+├── build_stiffness_blocks  # défaut : stiffness_layout + Domain::element_matrix
 ├── build_mass_blocks       # (défaut : vide)
 └── label / display / render
 

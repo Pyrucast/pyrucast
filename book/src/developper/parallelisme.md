@@ -35,8 +35,9 @@ résolution non linéaire. Deux invariants l'encadrent :
 
 La vérification n'est pas supprimée, elle est **déplacée** : un champ peut avoir
 été fabriqué à la main, on contrôle donc ses composantes *et leur ordre* une fois
-par zone, avant la région parallèle (`Domain::zone_layout`,
-`kernel::element_pointwise`), avec un message qui nomme le champ et l'écart. Le
+par zone, avant la région parallèle (`Domain::zone_layout` pour la voie point,
+`Domain::element_layout` pour la voie matrice, `kernel::element_pointwise`), avec
+un message qui nomme le champ et l'écart. Le
 noyau reçoit alors **la ligne** de son point — une tranche empruntée du tampon —
 et une table d'indices : il indexe et calcule, rien d'autre. Un noyau conforme
 s'écrit sans un seul `?` sur ses lectures, ce qui rend la règle vérifiable à

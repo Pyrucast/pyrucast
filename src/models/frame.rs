@@ -24,8 +24,7 @@
 //! mesh. What remains is what is genuinely two-dimensional: the local closed
 //! forms and the rotation that carries them to the global axes.
 
-use crate::containers::element_field::SubElementField;
-use crate::error::{PyrucastError, Result};
+use crate::error::Result;
 use crate::models::CellGeom;
 
 /// Local 6×6 frame stiffness (DOFs `[u'_A, w'_A, θ_A, u'_B, w'_B, θ_B]`) from
@@ -114,7 +113,10 @@ fn matmul(a: &[[f64; 6]; 6], b: &[[f64; 6]; 6]) -> [[f64; 6]; 6] {
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
 ///     DofOrdering::NodesThenVars, true, &mat, None,
-///     |geoms, m, s, ke| frame::element_stiffness(&geoms[0], m, ke),
+///     // Le noyau prend les constantes de section, pas le champ : c'est la
+///     // physique qui lit son contrat, lui ne fait que les maths.
+///     |geoms, m, s, ke| frame::element_stiffness(
+///         &geoms[0], 210000.0 * 0.01, 210000.0 * 1e-05, 80000.0 * 0.008, ke),
 /// )?;
 /// // Portique plan : axial et flexion, ramenés aux axes globaux.
 /// assert_eq!((bloc.n_rows(), bloc.n_cols()), (6, 6));
@@ -127,19 +129,12 @@ fn matmul(a: &[[f64; 6]; 6], b: &[[f64; 6]; 6]) -> [[f64; 6]; 6] {
 /// ```
 pub fn element_stiffness(
     geom: &CellGeom,
-    material: &SubElementField,
+    ea: f64,
+    ei: f64,
+    gas: f64,
     ke: &mut [f64],
 ) -> Result<()> {
-    let cell = geom.cell;
-    let xa = geom.node_coord(0);
-    let xb = geom.node_coord(1);
-    let (dx, dy) = (xb[0] - xa[0], xb[1] - xa[1]);
-    let l = (dx * dx + dy * dy).sqrt();
-    let (c, s) = (dx / l, dy / l);
-    let ea = material.value(cell, 0, "E")? * material.value(cell, 0, "A")?;
-    let ei = material.value(cell, 0, "E")? * material.value(cell, 0, "I")?;
-    let gas = material.value(cell, 0, "G")? * material.value(cell, 0, "A_s")?;
-
+    let (l, c, s) = cell_frame(geom)?;
     let kl = local_stiffness(ea, ei, gas, l);
     let t = rotation(c, s);
     // K_global = Tᵀ · K_loc · T.
@@ -239,29 +234,22 @@ fn cell_frame(geom: &CellGeom) -> Result<(f64, f64, f64)> {
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
 ///     DofOrdering::NodesThenVars, true, &mat, None,
-///     |geoms, m, s, ke| frame::element_mass(&geoms[0], m, ke),
+///     |geoms, m, s, ke| frame::element_mass(
+///         &geoms[0], 3.0 * 0.01, 3.0 * 1e-05, 210000.0 * 1e-05,
+///         Some(80000.0 * 0.008), ke),
 /// )?;
 /// assert_eq!((bloc.n_rows(), bloc.n_cols()), (6, 6));
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64]) -> Result<()> {
-    let cell = geom.cell;
+pub fn element_mass(
+    geom: &CellGeom,
+    rho_a: f64,
+    rho_i: f64,
+    ei: f64,
+    gas: Option<f64>,
+    ke: &mut [f64],
+) -> Result<()> {
     let (l, c, s) = cell_frame(geom)?;
-    let rho = material.value(cell, 0, "rho").map_err(|_| {
-        PyrucastError::Message(
-            "Frame mass matrix: material component `rho` (density) is required".into(),
-        )
-    })?;
-    let rho_a = rho * material.value(cell, 0, "A")?;
-    let rho_i = rho * material.value(cell, 0, "I")?;
-    let ei = material.value(cell, 0, "E")? * material.value(cell, 0, "I")?;
-    // Absent shear constants mean `Φ = 0` — a Bernoulli beam's material
-    // deliberately carries neither, and that absence *is* the statement that
-    // there is no shear compliance. One mass kernel then serves both theories.
-    let gas = match (material.value(cell, 0, "G"), material.value(cell, 0, "A_s")) {
-        (Ok(g), Ok(a_s)) => Some(g * a_s),
-        _ => None,
-    };
     let ml = local_mass(rho_a, rho_i, ei, gas, l);
     let t = rotation(c, s);
     write_6x6(ke, &matmul(&transpose(&t), &matmul(&ml, &t)));
@@ -298,17 +286,15 @@ pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64])
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
 ///     DofOrdering::NodesThenVars, true, &mat, Some(&mat),
-///     |geoms, m, s, ke| frame::element_geometric(&geoms[0], s.unwrap(), ke),
+///     |geoms, m, s, ke| frame::element_geometric(&geoms[0], 100.0, ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
 /// // C'est le signe de cette matrice qui décide de la charge critique.
 /// assert!(total.abs() < 1e-6);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn element_geometric(geom: &CellGeom, state: &SubElementField, ke: &mut [f64]) -> Result<()> {
-    let cell = geom.cell;
+pub fn element_geometric(geom: &CellGeom, n: f64, ke: &mut [f64]) -> Result<()> {
     let (l, c, s) = cell_frame(geom)?;
-    let n = state.value(cell, 0, "N")?;
     let kl = local_geometric(n, l);
     let t = rotation(c, s);
     write_6x6(ke, &matmul(&transpose(&t), &matmul(&kl, &t)));

@@ -55,6 +55,7 @@ use crate::models::tensor::{dual_name, primal_name};
 use crate::models::tensor::{stress_names, voigt_stress};
 use crate::models::ZoneLayout;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{ElementLayout, MatrixKind};
 use law::{DamageLaw, MatRead};
 use serde::{Deserialize, Serialize};
 
@@ -244,48 +245,6 @@ impl SubModelKind for Damage {
         self.stiffness_layout()
     }
 
-    fn element_matrix(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let geom = &geoms[0];
-        // Iteration operator = elastic (undamaged) stiffness. Reuse the
-        // elasticity element kernel; it reads only `E` and `nu`.
-        let mat = material;
-        elasticity::element_stiffness(
-            geom,
-            mat,
-            self.kinematics,
-            crate::models::symmetry::MaterialSymmetry::Isotropic,
-            ke,
-        )
-    }
-
-    fn element_mass(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let geom = &geoms[0];
-        let mat = material;
-        elasticity::element_mass(geom, mat, ke)
-    }
-
-    fn element_geometric(
-        &self,
-        geoms: &[CellGeom],
-        _material: &SubElementField,
-        state: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let geom = &geoms[0];
-        let stress = state;
-        elasticity::element_geometric(geom, stress, ke)
-    }
-
     fn physics(&self) -> &'static [Physics] {
         &[Physics::Mechanical]
     }
@@ -399,6 +358,57 @@ impl Domain for Damage {
             out[v + 1 + i] = *value;
         }
         Ok(())
+    }
+
+    /// Les mêmes noyaux que l'élasticité, donc les mêmes lectures d'état.
+    fn element_state_reads(&self, kind: MatrixKind) -> Vec<String> {
+        elasticity::continuum_element_state_reads(kind, self.space_dim, self.kinematics)
+    }
+
+    fn element_matrix(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        // Iteration operator = elastic (undamaged) stiffness. Reuse the
+        // elasticity element kernel; it reads only `E` and `nu`.
+        let mat = material;
+        elasticity::element_stiffness(
+            geom,
+            mat,
+            lay,
+            self.kinematics,
+            crate::models::symmetry::MaterialSymmetry::Isotropic,
+            ke,
+        )
+    }
+
+    fn element_mass(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        let mat = material;
+        elasticity::element_mass(geom, mat, lay, ke)
+    }
+
+    fn element_geometric(
+        &self,
+        geoms: &[CellGeom],
+        _material: &SubElementField,
+        lay: &ElementLayout,
+        state: &SubElementField,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        let stress = state;
+        elasticity::element_geometric(geom, stress, lay, ke)
     }
 }
 

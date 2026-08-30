@@ -389,6 +389,26 @@ impl SubElementField {
         Ok(&self.values[start..start + n_comp])
     }
 
+    /// [`point_values`](Self::point_values) **without the checks** — the form a
+    /// kernel calls.
+    ///
+    /// A per-cell or per-Gauss-point kernel is driven over `0..cell_count` ×
+    /// `0..gauss_count` of *this very field*, which the driver matched against
+    /// the FE subspace before the parallel region. Both indices are therefore
+    /// facts of the zone, and re-proving them at every point costs three
+    /// comparisons and an error path for a question already settled — the same
+    /// reason [`Coords::position_alive`](crate::coords::Coords) exists next to
+    /// the checked read.
+    ///
+    /// Read it by the indices a layout resolved once
+    /// ([`ZoneLayout`](crate::models::ZoneLayout) /
+    /// [`ElementLayout`](crate::models::ElementLayout)), never by name.
+    pub(crate) fn row(&self, cell: usize, gauss: usize) -> &[f64] {
+        let n_comp = self.components.len();
+        let start = (cell * self.n_gauss + gauss) * n_comp;
+        &self.values[start..start + n_comp]
+    }
+
     // ── Value access by component name ──────────────────────────────────────
 
     /// Read by `(cell, gauss, component name)`.

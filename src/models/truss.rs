@@ -14,6 +14,7 @@
 //! area), read from a [`SubElementField`].
 
 use crate::containers::element_field::SubElementField;
+use crate::containers::field::ABSENT_COMPONENT;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
@@ -25,6 +26,7 @@ use crate::models::owned_components;
 use crate::models::tensor::{dual_name, primal_name};
 use crate::models::ZoneLayout;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{ElementLayout, MatrixKind};
 use serde::{Deserialize, Serialize};
 
 /// Axis suffixes for the vector components, indexed by spatial direction.
@@ -164,38 +166,6 @@ impl SubModelKind for Truss {
         self.stiffness_layout()
     }
 
-    fn element_matrix(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let geom = &geoms[0];
-        element_stiffness(geom, material, ke)
-    }
-
-    fn element_mass(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let geom = &geoms[0];
-        element_mass(geom, material, ke)
-    }
-
-    fn element_geometric(
-        &self,
-        geoms: &[CellGeom],
-        _material: &SubElementField,
-        state: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let geom = &geoms[0];
-        let stress = state;
-        element_geometric(geom, stress, ke)
-    }
-
     /// Internal forces `f = Bᵀ N` of one bar. `B` projects the nodal
     /// displacement onto the axis (`ε = (u_B − u_A)·c / L`), so its transpose
     /// spreads the axial force `N` back onto the two ends: `f_A = −N c`,
@@ -305,6 +275,45 @@ impl Domain for Truss {
         out[0] = e * a * eps_axial;
         Ok(())
     }
+
+    /// La raideur géométrique de la barre lit son effort normal.
+    fn element_state_reads(&self, kind: MatrixKind) -> Vec<String> {
+        match kind {
+            MatrixKind::Geometric => vec!["n".to_string()],
+            _ => Vec::new(),
+        }
+    }
+
+    fn element_matrix(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        element_stiffness(&geoms[0], material, lay, ke)
+    }
+
+    fn element_mass(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        element_mass(&geoms[0], material, lay, ke)
+    }
+
+    fn element_geometric(
+        &self,
+        geoms: &[CellGeom],
+        _material: &SubElementField,
+        lay: &ElementLayout,
+        state: &SubElementField,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        element_geometric(&geoms[0], state, lay, ke)
+    }
 }
 
 /// Unit direction cosine vector `c = (x_B − x_A)/L` of one `SEG2` cell, from its
@@ -344,12 +353,16 @@ fn cell_cosine(geom: &CellGeom, space_dim: usize) -> Result<Vec<f64>> {
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["E".into(), "A".into()], &[210000.0, 0.01]).unwrap());
 /// # let ddl = || (vec!["f_x".to_string(), "f_y".to_string()], vec!["u_x".to_string(), "u_y".to_string()]);
-/// # use pyrucast::models::truss;
+/// # use pyrucast::models::{truss, ElementLayout};
+/// // `E` puis `A` : le champ suit le contrat, la table est l'identité.
+/// let lay = ElementLayout {
+///     material: vec![0, 1], optional_material: vec![], state: vec![],
+/// };
 /// let (duals, primals) = ddl();
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
 ///     DofOrdering::NodesThenVars, true, &mat, None,
-///     |geoms, m, s, ke| truss::element_stiffness(&geoms[0], m, ke),
+///     |geoms, m, s, ke| truss::element_stiffness(&geoms[0], m, &lay, ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
 /// // Une barre libre est singulière : la translation d'ensemble ne coûte rien.
@@ -359,6 +372,7 @@ fn cell_cosine(geom: &CellGeom, space_dim: usize) -> Result<Vec<f64>> {
 pub fn element_stiffness(
     geom: &CellGeom,
     material: &SubElementField,
+    lay: &ElementLayout,
     ke: &mut [f64],
 ) -> Result<()> {
     let sd = geom.space_dim;
@@ -369,7 +383,9 @@ pub fn element_stiffness(
         let xb = geom.node_coord(1);
         (0..sd).map(|a| (xb[a] - xa[a]).powi(2)).sum::<f64>().sqrt()
     };
-    let k_ax = material.value(geom.cell, 0, "E")? * material.value(geom.cell, 0, "A")? / len;
+    // `E` then `A`, in the order `MATERIAL_COMPONENTS` declares.
+    let row = material.row(geom.cell, 0);
+    let k_ax = row[lay.material[0] as usize] * row[lay.material[1] as usize] / len;
     for ii in 0..2 {
         for jj in 0..2 {
             let sign = if ii == jj { 1.0 } else { -1.0 };
@@ -420,28 +436,46 @@ fn cell_length(geom: &CellGeom, space_dim: usize) -> Result<f64> {
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["rho".into(), "A".into()], &[3.0, 0.01]).unwrap());
 /// # let ddl = || (vec!["f_x".to_string(), "f_y".to_string()], vec!["u_x".to_string(), "u_y".to_string()]);
-/// # use pyrucast::models::truss;
+/// # use pyrucast::models::{truss, ElementLayout};
+/// # use pyrucast::containers::field::ABSENT_COMPONENT;
+/// // La masse lit `A` (seconde composante requise) et `rho` (la seule
+/// // facultative) ; `E` n'entre pas, et n'est pas dans ce champ-ci.
+/// let lay = ElementLayout {
+///     material: vec![ABSENT_COMPONENT, 1],
+///     optional_material: vec![0],
+///     state: vec![],
+/// };
 /// let (duals, primals) = ddl();
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
 ///     DofOrdering::NodesThenVars, true, &mat, None,
-///     |geoms, m, s, ke| truss::element_mass(&geoms[0], m, ke),
+///     |geoms, m, s, ke| truss::element_mass(&geoms[0], m, &lay, ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
 /// // La masse cohérente somme à ρ·A·L par direction : ici deux fois 0,06.
 /// assert!((total - 2.0 * 3.0 * 0.01 * 2.0).abs() < 1e-9);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64]) -> Result<()> {
+pub fn element_mass(
+    geom: &CellGeom,
+    material: &SubElementField,
+    lay: &ElementLayout,
+    ke: &mut [f64],
+) -> Result<()> {
     let sd = geom.space_dim;
     let side = 2 * sd;
     let len = cell_length(geom, sd)?;
-    let rho = material.value(geom.cell, 0, "rho").map_err(|_| {
-        crate::error::PyrucastError::Message(
-            "Truss mass matrix: material component `rho` (density) is required".into(),
-        )
-    })?;
-    let a = material.value(geom.cell, 0, "A")?;
+    let row = material.row(geom.cell, 0);
+    // `rho` is the bar's only optional component: without it there is no mass.
+    let rho = match lay.optional_material[0] {
+        ABSENT_COMPONENT => {
+            return Err(crate::error::PyrucastError::Message(
+                "Truss mass matrix: material component `rho` (density) is required".into(),
+            ))
+        }
+        i => row[i as usize],
+    };
+    let a = row[lay.material[1] as usize];
     let m = rho * a * len / 6.0;
     for ii in 0..2 {
         for jj in 0..2 {
@@ -482,12 +516,16 @@ pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64])
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["n".into()], &[100.0]).unwrap());
 /// # let ddl = || (vec!["f_x".to_string(), "f_y".to_string()], vec!["u_x".to_string(), "u_y".to_string()]);
-/// # use pyrucast::models::truss;
+/// # use pyrucast::models::{truss, ElementLayout};
+/// // La raideur géométrique ne lit que l'effort normal `n`.
+/// let lay = ElementLayout {
+///     material: vec![], optional_material: vec![], state: vec![0],
+/// };
 /// let (duals, primals) = ddl();
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
 ///     DofOrdering::NodesThenVars, true, &mat, Some(&mat),
-///     |geoms, m, s, ke| truss::element_geometric(&geoms[0], s.unwrap(), ke),
+///     |geoms, m, s, ke| truss::element_geometric(&geoms[0], s.unwrap(), &lay, ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
 /// // La raideur **géométrique** vient de l'effort normal, non du matériau.
@@ -495,12 +533,17 @@ pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64])
 /// assert!(total.abs() < 1e-9);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn element_geometric(geom: &CellGeom, state: &SubElementField, ke: &mut [f64]) -> Result<()> {
+pub fn element_geometric(
+    geom: &CellGeom,
+    state: &SubElementField,
+    lay: &ElementLayout,
+    ke: &mut [f64],
+) -> Result<()> {
     let sd = geom.space_dim;
     let side = 2 * sd;
     let c = cell_cosine(geom, sd)?;
     let len = cell_length(geom, sd)?;
-    let k = state.value(geom.cell, 0, "n")? / len;
+    let k = state.row(geom.cell, 0)[lay.state[0] as usize] / len;
     for ii in 0..2 {
         for jj in 0..2 {
             let sign = if ii == jj { 1.0 } else { -1.0 };

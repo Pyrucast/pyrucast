@@ -49,9 +49,9 @@ use crate::dump::DumpOptions;
 use crate::error::Result;
 use crate::handle::Handle;
 use crate::models::transfer::{
-    coefficient_indices, coefficient_name, exchange_matrix, flux_name, internal_force,
-    material_contract, physics_slice,
+    coefficient_name, exchange_matrix, flux_name, internal_force, material_contract, physics_slice,
 };
+use crate::models::ElementLayout;
 use crate::models::ZoneLayout;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use serde::{Deserialize, Serialize};
@@ -186,20 +186,6 @@ impl SubModelKind for BoundaryTransfer {
         })
     }
 
-    /// The film matrix — the exchange kernel with both sides on the same cell,
-    /// which is exactly what an interface's diagonal block is.
-    fn element_matrix(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let geom = &geoms[0];
-        let mat = material;
-        let coefficients = coefficient_indices(mat, &self.components)?;
-        exchange_matrix(geom, geom, mat, &coefficients, 1.0, ke)
-    }
-
     /// Internal nodal fluxes `q_i = ∫ N_i · flux dΓ` — the **`N`-weighted**
     /// boundary counterpart of the `Bᵀ` continuum default. For this linear law it
     /// equals `(K·a)_i`, so it fits the « internal forces == K·u » invariant.
@@ -287,6 +273,20 @@ impl Domain for BoundaryTransfer {
             out[v] = h * deformation[lay.deformation[v] as usize];
         }
         Ok(())
+    }
+
+    /// The film matrix — the exchange kernel with both sides on the same cell,
+    /// which is exactly what an interface's diagonal block is.
+    fn element_matrix(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        let mat = material;
+        exchange_matrix(geom, geom, mat, lay, 1.0, ke)
     }
 }
 

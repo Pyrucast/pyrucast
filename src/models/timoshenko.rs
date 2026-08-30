@@ -47,6 +47,7 @@
 
 use crate::atoms::ElementType;
 use crate::containers::element_field::SubElementField;
+use crate::containers::field::ABSENT_COMPONENT;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
@@ -58,6 +59,7 @@ use crate::models::beam::{bending_4x4, mass_4x4, BeamModel};
 use crate::models::owned_components;
 use crate::models::ZoneLayout;
 use crate::models::{frame, frame3d, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{ElementLayout, MatrixKind};
 use serde::{Deserialize, Serialize};
 
 /// The material a configuration needs. `G` and `A_s` are what the theory adds
@@ -223,56 +225,6 @@ impl SubModelKind for Timoshenko {
         }
     }
 
-    fn element_matrix(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let geom = &geoms[0];
-        let mat = material;
-        match self.model {
-            BeamModel::Planar1d => planar_stiffness(geom, mat, ke),
-            BeamModel::Frame2d => frame::element_stiffness(geom, mat, ke),
-            BeamModel::Frame3d => frame3d::element_stiffness(geom, mat, ke),
-        }
-    }
-
-    fn element_mass(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let geom = &geoms[0];
-        let mat = material;
-        match self.model {
-            BeamModel::Planar1d => planar_mass(geom, mat, ke),
-            BeamModel::Frame2d => frame::element_mass(geom, mat, ke),
-            BeamModel::Frame3d => frame3d::element_mass(geom, mat, ke),
-        }
-    }
-
-    fn element_geometric(
-        &self,
-        geoms: &[CellGeom],
-        _material: &SubElementField,
-        state: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let geom = &geoms[0];
-        let stress = state;
-        match self.model {
-            BeamModel::Planar1d => Err(PyrucastError::Message(
-                "Timoshenko: a pure-bending beam carries no axial force, so it has no geometric \
-                 stiffness — use a 2-D or 3-D configuration"
-                    .into(),
-            )),
-            BeamModel::Frame2d => frame::element_geometric(geom, stress, ke),
-            BeamModel::Frame3d => frame3d::element_geometric(geom, stress, ke),
-        }
-    }
-
     fn physics(&self) -> &'static [Physics] {
         &[Physics::Mechanical]
     }
@@ -371,6 +323,117 @@ impl Domain for Timoshenko {
         }
         Ok(())
     }
+
+    /// La raideur géométrique de la poutre lit son effort normal.
+    fn element_state_reads(&self, kind: MatrixKind) -> Vec<String> {
+        match kind {
+            MatrixKind::Geometric => vec!["N".to_string()],
+            _ => Vec::new(),
+        }
+    }
+
+    fn element_matrix(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        // Chaque configuration a son contrat (`material_of`) ; les constantes se
+        // lisent par les indices que la zone a résolus, dans cet ordre-là.
+        let m = |k: usize| material.row(geom.cell, 0)[lay.material[k] as usize];
+        match self.model {
+            // [E, I, G, A_s]
+            BeamModel::Planar1d => planar_stiffness(geom, m(0) * m(1), m(2) * m(3), ke),
+            // [E, A, I, G, A_s]
+            BeamModel::Frame2d => {
+                frame::element_stiffness(geom, m(0) * m(1), m(0) * m(2), m(3) * m(4), ke)
+            }
+            // [E, A, I_y, I_z, J, G, A_sy, A_sz]
+            BeamModel::Frame3d => frame3d::element_stiffness(
+                geom,
+                m(0) * m(1),
+                m(5) * m(4),
+                m(0),
+                m(2),
+                m(3),
+                m(5),
+                m(6),
+                m(7),
+                ke,
+            ),
+        }
+    }
+
+    fn element_mass(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        let row = material.row(geom.cell, 0);
+        let m = |k: usize| row[lay.material[k] as usize];
+        // `rho` ferme la liste des composantes facultatives de chaque
+        // configuration ; sans elle il n'y a pas de masse à intégrer.
+        let rho = optional(row, lay, lay.optional_material.len() - 1, "rho")?;
+        match self.model {
+            // [E, I, G, A_s] + facultatives [A, rho]
+            BeamModel::Planar1d => {
+                let a = optional(row, lay, 0, "A")?;
+                planar_mass(geom, rho * a, rho * m(1), m(0) * m(1), m(2) * m(3), ke)
+            }
+            // [E, A, I, G, A_s]
+            BeamModel::Frame2d => frame::element_mass(
+                geom,
+                rho * m(1),
+                rho * m(2),
+                m(0) * m(2),
+                Some(m(3) * m(4)),
+                ke,
+            ),
+            // [E, A, I_y, I_z, J, G, A_sy, A_sz]
+            BeamModel::Frame3d => frame3d::element_mass(
+                geom,
+                rho,
+                m(1),
+                m(2),
+                m(3),
+                m(0),
+                Some(m(5)),
+                Some(m(6)),
+                Some(m(7)),
+                ke,
+            ),
+        }
+    }
+
+    fn element_geometric(
+        &self,
+        geoms: &[CellGeom],
+        _material: &SubElementField,
+        lay: &ElementLayout,
+        state: &SubElementField,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        match self.model {
+            BeamModel::Planar1d => Err(PyrucastError::Message(
+                "Timoshenko: a pure-bending beam carries no axial force, so it has no geometric \
+                 stiffness — use a 2-D or 3-D configuration"
+                    .into(),
+            )),
+            _ => {
+                let n = state.row(geom.cell, 0)[lay.state[0] as usize];
+                match self.model {
+                    BeamModel::Frame2d => frame::element_geometric(geom, n, ke),
+                    _ => frame3d::element_geometric(geom, n, ke),
+                }
+            }
+        }
+    }
 }
 
 // ─── The 1-D configuration's own kernels ────────────────────────────────────
@@ -380,17 +443,26 @@ impl Domain for Timoshenko {
 // 1-D beam has no rotation to make, so its kernels are the bare blocks.
 
 /// The exact bending stiffness of a 1-D beam, on `[w_A, θ_A, w_B, θ_B]`.
-fn planar_stiffness(geom: &CellGeom, material: &SubElementField, ke: &mut [f64]) -> Result<()> {
-    let cell = geom.cell;
+/// Une composante facultative, lue par l'indice que la zone a résolu — absente,
+/// elle se nomme dans l'erreur plutôt que de valoir zéro en silence.
+fn optional(row: &[f64], lay: &ElementLayout, slot: usize, name: &str) -> Result<f64> {
+    match lay.optional_material[slot] {
+        ABSENT_COMPONENT => Err(PyrucastError::Message(format!(
+            "Timoshenko mass matrix: material component `{name}` is required"
+        ))),
+        i => Ok(row[i as usize]),
+    }
+}
+
+fn planar_stiffness(geom: &CellGeom, ei: f64, gas: f64, ke: &mut [f64]) -> Result<()> {
     let (xa, xb) = (geom.node_coord(0), geom.node_coord(1));
     let l = (xb[0] - xa[0]).abs();
     if l <= f64::EPSILON {
         return Err(PyrucastError::Message(format!(
-            "Timoshenko: cell {cell} has zero length"
+            "Timoshenko: cell {} has zero length",
+            geom.cell
         )));
     }
-    let ei = material.value(cell, 0, "E")? * material.value(cell, 0, "I")?;
-    let gas = material.value(cell, 0, "G")? * material.value(cell, 0, "A_s")?;
     let k = bending_4x4(ei, Some(gas), l);
     for (r, row) in k.iter().enumerate() {
         for (c, v) in row.iter().enumerate() {
@@ -404,25 +476,17 @@ fn planar_stiffness(geom: &CellGeom, material: &SubElementField, ke: &mut [f64])
 /// rotary inertia `(ρIL/6)[[2,1],[1,2]]`, in DOF order `[w0, θ0, w1, θ1]`.
 ///
 /// This is the *linear* element's mass, kept as it was; see the module note.
-fn planar_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64]) -> Result<()> {
-    let cell = geom.cell;
+fn planar_mass(
+    geom: &CellGeom,
+    rho_a: f64,
+    rho_i: f64,
+    ei: f64,
+    gas: f64,
+    ke: &mut [f64],
+) -> Result<()> {
     let (xa, xb) = (geom.node_coord(0), geom.node_coord(1));
     let l = (xb[0] - xa[0]).abs();
-    let rho = material.value(cell, 0, "rho").map_err(|_| {
-        PyrucastError::Message(
-            "Timoshenko mass matrix: material component `rho` (density) is required".into(),
-        )
-    })?;
-    let i = material.value(cell, 0, "I")?;
-    let ei = material.value(cell, 0, "E")? * i;
-    let gas = material.value(cell, 0, "G")? * material.value(cell, 0, "A_s")?;
-    let m = mass_4x4(
-        rho * material.value(cell, 0, "A")?,
-        rho * i,
-        ei,
-        Some(gas),
-        l,
-    );
+    let m = mass_4x4(rho_a, rho_i, ei, Some(gas), l);
     for (r, row) in m.iter().enumerate() {
         for (c, v) in row.iter().enumerate() {
             ke[r * 4 + c] += v;

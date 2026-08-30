@@ -62,6 +62,7 @@ use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::kernel::MAX_CELL_DOFS;
 use crate::models::owned_components;
+use crate::models::ElementLayout;
 use crate::models::ZoneLayout;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use serde::{Deserialize, Serialize};
@@ -299,19 +300,6 @@ impl SubModelKind for Shell {
         })
     }
 
-    fn element_matrix(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let mat = material;
-        match self.model {
-            ShellModel::Thick => thick::element_stiffness(&geoms[0], &geoms[1], mat, ke),
-            ShellModel::Kirchhoff => kirchhoff::element_stiffness(&geoms[0], mat, ke),
-        }
-    }
-
     fn physics(&self) -> &'static [Physics] {
         &[Physics::Mechanical]
     }
@@ -424,6 +412,19 @@ impl Domain for Shell {
             }
         }
         Ok(())
+    }
+
+    fn element_matrix(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        match self.model {
+            ShellModel::Thick => thick::element_stiffness(&geoms[0], &geoms[1], material, lay, ke),
+            ShellModel::Kirchhoff => kirchhoff::element_stiffness(&geoms[0], material, lay, ke),
+        }
     }
 }
 

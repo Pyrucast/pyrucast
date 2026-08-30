@@ -47,8 +47,8 @@
 //! [`Contribution::Coupling`]. This physics is its first user.
 //!
 //! The **sign** rides on the kernel, not on a factor threaded through the
-//! assembler: [`SubModelKind::element_matrix`] gives `+h∫N_iN_j` and
-//! [`SubModelKind::coupling_element`] gives `−h∫N_iN_j`. Because each block picks
+//! assembler: [`Domain::element_matrix`] gives `+h∫N_iN_j` and
+//! [`Domain::coupling_element`] gives `−h∫N_iN_j`. Because each block picks
 //! its kernel from its own contribution variant, the assembler needs to know
 //! nothing about interfaces.
 //!
@@ -70,9 +70,10 @@ use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::transfer::{
-    coefficient_indices, coefficient_name, exchange_matrix, flux_name, internal_force, jump_name,
-    material_contract, physics_slice,
+    coefficient_name, exchange_matrix, flux_name, internal_force, jump_name, material_contract,
+    physics_slice,
 };
+use crate::models::ElementLayout;
 use crate::models::ZoneLayout;
 use crate::models::{
     CellGeom, Contribution, CouplingLayout, Domain, MatrixKind, MatrixLayout, Physics, SubModelKind,
@@ -259,34 +260,6 @@ impl SubModelKind for InterfaceTransfer {
         ])
     }
 
-    /// A diagonal block: `+h ∫_Γ N_i N_j dΓ`.
-    fn element_matrix(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let geom = &geoms[0];
-        let mat = material;
-        let coefficients = coefficient_indices(mat, &self.components)?;
-        exchange_matrix(geom, geom, mat, &coefficients, 1.0, ke)
-    }
-
-    /// An off-diagonal block: `−h ∫_Γ N_i^row N_j^col dΓ`. The sign lives here
-    /// rather than in a factor, because the two kernels are already distinct.
-    fn coupling_element(
-        &self,
-        _kind: MatrixKind,
-        row_geoms: &[CellGeom],
-        col_geoms: &[CellGeom],
-        material: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let mat = material;
-        let coefficients = coefficient_indices(mat, &self.components)?;
-        exchange_matrix(&row_geoms[0], &col_geoms[0], mat, &coefficients, -1.0, ke)
-    }
-
     /// Internal fluxes `q_i = ∫ N_i · flux dΓ` — weighted by `N`, not by `Bᵀ`,
     /// exactly as for convection: the interface integrand is a flux **density**,
     /// not a gradient-conjugate quantity.
@@ -366,6 +339,34 @@ impl Domain for InterfaceTransfer {
             out[v] = h * deformation[lay.deformation[v] as usize];
         }
         Ok(())
+    }
+
+    /// A diagonal block: `+h ∫_Γ N_i N_j dΓ`.
+    fn element_matrix(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        let mat = material;
+        exchange_matrix(geom, geom, mat, lay, 1.0, ke)
+    }
+
+    /// An off-diagonal block: `−h ∫_Γ N_i^row N_j^col dΓ`. The sign lives here
+    /// rather than in a factor, because the two kernels are already distinct.
+    fn coupling_element(
+        &self,
+        _kind: MatrixKind,
+        row_geoms: &[CellGeom],
+        col_geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let mat = material;
+        exchange_matrix(&row_geoms[0], &col_geoms[0], mat, lay, -1.0, ke)
     }
 }
 

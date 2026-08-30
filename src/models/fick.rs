@@ -46,6 +46,7 @@
 //! through a porous solid. It is optional: a steady assembly never asks for it.
 
 use crate::containers::element_field::SubElementField;
+use crate::containers::field::ABSENT_COMPONENT;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
@@ -54,6 +55,7 @@ use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::kernel::MAX_CELL_DOFS;
 use crate::models::symmetry::{self, MaterialSymmetry};
+use crate::models::ElementLayout;
 use crate::models::ZoneLayout;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use serde::{Deserialize, Serialize};
@@ -360,24 +362,6 @@ impl SubModelKind for Fick {
         self.stiffness_layout()
     }
 
-    fn element_matrix(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        element_stiffness(&geoms[0], material, self.symmetry, &self.species, ke)
-    }
-
-    fn element_mass(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        element_storage(&geoms[0], material, ke)
-    }
-
     /// Internal nodal fluxes `j_i = ∫ ∇N_i · flux dx` — `Bᵀ` applied to the
     /// weak-form flux, as in conduction. Single dual variable, so `fe[i]` per node.
     fn internal_force_reads(&self) -> Vec<String> {
@@ -398,10 +382,13 @@ impl SubModelKind for Fick {
             let dn = &mut dn_buf[..geom.n_nodes * d];
             geom.dn_dx(g, dn)?;
             let w = geom.det_j_w(g);
+            // The flux row, sliced once: its bounds were settled with the zone,
+            // so a node no longer re-proves them component by component.
+            let row = stress.row(geom.cell, g);
             for i in 0..geom.n_nodes {
                 let mut s = 0.0;
                 for a in 0..d {
-                    s += dn[i * d + a] * stress.get(geom.cell, g, lay[a] as usize)?;
+                    s += dn[i * d + a] * row[lay[a] as usize];
                 }
                 fe[i] += s * w;
             }
@@ -486,6 +473,26 @@ impl Domain for Fick {
         }
         Ok(())
     }
+
+    fn element_matrix(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        element_stiffness(&geoms[0], material, lay, self.symmetry, ke)
+    }
+
+    fn element_mass(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        element_storage(&geoms[0], material, lay, ke)
+    }
 }
 
 /// Element kernel: local diffusion matrix of one cell,
@@ -515,13 +522,16 @@ impl Domain for Fick {
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["D_H2".into()], &[2.0]).unwrap());
 /// # use pyrucast::models::fick;
+/// # use pyrucast::models::ElementLayout;
+/// // Le champ est rangé dans l'ordre du contrat : la table est l'identité.
+/// let lay = ElementLayout { material: vec![0], optional_material: vec![], state: vec![] };
 /// // Le même laplacien que la conduction, avec la diffusivité de l'espèce.
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support,
 ///     vec!["j_H2".into()], vec!["c_H2".into()], DofOrdering::NodesThenVars, true,
 ///     &mat, None,
 ///     |geoms, m, _s, ke| fick::element_stiffness(
-///         &geoms[0], m, MaterialSymmetry::Isotropic, "H2", ke),
+///         &geoms[0], m, &lay, MaterialSymmetry::Isotropic, ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
 /// assert!(total.abs() < 1e-9); // une concentration uniforme ne diffuse pas
@@ -530,22 +540,24 @@ impl Domain for Fick {
 pub fn element_stiffness(
     geom: &CellGeom,
     material: &SubElementField,
+    lay: &ElementLayout,
     symmetry: MaterialSymmetry,
-    species: &str,
     ke: &mut [f64],
 ) -> Result<()> {
     let n_nodes = geom.n_nodes;
     let space_dim = geom.space_dim;
+    let cell_row = material.row(geom.cell, 0);
     // An oriented diffusivity is built once per cell; the isotropic scalar is
-    // read at each Gauss point, so it may vary inside a cell.
+    // read at each Gauss point, so it may vary inside a cell. The species no
+    // longer travels down here: naming `D_<species>` is the zone's business,
+    // and it did it once — this reads `lay.material` and never a name.
     let tensor = if symmetry.has_frame() {
-        Some(symmetry::transport_tensor(
-            material,
-            geom.cell,
-            0,
+        Some(symmetry::transport_tensor_by(
+            cell_row,
+            cell_row,
+            &lay.material,
             symmetry,
             space_dim,
-            &format!("D_{species}"),
         )?)
     } else {
         None
@@ -557,7 +569,7 @@ pub fn element_stiffness(
         let det_j_w = geom.det_j_w(g);
         match &tensor {
             None => {
-                let d = material.value(geom.cell, g, &format!("D_{species}"))?;
+                let d = material.row(geom.cell, g)[lay.material[0] as usize];
                 for i in 0..n_nodes {
                     for j in 0..n_nodes {
                         let mut grad_dot = 0.0;
@@ -612,25 +624,39 @@ pub fn element_stiffness(
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["poro".into()], &[3.0]).unwrap());
 /// # use pyrucast::models::fick;
+/// # use pyrucast::models::ElementLayout;
+/// // `poro` est la seule composante **facultative** du contrat de Fick.
+/// let lay = ElementLayout {
+///     material: vec![], optional_material: vec![0], state: vec![],
+/// };
 /// // Le pendant de la capacité thermique, côté transport de masse.
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support,
 ///     vec!["j_H2".into()], vec!["c_H2".into()], DofOrdering::NodesThenVars, true,
 ///     &mat, None,
-///     |geoms, m, _s, ke| fick::element_storage(&geoms[0], m, ke),
+///     |geoms, m, _s, ke| fick::element_storage(&geoms[0], m, &lay, ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
 /// assert!((total - 3.0 * 0.5).abs() < 1e-9);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn element_storage(geom: &CellGeom, material: &SubElementField, ke: &mut [f64]) -> Result<()> {
+pub fn element_storage(
+    geom: &CellGeom,
+    material: &SubElementField,
+    lay: &ElementLayout,
+    ke: &mut [f64],
+) -> Result<()> {
     let n_nodes = geom.n_nodes;
-    let poro = material.value(geom.cell, 0, "poro").map_err(|_| {
-        PyrucastError::Message(
-            "Fick storage matrix: material component `poro` (storage coefficient) is required"
-                .into(),
-        )
-    })?;
+    // `poro` is optional: the diffusion assembly never asks for it, the storage
+    // matrix cannot do without.
+    let poro =
+        match lay.optional_material[0] {
+            ABSENT_COMPONENT => return Err(PyrucastError::Message(
+                "Fick storage matrix: material component `poro` (storage coefficient) is required"
+                    .into(),
+            )),
+            i => material.row(geom.cell, 0)[i as usize],
+        };
     for g in 0..geom.n_gauss {
         let n = geom.n_at_g(g);
         let det_j_w = geom.det_j_w(g);

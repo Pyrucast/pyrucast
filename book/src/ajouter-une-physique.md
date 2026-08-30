@@ -27,9 +27,7 @@ SubModelKind  (trait de base : le dénominateur commun de tout sous-modèle)
 ├── physics       -> &'static [Physics]          ── la nature (requise)
 ├── as_domain     -> Option<&dyn Domain>        (défaut : None)  ── seam capacité
 ├── as_constraint -> Option<&dyn Constraint>    (défaut : None)  ── seam capacité
-├── element_matrix / element_mass                (noyaux cellule ; défaut : erreur)
-│   element_geometric / element_tangent
-│   └── matrix_element(kind, …)                  (le dispatcher, fourni)
+│   └── matrix_element(kind, …)                  (le pont vers Domain, fourni)
 ├── stiffness_layout / mass_layout               (blocs calculés ; défaut : None)
 │   geometric_layout / tangent_layout
 │   └── matrix_layout(kind)                      (le dispatcher, fourni)
@@ -128,22 +126,9 @@ pub trait SubModelKind: Sync {
     fn as_domain(&self)     -> Option<&dyn Domain>     { None }
     fn as_constraint(&self) -> Option<&dyn Constraint> { None }
 
-    // ── Noyaux de matrice élémentaire (une cellule) — purs et séquentiels.
-    // `geoms` : un CellGeom par espace EF du layout (geoms[0] pour le cas usuel,
-    // plusieurs pour un élément multi-quadrature — poutre/coque).
-    // Défaut : erreur (« cette physique n'a pas ce terme »).
-    fn element_matrix(&self, geoms: &[CellGeom],
-        material: Option<&SubElementField>, ke: &mut [f64]) -> Result<()>;      // ∫ Bᵀ D B
-    fn element_mass(&self, geoms: &[CellGeom],
-        material: Option<&SubElementField>, ke: &mut [f64]) -> Result<()>;      // ∫ ρ Nᵀ N
-    fn element_geometric(&self, geoms: &[CellGeom],
-        material: Option<&SubElementField>, state: Option<&SubElementField>,
-        ke: &mut [f64]) -> Result<()>;                                          // ∫ Gᵀ σ̂ G
-    fn element_tangent(&self, geoms: &[CellGeom],
-        material: Option<&SubElementField>, state: Option<&SubElementField>,
-        ke: &mut [f64]) -> Result<()>;                                          // ∫ Bᵀ D_alg B
-    // Le dispatcher que pilote l'assembleur — fourni, on ne l'écrit pas :
-    fn matrix_element(&self, kind: MatrixKind, /* … */) -> Result<()> { /* route vers les quatre */ }
+    // Le pont vers les noyaux de matrice, qui vivent sur `Domain` (voir plus
+    // bas) — fourni, on ne l'écrit pas :
+    fn matrix_element(&self, kind: MatrixKind, /* … */) -> Result<()> { /* as_domain() puis route */ }
 
     // ── Déclarations structurelles du bloc *calculé*, une par MatrixKind ;
     // None (défaut) ⇒ pas de terme de ce genre pour cette physique :
@@ -200,6 +185,31 @@ pub trait Domain: Sync {
         prev: &Handle<SubElementField>,
         material: Option<&Handle<SubElementField>>,
         dt: f64) -> Result<SubElementField> { /* fourni : résout la zone, pilote integrate_point */ }
+
+    // ── Voie MATRICE, le miroir exact de la précédente ────────────────────
+    // Ce que le noyau de matrice lit dans l'état, par genre (défaut : rien —
+    // une raideur ou une masse ne lit que le matériau, déjà déclaré ci-dessus) :
+    fn element_state_reads(&self, kind: MatrixKind) -> Vec<String> { Vec::new() }
+    fn element_layout(&self, kind: MatrixKind, material: &SubElementField,
+        state: Option<&SubElementField>) -> Result<ElementLayout> { /* fourni */ }
+
+    // Les noyaux de matrice élémentaire (une cellule) — purs et séquentiels.
+    // `geoms` : un CellGeom par espace EF du layout (geoms[0] pour le cas usuel,
+    // plusieurs pour un élément multi-quadrature — poutre/coque).
+    // `lay` dit où chaque composante se trouve, résolu une fois par zone.
+    fn element_matrix(&self, geoms: &[CellGeom], material: &SubElementField,
+        lay: &ElementLayout, ke: &mut [f64]) -> Result<()>;                     // ∫ Bᵀ D B  (requis)
+    // Les quatre suivants ont un défaut qui erre : « cette physique n'a pas ce
+    // terme » — pas de masse, pas de flambement, pas de tangente, pas de couplage.
+    fn element_mass(&self, geoms: &[CellGeom], material: &SubElementField,
+        lay: &ElementLayout, ke: &mut [f64]) -> Result<()>;                     // ∫ ρ Nᵀ N
+    fn element_geometric(&self, geoms: &[CellGeom], material: &SubElementField,
+        lay: &ElementLayout, state: &SubElementField, ke: &mut [f64]) -> Result<()>;   // ∫ Gᵀ σ̂ G
+    fn element_tangent(&self, geoms: &[CellGeom], material: &SubElementField,
+        lay: &ElementLayout, state: &SubElementField, ke: &mut [f64]) -> Result<()>;   // ∫ Bᵀ D_alg B
+    fn coupling_element(&self, kind: MatrixKind, row_geoms: &[CellGeom],
+        col_geoms: &[CellGeom], material: &SubElementField,
+        lay: &ElementLayout, ke: &mut [f64]) -> Result<()>;                     // interface
 }
 pub trait Constraint {
     fn multiplier_mesh(&self) -> &Mesh;
@@ -208,6 +218,15 @@ pub trait Constraint {
     fn relations(&self) -> Result<Vec<Relation>>;
 }
 ```
+
+`Domain` porte donc **deux voies**, et elles ont la même forme : la physique
+déclare ce qu'elle lit, la zone le traduit en positions une fois, le noyau
+indexe. Un noyau ne compare jamais un nom de composante.
+
+| | déclare | résout (1× par zone) | consomme |
+|---|---|---|---|
+| voie **point de Gauss** | `deformation_reads` / `state_reads` | `zone_layout` → `ZoneLayout` | `integrate_point` |
+| voie **matrice** | `material_components` / `element_state_reads` | `element_layout` → `ElementLayout` | `element_matrix` & consorts |
 
 Conséquences pratiques — pour donner une capacité à une physique, implémenter le
 sous-trait **et** redéfinir le seam correspondant pour rendre `Some(self)` :

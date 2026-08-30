@@ -43,6 +43,7 @@
 
 use crate::atoms::ElementType;
 use crate::containers::element_field::SubElementField;
+use crate::containers::field::ABSENT_COMPONENT;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
@@ -54,6 +55,7 @@ use crate::models::kernel::MAX_CELL_DOFS;
 use crate::models::owned_components;
 use crate::models::ZoneLayout;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{ElementLayout, MatrixKind};
 use serde::{Deserialize, Serialize};
 
 pub use crate::models::beam::BeamModel;
@@ -233,84 +235,6 @@ impl SubModelKind for Bernoulli {
         }
     }
 
-    fn element_mass(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let geom = &geoms[0];
-        let mat = material;
-        match self.model {
-            BeamModel::Planar1d => planar_mass(geom, mat, ke),
-            BeamModel::Frame2d => crate::models::frame::element_mass(geom, mat, ke),
-            BeamModel::Frame3d => crate::models::frame3d::element_mass(geom, mat, ke),
-        }
-    }
-
-    fn element_geometric(
-        &self,
-        geoms: &[CellGeom],
-        _material: &SubElementField,
-        state: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let geom = &geoms[0];
-        let stress = state;
-        match self.model {
-            BeamModel::Planar1d => Err(PyrucastError::Message(
-                "Bernoulli: a pure-bending beam carries no axial force, so it has no geometric \
-                 stiffness — use a 2-D or 3-D configuration"
-                    .into(),
-            )),
-            BeamModel::Frame2d => crate::models::frame::element_geometric(geom, stress, ke),
-            BeamModel::Frame3d => crate::models::frame3d::element_geometric(geom, stress, ke),
-        }
-    }
-
-    fn element_matrix(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let geom = &geoms[0];
-        let mat = material;
-        let (l, dir) = self.axis(geom)?;
-        let cell = geom.cell;
-        let e = mat.value(cell, 0, "E")?;
-
-        match self.model {
-            BeamModel::Planar1d => {
-                let local = bending_4x4(geom, e * mat.value(cell, 0, "I")?)?;
-                copy(&local, ke, 4);
-            }
-            BeamModel::Frame2d => {
-                let local = plane_frame(
-                    geom,
-                    e * mat.value(cell, 0, "A")?,
-                    e * mat.value(cell, 0, "I")?,
-                    l,
-                )?;
-                let t = rotation_2d(dir[0], dir[1]);
-                congruent(&local, &t, ke, 6);
-            }
-            BeamModel::Frame3d => {
-                let local = space_frame(
-                    geom,
-                    e * mat.value(cell, 0, "A")?,
-                    e * mat.value(cell, 0, "I_y")?,
-                    e * mat.value(cell, 0, "I_z")?,
-                    mat.value(cell, 0, "G")? * mat.value(cell, 0, "J")?,
-                    l,
-                )?;
-                let t = rotation_3d(&dir);
-                congruent(&local, &t, ke, 12);
-            }
-        }
-        Ok(())
-    }
-
     fn physics(&self) -> &'static [Physics] {
         &[Physics::Mechanical]
     }
@@ -398,6 +322,121 @@ impl Domain for Bernoulli {
                 out[1] = m(0) * m(2) * e(1); // E·I_y·κ_y
                 out[2] = m(0) * m(3) * e(2); // E·I_z·κ_z
                 out[3] = m(5) * m(4) * e(3); // G·J·torsion
+            }
+        }
+        Ok(())
+    }
+
+    /// La raideur géométrique de la poutre lit son effort normal.
+    fn element_state_reads(&self, kind: MatrixKind) -> Vec<String> {
+        match kind {
+            MatrixKind::Geometric => vec!["N".to_string()],
+            _ => Vec::new(),
+        }
+    }
+
+    fn element_mass(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        let row = material.row(geom.cell, 0);
+        let m = |k: usize| row[lay.material[k] as usize];
+        // `rho` ferme la liste des facultatives ; sans elle, pas de masse.
+        let rho = optional(row, lay, lay.optional_material.len() - 1, "rho")?;
+        // Une poutre de Bernoulli ne déclare **ni** `G` **ni** `A_s` : cette
+        // absence *est* l'énoncé qu'il n'y a pas de souplesse au cisaillement.
+        match self.model {
+            // [E, I] + facultatives [A, rho]
+            BeamModel::Planar1d => {
+                let a = optional(row, lay, 0, "A")?;
+                planar_mass(geom, rho * a, rho * m(1), m(0) * m(1), ke)
+            }
+            // [E, A, I]
+            BeamModel::Frame2d => crate::models::frame::element_mass(
+                geom,
+                rho * m(1),
+                rho * m(2),
+                m(0) * m(2),
+                None,
+                ke,
+            ),
+            // [E, A, I_y, I_z, J, G]
+            BeamModel::Frame3d => crate::models::frame3d::element_mass(
+                geom,
+                rho,
+                m(1),
+                m(2),
+                m(3),
+                m(0),
+                None,
+                None,
+                None,
+                ke,
+            ),
+        }
+    }
+
+    fn element_geometric(
+        &self,
+        geoms: &[CellGeom],
+        _material: &SubElementField,
+        lay: &ElementLayout,
+        state: &SubElementField,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        match self.model {
+            BeamModel::Planar1d => Err(PyrucastError::Message(
+                "Bernoulli: a pure-bending beam carries no axial force, so it has no geometric \
+                 stiffness — use a 2-D or 3-D configuration"
+                    .into(),
+            )),
+            _ => {
+                let n = state.row(geom.cell, 0)[lay.state[0] as usize];
+                match self.model {
+                    BeamModel::Frame2d => crate::models::frame::element_geometric(geom, n, ke),
+                    _ => crate::models::frame3d::element_geometric(geom, n, ke),
+                }
+            }
+        }
+    }
+
+    fn element_matrix(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        let (l, dir) = self.axis(geom)?;
+        // Le contrat de chaque configuration (`material_of`), lu par les indices
+        // que la zone a résolus une fois.
+        let row = material.row(geom.cell, 0);
+        let m = |k: usize| row[lay.material[k] as usize];
+        let e = m(0);
+
+        match self.model {
+            // [E, I]
+            BeamModel::Planar1d => {
+                let local = bending_4x4(geom, e * m(1))?;
+                copy(&local, ke, 4);
+            }
+            // [E, A, I]
+            BeamModel::Frame2d => {
+                let local = plane_frame(geom, e * m(1), e * m(2), l)?;
+                let t = rotation_2d(dir[0], dir[1]);
+                congruent(&local, &t, ke, 6);
+            }
+            // [E, A, I_y, I_z, J, G]
+            BeamModel::Frame3d => {
+                let local = space_frame(geom, e * m(1), e * m(2), e * m(3), m(5) * m(4), l)?;
+                let t = rotation_3d(&dir);
+                congruent(&local, &t, ke, 12);
             }
         }
         Ok(())
@@ -597,23 +636,21 @@ fn congruent(local: &[Vec<f64>], t: &[Vec<f64>], ke: &mut [f64], side: usize) {
 /// back is the classical `ρAL/420·[156, 22L, 54, −13L; …]`, which
 /// `models::beam` asserts against that very table. Bernoulli therefore adds no
 /// derivation of its own — it is the `Φ → 0` end of one.
-fn planar_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64]) -> Result<()> {
-    let cell = geom.cell;
+/// Une composante facultative, lue par l'indice que la zone a résolu — absente,
+/// elle se nomme dans l'erreur plutôt que de valoir zéro en silence.
+fn optional(row: &[f64], lay: &ElementLayout, slot: usize, name: &str) -> Result<f64> {
+    match lay.optional_material[slot] {
+        ABSENT_COMPONENT => Err(PyrucastError::Message(format!(
+            "Bernoulli mass matrix: material component `{name}` is required"
+        ))),
+        i => Ok(row[i as usize]),
+    }
+}
+
+fn planar_mass(geom: &CellGeom, rho_a: f64, rho_i: f64, ei: f64, ke: &mut [f64]) -> Result<()> {
     let (xa, xb) = (geom.node_coord(0), geom.node_coord(1));
     let l = (xb[0] - xa[0]).abs();
-    let rho = material.value(cell, 0, "rho").map_err(|_| {
-        PyrucastError::Message(
-            "Bernoulli mass matrix: material component `rho` (density) is required".into(),
-        )
-    })?;
-    let i = material.value(cell, 0, "I")?;
-    let m = crate::models::beam::mass_4x4(
-        rho * material.value(cell, 0, "A")?,
-        rho * i,
-        material.value(cell, 0, "E")? * i,
-        None,
-        l,
-    );
+    let m = crate::models::beam::mass_4x4(rho_a, rho_i, ei, None, l);
     for (r, row) in m.iter().enumerate() {
         for (c, v) in row.iter().enumerate() {
             ke[r * 4 + c] += v;

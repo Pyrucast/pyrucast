@@ -6,6 +6,7 @@
 //! named [`MATERIAL_COMPONENT`].
 
 use crate::containers::element_field::SubElementField;
+use crate::containers::field::ABSENT_COMPONENT;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
@@ -15,6 +16,7 @@ use crate::handle::Handle;
 use crate::models::kernel::MAX_CELL_DOFS;
 use crate::models::owned_components;
 use crate::models::symmetry::{self, MaterialSymmetry};
+use crate::models::ElementLayout;
 use crate::models::ZoneLayout;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use serde::{Deserialize, Serialize};
@@ -324,26 +326,6 @@ impl SubModelKind for HeatConduction {
         self.stiffness_layout()
     }
 
-    fn element_matrix(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let geom = &geoms[0];
-        element_stiffness(geom, material, self.symmetry, ke)
-    }
-
-    fn element_mass(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let geom = &geoms[0];
-        element_capacity(geom, material, ke)
-    }
-
     /// Internal nodal fluxes `q_i = ∫ ∇N_i · flux dx` of one cell — `Bᵀ` applied
     /// to the weak-form flux, the scalar-transport counterpart of the
     /// continuum-mechanics default (and identical to
@@ -367,10 +349,13 @@ impl SubModelKind for HeatConduction {
             let dn = &mut dn_buf[..geom.n_nodes * d];
             geom.dn_dx(g, dn)?; // [i * d + a]
             let w = geom.det_j_w(g);
+            // The flux row, sliced once: its bounds were settled with the zone,
+            // so a node no longer re-proves them component by component.
+            let row = stress.row(geom.cell, g);
             for i in 0..geom.n_nodes {
                 let mut s = 0.0;
                 for a in 0..d {
-                    s += dn[i * d + a] * stress.get(geom.cell, g, lay[a] as usize)?;
+                    s += dn[i * d + a] * row[lay[a] as usize];
                 }
                 fe[i] += s * w;
             }
@@ -454,6 +439,26 @@ impl Domain for HeatConduction {
         }
         Ok(())
     }
+
+    fn element_matrix(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        element_stiffness(&geoms[0], material, lay, self.symmetry, ke)
+    }
+
+    fn element_mass(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        element_capacity(&geoms[0], material, lay, ke)
+    }
 }
 
 /// Element kernel: local conductivity matrix of one cell,
@@ -484,6 +489,9 @@ impl Domain for HeatConduction {
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["k".into()], &[2.0]).unwrap());
 /// # use pyrucast::models::heat_conduction;
+/// # use pyrucast::models::ElementLayout;
+/// // Le champ est rangé dans l'ordre du contrat : la table est l'identité.
+/// let lay = ElementLayout { material: vec![0], optional_material: vec![], state: vec![] };
 /// // ∫ ∇Nᵀ k ∇N. Une conductivité constante donne une matrice singulière :
 /// // un champ de température uniforme ne conduit rien.
 /// let bloc = assemble_block(
@@ -491,7 +499,7 @@ impl Domain for HeatConduction {
 ///     vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
 ///     &mat, None,
 ///     |geoms, m, _s, ke| heat_conduction::element_stiffness(
-///         &geoms[0], m, MaterialSymmetry::Isotropic, ke),
+///         &geoms[0], m, &lay, MaterialSymmetry::Isotropic, ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
 /// assert!(total.abs() < 1e-9);
@@ -500,22 +508,23 @@ impl Domain for HeatConduction {
 pub fn element_stiffness(
     geom: &CellGeom,
     material: &SubElementField,
+    lay: &ElementLayout,
     symmetry: MaterialSymmetry,
     ke: &mut [f64],
 ) -> Result<()> {
     let n_nodes = geom.n_nodes;
     let space_dim = geom.space_dim;
+    let cell_row = material.row(geom.cell, 0);
     // An oriented conductivity is built **once per cell** — its constants and its
     // material axes are cell-wise. Isotropy keeps reading its scalar at each
     // Gauss point, so a conductivity varying inside a cell still works.
     let tensor = if symmetry.has_frame() {
-        Some(symmetry::transport_tensor(
-            material,
-            geom.cell,
-            0,
+        Some(symmetry::transport_tensor_by(
+            cell_row,
+            cell_row,
+            &lay.material,
             symmetry,
             space_dim,
-            MATERIAL_COMPONENT,
         )?)
     } else {
         None
@@ -527,7 +536,8 @@ pub fn element_stiffness(
         let det_j_w = geom.det_j_w(g);
         match &tensor {
             None => {
-                let k = material.value(geom.cell, g, MATERIAL_COMPONENT)?;
+                // The scalar conductivity, by the index the zone resolved.
+                let k = material.row(geom.cell, g)[lay.material[0] as usize];
                 for i in 0..n_nodes {
                     for j in 0..n_nodes {
                         let mut grad_dot = 0.0;
@@ -584,32 +594,45 @@ pub fn element_stiffness(
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["rho".into(), "cp".into()], &[3.0, 4.0]).unwrap());
 /// # use pyrucast::models::heat_conduction;
+/// # use pyrucast::models::ElementLayout;
+/// // `rho` et `cp` sont les deux composantes **facultatives** du contrat de
+/// // conduction : la conductivité ne les demande jamais, la capacité si.
+/// let lay = ElementLayout {
+///     material: vec![], optional_material: vec![0, 1], state: vec![],
+/// };
 /// // ∫ ρ c_p Nᵀ N : la capacité thermique. Sa somme vaut ρ·c_p × aire —
 /// // la capacité de la maille entière.
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support,
 ///     vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
 ///     &mat, None,
-///     |geoms, m, _s, ke| heat_conduction::element_capacity(&geoms[0], m, ke),
+///     |geoms, m, _s, ke| heat_conduction::element_capacity(&geoms[0], m, &lay, ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
 /// assert!((total - 3.0 * 4.0 * 0.5).abs() < 1e-9);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn element_capacity(geom: &CellGeom, material: &SubElementField, ke: &mut [f64]) -> Result<()> {
+pub fn element_capacity(
+    geom: &CellGeom,
+    material: &SubElementField,
+    lay: &ElementLayout,
+    ke: &mut [f64],
+) -> Result<()> {
     let n_nodes = geom.n_nodes;
-    let rho = material.value(geom.cell, 0, "rho").map_err(|_| {
-        crate::error::PyrucastError::Message(
-            "HeatConduction capacity matrix: material component `rho` (density) is required".into(),
-        )
-    })?;
-    let cp = material.value(geom.cell, 0, "cp").map_err(|_| {
-        crate::error::PyrucastError::Message(
-            "HeatConduction capacity matrix: material component `cp` (specific heat) is required"
-                .into(),
-        )
-    })?;
-    let rho_cp = rho * cp;
+    // `rho` and `cp` are the two optional components of the conduction contract
+    // (`CAPACITY_COMPONENTS`): the conductivity assembly never asks for them,
+    // the capacity cannot do without.
+    let row = material.row(geom.cell, 0);
+    let read = |slot: usize, what: &str| -> Result<f64> {
+        match lay.optional_material[slot] {
+            ABSENT_COMPONENT => Err(crate::error::PyrucastError::Message(format!(
+                "HeatConduction capacity matrix: material component `{}` ({what}) is required",
+                CAPACITY_COMPONENTS[slot]
+            ))),
+            i => Ok(row[i as usize]),
+        }
+    };
+    let rho_cp = read(0, "density")? * read(1, "specific heat")?;
     for g in 0..geom.n_gauss {
         let n = geom.n_at_g(g);
         let w = geom.det_j_w(g) * rho_cp;

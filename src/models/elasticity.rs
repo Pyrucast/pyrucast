@@ -21,7 +21,7 @@
 //! Material components `E` (Young) and `nu` (Poisson).
 
 use crate::containers::element_field::SubElementField;
-use crate::containers::field::SubField;
+use crate::containers::field::ABSENT_COMPONENT;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
@@ -34,10 +34,19 @@ use crate::models::symmetry::{self, MaterialSymmetry};
 use crate::models::tensor::{dual_name, primal_name, stress_names, Kinematics};
 use crate::models::ZoneLayout;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{ElementLayout, MatrixKind};
 use serde::{Deserialize, Serialize};
 
 /// Material components required by **isotropic** linear elasticity.
 const MATERIAL_COMPONENTS: &[&str] = &["E", "nu"];
+/// Material an elastic law **accepts without requiring**: the thermal-expansion
+/// coefficient, consumed by
+/// [`thermal_strain`](fn@crate::ops::element_field::thermal_strain), and the
+/// density, which only the mass matrix wants. The order is the contract —
+/// `ElementLayout::optional_material` resolves it slot for slot.
+const OPTIONAL_COMPONENTS: &[&str] = &["alpha", "rho"];
+/// Position of `rho` in [`OPTIONAL_COMPONENTS`].
+const RHO_SLOT: usize = 1;
 /// Orthotropic constants plus the in-plane material axis (2-D).
 const ORTHOTROPIC_2D: &[&str] = &[
     "E_1", "E_2", "E_3", "nu_12", "nu_13", "nu_23", "G_12", "G_13", "G_23", "V1X", "V1Y",
@@ -314,55 +323,9 @@ impl SubModelKind for Elasticity {
         self.stiffness_layout()
     }
 
-    fn element_geometric(
-        &self,
-        geoms: &[CellGeom],
-        _material: &SubElementField,
-        state: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let geom = &geoms[0];
-        let stress = state;
-        element_geometric(geom, stress, ke)
-    }
-
     /// Linear elasticity: the consistent tangent **is** the elastic stiffness.
     fn tangent_layout(&self) -> Option<MatrixLayout> {
         self.stiffness_layout()
-    }
-
-    fn element_tangent(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        _state: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let geom = &geoms[0];
-        let mat = material;
-        element_stiffness(geom, mat, self.kinematics, self.symmetry, ke)
-    }
-
-    fn element_matrix(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let geom = &geoms[0];
-        let mat = material;
-        element_stiffness(geom, mat, self.kinematics, self.symmetry, ke)
-    }
-
-    fn element_mass(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let geom = &geoms[0];
-        let mat = material;
-        element_mass(geom, mat, ke)
     }
 
     fn physics(&self) -> &'static [Physics] {
@@ -399,7 +362,7 @@ impl Domain for Elasticity {
     /// assembly. Consumed by
     /// [`crate::ops::element_field::thermal_strain`](fn@crate::ops::element_field::thermal_strain).
     fn optional_material_components(&self) -> &'static [&'static str] {
-        &["alpha", "rho"]
+        OPTIONAL_COMPONENTS
     }
 
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
@@ -441,6 +404,65 @@ impl Domain for Elasticity {
             out[r] = (0..v).map(|c| dmat[r][c] * strain[c]).sum();
         }
         Ok(())
+    }
+
+    /// The geometric stiffness reads the current stress; the consistent tangent,
+    /// the algorithmic moduli the integrator wrote. Both are declared here, once
+    /// per zone, so the kernels below index instead of searching.
+    fn element_state_reads(&self, kind: MatrixKind) -> Vec<String> {
+        match kind {
+            // La tangente d'une loi **linéaire** est sa raideur : elle lit le
+            // matériau, et surtout pas des modules algorithmiques qu'aucun
+            // intégrateur n'a écrits ici. Déclarer ces lectures ferait échouer
+            // la résolution de zone sur un état qui n'a aucune raison de les
+            // porter — c'est la plasticité qui les produit, pas l'élasticité.
+            MatrixKind::Tangent => Vec::new(),
+            _ => continuum_element_state_reads(kind, self.space_dim, self.kinematics),
+        }
+    }
+
+    fn element_geometric(
+        &self,
+        geoms: &[CellGeom],
+        _material: &SubElementField,
+        lay: &ElementLayout,
+        state: &SubElementField,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        element_geometric(&geoms[0], state, lay, ke)
+    }
+
+    fn element_tangent(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        _state: &SubElementField,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        // A linear law's consistent tangent **is** its elastic stiffness, so it
+        // reads the material and ignores the moduli it also declared.
+        element_stiffness(&geoms[0], material, lay, self.kinematics, self.symmetry, ke)
+    }
+
+    fn element_matrix(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        element_stiffness(&geoms[0], material, lay, self.kinematics, self.symmetry, ke)
+    }
+
+    fn element_mass(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        element_mass(&geoms[0], material, lay, ke)
     }
 }
 
@@ -677,12 +699,17 @@ fn b_matrix(
 /// // Le noyau d'élément, tel que le pilote l'appelle. La matrice de
 /// // raideur d'un solide libre est **singulière** : ses lignes somment à
 /// // zéro, un mouvement de corps rigide n'engendrant aucune force.
+/// # use pyrucast::models::ElementLayout;
+/// // `E` puis `nu` : le champ est rangé dans l'ordre du contrat, donc la
+/// // table est l'identité. Un vrai assemblage la ferait résoudre par
+/// // `Domain::element_layout`, qui accepte n'importe quel ordre.
+/// let lay = ElementLayout { material: vec![0, 1], optional_material: vec![], state: vec![] };
 /// let (duals, primals) = vars();
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
 ///     DofOrdering::NodesThenVars, true, &mat, None,
 ///     |geoms, m, _s, ke| elasticity::element_stiffness(
-///         &geoms[0], m, Kinematics::PlaneStress,
+///         &geoms[0], m, &lay, Kinematics::PlaneStress,
 ///         MaterialSymmetry::Isotropic, ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
@@ -692,6 +719,7 @@ fn b_matrix(
 pub fn element_stiffness(
     geom: &CellGeom,
     material: &SubElementField,
+    lay: &ElementLayout,
     kinematics: Kinematics,
     symmetry: MaterialSymmetry,
     ke: &mut [f64],
@@ -699,9 +727,18 @@ pub fn element_stiffness(
     let n_nodes = geom.n_nodes;
     let space_dim = geom.space_dim;
     let dofs = space_dim * n_nodes;
-    // Constants read at Gauss 0 — constant material per cell.
-    let d = symmetry::elastic_constitutive(material, geom.cell, symmetry, kinematics, space_dim)?;
-    let v = d.len();
+    // Constants read at Gauss 0 — constant material per cell — **by index**:
+    // the zone resolved the names once, so this matches none and allocates
+    // nothing.
+    let mut d = [[0.0_f64; 6]; 6];
+    let v = symmetry::elastic_constitutive_into(
+        material.row(geom.cell, 0),
+        &lay.material,
+        symmetry,
+        kinematics,
+        space_dim,
+        &mut d,
+    )?;
     for g in 0..geom.n_gauss {
         // On a body of revolution the hoop row needs `N` and `r` at this point.
         let hoop = if kinematics.is_axisymmetric() {
@@ -770,27 +807,45 @@ pub fn element_stiffness(
 /// #                vec!["u_x".to_string(), "u_y".to_string()]);
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["rho".into()], &[2.0])?);
+/// # use pyrucast::models::ElementLayout;
+/// # use pyrucast::containers::field::ABSENT_COMPONENT;
+/// // La masse ne lit que `rho`, deuxième composante **facultative** du
+/// // contrat élastique (`["alpha", "rho"]`) : `alpha` est absente ici.
+/// let lay = ElementLayout {
+///     material: vec![],
+///     optional_material: vec![ABSENT_COMPONENT, 0],
+///     state: vec![],
+/// };
 /// // La masse totale se retrouve dans la somme des entrées, une fois par
 /// // direction : ρ × aire × space_dim.
 /// let (duals, primals) = vars();
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
 ///     DofOrdering::NodesThenVars, true, &mat, None,
-///     |geoms, m, _s, ke| elasticity::element_mass(&geoms[0], m, ke),
+///     |geoms, m, _s, ke| elasticity::element_mass(&geoms[0], m, &lay, ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
 /// assert!((total - 2.0 * 0.5 * 2.0).abs() < 1e-9);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64]) -> Result<()> {
+pub fn element_mass(
+    geom: &CellGeom,
+    material: &SubElementField,
+    lay: &ElementLayout,
+    ke: &mut [f64],
+) -> Result<()> {
     let n_nodes = geom.n_nodes;
     let space_dim = geom.space_dim;
     let dofs = space_dim * n_nodes;
-    let rho = material.value(geom.cell, 0, "rho").map_err(|_| {
-        PyrucastError::Message(
+    // `rho` is the second optional component of the elastic contract
+    // (`["alpha", "rho"]`): absent, there is no mass to integrate.
+    let i_rho = lay.optional_material[RHO_SLOT];
+    if i_rho == ABSENT_COMPONENT {
+        return Err(PyrucastError::Message(
             "Elasticity mass matrix: material component `rho` (density) is required".into(),
-        )
-    })?;
+        ));
+    }
+    let rho = material.row(geom.cell, 0)[i_rho as usize];
     for g in 0..geom.n_gauss {
         let n = geom.n_at_g(g);
         let w = geom.det_j_w(g) * rho;
@@ -848,6 +903,14 @@ pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64])
 /// # // un, on lui en donne un qui ne sert à rien plutôt qu'une Option.
 /// # let bidon = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["E".into(), "nu".into()], &[210_000.0, 0.3])?);
+/// # use pyrucast::models::ElementLayout;
+/// // La convention lit `[σ_xx, σ_xy, σ_yy]` ; le champ ci-dessus est rangé
+/// // `[σ_xx, σ_yy, σ_xy]`. C'est tout ce que la table absorbe.
+/// let lay = ElementLayout {
+///     material: vec![],
+///     optional_material: vec![],
+///     state: vec![0, 2, 1],
+/// };
 /// // La raideur **géométrique**, celle du flambement : elle vient de l'état
 /// // de contrainte, non du matériau. Sous traction elle est définie
 /// // positive ; c'est son signe qui décide de la charge critique.
@@ -855,40 +918,40 @@ pub fn element_mass(geom: &CellGeom, material: &SubElementField, ke: &mut [f64])
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
 ///     DofOrdering::NodesThenVars, true, &bidon, Some(&etat),
-///     |geoms, _m, s, ke| elasticity::element_geometric(&geoms[0], s.unwrap(), ke),
+///     |geoms, _m, s, ke| elasticity::element_geometric(&geoms[0], s.unwrap(), &lay, ke),
 /// )?;
 /// // Elle est singulière elle aussi : les modes rigides n'y coûtent rien.
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
 /// assert!(total.abs() < 1e-9);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn element_geometric(geom: &CellGeom, stress: &SubElementField, ke: &mut [f64]) -> Result<()> {
+pub fn element_geometric(
+    geom: &CellGeom,
+    stress: &SubElementField,
+    lay: &ElementLayout,
+    ke: &mut [f64],
+) -> Result<()> {
     let n_nodes = geom.n_nodes;
     let d = geom.space_dim;
     let dofs = d * n_nodes;
-    // Resolved once for the element, not once per Gauss point.
-    let names = crate::models::stress_matrix_reads(d);
-    let refs: Vec<&str> = names.iter().map(String::as_str).collect();
-    let lay = stress.resolve_components(&refs, "stress")?;
-    let stride = stress.component_count();
-    let values = stress.values();
+    // `lay.state` is the Voigt stress in `stress_matrix_reads` order, closed by
+    // the hoop `σ_θθ` on a body of revolution — resolved once for the zone.
+    let lay = &lay.state;
     let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
     for g in 0..geom.n_gauss {
         let dn = &mut dn_buf[..n_nodes * d]; // [i * d + c]
         geom.dn_dx(g, dn)?;
         let w = geom.det_j_w(g);
-        let start = (geom.cell * geom.n_gauss + g) * stride;
+        let row = stress.row(geom.cell, g);
         let mut sig = [0.0_f64; 9]; // [c * d + e]
-        crate::models::voigt_stress_matrix(&values[start..start + stride], &lay, d, &mut sig);
+        crate::models::voigt_stress_matrix(row, lay, d, &mut sig);
         // On a body of revolution the hoop strain's own non-linear part,
         // ½(u_r/r)², contributes `σ_θθ N_i N_j / r²` on the radial diagonal —
         // the initial-stress counterpart of the `N_i / r` row of `B`.
         let hoop = if geom.axisymmetric {
             let r = geom.radius(g)?;
-            Some((
-                geom.n_at_g(g),
-                stress.value(geom.cell, g, "sigma_zz")? / (r * r),
-            ))
+            // The hoop closes the read list, exactly as it does for `Bᵀσ`.
+            Some((geom.n_at_g(g), row[lay[lay.len() - 1] as usize] / (r * r)))
         } else {
             None
         };
@@ -913,6 +976,46 @@ pub fn element_geometric(geom: &CellGeom, stress: &SubElementField, ke: &mut [f6
         }
     }
     Ok(())
+}
+
+/// What a continuum-mechanics **matrix** kernel reads from the state field, by
+/// [`MatrixKind`] — the shared declaration of elasticity, plasticity and damage,
+/// which run the very same kernels.
+///
+/// ```
+/// # use pyrucast::models::MatrixKind;
+/// # use pyrucast::models::tensor::Kinematics;
+/// # use pyrucast::models::elasticity::continuum_element_state_reads;
+/// // Une raideur ne lit aucun état ; la raideur géométrique lit la contrainte.
+/// let k = Kinematics::PlaneStress;
+/// assert!(continuum_element_state_reads(MatrixKind::Stiffness, 2, k).is_empty());
+/// assert_eq!(continuum_element_state_reads(MatrixKind::Geometric, 2, k),
+///            ["sigma_xx", "sigma_xy", "sigma_yy"]);
+/// // Sur un corps de révolution, le cerceau ferme la liste.
+/// let axi = Kinematics::Axisymmetric;
+/// let noms = continuum_element_state_reads(MatrixKind::Geometric, 2, axi);
+/// assert_eq!(noms.last().unwrap(), "sigma_zz");
+/// ```
+pub fn continuum_element_state_reads(
+    kind: MatrixKind,
+    space_dim: usize,
+    kinematics: Kinematics,
+) -> Vec<String> {
+    match kind {
+        // The current Cauchy stress, Voigt-named, closed by the hoop `σ_θθ` on a
+        // body of revolution — the same list `Bᵀσ` reads.
+        MatrixKind::Geometric => {
+            let mut names = crate::models::stress_matrix_reads(space_dim);
+            if kinematics.is_axisymmetric() {
+                names.push("sigma_zz".to_string());
+            }
+            names
+        }
+        // The upper triangle of the algorithmic modulus the integrator wrote.
+        MatrixKind::Tangent => tangent_component_names(space_dim, kinematics),
+        // A stiffness or a mass reads the material and nothing else.
+        MatrixKind::Stiffness | MatrixKind::Mass => Vec::new(),
+    }
 }
 
 /// Names of the **consistent-tangent** state components a non-linear physics
@@ -1006,6 +1109,26 @@ pub fn read_tangent_matrix(
     Ok(d)
 }
 
+/// [`read_tangent_matrix`] **by index** — the form the tangent kernel calls.
+///
+/// `lay` gives the position of each `ktan_i_j` in the state row, in the
+/// upper-triangle order [`tangent_component_names`] declares, resolved once per
+/// zone. Reading by name at each Gauss point cost a `format!` and a string
+/// search per entry, for a table the zone already knew.
+fn read_tangent_matrix_by(row: &[f64], lay: &[u32], v: usize) -> Vec<Vec<f64>> {
+    let mut d = vec![vec![0.0; v]; v];
+    let mut k = 0;
+    for i in 0..v {
+        for j in i..v {
+            let val = row[lay[k] as usize];
+            d[i][j] = val;
+            d[j][i] = val;
+            k += 1;
+        }
+    }
+    d
+}
+
 /// Element kernel: local **consistent tangent** `K_t = Σ_g Bᵀ D_alg B |J| w` of
 /// one cell, with the per-Gauss algorithmic modulus `D_alg` read from `state`
 /// (the constitutive integrator's `ktan_*` output). Same `ke` layout as
@@ -1048,18 +1171,27 @@ pub fn read_tangent_matrix(
 /// # let etat = Handle::new(e);
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["E".into(), "nu".into()], &[210_000.0, 0.3])?);
+/// # use pyrucast::models::ElementLayout;
+/// // Les six `ktan_i_j` ont été écrits dans l'ordre du triangle supérieur,
+/// // et `E`, `nu` dans celui du contrat : deux identités.
+/// let tan_lay = ElementLayout {
+///     material: vec![], optional_material: vec![], state: (0..6).collect(),
+/// };
+/// let mat_lay = ElementLayout {
+///     material: vec![0, 1], optional_material: vec![], state: vec![],
+/// };
 /// let (duals, primals) = vars();
 /// let tangente = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals.clone(), primals.clone(),
 ///     DofOrdering::NodesThenVars, true, &mat, Some(&etat),
 ///     |geoms, _m, s, ke| elasticity::element_tangent_from_state(
-///         &geoms[0], s.unwrap(), Kinematics::PlaneStress, ke),
+///         &geoms[0], s.unwrap(), &tan_lay, Kinematics::PlaneStress, ke),
 /// )?;
 /// let raideur = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
 ///     DofOrdering::NodesThenVars, true, &mat, None,
 ///     |geoms, m, _s, ke| elasticity::element_stiffness(
-///         &geoms[0], m, Kinematics::PlaneStress,
+///         &geoms[0], m, &mat_lay, Kinematics::PlaneStress,
 ///         MaterialSymmetry::Isotropic, ke),
 /// )?;
 /// assert_eq!(tangente.dense(), raideur.dense());
@@ -1068,6 +1200,7 @@ pub fn read_tangent_matrix(
 pub fn element_tangent_from_state(
     geom: &CellGeom,
     state: &SubElementField,
+    lay: &ElementLayout,
     kinematics: Kinematics,
     ke: &mut [f64],
 ) -> Result<()> {
@@ -1085,7 +1218,7 @@ pub fn element_tangent_from_state(
         let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
         geom.dn_dx(g, &mut dn_buf[..n_nodes * space_dim])?;
         let b = b_matrix(&dn_buf[..n_nodes * space_dim], n_nodes, space_dim, hoop);
-        let d = read_tangent_matrix(state, geom.cell, g, space_dim, kinematics)?;
+        let d = read_tangent_matrix_by(state.row(geom.cell, g), &lay.state, v);
         // DB = D·B (voigt × dofs), then Kᵉ += Bᵀ (DB) · |J| w.
         let mut db = vec![vec![0.0; dofs]; v];
         for (r, dbr) in db.iter_mut().enumerate() {

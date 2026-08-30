@@ -243,7 +243,7 @@ pub struct MatrixLayout {
     /// single subspace for a plain volumetric physics, or several — sharing one
     /// submesh, differing only by quadrature — for a multi-quadrature element
     /// (a shear-deformable beam, a shell). The primary (index 0) drives the cell
-    /// loop and the DOF numbering; [`element_matrix`](SubModelKind::element_matrix)
+    /// loop and the DOF numbering; [`element_matrix`](Domain::element_matrix)
     /// receives one [`CellGeom`] per subspace, in this order.
     pub fespaces: Vec<Handle<SubFiniteElementSpace>>,
     /// POI1 sub-mesh giving the block's row **and** column node sequence.
@@ -582,126 +582,36 @@ pub trait SubModelKind: Sync {
         None
     }
 
-    /// Local element stiffness matrix of one cell — the pure, sequential kernel
-    /// a physics author writes (the stiffness counterpart of
-    /// [`Domain::integrate_point`]). Fills `ke` (row-major,
-    /// node-major / variable-minor: `ke[(li*n_dual+di) * n_cols_loc + (lj*n_primal+pj)]`)
-    /// from the cell geometry and material. `material` is `Some(_)` iff the
-    /// physics declares a [`Domain::material_fespace`].
-    ///
-    /// `geoms` holds one [`CellGeom`] per FE subspace declared in
-    /// [`stiffness_layout`](Self::stiffness_layout), in that order: a plain
-    /// volumetric physics reads `geoms[0]`, a multi-quadrature element (a
-    /// shear-deformable beam, a shell) reads each — e.g. `geoms[0]` full Gauss
-    /// for bending, `geoms[1]` reduced for shear.
-    ///
-    /// It **never sees rayon, the store, or a lock**: the assembler drives it in
-    /// parallel over all cells. Default errors (a physics with no element kernel,
-    /// e.g. a constraint such as `Dirichlet`).
-    fn element_matrix(
-        &self,
-        _geoms: &[CellGeom],
-        _material: &SubElementField,
-        _ke: &mut [f64],
-    ) -> Result<()> {
-        Err(PyrucastError::Message(format!(
-            "{}: no element kernel — element_matrix is undefined",
-            self.label()
-        )))
-    }
-
-    /// Local element **mass** matrix of one cell (`∫ ρ Nᵀ N` for mechanics,
-    /// `∫ ρ c Nᵀ N` for the thermal capacity) — the mass counterpart of
-    /// [`element_matrix`](Self::element_matrix). Default errors (a physics with
-    /// no mass term). See [`matrix_element`](Self::matrix_element).
-    fn element_mass(
-        &self,
-        _geoms: &[CellGeom],
-        _material: &SubElementField,
-        _ke: &mut [f64],
-    ) -> Result<()> {
-        Err(PyrucastError::Message(format!(
-            "{}: no mass kernel — element_mass is undefined",
-            self.label()
-        )))
-    }
-
-    /// Local element **geometric (initial-stress) stiffness** of one cell
-    /// (`∫ Gᵀ σ̂ G`). `state` carries this physics' current stress field (the
-    /// [`Domain::integrate_behavior`] output, Voigt-named). Default errors.
-    fn element_geometric(
-        &self,
-        _geoms: &[CellGeom],
-        _material: &SubElementField,
-        _state: &SubElementField,
-        _ke: &mut [f64],
-    ) -> Result<()> {
-        Err(PyrucastError::Message(format!(
-            "{}: no geometric-stiffness kernel — element_geometric is undefined",
-            self.label()
-        )))
-    }
-
-    /// Local element **consistent tangent** of one cell (`∫ Bᵀ D_alg B`).
-    /// `state` carries the algorithmic tangent moduli produced by
-    /// [`Domain::integrate_point`]. Default errors.
-    fn element_tangent(
-        &self,
-        _geoms: &[CellGeom],
-        _material: &SubElementField,
-        _state: &SubElementField,
-        _ke: &mut [f64],
-    ) -> Result<()> {
-        Err(PyrucastError::Message(format!(
-            "{}: no tangent kernel — element_tangent is undefined",
-            self.label()
-        )))
-    }
-
-    /// Local element **coupling** matrix of one facing cell pair — the kernel
-    /// behind [`Contribution::Coupling`]. `row_geoms` describes the cell on the
-    /// row mesh, `col_geoms` the facing cell on the column mesh; `ke` is
-    /// `(row nodes × dual) × (col nodes × primal)`, same node-major layout as
-    /// [`element_matrix`](Self::element_matrix).
-    ///
-    /// It is the physics' job to carry the **sign**: an exchange law contributes
-    /// `+h∫NᵢNⱼ` on its two diagonal blocks and `−h∫NᵢNⱼ` off-diagonal, and since
-    /// the two go through different kernels there is no factor to thread through
-    /// the assembler. Default errors.
-    fn coupling_element(
-        &self,
-        _kind: MatrixKind,
-        _row_geoms: &[CellGeom],
-        _col_geoms: &[CellGeom],
-        _material: &SubElementField,
-        _ke: &mut [f64],
-    ) -> Result<()> {
-        Err(PyrucastError::Message(format!(
-            "{}: no coupling kernel — coupling_element is undefined",
-            self.label()
-        )))
-    }
-
     /// Dispatch the per-cell element kernel for `kind` — the single seam the
     /// global assembler drives (via a [`ComputedRecipe`](crate::containers::matrix::ComputedRecipe)),
-    /// routing to [`element_matrix`](Self::element_matrix) /
-    /// [`element_mass`](Self::element_mass) /
-    /// [`element_geometric`](Self::element_geometric) /
-    /// [`element_tangent`](Self::element_tangent). `state` is `Some(_)` only for
+    /// routing to [`element_matrix`](Domain::element_matrix) /
+    /// [`element_mass`](Domain::element_mass) /
+    /// [`element_geometric`](Domain::element_geometric) /
+    /// [`element_tangent`](Domain::element_tangent). `state` is `Some(_)` only for
     /// the kinds that consume the current stress/tangent field (geometric,
     /// tangent); the others ignore it.
+    #[allow(clippy::too_many_arguments)]
     fn matrix_element(
         &self,
         kind: MatrixKind,
         geoms: &[CellGeom],
         material: &SubElementField,
+        lay: &ElementLayout,
         state: Option<&SubElementField>,
         ke: &mut [f64],
     ) -> Result<()> {
+        // The **one** bridge between the base contract and the element kernels,
+        // which live on `Domain`: only a physics that produces a matrix has
+        // them, and only such a physics declares a material FE subspace.
+        let domain = self.as_domain().ok_or_else(|| {
+            PyrucastError::Message(format!(
+                "{}: no element kernel — this sub-model declares no Domain",
+                self.label()
+            ))
+        })?;
         // The state exists for the two kinds that read it and for no other:
         // **that** is what the `Option` says, and it dies here rather than in
-        // each kernel below. The material is not optional at all — a physics
-        // with an element kernel declares a material FE subspace.
+        // each kernel below.
         let with_state = |what: &str| -> Result<&SubElementField> {
             state.ok_or_else(|| {
                 PyrucastError::Message(format!(
@@ -711,13 +621,13 @@ pub trait SubModelKind: Sync {
             })
         };
         match kind {
-            MatrixKind::Stiffness => self.element_matrix(geoms, material, ke),
-            MatrixKind::Mass => self.element_mass(geoms, material, ke),
+            MatrixKind::Stiffness => domain.element_matrix(geoms, material, lay, ke),
+            MatrixKind::Mass => domain.element_mass(geoms, material, lay, ke),
             MatrixKind::Geometric => {
-                self.element_geometric(geoms, material, with_state("geometric")?, ke)
+                domain.element_geometric(geoms, material, lay, with_state("geometric")?, ke)
             }
             MatrixKind::Tangent => {
-                self.element_tangent(geoms, material, with_state("tangent")?, ke)
+                domain.element_tangent(geoms, material, lay, with_state("tangent")?, ke)
             }
         }
     }
@@ -771,7 +681,7 @@ pub trait SubModelKind: Sync {
     ///
     /// **Default**: derived from [`stiffness_layout`](Self::stiffness_layout) —
     /// a single block on that layout, filled by
-    /// [`element_matrix`](Self::element_matrix) via [`kernel::assemble_block`].
+    /// [`element_matrix`](Domain::element_matrix) via [`kernel::assemble_block`].
     /// A plain volumetric physics therefore writes only `element_matrix` +
     /// `stiffness_layout` and gets this for free; this literal path serves as
     /// the bit-for-bit reference of the computed (scatter) path. A sub-model
@@ -786,6 +696,15 @@ pub trait SubModelKind: Sync {
                 self.label()
             )));
         };
+        let domain = self.as_domain().ok_or_else(|| {
+            PyrucastError::Message(format!(
+                "{}: no element kernel — this sub-model declares no Domain",
+                self.label()
+            ))
+        })?;
+        // Resolved once for the zone, before the parallel region: the closure
+        // below captures the table, so no cell ever matches a component name.
+        let lay = domain.element_layout(MatrixKind::Stiffness, &material.read(), None)?;
         let block = kernel::assemble_block(
             &layout.fespaces,
             &layout.support,
@@ -796,7 +715,7 @@ pub trait SubModelKind: Sync {
             layout.symmetric,
             material,
             None,
-            |geoms, m, _state, ke| self.element_matrix(geoms, m, ke),
+            |geoms, m, _state, ke| domain.element_matrix(geoms, m, &lay, ke),
         )?;
         Ok(vec![block])
     }
@@ -806,7 +725,7 @@ pub trait SubModelKind: Sync {
     /// or any multi-block physics). When `Some`, it drives **both** paths from a
     /// single description: the global assembler
     /// ([`crate::ops::matrix::stiffness`]) builds a *computed*
-    /// [`SubMatrix`] and scatters [`element_matrix`](Self::element_matrix)
+    /// [`SubMatrix`] and scatters [`element_matrix`](Domain::element_matrix)
     /// straight into the CSR (never materialising values), and the default
     /// [`build_stiffness_blocks`](Self::build_stiffness_blocks) produces the
     /// *literal* equivalent from the same layout + kernel.
@@ -1327,6 +1246,42 @@ pub struct ZoneLayout {
     pub optional_material: Vec<u32>,
 }
 
+/// What a **matrix** kernel reads, resolved once per zone — the counterpart of
+/// [`ZoneLayout`] on the element side.
+///
+/// The two paths of a physics now hold the same shape: the point kernel gets a
+/// [`ZoneLayout`] from [`Domain::zone_layout`], the element kernel gets an
+/// `ElementLayout` from [`Domain::element_layout`], and neither looks a
+/// component up by name. A name search is a string comparison; done inside a
+/// per-cell loop it re-proves at every cell what is a property of the *zone*.
+///
+/// ```
+/// # use pyrucast::models::ElementLayout;
+/// // Une table dit où lire. La physique déclare son ordre canonique
+/// // (`material_components`, `element_state_reads`), la zone le traduit.
+/// let lay = ElementLayout {
+///     material: vec![1, 0],
+///     optional_material: Vec::new(),
+///     state: Vec::new(),
+/// };
+/// let ligne = [0.3, 210_000.0];
+/// // `E` est déclaré en premier, mais rangé en second dans ce champ-là.
+/// assert_eq!(ligne[lay.material[0] as usize], 210_000.0);
+/// ```
+pub struct ElementLayout {
+    /// Position of each **required** material component, in
+    /// [`Domain::material_components`] order.
+    pub material: Vec<u32>,
+    /// Position of each **optional** material component, in
+    /// [`Domain::optional_material_components`] order;
+    /// [`ABSENT_COMPONENT`](crate::containers::field::ABSENT_COMPONENT) where
+    /// the caller supplied none.
+    pub optional_material: Vec<u32>,
+    /// Position of each [`Domain::element_state_reads`] component in the state
+    /// row — empty for the kinds that read no state (stiffness, mass).
+    pub state: Vec<u32>,
+}
+
 /// A **domain** sub-model — an optional capability, not part of the base
 /// [`SubModelKind`] contract. A domain is a physics defined *over a region*: it
 /// reads material data **and** integrates a constitutive law over its cells. A
@@ -1347,7 +1302,7 @@ pub struct ZoneLayout {
 /// ([`integrate_point`](Self::integrate_point) +
 /// [`behavior_output_components`](Self::behavior_output_components)) and the FE
 /// subspace [`behavior_fespace`](Self::behavior_fespace); the stiffness kernel
-/// [`element_matrix`](SubModelKind::element_matrix) stays on the base trait, and
+/// and the matrix kernels ([`element_matrix`](Self::element_matrix) & consorts) are
 /// the parallel driver [`integrate_behavior`](Self::integrate_behavior) is
 /// provided.
 ///
@@ -1471,6 +1426,160 @@ pub trait Domain: Sync {
             optional_material: material
                 .resolve_optional_components(self.optional_material_components()),
         })
+    }
+
+    /// Components the **matrix** kernel of `kind` reads from the state field, in
+    /// the slot order its indices assume — the counterpart of
+    /// [`state_reads`](Self::state_reads) on the element side.
+    ///
+    /// Default: none. A stiffness or a mass reads only the material, so only the
+    /// two state-consuming kinds — `Geometric` (the current stress) and
+    /// `Tangent` (the algorithmic moduli) — declare anything here. The material
+    /// side needs no declaration at all: [`material_components`](Self::material_components)
+    /// already is it.
+    fn element_state_reads(&self, _kind: MatrixKind) -> Vec<String> {
+        Vec::new()
+    }
+
+    /// Resolve this physics' matrix conventions against the fields it will be
+    /// handed — **the upstream half of index-based reading**, and the only place
+    /// a matrix kernel's component names are matched at all.
+    ///
+    /// **Provided**, and rarely worth redefining; the mirror of
+    /// [`zone_layout`](Self::zone_layout). The driver calls it once per zone,
+    /// before the parallel region, and hands the result to every cell.
+    fn element_layout(
+        &self,
+        kind: MatrixKind,
+        material: &SubElementField,
+        state: Option<&SubElementField>,
+    ) -> Result<ElementLayout> {
+        let mat_names = self.material_components();
+        let mat_refs: Vec<&str> = mat_names.iter().map(String::as_str).collect();
+        let state_names = self.element_state_reads(kind);
+        let state_refs: Vec<&str> = state_names.iter().map(String::as_str).collect();
+        let state_lay = match (state, state_refs.is_empty()) {
+            (_, true) => Vec::new(),
+            (Some(s), false) => s.resolve_components(&state_refs, "state")?,
+            // The assembler supplies a state for exactly the kinds that read
+            // one; a kernel declaring reads without one is a wiring mistake,
+            // caught here rather than at a Gauss point.
+            (None, false) => {
+                return Err(PyrucastError::Message(format!(
+                    "{kind:?}: this kernel reads {state_refs:?} from the state field, \
+                     and none was supplied"
+                )))
+            }
+        };
+        Ok(ElementLayout {
+            material: material.resolve_components(&mat_refs, "material")?,
+            optional_material: material
+                .resolve_optional_components(self.optional_material_components()),
+            state: state_lay,
+        })
+    }
+
+    /// Local element stiffness matrix of one cell — the pure, sequential kernel
+    /// a physics author writes (the stiffness counterpart of
+    /// [`integrate_point`](Self::integrate_point)). Fills `ke` (row-major,
+    /// node-major / variable-minor: `ke[(li*n_dual+di) * n_cols_loc + (lj*n_primal+pj)]`)
+    /// from the cell geometry and material.
+    ///
+    /// `geoms` holds one [`CellGeom`] per FE subspace declared in
+    /// [`SubModelKind::stiffness_layout`], in that order: a plain volumetric
+    /// physics reads `geoms[0]`, a multi-quadrature element (a shear-deformable
+    /// beam, a shell) reads each — e.g. `geoms[0]` full Gauss for bending,
+    /// `geoms[1]` reduced for shear.
+    ///
+    /// `lay` is [`element_layout`](Self::element_layout)'s answer, resolved once
+    /// for the zone: read the material by `lay.material[k]`, **never by name** —
+    /// a name search inside a per-cell loop re-proves at every cell what is a
+    /// property of the zone.
+    ///
+    /// It **never sees rayon, the store, or a lock**: the assembler drives it in
+    /// parallel over all cells. Required — every physics that produces a matrix
+    /// has a stiffness.
+    fn element_matrix(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()>;
+
+    /// Local element **mass** matrix of one cell (`∫ ρ Nᵀ N` for mechanics,
+    /// `∫ ρ c Nᵀ N` for the thermal capacity) — the mass counterpart of
+    /// [`element_matrix`](Self::element_matrix). Default errors: a physics may
+    /// legitimately have no mass term.
+    fn element_mass(
+        &self,
+        _geoms: &[CellGeom],
+        _material: &SubElementField,
+        _lay: &ElementLayout,
+        _ke: &mut [f64],
+    ) -> Result<()> {
+        Err(PyrucastError::Message(
+            "no mass kernel — element_mass is undefined for this physics".into(),
+        ))
+    }
+
+    /// Local element **geometric (initial-stress) stiffness** of one cell
+    /// (`∫ Gᵀ σ̂ G`). `state` carries this physics' current stress field (the
+    /// [`integrate_behavior`](Self::integrate_behavior) output), read by
+    /// `lay.state[k]`. Default errors: not every physics buckles.
+    fn element_geometric(
+        &self,
+        _geoms: &[CellGeom],
+        _material: &SubElementField,
+        _lay: &ElementLayout,
+        _state: &SubElementField,
+        _ke: &mut [f64],
+    ) -> Result<()> {
+        Err(PyrucastError::Message(
+            "no geometric-stiffness kernel — element_geometric is undefined for this physics"
+                .into(),
+        ))
+    }
+
+    /// Local element **consistent tangent** of one cell (`∫ Bᵀ D_alg B`).
+    /// `state` carries the algorithmic tangent moduli produced by
+    /// [`integrate_point`](Self::integrate_point), read by `lay.state[k]`.
+    /// Default errors: a linear law has no tangent of its own.
+    fn element_tangent(
+        &self,
+        _geoms: &[CellGeom],
+        _material: &SubElementField,
+        _lay: &ElementLayout,
+        _state: &SubElementField,
+        _ke: &mut [f64],
+    ) -> Result<()> {
+        Err(PyrucastError::Message(
+            "no tangent kernel — element_tangent is undefined for this physics".into(),
+        ))
+    }
+
+    /// Local element **coupling** matrix of one facing cell pair — the kernel
+    /// behind [`Contribution::Coupling`]. `row_geoms` describes the cell on the
+    /// row mesh, `col_geoms` the facing cell on the column mesh; `ke` is
+    /// `(row nodes × dual) × (col nodes × primal)`, same node-major layout as
+    /// [`element_matrix`](Self::element_matrix).
+    ///
+    /// It is the physics' job to carry the **sign**: an exchange law contributes
+    /// `+h∫NᵢNⱼ` on its two diagonal blocks and `−h∫NᵢNⱼ` off-diagonal, and since
+    /// the two go through different kernels there is no factor to thread through
+    /// the assembler. Default errors: only an interface couples two meshes.
+    fn coupling_element(
+        &self,
+        _kind: MatrixKind,
+        _row_geoms: &[CellGeom],
+        _col_geoms: &[CellGeom],
+        _material: &SubElementField,
+        _lay: &ElementLayout,
+        _ke: &mut [f64],
+    ) -> Result<()> {
+        Err(PyrucastError::Message(
+            "no coupling kernel — coupling_element is undefined for this physics".into(),
+        ))
     }
 
     /// The material state **at rest**, before any step — the `prev` of the first

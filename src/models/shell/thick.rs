@@ -49,12 +49,12 @@
 //! has nothing left to lock.
 
 use crate::containers::element_field::SubElementField;
-use crate::containers::field::SubField;
+use crate::containers::field::ABSENT_COMPONENT;
 use crate::error::Result;
 use crate::models::shell::{
     accumulate, local_derivatives, local_frame, membrane_and_drilling, to_global,
 };
-use crate::models::CellGeom;
+use crate::models::{CellGeom, ElementLayout};
 
 /// The membrane law `D_m` of a homogeneous section (plane stress × thickness).
 ///
@@ -137,22 +137,38 @@ pub fn shear_law(e: f64, nu: f64, h: f64, k_s: f64) -> f64 {
 /// #               vec!["u_x".to_string(), "u_y".to_string(), "u_z".to_string(),
 /// #                    "r_x".to_string(), "r_y".to_string(), "r_z".to_string()]);
 /// # use pyrucast::models::shell::thick;
+/// # use pyrucast::models::ElementLayout;
+/// # use pyrucast::containers::field::ABSENT_COMPONENT;
 /// // Sans `k_s` au matériau, la valeur d'une section rectangulaire
-/// // homogène : 5/6.
-/// assert!((thick::shear_factor(&mat.read(), 0) - 5.0 / 6.0).abs() < 1e-12);
+/// // homogène : 5/6. Le contrat facultatif d'une coque épaisse est
+/// // `["rho", "k_s"]`, et ici les deux manquent.
+/// let sans = ElementLayout {
+///     material: vec![0, 1, 2],
+///     optional_material: vec![ABSENT_COMPONENT, ABSENT_COMPONENT],
+///     state: vec![],
+/// };
+/// assert!((thick::shear_factor(mat.read().point_values(0, 0)?, &sans) - 5.0 / 6.0).abs() < 1e-12);
 /// // Avec, c'est celle du matériau qui l'emporte.
 /// # let propre = SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["E".into(), "nu".into(), "h".into(), "k_s".into()],
 /// #     &[210_000.0, 0.3, 0.01, 0.85])?;
-/// assert!((thick::shear_factor(&propre, 0) - 0.85).abs() < 1e-12);
+/// let avec = ElementLayout {
+///     material: vec![0, 1, 2],
+///     optional_material: vec![ABSENT_COMPONENT, 3],
+///     state: vec![],
+/// };
+/// assert!((thick::shear_factor(propre.point_values(0, 0)?, &avec) - 0.85).abs() < 1e-12);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn shear_factor(material: &SubElementField, cell: usize) -> f64 {
-    match material.component_index("k_s") {
-        Some(_) => material.value(cell, 0, "k_s").unwrap_or(5.0 / 6.0),
-        None => 5.0 / 6.0,
+pub fn shear_factor(row: &[f64], lay: &ElementLayout) -> f64 {
+    match lay.optional_material[K_S_SLOT] {
+        ABSENT_COMPONENT => 5.0 / 6.0,
+        i => row[i as usize],
     }
 }
+
+/// Position of `k_s` in a thick shell's optional material (`["rho", "k_s"]`).
+const K_S_SLOT: usize = 1;
 
 /// The local element stiffness of one facet, carried to the global axes.
 ///
@@ -189,11 +205,19 @@ pub fn shear_factor(material: &SubElementField, cell: usize) -> f64 {
 /// // Deux `CellGeom` : la quadrature **complète** pour la membrane et la
 /// // flexion, la **réduite** pour le cisaillement transverse — c'est ce
 /// // qui empêche le blocage en mince.
+/// # use pyrucast::models::ElementLayout;
+/// # use pyrucast::containers::field::ABSENT_COMPONENT;
+/// // `E`, `nu`, `h` dans l'ordre du contrat ; ni `rho` ni `k_s` ici.
+/// let lay = ElementLayout {
+///     material: vec![0, 1, 2],
+///     optional_material: vec![ABSENT_COMPONENT, ABSENT_COMPONENT],
+///     state: vec![],
+/// };
 /// let (duals, primals) = ddl();
 /// let bloc = assemble_block(
 ///     &[zone.clone(), zone.clone()], &support, &support, duals, primals,
 ///     DofOrdering::NodesThenVars, true, &mat, None,
-///     |geoms, m, _s, ke| thick::element_stiffness(&geoms[0], &geoms[1], m, ke),
+///     |geoms, m, _s, ke| thick::element_stiffness(&geoms[0], &geoms[1], m, &lay, ke),
 /// )?;
 /// // Le bloc porte les six DDL de chaque nœud : 18 × 18 sur un TRI3.
 /// assert_eq!((bloc.n_rows(), bloc.n_cols()), (18, 18));
@@ -206,18 +230,20 @@ pub fn element_stiffness(
     full: &CellGeom,
     reduced: &CellGeom,
     material: &SubElementField,
+    lay: &ElementLayout,
     ke: &mut [f64],
 ) -> Result<()> {
     let n = full.n_nodes;
     let side = 6 * n;
-    let cell = full.cell;
+    // `E`, `nu`, `h`, in the order `MATERIAL_COMPONENTS` declares.
+    let row = material.row(full.cell, 0);
     let (e, nu, h) = (
-        material.value(cell, 0, "E")?,
-        material.value(cell, 0, "nu")?,
-        material.value(cell, 0, "h")?,
+        row[lay.material[0] as usize],
+        row[lay.material[1] as usize],
+        row[lay.material[2] as usize],
     );
     let db = bending_law(e, nu, h);
-    let ds = shear_law(e, nu, h, shear_factor(material, cell));
+    let ds = shear_law(e, nu, h, shear_factor(row, lay));
 
     let frame = local_frame(full)?;
     let mut local = vec![vec![0.0_f64; side]; side];

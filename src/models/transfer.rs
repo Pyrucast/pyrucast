@@ -43,7 +43,7 @@
 use crate::containers::element_field::SubElementField;
 use crate::containers::field::SubField;
 use crate::error::{PyrucastError, Result};
-use crate::models::{CellGeom, Physics};
+use crate::models::{CellGeom, ElementLayout, Physics};
 
 /// The material component carrying the exchange coefficient of one transferred
 /// quantity — `h_T`, `h_c_H2`, `h_u_x`.
@@ -146,53 +146,6 @@ pub fn physics_slice(physics: Physics) -> &'static [Physics] {
     }
 }
 
-/// Resolve each transferred quantity's coefficient to a **component index**,
-/// once, before any loop.
-///
-/// [`SubElementField::value`] looks its component up by a linear scan over the
-/// names, so calling it inside the Gauss loop — as both physics used to — pays a
-/// string comparison per point. Hoisting it here is why the multi-component form
-/// costs less than the scalar one it replaces, rather than more.
-///
-/// ```
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::element_field::SubElementField;
-/// # use pyrucast::containers::field::SubField;
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::matrix::DofOrdering;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::kernel::assemble_block;
-/// # use pyrucast::models::transfer;
-/// # let coords = Handle::new(Coords::new(2).unwrap());
-/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
-/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
-/// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
-/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
-/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
-/// #     zone.clone(), vec!["h_T".into()], &[2.0]).unwrap());
-/// // Les index sont **hissés hors de la boucle de Gauss** : `value` cherche
-/// // son nom par balayage linéaire, et le payer par point coûtait plus que
-/// // la forme scalaire qu'on remplace.
-/// let paires = vec![("T".to_string(), "q".to_string())];
-/// assert_eq!(transfer::coefficient_indices(&mat.read(), &paires)?, vec![0]);
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn coefficient_indices(
-    material: &SubElementField,
-    components: &[(String, String)],
-) -> Result<Vec<usize>> {
-    components
-        .iter()
-        .map(|(primal, _)| material.component_index_or_err(&coefficient_name(primal)))
-        .collect()
-}
-
 /// `sign · h ∫_Γ N_i^row N_j^col dΓ`, one uncoupled sub-block per transferred
 /// quantity.
 ///
@@ -233,8 +186,12 @@ pub fn coefficient_indices(
 /// # let support = zone.read().submesh().read().to_poi1().unwrap();
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["h_T".into()], &[2.0]).unwrap());
-/// let paires = vec![("T".to_string(), "q".to_string())];
-/// let idx = transfer::coefficient_indices(&mat.read(), &paires)?;
+/// # use pyrucast::models::ElementLayout;
+/// // Un coefficient `h_<primal>` par couple transféré, dans l'ordre que
+/// // `material_components` déclare — ici un seul, donc l'identité.
+/// let lay = ElementLayout {
+///     material: vec![0], optional_material: vec![], state: vec![],
+/// };
 /// // h ∫ N_i N_j dΓ : la mesure vient du côté **ligne**, ce qui fait que
 /// // les quatre blocs d'une interface s'intègrent identiquement.
 /// let bloc = assemble_block(
@@ -242,7 +199,7 @@ pub fn coefficient_indices(
 ///     vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
 ///     &mat, None,
 ///     |geoms, m, _s, ke| {
-///         transfer::exchange_matrix(&geoms[0], &geoms[0], m, &idx, 1.0, ke)
+///         transfer::exchange_matrix(&geoms[0], &geoms[0], m, &lay, 1.0, ke)
 ///     },
 /// )?;
 /// // La somme des entrées vaut h × la longueur du segment.
@@ -254,18 +211,22 @@ pub fn exchange_matrix(
     row_geom: &CellGeom,
     col_geom: &CellGeom,
     material: &SubElementField,
-    coefficients: &[usize],
+    lay: &ElementLayout,
     sign: f64,
     ke: &mut [f64],
 ) -> Result<()> {
+    // One coefficient `h_<primal>` per transferred pair, in the order
+    // `material_components` declares — resolved once for the zone.
+    let coefficients = &lay.material;
     let n_vars = coefficients.len();
     let row_stride = col_geom.n_nodes * n_vars;
     for g in 0..row_geom.n_gauss {
         let row_shape = row_geom.n_at_g(g);
         let col_shape = col_geom.n_at_g(g);
         let w = row_geom.det_j_w(g);
+        let row = material.row(row_geom.cell, g);
         for (v, &comp) in coefficients.iter().enumerate() {
-            let hw = sign * material.get(row_geom.cell, g, comp)? * w;
+            let hw = sign * row[comp as usize] * w;
             if hw == 0.0 {
                 continue;
             }

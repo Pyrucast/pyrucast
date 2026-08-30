@@ -46,7 +46,6 @@
 //! explicitly as a material component.
 
 use crate::containers::element_field::SubElementField;
-use crate::containers::field::SubField;
 use crate::containers::field::ABSENT_COMPONENT;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
@@ -56,8 +55,9 @@ use crate::dump::DumpOptions;
 use crate::error::Result;
 use crate::handle::Handle;
 use crate::models::owned_components;
-use crate::models::ZoneLayout;
+use crate::models::ElementLayout;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{MatrixKind, ZoneLayout};
 use serde::{Deserialize, Serialize};
 
 /// Column DOF name (temperature) — shared with heat conduction.
@@ -109,7 +109,7 @@ pub const STEFAN_BOLTZMANN: f64 = 5.670_374_419e-8;
 /// points (via [`crate::ops::element_field::interp_to_gauss`]).
 const INPUT_COMPONENT: &str = PRIMAL_VAR;
 /// Behaviour-**output**: the radiated flux density, and the tangent coefficient
-/// `4σεT³` that [`SubModelKind::element_tangent`] reads back.
+/// `4σεT³` that [`Domain::element_tangent`] reads back.
 const OUTPUT_FLUX: &str = "flux";
 const OUTPUT_TANGENT: &str = "ktan";
 
@@ -217,41 +217,6 @@ impl SubModelKind for Radiation {
         Some(self.layout())
     }
 
-    /// The **linearised** radiative film, about the far-field temperature:
-    /// `h_r = 4σεT_∞³`, a constant. See the module docs for why the
-    /// linearisation is taken there rather than at the current state.
-    fn element_matrix(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let geom = &geoms[0];
-        let mat = material;
-        surface_mass(geom, ke, |g| {
-            let (sigma, emis) = (
-                sigma_of(mat, geom.cell, g)?,
-                mat.value(geom.cell, g, "emis")?,
-            );
-            let t_inf = mat.value(geom.cell, g, "T_inf")?;
-            Ok(4.0 * sigma * emis * t_inf.powi(3))
-        })
-    }
-
-    /// The consistent tangent `4σεT³ ∫ N_i N_j`, reading the coefficient from
-    /// the state the behaviour integration produced.
-    fn element_tangent(
-        &self,
-        geoms: &[CellGeom],
-        _material: &SubElementField,
-        state: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let geom = &geoms[0];
-        let st = state;
-        surface_mass(geom, ke, |g| st.value(geom.cell, g, OUTPUT_TANGENT))
-    }
-
     /// Internal nodal fluxes `q_i = ∫ N_i · flux dΓ` — weighted by `N`, not by
     /// `Bᵀ`, as for convection: the integrand is a flux **density** on the
     /// boundary, not a gradient-conjugate quantity.
@@ -350,29 +315,63 @@ impl Domain for Radiation {
         out[1] = 4.0 * sigma * emis * t.powi(3);
         Ok(())
     }
-}
 
-/// The Stefan-Boltzmann constant for this cell: the material's own if it carries
-/// one, the SI value otherwise.
-fn sigma_of(material: &SubElementField, cell: usize, g: usize) -> Result<f64> {
-    Ok(match material.component_index("sigma") {
-        Some(_) => material.value(cell, g, "sigma")?,
-        None => STEFAN_BOLTZMANN,
-    })
+    /// La tangente radiative lit le coefficient que le comportement a produit.
+    fn element_state_reads(&self, kind: MatrixKind) -> Vec<String> {
+        match kind {
+            MatrixKind::Tangent => vec![OUTPUT_TANGENT.to_string()],
+            _ => Vec::new(),
+        }
+    }
+
+    /// The **linearised** radiative film, about the far-field temperature:
+    /// `h_r = 4σεT_∞³`, a constant. See the module docs for why the
+    /// linearisation is taken there rather than at the current state.
+    fn element_matrix(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        surface_mass(geom, ke, |g| {
+            // `emis`, `T_inf`, and the Stefan-Boltzmann constant when it was
+            // supplied — all by index, exactly as `integrate_point` reads them.
+            let row = material.row(geom.cell, g);
+            let sigma = match lay.optional_material[0] {
+                ABSENT_COMPONENT => STEFAN_BOLTZMANN,
+                i => row[i as usize],
+            };
+            let emis = row[lay.material[0] as usize];
+            let t_inf = row[lay.material[1] as usize];
+            4.0 * sigma * emis * t_inf.powi(3)
+        })
+    }
+
+    /// The consistent tangent `4σεT³ ∫ N_i N_j`, reading the coefficient from
+    /// the state the behaviour integration produced.
+    fn element_tangent(
+        &self,
+        geoms: &[CellGeom],
+        _material: &SubElementField,
+        lay: &ElementLayout,
+        state: &SubElementField,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        surface_mass(geom, ke, |g| state.row(geom.cell, g)[lay.state[0] as usize])
+    }
 }
 
 /// `∫_Γ coeff(g) · N_i N_j dΓ` over one boundary cell — the surface mass matrix
 /// weighted by a per-Gauss coefficient. Both radiative operators are this
 /// integral; only the coefficient differs, so they share it.
-fn surface_mass(
-    geom: &CellGeom,
-    ke: &mut [f64],
-    coeff: impl Fn(usize) -> Result<f64>,
-) -> Result<()> {
+fn surface_mass(geom: &CellGeom, ke: &mut [f64], coeff: impl Fn(usize) -> f64) -> Result<()> {
     let n_nodes = geom.n_nodes;
     for g in 0..geom.n_gauss {
         let shape = geom.n_at_g(g);
-        let w = geom.det_j_w(g) * coeff(g)?;
+        let w = geom.det_j_w(g) * coeff(g);
         for i in 0..n_nodes {
             for j in 0..n_nodes {
                 ke[i * n_nodes + j] += shape[i] * shape[j] * w;

@@ -288,7 +288,7 @@ impl crate::dump::Dump for DofOrdering {
 /// Columns are symmetric with `col_nodes` and `primal_vars`.
 /// The recipe a **computed** [`SubMatrix`] carries *instead of* stored values:
 /// how to evaluate its contribution on the fly. The global assembler drives the
-/// sub-model's [`element_matrix`](crate::models::SubModelKind::element_matrix) kernel
+/// sub-model's [`element_matrix`](crate::models::Domain::element_matrix) kernel
 /// over `fespace`'s cells and scatters the result straight into the global
 /// matrix — a computed block never materialises a COO (its own `coo` stays an
 /// empty, correctly-sized placeholder, so structural queries still work).

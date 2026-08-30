@@ -59,7 +59,7 @@ use crate::error::{PyrucastError, Result};
 use crate::models::shell::{
     accumulate, local_coords, local_frame, membrane_and_drilling, to_global,
 };
-use crate::models::CellGeom;
+use crate::models::{CellGeom, ElementLayout};
 
 use super::thick::bending_law;
 
@@ -266,11 +266,16 @@ fn bending_b(
 /// # use pyrucast::models::shell::kirchhoff;
 /// // **Une** `CellGeom`, non deux : il n'y a pas de terme de cisaillement,
 /// // donc pas de seconde quadrature pour l'intégrer.
+/// # use pyrucast::models::ElementLayout;
+/// // `E`, `nu`, `h` dans l'ordre du contrat : la table est l'identité.
+/// let lay = ElementLayout {
+///     material: vec![0, 1, 2], optional_material: vec![], state: vec![],
+/// };
 /// let (duals, primals) = ddl();
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
 ///     DofOrdering::NodesThenVars, true, &mat, None,
-///     |geoms, m, _s, ke| kirchhoff::element_stiffness(&geoms[0], m, ke),
+///     |geoms, m, _s, ke| kirchhoff::element_stiffness(&geoms[0], m, &lay, ke),
 /// )?;
 /// // Le bloc porte les six DDL de chaque nœud : 18 × 18 sur un TRI3.
 /// assert_eq!((bloc.n_rows(), bloc.n_cols()), (18, 18));
@@ -282,15 +287,18 @@ fn bending_b(
 pub fn element_stiffness(
     geom: &CellGeom,
     material: &SubElementField,
+    lay: &ElementLayout,
     ke: &mut [f64],
 ) -> Result<()> {
     let n = geom.n_nodes;
     let side = 6 * n;
     let cell = geom.cell;
+    // `E`, `nu`, `h`, in the order `MATERIAL_COMPONENTS` declares.
+    let row = material.row(cell, 0);
     let (e, nu, h) = (
-        material.value(cell, 0, "E")?,
-        material.value(cell, 0, "nu")?,
-        material.value(cell, 0, "h")?,
+        row[lay.material[0] as usize],
+        row[lay.material[1] as usize],
+        row[lay.material[2] as usize],
     );
     let db = bending_law(e, nu, h);
 

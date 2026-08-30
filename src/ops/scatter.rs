@@ -272,6 +272,23 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix
                         phys.label()
                     ))
                 })?;
+                // The element kernels live on `Domain`; a computed block has
+                // one by construction, since only a `Domain` declares material.
+                let domain = phys.as_domain().ok_or_else(|| {
+                    PyrucastError::Message(format!(
+                        "{}: a computed matrix block needs an element kernel",
+                        phys.label()
+                    ))
+                })?;
+                // Resolved **once for the block**, before the parallel region:
+                // the closures below capture the table, so no cell ever matches
+                // a component name. The guards are dropped straight away — the
+                // drivers take the handles and hold their own.
+                let lay = {
+                    let mat = material.read();
+                    let state = recipe.state.as_ref().map(|h| h.read());
+                    domain.element_layout(recipe.kind, &mat, state.as_deref())?
+                };
                 // Per-cell triplets so the value stream lines up cell-for-cell
                 // with the precomputed slots (same `(li,di,lj,pj)` order).
                 let (_, _, per_cell) = if recipe.col_fespaces.is_empty() {
@@ -284,7 +301,9 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix
                         blk.ordering(),
                         material,
                         recipe.state.as_ref(),
-                        |geoms, m, state, ke| phys.matrix_element(recipe.kind, geoms, m, state, ke),
+                        |geoms, m, state, ke| {
+                            phys.matrix_element(recipe.kind, geoms, m, &lay, state, ke)
+                        },
                     )?
                 } else {
                     kernel::coupling_block_triplets_per_cell(
@@ -297,7 +316,7 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix
                         blk.ordering(),
                         material,
                         |row_geoms, col_geoms, m, ke| {
-                            phys.coupling_element(recipe.kind, row_geoms, col_geoms, m, ke)
+                            domain.coupling_element(recipe.kind, row_geoms, col_geoms, m, &lay, ke)
                         },
                     )?
                 };
@@ -417,6 +436,23 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatr
                         phys.label()
                     ))
                 })?;
+                // The element kernels live on `Domain`; a computed block has
+                // one by construction, since only a `Domain` declares material.
+                let domain = phys.as_domain().ok_or_else(|| {
+                    PyrucastError::Message(format!(
+                        "{}: a computed matrix block needs an element kernel",
+                        phys.label()
+                    ))
+                })?;
+                // Resolved **once for the block**, before the parallel region:
+                // the closures below capture the table, so no cell ever matches
+                // a component name. The guards are dropped straight away — the
+                // drivers take the handles and hold their own.
+                let lay = {
+                    let mat = material.read();
+                    let state = recipe.state.as_ref().map(|h| h.read());
+                    domain.element_layout(recipe.kind, &mat, state.as_deref())?
+                };
                 // Element matrices, evaluated in parallel, one triplet list per
                 // cell (grouping needed for the colour-driven scatter).
                 let (_, _, per_cell) = if recipe.col_fespaces.is_empty() {
@@ -429,7 +465,9 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatr
                         blk.ordering(),
                         material,
                         recipe.state.as_ref(),
-                        |geoms, m, state, ke| phys.matrix_element(recipe.kind, geoms, m, state, ke),
+                        |geoms, m, state, ke| {
+                            phys.matrix_element(recipe.kind, geoms, m, &lay, state, ke)
+                        },
                     )?
                 } else {
                     kernel::coupling_block_triplets_per_cell(
@@ -442,7 +480,7 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatr
                         blk.ordering(),
                         material,
                         |row_geoms, col_geoms, m, ke| {
-                            phys.coupling_element(recipe.kind, row_geoms, col_geoms, m, ke)
+                            domain.coupling_element(recipe.kind, row_geoms, col_geoms, m, &lay, ke)
                         },
                     )?
                 };
