@@ -14,11 +14,11 @@ use crate::py::mesh::PyMesh;
 use crate::py::model::PyModel;
 use pyo3::prelude::*;
 
-/// `kinematics.heat_conduction(fespace, symmetry=None)` — heat-conduction kinematics
+/// `model.heat_conduction(fespace, symmetry=None)` — heat-conduction model
 /// spanning **every** subspace of `fespace` (one zone per subspace). A
 /// single-subspace space gives the unit case; several give one zone
 /// each. Compose heterogeneous physics with `|`:
-/// `kinematics.heat_conduction(fes) | kinematics.dirichlet(...)`.
+/// `model.heat_conduction(fes) | model.dirichlet(...)`.
 ///
 /// `symmetry` is `"isotropic"` (the default), `"orthotropic"` or
 /// `"anisotropic"`, and selects which conductivity the material field must
@@ -37,15 +37,15 @@ pub fn heat_conduction(
     Ok(PyModel { inner })
 }
 
-/// `kinematics.fick(fespace, species, symmetry=None)` — Fickian diffusion of one
+/// `model.fick(fespace, species, symmetry=None)` — Fickian diffusion of one
 /// named **species**, spanning every subspace of `fespace`.
 ///
 /// Every name carries the species: DOFs are `c_<species>` (primal) and
 /// `j_<species>` (dual), the diffusivity is `D_<species>`, the reported flux
 /// `j_<species>_x…`. Two species therefore share a mesh without colliding —
 /// and no bare `c` can be mistaken for anything else. Its physics nature is
-/// `"diffusion"`, so `kinematics.filter("diffusion")` isolates it from a thermal
-/// or mechanical kinematics it is composed with.
+/// `"diffusion"`, so `model.filter("diffusion")` isolates it from a thermal
+/// or mechanical model it is composed with.
 ///
 /// `symmetry` is `"isotropic"` (the default), `"orthotropic"` or
 /// `"anisotropic"`, selecting the diffusivity the material field must carry:
@@ -66,7 +66,7 @@ pub fn fick(
     Ok(PyModel { inner })
 }
 
-/// `kinematics.interface_transfer(side_a, side_b, kind=None, tol=None)` — the
+/// `model.interface_transfer(side_a, side_b, kind=None, tol=None)` — the
 /// exchange law `j·n = h(c₁ − c₂)` across an interface between two bodies
 /// that do **not** share their nodes. `kind` is `"mass"` (the default:
 /// concentration `c`, flux `j`, nature `"diffusion"`) or `"thermal"` (a
@@ -101,8 +101,8 @@ pub fn interface_transfer(
     Ok(PyModel { inner })
 }
 
-/// `kinematics.elasticity(fespace, kinematics, symmetry=None)` — linear-elasticity
-/// kinematics spanning every subspace of `fespace`. `kinematics` is `"plane_stress"`,
+/// `model.elasticity(fespace, kinematics, symmetry=None)` — linear-elasticity
+/// model spanning every subspace of `fespace`. `kinematics` is `"plane_stress"`,
 /// `"plane_strain"` or `"axisymmetric"` (2-D), or `"full_3d"` (3-D). DOFs are
 /// the vector displacement `u_x, u_y(, u_z)`; material is supplied at
 /// assembly time.
@@ -130,9 +130,9 @@ pub fn elasticity(
     Ok(PyModel { inner })
 }
 
-/// `kinematics.dirichlet(imposed_variable, target_dual, imposed_mesh,
+/// `model.dirichlet(imposed_variable, target_dual, imposed_mesh,
 /// multiplier_mesh, multiplier=None, imposed_value=None, sense="=")` —
-/// Dirichlet constraint kinematics (a single sub-kinematics) imposed via Lagrange
+/// Dirichlet constraint model (a single sub-model) imposed via Lagrange
 /// multipliers.
 ///
 /// `imposed_variable` is the constrained primary variable (e.g. `"T"`);
@@ -145,8 +145,8 @@ pub fn elasticity(
 /// `imposed_<imposed_variable>`. The imposed value `u_d` is written by the
 /// user in the load field at the multiplier node's `imposed_value`
 /// component. `sense` (`"="`, `">="` or `"<="`, default `"="`) turns the
-/// constraint unilateral (`u ≥ u_d` / `u ≤ u_d`) — such a kinematics is solved
-/// with `solve_unilateral`. See the kinematics chapter of the book for the full
+/// constraint unilateral (`u ≥ u_d` / `u ≤ u_d`) — such a model is solved
+/// with `solve_unilateral`. See the model chapter of the book for the full
 /// semantics.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -173,19 +173,19 @@ pub fn dirichlet(
     Ok(PyModel { inner })
 }
 
-/// `kinematics.mpc(terms, multiplier_mesh, multiplier=None, imposed_value=None,
-/// sense="=")` — multi-point constraint (a single sub-kinematics) imposing, per
+/// `model.mpc(terms, multiplier_mesh, multiplier=None, imposed_value=None,
+/// sense="=")` — multi-point constraint (a single sub-model) imposing, per
 /// relation, `Σₖ aₖ·u(nodeₖ, varₖ) = g` via Lagrange multipliers.
 ///
 /// `terms` is a list of `(mesh, variable, target_dual, coefficient)` tuples:
 /// each `mesh` is a POI1 mesh (one node per relation), paired
 /// element-for-element with the others and with `multiplier_mesh` (relation
 /// `r` = cell `r` of every mesh). Find `target_dual` with
-/// `kinematics.dual_of(variable)`. `multiplier` / `imposed_value` override the
+/// `model.dual_of(variable)`. `multiplier` / `imposed_value` override the
 /// derived names `lambda_mpc` / `mpc_rhs`. The right-hand side `g` is written
 /// by the user in the load field at the multiplier node's `imposed_value`
 /// component (default `0`). `sense` (`"="`, `">="` or `"<="`, default `"="`)
-/// turns the relations unilateral (`Σ aₖ·uₖ ≥ g` / `≤ g`) — such a kinematics is
+/// turns the relations unilateral (`Σ aₖ·uₖ ≥ g` / `≤ g`) — such a model is
 /// solved with `solve_unilateral`. See the constraints chapter of the book.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
@@ -218,16 +218,16 @@ pub fn mpc(
     Ok(PyModel { inner })
 }
 
-/// `kinematics.embedded(immersed, host, components, multipliers=None,
+/// `model.embedded(immersed, host, components, multipliers=None,
 /// imposed_values=None, tol=None)` — embedded (immersed) constraint (a
-/// single sub-kinematics) tying each node of `immersed` to the interpolation of
+/// single sub-model) tying each node of `immersed` to the interpolation of
 /// `host` at that node, via Lagrange multipliers.
 ///
 /// `immersed` and `host` are meshes sharing one Coords (e.g. a bar
 /// « baignée » in a volume). `components` is a list of `(variable,
 /// target_dual)` pairs — the field components to tie (e.g.
 /// `[("u_x","f_x"), ("u_y","f_y"), ("u_z","f_z")]`); find each `target_dual`
-/// with `kinematics.dual_of(variable)`. The coupling weights are the host shape
+/// with `model.dual_of(variable)`. The coupling weights are the host shape
 /// functions at each immersed node, computed once at build by locating the
 /// node in the host (an immersed node outside the host is an error).
 /// `multipliers` / `imposed_values` override the per-component derived names
@@ -256,8 +256,8 @@ pub fn embedded(
     Ok(PyModel { inner })
 }
 
-/// `kinematics.contact(slave, master, components, multiplier=None,
-/// imposed_value=None)` — node-to-surface contact (a single sub-kinematics):
+/// `model.contact(slave, master, components, multiplier=None,
+/// imposed_value=None)` — node-to-surface contact (a single sub-model):
 /// prevent the nodes of `slave` from penetrating the oriented `master`
 /// surface mesh, one **unilateral** relation (`≥`) per slave node.
 ///
@@ -268,7 +268,7 @@ pub fn embedded(
 /// body. `components` is a list of `(variable, target_dual)` pairs — one
 /// per space dimension, in ambient order (e.g.
 /// `[("u_x","f_x"), ("u_y","f_y")]`); find each `target_dual` with
-/// `kinematics.dual_of(variable)`. `multiplier` / `imposed_value` override the
+/// `model.dual_of(variable)`. `multiplier` / `imposed_value` override the
 /// derived names `lambda_contact` / `contact_gap`.
 ///
 /// Solve with `solve_unilateral`; build the initial-gap right-hand side
