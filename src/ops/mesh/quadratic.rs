@@ -31,6 +31,11 @@ fn quadratic_of(et: ElementType) -> Result<(ElementType, &'static [[usize; 2]])>
     }
 }
 
+/// One zone of the result while it is being laid out: the quadratic type it
+/// will carry, how many corners each of its cells has (mid-edge nodes come
+/// after those), its face colour, and its connectivity.
+type PendingZone = (ElementType, usize, crate::atoms::RgbColor, Vec<NodeId>);
+
 /// Build the quadratic copy of a linear `mesh`.
 ///
 /// Every submesh must hold a **linear** element type; a POI1 or
@@ -65,8 +70,7 @@ pub fn to_quadratic(mesh: &Mesh) -> Result<Mesh> {
     // one flat buffer, so the whole promotion costs a single `Coords` write.
     let mut mid: HashMap<(NodeId, NodeId), u32> = HashMap::new();
     let mut midpoints: Vec<f64> = Vec::new();
-    #[allow(clippy::type_complexity)]
-    let mut zones: Vec<(ElementType, usize, crate::atoms::RgbColor, Vec<NodeId>)> = Vec::new();
+    let mut zones: Vec<PendingZone> = Vec::new();
 
     for sm_h in mesh {
         let (et, color, conn) = {

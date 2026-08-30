@@ -818,6 +818,10 @@ fn parse_gmsh(buf: &[u8]) -> Result<Parsed> {
 /// it, which is what makes them agree cell for cell. Only the way a node tag is
 /// turned into coordinates differs between them, and that is the caller's
 /// closure in [`GroupBuilder::node_of`].
+/// What one physical group has accumulated: its element types in first-seen
+/// order, and the flat connectivity gathered for each of them.
+type GroupCells = (Vec<ElementType>, HashMap<ElementType, Vec<NodeId>>);
+
 struct GroupBuilder {
     coords: Handle<Coords>,
     /// How many of gmsh's three coordinates to keep, from the `Coords` itself.
@@ -831,7 +835,7 @@ struct GroupBuilder {
     positions: Vec<f64>,
     /// Group names in order of first appearance — the order of the result.
     order: Vec<String>,
-    groups: HashMap<String, (Vec<ElementType>, HashMap<ElementType, Vec<NodeId>>)>,
+    groups: HashMap<String, GroupCells>,
     /// One cell's connectivity, permuted. Reused across cells so the hot loop
     /// allocates nothing.
     scratch: Vec<NodeId>,
