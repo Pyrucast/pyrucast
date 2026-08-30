@@ -96,6 +96,10 @@ harness = false
 name = "geom"
 harness = false
 
+[[bench]]
+name = "mesh"
+harness = false
+
 [features]
 # Compile the Python binding code (the `#[pyclass]` wrappers etc.). Pulls
 # in the optional `pyo3` dependency. On its own, pyo3 links to libpython
