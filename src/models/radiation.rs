@@ -235,7 +235,7 @@ impl SubModelKind for Radiation {
         for g in 0..geom.n_gauss {
             let shape = geom.n_at_g(g);
             let w = geom.det_j_w(g);
-            let flux = stress.get(geom.cell, g, lay[0] as usize)?;
+            let flux = stress.row(geom.cell, g)[lay[0] as usize];
             for i in 0..geom.n_nodes {
                 fe[i] += shape[i] * flux * w;
             }

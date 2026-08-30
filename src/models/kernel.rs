@@ -1779,6 +1779,24 @@ pub fn element_block_triplets_per_cell(
     };
     let row_pos = pos_map(&row_nodes);
     let col_pos = pos_map(&col_nodes);
+    // La position de **chaque nœud de la connectivité**, d'un seul parcours,
+    // avant la région parallèle. La hacher dans la boucle reposait la même
+    // question à chaque maille et à chaque assemblage, pour une réponse qui est
+    // un fait de la zone ; et l'erreur se nomme ici, où l'on sait encore quoi.
+    let lookup = |pos: &HashMap<NodeId, u32>, side: &str| -> Result<Vec<u32>> {
+        conn.iter()
+            .map(|nid| {
+                pos.get(nid).copied().ok_or_else(|| {
+                    PyrucastError::Message(format!(
+                        "element_block_triplets: node {nid:?} not in {side} support"
+                    ))
+                })
+            })
+            .collect()
+    };
+    let row_slot = lookup(&row_pos, "row")?;
+    let col_slot = lookup(&col_pos, "col")?;
+    let (row_slot, col_slot): (&[u32], &[u32]) = (&row_slot, &col_slot);
 
     // Per cell, in parallel: compute the element matrix, then emit its triplets
     // in **local** indices. Order within a cell is li,di,lj,pj; cells are
@@ -1791,15 +1809,8 @@ pub fn element_block_triplets_per_cell(
         .into_par_iter()
         .with_min_len((MIN_PARALLEL_LEN / n_nodes.max(1)).max(1))
         .map_init(
-            || {
-                (
-                    Vec::with_capacity(rds_ref.len()),
-                    vec![0.0_f64; ke_len],
-                    Vec::with_capacity(n_nodes),
-                    Vec::with_capacity(n_nodes),
-                )
-            },
-            |(geoms, ke, rpos, cpos), cell| -> Result<Vec<(usize, usize, f64)>> {
+            || (Vec::with_capacity(rds_ref.len()), vec![0.0_f64; ke_len]),
+            |(geoms, ke), cell| -> Result<Vec<(usize, usize, f64)>> {
                 geoms.clear();
                 geoms.extend(
                     rds_ref
@@ -1809,31 +1820,20 @@ pub fn element_block_triplets_per_cell(
                 ke.fill(0.0);
                 element(geoms, mat_ref, state_ref, ke)?;
 
-                let ids = &conn[cell * n_nodes..(cell + 1) * n_nodes];
-                rpos.clear();
-                cpos.clear();
-                for &nid in ids {
-                    rpos.push(*row_pos.get(&nid).ok_or_else(|| {
-                        PyrucastError::Message(format!(
-                            "element_block_triplets: node {nid:?} not in row support"
-                        ))
-                    })? as usize);
-                    cpos.push(*col_pos.get(&nid).ok_or_else(|| {
-                        PyrucastError::Message(format!(
-                            "element_block_triplets: node {nid:?} not in col support"
-                        ))
-                    })? as usize);
-                }
+                let base = cell * n_nodes;
+                let rpos = &row_slot[base..base + n_nodes];
+                let cpos = &col_slot[base..base + n_nodes];
 
                 let mut trips = Vec::with_capacity(ke_len);
                 for li in 0..n_nodes {
                     for di in 0..n_dual {
                         let r = li * n_dual + di;
-                        let ri = ordering.to_index(rpos[li], di, n_row_nodes, n_dual);
+                        let ri = ordering.to_index(rpos[li] as usize, di, n_row_nodes, n_dual);
                         for lj in 0..n_nodes {
                             for pj in 0..n_primal {
                                 let c = lj * n_primal + pj;
-                                let ci = ordering.to_index(cpos[lj], pj, n_col_nodes, n_primal);
+                                let ci =
+                                    ordering.to_index(cpos[lj] as usize, pj, n_col_nodes, n_primal);
                                 trips.push((ri, ci, ke[r * n_cols_loc + c]));
                             }
                         }
@@ -2374,6 +2374,20 @@ pub fn scatter_to_nodes(
     // and the map is total.
     let unique: Vec<NodeId> = support.read().connectivity().to_vec();
     let slot_of: HashMap<NodeId, usize> = unique.iter().enumerate().map(|(k, &n)| (n, k)).collect();
+    // La case de **chaque nœud de la connectivité**, d'un seul parcours, avant
+    // la région parallèle. Le commentaire ci-dessus dit que la table est
+    // totale : autant s'en servir une fois plutôt que la hacher par maille.
+    let slots: Vec<usize> = conn
+        .iter()
+        .map(|nid| {
+            slot_of.get(nid).copied().ok_or_else(|| {
+                PyrucastError::Message(
+                    "scatter_to_nodes: support does not cover a cell node".into(),
+                )
+            })
+        })
+        .collect::<Result<_>>()?;
+    let slots: &[usize] = &slots;
 
     // Cell colouring (cached on the primary FE subspace): two cells sharing a
     // node get different colours, so within a colour the cells scatter to
@@ -2404,13 +2418,8 @@ pub fn scatter_to_nodes(
             );
             fe_cell.iter_mut().for_each(|v| *v = 0.0);
             element(geoms, fe_cell)?;
-            let ids = &conn[cell * n_nodes..(cell + 1) * n_nodes];
-            for (li, &nid) in ids.iter().enumerate() {
-                let node_slot = *slot_of.get(&nid).ok_or_else(|| {
-                    PyrucastError::Message(
-                        "scatter_to_nodes: support does not cover a cell node".into(),
-                    )
-                })?;
+            let cell_slots = &slots[cell * n_nodes..(cell + 1) * n_nodes];
+            for (li, &node_slot) in cell_slots.iter().enumerate() {
                 let base = node_slot * n_dual;
                 for di in 0..n_dual {
                     out.add(base + di, fe_cell[li * n_dual + di]);

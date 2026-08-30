@@ -89,13 +89,20 @@ pub fn integral(field: &NodeField, fespace: &FiniteElementSpace, component: &str
 
         total += kernel::reduce_cells(sub_h, |geom| {
             let ids = geom.node_ids();
+            // Les valeurs de la maille, rassemblées **une fois** : elles ne
+            // changent pas d'un point de Gauss au suivant, et les hacher à
+            // chaque point revenait à reposer la même question n_gauss fois.
+            let mut cell_vals = [0.0_f64; MAX_CELL_DOFS];
+            for (i, id) in ids.iter().enumerate() {
+                cell_vals[i] = vals[id];
+            }
             let mut acc = 0.0;
             for g in 0..geom.n_gauss {
                 let mut n_buf = [0.0_f64; MAX_CELL_DOFS];
                 let n = geom.field_n_at_g(g, &mut n_buf)?; // field shape values N_i(ξ_g)
                 let mut fg = 0.0;
                 for i in 0..geom.n_nodes {
-                    fg += vals[&ids[i]] * n[i];
+                    fg += cell_vals[i] * n[i];
                 }
                 acc += fg * geom.det_j_w(g);
             }
@@ -153,15 +160,17 @@ pub fn integral_element(field: &ElementField, component: &str) -> Result<f64> {
     let mut found = false;
     for sub_h in field {
         let s = sub_h.read();
-        if s.component_index(component).is_none() {
+        // L'indice était calculé ici puis **jeté**, et la boucle le
+        // recherchait par nom à chaque point de Gauss. On le garde.
+        let Some(idx) = s.component_index(component) else {
             continue; // this zone does not carry the component — skip it
-        }
+        };
         found = true;
         let fespace = s.support();
         total += kernel::reduce_cells(&fespace, |geom| {
             let mut acc = 0.0;
             for g in 0..geom.n_gauss {
-                acc += s.value(geom.cell, g, component)? * geom.det_j_w(g);
+                acc += s.row(geom.cell, g)[idx] * geom.det_j_w(g);
             }
             Ok(acc)
         })?;

@@ -96,12 +96,18 @@ fn subspace_divergence(field: &Handle<SubElementField>) -> Result<SubNodeField> 
 
     // The field guard is captured by the element closure (borrowed in place) and
     // held across the parallel scatter.
+    // Les composantes du champ, résolues **une fois pour la zone** : le noyau
+    // ci-dessous tranche des lignes et indexe, il ne compare plus un seul nom.
+    let comps = f.components().to_vec();
+    let refs: Vec<&str> = comps.iter().map(String::as_str).collect();
+    let lay = f.resolve_components(&refs, "flux")?;
+
     let support = submesh.read().to_poi1()?;
     kernel::scatter_to_nodes(
         std::slice::from_ref(&fespace),
         &support,
         vec!["div".to_string()],
-        |geoms, fe| divergence_element(geoms, &f, fe),
+        |geoms, fe| divergence_element(geoms, &f, &lay, fe),
     )
 }
 
@@ -110,19 +116,26 @@ fn subspace_divergence(field: &Handle<SubElementField>) -> Result<SubNodeField> 
 /// of the gradient, so it plugs into the
 /// [`crate::models::kernel::scatter_to_nodes`] driver exactly like a physics'
 /// `internal_force_element`.
-fn divergence_element(geoms: &[CellGeom], field: &SubElementField, fe: &mut [f64]) -> Result<()> {
+fn divergence_element(
+    geoms: &[CellGeom],
+    field: &SubElementField,
+    lay: &[u32],
+    fe: &mut [f64],
+) -> Result<()> {
     let geom = &geoms[0];
     let d = geom.space_dim;
-    let comps = field.components();
     let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
     for g in 0..geom.n_gauss {
         let dn = &mut dn_buf[..geom.n_nodes * d]; // [i * d + a]
         geom.dn_dx(g, dn)?;
         let det_j_w = geom.det_j_w(g);
+        // La ligne du point, tranchée une fois : elle était relue par nom, et
+        // rebornée, pour chaque composante de chaque nœud de chaque point.
+        let row = field.row(geom.cell, g);
         for i in 0..geom.n_nodes {
             let mut grad_dot_f = 0.0;
-            for (a, comp) in comps.iter().enumerate() {
-                grad_dot_f += dn[i * d + a] * field.value(geom.cell, g, comp)?;
+            for a in 0..d {
+                grad_dot_f += dn[i * d + a] * row[lay[a] as usize];
             }
             fe[i] += grad_dot_f * det_j_w;
         }

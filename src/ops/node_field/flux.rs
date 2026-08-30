@@ -109,14 +109,13 @@ pub fn flux(
     density: FluxDensity,
     component: &str,
 ) -> Result<SubNodeField> {
-    let (submesh, n_cells, n_g) = {
-        let s = fespace.read();
-        (s.submesh(), s.cell_count()?, s.gauss_count())
-    };
+    let submesh = fespace.read().submesh();
 
-    // Flux density: a bare constant, or the field's single component read once
-    // (its guard cannot cross the parallel region, so snapshot it here).
-    let (uniform, densities): (f64, Option<Vec<Vec<f64>>>) = match density {
+    // Flux density: a bare constant, or the field's single component snapshotted
+    // once (its guard cannot cross the parallel region). The component count is
+    // checked here, for the zone; the copy below then reads **by index**, where
+    // it used to search the name again at every (cell, point).
+    let (uniform, densities): (f64, Option<Vec<f64>>) = match density {
         FluxDensity::Uniform(v) => (v, None),
         FluxDensity::Field(field) => {
             let f = field.read();
@@ -127,15 +126,9 @@ pub fn flux(
                     comps.len()
                 )));
             }
-            let comp = comps[0].clone();
-            let d = (0..n_cells)
-                .map(|cell| {
-                    (0..n_g)
-                        .map(|g| f.value(cell, g, &comp))
-                        .collect::<Result<_>>()
-                })
-                .collect::<Result<Vec<Vec<f64>>>>()?;
-            (0.0, Some(d))
+            // Une seule composante : le tampon du champ **est** la densité,
+            // ligne pour ligne. Plus de `Vec` de `Vec`, plus de recherche.
+            (0.0, Some(f.values().to_vec()))
         }
     };
 
@@ -154,7 +147,9 @@ pub fn flux(
             for g in 0..geom.n_gauss {
                 let mut n_buf = [0.0_f64; MAX_CELL_DOFS];
                 let shape = geom.field_n_at_g(g, &mut n_buf)?;
-                let phi = densities.as_deref().map_or(uniform, |d| d[cell][g]);
+                let phi = densities
+                    .as_deref()
+                    .map_or(uniform, |d| d[cell * geom.n_gauss + g]);
                 let w = geom.det_j_w(g) * phi;
                 for i in 0..geom.n_nodes {
                     fe[i] += shape[i] * w;
