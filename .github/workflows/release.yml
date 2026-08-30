@@ -271,8 +271,15 @@ jobs:
           name: wheel-${{ matrix.name }}
           path: dist/*.whl
 
+  # PyPI passe **après** crates.io, jamais en parallèle. Les deux publications
+  # sont à sens unique, et une seule des deux vérifie ce qu'elle envoie :
+  # `cargo publish` déballe le .crate et le compile, `twine` ne fait que
+  # téléverser. C'est ce qui s'est vu sur la 0.5.0 — crates.io a refusé un
+  # paquet auquel `exclude` avait mangé `src/archive/`, pendant que ce job,
+  # lancé en parallèle, envoyait sur PyPI la même sdist inutilisable et brûlait
+  # le numéro. La porte qui sait dire non s'ouvre donc la première.
   publish-pypi:
-    needs: [sdist, wheels]
+    needs: [crates-io, sdist, wheels]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
