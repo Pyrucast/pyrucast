@@ -4,15 +4,20 @@ use crate::containers::mesh::{Mesh, SubMesh};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
-use std::collections::HashMap;
+use crate::parallel::*;
 
 /// Weld together nodes closer than `tol` (Euclidean distance), rewriting the
 /// connectivity to refer to a single representative per cluster.
 ///
-/// Each cluster is represented by the node with the **smallest [`NodeId`]**,
-/// and that representative **keeps its own coordinates** (no averaging — a
-/// deliberate choice, like the rest of the pipeline, to avoid silently moving
-/// geometry). Welded-away nodes are left in the shared [`Coords`]; once
+/// A cluster is a **connected component** of the « closer than `tol` »
+/// relation: the pairing propagates from node to node, so on a chain a—b—c
+/// where a and c are further apart than `tol`, all three still end up welded
+/// together — which is also why a `tol` of the order of the element size
+/// collapses a whole region rather than a seam. Each cluster is represented by
+/// the node with the **smallest [`NodeId`]**, and that representative **keeps
+/// its own coordinates** (no averaging — a deliberate choice, like the rest of
+/// the pipeline, to avoid silently moving geometry). Welded-away nodes are
+/// left in the shared [`Coords`]; once
 /// nothing references them they become collectable by
 /// [`Coords::gc`](crate::coords::Coords::gc). Errors if `tol` is negative or
 /// if `mesh` has no submeshes (no Coords to attach to).
@@ -96,11 +101,7 @@ pub fn merge_nodes(mesh: &Mesh, tol: f64, in_place: bool) -> Result<Mesh> {
     let coords_handle = mesh.coords()?;
 
     // Map every referenced node to its cluster representative.
-    let representative = build_representatives(mesh, &coords_handle, tol)?;
-    let welded = representative
-        .iter()
-        .filter(|(id, rep)| *id != *rep)
-        .count();
+    let (representative, welded) = build_representatives(mesh, &coords_handle, tol)?;
 
     let (result, dropped) = if in_place {
         // An in-place weld never drops a cell — it refuses instead.
@@ -130,32 +131,50 @@ fn summary(welded: usize, dropped: usize, tol: f64, in_place: bool) -> String {
 fn weld_into_copy(
     mesh: &Mesh,
     coords_handle: &crate::handle::Handle<Coords>,
-    representative: &HashMap<NodeId, NodeId>,
+    representative: &[u32],
 ) -> Result<(Mesh, usize)> {
     let mut result = Mesh::empty();
     let mut dropped = 0;
     for sm_handle in mesh {
-        let (et, color, conn) = {
+        // The rewritten connectivity is built whole, under the submesh guard
+        // alone; the `Coords` lock is taken once, afterwards, by
+        // `from_connectivity`.
+        let (et, color, mapped, degenerate) = {
             let s = sm_handle.read();
-            (s.element_type(), s.face_color(), s.connectivity().to_vec())
-        };
-        let npc = et.nodes_per_cell();
-
-        let mut new_sm = SubMesh::new(coords_handle.clone(), et);
-        new_sm.set_face_color(color);
-
-        for chunk in conn.chunks(npc) {
-            let mapped: Vec<NodeId> = chunk
-                .iter()
-                .map(|n| representative.get(n).copied().unwrap_or(*n))
+            let et = s.element_type();
+            let npc = et.nodes_per_cell();
+            let conn = s.connectivity();
+            let mapped: Vec<NodeId> = conn
+                .par_iter()
+                .with_min_len(MIN_PARALLEL_LEN)
+                .map(|&n| image(representative, n))
                 .collect();
-            if is_degenerate(&mapped) {
-                dropped += 1;
-                continue;
-            }
-            new_sm.add_cell(&mapped)?;
-        }
+            let degenerate: Vec<bool> = mapped
+                .par_chunks(npc)
+                .with_min_len(MIN_PARALLEL_LEN)
+                .map(is_degenerate)
+                .collect();
+            (et, s.face_color(), mapped, degenerate)
+        };
 
+        let npc = et.nodes_per_cell();
+        let dropped_here = degenerate.iter().filter(|d| **d).count();
+        dropped += dropped_here;
+        let conn = if dropped_here == 0 {
+            // Nothing collapsed: the mapped connectivity is the answer.
+            mapped
+        } else {
+            let mut kept = Vec::with_capacity(mapped.len() - dropped_here * npc);
+            for (cell, &deg) in mapped.chunks(npc).zip(&degenerate) {
+                if !deg {
+                    kept.extend_from_slice(cell);
+                }
+            }
+            kept
+        };
+
+        let mut new_sm = SubMesh::from_connectivity(coords_handle.clone(), et, conn)?;
+        new_sm.set_face_color(color);
         result.add_sub(Handle::new(new_sm))?;
     }
 
@@ -165,7 +184,7 @@ fn weld_into_copy(
 /// Rename the nodes of `mesh`'s own submeshes — the in-place half of
 /// [`merge_nodes`]. Refuses (before writing anything) a sealed submesh or a
 /// cell that would collapse; see [`merge_nodes`] for why.
-fn weld_in_place(mesh: &Mesh, representative: &HashMap<NodeId, NodeId>) -> Result<Mesh> {
+fn weld_in_place(mesh: &Mesh, representative: &[u32]) -> Result<Mesh> {
     // Pre-flight over the whole mesh: an in-place run is all-or-nothing.
     for (si, sm_handle) in mesh.into_iter().enumerate() {
         let s = sm_handle.read();
@@ -181,25 +200,26 @@ fn weld_in_place(mesh: &Mesh, representative: &HashMap<NodeId, NodeId>) -> Resul
         if npc == 0 {
             continue;
         }
-        for (ci, chunk) in s.connectivity().chunks(npc).enumerate() {
-            let mapped: Vec<NodeId> = chunk
-                .iter()
-                .map(|n| representative.get(n).copied().unwrap_or(*n))
-                .collect();
-            if is_degenerate(&mapped) {
-                return Err(PyrucastError::Message(format!(
-                    "merge_nodes(in_place): cell {ci} of submesh {si} ({}) would \
-                     collapse — welding it away would change the cell count, which \
-                     an in-place weld preserves; lower tol, or weld by copy \
-                     (in_place = false), which drops degenerate cells",
-                    s.element_type()
-                )));
-            }
+        // `position_first` names the same cell a sequential scan would, so the
+        // message does not depend on the thread count.
+        let collapsing = s
+            .connectivity()
+            .par_chunks(npc)
+            .with_min_len(MIN_PARALLEL_LEN)
+            .position_first(|cell| collapses(representative, cell));
+        if let Some(ci) = collapsing {
+            return Err(PyrucastError::Message(format!(
+                "merge_nodes(in_place): cell {ci} of submesh {si} ({}) would \
+                 collapse — welding it away would change the cell count, which \
+                 an in-place weld preserves; lower tol, or weld by copy \
+                 (in_place = false), which drops degenerate cells",
+                s.element_type()
+            )));
         }
     }
 
     for sm_handle in mesh {
-        sm_handle.write().remap_nodes(representative)?;
+        sm_handle.write().remap_nodes_dense(representative)?;
     }
 
     // The same mesh back: an aggregate over the very same submesh slots (the
@@ -207,77 +227,258 @@ fn weld_in_place(mesh: &Mesh, representative: &HashMap<NodeId, NodeId>) -> Resul
     mesh.subset(0..mesh.len())
 }
 
-/// Assign each referenced node a representative id via a uniform spatial grid
-/// of cell size `tol`. Two points within `tol` differ by at most `tol` on each
-/// axis, i.e. at most one grid cell, so scanning the 3^dim neighbourhood finds
-/// every candidate. Nodes are processed in ascending id order, so the
-/// representative of a cluster is always its smallest id.
+/// Map every referenced node to its cluster representative — the smallest
+/// `NodeId` of its connected component under « closer than `tol` » — and count
+/// how many nodes were welded away.
+///
+/// The table is **dense**, indexed by `NodeId.0`: a node that stands for itself
+/// maps to itself. Three passes, and not a single hash lookup — `NodeId` is
+/// already an index into the `Coords`, and the grid buckets are a plain array:
+///
+/// 1. a uniform grid over the referenced nodes, in CSR form
+///    ([`NodeGrid`]), whose cell is never smaller than `tol`;
+/// 2. a **parallel** neighbour search emitting one edge per pair within `tol`,
+///    each node visiting only the buckets its `tol`-ball actually touches —
+///    one, in the ordinary case where `tol` is far below the element size;
+/// 3. a union-find closing the components, always linking to the smaller root.
+///
+/// The result does not depend on the thread count: the edge set is the same
+/// whatever the order it is collected in, and so is the smallest id of a
+/// component.
 fn build_representatives(
     mesh: &Mesh,
     coords_handle: &crate::handle::Handle<Coords>,
     tol: f64,
-) -> Result<HashMap<NodeId, NodeId>> {
-    // Unique referenced ids, ascending.
-    let mut ids: Vec<NodeId> = Vec::new();
-    {
-        let mut seen = std::collections::HashSet::new();
-        for sm_handle in mesh {
-            for &n in sm_handle.read().connectivity() {
-                if seen.insert(n) {
-                    ids.push(n);
+) -> Result<(Vec<u32>, usize)> {
+    let capacity = coords_handle.read().capacity();
+
+    // Referenced ids, ascending, through a dense bitmap: no hash set, and the
+    // ascending order comes out of the scan rather than out of a sort.
+    let mut referenced = vec![false; capacity];
+    for sm_handle in mesh {
+        for &n in sm_handle.read().connectivity() {
+            match referenced.get_mut(n.0 as usize) {
+                Some(slot) => *slot = true,
+                // An id the `Coords` never handed out: refused here rather
+                // than left to trip the dense table further down.
+                None => {
+                    return Err(PyrucastError::Message(format!(
+                        "merge_nodes: node {} does not belong to this Coords",
+                        n.0
+                    )));
                 }
             }
         }
     }
-    ids.sort_by_key(|n| n.0);
+    let ids: Vec<NodeId> = (0..capacity as u32)
+        .filter(|&i| referenced[i as usize])
+        .map(NodeId)
+        .collect();
 
-    let coords = coords_handle.read();
-    let dim = coords.dim() as usize;
-    // A positive cell size even when tol == 0 (then only exactly coincident
-    // points share a cell, and the tol² test keeps only true duplicates).
-    let cell = if tol > 0.0 { tol } else { 1.0 };
+    // Every node stands for itself until an edge says otherwise.
+    let mut parent: Vec<u32> = (0..capacity as u32).collect();
+    if ids.is_empty() {
+        return Ok((parent, 0));
+    }
+
+    let guard = coords_handle.read();
+    let coords: &Coords = &guard;
+    // Paid once for the whole cloud, so the search reads positions unchecked.
+    coords.ensure_all_alive(&ids)?;
+
+    let grid = NodeGrid::build(&ids, coords, tol);
     let tol2 = tol * tol;
-
-    let offsets = neighbour_offsets(dim);
-    // Grid cell key → representatives already placed there.
-    let mut grid: HashMap<Vec<i64>, Vec<NodeId>> = HashMap::new();
-    let mut representative: HashMap<NodeId, NodeId> = HashMap::new();
-
-    for &id in &ids {
-        let p = coords.position(id)?;
-        let base: Vec<i64> = p.iter().map(|&x| (x / cell).floor() as i64).collect();
-
-        let mut rep = None;
-        'search: for off in &offsets {
-            let key: Vec<i64> = base.iter().zip(off).map(|(b, o)| b + o).collect();
-            if let Some(candidates) = grid.get(&key) {
-                for &c in candidates {
-                    if dist2(p, coords.position(c)?) <= tol2 {
-                        rep = Some(c);
-                        break 'search;
-                    }
+    // One edge per pair within tol, the smaller id second. Building the pairs
+    // is where the time goes, and every node's search is independent.
+    let edges: Vec<(u32, u32)> = ids
+        .par_iter()
+        .with_min_len(MIN_PARALLEL_LEN)
+        .flat_map_iter(|&id| {
+            let p = coords.position_alive(id);
+            let mut local: Vec<(u32, u32)> = Vec::new();
+            grid.for_each_candidate(p, tol, &mut |other: NodeId| {
+                if other.0 < id.0 && dist2(p, coords.position_alive(other)) <= tol2 {
+                    local.push((id.0, other.0));
                 }
-            }
-        }
+            });
+            local
+        })
+        .collect();
+    drop(guard);
 
-        match rep {
-            Some(r) => {
-                representative.insert(id, r);
-            }
-            None => {
-                // New representative: it stands for itself and joins the grid.
-                representative.insert(id, id);
-                grid.entry(base).or_default().push(id);
-            }
+    for &(a, b) in &edges {
+        let (ra, rb) = (find(&mut parent, a), find(&mut parent, b));
+        if ra != rb {
+            // The smaller id takes the root: a cluster is represented by its
+            // smallest node, whatever order the edges arrived in.
+            let (root, child) = if ra < rb { (ra, rb) } else { (rb, ra) };
+            parent[child as usize] = root;
         }
     }
 
-    Ok(representative)
+    // Full compression, so the table is a direct lookup from here on.
+    let mut welded = 0;
+    for &id in &ids {
+        let root = find(&mut parent, id.0);
+        parent[id.0 as usize] = root;
+        if root != id.0 {
+            welded += 1;
+        }
+    }
+
+    Ok((parent, welded))
+}
+
+/// Union-find root of `x`, with path halving.
+fn find(parent: &mut [u32], mut x: u32) -> u32 {
+    while parent[x as usize] != x {
+        let grand = parent[parent[x as usize] as usize];
+        parent[x as usize] = grand;
+        x = grand;
+    }
+    x
+}
+
+/// A uniform grid over the referenced nodes, in CSR form: the ids of bucket
+/// `b` are `items[starts[b]..starts[b + 1]]`, ascending.
+///
+/// The cell is **never smaller than `tol`**, so the ball of radius `tol` around
+/// a point spills over at most one bucket per axis — which is what lets a
+/// search visit the buckets it really touches instead of a fixed 3^dim
+/// neighbourhood.
+struct NodeGrid {
+    dim: usize,
+    lo: Vec<f64>,
+    /// 1 / cell size per axis (0 on an axis with no extent).
+    inv: Vec<f64>,
+    res: Vec<usize>,
+    stride: Vec<usize>,
+    starts: Vec<u32>,
+    items: Vec<NodeId>,
+}
+
+impl NodeGrid {
+    fn build(ids: &[NodeId], coords: &Coords, tol: f64) -> NodeGrid {
+        let dim = coords.dim() as usize;
+        let n = ids.len();
+
+        let mut lo = vec![f64::INFINITY; dim];
+        let mut hi = vec![f64::NEG_INFINITY; dim];
+        for &id in ids {
+            for (a, &x) in coords.position_alive(id).iter().enumerate() {
+                lo[a] = lo[a].min(x);
+                hi[a] = hi[a].max(x);
+            }
+        }
+
+        // Only the axes with an extent are worth cutting: a plane sitting in
+        // 3-D spends its buckets in the plane, not on the flat axis.
+        let live = lo
+            .iter()
+            .zip(&hi)
+            .filter(|(l, h)| *h - *l > 0.0)
+            .count()
+            .max(1);
+        let target = (n as f64).powf(1.0 / live as f64).round().max(1.0);
+        let mut res = vec![1usize; dim];
+        let mut inv = vec![0.0f64; dim];
+        for a in 0..dim {
+            let extent = hi[a] - lo[a];
+            if extent <= 0.0 {
+                continue;
+            }
+            // ~n buckets in all, but never a cell below tol.
+            let mut r = target;
+            if tol > 0.0 {
+                r = r.min((extent / tol).floor().max(1.0));
+            }
+            res[a] = r as usize;
+            inv[a] = res[a] as f64 / extent;
+        }
+        let mut stride = vec![1usize; dim];
+        for a in 1..dim {
+            stride[a] = stride[a - 1] * res[a - 1];
+        }
+        let total = stride[dim - 1] * res[dim - 1];
+
+        let mut grid = NodeGrid {
+            dim,
+            lo,
+            inv,
+            res,
+            stride,
+            starts: vec![0; total + 1],
+            items: vec![NodeId(0); n],
+        };
+
+        // Counting sort: count, prefix-sum, scatter. Ids are visited in
+        // ascending order, so each bucket comes out ascending too.
+        for &id in ids {
+            let b = grid.bucket(coords.position_alive(id));
+            grid.starts[b + 1] += 1;
+        }
+        for b in 0..total {
+            grid.starts[b + 1] += grid.starts[b];
+        }
+        let mut cursor = grid.starts.clone();
+        for &id in ids {
+            let b = grid.bucket(coords.position_alive(id));
+            grid.items[cursor[b] as usize] = id;
+            cursor[b] += 1;
+        }
+        grid
+    }
+
+    /// Index along `axis` of the bucket holding coordinate `x`, clamped to the
+    /// grid (a point outside the bbox belongs to the border bucket).
+    fn axis_index(&self, axis: usize, x: f64) -> usize {
+        let i = ((x - self.lo[axis]) * self.inv[axis]).floor();
+        i.clamp(0.0, (self.res[axis] - 1) as f64) as usize
+    }
+
+    /// Linear index of the bucket holding point `p`.
+    fn bucket(&self, p: &[f64]) -> usize {
+        (0..self.dim)
+            .map(|a| self.axis_index(a, p[a]) * self.stride[a])
+            .sum()
+    }
+
+    /// Call `f` on every node of every bucket the ball of radius `tol` around
+    /// `p` touches — at most two rows per axis, and usually just the one the
+    /// point itself lands in. Recursing over the axes keeps it dimension-
+    /// agnostic without allocating a thing.
+    fn for_each_candidate(&self, p: &[f64], tol: f64, f: &mut impl FnMut(NodeId)) {
+        self.visit(0, 0, p, tol, f);
+    }
+
+    fn visit(&self, axis: usize, acc: usize, p: &[f64], tol: f64, f: &mut impl FnMut(NodeId)) {
+        if axis == self.dim {
+            for &id in &self.items[self.starts[acc] as usize..self.starts[acc + 1] as usize] {
+                f(id);
+            }
+            return;
+        }
+        let first = self.axis_index(axis, p[axis] - tol);
+        let last = self.axis_index(axis, p[axis] + tol);
+        for i in first..=last {
+            self.visit(axis + 1, acc + i * self.stride[axis], p, tol, f);
+        }
+    }
 }
 
 /// Squared Euclidean distance between two coordinate slices of equal length.
 fn dist2(a: &[f64], b: &[f64]) -> f64 {
     a.iter().zip(b).map(|(x, y)| (x - y) * (x - y)).sum()
+}
+
+/// The image of a node through the dense representative table.
+///
+/// The table covers the whole `Coords`, and every id it is asked about comes
+/// out of a connectivity that [`build_representatives`] has already checked —
+/// so the index is the caller's contract, honoured once per zone rather than
+/// once per node.
+fn image(table: &[u32], n: NodeId) -> NodeId {
+    NodeId(table[n.0 as usize])
 }
 
 /// Whether a cell references the same node twice or more (after welding).
@@ -288,21 +489,13 @@ fn is_degenerate(nodes: &[NodeId]) -> bool {
         .any(|(i, n)| nodes[i + 1..].contains(n))
 }
 
-/// All offsets in `{-1, 0, 1}^dim` (the 3^dim grid neighbourhood).
-fn neighbour_offsets(dim: usize) -> Vec<Vec<i64>> {
-    let mut offsets = vec![Vec::new()];
-    for _ in 0..dim {
-        let mut next = Vec::with_capacity(offsets.len() * 3);
-        for prefix in &offsets {
-            for d in [-1i64, 0, 1] {
-                let mut v = prefix.clone();
-                v.push(d);
-                next.push(v);
-            }
-        }
-        offsets = next;
-    }
-    offsets
+/// Whether a cell **would** collapse once welded — read off the table, without
+/// materialising the welded cell.
+fn collapses(table: &[u32], cell: &[NodeId]) -> bool {
+    cell.iter().enumerate().any(|(i, &n)| {
+        let rep = image(table, n);
+        cell[i + 1..].iter().any(|&m| image(table, m) == rep)
+    })
 }
 
 #[cfg(test)]
@@ -376,6 +569,31 @@ mod tests {
         let welded = merged.node(0, 1, 1).unwrap();
         assert_eq!(welded.id(), b.id());
         assert_eq!(coords.read().position(b.id()).unwrap(), &[5.0, 5.0]);
+    }
+
+    #[test]
+    fn a_chain_of_close_nodes_closes_into_one_cluster() {
+        let coords = coords2();
+        // a—b—c espacés de 0,9 : a touche b, b touche c, mais a et c sont à
+        // 1,8, soit bien plus que la tolérance.
+        let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[0.9, 0.0]).unwrap();
+        let c = Node::create_in(coords.clone(), &[1.8, 0.0]).unwrap();
+        let far = Node::create_in(coords.clone(), &[10.0, 0.0]).unwrap();
+
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
+        mesh.add_cell(&[a.id(), far.id()]).unwrap();
+        mesh.add_cell(&[b.id(), far.id()]).unwrap();
+        mesh.add_cell(&[c.id(), far.id()]).unwrap();
+
+        let merged = merge_nodes(&mesh, 1.0, false).unwrap();
+        // La grappe est une composante connexe : la chaîne se referme, et les
+        // trois nœuds pointent sur `a`, le plus petit identifiant.
+        for cell in 0..3 {
+            assert_eq!(merged.node(0, cell, 0).unwrap().id(), a.id());
+        }
+        // Le nœud lointain, lui, n'a pas bougé.
+        assert_eq!(merged.node(0, 0, 1).unwrap().id(), far.id());
     }
 
     #[test]

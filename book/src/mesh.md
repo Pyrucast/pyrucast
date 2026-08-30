@@ -80,6 +80,16 @@ En cas d'échec partiel d'`add_cell` (par exemple un nœud déjà ramassé), les
 incréments déjà effectués pour la cellule courante sont **annulés** (rollback
 transactionnel à l'échelle d'une cellule).
 
+**Construire en bloc.** Un `add_cell` prend le verrou d'écriture de la `Coords`
+et lâche les caches dérivés du sous-maillage : c'est le bon grain pour une
+maille posée à la main, mais sur un million de mailles c'est *ce* prix-là qu'on
+paie, pas la connectivité. Un opérateur qui produit un gros maillage passe donc
+par `SubMesh::from_connectivity(coords, type, connectivité)` (côté Rust), qui
+valide et incrémente tout le tableau en une seule prise de verrou — une unité
+par **occurrence**, comme toujours — et par `Coords::add_nodes` pour créer ses
+nœuds d'un coup. C'est la couture qu'empruntent `translate`, `rotate`, les
+symétries, `copy` et `merge_nodes`.
+
 ## Scellement (connectivité figée après consommation)
 
 Par convention, un maillage n'est plus modifié une fois construit : un

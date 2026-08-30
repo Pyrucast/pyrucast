@@ -166,7 +166,8 @@ pub struct Coords {
     active: usize,
     /// `alive[id] == false` ⇒ collected by the GC. Once `false`, stays so forever.
     alive: Vec<bool>,
-    /// Per-node refcount. The GC collects `alive` nodes whose refcount is 0.
+    /// Per-node refcount, one unit per **occurrence** in a connectivity.
+    /// The GC collects `alive` nodes whose refcount is 0.
     ///
     /// **Never archived.** A file holds some of the objects that reference these
     /// nodes, not all of them, so a saved count would be a count of a world that
@@ -351,6 +352,56 @@ impl Coords {
         Ok(NodeId(id))
     }
 
+    /// Add **many** nodes at once, from the flat coordinate buffer
+    /// `flat` (`n * dim` values, point after point). Same contract as
+    /// [`add_node`](Self::add_node), paid once instead of `n` times: each node
+    /// starts at refcount 1, and the caller owes each of them one decrement.
+    ///
+    /// Ids are handed out sequentially, so the result is the **contiguous
+    /// range** of the new ids. Nothing is added unless every point is
+    /// acceptable — the whole buffer is checked first.
+    ///
+    /// This is the bulk seam a mesh builder wants: creating a million nodes one
+    /// call at a time means a million `Coords` write locks, which is what it
+    /// costs, not the coordinates themselves.
+    ///
+    /// ```
+    /// # use pyrucast::coords::Coords;
+    /// let mut c = Coords::new(2).unwrap();
+    /// // Trois points d'un coup : les identifiants sortent contigus.
+    /// let ids = c.add_nodes(&[0.0, 0.0, 1.0, 0.0, 0.0, 1.0]).unwrap();
+    /// assert_eq!((ids.start, ids.end), (0, 3));
+    /// assert_eq!(c.position(pyrucast::atoms::NodeId(2)).unwrap(), &[0.0, 1.0]);
+    /// // Un tampon qui ne tombe pas juste sur la dimension est refusé.
+    /// assert!(c.add_nodes(&[1.0, 2.0, 3.0]).is_err());
+    /// ```
+    pub fn add_nodes(&mut self, flat: &[f64]) -> Result<std::ops::Range<u32>> {
+        let d = self.dim as usize;
+        if !flat.len().is_multiple_of(d) {
+            return Err(PyrucastError::Message(format!(
+                "add_nodes: buffer of {} values is not a multiple of dim = {d}",
+                flat.len()
+            )));
+        }
+        // Checked over the whole buffer before anything is written, so a
+        // rejected call adds no node at all.
+        for p in flat.chunks(d) {
+            self.check_radius("add_nodes", p)?;
+        }
+
+        let start = self.alive.len() as u32;
+        let n = flat.len() / d;
+        for set in &mut self.configs {
+            set.extend_from_slice(flat);
+        }
+        self.alive.resize(self.alive.len() + n, true);
+        self.refcount.resize(self.refcount.len() + n, 1);
+        if let Some(perm) = &mut self.permutation {
+            perm.extend(start..start + n as u32);
+        }
+        Ok(start..start + n as u32)
+    }
+
     /// Increment the refcount of a live node.
     ///
     /// ```
@@ -388,6 +439,69 @@ impl Coords {
             )));
         }
         *r -= 1;
+        Ok(())
+    }
+
+    /// Increment the refcount of **every** id of `ids`, once per occurrence —
+    /// the bulk form of [`incref`](Self::incref), for a whole connectivity.
+    ///
+    /// All-or-nothing: the list is validated with
+    /// [`ensure_all_alive`](Self::ensure_all_alive) **before** the first
+    /// increment, and validation is the only way this can fail, so a refused
+    /// call leaves every count where it was.
+    ///
+    /// ```
+    /// # use pyrucast::coords::Coords;
+    /// let mut c = Coords::new(2)?;
+    /// let a = c.add_node(&[0.0, 0.0])?;
+    /// let b = c.add_node(&[1.0, 0.0])?;
+    /// // Une unité par occurrence : `a` compte double dans cette liste.
+    /// c.incref_all(&[a, b, a])?;
+    /// assert_eq!((c.refcount(a), c.refcount(b)), (3, 2));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn incref_all(&mut self, ids: &[NodeId]) -> Result<()> {
+        self.ensure_all_alive(ids)?;
+        for &id in ids {
+            let r = &mut self.refcount[id.0 as usize];
+            *r = r.saturating_add(1);
+        }
+        Ok(())
+    }
+
+    /// Decrement the refcount of **every** id of `ids`, once per occurrence —
+    /// the bulk form of [`decref`](Self::decref).
+    ///
+    /// All-or-nothing here too, but the count is what can refuse: a node whose
+    /// units are exhausted stops the run, and the decrements already applied
+    /// are given back before the error returns.
+    ///
+    /// ```
+    /// # use pyrucast::coords::Coords;
+    /// let mut c = Coords::new(2)?;
+    /// let a = c.add_node(&[0.0, 0.0])?;
+    /// let b = c.add_node(&[1.0, 0.0])?;
+    /// // `a` n'a qu'une unité : la liste est refusée, et `b` la garde.
+    /// assert!(c.decref_all(&[a, a, b]).is_err());
+    /// assert_eq!((c.refcount(a), c.refcount(b)), (1, 1));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn decref_all(&mut self, ids: &[NodeId]) -> Result<()> {
+        self.ensure_all_alive(ids)?;
+        for (done, &id) in ids.iter().enumerate() {
+            let r = &mut self.refcount[id.0 as usize];
+            if *r == 0 {
+                // Hand back what this call already took, so it changed nothing.
+                for &m in &ids[..done] {
+                    self.refcount[m.0 as usize] += 1;
+                }
+                return Err(PyrucastError::Message(format!(
+                    "decref_all: refcount already zero for node {}",
+                    id.0
+                )));
+            }
+            *r -= 1;
+        }
         Ok(())
     }
 

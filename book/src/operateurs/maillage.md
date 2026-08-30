@@ -2165,6 +2165,19 @@ plus petit identifiant —, et ce représentant **garde ses propres coordonnées
 de chaque sous-maillage est réécrite pour pointer vers les représentants ; la
 structure de sous-maillages (types, ordre, couleurs) est préservée.
 
+Un cluster est une **composante connexe** de la relation « distants de moins de
+`tol` » : la soudure se propage de proche en proche. Sur une chaîne a—b—c où a
+et b se touchent, b et c aussi, mais a et c non, les trois n'en font qu'un.
+C'est aussi pourquoi une tolérance de l'ordre de la taille de maille effondre
+toute une zone au lieu d'une seule interface : `tol` se choisit petit devant
+l'arête la plus courte, et la ligne de bilan est là pour le vérifier.
+
+**Coût.** La recherche des voisins passe par une grille uniforme dont la maille
+ne descend jamais sous `tol` : chaque nœud ne visite que les cases que sa boule
+de rayon `tol` touche vraiment — une seule, dans le cas courant — et cette
+phase est parallélisée. Compter une poignée de secondes pour dix millions de
+mailles, la mémoire de travail restant de l'ordre de quelques octets par nœud.
+
 Une cellule qui **s'effondre** — c'est-à-dire qui référence deux fois le même
 représentant après soudure (un `SEG2` dont les deux bouts fusionnent, un `TRI3`
 à deux coins confondus, …) — est **abandonnée** : elle est dégénérée. Les

@@ -345,6 +345,12 @@ pub fn consolidate(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
 /// triangle, …) are dropped. `tol` must be ≥ 0; `tol = 0` welds only exactly
 /// coincident nodes. `mesh` itself is left untouched.
 ///
+/// A cluster is a connected component of the « closer than `tol` » relation:
+/// the weld propagates from node to node, so on a chain a—b—c where a and c
+/// are further apart than `tol`, all three still end up as one — which is why
+/// a `tol` of the order of the element size collapses a whole region rather
+/// than a seam.
+///
 /// With `in_place=True` the connectivity of `mesh`'s **own** submeshes is
 /// rewritten instead — the assumed side effect — and the very same mesh object
 /// is returned. Since the union `mesh_a | mesh_b` shares its submeshes rather

@@ -151,6 +151,66 @@ impl SubMesh {
         }
     }
 
+    /// Build a submesh from a **whole flat connectivity** at once: cell `i`
+    /// occupies `connectivity[i*npc..(i+1)*npc]`, so its length must be a
+    /// multiple of the element type's node count.
+    ///
+    /// The bulk twin of [`add_cell`](SubMesh::add_cell), and the seam every
+    /// operator that produces a big mesh should sit on. `add_cell` takes the
+    /// `Coords` write lock and drops the derived caches **once per cell**;
+    /// on a million cells that, not the connectivity itself, is the cost. Here
+    /// the nodes are validated and increfed in a single locked pass — one unit
+    /// per occurrence, as always — and the caches are simply never built.
+    ///
+    /// Nothing is increfed unless every id names a live node, so a rejected
+    /// call leaves the `Coords` exactly as it was.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::mesh::SubMesh;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// // Deux triangles posés d'un seul coup, connectivité à plat.
+    /// let ids: Vec<_> = n.iter().map(|x| x.id()).collect();
+    /// let sm = SubMesh::from_connectivity(
+    ///     coords.clone(),
+    ///     ElementType::TRI3,
+    ///     vec![ids[0], ids[1], ids[2], ids[1], ids[3], ids[2]],
+    /// )?;
+    /// assert_eq!(sm.cell_count(), 2);
+    /// // Une unité par occurrence : le nœud 2 sert deux fois, plus son `Node`.
+    /// assert_eq!(coords.read().refcount(ids[2]), 3);
+    /// // Une longueur qui ne tombe pas juste sur le type d'élément est refusée.
+    /// assert!(SubMesh::from_connectivity(coords.clone(), ElementType::TRI3, vec![ids[0]]).is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn from_connectivity(
+        coords: Handle<Coords>,
+        element_type: ElementType,
+        connectivity: Vec<NodeId>,
+    ) -> Result<Self> {
+        let npc = element_type.nodes_per_cell();
+        if npc == 0 || !connectivity.len().is_multiple_of(npc) {
+            return Err(PyrucastError::Message(format!(
+                "from_connectivity({element_type}): {} node(s) is not a multiple of {npc}",
+                connectivity.len()
+            )));
+        }
+        coords.write().incref_all(&connectivity)?;
+        Ok(Self {
+            element_type,
+            coords,
+            connectivity,
+            face_color: RgbColor::default(),
+            sealed: false,
+            node_index: OnceLock::new(),
+            poi1_companion: OnceLock::new(),
+        })
+    }
+
     /// Whether this submesh is sealed (connectivity frozen).
     ///
     /// ```
@@ -450,16 +510,13 @@ impl SubMesh {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn duplicate(&self) -> Result<SubMesh> {
-        let mut copy = SubMesh::new(self.coords.clone(), self.element_type);
+        // One locked pass for the whole connectivity, increfs included.
+        let mut copy = SubMesh::from_connectivity(
+            self.coords.clone(),
+            self.element_type,
+            self.connectivity.clone(),
+        )?;
         copy.face_color = self.face_color;
-        let npc = self.element_type.nodes_per_cell();
-        if npc > 0 {
-            for chunk in self.connectivity.chunks(npc) {
-                // `copy` is unsealed, so `add_cell` runs and increfs the
-                // nodes (with rollback on failure).
-                copy.add_cell(chunk)?;
-            }
-        }
         Ok(copy)
     }
 
@@ -515,47 +572,63 @@ impl SubMesh {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn remap_nodes(&mut self, map: &HashMap<NodeId, NodeId>) -> Result<usize> {
+        self.remap_with(|old| map.get(&old).copied().unwrap_or(old))
+    }
+
+    /// The rename [`merge_nodes`](fn@crate::ops::mesh::merge_nodes) welds
+    /// with: the same contract as [`remap_nodes`](SubMesh::remap_nodes), read
+    /// off a **dense table** indexed by `NodeId.0` (`table[i] == i` for a node
+    /// that stays) instead of a `HashMap`. On a ten-million-cell weld the map
+    /// alone is the cost — `NodeId` is already an index into the `Coords`.
+    ///
+    /// The table must cover the whole `Coords` this submesh sits in; indexing
+    /// it is the caller's contract, as it is for
+    /// [`Coords::position_alive`](crate::coords::Coords).
+    pub(crate) fn remap_nodes_dense(&mut self, table: &[u32]) -> Result<usize> {
+        self.remap_with(|old| NodeId(table[old.0 as usize]))
+    }
+
+    /// The shared body of the two renames: rewrite every slot whose image
+    /// differs from it, moving one refcount unit per rewritten slot.
+    ///
+    /// One `Coords` lock for the whole submesh, and no list of changes built
+    /// on the side: the images are validated first, inside that same lock, so
+    /// the increments that follow cannot fail and the run stays
+    /// all-or-nothing without a rollback path.
+    fn remap_with(&mut self, image: impl Fn(NodeId) -> NodeId) -> Result<usize> {
         if self.sealed {
             return Err(PyrucastError::MeshSealed);
         }
 
-        // Slots to rewrite, with the refcount move each one implies.
-        let changes: Vec<(usize, NodeId, NodeId)> = self
-            .connectivity
-            .iter()
-            .enumerate()
-            .filter_map(|(i, &old)| match map.get(&old) {
-                Some(&new) if new != old => Some((i, old, new)),
-                _ => None,
-            })
-            .collect();
-        if changes.is_empty() {
-            return Ok(0);
-        }
-
+        let mut rewritten = 0;
         {
             let mut c = self.coords.write();
-            // Incref the images first: until they have all succeeded, nothing
-            // has been given up, so a rollback restores the initial state.
-            for (done, &(_, _, new)) in changes.iter().enumerate() {
-                if let Err(e) = c.incref(new) {
-                    for &(_, _, rollback) in &changes[..done] {
-                        let _ = c.decref(rollback);
-                    }
-                    return Err(e);
+            // Nothing is written until every image is known to be live.
+            for &old in &self.connectivity {
+                let new = image(old);
+                if new != old && !c.is_alive(new) {
+                    return Err(PyrucastError::Message(format!(
+                        "remap_nodes: node {} is not found or collected",
+                        new.0
+                    )));
                 }
             }
-            for &(_, old, _) in &changes {
-                c.decref(old)?;
+            for slot in &mut self.connectivity {
+                let new = image(*slot);
+                if new != *slot {
+                    c.incref(new)?;
+                    c.decref(*slot)?;
+                    *slot = new;
+                    rewritten += 1;
+                }
             }
         }
 
-        for &(i, _, new) in &changes {
-            self.connectivity[i] = new;
+        if rewritten > 0 {
+            // Both caches are derived from the connectivity that just moved.
+            self.invalidate_caches();
         }
-        // Both caches are derived from the connectivity that just moved.
-        self.invalidate_caches();
-        Ok(changes.len())
+        Ok(rewritten)
     }
 
     /// Element type of the submesh.
@@ -1756,6 +1829,30 @@ mod tests {
             assert_eq!(cf.refcount(b.id()), 1, "b must be rolled back");
         }
         assert_eq!(sm.cell_count(), 0);
+    }
+
+    #[test]
+    fn from_connectivity_refuses_a_dead_node_without_increfing_anything() {
+        let coords = Handle::new(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let dead_id = coords.write().add_node(&[2.0]).unwrap();
+        {
+            let mut c = coords.write();
+            c.decref(dead_id).unwrap();
+            assert_eq!(c.gc(), 1);
+        }
+
+        let err = SubMesh::from_connectivity(
+            coords.clone(),
+            ElementType::TRI3,
+            vec![a.id(), b.id(), dead_id],
+        )
+        .unwrap_err();
+        assert!(matches!(err, PyrucastError::Message(_)));
+        // Validation comes first: nothing was increfed on the way out.
+        let cf = coords.read();
+        assert_eq!((cf.refcount(a.id()), cf.refcount(b.id())), (1, 1));
     }
 
     #[test]
