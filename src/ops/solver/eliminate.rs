@@ -510,12 +510,20 @@ fn build_condensation(model: &Model, matrix: &Matrix) -> Result<Condensation> {
     }
 
     // ── Extract K_phys from the assembled CSR ──────────────────────────
-    let csr = matrix.to_csr()?;
+    // Borrowed, not materialised: the assembled sparsity is shared, and this
+    // only reads it.
+    let (offsets, cols, vals) = matrix.csr_arrays()?;
     let mut k_coo = CooMatrix::<f64>::new(n_phys, n_phys);
-    for (r, c, &v) in csr.triplet_iter() {
-        let (pr, pc) = (full_row_to_phys[r], full_col_to_phys[c]);
-        if pr != usize::MAX && pc != usize::MAX {
-            k_coo.push(pr, pc, v);
+    for r in 0..full_row.len() {
+        let pr = full_row_to_phys[r];
+        if pr == usize::MAX {
+            continue;
+        }
+        for k in offsets[r]..offsets[r + 1] {
+            let pc = full_col_to_phys[cols[k]];
+            if pc != usize::MAX {
+                k_coo.push(pr, pc, vals[k]);
+            }
         }
     }
     let k_phys = CsrMatrix::from(&k_coo);

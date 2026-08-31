@@ -11,7 +11,9 @@
 //! across assemblies (materials change, sparsity does not).
 //!
 //! **Numeric** ([`scatter_serial`]): evaluate each block's contribution and add
-//! it into the CSR values at its precomputed slot.
+//! it into the CSR values at its precomputed slot. Both numeric phases yield
+//! the **values alone**, in the pattern's slot order: the sparsity is the
+//! pattern's, and the assembled matrix shares it rather than copying it.
 //!
 //! [`scatter_serial`] visits blocks — and, within a block, cells / COO entries —
 //! in the same order the triplet stream had, accumulating each slot in that
@@ -24,7 +26,7 @@ use crate::error::{PyrucastError, Result};
 use crate::models::kernel;
 use crate::ops::coloring;
 use crate::parallel::*;
-use nalgebra_sparse::CsrMatrix;
+
 use std::collections::HashMap;
 use std::sync::atomic::AtomicU64;
 
@@ -117,10 +119,10 @@ impl DofIndex {
 /// let motif = scatter::build_pattern(&k)?;
 /// let serie = scatter::scatter_serial(&k, &motif)?;
 /// let para = scatter::scatter_parallel(&k, &motif)?;
-/// assert_eq!(serie.nnz(), motif.nnz());
-/// assert_eq!(para.nnz(), serie.nnz());
+/// assert_eq!(serie.len(), motif.nnz());
+/// assert_eq!(para.len(), serie.len());
 /// // Mêmes valeurs, à l'ordre de sommation des couleurs près.
-/// for (a, b) in serie.values().iter().zip(para.values()) {
+/// for (a, b) in serie.iter().zip(&para) {
 ///     assert!((a - b).abs() < 1e-12);
 /// }
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -234,8 +236,8 @@ pub fn build_pattern(k: &Matrix) -> Result<AssemblyPattern> {
         vars,
         row_keys,
         col_keys,
-        row_offsets,
-        col_indices,
+        row_offsets: std::sync::Arc::new(row_offsets),
+        col_indices: std::sync::Arc::new(col_indices),
         block_slots: Vec::new(),
     };
 
@@ -300,18 +302,15 @@ pub fn build_pattern(k: &Matrix) -> Result<AssemblyPattern> {
 /// let motif = scatter::build_pattern(&k)?;
 /// let serie = scatter::scatter_serial(&k, &motif)?;
 /// let para = scatter::scatter_parallel(&k, &motif)?;
-/// assert_eq!(serie.nnz(), motif.nnz());
-/// assert_eq!(para.nnz(), serie.nnz());
+/// assert_eq!(serie.len(), motif.nnz());
+/// assert_eq!(para.len(), serie.len());
 /// // Mêmes valeurs, à l'ordre de sommation des couleurs près.
-/// for (a, b) in serie.values().iter().zip(para.values()) {
+/// for (a, b) in serie.iter().zip(&para) {
 ///     assert!((a - b).abs() < 1e-12);
 /// }
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix<f64>> {
-    let nrows = pattern.row_keys.len();
-    let ncols = pattern.col_keys.len();
-
+pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<Vec<f64>> {
     let mut values = vec![0.0f64; pattern.nnz()];
     for (bi, blk_h) in k.into_iter().enumerate() {
         let blk = blk_h.read();
@@ -409,14 +408,7 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix
         }
     }
 
-    CsrMatrix::try_from_csr_data(
-        nrows,
-        ncols,
-        pattern.row_offsets.clone(),
-        pattern.col_indices.clone(),
-        values,
-    )
-    .map_err(|e| PyrucastError::Message(format!("scatter_serial: invalid CSR: {e}")))
+    Ok(values)
 }
 
 /// Assemble `k` into a CSR by scattering each block's contribution into
@@ -460,18 +452,15 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix
 /// let motif = scatter::build_pattern(&k)?;
 /// let serie = scatter::scatter_serial(&k, &motif)?;
 /// let para = scatter::scatter_parallel(&k, &motif)?;
-/// assert_eq!(serie.nnz(), motif.nnz());
-/// assert_eq!(para.nnz(), serie.nnz());
+/// assert_eq!(serie.len(), motif.nnz());
+/// assert_eq!(para.len(), serie.len());
 /// // Mêmes valeurs, à l'ordre de sommation des couleurs près.
-/// for (a, b) in serie.values().iter().zip(para.values()) {
+/// for (a, b) in serie.iter().zip(&para) {
 ///     assert!((a - b).abs() < 1e-12);
 /// }
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix<f64>> {
-    let nrows = pattern.row_keys.len();
-    let ncols = pattern.col_keys.len();
-
+pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<Vec<f64>> {
     // f64 values held as bits so the colour-parallel scatter can write them
     // through shared references (see `add_atomic`).
     let values: Vec<AtomicU64> = (0..pattern.nnz()).map(|_| AtomicU64::new(0)).collect();
@@ -609,16 +598,10 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatr
         }
     }
 
-    let vals: Vec<f64> = values
+    // `AtomicU64` and `f64` share a layout, so this reuses the allocation rather
+    // than raising a second buffer the size of the whole value array.
+    Ok(values
         .into_iter()
         .map(|a| f64::from_bits(a.into_inner()))
-        .collect();
-    CsrMatrix::try_from_csr_data(
-        nrows,
-        ncols,
-        pattern.row_offsets.clone(),
-        pattern.col_indices.clone(),
-        vals,
-    )
-    .map_err(|e| PyrucastError::Message(format!("scatter_parallel: invalid CSR: {e}")))
+        .collect())
 }

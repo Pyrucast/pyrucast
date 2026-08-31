@@ -1971,6 +1971,58 @@ mod coo_serde {
 
 // ─── Matrix (aggregate) ────────────────────────────────────────────────────
 
+/// The assembled CSR, its **index arrays shared** with whatever produced them.
+///
+/// A `CsrMatrix` owns its three arrays, so storing one here meant copying the
+/// sparsity out of the assembler's (already shared, already memoised) pattern at
+/// every assembly — twenty gigabytes of `memcpy` on a solid mesh, to reproduce
+/// something that had not changed. Only the values are new from one assembly to
+/// the next; the offsets and the column indices are the pattern's, held by
+/// `Arc`. A `CsrMatrix` is built on demand, where one is actually wanted.
+pub(crate) struct AssembledCsr {
+    pub(crate) row_offsets: std::sync::Arc<Vec<usize>>,
+    pub(crate) col_indices: std::sync::Arc<Vec<usize>>,
+    pub(crate) values: Vec<f64>,
+    pub(crate) ncols: usize,
+}
+
+impl AssembledCsr {
+    fn nrows(&self) -> usize {
+        self.row_offsets.len().saturating_sub(1)
+    }
+
+    /// Slot of `(r, c)` in `values`, or `None` when the pattern has no such
+    /// entry. The columns of a row are sorted, so this is a binary search.
+    fn slot(&self, r: usize, c: usize) -> Option<usize> {
+        let (lo, hi) = (*self.row_offsets.get(r)?, *self.row_offsets.get(r + 1)?);
+        self.col_indices[lo..hi]
+            .binary_search(&c)
+            .ok()
+            .map(|k| lo + k)
+    }
+
+    /// Every stored entry as `(row, col, value)`, in CSR order.
+    fn triplets(&self) -> impl Iterator<Item = (usize, usize, f64)> + '_ {
+        (0..self.nrows()).flat_map(move |r| {
+            let (lo, hi) = (self.row_offsets[r], self.row_offsets[r + 1]);
+            (lo..hi).map(move |k| (r, self.col_indices[k], self.values[k]))
+        })
+    }
+
+    /// Materialise a `CsrMatrix` — the one place the index arrays are copied,
+    /// and only for a caller that asked for that type.
+    fn to_csr(&self) -> Result<CsrMatrix<f64>> {
+        CsrMatrix::try_from_csr_data(
+            self.nrows(),
+            self.ncols,
+            (*self.row_offsets).clone(),
+            (*self.col_indices).clone(),
+            self.values.clone(),
+        )
+        .map_err(|e| PyrucastError::Message(format!("to_csr: invalid CSR: {e}")))
+    }
+}
+
 /// Snapshot produced by [`Matrix::finalize`]: DOF numbering + assembled CSR.
 ///
 /// The numbering is held as packed [`DofKey`]s over a shared name table, not as
@@ -1981,7 +2033,7 @@ struct AssembledData {
     vars: std::sync::Arc<Vec<String>>,
     row_keys: Vec<DofKey>,
     col_keys: Vec<DofKey>,
-    csr: CsrMatrix<f64>,
+    csr: AssembledCsr,
 }
 
 /// Aggregate of [`SubMatrix`] blocks.
@@ -2257,10 +2309,13 @@ pub struct AssemblyPattern {
     pub row_keys: Vec<DofKey>,
     /// Global column DOFs as packed [`DofKey`]s, in CSR column order.
     pub col_keys: Vec<DofKey>,
-    /// CSR row offsets, length `row_keys.len() + 1`.
-    pub row_offsets: Vec<usize>,
+    /// CSR row offsets, length `row_keys.len() + 1`. Held by `Arc` because the
+    /// assembled matrices built from this pattern **share** it rather than each
+    /// copying the sparsity out.
+    pub row_offsets: std::sync::Arc<Vec<usize>>,
     /// CSR column indices, sorted within each row, length `row_offsets[nrows]`.
-    pub col_indices: Vec<usize>,
+    /// Shared like [`row_offsets`](Self::row_offsets).
+    pub col_indices: std::sync::Arc<Vec<usize>>,
     /// Precomputed value-array slot of every entry each block contributes, one
     /// entry per block in the matrix's `subs` order. Since the pattern is
     /// material-independent and cached, the `binary_search` that maps a
@@ -2449,6 +2504,17 @@ impl AssemblyPattern {
         self.named(&self.col_keys)
     }
 
+    /// Wrap `values` — the numeric phase's output, in this pattern's slot order
+    /// — into an assembled CSR that **shares** this pattern's sparsity.
+    pub(crate) fn assembled_csr(&self, values: Vec<f64>) -> AssembledCsr {
+        AssembledCsr {
+            row_offsets: self.row_offsets.clone(),
+            col_indices: self.col_indices.clone(),
+            values,
+            ncols: self.col_keys.len(),
+        }
+    }
+
     fn named(&self, keys: &[DofKey]) -> Vec<NamedDof> {
         keys.iter()
             .map(|&k| (dof_node(k), self.vars[dof_var(k) as usize].clone()))
@@ -2491,11 +2557,12 @@ fn sort_rows_in_place(pairs: &mut [(usize, f64)], bounds: &[usize]) {
 /// dedup-and-sum scan are O(nnz) serial passes. The per-row sort is stable, so
 /// equal `(row, col)` entries are summed in stream order — bit-for-bit identical
 /// to the serial path.
+#[allow(clippy::type_complexity)]
 fn csr_from_triplets_parallel(
     nrows: usize,
-    ncols: usize,
+    _ncols: usize,
     triplets: Vec<(usize, usize, f64)>,
-) -> Result<CsrMatrix<f64>> {
+) -> Result<(Vec<usize>, Vec<usize>, Vec<f64>)> {
     let nnz = triplets.len();
     // 1. Entries per row → exclusive prefix sum → per-row bucket bounds.
     let mut bounds = vec![0usize; nrows + 1];
@@ -2534,8 +2601,7 @@ fn csr_from_triplets_parallel(
     for r in 0..nrows {
         row_offsets[r + 1] += row_offsets[r];
     }
-    CsrMatrix::try_from_csr_data(nrows, ncols, row_offsets, col_indices, values)
-        .map_err(|e| PyrucastError::Message(format!("csr_from_triplets_parallel: {e}")))
+    Ok((row_offsets, col_indices, values))
 }
 
 impl Matrix {
@@ -2607,7 +2673,14 @@ impl Matrix {
         let row_keys = self.collect_dof_keys(true, &vars)?;
         let col_keys = self.collect_dof_keys(false, &vars)?;
         let triplets = self.build_global_triplets(&vars, &row_keys, &col_keys)?;
-        let csr = csr_from_triplets_parallel(row_keys.len(), col_keys.len(), triplets)?;
+        let (row_offsets, col_indices, values) =
+            csr_from_triplets_parallel(row_keys.len(), col_keys.len(), triplets)?;
+        let csr = AssembledCsr {
+            row_offsets: std::sync::Arc::new(row_offsets),
+            col_indices: std::sync::Arc::new(col_indices),
+            values,
+            ncols: col_keys.len(),
+        };
         self.assembled = Some(AssembledData {
             vars,
             row_keys,
@@ -2629,7 +2702,7 @@ impl Matrix {
         vars: std::sync::Arc<Vec<String>>,
         row_keys: Vec<DofKey>,
         col_keys: Vec<DofKey>,
-        csr: CsrMatrix<f64>,
+        csr: AssembledCsr,
     ) {
         self.assembled = Some(AssembledData {
             vars,
@@ -3276,7 +3349,7 @@ impl Matrix {
             let r = find(&a.row_keys, row_node, row_field);
             let c = find(&a.col_keys, col_node, col_field);
             return Ok(match (r, c) {
-                (Some(r), Some(c)) => a.csr.get_entry(r, c).map(|e| e.into_value()).unwrap_or(0.0),
+                (Some(r), Some(c)) => a.csr.slot(r, c).map_or(0.0, |k| a.csr.values[k]),
                 _ => 0.0,
             });
         }
@@ -3325,7 +3398,13 @@ impl Matrix {
 
     // ── Solver-facing (require finalize) ────────────────────────────────
 
-    /// Assembled CSR. Requires [`finalize`](Self::finalize).
+    /// Assembled CSR, **materialised**. Requires [`finalize`](Self::finalize).
+    ///
+    /// The assembled state holds the sparsity by `Arc`, shared with the
+    /// assembler's memoised pattern, and only the values as its own. Building a
+    /// `CsrMatrix` — which owns all three arrays — therefore copies the
+    /// sparsity, so ask for one only where that type is genuinely needed; to
+    /// read the assembled matrix, [`csr_arrays`](Self::csr_arrays) borrows it.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -3350,8 +3429,45 @@ impl Matrix {
     /// // Le CSR **est** l'état assemblé : emprunté, pas reconstruit.
     /// assert_eq!(k.to_csr().unwrap().nnz(), 4);
     /// ```
-    pub fn to_csr(&self) -> Result<&CsrMatrix<f64>> {
-        Ok(&self.assembled_or_err()?.csr)
+    pub fn to_csr(&self) -> Result<CsrMatrix<f64>> {
+        self.assembled_or_err()?.csr.to_csr()
+    }
+
+    /// The assembled CSR **borrowed**: `(row_offsets, col_indices, values)`.
+    /// Requires [`finalize`](Self::finalize).
+    ///
+    /// The reading form of [`to_csr`](Self::to_csr), copying nothing.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::Matrix;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::Model;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::{element_field, matrix};
+    /// # use pyrucast::ops::model;
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+    /// # let k = matrix::stiffness(&model, &materials).unwrap();
+    /// // Les trois tableaux du CSR, empruntés — rien n'est recopié.
+    /// let (offsets, cols, values) = k.csr_arrays()?;
+    /// assert_eq!(offsets.len(), k.n_rows()? + 1);
+    /// assert_eq!(cols.len(), values.len());
+    /// assert_eq!(values.len(), k.to_csr()?.nnz());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn csr_arrays(&self) -> Result<(&[usize], &[usize], &[f64])> {
+        let a = self.assembled_or_err()?;
+        Ok((&a.csr.row_offsets, &a.csr.col_indices, &a.csr.values))
     }
 
     /// Assembled dense matrix. Requires [`finalize`](Self::finalize).
@@ -3385,7 +3501,7 @@ impl Matrix {
         let nr = a.row_keys.len();
         let nc = a.col_keys.len();
         let mut out = DMatrix::<f64>::zeros(nr, nc);
-        for (r, c, &v) in a.csr.triplet_iter() {
+        for (r, c, v) in a.csr.triplets() {
             out[(r, c)] += v;
         }
         Ok(out)
@@ -3456,7 +3572,7 @@ impl Matrix {
     pub fn to_coo(&self) -> Result<CooMatrix<f64>> {
         let a = self.assembled_or_err()?;
         let mut coo = CooMatrix::<f64>::new(a.row_keys.len(), a.col_keys.len());
-        for (r, c, &v) in a.csr.triplet_iter() {
+        for (r, c, v) in a.csr.triplets() {
             coo.push(r, c, v);
         }
         Ok(coo)
@@ -3487,7 +3603,7 @@ impl Matrix {
     /// assert_eq!(k.to_csc().unwrap().ncols(), 2);
     /// ```
     pub fn to_csc(&self) -> Result<CscMatrix<f64>> {
-        Ok(CscMatrix::from(&self.assembled_or_err()?.csr))
+        Ok(CscMatrix::from(&self.assembled_or_err()?.csr.to_csr()?))
     }
 
     /// `y = A · x` (dense). Requires [`finalize`](Self::finalize).
@@ -3525,9 +3641,18 @@ impl Matrix {
                 nc
             )));
         }
-        let x_vec = DVector::<f64>::from_column_slice(x);
-        let y_vec: DVector<f64> = &a.csr * &x_vec;
-        Ok(y_vec.iter().copied().collect())
+        // Row-wise SpMV straight on the CSR arrays: each row's dot product is
+        // written once, so the result is independent of the thread count.
+        let (offsets, cols, vals) = (&a.csr.row_offsets, &a.csr.col_indices, &a.csr.values);
+        let mut y = vec![0.0f64; a.csr.nrows()];
+        y.par_iter_mut()
+            .with_min_len(MIN_PARALLEL_LEN)
+            .enumerate()
+            .for_each(|(r, out)| {
+                let (lo, hi) = (offsets[r], offsets[r + 1]);
+                *out = (lo..hi).map(|k| vals[k] * x[cols[k]]).sum();
+            });
+        Ok(y)
     }
 
     /// [`Mesh`] over the blocks' distinct **row** supports (the dual side:
@@ -4037,8 +4162,8 @@ impl crate::dump::Dump for Matrix {
             let (row_dofs, col_dofs, data) = if let Some(a) = &self.assembled {
                 let nc = a.col_keys.len();
                 let mut data = vec![0.0f64; a.row_keys.len() * nc];
-                for (r, c, v) in a.csr.triplet_iter() {
-                    data[r * nc + c] = *v;
+                for (r, c, v) in a.csr.triplets() {
+                    data[r * nc + c] = v;
                 }
                 (
                     Self::name_dofs(&a.row_keys, &a.vars),

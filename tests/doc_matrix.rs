@@ -222,9 +222,13 @@ fn lire_une_matrice_assemblee() -> Result<()> {
     // Vue dense typée nalgebra (column-major DMatrix), prête pour LU/Cholesky.
     let m: nalgebra::DMatrix<f64> = k.to_dmatrix()?;
 
-    // Vues creuses nalgebra-sparse, prêtes pour les solveurs creux.
-    let csr: &nalgebra_sparse::CsrMatrix<f64> = k.to_csr()?;
+    // Vues creuses nalgebra-sparse, prêtes pour les solveurs creux. `to_csr`
+    // matérialise ; `csr_arrays` emprunte les trois tableaux sans rien copier.
+    let csr: nalgebra_sparse::CsrMatrix<f64> = k.to_csr()?;
     let csc: nalgebra_sparse::CscMatrix<f64> = k.to_csc()?;
+    let (offsets, cols, vals): (&[usize], &[usize], &[f64]) = k.csr_arrays()?;
+    assert_eq!(offsets.len(), k.n_rows()? + 1);
+    assert_eq!(cols.len(), vals.len());
 
     // Itération sur les triplets bruts (ordre d'insertion préservé). Une
     // entrée est un 5-uplet `(nœud ligne, var duale, nœud colonne, var

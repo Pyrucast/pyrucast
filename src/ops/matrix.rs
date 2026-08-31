@@ -32,7 +32,6 @@ use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
 use crate::handle::Handle;
 use crate::models::{Contribution, MatrixKind};
-use nalgebra_sparse::{CooMatrix, CsrMatrix};
 
 /// Assemble the stiffness matrix `K` for `model`.
 ///
@@ -186,12 +185,12 @@ pub fn assemble_kind(
     // per kind on the model and reused across assemblies; the values are
     // scattered into it in parallel by cell colour ([`crate::ops::scatter::scatter_parallel`]).
     let pattern = model.matrix_pattern(kind, || crate::ops::scatter::build_pattern(&k))?;
-    let csr = crate::ops::scatter::scatter_parallel(&k, pattern.as_ref())?;
+    let values = crate::ops::scatter::scatter_parallel(&k, pattern.as_ref())?;
     k.set_assembled(
         pattern.vars.clone(),
         pattern.row_keys.clone(),
         pattern.col_keys.clone(),
-        csr,
+        pattern.assembled_csr(values),
     );
     Ok(k)
 }
@@ -226,7 +225,8 @@ impl Matrix {
     /// should keep going through [`stiffness`].
     pub fn assemble(&mut self) -> Result<()> {
         let pattern = crate::ops::scatter::build_pattern(self)?;
-        let csr = crate::ops::scatter::scatter_parallel(self, &pattern)?;
+        let values = crate::ops::scatter::scatter_parallel(self, &pattern)?;
+        let csr = pattern.assembled_csr(values);
         self.set_assembled(pattern.vars, pattern.row_keys, pattern.col_keys, csr);
         Ok(())
     }
@@ -464,31 +464,29 @@ pub fn tangent(model: &Model, materials: &ElementField, state: &ElementField) ->
 /// assert_eq!(diagonale.get(a.id(), "q", b.id(), "T").unwrap(), 0.0);
 /// ```
 pub fn lump(m: &Matrix) -> Result<Matrix> {
-    let csr = m.to_csr()?;
+    let (offsets, _, values) = m.csr_arrays()?;
     let vars = m.dof_vars()?;
     let row_keys = m.row_dof_keys()?;
     let col_keys = m.col_dof_keys()?;
-    let n = csr.nrows();
-    if csr.ncols() != n {
+    let n = row_keys.len();
+    if col_keys.len() != n {
         return Err(crate::error::PyrucastError::Message(format!(
             "lump: matrix must be square, got {}×{}",
             n,
-            csr.ncols()
+            col_keys.len()
         )));
     }
-    // Diagonal = per-row sum, assembled straight into a diagonal CSR.
-    let (mut rows, mut cols, mut vals) = (Vec::new(), Vec::new(), Vec::new());
-    for (i, row) in csr.row_iter().enumerate() {
-        let s: f64 = row.values().iter().sum();
-        if s != 0.0 {
-            rows.push(i);
-            cols.push(i);
-            vals.push(s);
-        }
-    }
-    let coo = CooMatrix::try_from_triplets(n, n, rows, cols, vals)
-        .map_err(|e| crate::error::PyrucastError::Message(format!("lump: invalid COO: {e}")))?;
-    let diag = CsrMatrix::from(&coo);
+    // Diagonal = per-row sum, written straight into a diagonal CSR: one entry
+    // per row, so the offsets are the row index itself.
+    let diag_values: Vec<f64> = (0..n)
+        .map(|r| values[offsets[r]..offsets[r + 1]].iter().sum())
+        .collect();
+    let diag = crate::containers::matrix::AssembledCsr {
+        row_offsets: std::sync::Arc::new((0..=n).collect()),
+        col_indices: std::sync::Arc::new((0..n).collect()),
+        values: diag_values,
+        ncols: n,
+    };
     let mut out = Matrix::empty();
     out.set_assembled(vars, row_keys, col_keys, diag);
     Ok(out)
@@ -783,14 +781,14 @@ mod tests {
         let (model, materials) = chain_heat_with_dirichlet(6);
         let k = assemble_computed_blocks(&model, &materials);
         let pattern = crate::ops::scatter::build_pattern(&k).unwrap();
-        let csr = crate::ops::scatter::scatter_serial(&k, &pattern).unwrap();
+        let values = crate::ops::scatter::scatter_serial(&k, &pattern).unwrap();
 
         let k_ref = assemble_literal_reference(&model, &materials).unwrap();
-        let csr_ref = k_ref.to_csr().unwrap();
+        let (offsets_ref, cols_ref, values_ref) = k_ref.csr_arrays().unwrap();
 
-        assert_eq!(csr.row_offsets(), csr_ref.row_offsets());
-        assert_eq!(csr.col_indices(), csr_ref.col_indices());
-        assert_eq!(csr.values(), csr_ref.values());
+        assert_eq!(&pattern.row_offsets[..], offsets_ref);
+        assert_eq!(&pattern.col_indices[..], cols_ref);
+        assert_eq!(values, values_ref);
     }
 
     /// `SubMatrix::factor` scales every entry the **serial** scatter emits, on
@@ -801,15 +799,15 @@ mod tests {
         let (model, materials) = chain_heat_with_dirichlet(6);
         let k = assemble_computed_blocks(&model, &materials);
         let pattern = crate::ops::scatter::build_pattern(&k).unwrap();
-        let csr_unscaled = crate::ops::scatter::scatter_serial(&k, &pattern).unwrap();
+        let unscaled = crate::ops::scatter::scatter_serial(&k, &pattern).unwrap();
 
         let scaled = (&k * 3.0).unwrap();
         let pattern_scaled = crate::ops::scatter::build_pattern(&scaled).unwrap();
-        let csr_scaled = crate::ops::scatter::scatter_serial(&scaled, &pattern_scaled).unwrap();
+        let scaled_values = crate::ops::scatter::scatter_serial(&scaled, &pattern_scaled).unwrap();
 
-        assert_eq!(csr_scaled.row_offsets(), csr_unscaled.row_offsets());
-        assert_eq!(csr_scaled.col_indices(), csr_unscaled.col_indices());
-        for (x, y) in csr_scaled.values().iter().zip(csr_unscaled.values()) {
+        assert_eq!(pattern_scaled.row_offsets, pattern.row_offsets);
+        assert_eq!(pattern_scaled.col_indices, pattern.col_indices);
+        for (x, y) in scaled_values.iter().zip(&unscaled) {
             assert!(
                 (x - 3.0 * y).abs() <= 1e-9 * (1.0 + y.abs()),
                 "value mismatch: {x} vs 3×{y}"
@@ -888,14 +886,14 @@ mod tests {
         let (model, materials) = multi_fespace_shell(5);
         let k = assemble_computed_blocks(&model, &materials);
         let pattern = crate::ops::scatter::build_pattern(&k).unwrap();
-        let csr = crate::ops::scatter::scatter_serial(&k, &pattern).unwrap();
+        let values = crate::ops::scatter::scatter_serial(&k, &pattern).unwrap();
 
         let k_ref = assemble_literal_reference(&model, &materials).unwrap();
-        let csr_ref = k_ref.to_csr().unwrap();
+        let (offsets_ref, cols_ref, values_ref) = k_ref.csr_arrays().unwrap();
 
-        assert_eq!(csr.row_offsets(), csr_ref.row_offsets());
-        assert_eq!(csr.col_indices(), csr_ref.col_indices());
-        assert_eq!(csr.values(), csr_ref.values());
+        assert_eq!(&pattern.row_offsets[..], offsets_ref);
+        assert_eq!(&pattern.col_indices[..], cols_ref);
+        assert_eq!(values, values_ref);
     }
 
     /// The same shell through the **parallel** colour-driven scatter (the real

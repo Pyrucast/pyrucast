@@ -582,10 +582,18 @@ impl Coords {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn ensure_all_alive(&self, ids: &[NodeId]) -> Result<()> {
-        for &id in ids {
-            self.ensure_alive(id)?;
+        // An assembly checks a whole connectivity here — eighty million ids on a
+        // solid mesh, once per block per assembly. The search fans out; only the
+        // culprit, if there is one, builds a message.
+        use crate::parallel::*;
+        match ids
+            .par_iter()
+            .with_min_len(MIN_PARALLEL_LEN)
+            .find_any(|&&id| !self.is_alive(id))
+        {
+            Some(&id) => self.ensure_alive(id),
+            None => Ok(()),
         }
-        Ok(())
     }
 
     /// The position of a node **already known to be live**.
