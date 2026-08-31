@@ -1369,12 +1369,30 @@ fn det_small(m: &[f64], n: usize) -> f64 {
     }
 }
 
+/// How far below its own scale a determinant may fall before the matrix is
+/// called singular.
+///
+/// Three orders of magnitude above the roundoff floor of [`det_small`], which
+/// is a few `f64::EPSILON` relative to that scale, and low enough to accept a
+/// sliver down to an aspect ratio of about `1e-6`.
+const SINGULAR_RATIO: f64 = 1e-12;
+
 /// Invert a small (1×1, 2×2, 3×3) row-major square matrix.
 ///
-/// Returns an error if the matrix is (numerically) singular.
+/// Returns an error if the matrix is (numerically) singular. Singularity is
+/// judged **relative to the matrix's own magnitude**: a determinant is
+/// homogeneous to the `n`-th power of an entry, so an absolute threshold would
+/// reject sound Gram matrices for the sole crime of being written in a small
+/// unit — a half-millimetre hexahedron whose coordinates are in metres has
+/// `det(JᵀJ) ≈ 1e-21` and is not degenerate for it.
 fn inverse_small(m: &[f64], n: usize, inv: &mut [f64; MAX_JACOBIAN]) -> Result<()> {
     let det = det_small(m, n);
-    if det.abs() < f64::EPSILON {
+    // The largest entry is the scale of the matrix; the determinant of a sound
+    // one cannot fall far below its `n`-th power. Written as a negated `>` so
+    // that a NaN determinant — and a matrix of zeros, whose scale is nil — is
+    // rejected too.
+    let scale = m[..n * n].iter().fold(0.0_f64, |acc, v| acc.max(v.abs()));
+    if !(det.abs() > SINGULAR_RATIO * scale.powi(n as i32)) {
         return Err(PyrucastError::Message(
             "inverse_small: singular matrix".into(),
         ));
@@ -2119,5 +2137,31 @@ mod tests {
             (vol - 8.0).abs() < 1e-12,
             "PYRA5 volume = {vol}, expected 8"
         );
+    }
+
+    #[test]
+    fn dn_dx_survives_small_units() {
+        // Half a millimetre written in metres: the Jacobian of a sound cube,
+        // whose Gram matrix has `det(JᵀJ) ≈ 4e-40`. An absolute threshold on
+        // that determinant called the cell degenerate; a relative one does not.
+        let h = 0.25e-3;
+        let jac = [h, 0.0, 0.0, 0.0, h, 0.0, 0.0, 0.0, h];
+        let dn_dxi = [1.0, 0.0, 0.0];
+        let mut out = [0.0; 3];
+        build_dn_dx(&jac, &dn_dxi, 3, 3, 1, &mut out).unwrap();
+        assert!((out[0] - 1.0 / h).abs() < 1e-9 / h, "dN/dx = {out:?}");
+        assert!(out[1].abs() < 1e-9 / h);
+        assert!(out[2].abs() < 1e-9 / h);
+    }
+
+    #[test]
+    fn dn_dx_rejects_a_flattened_cell() {
+        // Third column nil: the cell has collapsed onto a plane, and no unit
+        // it is written in makes that reversible.
+        let h = 0.25e-3;
+        let jac = [h, 0.0, 0.0, 0.0, h, 0.0, 0.0, 0.0, 0.0];
+        let dn_dxi = [1.0, 0.0, 0.0];
+        let mut out = [0.0; 3];
+        assert!(build_dn_dx(&jac, &dn_dxi, 3, 3, 1, &mut out).is_err());
     }
 }
