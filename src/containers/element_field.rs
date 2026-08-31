@@ -227,10 +227,17 @@ impl SubElementField {
                 components.len()
             )));
         }
-        let names = components.clone();
         let mut field = Self::new(fespace, components)?;
-        for (name, &v) in names.iter().zip(values_per_component) {
-            field.set_uniform(name, v)?;
+        // One pass tiling the per-component values across every point, rather
+        // than one strided pass per component over the whole buffer.
+        let ncomp = values_per_component.len();
+        if ncomp > 0 {
+            use crate::parallel::*;
+            field
+                .values
+                .par_chunks_mut(ncomp)
+                .with_min_len((MIN_PARALLEL_LEN / ncomp).max(1))
+                .for_each(|row| row.copy_from_slice(values_per_component));
         }
         Ok(field)
     }

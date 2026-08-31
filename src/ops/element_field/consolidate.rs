@@ -20,6 +20,7 @@ use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::field::SubField;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
+use crate::parallel::*;
 
 /// Fuse the zones of `field` that share the same support
 /// `SubFiniteElementSpace`. See the module documentation. Errors if two
@@ -65,94 +66,102 @@ use crate::handle::Handle;
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn consolidate(field: &ElementField) -> Result<ElementField> {
-    struct Snap {
-        handle: Handle<SubElementField>,
-        fespace: Handle<crate::containers::finite_element_space::SubFiniteElementSpace>,
-        components: Vec<String>,
-        n_cells: usize,
-        n_gauss: usize,
-        values: Vec<f64>,
-    }
-    let mut snaps: Vec<Snap> = Vec::with_capacity(field.len());
+    // Group the zone handles by FE-subspace identity, first-seen order.
+    let mut groups: Vec<Vec<Handle<SubElementField>>> = Vec::new();
     for h in field {
-        let (fespace, components, n_cells, n_gauss, values) = {
-            let s = h.read();
-            (
-                s.support(),
-                s.components().to_vec(),
-                s.cell_count(),
-                s.gauss_count(),
-                s.values().to_vec(),
-            )
-        };
-        snaps.push(Snap {
-            handle: h.clone(),
-            fespace,
-            components,
-            n_cells,
-            n_gauss,
-            values,
-        });
-    }
-
-    // Group sub indices by FE-subspace handle identity, first-seen order.
-    let mut groups: Vec<Vec<usize>> = Vec::new();
-    for (i, snap) in snaps.iter().enumerate() {
+        let fespace = h.read().support();
         match groups
             .iter_mut()
-            .find(|idxs| snaps[idxs[0]].fespace.same_object(&snap.fespace))
+            .find(|g| g[0].read().support().same_object(&fespace))
         {
-            Some(idxs) => idxs.push(i),
-            None => groups.push(vec![i]),
+            Some(g) => g.push(h.clone()),
+            None => groups.push(vec![h.clone()]),
         }
     }
 
-    let mut out = ElementField::default();
-    for idxs in &groups {
-        if let [single] = idxs.as_slice() {
-            out.add_sub(snaps[*single].handle.clone())?;
+    let mut out = ElementField::empty();
+    for group in &groups {
+        // A group of one keeps its zone: shared, never copied. Snapshotting it
+        // would copy a material field's whole value array to hand it back
+        // unchanged.
+        if let [single] = group.as_slice() {
+            out.add_sub(single.clone())?;
             continue;
         }
 
-        // Union of the group's components, first-seen order across the subs.
+        // Read the group's zones for the whole fusion — concurrent shared locks,
+        // no copy.
+        let zones: Vec<_> = group.iter().map(|h| h.read()).collect();
+
+        // Union of the group's components, first-seen order across the zones.
         let mut components: Vec<String> = Vec::new();
-        for &i in idxs {
-            for c in &snaps[i].components {
+        for z in &zones {
+            for c in z.components() {
                 if !components.contains(c) {
                     components.push(c.clone());
                 }
             }
         }
+        // All zones share the support, hence the same (cell, gauss) layout.
+        let mut fused = SubElementField::new(zones[0].support(), components.clone())?;
+        let out_nc = components.len();
+        let n_gauss = fused.gauss_count().max(1);
 
-        // All subs share the support, hence the same (cell, gauss) layout.
-        let support = snaps[idxs[0]].fespace.clone();
-        let mut fused = SubElementField::new(support, components)?;
+        // Resolve, **once per zone**, where each of its components lands in the
+        // fused layout and whether this zone is the one that writes it. Looking
+        // the name up at every Gauss point instead would re-prove, a hundred
+        // million times over, a property of the zone.
+        let mut written = vec![false; out_nc];
+        let mut plans: Vec<Vec<(usize, usize, bool)>> = Vec::with_capacity(zones.len());
+        for z in &zones {
+            let plan = z
+                .components()
+                .iter()
+                .enumerate()
+                .map(|(ci, comp)| {
+                    let oc = components
+                        .iter()
+                        .position(|c| c == comp)
+                        .expect("the union of the group's components contains each of them");
+                    let first = !written[oc];
+                    written[oc] = true;
+                    (ci, oc, first)
+                })
+                .collect();
+            plans.push(plan);
+        }
 
-        // A component shared by several subs must agree at every point.
-        let mut written: std::collections::HashSet<String> = std::collections::HashSet::new();
-        for &i in idxs {
-            let snap = &snaps[i];
-            let ncomp = snap.components.len();
-            for (ci, comp) in snap.components.iter().enumerate() {
-                let first_writer = written.insert(comp.clone());
-                for cell in 0..snap.n_cells {
-                    for g in 0..snap.n_gauss {
-                        let v = snap.values[(cell * snap.n_gauss + g) * ncomp + ci];
-                        if first_writer {
-                            fused.set_value(cell, g, comp, v)?;
-                        } else {
-                            let existing = fused.value(cell, g, comp)?;
-                            if existing != v {
-                                return Err(PyrucastError::Message(format!(
-                                    "incoherent ElementField on shared support: \
-                                     cell {}, gauss {}, component {}: {} ≠ {}",
-                                    cell, g, comp, existing, v
-                                )));
-                            }
+        // One flat pass per zone, parallel over the (cell, gauss) rows: each row
+        // of the fused buffer is written by one task alone. A component several
+        // zones carry must agree at every point — checked by index, in the same
+        // pass.
+        for (z, plan) in zones.iter().zip(&plans) {
+            let src_nc = z.component_count();
+            let src = z.values();
+            fused
+                .values_mut()
+                .par_chunks_mut(out_nc)
+                .with_min_len((MIN_PARALLEL_LEN / out_nc.max(1)).max(1))
+                .enumerate()
+                .try_for_each(|(row, dst)| -> Result<()> {
+                    for &(ci, oc, first) in plan {
+                        let v = src[row * src_nc + ci];
+                        if first {
+                            dst[oc] = v;
+                        } else if dst[oc] != v {
+                            return Err(PyrucastError::Message(format!(
+                                "incoherent ElementField on shared support: \
+                                 cell {}, gauss {}, component {}: {} ≠ {}",
+                                row / n_gauss,
+                                row % n_gauss,
+                                components[oc],
+                                dst[oc],
+                                v
+                            )));
                         }
                     }
-                }
-            }
+                    Ok(())
+                })?;
         }
         out.add_sub(Handle::new(fused))?;
     }
@@ -214,14 +223,16 @@ pub fn consolidate(field: &ElementField) -> Result<ElementField> {
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn check_unique_component_per_support(field: &ElementField) -> Result<()> {
-    // (support identity, component) already seen.
-    let mut seen: Vec<(usize, String)> = Vec::new();
+    // (support identity, component) already seen. A set, not a scanned list:
+    // this runs on every union, and a field of many zones would otherwise cost
+    // a string comparison per pair of components.
+    let mut seen: std::collections::HashSet<(usize, String)> = std::collections::HashSet::new();
     for h in field {
         let s = h.read();
         let support = s.support();
         for comp in s.components() {
             let key = (support.id(), comp.clone());
-            if seen.contains(&key) {
+            if !seen.insert(key) {
                 return Err(PyrucastError::Message(format!(
                     "ElementField: component {comp} is carried by two zones on \
                      the same support {support}. Component fields must be unique \
@@ -229,7 +240,6 @@ pub fn check_unique_component_per_support(field: &ElementField) -> Result<()> {
                      legitimately share a support."
                 )));
             }
-            seen.push(key);
         }
     }
     Ok(())

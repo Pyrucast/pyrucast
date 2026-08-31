@@ -330,8 +330,23 @@ pub trait Aggregate: Default {
         if let Some(h) = other.items().first() {
             self.check_push(h)?;
         }
+        // Scanning the whole list per handle makes a chain of unions quadratic
+        // in the zone count. Past a handful of zones, index the identities once.
+        const SCAN_BELOW: usize = 16;
+        if self.len() + other.len() <= SCAN_BELOW {
+            for h in other.iter() {
+                if self.contains_handle(h) {
+                    continue;
+                }
+                self.items_mut().push(h.clone());
+                self.post_push();
+            }
+            return Ok(());
+        }
+        let mut held: std::collections::HashSet<usize> =
+            self.items().iter().map(|h| h.id()).collect();
         for h in other.iter() {
-            if self.contains_handle(h) {
+            if !held.insert(h.id()) {
                 continue;
             }
             self.items_mut().push(h.clone());

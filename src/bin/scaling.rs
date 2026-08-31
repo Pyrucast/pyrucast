@@ -151,7 +151,7 @@ fn bytes(b: usize) -> String {
 ///
 /// One zone, one computed block — the shape a solid mesh actually assembles in,
 /// and the one whose intermediates blow up with the cell count.
-fn build_cube(n: usize) -> (Model, ElementField) {
+fn build_cube(n: usize) -> (Model, ElementField, FiniteElementSpace) {
     let coords = Handle::new(Coords::new(3).unwrap());
     let side = n + 1;
     let mut ids: Vec<NodeId> = Vec::with_capacity(side * side * side);
@@ -190,7 +190,7 @@ fn build_cube(n: usize) -> (Model, ElementField) {
     let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
     let model = model::elasticity(&fes, Kinematics::Full3D).unwrap();
     let materials = material_field(&model, &[("E", 210e9), ("nu", 0.3)]).unwrap();
-    (model, materials)
+    (model, materials, fes)
 }
 
 /// Run `f` once, print its wall time under `name`, and hand back its result.
@@ -250,7 +250,7 @@ fn run_cube(n: usize, reps: u32) {
     );
 
     println!("── phases ──");
-    let (model, materials) = phase("build_cube (maillage + EF)", || build_cube(n));
+    let (model, materials, fespace) = phase("build_cube (maillage + EF)", || build_cube(n));
     let mat_again = phase("element_field::material_field", || {
         material_field(&model, &[("E", 210e9), ("nu", 0.3)]).unwrap()
     });
@@ -258,6 +258,18 @@ fn run_cube(n: usize, reps: u32) {
     const ZONES: usize = 256;
     let fused = phase("union en chaîne (256 zones)", || union_chain(ZONES));
     debug_assert_eq!(fused, ZONES);
+
+    // Two component-disjoint material zones on one support, then fused: the
+    // path a multi-physics material takes, and the one that walks every Gauss
+    // point of the mesh.
+    let deux = ElementField::new(&fespace, vec!["E".into(), "nu".into()])
+        .unwrap()
+        .union(&ElementField::new(&fespace, vec!["rho".into()]).unwrap())
+        .unwrap();
+    let une = phase("element_field::consolidate", || {
+        element_field::consolidate(&deux).unwrap()
+    });
+    debug_assert_eq!(une.len(), 1);
 
     // The first assembly pays the symbolic phase (DOF numbering + sparsity);
     // every later one reuses the pattern memoised on the model.

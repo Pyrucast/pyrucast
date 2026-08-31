@@ -568,18 +568,26 @@ pub trait SubField {
             .enumerate()
             .map(|(oc, name)| (oc, self.component_index(name), other.component_index(name)))
             .collect();
-        let outv = out.values_mut();
-        for row in 0..rows {
-            for &(oc, si, oi) in &src {
-                let v = match (si, oi) {
-                    (Some(si), Some(oi)) => op(sv[row * self_nc + si], ov[row * other_nc + oi]),
-                    (Some(si), None) => sv[row * self_nc + si],
-                    (None, Some(oi)) => ov[row * other_nc + oi],
-                    (None, None) => unreachable!("output component comes from at least one side"),
-                };
-                outv[row * out_nc + oc] = v;
-            }
-        }
+        debug_assert_eq!(out.values().len(), rows * out_nc);
+        let src = &src;
+        // Each output row is written by one task alone, so the result does not
+        // depend on the thread count.
+        out.values_mut()
+            .par_chunks_mut(out_nc)
+            .with_min_len((crate::parallel::MIN_PARALLEL_LEN / out_nc.max(1)).max(1))
+            .enumerate()
+            .for_each(|(row, dst)| {
+                for &(oc, si, oi) in src {
+                    dst[oc] = match (si, oi) {
+                        (Some(si), Some(oi)) => op(sv[row * self_nc + si], ov[row * other_nc + oi]),
+                        (Some(si), None) => sv[row * self_nc + si],
+                        (None, Some(oi)) => ov[row * other_nc + oi],
+                        (None, None) => {
+                            unreachable!("output component comes from at least one side")
+                        }
+                    };
+                }
+            });
         Ok(out)
     }
 
@@ -1273,23 +1281,25 @@ where
         Self: Sized,
         Self::Sub: Clone,
     {
-        // Snapshot both sides' zones (clone out of the store) so we never hold
-        // two guards at once — safe even when `other` shares handles with
-        // `self`.
-        let lefts: Vec<Self::Sub> = self.iter().map(|h| (*h.read()).clone()).collect();
+        // Snapshot the **right** side's zones (clone out of the store): they are
+        // probed against every left zone, so a guard on one of them would meet
+        // the left guard — and `other` may share handles with `self`. The left
+        // side is read in place: a second copy of it would be a whole material
+        // field cloned to be looked at once.
         let rights: Vec<Self::Sub> = other.iter().map(|h| (*h.read()).clone()).collect();
 
         let mut out = Self::default();
         let mut right_used = vec![false; rights.len()];
         // Each left zone: combine with the right zone on the same support if
         // any, else pass through unchanged.
-        for l in &lefts {
+        for h in self.iter() {
+            let l = h.read();
             match rights.iter().position(|r| l.same_support(r)) {
                 Some(j) => {
                     out.add_sub(Handle::new(l.merge_components(&rights[j], op)?))?;
                     right_used[j] = true;
                 }
-                None => out.add_sub(Handle::new(l.clone()))?,
+                None => out.add_sub(Handle::new((*l).clone()))?,
             }
         }
         // Right zones whose support was absent on the left: pass through.
