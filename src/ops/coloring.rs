@@ -11,7 +11,14 @@
 //! the per-fespace colouring used today (keys = shared **nodes**) and a future
 //! global colouring (keys = shared global / master DOFs after MPC condensation).
 //! Only the key builder changes — this function does not.
+//!
+//! Underneath, the colouring works on keys numbered `0..n_keys`, and the
+//! incidence that drives it is a CSR built by counting sort. The node case —
+//! every FE assembly — skips the numbering step entirely
+//! ([`greedy_color_nodes`]): a `NodeId` already indexes `Coords`, so it *is* the
+//! dense key. Both forms return the same partition on the same input.
 
+use crate::atoms::NodeId;
 use std::collections::HashMap;
 use std::hash::Hash;
 
@@ -67,12 +74,77 @@ pub fn greedy_color<K: Eq + Hash + Copy>(
         return Vec::new();
     }
     debug_assert_eq!(keys.len(), n_cells * keys_per_cell);
+    // Number the distinct keys, then colour on the numbering. One hash lookup
+    // per key occurrence — no container allocated per key.
+    let mut ids: HashMap<K, u32> = HashMap::new();
+    let dense: Vec<u32> = keys
+        .iter()
+        .map(|&k| {
+            let next = ids.len() as u32;
+            *ids.entry(k).or_insert(next)
+        })
+        .collect();
+    color_dense(n_cells, keys_per_cell, &dense, ids.len())
+}
 
-    // key → cells touching it (the conflict graph, stored implicitly).
-    let mut incidence: HashMap<K, Vec<usize>> = HashMap::new();
+/// [`greedy_color`] where the keys are **nodes** — the case every FE assembly
+/// hits, and the one worth not hashing at all.
+///
+/// A `NodeId` indexes `Coords` directly, so it *is* the dense key: `n_nodes` is
+/// the width of that id space, and the incidence needs no map. Same partition as
+/// the generic form on the same input — the greedy pass depends on which cells
+/// share a key, never on how the keys are numbered.
+///
+/// ```
+/// # use pyrucast::atoms::NodeId;
+/// # use pyrucast::ops::coloring;
+/// // Deux mailles qui partagent le nœud 1 : deux couleurs, comme la forme
+/// // générique — mais sans une seule table de hachage.
+/// let conn = [NodeId(0), NodeId(1), NodeId(1), NodeId(2)];
+/// let couleurs = coloring::greedy_color_nodes(2, 2, &conn, 3);
+/// assert_eq!(couleurs, vec![vec![0], vec![1]]);
+/// assert_eq!(couleurs, coloring::greedy_color(2, 2, &conn));
+/// ```
+pub fn greedy_color_nodes(
+    n_cells: usize,
+    keys_per_cell: usize,
+    conn: &[NodeId],
+    n_nodes: usize,
+) -> Vec<Vec<usize>> {
+    if n_cells == 0 {
+        return Vec::new();
+    }
+    debug_assert_eq!(conn.len(), n_cells * keys_per_cell);
+    let dense: Vec<u32> = conn.iter().map(|n| n.0).collect();
+    let n_keys = dense.iter().map(|&k| k as usize + 1).max().unwrap_or(0);
+    color_dense(n_cells, keys_per_cell, &dense, n_keys.max(n_nodes))
+}
+
+/// The colouring proper, over keys already numbered `0..n_keys`.
+///
+/// The incidence (key → the cells touching it) is a **CSR built by counting
+/// sort**: one pass to count, a prefix sum, one pass to fill. The map of vectors
+/// it replaces allocated a `Vec` per key — ten million of them on a solid mesh,
+/// for lists of eight entries each.
+fn color_dense(
+    n_cells: usize,
+    keys_per_cell: usize,
+    keys: &[u32],
+    n_keys: usize,
+) -> Vec<Vec<usize>> {
+    let mut offsets = vec![0usize; n_keys + 1];
+    for &k in keys {
+        offsets[k as usize + 1] += 1;
+    }
+    for i in 0..n_keys {
+        offsets[i + 1] += offsets[i];
+    }
+    let mut cursor = offsets.clone();
+    let mut cells = vec![0u32; keys.len()];
     for c in 0..n_cells {
         for &k in &keys[c * keys_per_cell..(c + 1) * keys_per_cell] {
-            incidence.entry(k).or_default().push(c);
+            cells[cursor[k as usize]] = c as u32;
+            cursor[k as usize] += 1;
         }
     }
 
@@ -84,8 +156,8 @@ pub fn greedy_color<K: Eq + Hash + Copy>(
 
     for c in 0..n_cells {
         for &k in &keys[c * keys_per_cell..(c + 1) * keys_per_cell] {
-            for &other in &incidence[&k] {
-                let oc = color[other];
+            for &other in &cells[offsets[k as usize]..offsets[k as usize + 1]] {
+                let oc = color[other as usize];
                 if oc != usize::MAX {
                     if oc >= forbidden_by.len() {
                         forbidden_by.resize(oc + 1, usize::MAX);
@@ -161,6 +233,26 @@ mod tests {
         assert_eq!(buckets[0], vec![0, 2]);
         assert_eq!(buckets[1], vec![1, 3]);
         assert_valid(&buckets, 4, 2, &keys);
+    }
+
+    /// The dense form must give the **same partition** as the generic one: the
+    /// scatter accumulates colour by colour, so a different grouping would
+    /// change the summation order of the assembly.
+    #[test]
+    fn dense_and_generic_agree_on_a_quad_grid() {
+        let n = 8usize;
+        let at = |i: usize, j: usize| NodeId((j * (n + 1) + i) as u32);
+        let mut conn = Vec::with_capacity(n * n * 4);
+        for j in 0..n {
+            for i in 0..n {
+                conn.extend_from_slice(&[at(i, j), at(i + 1, j), at(i + 1, j + 1), at(i, j + 1)]);
+            }
+        }
+        let n_nodes = (n + 1) * (n + 1);
+        assert_eq!(
+            greedy_color_nodes(n * n, 4, &conn, n_nodes),
+            greedy_color(n * n, 4, &conn)
+        );
     }
 
     #[test]

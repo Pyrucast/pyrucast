@@ -2646,7 +2646,8 @@ pub fn scatter_to_nodes(
     // Cell colouring (cached on the primary FE subspace): two cells sharing a
     // node get different colours, so within a colour the cells scatter to
     // pairwise-disjoint nodes.
-    let coloring = fe.coloring(|| coloring::greedy_color(n_cells, n_nodes, conn));
+    let coloring =
+        fe.coloring(|| coloring::greedy_color_nodes(n_cells, n_nodes, conn, coords.node_count()));
 
     // Fused compute + scatter, colour by colour: each cell builds its local
     // vector on a per-thread scratch buffer (no per-cell heap alloc, no

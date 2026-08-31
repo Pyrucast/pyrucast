@@ -554,8 +554,14 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatr
                     let conn = submesh_g.connectivity();
                     let n_cells = fe.cell_count()?;
                     let keys_per_cell = conn.len().checked_div(n_cells).unwrap_or(0);
-                    let coloring =
-                        fe.coloring(|| coloring::greedy_color(n_cells, keys_per_cell, conn));
+                    let coloring = fe.coloring(|| {
+                        coloring::greedy_color_nodes(
+                            n_cells,
+                            keys_per_cell,
+                            conn,
+                            submesh_g.coords().read().node_count(),
+                        )
+                    });
 
                     // Scatter colour by colour: within a colour, cells write disjoint
                     // slots ⇒ the parallel atomic stores never race. Slots are
