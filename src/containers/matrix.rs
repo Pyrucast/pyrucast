@@ -499,8 +499,8 @@ impl SubMatrix {
         let row_nodes: Vec<NodeId> = row_support.read().connectivity().to_vec();
         let col_nodes: Vec<NodeId> = col_support.read().connectivity().to_vec();
         // The block's row/col numbering snapshots these supports; freeze them.
-        crate::containers::mesh::seal(&row_support)?;
-        crate::containers::mesh::seal(&col_support)?;
+        crate::containers::mesh::seal(&row_support);
+        crate::containers::mesh::seal(&col_support);
         let nrows = row_nodes.len() * dual_vars.len();
         let ncols = col_nodes.len() * primal_vars.len();
         Ok(Self {
@@ -579,8 +579,8 @@ impl SubMatrix {
         let row_nodes: Vec<NodeId> = row_support.read().connectivity().to_vec();
         let col_nodes: Vec<NodeId> = col_support.read().connectivity().to_vec();
         // The block's row/col numbering snapshots these supports; freeze them.
-        crate::containers::mesh::seal(&row_support)?;
-        crate::containers::mesh::seal(&col_support)?;
+        crate::containers::mesh::seal(&row_support);
+        crate::containers::mesh::seal(&col_support);
         let nrows = row_nodes.len() * dual_vars.len();
         let ncols = col_nodes.len() * primal_vars.len();
         Ok(Self {
@@ -662,8 +662,8 @@ impl SubMatrix {
         let row_nodes: Vec<NodeId> = row_support.read().connectivity().to_vec();
         let col_nodes: Vec<NodeId> = col_support.read().connectivity().to_vec();
         // The block's row/col numbering snapshots these supports; freeze them.
-        crate::containers::mesh::seal(&row_support)?;
-        crate::containers::mesh::seal(&col_support)?;
+        crate::containers::mesh::seal(&row_support);
+        crate::containers::mesh::seal(&col_support);
         let nrows = row_nodes.len() * dual_vars.len();
         let ncols = col_nodes.len() * primal_vars.len();
         if coo.nrows() != nrows || coo.ncols() != ncols {
@@ -1488,10 +1488,10 @@ impl SubMatrix {
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
     /// # use pyrucast::handle::Handle as H;
-    /// assert!(H::same_object(&bloc.coords().unwrap(), &coords));
+    /// assert!(H::same_object(&bloc.coords(), &coords));
     /// ```
-    pub fn coords(&self) -> Result<Handle<Coords>> {
-        Ok(self.row_support.read().coords())
+    pub fn coords(&self) -> Handle<Coords> {
+        self.row_support.read().coords()
     }
 
     /// Sum of all entries at `(row_node, row_var) × (col_node, col_var)`.
@@ -2095,7 +2095,7 @@ crate::impl_aggregate!(Matrix, SubMatrix, sub_matrix, "sub-matrix(es)", {
     fn display_extra(&self) -> Option<String> {
         let n_rows = self.n_rows().unwrap_or(0);
         let n_cols = self.n_cols().unwrap_or(0);
-        let sym = self.symmetric().unwrap_or(false);
+        let sym = self.symmetric();
         Some(format!(
             ", {} row(s) × {} col(s){}",
             n_rows,
@@ -2621,7 +2621,7 @@ fn csr_from_triplets_parallel(
     nrows: usize,
     _ncols: usize,
     triplets: Vec<(usize, usize, f64)>,
-) -> Result<(Vec<usize>, Vec<usize>, Vec<f64>)> {
+) -> (Vec<usize>, Vec<usize>, Vec<f64>) {
     let nnz = triplets.len();
     // 1. Entries per row → exclusive prefix sum → per-row bucket bounds.
     let mut bounds = vec![0usize; nrows + 1];
@@ -2660,7 +2660,7 @@ fn csr_from_triplets_parallel(
     for r in 0..nrows {
         row_offsets[r + 1] += row_offsets[r];
     }
-    Ok((row_offsets, col_indices, values))
+    (row_offsets, col_indices, values)
 }
 
 impl Matrix {
@@ -2728,12 +2728,12 @@ impl Matrix {
                 ));
             }
         }
-        let vars = std::sync::Arc::new(self.field_names()?);
+        let vars = std::sync::Arc::new(self.field_names());
         let row_keys = self.collect_dof_keys(true, &vars)?;
         let col_keys = self.collect_dof_keys(false, &vars)?;
         let triplets = self.build_global_triplets(&vars, &row_keys, &col_keys)?;
         let (row_offsets, col_indices, values) =
-            csr_from_triplets_parallel(row_keys.len(), col_keys.len(), triplets)?;
+            csr_from_triplets_parallel(row_keys.len(), col_keys.len(), triplets);
         let csr = AssembledCsr {
             row_offsets: std::sync::Arc::new(row_offsets),
             col_indices: std::sync::Arc::new(col_indices),
@@ -2924,7 +2924,7 @@ impl Matrix {
         }
 
         if let Some(first) = self.iter().next() {
-            let coords_h = first.read().coords()?;
+            let coords_h = first.read().coords();
             if let Some(perm) = coords_h.read().permutation() {
                 // Stable, so a node's variables keep their relative order.
                 out.par_sort_by_key(|&k| perm[dof_node(k).0 as usize]);
@@ -3018,15 +3018,15 @@ impl Matrix {
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Une raideur de Galerkine est symétrique : le drapeau le déclare.
-    /// assert!(k.symmetric().unwrap());
+    /// assert!(k.symmetric());
     /// ```
-    pub fn symmetric(&self) -> Result<bool> {
+    pub fn symmetric(&self) -> bool {
         for h in self {
             if !h.read().symmetric() {
-                return Ok(false);
+                return false;
             }
         }
-        Ok(true)
+        true
     }
 
     /// Union of all row DOFs across blocks, in first-seen order.
@@ -3129,7 +3129,7 @@ impl Matrix {
         if let Some(a) = &self.assembled {
             return Ok(a.vars.clone());
         }
-        Ok(std::sync::Arc::new(self.field_names()?))
+        Ok(std::sync::Arc::new(self.field_names()))
     }
 
     /// Row DOFs as packed [`DofKey`]s, in CSR row order — the numbering the
@@ -3166,7 +3166,7 @@ impl Matrix {
         if let Some(a) = &self.assembled {
             return Ok(a.row_keys.clone());
         }
-        let vars = self.field_names()?;
+        let vars = self.field_names();
         self.collect_dof_keys(true, &vars)
     }
 
@@ -3203,7 +3203,7 @@ impl Matrix {
         if let Some(a) = &self.assembled {
             return Ok(a.col_keys.clone());
         }
-        let vars = self.field_names()?;
+        let vars = self.field_names();
         self.collect_dof_keys(false, &vars)
     }
 
@@ -3230,7 +3230,7 @@ impl Matrix {
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Les noms sont internés une seule fois, lignes et colonnes confondues.
-    /// let noms = k.field_names().unwrap();
+    /// let noms = k.field_names();
     /// assert!(noms.contains(&"T".to_string()) && noms.contains(&"q".to_string()));
     /// ```
     ///
@@ -3255,10 +3255,10 @@ impl Matrix {
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Les noms sont internés une seule fois, lignes et colonnes confondues.
-    /// let noms = k.field_names().unwrap();
+    /// let noms = k.field_names();
     /// assert!(noms.contains(&"T".to_string()) && noms.contains(&"q".to_string()));
     /// ```
-    pub fn field_names(&self) -> Result<Vec<String>> {
+    pub fn field_names(&self) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
         for h in self {
             for name in h.read().field_names() {
@@ -3267,7 +3267,7 @@ impl Matrix {
                 }
             }
         }
-        Ok(out)
+        out
     }
 
     /// Number of distinct row DOFs.
@@ -3351,15 +3351,15 @@ impl Matrix {
     /// // Compte les entrées **stockées** dans les blocs. Un bloc *calculé*
     /// // — ce que produit `stiffness` — n'en stocke aucune : ses valeurs
     /// // naissent à l'assemblage et vivent dans le CSR global.
-    /// assert_eq!(k.entry_count().unwrap(), 0);
+    /// assert_eq!(k.entry_count(), 0);
     /// assert_eq!(k.to_csr().unwrap().nnz(), 4); // le CSR, lui, les porte
     /// ```
-    pub fn entry_count(&self) -> Result<usize> {
+    pub fn entry_count(&self) -> usize {
         let mut total = 0usize;
         for h in self {
             total += h.read().entry_count();
         }
-        Ok(total)
+        total
     }
 
     /// Sum of contributions at `(row, col)` across every block.
@@ -3385,18 +3385,12 @@ impl Matrix {
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Un SEG2 de longueur 1, k = 1 : K = [[1, -1], [-1, 1]].
-    /// assert_eq!(k.get(a.id(), "q", a.id(), "T").unwrap(), 1.0);
-    /// assert_eq!(k.get(a.id(), "q", b.id(), "T").unwrap(), -1.0);
+    /// assert_eq!(k.get(a.id(), "q", a.id(), "T"), 1.0);
+    /// assert_eq!(k.get(a.id(), "q", b.id(), "T"), -1.0);
     /// // Une coordonnée absente du motif vaut zéro : la lecture ne lève pas.
-    /// assert_eq!(k.get(a.id(), "q", a.id(), "absente").unwrap(), 0.0);
+    /// assert_eq!(k.get(a.id(), "q", a.id(), "absente"), 0.0);
     /// ```
-    pub fn get(
-        &self,
-        row_node: NodeId,
-        row_field: &str,
-        col_node: NodeId,
-        col_field: &str,
-    ) -> Result<f64> {
+    pub fn get(&self, row_node: NodeId, row_field: &str, col_node: NodeId, col_field: &str) -> f64 {
         // When assembled, the CSR is the source of truth — and the only place a
         // *computed* block's values live (its COO is empty). Fall back to the
         // per-block COO sum only for an unassembled (literal) matrix.
@@ -3407,16 +3401,16 @@ impl Matrix {
             };
             let r = find(&a.row_keys, row_node, row_field);
             let c = find(&a.col_keys, col_node, col_field);
-            return Ok(match (r, c) {
+            return match (r, c) {
                 (Some(r), Some(c)) => a.csr.slot(r, c).map_or(0.0, |k| a.csr.values[k]),
                 _ => 0.0,
-            });
+            };
         }
         let mut total = 0.0;
         for h in self {
             total += h.read().get(row_node, row_field, col_node, col_field);
         }
-        Ok(total)
+        total
     }
 
     /// All COO entries across every block, in block-insertion order.
@@ -3445,14 +3439,14 @@ impl Matrix {
     /// // primale, valeur — les noms y sont déjà résolus. Comme
     /// // `entry_count`, cela parcourt les entrées **stockées** : un bloc
     /// // calculé n'en a aucune, ses valeurs vivant dans le CSR global.
-    /// assert!(k.iter_entries().unwrap().is_empty());
+    /// assert!(k.iter_entries().is_empty());
     /// ```
-    pub fn iter_entries(&self) -> Result<Vec<MatrixEntry>> {
+    pub fn iter_entries(&self) -> Vec<MatrixEntry> {
         let mut out = Vec::new();
         for h in self {
             out.extend(h.read().iter_entries());
         }
-        Ok(out)
+        out
     }
 
     // ── Solver-facing (require finalize) ────────────────────────────────
@@ -3747,7 +3741,7 @@ impl Matrix {
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Le support **ligne** : la cible de projection d'un second membre.
-    /// assert_eq!(k.row_mesh().unwrap().cell_count().unwrap(), 2);
+    /// assert_eq!(k.row_mesh().unwrap().cell_count(), 2);
     /// ```
     pub fn row_mesh(&self) -> Result<Mesh> {
         self.support_mesh(true)
@@ -3779,7 +3773,7 @@ impl Matrix {
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Le support **colonne** : celui d'un champ que l'on multiplie.
-    /// assert_eq!(k.col_mesh().unwrap().cell_count().unwrap(), 2);
+    /// assert_eq!(k.col_mesh().unwrap().cell_count(), 2);
     /// ```
     pub fn col_mesh(&self) -> Result<Mesh> {
         self.support_mesh(false)
@@ -3860,9 +3854,9 @@ impl Matrix {
     /// # use pyrucast::models::Physics;
     /// # use pyrucast::ops::model;
     /// // Les natures **présentes**, dédupliquées.
-    /// assert!(k.physics().unwrap().contains(&Physics::Thermal));
+    /// assert!(k.physics().contains(&Physics::Thermal));
     /// ```
-    pub fn physics(&self) -> Result<Vec<Physics>> {
+    pub fn physics(&self) -> Vec<Physics> {
         let mut out: Vec<Physics> = Vec::new();
         for h in self {
             for &p in h.read().physics() {
@@ -3871,7 +3865,7 @@ impl Matrix {
                 }
             }
         }
-        Ok(out)
+        out
     }
 
     /// Shared body of `row_mesh` / `col_mesh`.
@@ -4230,7 +4224,7 @@ impl crate::dump::Dump for Matrix {
                     data,
                 )
             } else {
-                let vars = self.field_names()?;
+                let vars = self.field_names();
                 let row_keys = self.collect_dof_keys(true, &vars)?;
                 let col_keys = self.collect_dof_keys(false, &vars)?;
                 let triplets = self.build_global_triplets(&vars, &row_keys, &col_keys)?;
@@ -4614,7 +4608,7 @@ mod tests {
         // Only the explicitly-tagged block is reached by Other; the bare one never.
         assert_eq!(k.filter(Physics::Other).unwrap().len(), 1);
         // The aggregate reports every distinct nature present (bare contributes none).
-        let present = k.physics().unwrap();
+        let present = k.physics();
         assert!(present.contains(&Physics::Mechanical));
         assert!(present.contains(&Physics::Thermal));
         assert!(present.contains(&Physics::Other));
@@ -4713,8 +4707,8 @@ mod tests {
         let m = Matrix::empty();
         assert_eq!(m.n_rows().unwrap(), 0);
         assert_eq!(m.n_cols().unwrap(), 0);
-        assert!(m.symmetric().unwrap());
-        assert_eq!(m.entry_count().unwrap(), 0);
+        assert!(m.symmetric());
+        assert_eq!(m.entry_count(), 0);
     }
 
     #[test]
@@ -4801,7 +4795,7 @@ mod tests {
         let mut k = Matrix::empty();
         k.add_sub(Handle::new(a)).unwrap();
         k.add_sub(Handle::new(b)).unwrap();
-        assert!(!k.symmetric().unwrap());
+        assert!(!k.symmetric());
     }
 
     #[test]
@@ -4830,16 +4824,16 @@ mod tests {
         assert!(!orig_h.same_object(scaled_h));
 
         // Values diverge accordingly: the source is untouched.
-        assert_eq!(orig.get(a, "q", a, "T").unwrap(), 2.0);
-        assert_eq!(orig.get(b, "q", b, "T").unwrap(), 3.0);
-        assert_eq!(scaled.get(a, "q", a, "T").unwrap(), 20.0);
-        assert_eq!(scaled.get(b, "q", b, "T").unwrap(), 30.0);
+        assert_eq!(orig.get(a, "q", a, "T"), 2.0);
+        assert_eq!(orig.get(b, "q", b, "T"), 3.0);
+        assert_eq!(scaled.get(a, "q", a, "T"), 20.0);
+        assert_eq!(scaled.get(b, "q", b, "T"), 30.0);
 
         // `/` divides the factor, chaining from the already-scaled matrix.
         let halved = (&scaled / 2.0).unwrap();
-        assert_eq!(halved.get(a, "q", a, "T").unwrap(), 10.0);
+        assert_eq!(halved.get(a, "q", a, "T"), 10.0);
         assert_eq!(
-            scaled.get(a, "q", a, "T").unwrap(),
+            scaled.get(a, "q", a, "T"),
             20.0,
             "/ must not mutate its source either"
         );
@@ -4905,12 +4899,12 @@ mod tests {
 
         assert_eq!(sys.n_rows().unwrap(), 3);
         assert_eq!(sys.n_cols().unwrap(), 3);
-        assert_eq!(sys.get(a, "q", a, "T").unwrap(), 2.0 + 8.0);
-        assert_eq!(sys.get(a, "q", b, "T").unwrap(), -1.0);
-        assert_eq!(sys.get(b, "q", a, "T").unwrap(), -1.0);
-        assert_eq!(sys.get(b, "q", b, "T").unwrap(), 2.0 + 8.0);
+        assert_eq!(sys.get(a, "q", a, "T"), 2.0 + 8.0);
+        assert_eq!(sys.get(a, "q", b, "T"), -1.0);
+        assert_eq!(sys.get(b, "q", a, "T"), -1.0);
+        assert_eq!(sys.get(b, "q", b, "T"), 2.0 + 8.0);
         // Untouched by M (which doesn't carry the c DOF at all).
-        assert_eq!(sys.get(c, "q", c, "T").unwrap(), 5.0);
+        assert_eq!(sys.get(c, "q", c, "T"), 5.0);
     }
 
     #[test]
@@ -5124,7 +5118,7 @@ mod tests {
         assert_eq!(y.value(a, "q").unwrap(), 0.0);
         assert_eq!(y.value(b, "q").unwrap(), 3.0);
         // The result lives on the row DOFs — component is "q", not "T".
-        assert!(y.value_opt(a, "T").unwrap().is_none());
+        assert!(y.value_opt(a, "T").is_none());
 
         // The `*` operator is sugar for `mul_field`.
         let y_op = (&k * &x).unwrap();
@@ -5174,7 +5168,7 @@ mod tests {
         k.add_sub(Handle::new(a)).unwrap();
         k.add_sub(Handle::new(b)).unwrap();
 
-        let entries = k.iter_entries().unwrap();
+        let entries = k.iter_entries();
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].4, 1.0);
         assert_eq!(entries[1].4, 2.0);

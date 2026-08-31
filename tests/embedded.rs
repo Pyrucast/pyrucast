@@ -17,6 +17,7 @@ use pyrucast::containers::model::{Model, SubModel};
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
+use pyrucast::models::embedded::DEFAULT_TOL;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::matrix::stiffness;
 use pyrucast::ops::mesh::barycenter;
@@ -79,7 +80,7 @@ fn immersed_node_follows_host_interpolation() -> Result<()> {
         None,
         Default::default(),
     )?;
-    let dir_mult_nodes = dir.multiplier_nodes()?; // paired corner-for-corner
+    let dir_mult_nodes = dir.multiplier_nodes(); // paired corner-for-corner
     model.add_sub(Handle::new(dir))?;
 
     // Immersed node inside the cube, tied to the host by an Embedded constraint.
@@ -93,9 +94,9 @@ fn immersed_node_follows_host_interpolation() -> Result<()> {
         vec![("T".into(), "q".into())],
         None,
         None,
-        None,
+        DEFAULT_TOL,
     )?;
-    let emb_mult = emb.multiplier_nodes()?[0];
+    let emb_mult = emb.multiplier_nodes()[0];
     model.add_sub(Handle::new(emb))?;
 
     // RHS: imposed_T = field(corner) at each Dirichlet multiplier, 0 (tie) at the
@@ -198,7 +199,7 @@ fn immersed_node_follows_host_displacement_field() -> Result<()> {
         ],
         None,
         None,
-        None,
+        DEFAULT_TOL,
     )?)?;
 
     let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("nu", NU)])?;
@@ -286,7 +287,7 @@ fn embedded_per_component_offset() -> Result<()> {
         ],
         None,
         None,
-        None,
+        DEFAULT_TOL,
     )?;
     // Per-component g via relation index (1 immersed node ⇒ index = component).
     let emb_rhs = embedded.constraint_rhs_by_index(&[(0, g[0]), (1, g[1]), (2, g[2])])?;

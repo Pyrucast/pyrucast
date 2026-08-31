@@ -60,7 +60,7 @@ pub fn xtx(x: &Bound<'_, PyAny>, components: Option<Vec<String>>) -> PyResult<f6
         ($inner:expr) => {
             match &refs {
                 Some(c) => $inner.xtx_components(c)?,
-                None => $inner.xtx()?,
+                None => $inner.xtx(),
             }
         };
     }

@@ -66,7 +66,7 @@ fn filtrer_une_matrice_par_nature() -> Result<()> {
     let k = matrix::stiffness(&model, &materials)?;
 
     let k_meca = k.filter(Physics::Mechanical)?; // blocs au moins mécaniques
-    let natures = k.physics()?; // ex. [Thermal, Constraint]
+    let natures = k.physics(); // ex. [Thermal, Constraint]
 
     assert!(k_meca.is_empty()); // ce modèle est thermique
     assert!(natures.contains(&Physics::Thermal));
@@ -86,7 +86,7 @@ fn diviser_une_matrice_ne_reecrit_aucune_valeur() -> Result<()> {
                                // Le facteur d'un bloc **calculé** ne se matérialise qu'à l'assemblage :
                                // sans ce `assemble`, la relecture rendrait des zéros.
     m_dt.assemble()?;
-    assert_eq!(m.get(a, "q", a, "T")?, m_dt.get(a, "q", a, "T")? * dt); // m inchangée
+    assert_eq!(m.get(a, "q", a, "T"), m_dt.get(a, "q", a, "T") * dt); // m inchangée
     Ok(())
 }
 // ANCHOR_END: facteur
@@ -147,7 +147,7 @@ fn les_entrees_vivent_dans_un_bloc() -> Result<()> {
 
     assert_eq!(k.n_rows()?, 2);
     assert_eq!(k.n_cols()?, 2);
-    assert!(k.symmetric()?);
+    assert!(k.symmetric());
     Ok(())
 }
 // ANCHOR_END: bloc_carre
@@ -195,7 +195,7 @@ fn un_bloc_de_lagrange_est_rectangulaire() -> Result<()> {
     // "T" est interné une seule fois dans la table de noms même s'il apparaît
     // côté ligne ET côté colonne (la collision est résolue par les `NodeId`
     // distincts : les multiplicateurs sont des nœuds à part entière).
-    assert_eq!(c.field_names()?.len(), 1);
+    assert_eq!(c.field_names().len(), 1);
     Ok(())
 }
 // ANCHOR_END: bloc_rectangulaire
@@ -213,7 +213,7 @@ fn lire_une_matrice_assemblee() -> Result<()> {
     // été appelé.
 
     // Valeur à une coordonnée (somme de toutes les entrées COO à ce point).
-    let v: f64 = k.get(a, "q", a, "T")?;
+    let v: f64 = k.get(a, "q", a, "T");
 
     // Vue dense ligne-major (flat Vec, pratique pour Python).
     let d: Vec<f64> = k.dense()?;
@@ -233,7 +233,7 @@ fn lire_une_matrice_assemblee() -> Result<()> {
     // Itération sur les triplets bruts (ordre d'insertion préservé). Une
     // entrée est un 5-uplet `(nœud ligne, var duale, nœud colonne, var
     // primale, valeur)` — les noms de variables y sont déjà résolus.
-    for (row_node, row_var, col_node, col_var, value) in k.iter_entries()? {
+    for (row_node, row_var, col_node, col_var, value) in k.iter_entries() {
         let _ = (row_node, row_var, col_node, col_var, value);
     }
 

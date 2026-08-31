@@ -64,7 +64,7 @@ use crate::models::kernel::MAX_CELL_DOFS;
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn interp_to_gauss(field: &NodeField, fespace: &FiniteElementSpace) -> Result<ElementField> {
-    let components = Field::components(field)?;
+    let components = Field::components(field);
     let view = field.view()?;
     let mut out = ElementField::empty();
     for sub in fespace {

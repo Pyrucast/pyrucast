@@ -117,7 +117,7 @@ use crate::ops::mesh::{contour, paving};
 /// // dont les rangées ont le droit de plier : meilleure sur les formes
 /// // rectilinéaires, moins bonne sur les courbes.
 /// let m = mesh::grid_surface2(&contour, ElementType::QUA4, Some(0.5), 1, false, mesh::FrontRelax::Free)?;
-/// assert!(m.cell_count()? > 0);
+/// assert!(m.cell_count() > 0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn grid_surface2(

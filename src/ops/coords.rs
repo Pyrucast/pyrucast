@@ -34,7 +34,7 @@ fn resolve_axis_components(
             comps.len()
         )));
     }
-    let have = Field::components(field)?;
+    let have = Field::components(field);
     for name in &comps {
         if !have.iter().any(|c| c == name) {
             return Err(PyrucastError::Message(format!(
@@ -50,7 +50,7 @@ fn resolve_axis_components(
 /// through the aggregate (first zone wins), so interface nodes appear
 /// exactly once. Errors if a node lacks one of the components.
 fn per_node_values(field: &NodeField, comps: &[String]) -> Result<Vec<(NodeId, Vec<f64>)>> {
-    let nodes = field.node_ids()?;
+    let nodes = field.node_ids();
     let mut out = Vec::with_capacity(nodes.len());
     for nid in nodes {
         let mut values = Vec::with_capacity(comps.len());

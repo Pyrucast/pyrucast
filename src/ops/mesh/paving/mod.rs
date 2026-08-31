@@ -140,8 +140,8 @@ const FRONT_RELAX: f64 = 0.5;
 ///     FrontRelax::Free)?;
 /// let le_long = mesh::pave_surface(&contour, ElementType::QUA4, Some(1.0), false,
 ///     FrontRelax::Along)?;
-/// assert!(libre.cell_count()? > 500);
-/// assert_eq!(le_long.cell_count()?, 400);
+/// assert!(libre.cell_count() > 500);
+/// assert_eq!(le_long.cell_count(), 400);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

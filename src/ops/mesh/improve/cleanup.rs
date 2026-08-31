@@ -105,7 +105,7 @@ use crate::ops::mesh::paving::cleanup as pass;
 /// # let support = mesh::poi1_from_nodes(&n).unwrap();
 /// // La **topologie** : qui est voisin de qui. Le bord n'est jamais touché,
 /// // donc un maillage à une seule maille en ressort intact.
-/// assert_eq!(mesh::cleanup(&maillage)?.cell_count()?, 1);
+/// assert_eq!(mesh::cleanup(&maillage)?.cell_count(), 1);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn cleanup(mesh: &Mesh) -> Result<Mesh> {

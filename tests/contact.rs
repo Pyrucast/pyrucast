@@ -180,7 +180,7 @@ fn patch_test_uniform_pressure_through_contact() -> Result<()> {
     let mults: Vec<NodeId> = {
         let mut v = Vec::new();
         for h in &tb.contact {
-            v.extend(h.read().multiplier_nodes()?);
+            v.extend(h.read().multiplier_nodes());
         }
         v
     };
@@ -239,7 +239,7 @@ fn separation_releases_every_pair() -> Result<()> {
     let mults: Vec<NodeId> = {
         let mut v = Vec::new();
         for h in &tb.contact {
-            v.extend(h.read().multiplier_nodes()?);
+            v.extend(h.read().multiplier_nodes());
         }
         v
     };
@@ -344,7 +344,7 @@ fn contact_3d_two_cubes() -> Result<()> {
     let mults: Vec<NodeId> = {
         let mut v = Vec::new();
         for h in &contact {
-            v.extend(h.read().multiplier_nodes()?);
+            v.extend(h.read().multiplier_nodes());
         }
         v
     };

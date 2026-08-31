@@ -31,7 +31,7 @@ use crate::error::{PyrucastError, Result};
 /// // au centre. Le rayon vient de la distance, non d'un argument.
 /// let a = mesh::arc(&p(&[1.0, 0.0, 0.0]), &p(&[0.0, 0.0, 0.0]),
 ///                   &p(&[0.0, 1.0, 0.0]), 4, ElementType::SEG2)?;
-/// assert_eq!(a.cell_count()?, 4);
+/// assert_eq!(a.cell_count(), 4);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn arc(
@@ -165,7 +165,7 @@ mod tests {
 
         let mesh = arc(&a, &center, &b, 3, ElementType::SEG2).unwrap();
         assert_eq!(mesh.element_types().unwrap(), vec![ElementType::SEG2]);
-        assert_eq!(mesh.cell_count().unwrap(), 3);
+        assert_eq!(mesh.cell_count(), 3);
 
         assert_eq!(mesh.node(0, 0, 0).unwrap().id(), a.id());
         assert_eq!(mesh.node(0, 2, 1).unwrap().id(), b.id());
@@ -193,7 +193,7 @@ mod tests {
         let b = Node::create_in(coords.clone(), &[-2.0 * 0.5, 2.0 * 0.8660254037844387]).unwrap();
 
         let mesh = arc(&a, &center, &b, 1, ElementType::SEG2).unwrap();
-        assert_eq!(mesh.cell_count().unwrap(), 1);
+        assert_eq!(mesh.cell_count(), 1);
         assert_eq!(mesh.node(0, 0, 0).unwrap().id(), a.id());
         assert_eq!(mesh.node(0, 0, 1).unwrap().id(), b.id());
     }
@@ -207,7 +207,7 @@ mod tests {
 
         let mesh = arc(&a, &center, &b, 2, ElementType::SEG3).unwrap();
         assert_eq!(mesh.element_types().unwrap(), vec![ElementType::SEG3]);
-        assert_eq!(mesh.cell_count().unwrap(), 2);
+        assert_eq!(mesh.cell_count(), 2);
     }
 
     #[test]

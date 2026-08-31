@@ -1280,7 +1280,7 @@ pub fn element_pointwise(
 
     let rd = RefData::snapshot(&fe)?;
     let n_gauss = rd.n_gauss;
-    let n_cells = fe.cell_count()?;
+    let n_cells = fe.cell_count();
     let conn: &[NodeId] = sm.connectivity();
     // Every node of the connectivity, checked live **once** — the cell
     // geometry then reads coordinates without asking again.
@@ -1775,7 +1775,7 @@ pub fn element_block_triplets_per_cell(
         rds.push(RefData::snapshot(&f)?);
     }
 
-    let n_cells = fe.cell_count()?;
+    let n_cells = fe.cell_count();
     let n_nodes = rds[0].n_nodes;
     let conn: &[NodeId] = sm.connectivity();
     // Every node of the connectivity, checked live **once** — the cell
@@ -2090,7 +2090,7 @@ pub fn element_block_pattern(
     let submesh = fe.submesh();
     let sm = submesh.read();
     let conn: &[NodeId] = sm.connectivity();
-    let n_cells = fe.cell_count()?;
+    let n_cells = fe.cell_count();
     let n_nodes = conn.len().checked_div(n_cells).unwrap_or(0);
 
     let row_nodes: Vec<NodeId> = row_support.read().connectivity().to_vec();
@@ -2127,7 +2127,7 @@ fn check_conforming(
     row_conn: &[NodeId],
     col_conn: &[NodeId],
 ) -> Result<(usize, usize, usize)> {
-    let (n_row_cells, n_col_cells) = (row_fe.cell_count()?, col_fe.cell_count()?);
+    let (n_row_cells, n_col_cells) = (row_fe.cell_count(), col_fe.cell_count());
     if n_row_cells != n_col_cells {
         return Err(PyrucastError::Message(format!(
             "coupling block: the two sides of an interface must be conforming — \
@@ -2374,7 +2374,7 @@ pub fn element_block_values_per_cell(
         rds.push(RefData::snapshot(&f)?);
     }
 
-    let n_cells = fe.cell_count()?;
+    let n_cells = fe.cell_count();
     let n_nodes = rds[0].n_nodes;
     let conn: &[NodeId] = sm.connectivity();
     coords.ensure_all_alive(conn)?;
@@ -2503,7 +2503,7 @@ pub fn element_block_colored(
         rds.push(RefData::snapshot(&f)?);
     }
 
-    let n_cells = fe.cell_count()?;
+    let n_cells = fe.cell_count();
     let n_nodes = rds[0].n_nodes;
     let conn: &[NodeId] = sm.connectivity();
     coords.ensure_all_alive(conn)?;
@@ -2828,7 +2828,7 @@ pub fn scatter_to_nodes(
         rds.push(RefData::snapshot(&f)?);
     }
 
-    let n_cells = fe.cell_count()?;
+    let n_cells = fe.cell_count();
     let n_nodes = rds[0].n_nodes;
     let conn: &[NodeId] = sm.connectivity();
     // Every node of the connectivity, checked live **once** — the cell
@@ -2961,7 +2961,7 @@ pub fn reduce_cells(
     let coords = coords_h.read();
     let rd = RefData::snapshot(&fe)?;
 
-    let n_cells = fe.cell_count()?;
+    let n_cells = fe.cell_count();
     let n_nodes = rd.n_nodes;
     let conn: &[NodeId] = sm.connectivity();
     // Every node of the connectivity, checked live **once** — the cell

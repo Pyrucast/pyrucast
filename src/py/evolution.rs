@@ -213,7 +213,7 @@ impl PySubEvolution {
         // Clone out so no read lock is held during rendering.
         let sub = (*self.handle.read()).clone();
         sub.plot(
-            Some(view),
+            view,
             save.as_deref(),
             mesh.as_ref().map(|m| &m.inner),
             component.as_deref(),
@@ -313,7 +313,7 @@ impl PyEvolution {
                 "Evolution step value must be a float, a NodeField or an ElementField",
             ));
         };
-        inner.set_abscissa_type(abscissa_type)?;
+        inner.set_abscissa_type(abscissa_type);
         inner.set_ordinate_type(ordinate_type)?;
         Ok(Self { inner })
     }
@@ -412,7 +412,7 @@ impl PyEvolution {
             vmax,
         };
         self.inner.plot(
-            Some(view),
+            view,
             save.as_deref(),
             mesh.as_ref().map(|m| &m.inner),
             component.as_deref(),

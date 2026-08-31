@@ -38,7 +38,7 @@
 //!
 //! // Export to a PNG file in iso view (requires feature `viz`).
 //! # #[cfg(feature = "viz")]
-//! sm.plot(Some(View::iso()), Some(std::path::Path::new("triangle.png"))).unwrap();
+//! sm.plot(View::iso(), Some(std::path::Path::new("triangle.png"))).unwrap();
 //! ```
 
 pub mod axes;
@@ -257,11 +257,10 @@ pub(crate) fn check_revolve<D: Drawable>(object: &D, view: &View) -> Result<()> 
 /// `viz-interactive`; the interactive path requires it.
 pub(crate) fn render<D: Drawable>(
     object: &D,
-    view: Option<View>,
+    view: View,
     save: Option<&Path>,
     title: Option<&str>,
 ) -> Result<()> {
-    let view = view.unwrap_or_default();
     check_revolve(object, &view)?;
     match save {
         Some(path) => render_to_file(object, view, path, title),
@@ -288,7 +287,7 @@ pub(crate) fn render<D: Drawable>(
 /// skin; `Wireframe` draws every edge.
 pub(crate) fn render_submesh_styled(
     sm: &crate::containers::mesh::SubMesh,
-    view: Option<View>,
+    view: View,
     save: Option<&Path>,
     style: MeshStyle,
     title: Option<&str>,
@@ -303,7 +302,7 @@ pub(crate) fn render_submesh_styled(
 /// (geometry only, no field).
 pub(crate) fn render_mesh_styled(
     mesh: &crate::containers::mesh::Mesh,
-    view: Option<View>,
+    view: View,
     save: Option<&Path>,
     style: MeshStyle,
     title: Option<&str>,
@@ -343,11 +342,10 @@ pub(crate) fn render_mesh_with_field(
     component: Option<&str>,
     scale: ColorScale,
     smooth: usize,
-    view: Option<View>,
+    view: View,
     save: Option<&Path>,
     title: Option<&str>,
 ) -> Result<()> {
-    let view = view.unwrap_or_default();
     check_revolve(mesh, &view)?;
     let data = field.data()?;
     let resolved = field_color::resolve_component(&data, component)?;
@@ -391,11 +389,10 @@ pub fn render_submesh_with_field(
     component: Option<&str>,
     scale: ColorScale,
     smooth: usize,
-    view: Option<View>,
+    view: View,
     save: Option<&Path>,
     title: Option<&str>,
 ) -> Result<()> {
-    let view = view.unwrap_or_default();
     check_revolve(&*submesh.read(), &view)?;
     let data = field.data()?;
     let resolved = field_color::resolve_component(&data, component)?;
@@ -441,7 +438,7 @@ pub(crate) fn node_field_points(
     let coords = field.coords()?;
     let c = coords.read();
     let mut points = Vec::new();
-    for nid in field.node_ids()? {
+    for nid in field.node_ids() {
         if let Some(val) = view.value_opt(nid, component) {
             points.push((pad3(c.position(nid)?), val));
         }
@@ -468,7 +465,7 @@ pub(crate) fn node_field_bbox(
     let coords = field.coords()?;
     let c = coords.read();
     let mut bb = crate::viz::camera::Bbox3::empty();
-    for nid in field.node_ids()? {
+    for nid in field.node_ids() {
         bb.extend(pad3(c.position(nid)?));
     }
     Ok(bb)
@@ -481,7 +478,7 @@ pub(crate) fn render_node_field_points(
     field: &crate::containers::node_field::NodeField,
     component: Option<&str>,
     scale: ColorScale,
-    view: Option<View>,
+    view: View,
     save: Option<&Path>,
     title: Option<&str>,
 ) -> Result<()> {
@@ -524,7 +521,7 @@ pub(crate) fn render_evolution_field(
     scale: ColorScale,
     smooth: usize,
     frame: Option<usize>,
-    view: Option<View>,
+    view: View,
     save: Option<&Path>,
 ) -> Result<()> {
     if frames.is_empty() {
@@ -564,7 +561,7 @@ pub(crate) fn render_evolution_field(
                     component,
                     scale,
                     smooth,
-                    view.unwrap_or_default(),
+                    view,
                     None,
                 )
             }
@@ -590,7 +587,7 @@ fn render_one_frame(
     component: Option<&str>,
     scale: ColorScale,
     smooth: usize,
-    view: Option<View>,
+    view: View,
     save: Option<&Path>,
     title: Option<&str>,
 ) -> Result<()> {
@@ -632,7 +629,7 @@ pub(crate) fn render_curve(
     x_label: &str,
     y_label: &str,
     title: &str,
-    view: Option<View>,
+    view: View,
     save: Option<&Path>,
 ) -> Result<()> {
     let plot = curve::CurvePlot {
@@ -641,13 +638,13 @@ pub(crate) fn render_curve(
         y_label: y_label.to_string(),
         title: title.to_string(),
     };
-    let mut view = view.unwrap_or_default();
+    let mut view = view;
     view.show_axes = false;
     // A curve is a flat chart: no camera, hence no body to sweep either.
     view.revolve = None;
     // The curve's own caption already sits at the top of the chart, so we do
     // not repeat it as a bottom figure title.
-    render(&plot, Some(view), save, None)
+    render(&plot, view, save, None)
 }
 
 /// Draw `object` (and its gizmo) onto `area`, mapping plotters errors.

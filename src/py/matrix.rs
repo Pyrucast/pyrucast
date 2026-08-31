@@ -259,7 +259,7 @@ impl PyMatrix {
     fn physics(&self) -> PyResult<Vec<String>> {
         Ok(self
             .inner
-            .physics()?
+            .physics()
             .iter()
             .map(|p| p.name().to_string())
             .collect())
@@ -277,18 +277,18 @@ impl PyMatrix {
 
     /// Total number of stored entries across all blocks.
     fn entry_count(&self) -> PyResult<usize> {
-        Ok(self.inner.entry_count()?)
+        Ok(self.inner.entry_count())
     }
 
     /// Whether the matrix is declared symmetric.
     #[getter]
     fn symmetric(&self) -> PyResult<bool> {
-        Ok(self.inner.symmetric()?)
+        Ok(self.inner.symmetric())
     }
 
     /// Variable (field) names across the whole matrix.
     fn field_names(&self) -> PyResult<Vec<String>> {
-        Ok(self.inner.field_names()?)
+        Ok(self.inner.field_names())
     }
 
     /// `(node_id, field_name)` of each global row, in order.
@@ -320,7 +320,7 @@ impl PyMatrix {
         col_field: &str,
     ) -> PyResult<f64> {
         let (rn, cn) = (row_node.as_node().id(), col_node.as_node().id());
-        Ok(self.inner.get(rn, row_field, cn, col_field)?)
+        Ok(self.inner.get(rn, row_field, cn, col_field))
     }
 
     /// Dense row-major buffer of the finalized matrix (`n_rows × n_cols`).
@@ -346,7 +346,7 @@ impl PyMatrix {
     fn entries(&self) -> PyResult<PyMatrixEntries> {
         Ok(self
             .inner
-            .iter_entries()?
+            .iter_entries()
             .into_iter()
             .map(|(rn, rf, cn, cf, v)| (rn.0, rf, cn.0, cf, v))
             .collect())

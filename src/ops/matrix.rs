@@ -65,7 +65,7 @@ use crate::models::{Contribution, MatrixKind};
 ///
 /// // Un SEG2 de longueur 1, k = 1 : K = [[1, -1], [-1, 1]].
 /// assert_eq!(k.n_rows().unwrap(), 2);
-/// assert_eq!(k.get(a.id(), "q", a.id(), "T").unwrap(), 1.0);
+/// assert_eq!(k.get(a.id(), "q", a.id(), "T"), 1.0);
 /// ```
 pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
     assemble_kind(model, materials, MatrixKind::Stiffness, None)
@@ -461,7 +461,7 @@ pub fn tangent(model: &Model, materials: &ElementField, state: &ElementField) ->
 ///     x.dense().unwrap().iter().sum()
 /// };
 /// assert!((somme(&m) - somme(&diagonale)).abs() < 1e-12);
-/// assert_eq!(diagonale.get(a.id(), "q", b.id(), "T").unwrap(), 0.0);
+/// assert_eq!(diagonale.get(a.id(), "q", b.id(), "T"), 0.0);
 /// ```
 pub fn lump(m: &Matrix) -> Result<Matrix> {
     let (offsets, _, values) = m.csr_arrays()?;
@@ -967,7 +967,7 @@ mod tests {
         let materials = material_field_per_sub_model(&model, &[&[("k", 1.0)]]).unwrap();
 
         let mut k = stiffness(&model, &materials).unwrap();
-        let before = k.get(a.id(), "q", a.id(), "T").unwrap();
+        let before = k.get(a.id(), "q", a.id(), "T");
 
         // A hand-built literal block (no model behind it) adding +10 at (a,q)×(a,T).
         let support = Handle::new(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
@@ -987,7 +987,7 @@ mod tests {
         assert!(k.finalize().is_err());
         k.assemble().unwrap();
 
-        let after = k.get(a.id(), "q", a.id(), "T").unwrap();
+        let after = k.get(a.id(), "q", a.id(), "T");
         assert!(
             (after - (before + 10.0)).abs() <= 1e-12 * (1.0 + before.abs()),
             "composition failed: before {before}, after {after}"

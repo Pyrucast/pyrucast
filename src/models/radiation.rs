@@ -411,7 +411,7 @@ crate::physics_operator! {
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// // Le rayonnement s'unione à la conduction : mêmes DDL, donc mêmes blocs.
     /// let m = model::heat_conduction(&fes)?.union(&model::radiation(&fes)?)?;
-    /// assert_eq!(m.primal_vars()?, vec!["T".to_string()]);
+    /// assert_eq!(m.primal_vars(), vec!["T".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn radiation(fes) via SubModel::radiation;

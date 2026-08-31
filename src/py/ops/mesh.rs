@@ -426,6 +426,9 @@ pub fn border(mesh: PyRef<PyMesh>, angle_deg: Option<f64>) -> PyResult<PyMesh> {
 #[pyfunction]
 #[pyo3(signature = (mesh, angle_deg=None))]
 pub fn skin(mesh: PyRef<PyMesh>, angle_deg: Option<f64>) -> PyResult<PyMesh> {
+    // Le kwarg facultatif de Python s'aplatit **ici**, à la frontière : passé
+    // ce point l'opérateur reçoit un angle, pas une absence à tester.
+    let angle_deg = angle_deg.unwrap_or(crate::ops::mesh::skin::DEFAULT_ANGLE_DEG);
     let result = crate::ops::mesh::skin(&mesh.inner, angle_deg)?;
     Ok(PyMesh { inner: result })
 }

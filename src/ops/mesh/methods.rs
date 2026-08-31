@@ -217,7 +217,7 @@ impl Mesh {
     }
 
     /// Voir [`mesh::skin`](fn@crate::ops::mesh::skin).
-    pub fn skin(&self, angle_deg: Option<f64>) -> Result<Mesh> {
+    pub fn skin(&self, angle_deg: f64) -> Result<Mesh> {
         crate::ops::mesh::skin(self, angle_deg)
     }
 

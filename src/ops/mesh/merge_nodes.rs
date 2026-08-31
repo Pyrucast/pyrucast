@@ -84,12 +84,12 @@ use crate::parallel::*;
 /// let deux = a.union(&b)?;
 /// // `to_poi1` dédoublonne **par zone** : sur deux zones il compte encore
 /// // quatre nœuds. Consolider d'abord donne le vrai nuage.
-/// assert_eq!(mesh::to_poi1(&mesh::consolidate(&deux)?)?.cell_count()?, 4);
+/// assert_eq!(mesh::to_poi1(&mesh::consolidate(&deux)?)?.cell_count(), 4);
 /// let cousu = mesh::merge_nodes(&deux, 1e-6, false)?;
-/// assert_eq!(mesh::to_poi1(&mesh::consolidate(&cousu)?)?.cell_count()?, 3);
+/// assert_eq!(mesh::to_poi1(&mesh::consolidate(&cousu)?)?.cell_count(), 3);
 /// // La structure est intacte : mêmes zones, mêmes mailles, dans le même
 /// // ordre — seul **à quel nœud** une maille se réfère a changé.
-/// assert_eq!(cousu.cell_count()?, deux.cell_count()?);
+/// assert_eq!(cousu.cell_count(), deux.cell_count());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn merge_nodes(mesh: &Mesh, tol: f64, in_place: bool) -> Result<Mesh> {
@@ -525,7 +525,7 @@ mod tests {
         mesh.add_cell(&[b2.id(), d.id(), c2.id()]).unwrap();
 
         let merged = merge_nodes(&mesh, 1e-6, false).unwrap();
-        assert_eq!(merged.cell_count().unwrap(), 2, "both triangles survive");
+        assert_eq!(merged.cell_count(), 2, "both triangles survive");
 
         // b2 → b and c2 → c, so the second triangle now uses b and c.
         let tri1: Vec<_> = (0..3).map(|i| merged.node(0, 1, i).unwrap().id()).collect();
@@ -545,11 +545,7 @@ mod tests {
         mesh.add_cell(&[b.id(), c.id()]).unwrap();
 
         let merged = merge_nodes(&mesh, 1e-6, false).unwrap();
-        assert_eq!(
-            merged.cell_count().unwrap(),
-            1,
-            "the (b,c) segment is dropped"
-        );
+        assert_eq!(merged.cell_count(), 1, "the (b,c) segment is dropped");
     }
 
     #[test]
@@ -641,8 +637,8 @@ mod tests {
         // b2 → b in `right` itself — the two pieces now share their node.
         assert_eq!(right.node(0, 0, 0).unwrap().id(), b.id());
         assert_eq!(left.node(0, 0, 1).unwrap().id(), b.id());
-        assert_eq!(left.cell_count().unwrap(), 1);
-        assert_eq!(right.cell_count().unwrap(), 1);
+        assert_eq!(left.cell_count(), 1);
+        assert_eq!(right.cell_count(), 1);
     }
 
     #[test]
@@ -680,16 +676,10 @@ mod tests {
 
         assert!(merge_nodes(&mesh, 1e-6, true).is_err());
         // Nothing was written: the mesh still holds both cells, on c.
-        assert_eq!(mesh.cell_count().unwrap(), 2);
+        assert_eq!(mesh.cell_count(), 2);
         assert_eq!(mesh.node(0, 1, 1).unwrap().id(), c.id());
         // The copying variant is the way out — it drops the degenerate cell.
-        assert_eq!(
-            merge_nodes(&mesh, 1e-6, false)
-                .unwrap()
-                .cell_count()
-                .unwrap(),
-            1
-        );
+        assert_eq!(merge_nodes(&mesh, 1e-6, false).unwrap().cell_count(), 1);
     }
 
     #[test]
@@ -702,7 +692,7 @@ mod tests {
 
         let mut sealed = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
         sealed.add_cell(&[b2.id(), d.id()]).unwrap();
-        crate::containers::mesh::seal(&sealed.get(0).unwrap()).unwrap();
+        crate::containers::mesh::seal(&sealed.get(0).unwrap());
 
         let mut open = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
         open.add_cell(&[a.id(), b.id()]).unwrap();

@@ -287,7 +287,7 @@ impl SubModelKind for InterfaceTransfer {
     fn render(&self, _opts: &DumpOptions) -> String {
         let primal = self.primal_vars().join(", ");
         let dual = self.dual_vars().join(", ");
-        let cells = self.side_a.read().cell_count().unwrap_or(0);
+        let cells = self.side_a.read().cell_count();
         format!(
             "SubModel<InterfaceTransfer>\n  primal var(s): {primal}\n  \
              dual var(s):   {dual}\n  interface: {cells} facing cell pair(s)"

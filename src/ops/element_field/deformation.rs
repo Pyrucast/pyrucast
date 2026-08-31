@@ -75,7 +75,7 @@ use crate::ops::element_field::gradient::AXES;
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn deformation(u: &NodeField, fespace: &FiniteElementSpace) -> Result<ElementField> {
-    let components = Field::components(u)?;
+    let components = Field::components(u);
     let view = u.view()?;
     let mut out = ElementField::empty();
     for sub in fespace {

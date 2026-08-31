@@ -336,7 +336,7 @@ impl Mpc {
                 "Mpc: at least one term is required".into(),
             ));
         }
-        if multiplier_mesh.cell_count()? == 0 {
+        if multiplier_mesh.cell_count() == 0 {
             return Err(PyrucastError::Message(
                 "Mpc: multiplier_mesh must carry at least one node".into(),
             ));
@@ -466,7 +466,7 @@ impl SubModelKind for Mpc {
     }
 
     fn display(&self) -> String {
-        let n = self.multiplier_mesh.cell_count().unwrap_or(0);
+        let n = self.multiplier_mesh.cell_count();
         format!(
             "SubModel<Mpc>: {} relation(s), {} term(s) each",
             n,
@@ -475,7 +475,7 @@ impl SubModelKind for Mpc {
     }
 
     fn render(&self, _opts: &DumpOptions) -> String {
-        let n = self.multiplier_mesh.cell_count().unwrap_or(0);
+        let n = self.multiplier_mesh.cell_count();
         let mut out = format!(
             "SubModel<Mpc>\n  primal var(s): {} (multiplier)\n  dual var(s):   {} \
              (imposed value / g)\n  sense: {}\n  relations: {n}\n  terms:",

@@ -251,7 +251,9 @@ pub fn embedded(
         components,
         multipliers,
         imposed_values,
-        tol,
+        // Aplati à la frontière : le sous-modèle reçoit une tolérance, pas une
+        // absence à tester.
+        tol.unwrap_or(crate::models::embedded::DEFAULT_TOL),
     )?;
     Ok(PyModel { inner })
 }

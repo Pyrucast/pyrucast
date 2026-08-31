@@ -781,7 +781,7 @@ pub fn save<P: AsRef<Path>>(path: P, roots: &[(&str, &dyn ArchiveRoot)]) -> Resu
 /// let relu = objets.mesh("maillage")?;
 /// # use pyrucast::handle::Handle as H;
 /// assert!(!H::same_object(&relu.get(0)?, &mesh.get(0)?));
-/// assert_eq!(relu.cell_count()?, mesh.cell_count()?);
+/// assert_eq!(relu.cell_count(), mesh.cell_count());
 /// // Un fichier qui n'est pas une archive est refusé sur sa signature.
 /// std::fs::write(&chemin, b"pas une archive")?;
 /// assert!(archive::load(&chemin).is_err());

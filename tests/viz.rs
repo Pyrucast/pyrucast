@@ -44,7 +44,7 @@ fn submesh_exports_png() {
     let sm = build_two_triangles();
     let dir = tmpdir();
     let path = dir.join("tri.png");
-    sm.plot(Some(View::iso()), Some(&path)).unwrap();
+    sm.plot(View::iso(), Some(&path)).unwrap();
     let meta = std::fs::metadata(&path).unwrap();
     assert!(meta.len() > 0, "PNG should not be empty");
 }
@@ -54,7 +54,7 @@ fn submesh_exports_svg() {
     let sm = build_two_triangles();
     let dir = tmpdir();
     let path = dir.join("tri.svg");
-    sm.plot(Some(View::front()), Some(&path)).unwrap();
+    sm.plot(View::front(), Some(&path)).unwrap();
     let bytes = std::fs::read(&path).unwrap();
     assert!(!bytes.is_empty(), "SVG should not be empty");
     let text = String::from_utf8(bytes).expect("SVG should be valid UTF-8");
@@ -66,7 +66,7 @@ fn submesh_exports_svgz() {
     let sm = build_two_triangles();
     let dir = tmpdir();
     let path = dir.join("tri.svgz");
-    sm.plot(Some(View::front()), Some(&path)).unwrap();
+    sm.plot(View::front(), Some(&path)).unwrap();
     let bytes = std::fs::read(&path).unwrap();
     assert_eq!(
         &bytes[..2],
@@ -85,8 +85,8 @@ fn svgz_is_the_svg_compressed_and_nothing_else() {
     let dir = tmpdir();
     let plain = dir.join("tri.svg");
     let zipped = dir.join("tri.svgz");
-    sm.plot(Some(View::front()), Some(&plain)).unwrap();
-    sm.plot(Some(View::front()), Some(&zipped)).unwrap();
+    sm.plot(View::front(), Some(&plain)).unwrap();
+    sm.plot(View::front(), Some(&zipped)).unwrap();
 
     let expected = std::fs::read(&plain).unwrap();
     let raw = std::fs::read(&zipped).unwrap();
@@ -110,7 +110,7 @@ fn submesh_default_view_is_iso() {
     let sm = build_two_triangles();
     let dir = tmpdir();
     let path = dir.join("tri-default.png");
-    sm.plot(None, Some(&path)).unwrap();
+    sm.plot(View::default(), Some(&path)).unwrap();
     assert!(std::fs::metadata(&path).unwrap().len() > 0);
 }
 
@@ -152,7 +152,7 @@ fn submesh_renders_every_element_type() {
         let mut sm = SubMesh::new(coords.clone(), et);
         sm.add_cell(&ids).unwrap();
         let path = dir.join(format!("{}.png", et.name().to_ascii_lowercase()));
-        sm.plot(Some(View::iso()), Some(&path))
+        sm.plot(View::iso(), Some(&path))
             .unwrap_or_else(|e| panic!("{}: {}", et, e));
         let len = std::fs::metadata(&path).unwrap().len();
         assert!(len > 0, "{}: PNG should not be empty", et);
@@ -164,7 +164,7 @@ fn unsupported_extension_errors() {
     let sm = build_two_triangles();
     let dir = tmpdir();
     let path = dir.join("tri.jpg");
-    let err = sm.plot(None, Some(&path)).unwrap_err();
+    let err = sm.plot(View::default(), Some(&path)).unwrap_err();
     let msg = format!("{err}");
     assert!(
         msg.contains("png") || msg.contains("svg"),
@@ -200,7 +200,7 @@ fn mesh_plot_renders_each_submesh_with_its_color() {
 
     let dir = tmpdir();
     let path = dir.join("mesh.svg");
-    mesh.plot(None, Some(&path)).unwrap();
+    mesh.plot(View::default(), Some(&path)).unwrap();
 
     let text = std::fs::read_to_string(&path).unwrap();
     // The SVG embeds the fill colours as hex; both faces should appear.
@@ -239,7 +239,7 @@ fn mesh_renders_mixed_element_types() {
 
     let dir = tmpdir();
     let path = dir.join("mixed.png");
-    mesh.plot(None, Some(&path)).unwrap();
+    mesh.plot(View::default(), Some(&path)).unwrap();
     assert!(std::fs::metadata(&path).unwrap().len() > 0);
 }
 
@@ -273,7 +273,7 @@ fn mesh_plot_with_field_export_svg_contains_overlay_label() {
     let dir = tmpdir();
     let path = dir.join("mesh_field.svg");
     mesh.plot_with_field(
-        Some(View::front()),
+        View::front(),
         Some(&path),
         pyrucast::viz::FieldArg::Node(&field),
         None,
@@ -323,7 +323,7 @@ fn plot_with_field_colorbar_uses_explicit_bounds() {
     // Pin the scale to [-10, 10]; the colorbar ticks (and the overlay
     // range) must reflect the override, not the data's own [1, 1] cell mean.
     mesh.plot_with_field(
-        Some(View::front()),
+        View::front(),
         Some(&path),
         pyrucast::viz::FieldArg::Node(&field),
         None,
@@ -378,7 +378,7 @@ fn plot_with_field_explicit_component_choice() {
         Some("UY"),
         ColorScale::default(),
         0,
-        Some(View::front()),
+        View::front(),
         Some(&path),
         None,
     )
@@ -399,7 +399,7 @@ fn figure_title_is_engraved_at_the_bottom_of_a_saved_image() {
     let dir = tmpdir();
     let titled = dir.join("titled.svg");
     sm.plot_styled(
-        Some(View::iso()),
+        View::iso(),
         Some(&titled),
         MeshStyle::Surface,
         Some("cantilever-beam"),
@@ -413,7 +413,7 @@ fn figure_title_is_engraved_at_the_bottom_of_a_saved_image() {
 
     // No title → the caption text is absent (and the plot keeps full height).
     let plain = dir.join("plain.svg");
-    sm.plot_styled(Some(View::iso()), Some(&plain), MeshStyle::Surface, None)
+    sm.plot_styled(View::iso(), Some(&plain), MeshStyle::Surface, None)
         .unwrap();
     let plain_text = std::fs::read_to_string(&plain).unwrap();
     assert!(!plain_text.contains("cantilever-beam"));
@@ -442,7 +442,7 @@ fn plot_with_field_unknown_component_errors() {
         Some("UNKNOWN"),
         ColorScale::default(),
         0,
-        None,
+        View::default(),
         Some(&path),
         None,
     )
@@ -487,7 +487,7 @@ fn plot_mesh_with_element_field_writes_svg() {
     let dir = tmpdir();
     let path = dir.join("mesh_element_field.svg");
     mesh.plot_with_field(
-        Some(View::front()),
+        View::front(),
         Some(&path),
         pyrucast::viz::FieldArg::Element(&ef),
         None,
@@ -524,7 +524,7 @@ fn node_field_standalone_plot_is_point_cloud() {
     let dir = tmpdir();
     let path = dir.join("node_field_points.svg");
     f.plot(
-        Some(View::front()),
+        View::front(),
         Some(&path),
         None,
         ColorScale::default(),
@@ -559,7 +559,7 @@ fn element_field_standalone_plot_reconstructs_mesh() {
     let dir = tmpdir();
     let path = dir.join("element_field_alone.svg");
     ef.plot(
-        Some(View::front()),
+        View::front(),
         Some(&path),
         None,
         ColorScale::default(),
@@ -598,9 +598,9 @@ fn mesh_wireframe_has_no_filled_faces() {
     let dir = tmpdir();
     let surface = dir.join("tet_surface.svg");
     let wire = dir.join("tet_wire.svg");
-    mesh.plot_styled(Some(View::iso()), Some(&surface), MeshStyle::Surface, None)
+    mesh.plot_styled(View::iso(), Some(&surface), MeshStyle::Surface, None)
         .unwrap();
-    mesh.plot_styled(Some(View::iso()), Some(&wire), MeshStyle::Wireframe, None)
+    mesh.plot_styled(View::iso(), Some(&wire), MeshStyle::Wireframe, None)
         .unwrap();
 
     let surface_svg = std::fs::read_to_string(&surface).unwrap();

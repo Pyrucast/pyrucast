@@ -29,7 +29,7 @@ impl PySubFiniteElementSpace {
     /// Element type name (e.g. `"TRI3"`).
     #[getter]
     fn element_type(&self) -> PyResult<String> {
-        Ok(self.handle.read().element_type()?.name().to_string())
+        Ok(self.handle.read().element_type().name().to_string())
     }
 
     /// Interpolation name (e.g. `"LAGRANGE1"`).
@@ -71,7 +71,7 @@ impl PySubFiniteElementSpace {
 
     /// Number of elements (cells) in this subspace.
     fn cell_count(&self) -> PyResult<usize> {
-        Ok(self.handle.read().cell_count()?)
+        Ok(self.handle.read().cell_count())
     }
 
     /// Number of Gauss (quadrature) points per element.
@@ -130,7 +130,7 @@ impl PySubFiniteElementSpace {
 
     /// All elements as a Python list.
     fn elements(&self) -> PyResult<Vec<PyElement>> {
-        let n = self.handle.read().cell_count()?;
+        let n = self.handle.read().cell_count();
         let mut out = Vec::with_capacity(n);
         for i in 0..n {
             out.push(PyElement {
@@ -142,14 +142,14 @@ impl PySubFiniteElementSpace {
 
     /// `len(subspace)` → number of elements (= number of cells).
     fn __len__(&self) -> PyResult<usize> {
-        Ok(self.handle.read().cell_count()?)
+        Ok(self.handle.read().cell_count())
     }
 
     /// `subspace[i]` → `Element` view on element `i`. Supports negative
     /// indices and raises `IndexError` out of range so
     /// `for el in subspace:` works.
     fn __getitem__(&self, idx: isize) -> PyResult<PyElement> {
-        let n = self.handle.read().cell_count()? as isize;
+        let n = self.handle.read().cell_count() as isize;
         let normalized = if idx < 0 { n + idx } else { idx };
         if normalized < 0 || normalized >= n {
             return Err(PyIndexError::new_err(format!(

@@ -100,12 +100,12 @@ const SMOOTH_SWEEPS: usize = 12;
 /// #         c.add_cell(&base.iter().map(|n| n.id()).collect::<Vec<_>>()).unwrap();
 /// #         c
 /// #     }), &[0.0, 0.0, 1.0]).unwrap(), 1).unwrap();
-/// # let enveloppe = mesh::convert(&mesh::skin(&cube, None).unwrap(),
+/// # let enveloppe = mesh::convert(&mesh::skin(&cube, mesh::skin::DEFAULT_ANGLE_DEG).unwrap(),
 /// #                               ElementType::TRI3).unwrap();
 /// // Couche limite hexaédrique, raccord pyramidal, cœur tétraédrique :
 /// // trois types d'éléments dans le même maillage.
 /// let v = mesh::pave_volume(&enveloppe, 1, Some(0.2), Some(0.5))?;
-/// assert!(v.cell_count()? > 0);
+/// assert!(v.cell_count() > 0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn pave_volume(
@@ -138,7 +138,7 @@ pub fn pave_volume(
 /// #         c.add_cell(&base.iter().map(|n| n.id()).collect::<Vec<_>>()).unwrap();
 /// #         c
 /// #     }), &[0.0, 0.0, 1.0]).unwrap(), 1).unwrap();
-/// # let enveloppe = mesh::convert(&mesh::skin(&cube, None).unwrap(),
+/// # let enveloppe = mesh::convert(&mesh::skin(&cube, mesh::skin::DEFAULT_ANGLE_DEG).unwrap(),
 /// #                               ElementType::TRI3).unwrap();
 /// # use std::sync::atomic::{AtomicBool, Ordering};
 /// // Le jeton est sondé aux points de contrôle du mailleur : armé d'avance,
@@ -430,7 +430,7 @@ mod tests {
         )
         .unwrap();
         let solid = crate::ops::mesh::extrude(&face, &[0.0, height, 0.0], ny).unwrap();
-        crate::ops::mesh::skin(&solid, None).unwrap()
+        crate::ops::mesh::skin(&solid, crate::ops::mesh::skin::DEFAULT_ANGLE_DEG).unwrap()
     }
 
     fn box_skin(nx: usize, ny: usize, nz: usize) -> Mesh {
@@ -476,7 +476,7 @@ mod tests {
         )
         .unwrap();
         let solid = crate::ops::mesh::extrude(&face, &[0.0, height, 0.0], layers).unwrap();
-        crate::ops::mesh::skin(&solid, None).unwrap()
+        crate::ops::mesh::skin(&solid, crate::ops::mesh::skin::DEFAULT_ANGLE_DEG).unwrap()
     }
 
     /// Cells per element type.
@@ -554,7 +554,7 @@ mod tests {
                     assert!(
                         det > 0.0,
                         "cell {c} of {} has |J| = {det}",
-                        space.element_type().unwrap()
+                        space.element_type()
                     );
                 }
             }

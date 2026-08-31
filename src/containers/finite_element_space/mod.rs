@@ -96,7 +96,7 @@ use std::sync::OnceLock;
 /// // quadrature : c'est là que vivent formes, poids et jacobien.
 /// let z = SubFiniteElementSpace::new(
 ///     maillage.get(0)?, Interpolation::Lagrange1, QuadratureRule::Gauss)?;
-/// assert_eq!(z.element_type()?, ElementType::TRI3);
+/// assert_eq!(z.element_type(), ElementType::TRI3);
 /// assert_eq!(z.gauss_count(), 3);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -262,7 +262,7 @@ impl SubFiniteElementSpace {
         // Capturing the submesh in a finite-element space freezes its
         // connectivity: the reference-space tables and any assembled matrix
         // are cell-indexed and must not be invalidated by later `add_cell`s.
-        let submesh = crate::containers::mesh::seal(&submesh)?;
+        let submesh = crate::containers::mesh::seal(&submesh);
 
         Ok(Self {
             submesh,
@@ -363,10 +363,10 @@ impl SubFiniteElementSpace {
     /// # let sub = fes.get(0).unwrap();
     /// # let s = sub.read();
     /// # use pyrucast::handle::Handle as H;
-    /// assert!(H::same_object(&s.coords().unwrap(), &coords));
+    /// assert!(H::same_object(&s.coords(), &coords));
     /// ```
-    pub fn coords(&self) -> Result<Handle<Coords>> {
-        Ok(self.submesh.read().coords())
+    pub fn coords(&self) -> Handle<Coords> {
+        self.submesh.read().coords()
     }
 
     /// Interpolation in use.
@@ -432,10 +432,10 @@ impl SubFiniteElementSpace {
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
     /// # let sub = fes.get(0).unwrap();
     /// # let s = sub.read();
-    /// assert_eq!(s.element_type().unwrap(), ElementType::TRI3);
+    /// assert_eq!(s.element_type(), ElementType::TRI3);
     /// ```
-    pub fn element_type(&self) -> Result<ElementType> {
-        Ok(self.submesh.read().element_type())
+    pub fn element_type(&self) -> ElementType {
+        self.submesh.read().element_type()
     }
 
     /// Reference dimension (= topological dim of the element type).
@@ -459,7 +459,7 @@ impl SubFiniteElementSpace {
     /// assert_eq!(s.ref_dim().unwrap(), 2);
     /// ```
     pub fn ref_dim(&self) -> Result<usize> {
-        Ok(self.element_type()?.topological_dim())
+        Ok(self.element_type().topological_dim())
     }
 
     /// Geometric (physical) dimension of the underlying `Coords`.
@@ -534,7 +534,7 @@ impl SubFiniteElementSpace {
     /// assert_eq!(s.nodes_per_cell().unwrap(), 3);
     /// ```
     pub fn nodes_per_cell(&self) -> Result<usize> {
-        Ok(self.element_type()?.nodes_per_cell())
+        Ok(self.element_type().nodes_per_cell())
     }
 
     /// Number of cells in the underlying submesh.
@@ -554,10 +554,10 @@ impl SubFiniteElementSpace {
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
     /// # let sub = fes.get(0).unwrap();
     /// # let s = sub.read();
-    /// assert_eq!(s.cell_count().unwrap(), 1);
+    /// assert_eq!(s.cell_count(), 1);
     /// ```
-    pub fn cell_count(&self) -> Result<usize> {
-        Ok(self.submesh.read().cell_count())
+    pub fn cell_count(&self) -> usize {
+        self.submesh.read().cell_count()
     }
 
     /// Number of Gauss points per cell.
@@ -752,7 +752,7 @@ impl SubFiniteElementSpace {
     /// assert_eq!(s.shape_count().unwrap(), 3);
     /// ```
     pub fn shape_count(&self) -> Result<usize> {
-        Ok(self.interpolation.shape_count(self.element_type()?))
+        Ok(self.interpolation.shape_count(self.element_type()))
     }
 
     /// Field shape values `N_i(ξ_g)`, length [`shape_count`](Self::shape_count).
@@ -1033,7 +1033,7 @@ impl fmt::Debug for SubFiniteElementSpace {
 
 impl fmt::Display for SubFiniteElementSpace {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let et = self.element_type().map(|e| e.name()).unwrap_or("?");
+        let et = self.element_type().name();
         write!(
             f,
             "SubFiniteElementSpace<{}, {}, {}>: {} Gauss point(s)",
@@ -1262,7 +1262,7 @@ impl FiniteElementSpace {
     /// ```
     pub fn elements(&self, subspace_idx: usize) -> Result<ElementIter> {
         let sub = self.get(subspace_idx)?;
-        let n = sub.read().cell_count()?;
+        let n = sub.read().cell_count();
         Ok(ElementIter::new(sub, n))
     }
 
@@ -2016,12 +2016,12 @@ mod tests {
         assert_eq!(fes.len(), 2);
         {
             let s = fes.get(0).unwrap().read();
-            assert_eq!(s.element_type().unwrap(), ElementType::TRI3);
+            assert_eq!(s.element_type(), ElementType::TRI3);
             assert_eq!(s.gauss_count(), 3);
         }
         {
             let s = fes.get(1).unwrap().read();
-            assert_eq!(s.element_type().unwrap(), ElementType::QUA4);
+            assert_eq!(s.element_type(), ElementType::QUA4);
             assert_eq!(s.gauss_count(), 4);
         }
     }

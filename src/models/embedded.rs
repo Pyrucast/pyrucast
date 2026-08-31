@@ -61,7 +61,18 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 /// Default reference-domain tolerance for locating immersed nodes in the host.
-const DEFAULT_TOL: f64 = 1e-6;
+///
+/// Public because [`Embedded::new`] takes the tolerance **by value**: a caller
+/// with no opinion passes this constant rather than a `None` the constructor
+/// would have to test for.
+///
+/// ```
+/// # use pyrucast::models::embedded::DEFAULT_TOL;
+/// // La tolérance par défaut se **transmet** : le constructeur reçoit un
+/// // nombre, jamais une absence à tester.
+/// assert_eq!(DEFAULT_TOL, 1e-6);
+/// ```
+pub const DEFAULT_TOL: f64 = 1e-6;
 
 /// Default multiplier (primal) name for a constrained variable: `lambda_<v>`.
 ///
@@ -185,7 +196,7 @@ struct Component {
 /// // l'autre** — une relation par nœud et par composante.
 /// let e = Embedded::new(&immergee, &maillage,
 ///     vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
-///     None, None, None)?;
+///     None, None, pyrucast::models::embedded::DEFAULT_TOL)?;
 /// assert_eq!(e.relations()?.len(), 4); // deux nœuds × deux composantes
 /// assert_eq!(e.relations()?[0].imposed_value, embedded::default_imposed_value("u_x"));
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -254,7 +265,7 @@ impl Embedded {
     /// // l'autre** — une relation par nœud et par composante.
     /// let e = Embedded::new(&immergee, &maillage,
     ///     vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
-    ///     None, None, None)?;
+    ///     None, None, pyrucast::models::embedded::DEFAULT_TOL)?;
     /// assert_eq!(e.relations()?.len(), 4); // deux nœuds × deux composantes
     /// assert_eq!(e.relations()?[0].imposed_value, embedded::default_imposed_value("u_x"));
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -265,7 +276,7 @@ impl Embedded {
         components: Vec<(String, String)>,
         multipliers: Option<Vec<String>>,
         imposed_values: Option<Vec<String>>,
-        tol: Option<f64>,
+        tol: f64,
     ) -> Result<Self> {
         if components.is_empty() {
             return Err(PyrucastError::Message(
@@ -314,7 +325,7 @@ impl Embedded {
                 .map(|&n| Ok(c.position(n)?.to_vec()))
                 .collect::<Result<_>>()?
         };
-        let tol = tol.unwrap_or(DEFAULT_TOL);
+
         let located = locate_points(host, &points, tol)?;
 
         let mut hosts = Vec::with_capacity(immersed_ids.len());
@@ -616,7 +627,7 @@ mod tests {
     #[test]
     fn empty_components_rejected() {
         let (bar, host, _c) = hex_and_bar();
-        assert!(Embedded::new(&bar, &host, vec![], None, None, None).is_err());
+        assert!(Embedded::new(&bar, &host, vec![], None, None, DEFAULT_TOL).is_err());
     }
 
     #[test]
@@ -638,7 +649,7 @@ mod tests {
             vec![("u_x".into(), "f_x".into())],
             None,
             None,
-            None
+            DEFAULT_TOL
         )
         .is_err());
     }
@@ -652,7 +663,7 @@ mod tests {
             vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
             None,
             None,
-            None,
+            DEFAULT_TOL,
         )
         .unwrap();
 

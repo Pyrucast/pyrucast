@@ -29,7 +29,7 @@ use crate::error::Result;
 /// // Le nuage des nœuds **distincts** d'un maillage : deux mailles qui
 /// // partagent un nœud ne le comptent qu'une fois.
 /// let l = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[2.0, 0.0, 0.0]), 2, ElementType::SEG2)?;
-/// assert_eq!(mesh::to_poi1(&l)?.cell_count()?, 3);
+/// assert_eq!(mesh::to_poi1(&l)?.cell_count(), 3);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn to_poi1(mesh: &Mesh) -> Result<Mesh> {
@@ -67,7 +67,7 @@ mod tests {
         assert_eq!(poi.len(), 1);
         assert_eq!(poi.element_types().unwrap(), vec![ElementType::POI1]);
         // 6 connectivity entries but only 4 unique nodes.
-        assert_eq!(poi.cell_count().unwrap(), 4);
+        assert_eq!(poi.cell_count(), 4);
 
         let ids: Vec<_> = (0..4).map(|i| poi.node(0, i, 0).unwrap().id()).collect();
         assert_eq!(ids, vec![a.id(), b.id(), c.id(), d.id()]);

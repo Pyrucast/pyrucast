@@ -34,7 +34,7 @@ use crate::models::symmetry::MaterialSymmetry;
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// let m = model::fick(&fes, "H2")?;
-/// assert_eq!(m.primal_vars()?, vec!["c_H2".to_string()]);
+/// assert_eq!(m.primal_vars(), vec!["c_H2".to_string()]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn fick(fes: &FiniteElementSpace, species: &str) -> Result<Model> {
@@ -69,7 +69,7 @@ pub fn fick(fes: &FiniteElementSpace, species: &str) -> Result<Model> {
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// let m = model::fick_with_symmetry(&fes, MaterialSymmetry::Orthotropic, "H2")?;
-/// assert_eq!(m.dual_vars()?, vec!["j_H2".to_string()]);
+/// assert_eq!(m.dual_vars(), vec!["j_H2".to_string()]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn fick_with_symmetry(

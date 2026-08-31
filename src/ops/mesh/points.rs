@@ -83,10 +83,10 @@ use std::collections::HashSet;
 /// // La boule **fermée**, élargie de la tolérance : les quatre nœuds y sont.
 /// // Le résultat est un maillage POI1 : une maille par nœud retenu.
 /// let dedans = points::points_in_sphere(&maillage, &[0.0, 0.0, 0.0], 1.0, None)?;
-/// assert_eq!(dedans.cell_count()?, 4);
+/// assert_eq!(dedans.cell_count(), 4);
 /// // Rayon nul : l'origine seule.
 /// assert_eq!(points::points_in_sphere(&maillage, &[0.0, 0.0, 0.0], 0.0, None)?
-///     .cell_count()?, 1);
+///     .cell_count(), 1);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn points_in_sphere(
@@ -131,7 +131,7 @@ pub fn points_in_sphere(
 /// # let maillage = Mesh::from_submesh(sm);
 /// // La **surface** seule : les trois nœuds à distance 1, pas l'origine.
 /// let dessus = points::points_on_sphere(&maillage, &[0.0, 0.0, 0.0], 1.0, None)?;
-/// assert_eq!(dessus.cell_count()?, 3);
+/// assert_eq!(dessus.cell_count(), 3);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn points_on_sphere(
@@ -184,7 +184,7 @@ pub fn points_on_sphere(
 /// // Le plan z = 0 : trois nœuds y tombent.
 /// let plan = points::points_on_plane(
 ///     &maillage, &[0.0, 0.0, 0.0], &[0.0, 0.0, 1.0], None)?;
-/// assert_eq!(plan.cell_count()?, 3);
+/// assert_eq!(plan.cell_count(), 3);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn points_on_plane(
@@ -232,7 +232,7 @@ pub fn points_on_plane(
 /// // Le demi-espace **du côté opposé à la normale**, plan compris.
 /// let dessous = points::points_below_plane(
 ///     &maillage, &[0.0, 0.0, 0.0], &[0.0, 0.0, 1.0], None)?;
-/// assert_eq!(dessous.cell_count()?, 3); // z ≤ 0
+/// assert_eq!(dessous.cell_count(), 3); // z ≤ 0
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn points_below_plane(
@@ -282,7 +282,7 @@ pub fn points_below_plane(
 /// # let maillage = Mesh::from_submesh(sm);
 /// // L'axe des x, **droite entière** et non segment : l'origine et (1,0,0).
 /// let axe = points::points_on_line(&maillage, &[0.0, 0.0, 0.0], &[1.0, 0.0, 0.0], None)?;
-/// assert_eq!(axe.cell_count()?, 2);
+/// assert_eq!(axe.cell_count(), 2);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn points_on_line(mesh: &Mesh, a: &[f64], b: &[f64], tol: Option<f64>) -> Result<Mesh> {
@@ -331,7 +331,7 @@ pub fn points_on_line(mesh: &Mesh, a: &[f64], b: &[f64], tol: Option<f64>) -> Re
 /// // il tient les deux nœuds de l'axe, pas ceux à distance 1.
 /// let cyl = points::points_in_cylinder(
 ///     &maillage, &[0.0, 0.0, 0.0], &[0.0, 0.0, 1.0], 0.5, None)?;
-/// assert_eq!(cyl.cell_count()?, 2);
+/// assert_eq!(cyl.cell_count(), 2);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn points_in_cylinder(
@@ -387,7 +387,7 @@ pub fn points_in_cylinder(
 /// // et (0,1,0) — encore faut-il qu'ils soient entre les deux bases.
 /// let paroi = points::points_on_cylinder(
 ///     &maillage, &[0.0, 0.0, 0.0], &[0.0, 0.0, 1.0], 1.0, None)?;
-/// assert_eq!(paroi.cell_count()?, 2);
+/// assert_eq!(paroi.cell_count(), 2);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn points_on_cylinder(
@@ -448,7 +448,7 @@ pub fn points_on_cylinder(
 /// let cone = points::points_in_cone(
 ///     &maillage, &[0.0, 0.0, 0.0], &[0.0, 0.0, 1.0], 1.0, 0.0, None)?;
 /// // Les trois nœuds du plan z = 0 (dans le disque de base) **et** la pointe.
-/// assert_eq!(cone.cell_count()?, 4);
+/// assert_eq!(cone.cell_count(), 4);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn points_in_cone(
@@ -504,7 +504,7 @@ pub fn points_in_cone(
 /// let paroi = points::points_on_cone(
 ///     &maillage, &[0.0, 0.0, 0.0], &[0.0, 0.0, 1.0], 1.0, 0.0, None)?;
 /// // La nappe seule : le cercle de base et l'apex, pas le centre du disque.
-/// assert_eq!(paroi.cell_count()?, 3);
+/// assert_eq!(paroi.cell_count(), 3);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn points_on_cone(
@@ -573,7 +573,7 @@ pub fn points_on_cone(
 /// // deux nœuds du plan z = 0 qui sont à distance 1 de l'axe.
 /// let tore = points::points_in_torus(
 ///     &maillage, &[0.0, 0.0, 0.0], &[0.0, 0.0, 1.0], 1.0, 0.25, None)?;
-/// assert_eq!(tore.cell_count()?, 2);
+/// assert_eq!(tore.cell_count(), 2);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn points_in_torus(
@@ -624,7 +624,7 @@ pub fn points_in_torus(
 /// // La **surface** du tore : les mêmes nœuds, qui sont pile dessus.
 /// let surface = points::points_on_torus(
 ///     &maillage, &[0.0, 0.0, 0.0], &[0.0, 0.0, 1.0], 1.0, 0.0, None)?;
-/// assert_eq!(surface.cell_count()?, 2);
+/// assert_eq!(surface.cell_count(), 2);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn points_on_torus(

@@ -265,7 +265,7 @@ crate::physics_operator! {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// let m = model::ottosen(&fes, Kinematics::PlaneStrain)?;
-    /// assert_eq!(m.primal_vars()?, vec!["u_x".to_string(), "u_y".to_string()]);
+    /// assert_eq!(m.primal_vars(), vec!["u_x".to_string(), "u_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn ottosen(fes, kinematics: Kinematics) = crate::ops::model::plasticity_with_law, PlasticLaw::Ottosen;

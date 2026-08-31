@@ -331,7 +331,7 @@ crate::physics_operator! {
     /// # let fes_bord = FiniteElementSpace::lagrange1(&Mesh::from_submesh(bord))?;
     /// let m = model::boundary_transfer(
     ///     &fes_bord, vec![("T".into(), "q".into())], Physics::Thermal)?;
-    /// assert_eq!(m.primal_vars()?, vec!["T".to_string()]);
+    /// assert_eq!(m.primal_vars(), vec!["T".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn boundary_transfer(fes, components: Vec<(String, String)>, physics: Physics) via SubModel::boundary_transfer;

@@ -192,7 +192,7 @@ fn sub_element_submesh(
 /// // Les nœuds dont T ≥ 40 : deux sur trois. Le résultat est un maillage
 /// // POI1, une zone par zone traitée.
 /// let chauds = select::select_nodes(&temp, &bande, None)?;
-/// assert_eq!(chauds.cell_count()?, 2);
+/// assert_eq!(chauds.cell_count(), 2);
 /// assert_eq!(chauds.element_types()?, vec![ElementType::POI1]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -248,9 +248,9 @@ pub fn select_nodes(
 /// # let bande = Band::new(Some(40.0), None, None, None).unwrap();
 /// // Une maille n'est retenue que si **tous** ses points de Gauss passent.
 /// let forte = Band::new(Some(1.0), None, None, None)?;
-/// assert_eq!(select::select_cells(&flux, &forte, None)?.cell_count()?, 1);
+/// assert_eq!(select::select_cells(&flux, &forte, None)?.cell_count(), 1);
 /// let trop = Band::new(Some(10.0), None, None, None)?;
-/// assert_eq!(select::select_cells(&flux, &trop, None)?.cell_count()?, 0);
+/// assert_eq!(select::select_cells(&flux, &trop, None)?.cell_count(), 0);
 /// // Et la zone garde son type d'élément, non POI1.
 /// assert_eq!(select::select_cells(&flux, &forte, None)?.element_types()?,
 ///            vec![ElementType::TRI3]);
@@ -305,7 +305,7 @@ pub fn select_cells(
 /// // La forme mono-zone : un maillage à un seul sous-maillage POI1.
 /// let chauds = select::select_sub_nodes(&temp.get(0)?.read(), &bande, None)?;
 /// assert_eq!(chauds.len(), 1);
-/// assert_eq!(chauds.cell_count()?, 2);
+/// assert_eq!(chauds.cell_count(), 2);
 /// // Un filtre de composante qui ne s'applique pas à la zone la saute, et
 /// // rend un maillage **vide** plutôt qu'une erreur.
 /// let absente = select::select_sub_nodes(
@@ -360,7 +360,7 @@ pub fn select_sub_nodes(
 /// let forte = Band::new(Some(1.0), None, None, None)?;
 /// let zone = flux.get(0)?;
 /// let retenues = select::select_sub_cells(&zone.read(), &forte, None)?;
-/// assert_eq!(retenues.cell_count()?, 1);
+/// assert_eq!(retenues.cell_count(), 1);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn select_sub_cells(

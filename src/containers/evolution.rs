@@ -577,7 +577,7 @@ impl SubEvolution {
     #[allow(clippy::too_many_arguments)]
     pub fn plot(
         &self,
-        view: Option<crate::viz::View>,
+        view: crate::viz::View,
         save: Option<&std::path::Path>,
         mesh: Option<&crate::containers::mesh::Mesh>,
         component: Option<&str>,
@@ -1066,7 +1066,7 @@ impl Evolution {
     /// # chaud.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
     /// let mut e = Evolution::from_scalars(vec![(0.0, 1.0), (1.0, 2.0)], OutOfRange::Clamp)?;
     /// assert_eq!(e.abscissa_type()?, None);
-    /// e.set_abscissa_type(Some("time".into()))?;
+    /// e.set_abscissa_type(Some("time".into()));
     /// assert_eq!(e.abscissa_type()?, Some("time".into()));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -1130,15 +1130,14 @@ impl Evolution {
     /// # chaud.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
     /// // Le type est posé sur **toutes** les zones à la fois.
     /// let mut e = Evolution::from_node_fields(&[(0.0, &froid), (1.0, &chaud)], OutOfRange::Clamp)?;
-    /// e.set_abscissa_type(Some("time".into()))?;
+    /// e.set_abscissa_type(Some("time".into()));
     /// assert_eq!(e.abscissa_type()?, Some("time".into()));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn set_abscissa_type(&mut self, t: Option<String>) -> Result<()> {
+    pub fn set_abscissa_type(&mut self, t: Option<String>) {
         for h in &self.subs {
             h.write().set_abscissa_type(t.clone());
         }
-        Ok(())
     }
 
     /// Set (or clear) the ordinate type on **every** sub-evolution. Errors on a
@@ -1222,7 +1221,7 @@ impl Evolution {
     /// // l'ordonnée celle produite.
     /// let mut loi = Evolution::from_scalars(
     ///     vec![(20.0, 50.0), (120.0, 30.0)], OutOfRange::Clamp)?;
-    /// loi.set_abscissa_type(Some("T".into()))?;
+    /// loi.set_abscissa_type(Some("T".into()));
     /// loi.set_ordinate_type(Some("k".into()))?;
     /// let k = loi.interpolate_node_field(&temp, None)?;
     /// assert_eq!(k.get(0)?.read().value(n[0].id(), "k")?, 30.0);
@@ -1268,7 +1267,7 @@ impl Evolution {
     /// // les abscisses, `k` est la composante produite.
     /// let mut loi =
     ///     Evolution::from_scalars(vec![(20.0, 50.0), (120.0, 30.0)], OutOfRange::Clamp)?;
-    /// loi.set_abscissa_type(Some("T".into()))?;
+    /// loi.set_abscissa_type(Some("T".into()));
     /// loi.set_ordinate_type(Some("k".into()))?;
     /// let k = loi.interpolate_element_field(&chaud, None)?;
     /// assert_eq!(k.get(0)?.read().value(0, 0, "k")?, 30.0);
@@ -1519,7 +1518,7 @@ impl Evolution {
     #[allow(clippy::too_many_arguments)]
     pub fn plot(
         &self,
-        view: Option<crate::viz::View>,
+        view: crate::viz::View,
         save: Option<&std::path::Path>,
         mesh: Option<&crate::containers::mesh::Mesh>,
         component: Option<&str>,
@@ -2123,7 +2122,7 @@ mod tests {
         // A single-curve typed scalar Evolution used as a transfer function.
         let mut e =
             Evolution::from_scalars(vec![(0.0, 0.0), (10.0, 20.0)], OutOfRange::Error).unwrap();
-        e.set_abscissa_type(Some("T".into())).unwrap();
+        e.set_abscissa_type(Some("T".into()));
         e.set_ordinate_type(Some("E".into())).unwrap();
         let sm = poi1(2);
         let input = NodeField::from_sub(node_field(&sm, &[0.0, 10.0]));
@@ -2140,7 +2139,7 @@ mod tests {
         let e0 = Evolution::from_scalars(vec![(0.0, 0.0), (1.0, 1.0)], OutOfRange::Error).unwrap();
         let e1 = Evolution::from_scalars(vec![(0.0, 0.0), (1.0, 1.0)], OutOfRange::Error).unwrap();
         let mut two = e0.union(&e1).unwrap();
-        two.set_abscissa_type(Some("T".into())).unwrap();
+        two.set_abscissa_type(Some("T".into()));
         let input = NodeField::from_sub(node_field(&poi1(1), &[0.5]));
         assert!(two.interpolate_node_field(&input, None).is_err());
     }
@@ -2149,7 +2148,7 @@ mod tests {
     fn types_round_trip_on_aggregate() {
         let mut e =
             Evolution::from_scalars(vec![(0.0, 0.0), (1.0, 1.0)], OutOfRange::Error).unwrap();
-        e.set_abscissa_type(Some("time".into())).unwrap();
+        e.set_abscissa_type(Some("time".into()));
         e.set_ordinate_type(Some("force".into())).unwrap();
         assert_eq!(e.abscissa_type().unwrap().as_deref(), Some("time"));
         assert_eq!(e.ordinate_type().unwrap().as_deref(), Some("force"));

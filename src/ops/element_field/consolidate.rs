@@ -291,7 +291,7 @@ mod tests {
 
         let c = consolidate(&two_zone(&a, &b)).unwrap();
         assert_eq!(c.len(), 1, "same support ⇒ one fused zone");
-        assert_eq!(Field::components(&c).unwrap(), vec!["E", "nu"]);
+        assert_eq!(Field::components(&c), vec!["E", "nu"]);
         let s = c.get(0).unwrap().read();
         assert_eq!(s.value(0, 0, "E").unwrap(), 210.0);
         assert_eq!(s.value(0, 0, "nu").unwrap(), 0.3);

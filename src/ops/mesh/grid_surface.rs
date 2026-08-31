@@ -158,7 +158,7 @@ use crate::ops::mesh::{contour, paving};
 /// // Cœur en grille orientée sur le contour, plus une bande frontale de
 /// // `band` rangées pour raccorder la grille au bord.
 /// let m = mesh::grid_surface(&contour, ElementType::QUA4, Some(0.5), 1, false, mesh::FrontRelax::Free)?;
-/// assert!(m.cell_count()? > 0);
+/// assert!(m.cell_count() > 0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn grid_surface(

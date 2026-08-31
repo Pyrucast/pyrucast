@@ -51,16 +51,16 @@ fn geometric_stiffness_uniaxial_stress_unit_quad() -> Result<()> {
     let tol = 1e-12;
 
     // σ · ∫(∂N_0/∂x)² = σ/3, on both the u_x and (δ_ab) the u_y diagonal block.
-    assert!((kg.get(n[0].id(), "f_x", n[0].id(), "u_x")? - SIG / 3.0).abs() < tol);
-    assert!((kg.get(n[0].id(), "f_y", n[0].id(), "u_y")? - SIG / 3.0).abs() < tol);
+    assert!((kg.get(n[0].id(), "f_x", n[0].id(), "u_x") - SIG / 3.0).abs() < tol);
+    assert!((kg.get(n[0].id(), "f_y", n[0].id(), "u_y") - SIG / 3.0).abs() < tol);
     // σ · ∫ ∂N_0/∂x ∂N_1/∂x = −σ/3.
-    assert!((kg.get(n[0].id(), "f_x", n[1].id(), "u_x")? + SIG / 3.0).abs() < tol);
+    assert!((kg.get(n[0].id(), "f_x", n[1].id(), "u_x") + SIG / 3.0).abs() < tol);
     // No cross-component coupling.
-    assert!(kg.get(n[0].id(), "f_x", n[0].id(), "u_y")?.abs() < tol);
+    assert!(kg.get(n[0].id(), "f_x", n[0].id(), "u_y").abs() < tol);
 
     // Each x-x row sums to 0 (rigid translation carries no geometric stiffness).
     let row_sum: f64 = (0..4)
-        .map(|j| kg.get(n[0].id(), "f_x", n[j].id(), "u_x").unwrap())
+        .map(|j| kg.get(n[0].id(), "f_x", n[j].id(), "u_x"))
         .sum();
     assert!(row_sum.abs() < 1e-10, "row sum = {row_sum}");
     Ok(())
@@ -85,8 +85,8 @@ fn geometric_stiffness_is_symmetric() -> Result<()> {
     let tol = 1e-12;
     for i in 0..4 {
         for j in 0..4 {
-            let a = kg.get(n[i].id(), "f_x", n[j].id(), "u_x")?;
-            let b = kg.get(n[j].id(), "f_x", n[i].id(), "u_x")?;
+            let a = kg.get(n[i].id(), "f_x", n[j].id(), "u_x");
+            let b = kg.get(n[j].id(), "f_x", n[i].id(), "u_x");
             assert!((a - b).abs() < tol, "asymmetry at ({i},{j})");
         }
     }

@@ -96,7 +96,7 @@ impl Element {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(fespace: Handle<SubFiniteElementSpace>, idx: usize) -> Result<Self> {
-        let n = fespace.read().cell_count()?;
+        let n = fespace.read().cell_count();
         if idx >= n {
             return Err(PyrucastError::Message(format!(
                 "element index {idx} out of range (cell_count={n})"
@@ -173,7 +173,7 @@ impl Element {
     /// # let el = Element::new(zone.clone(), 0).unwrap();
     /// // La maille géométrique sous-jacente — la connectivité, sans les
     /// // fonctions de forme.
-    /// assert_eq!(el.cell()?.node_ids()?.len(), 3);
+    /// assert_eq!(el.cell()?.node_ids().len(), 3);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn cell(&self) -> Result<Cell> {
@@ -224,11 +224,11 @@ impl Element {
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let el = Element::new(zone.clone(), 0).unwrap();
-    /// assert_eq!(el.space_dim()?, 2);
+    /// assert_eq!(el.space_dim(), 2);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn space_dim(&self) -> Result<usize> {
-        Ok(self.fespace.read().space_dim())
+    pub fn space_dim(&self) -> usize {
+        self.fespace.read().space_dim()
     }
 
     /// Reference dimension (= topological dim of the element type).
@@ -303,7 +303,7 @@ impl Element {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn node_ids(&self) -> Result<Vec<NodeId>> {
-        self.cell()?.node_ids()
+        Ok(self.cell()?.node_ids())
     }
 
     // ── Reference-space accessors (shared with the FE space) ────────────
@@ -499,7 +499,7 @@ impl fmt::Display for Element {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.cell() {
             Ok(cell) => {
-                let et = cell.element_type().map(|e| e.name()).unwrap_or("?");
+                let et = cell.element_type().name();
                 write!(f, "Element<{}> #{}", et, self.idx)
             }
             Err(_) => write!(f, "Element #{}", self.idx),
@@ -619,7 +619,7 @@ mod tests {
         assert_eq!(el.node_ids().unwrap(), vec![nodes[0].id(), nodes[1].id()]);
 
         let cell = el.cell().unwrap();
-        assert_eq!(cell.element_type().unwrap(), ElementType::SEG2);
+        assert_eq!(cell.element_type(), ElementType::SEG2);
 
         for g in 0..el.gauss_count() {
             // SEG2 of length 1 in 1-D → |J| = 0.5

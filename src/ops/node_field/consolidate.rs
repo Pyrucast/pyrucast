@@ -240,7 +240,7 @@ mod tests {
 
         let c = consolidate(&two_zone(&a, &b)).unwrap();
         assert_eq!(c.len(), 1, "same support ⇒ one fused zone");
-        assert_eq!(Field::components(&c).unwrap(), vec!["T", "P"]);
+        assert_eq!(Field::components(&c), vec!["T", "P"]);
         assert_eq!(c.value(n0.id(), "T").unwrap(), 5.0);
         assert_eq!(c.value(n1.id(), "P").unwrap(), 9.0);
     }

@@ -34,7 +34,7 @@ use crate::error::{PyrucastError, Result};
 /// // rejoignant le premier.
 /// let c = mesh::circle(&p(&[0.0, 0.0, 0.0]), &[0.0, 0.0, 1.0], 1.0, 8,
 ///                      ElementType::SEG2)?;
-/// assert_eq!(c.cell_count()?, 8);
+/// assert_eq!(c.cell_count(), 8);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn circle(
@@ -128,7 +128,7 @@ mod tests {
         let mesh = circle(&center, &[0.0, 0.0, 1.0], 1.0, 4, ElementType::SEG2).unwrap();
 
         assert_eq!(mesh.element_types().unwrap(), vec![ElementType::SEG2]);
-        assert_eq!(mesh.cell_count().unwrap(), 4);
+        assert_eq!(mesh.cell_count(), 4);
 
         let n0 = mesh.node(0, 0, 0).unwrap();
         assert!((n0.position().unwrap()[0] - 1.0).abs() < 1e-12);
@@ -167,7 +167,7 @@ mod tests {
         let coords = Handle::new(Coords::new(3).unwrap());
         let center = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0]).unwrap();
         let mesh = circle(&center, &[0.0, 1.0, 0.0], 2.0, 8, ElementType::SEG2).unwrap();
-        assert_eq!(mesh.cell_count().unwrap(), 8);
+        assert_eq!(mesh.cell_count(), 8);
 
         for ei in 0..8 {
             let c = mesh.node(0, ei, 0).unwrap().position().unwrap();
@@ -183,7 +183,7 @@ mod tests {
         let center = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let mesh = circle(&center, &[0.0, 0.0, 1.0], 1.0, 6, ElementType::SEG3).unwrap();
         assert_eq!(mesh.element_types().unwrap(), vec![ElementType::SEG3]);
-        assert_eq!(mesh.cell_count().unwrap(), 6);
+        assert_eq!(mesh.cell_count(), 6);
     }
 
     #[test]

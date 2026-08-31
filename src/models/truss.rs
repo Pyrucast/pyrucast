@@ -692,7 +692,7 @@ crate::physics_operator! {
     /// # b.add_cell(&[n[0].id(), n[1].id()])?;
     /// # let barres = FiniteElementSpace::lagrange1(&Mesh::from_submesh(b))?;
     /// let m = model::truss(&barres)?;
-    /// assert_eq!(m.primal_vars()?, vec!["u_x".to_string(), "u_y".to_string()]);
+    /// assert_eq!(m.primal_vars(), vec!["u_x".to_string(), "u_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn truss(fes) via SubModel::truss;

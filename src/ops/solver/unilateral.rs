@@ -1036,7 +1036,7 @@ mod tests {
             Default::default(),
         )
         .unwrap();
-        let dir_mult = dir.multiplier_nodes().unwrap()[0];
+        let dir_mult = dir.multiplier_nodes()[0];
         model.add_sub(Handle::new(dir)).unwrap();
 
         // Two loose lower bounds at nodes 1 and 2.
@@ -1054,7 +1054,7 @@ mod tests {
                 RelationSense::GreaterEqual,
             )
             .unwrap();
-            bound_mults.push(b.multiplier_nodes().unwrap()[0]);
+            bound_mults.push(b.multiplier_nodes()[0]);
             model.add_sub(Handle::new(b)).unwrap();
         }
 

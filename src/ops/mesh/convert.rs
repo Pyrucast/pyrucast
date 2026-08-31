@@ -67,7 +67,7 @@ fn split_of(src: ElementType, target: ElementType) -> Result<&'static [&'static 
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id(), n[3].id()])?;
 /// let carre = Mesh::from_submesh(sm);
 /// let tri = mesh::convert(&carre, ElementType::TRI3)?;
-/// assert_eq!(tri.cell_count()?, 2);
+/// assert_eq!(tri.cell_count(), 2);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn convert(mesh: &Mesh, target: ElementType) -> Result<Mesh> {
@@ -124,7 +124,7 @@ mod tests {
 
         let tri = convert(&m, ElementType::TRI3).unwrap();
         assert_eq!(tri.element_types().unwrap(), vec![ElementType::TRI3]);
-        assert_eq!(tri.cell_count().unwrap(), 2);
+        assert_eq!(tri.cell_count(), 2);
         // (0,1,2) and (0,2,3): corners re-used, no new node.
         assert_eq!(tri.node(0, 0, 0).unwrap().id(), n[0]);
         assert_eq!(tri.node(0, 0, 1).unwrap().id(), n[1]);
@@ -155,7 +155,7 @@ mod tests {
 
         let tets = convert(&m, ElementType::TET4).unwrap();
         assert_eq!(tets.element_types().unwrap(), vec![ElementType::TET4]);
-        assert_eq!(tets.cell_count().unwrap(), 6);
+        assert_eq!(tets.cell_count(), 6);
 
         // No node created: the coords still hold exactly the 8 corners.
         let live: usize = {
@@ -203,7 +203,7 @@ mod tests {
 
         let out = convert(&m, ElementType::TRI3).unwrap();
         assert_eq!(out.element_types().unwrap(), vec![ElementType::TRI3]);
-        assert_eq!(out.cell_count().unwrap(), 1);
+        assert_eq!(out.cell_count(), 1);
         assert_eq!(out.node(0, 0, 0).unwrap().id(), a.id());
         assert_eq!(out.node(0, 0, 1).unwrap().id(), b.id());
         assert_eq!(out.node(0, 0, 2).unwrap().id(), c.id());

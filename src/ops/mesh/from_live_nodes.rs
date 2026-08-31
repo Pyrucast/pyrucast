@@ -18,7 +18,7 @@ use crate::handle::Handle;
 /// // sortie quand on a construit de la géométrie sans maillage.
 /// let _a = p(&[0.0, 0.0, 0.0]);
 /// let _b = p(&[1.0, 0.0, 0.0]);
-/// assert_eq!(mesh::from_live_nodes(coords.clone())?.cell_count()?, 2);
+/// assert_eq!(mesh::from_live_nodes(coords.clone())?.cell_count(), 2);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn from_live_nodes(coords: Handle<Coords>) -> Result<Mesh> {
@@ -45,11 +45,11 @@ mod tests {
 
         let m = from_live_nodes(coords.clone()).unwrap();
         assert_eq!(m.element_types().unwrap(), vec![ElementType::POI1]);
-        assert_eq!(m.cell_count().unwrap(), 3);
+        assert_eq!(m.cell_count(), 3);
 
         // from_live_nodes is a snapshot: mesh m holds the refs, so a
         // second call on the same configuration yields the same result.
         let m2 = from_live_nodes(coords).unwrap();
-        assert_eq!(m2.cell_count().unwrap(), 3);
+        assert_eq!(m2.cell_count(), 3);
     }
 }

@@ -147,7 +147,7 @@ mod tests {
 
         let f = positions(&mesh, None).unwrap();
         assert_eq!(f.len(), 1);
-        assert_eq!(Field::components(&f).unwrap(), vec!["X", "Y", "Z"]);
+        assert_eq!(Field::components(&f), vec!["X", "Y", "Z"]);
         assert_eq!(f.node_count().unwrap(), 2);
         assert_eq!(f.value(a.id(), "X").unwrap(), 1.0);
         assert_eq!(f.value(a.id(), "Y").unwrap(), 2.0);
@@ -206,7 +206,7 @@ mod tests {
         mesh.add_cell(&[a.id()]).unwrap();
 
         let f = positions(&mesh, None).unwrap();
-        assert_eq!(Field::components(&f).unwrap(), vec!["X", "Y"]);
+        assert_eq!(Field::components(&f), vec!["X", "Y"]);
     }
 
     #[test]
@@ -217,7 +217,7 @@ mod tests {
         mesh.add_cell(&[a.id()]).unwrap();
 
         let f = positions(&mesh, Some(vec!["X".into(), "Z".into()])).unwrap();
-        assert_eq!(Field::components(&f).unwrap(), vec!["X", "Z"]);
+        assert_eq!(Field::components(&f), vec!["X", "Z"]);
         assert_eq!(f.value(a.id(), "X").unwrap(), 1.0);
         assert_eq!(f.value(a.id(), "Z").unwrap(), 3.0);
     }

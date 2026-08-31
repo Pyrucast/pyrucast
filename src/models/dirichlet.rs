@@ -226,7 +226,7 @@ impl Dirichlet {
         imposed_value: Option<String>,
         sense: RelationSense,
     ) -> Result<Self> {
-        if imposed_mesh.cell_count()? == 0 {
+        if imposed_mesh.cell_count() == 0 {
             return Err(PyrucastError::Message(
                 "Dirichlet: imposed_mesh must constrain at least one node".into(),
             ));
@@ -354,7 +354,7 @@ impl SubModelKind for Dirichlet {
     }
 
     fn display(&self) -> String {
-        let n = self.imposed_mesh.cell_count().unwrap_or(0);
+        let n = self.imposed_mesh.cell_count();
         format!(
             "SubModel<Dirichlet({})>: {} constrained node(s)",
             self.imposed_variable, n
@@ -362,8 +362,8 @@ impl SubModelKind for Dirichlet {
     }
 
     fn render(&self, _opts: &DumpOptions) -> String {
-        let nc = self.imposed_mesh.cell_count().unwrap_or(0);
-        let nm = self.multiplier_mesh.cell_count().unwrap_or(0);
+        let nc = self.imposed_mesh.cell_count();
+        let nm = self.multiplier_mesh.cell_count();
         format!(
             "SubModel<Dirichlet({imposed_variable})>\n  primal var(s): {multiplier} \
              (multiplier)\n  dual var(s):   {imposed_value} (imposed value)\n  \
@@ -386,7 +386,7 @@ impl Constraint for Dirichlet {
     /// Dirichlet is a single-term relation `1·u ⋈ u_d` per constrained node
     /// (`⋈` is the sub-model's sense, `=` by default).
     fn relations(&self) -> Result<Vec<Relation>> {
-        let mut relations = Vec::with_capacity(self.imposed_mesh.cell_count()?);
+        let mut relations = Vec::with_capacity(self.imposed_mesh.cell_count());
         for i in 0..self.imposed_mesh.len() {
             let imposed_nodes: Vec<NodeId> =
                 self.imposed_mesh.get(i)?.read().connectivity().to_vec();

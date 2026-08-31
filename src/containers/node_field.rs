@@ -164,7 +164,7 @@ impl SubNodeField {
 
         // The field indexes its rows by position in this support; freeze it so
         // the row order can never move under the values.
-        let support = crate::containers::mesh::seal(submesh)?;
+        let support = crate::containers::mesh::seal(submesh);
 
         let n_comp = components.len();
         Ok(SubNodeField {
@@ -538,7 +538,7 @@ impl SubNodeField {
     /// # let poi1 = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut u = SubNodeField::from_poi1(&poi1, vec!["UX".into(), "UY".into()]).unwrap();
     /// // Le support vu comme agrégat — la cible de projection d'un autre champ.
-    /// assert_eq!(u.support_mesh().unwrap().cell_count().unwrap(), 2);
+    /// assert_eq!(u.support_mesh().unwrap().cell_count(), 2);
     /// ```
     pub fn support_mesh(&self) -> Result<Mesh> {
         let sm_handle = Handle::new(self.support_submesh()?);
@@ -848,7 +848,7 @@ crate::impl_subfield_field_ops!(SubNodeField);
 /// assert_eq!(f.len(), 1);
 /// assert_eq!(f.node_count()?, 3);
 /// # use pyrucast::containers::field::Field;
-/// assert_eq!(f.components()?, vec!["T".to_string()]);
+/// assert_eq!(f.components(), vec!["T".to_string()]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Serialize, Deserialize, Default)]
@@ -958,7 +958,7 @@ impl NodeField {
     ///     .union(&mesh::poi1_from_nodes(&[b.clone()]).unwrap()).unwrap();
     /// # use pyrucast::containers::field::Field;
     /// let f = NodeField::with(&deux, &[vec!["T".into()], vec!["UX".into()]]).unwrap();
-    /// assert_eq!(f.components().unwrap(), vec!["T".to_string(), "UX".to_string()]);
+    /// assert_eq!(f.components(), vec!["T".to_string(), "UX".to_string()]);
     /// ```
     pub fn with(mesh: &Mesh, components_per_submesh: &[Vec<String>]) -> Result<Self> {
         if mesh.is_empty() {
@@ -1074,7 +1074,7 @@ impl NodeField {
     /// assert_eq!(u.value(b.id(), "T").unwrap(), 0.0);
     /// ```
     pub fn value(&self, nid: NodeId, component: &str) -> Result<f64> {
-        self.value_opt(nid, component)?.ok_or_else(|| {
+        self.value_opt(nid, component).ok_or_else(|| {
             PyrucastError::Message(format!(
                 "no subfield defines (node {}, component {})",
                 nid, component
@@ -1098,17 +1098,17 @@ impl NodeField {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap();
     /// let u = NodeField::new(&support, vec!["T".into()]).unwrap();
     /// // La variante qui distingue « absent du support » de « vaut zéro ».
-    /// assert_eq!(u.value_opt(a.id(), "T").unwrap(), Some(0.0));
+    /// assert_eq!(u.value_opt(a.id(), "T"), Some(0.0));
     /// let ailleurs = Node::create_in(coords.clone(), &[9.0, 9.0]).unwrap();
-    /// assert_eq!(u.value_opt(ailleurs.id(), "T").unwrap(), None);
+    /// assert_eq!(u.value_opt(ailleurs.id(), "T"), None);
     /// ```
-    pub fn value_opt(&self, nid: NodeId, component: &str) -> Result<Option<f64>> {
+    pub fn value_opt(&self, nid: NodeId, component: &str) -> Option<f64> {
         for h in self {
             if let Some(v) = h.read().component_value_opt(nid, component) {
-                return Ok(Some(v));
+                return Some(v);
             }
         }
-        Ok(None)
+        None
     }
 
     /// Values at `nodes` for the named `component`, returned in the **same
@@ -1155,9 +1155,9 @@ impl NodeField {
     /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap();
     /// let u = NodeField::new(&support, vec!["T".into()]).unwrap();
-    /// assert_eq!(u.node_ids().unwrap(), vec![a.id(), b.id()]);
+    /// assert_eq!(u.node_ids(), vec![a.id(), b.id()]);
     /// ```
-    pub fn node_ids(&self) -> Result<Vec<NodeId>> {
+    pub fn node_ids(&self) -> Vec<NodeId> {
         let mut out: Vec<NodeId> = Vec::new();
         for h in self {
             let s = h.read();
@@ -1169,7 +1169,7 @@ impl NodeField {
                 }
             }
         }
-        Ok(out)
+        out
     }
 
     /// Number of distinct nodes across the subs.
@@ -1189,7 +1189,7 @@ impl NodeField {
     /// assert_eq!(u.node_count().unwrap(), 2); // nœuds **distincts**, zones confondues
     /// ```
     pub fn node_count(&self) -> Result<usize> {
-        Ok(self.node_ids()?.len())
+        Ok(self.node_ids().len())
     }
 
     /// Visualize this field alone, as a **coloured point cloud** over
@@ -1200,7 +1200,7 @@ impl NodeField {
     #[cfg(feature = "viz")]
     pub fn plot(
         &self,
-        view: Option<crate::viz::View>,
+        view: crate::viz::View,
         save: Option<&std::path::Path>,
         component: Option<&str>,
         scale: crate::viz::ColorScale,
@@ -1947,11 +1947,11 @@ mod tests {
         let f =
             NodeField::with(&mesh, &[vec!["T".into()], vec!["UX".into(), "UY".into()]]).unwrap();
         use crate::containers::field::Field;
-        assert_eq!(Field::components(&f).unwrap(), vec!["T", "UX", "UY"]);
+        assert_eq!(Field::components(&f), vec!["T", "UX", "UY"]);
         // T exists on zone 0 only: defined at n0, absent at n3.
         assert_eq!(f.value(nodes[0].id(), "T").unwrap(), 0.0);
         assert!(f.value(nodes[3].id(), "T").is_err());
-        assert_eq!(f.value_opt(nodes[3].id(), "T").unwrap(), None);
+        assert_eq!(f.value_opt(nodes[3].id(), "T"), None);
     }
 
     #[test]

@@ -207,12 +207,12 @@ const DEGENERATE_SHAPE: f64 = 1e-4;
 /// #         c.add_cell(&base.iter().map(|n| n.id()).collect::<Vec<_>>()).unwrap();
 /// #         c
 /// #     }), &[0.0, 0.0, 1.0]).unwrap(), 1).unwrap();
-/// # let enveloppe = mesh::convert(&mesh::skin(&cube, None).unwrap(),
+/// # let enveloppe = mesh::convert(&mesh::skin(&cube, mesh::skin::DEFAULT_ANGLE_DEG).unwrap(),
 /// #                               ElementType::TRI3).unwrap();
 /// // Delaunay sous contrainte d'enveloppe : la peau est **gelée**, et le
 /// // volume rempli de tétraèdres.
 /// let v = mesh::triangulate_volume(&enveloppe, Some(0.5), false)?;
-/// assert!(v.cell_count()? > 0);
+/// assert!(v.cell_count() > 0);
 /// assert_eq!(v.element_types()?, vec![ElementType::TET4]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -244,7 +244,7 @@ pub fn triangulate_volume(
 /// #         c.add_cell(&base.iter().map(|n| n.id()).collect::<Vec<_>>()).unwrap();
 /// #         c
 /// #     }), &[0.0, 0.0, 1.0]).unwrap(), 1).unwrap();
-/// # let enveloppe = mesh::convert(&mesh::skin(&cube, None).unwrap(),
+/// # let enveloppe = mesh::convert(&mesh::skin(&cube, mesh::skin::DEFAULT_ANGLE_DEG).unwrap(),
 /// #                               ElementType::TRI3).unwrap();
 /// # use std::sync::atomic::{AtomicBool, Ordering};
 /// // Le jeton est sondé aux points de contrôle du mailleur : armé d'avance,
@@ -711,7 +711,7 @@ mod tests {
         let mesh = triangulate_volume(&surface(&coords, &nodes, &BOX_FACETS), None, false).unwrap();
 
         assert_eq!(mesh.element_types().unwrap(), vec![ElementType::TET4]);
-        assert!(mesh.cell_count().unwrap() >= 5);
+        assert!(mesh.cell_count() >= 5);
         let v = volume_of(&mesh);
         assert!((v - 1.0).abs() < 1e-12, "volume {v}");
     }
@@ -725,7 +725,7 @@ mod tests {
 
         // Every corner the caller gave is still there, with its own identity.
         let mut used: Vec<NodeId> = Vec::new();
-        for ci in 0..mesh.cell_count().unwrap() {
+        for ci in 0..mesh.cell_count() {
             for k in 0..4 {
                 let id = mesh.node(0, ci, k).unwrap().id();
                 if !used.contains(&id) {
@@ -740,8 +740,8 @@ mod tests {
 
         // Refinement adds nodes, but strictly *inside*: peeling the result
         // gives back the twelve facets that came in, no more.
-        let peeled = super::super::skin(&mesh, None).unwrap();
-        assert_eq!(peeled.cell_count().unwrap(), 12);
+        let peeled = super::super::skin(&mesh, crate::ops::mesh::skin::DEFAULT_ANGLE_DEG).unwrap();
+        assert_eq!(peeled.cell_count(), 12);
     }
 
     #[test]
@@ -753,8 +753,8 @@ mod tests {
 
         // `skin` peels the boundary independently; it must find the same
         // twelve triangles.
-        let peeled = super::super::skin(&mesh, None).unwrap();
-        assert_eq!(peeled.cell_count().unwrap(), 12);
+        let peeled = super::super::skin(&mesh, crate::ops::mesh::skin::DEFAULT_ANGLE_DEG).unwrap();
+        assert_eq!(peeled.cell_count(), 12);
     }
 
     #[test]
@@ -804,7 +804,7 @@ mod tests {
         .collect();
         let facets = [[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]];
         let mesh = triangulate_volume(&surface(&coords, &n, &facets), None, false).unwrap();
-        assert_eq!(mesh.cell_count().unwrap(), 1);
+        assert_eq!(mesh.cell_count(), 1);
         assert!((volume_of(&mesh) - 1.0 / 6.0).abs() < 1e-15);
     }
 
@@ -1012,7 +1012,7 @@ mod tests {
         let plate =
             super::super::triangulate_surface(&contour, ElementType::TRI3, Some(size)).unwrap();
         let solid = super::super::extrude(&plate, &[0.0, 0.4, 0.0], 1).unwrap();
-        let skin = super::super::skin(&solid, None).unwrap();
+        let skin = super::super::skin(&solid, crate::ops::mesh::skin::DEFAULT_ANGLE_DEG).unwrap();
         let skin = super::super::convert(&skin, ElementType::TRI3).unwrap();
         super::super::invert(&skin).unwrap()
     }
@@ -1108,10 +1108,10 @@ mod tests {
 
         // Nodes were added — refinement fills the inside — but none of them
         // on the envelope, which is what the strict contract is about.
-        let peeled = super::super::skin(&mesh, None).unwrap();
+        let peeled = super::super::skin(&mesh, crate::ops::mesh::skin::DEFAULT_ANGLE_DEG).unwrap();
         assert_eq!(
-            peeled.cell_count().unwrap(),
-            envelope.cell_count().unwrap(),
+            peeled.cell_count(),
+            envelope.cell_count(),
             "the skin is the envelope, facet for facet"
         );
     }
@@ -1142,7 +1142,7 @@ mod tests {
                 .sum::<f64>()
                 .sqrt()
         };
-        let peeled = super::super::skin(&mesh, None).unwrap();
+        let peeled = super::super::skin(&mesh, crate::ops::mesh::skin::DEFAULT_ANGLE_DEG).unwrap();
         let mut checked = 0;
         for (si, &n) in peeled.cell_counts().unwrap().iter().enumerate() {
             for ci in 0..n {

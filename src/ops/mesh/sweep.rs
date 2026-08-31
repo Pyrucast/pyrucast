@@ -38,7 +38,7 @@ use crate::handle::Handle;
 /// let a = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[1.0, 0.0, 0.0]), 2, ElementType::SEG2)?;
 /// let b = mesh::line(&p(&[0.0, 1.0, 0.0]), &p(&[2.0, 1.0, 0.0]), 2, ElementType::SEG2)?;
 /// let s = mesh::sweep(&a, &b, 1, ElementType::QUA4)?;
-/// assert_eq!(s.cell_count()?, 2);
+/// assert_eq!(s.cell_count(), 2);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn sweep(
@@ -169,7 +169,7 @@ mod tests {
 
         let qua = sweep(&mesh_a, &mesh_b, 2, ElementType::QUA4).unwrap();
         assert_eq!(qua.element_types().unwrap(), vec![ElementType::QUA4]);
-        assert_eq!(qua.cell_count().unwrap(), 4);
+        assert_eq!(qua.cell_count(), 4);
 
         let n00 = qua.node(0, 0, 0).unwrap();
         assert_eq!(n00.position().unwrap(), vec![0.0, 0.0]);
@@ -193,7 +193,7 @@ mod tests {
         let mesh_b = line(&b0, &b1, 1, ElementType::SEG2).unwrap();
 
         let qua = sweep(&mesh_a, &mesh_b, 1, ElementType::QUA4).unwrap();
-        assert_eq!(qua.cell_count().unwrap(), 1);
+        assert_eq!(qua.cell_count(), 1);
 
         assert_eq!(qua.node(0, 0, 0).unwrap().id(), a0.id());
         assert_eq!(qua.node(0, 0, 1).unwrap().id(), a1.id());
@@ -259,7 +259,7 @@ mod tests {
         let tri = sweep(&mesh_a, &mesh_b, 2, ElementType::TRI3).unwrap();
         assert_eq!(tri.element_types().unwrap(), vec![ElementType::TRI3]);
         // 4 QUA4 cells → 8 TRI3 cells.
-        assert_eq!(tri.cell_count().unwrap(), 8);
+        assert_eq!(tri.cell_count(), 8);
     }
 
     #[test]
@@ -275,7 +275,7 @@ mod tests {
 
         let qua8 = sweep(&mesh_a, &mesh_b, 1, ElementType::QUA8).unwrap();
         assert_eq!(qua8.element_types().unwrap(), vec![ElementType::QUA8]);
-        assert_eq!(qua8.cell_count().unwrap(), 1);
+        assert_eq!(qua8.cell_count(), 1);
     }
 
     #[test]
@@ -291,7 +291,7 @@ mod tests {
 
         let qua9 = sweep(&mesh_a, &mesh_b, 1, ElementType::QUA9).unwrap();
         assert_eq!(qua9.element_types().unwrap(), vec![ElementType::QUA9]);
-        assert_eq!(qua9.cell_count().unwrap(), 1);
+        assert_eq!(qua9.cell_count(), 1);
 
         let center = qua9.node(0, 0, 8).unwrap();
         assert_eq!(center.position().unwrap(), vec![1.0, 1.0]);
@@ -310,6 +310,6 @@ mod tests {
 
         let tri6 = sweep(&mesh_a, &mesh_b, 1, ElementType::TRI6).unwrap();
         assert_eq!(tri6.element_types().unwrap(), vec![ElementType::TRI6]);
-        assert_eq!(tri6.cell_count().unwrap(), 2);
+        assert_eq!(tri6.cell_count(), 2);
     }
 }

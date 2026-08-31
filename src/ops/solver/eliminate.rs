@@ -342,7 +342,7 @@ fn solve_inner(
     cancel.check()?;
 
     // No constraint ⇒ elimination is a no-op; solve the matrix as-is.
-    if !has_constraint(model)? {
+    if !has_constraint(model) {
         return lu::solve_cancellable_with_options(matrix, rhs, options, cancel);
     }
 
@@ -421,13 +421,13 @@ fn solve_inner(
 }
 
 /// Whether `model` carries at least one constraint sub-model.
-fn has_constraint(model: &Model) -> Result<bool> {
+fn has_constraint(model: &Model) -> bool {
     for h in model {
         if h.read().as_kind().as_constraint().is_some() {
-            return Ok(true);
+            return true;
         }
     }
-    Ok(false)
+    false
 }
 
 /// Build the [`Condensation`]: partition physics vs multiplier DOFs, extract the

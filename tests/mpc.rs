@@ -79,11 +79,11 @@ fn mpc_difference_relation_recovers_linear_solution() -> Result<()> {
         None,
         Default::default(),
     )?;
-    let dir_mult = dir.multiplier_nodes()?[0];
+    let dir_mult = dir.multiplier_nodes()[0];
     model.add_sub(Handle::new(dir))?;
 
     // MPC: T(node4) − T(node0) = 1. `dual_of` finds "q" for us.
-    let dual = model.dual_of("T")?.expect("heat conduction declares T");
+    let dual = model.dual_of("T").expect("heat conduction declares T");
     assert_eq!(dual, "q");
     let mesh_last = poi1(&nodes[N_ELEMS])?;
     let mesh_first = poi1(&nodes[0])?;
@@ -93,7 +93,7 @@ fn mpc_difference_relation_recovers_linear_solution() -> Result<()> {
         MpcTerm::new(&mesh_first, "T".into(), dual, -1.0)?,
     ];
     let mpc = SubModel::mpc(terms, &mult_mpc_mesh, None, None, Default::default())?;
-    let mpc_mult = mpc.multiplier_nodes()?[0];
+    let mpc_mult = mpc.multiplier_nodes()[0];
     model.add_sub(Handle::new(mpc))?;
 
     // RHS: imposed_T = 0 at the Dirichlet multiplier, mpc_rhs = 1 (g) at the MPC one.
@@ -153,7 +153,7 @@ fn single_term_mpc_matches_dirichlet() -> Result<()> {
             None,
             Default::default(),
         )?;
-        let (nl, nr) = (dl.multiplier_nodes()?[0], dr.multiplier_nodes()?[0]);
+        let (nl, nr) = (dl.multiplier_nodes()[0], dr.multiplier_nodes()[0]);
         model.add_sub(Handle::new(dl))?;
         model.add_sub(Handle::new(dr))?;
         let mut sm = SubMesh::new(coords, ElementType::POI1);
@@ -181,14 +181,14 @@ fn single_term_mpc_matches_dirichlet() -> Result<()> {
             None,
             Default::default(),
         )?;
-        let nl = dl.multiplier_nodes()?[0];
+        let nl = dl.multiplier_nodes()[0];
         model.add_sub(Handle::new(dl))?;
 
         let right = poi1(&nodes[N_ELEMS])?;
         let mult_mpc = barycenter(&right)?;
         let terms = vec![MpcTerm::new(&right, "T".into(), "q".into(), 1.0)?];
         let mpc = SubModel::mpc(terms, &mult_mpc, None, None, Default::default())?;
-        let nm = mpc.multiplier_nodes()?[0];
+        let nm = mpc.multiplier_nodes()[0];
         model.add_sub(Handle::new(mpc))?;
 
         let mut sm = SubMesh::new(coords, ElementType::POI1);
@@ -240,11 +240,11 @@ fn mpc_elimination_matches_lagrange() -> Result<()> {
         None,
         Default::default(),
     )?;
-    let dir_mult = dir.multiplier_nodes()?[0];
+    let dir_mult = dir.multiplier_nodes()[0];
     model.add_sub(Handle::new(dir))?;
 
     // MPC: 2·T(node4) − 1·T(node2) = 1.5 (slave = node4, master = node2).
-    let dual = model.dual_of("T")?.expect("heat conduction declares T");
+    let dual = model.dual_of("T").expect("heat conduction declares T");
     let mesh4 = poi1(&nodes[N_ELEMS])?;
     let mesh2 = poi1(&nodes[N_ELEMS / 2])?;
     let mult_mpc_mesh = barycenter(&mesh4)?;
@@ -253,7 +253,7 @@ fn mpc_elimination_matches_lagrange() -> Result<()> {
         MpcTerm::new(&mesh2, "T".into(), dual, -1.0)?,
     ];
     let mpc = SubModel::mpc(terms, &mult_mpc_mesh, None, None, Default::default())?;
-    let mpc_mult = mpc.multiplier_nodes()?[0];
+    let mpc_mult = mpc.multiplier_nodes()[0];
     model.add_sub(Handle::new(mpc))?;
 
     // RHS: imposed_T = 0, mpc_rhs = 1.5 (= 2·1 − 1·0.5).
@@ -321,7 +321,7 @@ fn single_term_mpc_elimination_equals_dirichlet() -> Result<()> {
             None,
             Default::default(),
         )?;
-        let (nl, nr) = (dl.multiplier_nodes()?[0], dr.multiplier_nodes()?[0]);
+        let (nl, nr) = (dl.multiplier_nodes()[0], dr.multiplier_nodes()[0]);
         model.add_sub(Handle::new(dl))?;
         model.add_sub(Handle::new(dr))?;
         let mut sm = SubMesh::new(coords, ElementType::POI1);
@@ -349,14 +349,14 @@ fn single_term_mpc_elimination_equals_dirichlet() -> Result<()> {
             None,
             Default::default(),
         )?;
-        let nl = dl.multiplier_nodes()?[0];
+        let nl = dl.multiplier_nodes()[0];
         model.add_sub(Handle::new(dl))?;
 
         let right = poi1(&nodes[N_ELEMS])?;
         let mult_mpc = barycenter(&right)?;
         let terms = vec![MpcTerm::new(&right, "T".into(), "q".into(), 1.0)?];
         let mpc = SubModel::mpc(terms, &mult_mpc, None, None, Default::default())?;
-        let nm = mpc.multiplier_nodes()?[0];
+        let nm = mpc.multiplier_nodes()[0];
         model.add_sub(Handle::new(mpc))?;
 
         let mut sm = SubMesh::new(coords, ElementType::POI1);
@@ -414,7 +414,7 @@ fn elimination_recovers_reaction_equals_multiplier() -> Result<()> {
         None,
         Default::default(),
     )?;
-    let (nl, nr) = (dl.multiplier_nodes()?[0], dr.multiplier_nodes()?[0]);
+    let (nl, nr) = (dl.multiplier_nodes()[0], dr.multiplier_nodes()[0]);
     model.add_sub(Handle::new(dl))?;
     model.add_sub(Handle::new(dr))?;
 
@@ -471,11 +471,11 @@ fn elimination_periodicity_constant_field() -> Result<()> {
         None,
         Default::default(),
     )?;
-    let dir_mult = dir.multiplier_nodes()?[0];
+    let dir_mult = dir.multiplier_nodes()[0];
     model.add_sub(Handle::new(dir))?;
 
     // Periodicity T(node4) − T(node0) = 0.
-    let dual = model.dual_of("T")?.expect("heat conduction declares T");
+    let dual = model.dual_of("T").expect("heat conduction declares T");
     let mesh4 = poi1(&nodes[N_ELEMS])?;
     let mesh0 = poi1(&nodes[0])?;
     let mult_mpc_mesh = barycenter(&mesh4)?;
@@ -484,7 +484,7 @@ fn elimination_periodicity_constant_field() -> Result<()> {
         MpcTerm::new(&mesh0, "T".into(), dual, -1.0)?,
     ];
     let mpc = SubModel::mpc(terms, &mult_mpc_mesh, None, None, Default::default())?;
-    let mpc_mult = mpc.multiplier_nodes()?[0];
+    let mpc_mult = mpc.multiplier_nodes()[0];
     model.add_sub(Handle::new(mpc))?;
 
     // RHS: imposed_T = 0.5 at the anchor, mpc_rhs = 0.
@@ -528,7 +528,7 @@ fn elimination_rejects_chaining() -> Result<()> {
         None,
         Default::default(),
     )?;
-    let dir_mult = dir.multiplier_nodes()?[0];
+    let dir_mult = dir.multiplier_nodes()[0];
     model.add_sub(Handle::new(dir))?;
 
     // A single-term MPC on the *same* node0 — its only DOF is already a slave.
@@ -536,7 +536,7 @@ fn elimination_rejects_chaining() -> Result<()> {
     let mult_mpc_mesh = barycenter(&mesh0)?;
     let terms = vec![MpcTerm::new(&mesh0, "T".into(), "q".into(), 1.0)?];
     let mpc = SubModel::mpc(terms, &mult_mpc_mesh, None, None, Default::default())?;
-    let mpc_mult = mpc.multiplier_nodes()?[0];
+    let mpc_mult = mpc.multiplier_nodes()[0];
     model.add_sub(Handle::new(mpc))?;
 
     let mut rhs_sm = SubMesh::new(coords, ElementType::POI1);
@@ -563,7 +563,7 @@ fn elimination_rejects_zero_coefficient() -> Result<()> {
     let mult_mpc_mesh = barycenter(&mesh4)?;
     let terms = vec![MpcTerm::new(&mesh4, "T".into(), "q".into(), 0.0)?];
     let mpc = SubModel::mpc(terms, &mult_mpc_mesh, None, None, Default::default())?;
-    let mpc_mult = mpc.multiplier_nodes()?[0];
+    let mpc_mult = mpc.multiplier_nodes()[0];
     model.add_sub(Handle::new(mpc))?;
 
     let mut rhs_sm = SubMesh::new(coords, ElementType::POI1);
@@ -594,14 +594,14 @@ fn elimination_condensation_cached_then_invalidated() -> Result<()> {
         None,
         Default::default(),
     )?;
-    let nl = dl.multiplier_nodes()?[0];
+    let nl = dl.multiplier_nodes()[0];
     model.add_sub(Handle::new(dl))?;
 
     let right = poi1(&nodes[N_ELEMS])?;
     let mult_mpc = barycenter(&right)?;
     let terms = vec![MpcTerm::new(&right, "T".into(), "q".into(), 1.0)?];
     let mpc = SubModel::mpc(terms, &mult_mpc, None, None, Default::default())?;
-    let nm = mpc.multiplier_nodes()?[0];
+    let nm = mpc.multiplier_nodes()[0];
     model.add_sub(Handle::new(mpc))?;
 
     let mut sm = SubMesh::new(coords, ElementType::POI1);

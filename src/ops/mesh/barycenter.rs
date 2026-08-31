@@ -40,7 +40,7 @@ use crate::handle::Handle;
 /// // zone — autant de mailles POI1 que d'éléments en entrée.
 /// let l = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[2.0, 0.0, 0.0]), 2, ElementType::SEG2)?;
 /// let g = mesh::barycenter(&l)?;
-/// assert_eq!(g.cell_count()?, 2);
+/// assert_eq!(g.cell_count(), 2);
 /// assert_eq!(g.node(0, 0, 0)?.position()?, vec![0.5, 0.0, 0.0]);
 ///
 /// // Sur une entrée POI1, le centroïde d'un point est le point : c'est la
@@ -116,7 +116,7 @@ mod tests {
         let bary = barycenter(&mesh).unwrap();
         assert_eq!(bary.len(), 1);
         assert_eq!(bary.element_types().unwrap(), vec![ElementType::POI1]);
-        assert_eq!(bary.cell_count().unwrap(), 2);
+        assert_eq!(bary.cell_count(), 2);
 
         let m0 = bary.node(0, 0, 0).unwrap();
         let m1 = bary.node(0, 1, 0).unwrap();
@@ -139,7 +139,7 @@ mod tests {
         mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
 
         let bary = barycenter(&mesh).unwrap();
-        assert_eq!(bary.cell_count().unwrap(), 1);
+        assert_eq!(bary.cell_count(), 1);
         let centroid = bary.node(0, 0, 0).unwrap();
         let cf = coords.read();
         assert_eq!(cf.position(centroid.id()).unwrap(), &[1.0, 1.0]);

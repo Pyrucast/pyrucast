@@ -175,12 +175,12 @@ fn triangulate_surface_from_circle_contour() -> Result<()> {
     let circle = pyrucast::ops::mesh::circle(&center, &[0.0, 0.0, 1.0], 1.0, 8, ElementType::SEG2)?;
     let tri = pyrucast::ops::mesh::triangulate_surface(&circle, ElementType::TRI3, Some(0.25))?;
     assert_eq!(tri.element_types()?, vec![ElementType::TRI3]);
-    assert!(tri.cell_count()? > 6, "expected interior nodes to be added");
+    assert!(tri.cell_count() > 6, "expected interior nodes to be added");
 
     // Sum of signed triangle areas equals the inscribed octagon's area
     // (= 8 · 0.5 · r² · sin(2π/8) = 2√2 ≈ 2.8284), whatever the refinement.
     let mut total = 0.0;
-    for ci in 0..tri.cell_count()? {
+    for ci in 0..tri.cell_count() {
         let p0 = tri.node(0, ci, 0)?.position()?;
         let p1 = tri.node(0, ci, 1)?.position()?;
         let p2 = tri.node(0, ci, 2)?.position()?;
@@ -226,7 +226,7 @@ fn mesh_composed_of_multiple_submeshes() -> Result<()> {
     };
 
     assert_eq!(mesh.len(), 2);
-    let total = mesh.cell_count()?;
+    let total = mesh.cell_count();
     assert_eq!(total, 4); // 3 points + 1 triangle
     Ok(())
 }

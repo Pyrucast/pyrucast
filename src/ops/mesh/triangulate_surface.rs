@@ -72,7 +72,7 @@ const MIN_ANGLE_DEG: f64 = 20.0;
 /// // Le mailleur par triangulation contrainte : le contour est **respecté
 /// // à l'arête près**, et la taille cible pilote le raffinement.
 /// let m = mesh::triangulate_surface(&contour, ElementType::TRI3, Some(0.5))?;
-/// assert!(m.cell_count()? > 0);
+/// assert!(m.cell_count() > 0);
 /// assert_eq!(m.element_types()?, vec![ElementType::TRI3]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -1923,7 +1923,7 @@ mod tests {
         let contour = discretized_square(coords, 1.0, 8);
         let mesh = triangulate_surface(&contour, ElementType::TRI3, Some(0.15)).unwrap();
         assert_eq!(mesh.element_types().unwrap(), vec![ElementType::TRI3]);
-        assert!(mesh.cell_count().unwrap() > 20);
+        assert!(mesh.cell_count() > 20);
         assert!(
             (mesh_area(&mesh) - 1.0).abs() < 1e-9,
             "area drift: {}",
@@ -1937,7 +1937,7 @@ mod tests {
         let coords = Handle::new(Coords::new(2).unwrap());
         let contour = square(coords, 1.0);
         let mesh = triangulate_surface(&contour, ElementType::TRI3, Some(10.0)).unwrap();
-        assert!(mesh.cell_count().unwrap() >= 2);
+        assert!(mesh.cell_count() >= 2);
         assert!((mesh_area(&mesh) - 1.0).abs() < 1e-9);
     }
 
@@ -2090,7 +2090,7 @@ mod tests {
         }
         let contour = Mesh::from_submesh(sm);
         let mesh = triangulate_surface(&contour, ElementType::TRI3, Some(0.3)).unwrap();
-        assert!(mesh.cell_count().unwrap() > 0);
+        assert!(mesh.cell_count() > 0);
     }
 
     #[test]
@@ -2129,7 +2129,7 @@ mod tests {
         let start = std::time::Instant::now();
         let mesh = triangulate_surface(&contour, ElementType::TRI3, Some(7.8e-4)).unwrap();
         let elapsed = start.elapsed();
-        let n_cells = mesh.cell_count().unwrap();
+        let n_cells = mesh.cell_count();
         println!("perf: {} TRI3 cells in {:?}", n_cells, elapsed);
         assert!(n_cells > 80_000, "only {} cells", n_cells);
         assert!(elapsed.as_secs_f64() < 30.0, "took {:?}", elapsed);

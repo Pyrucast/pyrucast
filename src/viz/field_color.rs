@@ -187,7 +187,7 @@ impl FieldData {
         match self {
             FieldData::Node(v) => Ok(SubmeshFieldCtx::Node(v)),
             FieldData::Element(v) => {
-                let zone = v.zone_for_submesh(sm)?.ok_or_else(|| {
+                let zone = v.zone_for_submesh(sm).ok_or_else(|| {
                     PyrucastError::Message(format!(
                         "no ElementField zone lives on {sm} — the field's \
                          FE space does not cover this (sub)mesh"

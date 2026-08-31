@@ -43,7 +43,7 @@ use crate::error::Result;
 /// let m = model::embedded(
 ///     &immergee, &maillage,
 ///     vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
-///     None, None, None)?;
+///     None, None, pyrucast::models::embedded::DEFAULT_TOL)?;
 /// assert_eq!(m.len(), 1);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -54,7 +54,7 @@ pub fn embedded(
     components: Vec<(String, String)>,
     multipliers: Option<Vec<String>>,
     imposed_values: Option<Vec<String>>,
-    tol: Option<f64>,
+    tol: f64,
 ) -> Result<Model> {
     single(SubModel::embedded(
         immersed,

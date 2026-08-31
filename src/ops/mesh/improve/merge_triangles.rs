@@ -120,7 +120,7 @@ impl Cell {
 /// # let support = mesh::poi1_from_nodes(&n).unwrap();
 /// // Apparie les triangles en quadrangles quand la paire est de qualité.
 /// // Un triangle isolé n'a personne avec qui s'apparier.
-/// assert_eq!(mesh::merge_triangles(&maillage)?.cell_count()?, 1);
+/// assert_eq!(mesh::merge_triangles(&maillage)?.cell_count(), 1);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn merge_triangles(mesh: &Mesh) -> Result<Mesh> {

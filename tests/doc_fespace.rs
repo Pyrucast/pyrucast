@@ -70,7 +70,7 @@ fn evaluer_les_grandeurs_sur_une_cellule() -> Result<()> {
     let sub = fes.get(0)?;
 
     let s = sub.read();
-    for cell_idx in 0..s.cell_count()? {
+    for cell_idx in 0..s.cell_count() {
         for g in 0..s.gauss_count() {
             let n = s.n_at_g(g)?; // N_i(ξ_g)
             let dn = s.dn_at_g(g)?; // ∂N_i/∂ξ_k(ξ_g)

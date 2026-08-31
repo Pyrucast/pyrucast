@@ -1031,7 +1031,7 @@ impl SubModel {
     /// // dans la composante `imposed_T`.
     /// let m = SubModel::dirichlet(
     ///     "T".into(), "q".into(), &impose, &mult, None, None, RelationSense::Equality)?;
-    /// assert_eq!(m.multiplier_nodes()?.len(), 1);
+    /// assert_eq!(m.multiplier_nodes().len(), 1);
     /// assert_eq!(m.physics(), &[Physics::Constraint]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -1099,7 +1099,7 @@ impl SubModel {
     ///     vec![MpcTerm::new(&a, "T".into(), "q".into(), 1.0)?,
     ///          MpcTerm::new(&b, "T".into(), "q".into(), -1.0)?],
     ///     &mult, None, None, RelationSense::Equality)?;
-    /// assert_eq!(m.multiplier_nodes()?.len(), 1); // un λ par relation
+    /// assert_eq!(m.multiplier_nodes().len(), 1); // un λ par relation
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn mpc(
@@ -1162,7 +1162,7 @@ impl SubModel {
     /// let m = SubModel::embedded(
     ///     &immergee, &maillage,
     ///     vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
-    ///     None, None, None)?;
+    ///     None, None, pyrucast::models::embedded::DEFAULT_TOL)?;
     /// assert_eq!(m.physics(), &[Physics::Constraint]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -1173,7 +1173,7 @@ impl SubModel {
         components: Vec<(String, String)>,
         multipliers: Option<Vec<String>>,
         imposed_values: Option<Vec<String>>,
-        tol: Option<f64>,
+        tol: f64,
     ) -> Result<Self> {
         Ok(SubModel::Embedded(embedded::Embedded::new(
             immersed,
@@ -1230,7 +1230,7 @@ impl SubModel {
     ///     &slave, &master,
     ///     vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
     ///     None, None)?;
-    /// assert_eq!(m.multiplier_nodes()?.len(), 1);
+    /// assert_eq!(m.multiplier_nodes().len(), 1);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn contact(
@@ -1320,19 +1320,19 @@ impl SubModel {
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// let d = SubModel::dirichlet(
     ///     "T".into(), "q".into(), &impose, &mult, None, None, RelationSense::Equality)?;
-    /// assert_eq!(d.multiplier_nodes()?.len(), 1);
+    /// assert_eq!(d.multiplier_nodes().len(), 1);
     /// // Vide pour une physique volumique : elle n'introduit pas de multiplicateur.
-    /// assert!(SubModel::heat_conduction(zone.clone())?.multiplier_nodes()?.is_empty());
+    /// assert!(SubModel::heat_conduction(zone.clone())?.multiplier_nodes().is_empty());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn multiplier_nodes(&self) -> Result<Vec<NodeId>> {
+    pub fn multiplier_nodes(&self) -> Vec<NodeId> {
         let mut out = Vec::new();
         if let Some(constraint) = self.as_kind().as_constraint() {
             for sm in constraint.multiplier_mesh() {
                 out.extend(sm.read().connectivity().iter().copied());
             }
         }
-        Ok(out)
+        out
     }
 
     /// POI1 [`Mesh`] of the multiplier nodes (shares the multiplier submeshes
@@ -2210,17 +2210,17 @@ impl Model {
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// let m = model::elasticity(&fes, Kinematics::PlaneStress)?;
     /// // Le dual conjugué, cherché sur l'ensemble des sous-modèles.
-    /// assert_eq!(m.dual_of("u_y")?, Some("f_y".into()));
-    /// assert_eq!(m.dual_of("T")?, None);
+    /// assert_eq!(m.dual_of("u_y"), Some("f_y".into()));
+    /// assert_eq!(m.dual_of("T"), None);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn dual_of(&self, variable: &str) -> Result<Option<String>> {
+    pub fn dual_of(&self, variable: &str) -> Option<String> {
         for h in self {
             if let Some(dual) = h.read().dual_of(variable) {
-                return Ok(Some(dual));
+                return Some(dual);
             }
         }
-        Ok(None)
+        None
     }
 
     /// Build the constraint load (right-hand side) from `(constrained_node, g)`
@@ -2357,16 +2357,16 @@ impl Model {
     /// // L'union des primales de tous les sous-modèles, dédupliquée.
     /// let m = model::heat_conduction(&fes)?
     ///     .union(&model::elasticity(&fes, Kinematics::PlaneStress)?)?;
-    /// assert_eq!(m.primal_vars()?,
+    /// assert_eq!(m.primal_vars(),
     ///            vec!["T".to_string(), "u_x".to_string(), "u_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn primal_vars(&self) -> Result<Vec<String>> {
+    pub fn primal_vars(&self) -> Vec<String> {
         let mut all: Vec<String> = Vec::new();
         for h in self {
             all.extend(h.read().primal_vars());
         }
-        Ok(union_names(all))
+        union_names(all)
     }
 
     /// Dual variable names — union over all sub-models, first-seen order.
@@ -2398,16 +2398,16 @@ impl Model {
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// let m = model::heat_conduction(&fes)?
     ///     .union(&model::elasticity(&fes, Kinematics::PlaneStress)?)?;
-    /// assert_eq!(m.dual_vars()?,
+    /// assert_eq!(m.dual_vars(),
     ///            vec!["q".to_string(), "f_x".to_string(), "f_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn dual_vars(&self) -> Result<Vec<String>> {
+    pub fn dual_vars(&self) -> Vec<String> {
         let mut all: Vec<String> = Vec::new();
         for h in self {
             all.extend(h.read().dual_vars());
         }
-        Ok(union_names(all))
+        union_names(all)
     }
 
     /// Rebuild the [`FiniteElementSpace`] this model integrates on: the
@@ -2502,7 +2502,7 @@ impl Model {
     ///     .union(&model::elasticity(&fes, Kinematics::PlaneStress)?)?;
     /// // Extraire une physique du modèle multi-physique — les sous-modèles
     /// // sont **partagés**, pas copiés.
-    /// assert_eq!(m.filter(Physics::Thermal)?.primal_vars()?, vec!["T".to_string()]);
+    /// assert_eq!(m.filter(Physics::Thermal)?.primal_vars(), vec!["T".to_string()]);
     /// assert!(m.filter(Physics::Diffusion)?.is_empty());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -2605,21 +2605,21 @@ mod tests {
     #[test]
     fn primal_dual_vars_for_heat_conduction_alone() {
         let (_cfg, _, _, model, _mat) = build_seg2_heat_model(1.0, 1.0, false);
-        assert_eq!(model.primal_vars().unwrap(), vec!["T".to_string()]);
-        assert_eq!(model.dual_vars().unwrap(), vec!["q".to_string()]);
+        assert_eq!(model.primal_vars(), vec!["T".to_string()]);
+        assert_eq!(model.dual_vars(), vec!["q".to_string()]);
     }
 
     #[test]
     fn primal_dual_vars_include_lagrange_after_dirichlet() {
         let (_cfg, _, _, model, _mat) = build_seg2_heat_model(1.0, 1.0, true);
         assert_eq!(
-            model.primal_vars().unwrap(),
+            model.primal_vars(),
             vec!["T".to_string(), "lambda_T".to_string()]
         );
         // Dual side: "q" from heat conduction + "imposed_T" (the Dirichlet
         // dual — a distinct name, no longer colliding with the primal "T").
         assert_eq!(
-            model.dual_vars().unwrap(),
+            model.dual_vars(),
             vec!["q".to_string(), "imposed_T".to_string()]
         );
     }
@@ -2671,7 +2671,7 @@ mod tests {
             assert!(!h.read().physics().is_empty(), "assembled block is tagged");
         }
         // The matrix as a whole reports both natures present.
-        let present = k.physics().unwrap();
+        let present = k.physics();
         assert!(present.contains(&Physics::Thermal));
         assert!(present.contains(&Physics::Constraint));
 
@@ -2700,10 +2700,10 @@ mod tests {
         assert_eq!(k.n_cols().unwrap(), 2);
         let expected = k_val / length;
         let tol = 1e-12;
-        assert!((k.get(a_id, "q", a_id, "T").unwrap() - expected).abs() < tol);
-        assert!((k.get(a_id, "q", b_id, "T").unwrap() + expected).abs() < tol);
-        assert!((k.get(b_id, "q", a_id, "T").unwrap() + expected).abs() < tol);
-        assert!((k.get(b_id, "q", b_id, "T").unwrap() - expected).abs() < tol);
+        assert!((k.get(a_id, "q", a_id, "T") - expected).abs() < tol);
+        assert!((k.get(a_id, "q", b_id, "T") + expected).abs() < tol);
+        assert!((k.get(b_id, "q", a_id, "T") + expected).abs() < tol);
+        assert!((k.get(b_id, "q", b_id, "T") - expected).abs() < tol);
     }
 
     /// Two SEG2 elements sharing the middle node form the classic
@@ -2732,7 +2732,7 @@ mod tests {
         assert_eq!(k.n_rows().unwrap(), 3);
         assert_eq!(k.n_cols().unwrap(), 3);
 
-        let v = |i: NodeId, j: NodeId| k.get(i, "q", j, "T").unwrap();
+        let v = |i: NodeId, j: NodeId| k.get(i, "q", j, "T");
         let tol = 1e-12;
         // h = 1 ⇒ K_global = [[1, -1, 0], [-1, 2, -1], [0, -1, 1]].
         assert!((v(n0.id(), n0.id()) - 1.0).abs() < tol);
@@ -2772,9 +2772,9 @@ mod tests {
             .0;
 
         // C entry: (mult, "imposed_T") × (a_id, "T") = 1
-        assert_eq!(k.get(mult, "imposed_T", a_id, "T").unwrap(), 1.0);
+        assert_eq!(k.get(mult, "imposed_T", a_id, "T"), 1.0);
         // Cᵀ entry: (a_id, "q") × (mult, "lambda_T") = 1
-        assert_eq!(k.get(a_id, "q", mult, "lambda_T").unwrap(), 1.0);
+        assert_eq!(k.get(a_id, "q", mult, "lambda_T"), 1.0);
         // Ensure lambda_T appears as a column.
         let col_dofs = k.col_dofs().unwrap();
         let lambda_col_present = col_dofs
@@ -2812,7 +2812,7 @@ mod tests {
         .unwrap();
         // Sharing the submesh handles does not touch node refcounts.
         assert_eq!(coords.read().refcount(mult_id), 1);
-        assert_eq!(sub.multiplier_nodes().unwrap(), vec![mult_id]);
+        assert_eq!(sub.multiplier_nodes(), vec![mult_id]);
 
         // Drop the user's multiplier mesh: the sub-model still holds the
         // submesh, so the node lives on.
@@ -2864,8 +2864,8 @@ mod tests {
     #[test]
     fn empty_model_has_no_vars_and_empty_mass() {
         let model = Model::empty();
-        assert_eq!(model.primal_vars().unwrap(), Vec::<String>::new());
-        assert_eq!(model.dual_vars().unwrap(), Vec::<String>::new());
+        assert_eq!(model.primal_vars(), Vec::<String>::new());
+        assert_eq!(model.dual_vars(), Vec::<String>::new());
         let m = crate::ops::matrix::mass(&model, &ElementField::empty()).unwrap();
         assert_eq!(m.n_rows().unwrap(), 0);
         assert_eq!(m.n_cols().unwrap(), 0);
@@ -2900,8 +2900,8 @@ mod tests {
         // One HeatConduction sub-model per subspace.
         let hc = model::heat_conduction(&fes).unwrap();
         assert_eq!(hc.len(), 2);
-        assert_eq!(hc.primal_vars().unwrap(), vec!["T".to_string()]);
-        assert_eq!(hc.dual_vars().unwrap(), vec!["q".to_string()]);
+        assert_eq!(hc.primal_vars(), vec!["T".to_string()]);
+        assert_eq!(hc.dual_vars(), vec!["q".to_string()]);
 
         // Compose with a Dirichlet model via `union` (Python `|`).
         let imp = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&n0)).unwrap());
@@ -2920,7 +2920,7 @@ mod tests {
         let full = hc.union(&dir).unwrap();
         assert_eq!(full.len(), 3);
         assert_eq!(
-            full.primal_vars().unwrap(),
+            full.primal_vars(),
             vec!["T".to_string(), "lambda_T".to_string()]
         );
     }
@@ -3003,7 +3003,7 @@ mod tests {
         // For a SEG2 of length h = 1 and conductivity k:
         // K_local = (k / h) [[1, -1], [-1, 1]] = k [[1, -1], [-1, 1]].
         let tol = 1e-12;
-        let v = |i: NodeId, j: NodeId| k.get(i, "q", j, "T").unwrap();
+        let v = |i: NodeId, j: NodeId| k.get(i, "q", j, "T");
         // Diagonal at n0 = k_a only.
         assert!((v(n0.id(), n0.id()) - k_a).abs() < tol);
         // Diagonal at n1 = k_a + k_b (shared node).

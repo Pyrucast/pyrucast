@@ -386,7 +386,7 @@ impl SubMesh {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
     /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// // Raccourci du cas unitaire : ajoute dans la zone unique.
-    /// assert_eq!(mesh.cell_count().unwrap(), 1);
+    /// assert_eq!(mesh.cell_count(), 1);
     /// ```
     pub fn add_cell(&mut self, nodes: &[NodeId]) -> Result<usize> {
         if self.sealed {
@@ -816,7 +816,7 @@ impl SubMesh {
             ElementType::POI1,
             seen,
         )?);
-        seal(&handle)?;
+        seal(&handle);
         // Memoize. On a race the loser drops its build and everyone reads the
         // winner's slot. Mutating `self` later drops this slot, so what is
         // cached always answers for the current connectivity.
@@ -841,11 +841,7 @@ impl SubMesh {
     /// segments, TRI3 / QUA4 as filled polygons, and TET4 / HEX8 as their
     /// outer skin (boundary faces) under the painter's algorithm.
     #[cfg(feature = "viz")]
-    pub fn plot(
-        &self,
-        view: Option<crate::viz::View>,
-        save: Option<&std::path::Path>,
-    ) -> Result<()> {
+    pub fn plot(&self, view: crate::viz::View, save: Option<&std::path::Path>) -> Result<()> {
         self.plot_styled(view, save, crate::viz::MeshStyle::default(), None)
     }
 
@@ -856,7 +852,7 @@ impl SubMesh {
     #[cfg(feature = "viz")]
     pub fn plot_styled(
         &self,
-        view: Option<crate::viz::View>,
+        view: crate::viz::View,
         save: Option<&std::path::Path>,
         style: crate::viz::MeshStyle,
         title: Option<&str>,
@@ -901,21 +897,21 @@ impl SubMesh {
 /// // de sceller un support qu'un lecteur tient déjà — un `view` de champ.
 /// let zone = maillage.get(0)?;
 /// assert!(!zone.read().is_sealed());
-/// seal(&zone)?;
+/// seal(&zone);
 /// assert!(zone.read().is_sealed());
 /// // Idempotent, et sans écriture la seconde fois : le guard de lecture
 /// // ci-dessous coexiste, là où un verrou d'écriture s'interbloquerait.
 /// let lecteur = zone.read();
-/// seal(&zone)?;
+/// seal(&zone);
 /// assert!(lecteur.is_sealed());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn seal(handle: &Handle<SubMesh>) -> Result<Handle<SubMesh>> {
+pub fn seal(handle: &Handle<SubMesh>) -> Handle<SubMesh> {
     if handle.read().is_sealed() {
-        return Ok(handle.clone());
+        return handle.clone();
     }
     handle.write().seal();
-    Ok(handle.clone())
+    handle.clone()
 }
 
 impl Drop for SubMesh {
@@ -1000,7 +996,7 @@ impl crate::dump::Dump for SubMesh {
 /// // C'est ce qui permet à un maillage de mêler triangles et quadrangles
 /// // sans que rien, en aval, ait à s'en soucier.
 /// assert_eq!(maillage.len(), 1);
-/// assert_eq!(maillage.cell_count()?, 1);
+/// assert_eq!(maillage.cell_count(), 1);
 /// assert_eq!(maillage.element_types()?, vec![ElementType::TRI3]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -1011,10 +1007,7 @@ pub struct Mesh {
 
 crate::impl_aggregate!(Mesh, SubMesh, submesh, "submesh(es)", {
     fn display_extra(&self) -> Option<String> {
-        Some(format!(
-            ", {} cell(s) total",
-            self.cell_count().unwrap_or(0)
-        ))
+        Some(format!(", {} cell(s) total", self.cell_count()))
     }
     fn check_push(&self, h: &Handle<SubMesh>) -> Result<()> {
         if self.is_empty() {
@@ -1058,9 +1051,9 @@ impl Node {
     /// // Le même `|` que celui des agrégats, appliqué à deux nœuds : un
     /// // maillage POI1 unitaire, qu'on fait ensuite croître nœud par nœud.
     /// let deux = n[0].union(&n[1])?;
-    /// assert_eq!(deux.cell_count()?, 2);
+    /// assert_eq!(deux.cell_count(), 2);
     /// assert_eq!(deux.element_types()?, vec![ElementType::POI1]);
-    /// assert_eq!(deux.union_node(&n[2])?.cell_count()?, 3);
+    /// assert_eq!(deux.union_node(&n[2])?.cell_count(), 3);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn union(&self, other: &Node) -> Result<Mesh> {
@@ -1086,7 +1079,7 @@ impl Mesh {
     /// // union de points, pas l'ajout d'un point à un maillage quelconque.
     /// let nuage = pyrucast::ops::mesh::poi1_from_nodes(&[n[0].clone()]).unwrap();
     /// let deux_points = nuage.union_node(&n[1]).unwrap();
-    /// assert_eq!(deux_points.cell_count().unwrap(), 2);
+    /// assert_eq!(deux_points.cell_count(), 2);
     /// ```
     pub fn union_node(&self, node: &Node) -> Result<Mesh> {
         let sub = self.unit()?;
@@ -1119,14 +1112,14 @@ impl Mesh {
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
     /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// assert_eq!(mesh.cell_count().unwrap(), 1); // toutes zones confondues
+    /// assert_eq!(mesh.cell_count(), 1); // toutes zones confondues
     /// ```
-    pub fn cell_count(&self) -> Result<usize> {
+    pub fn cell_count(&self) -> usize {
         let mut total = 0usize;
         for sm in self {
             total += sm.read().cell_count();
         }
-        Ok(total)
+        total
     }
 
     /// Handle to the `Coords` of the first submesh.
@@ -1195,7 +1188,7 @@ impl Mesh {
     /// FiniteElementSpace::lagrange1(&mesh).unwrap(); // scelle la zone
     /// let mut copie = mesh.duplicate().unwrap(); // neuve, modifiable
     /// copie.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// assert_eq!(copie.cell_count().unwrap(), 2);
+    /// assert_eq!(copie.cell_count(), 2);
     /// ```
     pub fn duplicate(&self) -> Result<Mesh> {
         let mut copy = Self::default();
@@ -1232,7 +1225,7 @@ impl Mesh {
     /// // Une couleur pour toutes les zones, sans boucle — et le maillage
     /// // revient, pour enchaîner.
     /// let rouge = RgbColor::new(220, 60, 60);
-    /// assert_eq!(mesh.set_face_color(rouge).cell_count()?, 2);
+    /// assert_eq!(mesh.set_face_color(rouge).cell_count(), 2);
     /// assert!(mesh.iter().all(|z| z.read().face_color() == rouge));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -1266,7 +1259,7 @@ impl Mesh {
     /// // refuse dès qu'il y en a plusieurs — l'ambiguïté serait silencieuse.
     /// let mut m = maillage;
     /// m.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
-    /// assert_eq!(m.cell_count()?, 2);
+    /// assert_eq!(m.cell_count(), 2);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn add_cell(&mut self, nodes: &[NodeId]) -> Result<usize> {
@@ -1436,7 +1429,7 @@ impl Mesh {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
     /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// let c = mesh.cell(0, 0).unwrap();
-    /// assert_eq!(c.nodes_per_cell().unwrap(), 3);
+    /// assert_eq!(c.nodes_per_cell(), 3);
     /// ```
     pub fn cell(&self, submesh_idx: usize, cell_idx: usize) -> Result<Cell> {
         let sm = self.get(submesh_idx)?;
@@ -1467,11 +1460,7 @@ impl Mesh {
     /// [`SubMesh::face_color`]. See [`SubMesh::plot`] for the meaning of
     /// `view` and `save` and the supported element types.
     #[cfg(feature = "viz")]
-    pub fn plot(
-        &self,
-        view: Option<crate::viz::View>,
-        save: Option<&std::path::Path>,
-    ) -> Result<()> {
+    pub fn plot(&self, view: crate::viz::View, save: Option<&std::path::Path>) -> Result<()> {
         self.plot_styled(view, save, crate::viz::MeshStyle::default(), None)
     }
 
@@ -1483,7 +1472,7 @@ impl Mesh {
     #[cfg(feature = "viz")]
     pub fn plot_styled(
         &self,
-        view: Option<crate::viz::View>,
+        view: crate::viz::View,
         save: Option<&std::path::Path>,
         style: crate::viz::MeshStyle,
         title: Option<&str>,
@@ -1515,7 +1504,7 @@ impl Mesh {
     #[cfg(feature = "viz")]
     pub fn plot_with_field(
         &self,
-        view: Option<crate::viz::View>,
+        view: crate::viz::View,
         save: Option<&std::path::Path>,
         field: crate::viz::FieldArg<'_>,
         component: Option<&str>,
@@ -1678,8 +1667,8 @@ mod tests {
             sm.add_cell(&[a.id()]).unwrap();
             sm
         });
-        seal(&h).unwrap();
-        seal(&h).unwrap(); // idempotent
+        seal(&h);
+        seal(&h); // idempotent
         assert!(h.read().is_sealed());
         assert!(matches!(
             h.write().add_cell(&[a.id()]).unwrap_err(),
@@ -1796,10 +1785,10 @@ mod tests {
         let mesh = Mesh::from_submesh(sm);
 
         let mut copy = mesh.duplicate().unwrap();
-        assert_eq!(copy.cell_count().unwrap(), 1);
+        assert_eq!(copy.cell_count(), 1);
         // A fresh submesh handle: editable.
         copy.add_cell(&[b.id()]).unwrap();
-        assert_eq!(copy.cell_count().unwrap(), 2);
+        assert_eq!(copy.cell_count(), 2);
     }
 
     #[test]
@@ -1887,7 +1876,7 @@ mod tests {
         mesh.add_sub(sm_pts).unwrap();
         mesh.add_sub(sm_tri).unwrap();
         assert_eq!(mesh.len(), 2);
-        assert_eq!(mesh.cell_count().unwrap(), 3); // 2 points + 1 triangle
+        assert_eq!(mesh.cell_count(), 3); // 2 points + 1 triangle
     }
 
     #[test]
@@ -1972,7 +1961,7 @@ mod tests {
 
         let merged = m1.union(&m2).unwrap();
         assert_eq!(merged.len(), 2);
-        assert_eq!(merged.cell_count().unwrap(), 3); // 2 POI1 + 1 TRI3
+        assert_eq!(merged.cell_count(), 3); // 2 POI1 + 1 TRI3
     }
 
     #[test]
@@ -2062,7 +2051,7 @@ mod tests {
         assert_eq!(u1.read().cell_count(), 3); // three distinct nodes
 
         // Sealing changes nothing: same slot.
-        seal(&h).unwrap();
+        seal(&h);
         assert!(h.read().to_poi1().unwrap().same_object(&u1));
     }
 

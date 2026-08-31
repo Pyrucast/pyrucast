@@ -750,7 +750,7 @@ crate::physics_operator! {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// let m = model::creep_norton(&fes, Kinematics::PlaneStrain)?;
-    /// assert_eq!(m.primal_vars()?, vec!["u_x".to_string(), "u_y".to_string()]);
+    /// assert_eq!(m.primal_vars(), vec!["u_x".to_string(), "u_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn creep_norton(fes, kinematics: Kinematics) = crate::ops::model::plasticity_with_law, PlasticLaw::CreepNorton;
@@ -782,7 +782,7 @@ crate::physics_operator! {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// let m = model::creep_blackburn(&fes, Kinematics::PlaneStrain)?;
-    /// assert_eq!(m.primal_vars()?, vec!["u_x".to_string(), "u_y".to_string()]);
+    /// assert_eq!(m.primal_vars(), vec!["u_x".to_string(), "u_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn creep_blackburn(fes, kinematics: Kinematics) = crate::ops::model::plasticity_with_law, PlasticLaw::CreepBlackburn;
@@ -814,7 +814,7 @@ crate::physics_operator! {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// let m = model::creep_lemaitre(&fes, Kinematics::PlaneStrain)?;
-    /// assert_eq!(m.primal_vars()?, vec!["u_x".to_string(), "u_y".to_string()]);
+    /// assert_eq!(m.primal_vars(), vec!["u_x".to_string(), "u_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn creep_lemaitre(fes, kinematics: Kinematics) = crate::ops::model::plasticity_with_law, PlasticLaw::CreepLemaitre;
@@ -848,7 +848,7 @@ crate::physics_operator! {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// let m = model::viscoplasticity_chaboche(&fes, Kinematics::PlaneStrain)?;
-    /// assert_eq!(m.primal_vars()?, vec!["u_x".to_string(), "u_y".to_string()]);
+    /// assert_eq!(m.primal_vars(), vec!["u_x".to_string(), "u_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn viscoplasticity_chaboche(fes, kinematics: Kinematics) = crate::ops::model::plasticity_with_law, PlasticLaw::ViscoplasticChaboche;
@@ -881,7 +881,7 @@ crate::physics_operator! {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// let m = model::viscoplasticity_lemaitre_chaboche(&fes, Kinematics::PlaneStrain)?;
-    /// assert_eq!(m.primal_vars()?, vec!["u_x".to_string(), "u_y".to_string()]);
+    /// assert_eq!(m.primal_vars(), vec!["u_x".to_string(), "u_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn viscoplasticity_lemaitre_chaboche(fes, kinematics: Kinematics) = crate::ops::model::plasticity_with_law, PlasticLaw::ViscoplasticLemaitreChaboche;

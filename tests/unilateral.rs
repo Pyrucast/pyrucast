@@ -91,14 +91,14 @@ fn bounded_bar(q: f64, bound: f64, sense: RelationSense) -> Result<Setup> {
         None,
         Default::default(),
     )?;
-    let dir_mult = dir.multiplier_nodes()?[0];
+    let dir_mult = dir.multiplier_nodes()[0];
     model.add_sub(Handle::new(dir))?;
 
     // Unilateral bound T(1) ⋈ bound.
     let imposed1 = poi1(&nodes[N_ELEMS])?;
     let mult1 = barycenter(&imposed1)?;
     let uni = SubModel::dirichlet("T".into(), "q".into(), &imposed1, &mult1, None, None, sense)?;
-    let uni_mult = uni.multiplier_nodes()?[0];
+    let uni_mult = uni.multiplier_nodes()[0];
     model.add_sub(Handle::new(uni))?;
 
     // RHS: flux q at the right physics node, u_d at both multiplier slots.
@@ -219,10 +219,10 @@ fn unilateral_mpc_difference_relation() -> Result<()> {
             None,
             Default::default(),
         )?;
-        let dir_mult = dir.multiplier_nodes()?[0];
+        let dir_mult = dir.multiplier_nodes()[0];
         model.add_sub(Handle::new(dir))?;
 
-        let dual = model.dual_of("T")?.expect("heat conduction declares T");
+        let dual = model.dual_of("T").expect("heat conduction declares T");
         let mesh_last = poi1(&nodes[N_ELEMS])?;
         let mesh_first = poi1(&nodes[0])?;
         let mult_mpc_mesh = barycenter(&mesh_last)?;
@@ -237,7 +237,7 @@ fn unilateral_mpc_difference_relation() -> Result<()> {
             None,
             RelationSense::GreaterEqual,
         )?;
-        let mpc_mult = mpc.multiplier_nodes()?[0];
+        let mpc_mult = mpc.multiplier_nodes()[0];
         model.add_sub(Handle::new(mpc))?;
 
         let mut rhs_sm = SubMesh::new(coords, ElementType::POI1);
@@ -339,7 +339,7 @@ fn schur_falls_back_when_base_is_singular() -> Result<()> {
         None,
         RelationSense::LessEqual,
     )?;
-    let uni_mult = uni.multiplier_nodes()?[0];
+    let uni_mult = uni.multiplier_nodes()[0];
     model.add_sub(Handle::new(uni))?;
 
     // Flux q = 5 at the right end drives T up into the bound ⇒ the relation is

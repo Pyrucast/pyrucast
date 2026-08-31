@@ -31,7 +31,7 @@ use std::collections::HashSet;
 /// assert_eq!(deux.len(), 2);
 /// let une = mesh::consolidate(&deux)?;
 /// assert_eq!(une.len(), 1);
-/// assert_eq!(une.cell_count()?, 2);
+/// assert_eq!(une.cell_count(), 2);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn consolidate(mesh: &Mesh) -> Result<Mesh> {
@@ -118,11 +118,7 @@ mod tests {
 
         let c2 = consolidate(&mesh).unwrap();
         assert_eq!(c2.len(), 1, "must merge the two TRI3 submeshes");
-        assert_eq!(
-            c2.cell_count().unwrap(),
-            2,
-            "two distinct cells must be kept"
-        );
+        assert_eq!(c2.cell_count(), 2, "two distinct cells must be kept");
         assert_eq!(c2.element_types().unwrap(), vec![ElementType::TRI3]);
     }
 
@@ -150,7 +146,7 @@ mod tests {
 
         let c2 = consolidate(&mesh).unwrap();
         assert_eq!(c2.len(), 1);
-        assert_eq!(c2.cell_count().unwrap(), 1, "the duplicate must be removed");
+        assert_eq!(c2.cell_count(), 1, "the duplicate must be removed");
     }
 
     #[test]

@@ -175,7 +175,7 @@ impl SubElementField {
         crate::containers::field::check_components("SubElementField", &components)?;
         let (n_cells, n_gauss) = {
             let s = fespace.read();
-            (s.cell_count()?, s.gauss_count())
+            (s.cell_count(), s.gauss_count())
         };
         let n_comp = components.len();
         let values = vec![0.0; n_cells * n_gauss * n_comp];
@@ -775,7 +775,7 @@ impl ElementField {
     pub(crate) fn subs_for_fespace(
         &self,
         fespace: &Handle<SubFiniteElementSpace>,
-    ) -> Result<Vec<Handle<SubElementField>>> {
+    ) -> Vec<Handle<SubElementField>> {
         let mut out = Vec::new();
         for h in self {
             let matches = {
@@ -786,7 +786,7 @@ impl ElementField {
                 out.push(h.clone());
             }
         }
-        Ok(out)
+        out
     }
 
     /// The **unique** [`SubElementField`] on `fespace`.
@@ -804,7 +804,7 @@ impl ElementField {
         &self,
         fespace: &Handle<SubFiniteElementSpace>,
     ) -> Result<Handle<SubElementField>> {
-        let mut zones = self.subs_for_fespace(fespace)?;
+        let mut zones = self.subs_for_fespace(fespace);
         match zones.len() {
             1 => Ok(zones.pop().expect("length checked to be 1")),
             0 => Err(PyrucastError::Message(format!(
@@ -839,7 +839,7 @@ impl ElementField {
         required: &[String],
     ) -> Result<Handle<SubElementField>> {
         let mut matching: Vec<Handle<SubElementField>> = Vec::new();
-        for h in self.subs_for_fespace(fespace)? {
+        for h in self.subs_for_fespace(fespace) {
             let carries_all = {
                 let comps = h.read().components().to_vec();
                 required.iter().all(|r| comps.contains(r))
@@ -922,7 +922,7 @@ impl ElementField {
     #[cfg(feature = "viz")]
     pub fn plot(
         &self,
-        view: Option<crate::viz::View>,
+        view: crate::viz::View,
         save: Option<&std::path::Path>,
         component: Option<&str>,
         scale: crate::viz::ColorScale,
@@ -963,14 +963,14 @@ impl ElementFieldView {
     pub(crate) fn zone_for_submesh(
         &self,
         submesh: &Handle<crate::containers::mesh::SubMesh>,
-    ) -> Result<Option<&SubElementField>> {
+    ) -> Option<&SubElementField> {
         for z in &self.zones {
             let sm = z.support().read().submesh();
             if sm.same_object(submesh) {
-                return Ok(Some(z));
+                return Some(z);
             }
         }
-        Ok(None)
+        None
     }
 }
 

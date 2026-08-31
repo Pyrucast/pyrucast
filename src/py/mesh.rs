@@ -208,7 +208,7 @@ impl PySubMesh {
                         comp_ref,
                         scale,
                         smooth,
-                        Some(view),
+                        view,
                         save_ref,
                         title_ref,
                     )?;
@@ -218,7 +218,7 @@ impl PySubMesh {
             None => {
                 self.handle
                     .read()
-                    .plot_styled(Some(view), save_ref, style, title_ref)?;
+                    .plot_styled(view, save_ref, style, title_ref)?;
             }
         }
         Ok(())
@@ -340,7 +340,7 @@ impl PyMesh {
 
     /// Total number of cells across all submeshes.
     fn cell_count(&self) -> PyResult<usize> {
-        Ok(self.inner.cell_count()?)
+        Ok(self.inner.cell_count())
     }
 
     /// The `Coords` this mesh hangs off (all submeshes share it).
@@ -392,21 +392,13 @@ impl PyMesh {
             Some(f) => {
                 let comp_ref = component.as_deref();
                 with_field_arg(&f, |arg| {
-                    self.inner.plot_with_field(
-                        Some(view),
-                        save_ref,
-                        arg,
-                        comp_ref,
-                        scale,
-                        smooth,
-                        title_ref,
-                    )?;
+                    self.inner
+                        .plot_with_field(view, save_ref, arg, comp_ref, scale, smooth, title_ref)?;
                     Ok(())
                 })?;
             }
             None => {
-                self.inner
-                    .plot_styled(Some(view), save_ref, style, title_ref)?;
+                self.inner.plot_styled(view, save_ref, style, title_ref)?;
             }
         }
         Ok(())

@@ -85,7 +85,7 @@ fn edge_key(u: NodeId, v: NodeId) -> (NodeId, NodeId) {
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::QUA4);
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id(), n[3].id()])?;
 /// let carre = Mesh::from_submesh(sm);
-/// assert_eq!(mesh::border(&carre, None)?.cell_count()?, 4);
+/// assert_eq!(mesh::border(&carre, None)?.cell_count(), 4);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn border(mesh: &Mesh, angle_deg: Option<f64>) -> Result<Mesh> {

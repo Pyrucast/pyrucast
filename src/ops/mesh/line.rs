@@ -26,10 +26,10 @@ use crate::error::{PyrucastError, Result};
 /// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
 /// // Un segment discrétisé : n mailles, n+1 nœuds.
 /// let l = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[3.0, 0.0, 0.0]), 3, ElementType::SEG2)?;
-/// assert_eq!(l.cell_count()?, 3);
+/// assert_eq!(l.cell_count(), 3);
 /// // En quadratique, les nœuds milieux s'ajoutent.
 /// let q = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[3.0, 0.0, 0.0]), 3, ElementType::SEG3)?;
-/// assert_eq!(q.cell_count()?, 3);
+/// assert_eq!(q.cell_count(), 3);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn line(a: &Node, b: &Node, n_elems: usize, element_type: ElementType) -> Result<Mesh> {
@@ -110,7 +110,7 @@ mod tests {
 
         let mesh = line(&a, &b, 3, ElementType::SEG2).unwrap();
         assert_eq!(mesh.element_types().unwrap(), vec![ElementType::SEG2]);
-        assert_eq!(mesh.cell_count().unwrap(), 3);
+        assert_eq!(mesh.cell_count(), 3);
 
         let n00 = mesh.node(0, 0, 0).unwrap();
         let n10 = mesh.node(0, 1, 0).unwrap();
@@ -131,7 +131,7 @@ mod tests {
         let b = Node::create_in(coords.clone(), &[1.0, 1.0]).unwrap();
 
         let mesh = line(&a, &b, 1, ElementType::SEG2).unwrap();
-        assert_eq!(mesh.cell_count().unwrap(), 1);
+        assert_eq!(mesh.cell_count(), 1);
         assert_eq!(mesh.node(0, 0, 0).unwrap().id(), a.id());
         assert_eq!(mesh.node(0, 0, 1).unwrap().id(), b.id());
     }
@@ -152,7 +152,7 @@ mod tests {
 
         let mesh = line(&a, &b, 2, ElementType::SEG3).unwrap();
         assert_eq!(mesh.element_types().unwrap(), vec![ElementType::SEG3]);
-        assert_eq!(mesh.cell_count().unwrap(), 2);
+        assert_eq!(mesh.cell_count(), 2);
 
         // Corners at 0, 2, 4; mid-edge nodes at 1 and 3.
         let n00 = mesh.node(0, 0, 0).unwrap();

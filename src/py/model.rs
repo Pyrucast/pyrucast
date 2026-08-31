@@ -130,19 +130,19 @@ impl PyModel {
 
     /// Names of the primal (primary) variables across the whole model.
     fn primal_vars(&self) -> PyResult<Vec<String>> {
-        Ok(self.inner.primal_vars()?)
+        Ok(self.inner.primal_vars())
     }
 
     /// Names of the dual variables across the whole model.
     fn dual_vars(&self) -> PyResult<Vec<String>> {
-        Ok(self.inner.dual_vars()?)
+        Ok(self.inner.dual_vars())
     }
 
     /// `Model.dual_of(variable)` — the dual (residual) variable conjugate to a
     /// primal `variable` (e.g. `"u_x" -> "f_x"`, `"T" -> "q"`), searched across
     /// all sub-models, or `None`. A helper to fill an MPC term's `target_dual`.
     fn dual_of(&self, variable: &str) -> PyResult<Option<String>> {
-        Ok(self.inner.dual_of(variable)?)
+        Ok(self.inner.dual_of(variable))
     }
 
     /// `Model.fespace()` — the `FiniteElementSpace` this model integrates on,

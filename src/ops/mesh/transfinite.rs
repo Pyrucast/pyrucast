@@ -56,7 +56,7 @@ use crate::handle::Handle;
 /// let haut = mesh::line(&c, &d, 2, ElementType::SEG2)?;
 /// let gauche = mesh::line(&d, &a, 3, ElementType::SEG2)?;
 /// let m = mesh::transfinite(&bas, &droite, &haut, &gauche, ElementType::QUA4)?;
-/// assert_eq!(m.cell_count()?, 2 * 3);
+/// assert_eq!(m.cell_count(), 2 * 3);
 /// // Deux côtés opposés de découpages différents : refusé, en le disant.
 /// let trop = mesh::line(&c, &d, 5, ElementType::SEG2)?;
 /// assert!(mesh::transfinite(&bas, &droite, &trop, &gauche, ElementType::QUA4).is_err());
@@ -259,7 +259,7 @@ mod tests {
         let (side1, side2, side3, side4) = unit_square(4, 3);
         let mesh = transfinite(&side1, &side2, &side3, &side4, ElementType::QUA4).unwrap();
         assert_eq!(mesh.element_types().unwrap(), vec![ElementType::QUA4]);
-        assert_eq!(mesh.cell_count().unwrap(), 12);
+        assert_eq!(mesh.cell_count(), 12);
 
         // Interior node (i=2, j=1) of a 4x3 grid (n1=4, n2=3) on the unit
         // square: exact bilinear position (0.5, 1/3), since all four sides
@@ -275,7 +275,7 @@ mod tests {
     fn transfinite_one_by_one_reuses_all_four_corners() {
         let (side1, side2, side3, side4) = unit_square(1, 1);
         let mesh = transfinite(&side1, &side2, &side3, &side4, ElementType::QUA4).unwrap();
-        assert_eq!(mesh.cell_count().unwrap(), 1);
+        assert_eq!(mesh.cell_count(), 1);
 
         let p0 = side1.node(0, 0, 0).unwrap().id();
         let p1 = side1.node(0, 0, 1).unwrap().id();
@@ -330,7 +330,7 @@ mod tests {
         let (side1, side2, side3, side4) = unit_square(2, 2);
         let mesh = transfinite(&side1, &side2, &side3, &side4, ElementType::TRI3).unwrap();
         assert_eq!(mesh.element_types().unwrap(), vec![ElementType::TRI3]);
-        assert_eq!(mesh.cell_count().unwrap(), 8);
+        assert_eq!(mesh.cell_count(), 8);
     }
 
     #[test]
@@ -338,7 +338,7 @@ mod tests {
         let (side1, side2, side3, side4) = unit_square(2, 2);
         let mesh = transfinite(&side1, &side2, &side3, &side4, ElementType::QUA8).unwrap();
         assert_eq!(mesh.element_types().unwrap(), vec![ElementType::QUA8]);
-        assert_eq!(mesh.cell_count().unwrap(), 4);
+        assert_eq!(mesh.cell_count(), 4);
     }
 
     #[test]

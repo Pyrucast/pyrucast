@@ -71,7 +71,7 @@ use std::collections::HashMap;
 /// // Réordonne des segments épars en une ligne continue. Une ligne déjà
 /// // chaînée en ressort inchangée.
 /// let l = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[3.0, 0.0, 0.0]), 3, ElementType::SEG2)?;
-/// assert_eq!(mesh::chain(&l)?.cell_count()?, 3);
+/// assert_eq!(mesh::chain(&l)?.cell_count(), 3);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn chain(mesh: &Mesh) -> Result<Mesh> {
@@ -228,7 +228,7 @@ mod tests {
     fn conn_of(mesh: &Mesh, sub: usize) -> Vec<Vec<u32>> {
         mesh.cells(sub)
             .unwrap()
-            .map(|c| c.node_ids().unwrap().into_iter().map(|n| n.0).collect())
+            .map(|c| c.node_ids().into_iter().map(|n| n.0).collect())
             .collect()
     }
 

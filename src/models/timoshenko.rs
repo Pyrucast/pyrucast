@@ -148,7 +148,7 @@ impl Timoshenko {
             (
                 s.submesh(),
                 s.space_dim(),
-                s.element_type()?,
+                s.element_type(),
                 s.is_axisymmetric(),
                 s.interpolation(),
             )

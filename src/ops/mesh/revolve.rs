@@ -41,7 +41,7 @@ use crate::error::Result;
 /// let l = mesh::line(&p(&[1.0, 0.0, 0.0]), &p(&[1.0, 0.0, 1.0]), 1, ElementType::SEG2)?;
 /// let s = mesh::revolve(&l, std::f64::consts::PI, 4, &[0.0, 0.0, 0.0],
 ///                       Some(&[0.0, 0.0, 1.0]))?;
-/// assert_eq!(s.cell_count()?, 4);
+/// assert_eq!(s.cell_count(), 4);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn revolve(
@@ -95,7 +95,7 @@ mod tests {
         let seg = radial_seg2_2d(2);
         let ring = revolve(&seg, PI / 2.0, 3, &[0.0, 0.0], None).unwrap();
         assert_eq!(ring.element_types().unwrap(), vec![ElementType::QUA4]);
-        assert_eq!(ring.cell_count().unwrap(), 6);
+        assert_eq!(ring.cell_count(), 6);
 
         // Layer 0 re-uses the source nodes, at the source position.
         assert_eq!(
@@ -125,7 +125,7 @@ mod tests {
     fn full_turn_closes_the_ring() {
         let seg = radial_seg2_2d(1);
         let ring = revolve(&seg, TAU, 4, &[0.0, 0.0], None).unwrap();
-        assert_eq!(ring.cell_count().unwrap(), 4);
+        assert_eq!(ring.cell_count(), 4);
 
         // The last layer is the first one again: 4 angular positions × 2
         // radial nodes, not 5.
@@ -140,7 +140,7 @@ mod tests {
         let tri = tri3_off_axis();
         let wedge = revolve(&tri, PI / 6.0, 2, &[0.0, 0.0, 0.0], Some(&[0.0, 0.0, 1.0])).unwrap();
         assert_eq!(wedge.element_types().unwrap(), vec![ElementType::PENTA6]);
-        assert_eq!(wedge.cell_count().unwrap(), 2);
+        assert_eq!(wedge.cell_count(), 2);
 
         // Bottom face of the first layer = the source triangle.
         assert_eq!(
@@ -166,7 +166,7 @@ mod tests {
 
         let tube = revolve(&qua, TAU, 8, &[0.0, 0.0, 0.0], Some(&[0.0, 0.0, 1.0])).unwrap();
         assert_eq!(tube.element_types().unwrap(), vec![ElementType::HEX8]);
-        assert_eq!(tube.cell_count().unwrap(), 8);
+        assert_eq!(tube.cell_count(), 8);
         // Closed ring: 8 angular positions × 4 section nodes.
         assert_eq!(distinct_nodes(&tube), 32);
     }

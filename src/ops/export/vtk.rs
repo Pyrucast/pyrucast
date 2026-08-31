@@ -254,11 +254,11 @@ pub fn vtk_node_field_string(mesh: &Mesh, field: &NodeField) -> Result<String> {
     write_geometry(&mut out, &geo, "pyrucast node field");
 
     let _ = writeln!(out, "POINT_DATA {}", geo.points.len());
-    for comp in field.components()? {
+    for comp in field.components() {
         let _ = writeln!(out, "SCALARS {} double 1", sanitize(&comp));
         out.push_str("LOOKUP_TABLE default\n");
         for &nid in &geo.point_nodes {
-            let v = field.value_opt(nid, &comp)?.unwrap_or(0.0);
+            let v = field.value_opt(nid, &comp).unwrap_or(0.0);
             let _ = writeln!(out, "{v}");
         }
     }
@@ -386,7 +386,7 @@ pub fn vtk_element_field_string(mesh: &Mesh, field: &ElementField) -> Result<Str
     write_geometry(&mut out, &geo, "pyrucast element field");
 
     let _ = writeln!(out, "CELL_DATA {}", geo.cells.len());
-    for comp in field.components()? {
+    for comp in field.components() {
         let _ = writeln!(out, "SCALARS {} double 1", sanitize(&comp));
         out.push_str("LOOKUP_TABLE default\n");
         for sm_h in mesh {

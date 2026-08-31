@@ -63,8 +63,8 @@
 //! let mult_mesh_b = mesh::barycenter(&imposed_b).unwrap();
 //! let dir_a = SubModel::dirichlet("T".into(), "q".into(), &imposed_a, &mult_mesh_a, None, None, Default::default()).unwrap();
 //! let dir_b = SubModel::dirichlet("T".into(), "q".into(), &imposed_b, &mult_mesh_b, None, None, Default::default()).unwrap();
-//! let mult_a = dir_a.multiplier_nodes().unwrap()[0];
-//! let mult_b = dir_b.multiplier_nodes().unwrap()[0];
+//! let mult_a = dir_a.multiplier_nodes()[0];
+//! let mult_b = dir_b.multiplier_nodes()[0];
 //! model.add_sub(Handle::new(dir_a)).unwrap();
 //! model.add_sub(Handle::new(dir_b)).unwrap();
 //!
@@ -716,8 +716,8 @@ mod tests {
             Default::default(),
         )
         .unwrap();
-        let mult_left = left_dir.multiplier_nodes().unwrap()[0];
-        let mult_right = right_dir.multiplier_nodes().unwrap()[0];
+        let mult_left = left_dir.multiplier_nodes()[0];
+        let mult_right = right_dir.multiplier_nodes()[0];
         model.add_sub(Handle::new(left_dir)).unwrap();
         model.add_sub(Handle::new(right_dir)).unwrap();
 

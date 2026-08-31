@@ -48,13 +48,13 @@ fn consistent_mass_of_unit_quad_matches_closed_form() -> Result<()> {
     let diag = RHO * 4.0 / 36.0; // node with itself
     let adj = RHO * 2.0 / 36.0; // edge-adjacent nodes
     let opp = RHO * 1.0 / 36.0; // diagonally-opposite node
-    assert!((m.get(n[0].id(), "f_x", n[0].id(), "u_x")? - diag).abs() < tol);
-    assert!((m.get(n[0].id(), "f_x", n[1].id(), "u_x")? - adj).abs() < tol);
-    assert!((m.get(n[0].id(), "f_x", n[2].id(), "u_x")? - opp).abs() < tol);
+    assert!((m.get(n[0].id(), "f_x", n[0].id(), "u_x") - diag).abs() < tol);
+    assert!((m.get(n[0].id(), "f_x", n[1].id(), "u_x") - adj).abs() < tol);
+    assert!((m.get(n[0].id(), "f_x", n[2].id(), "u_x") - opp).abs() < tol);
     // Same for the u_y ↔ f_y block.
-    assert!((m.get(n[0].id(), "f_y", n[0].id(), "u_y")? - diag).abs() < tol);
+    assert!((m.get(n[0].id(), "f_y", n[0].id(), "u_y") - diag).abs() < tol);
     // The mass is block-diagonal in the components: no u_y ↔ f_x coupling.
-    assert!(m.get(n[0].id(), "f_x", n[0].id(), "u_y")?.abs() < tol);
+    assert!(m.get(n[0].id(), "f_x", n[0].id(), "u_y").abs() < tol);
 
     // Whole-matrix sum = space_dim · ρ · area (ΣN_i = 1 ⇒ Σ_ij ∫N_iN_j = area).
     let total: f64 = m.to_dmatrix()?.sum();
@@ -64,7 +64,7 @@ fn consistent_mass_of_unit_quad_matches_closed_form() -> Result<()> {
     );
 
     // Consistent (not lumped): off-diagonal terms are present.
-    assert!(m.get(n[0].id(), "f_x", n[1].id(), "u_x")?.abs() > 1e-6);
+    assert!(m.get(n[0].id(), "f_x", n[1].id(), "u_x").abs() > 1e-6);
     Ok(())
 }
 
@@ -84,9 +84,9 @@ fn heat_capacity_of_unit_quad_matches_closed_form() -> Result<()> {
     let c = pyrucast::ops::matrix::mass(&model, &materials)?;
     let tol = 1e-12;
     let rc = RHO * CP;
-    assert!((c.get(n[0].id(), "q", n[0].id(), "T")? - rc * 4.0 / 36.0).abs() < tol);
-    assert!((c.get(n[0].id(), "q", n[1].id(), "T")? - rc * 2.0 / 36.0).abs() < tol);
-    assert!((c.get(n[0].id(), "q", n[2].id(), "T")? - rc * 1.0 / 36.0).abs() < tol);
+    assert!((c.get(n[0].id(), "q", n[0].id(), "T") - rc * 4.0 / 36.0).abs() < tol);
+    assert!((c.get(n[0].id(), "q", n[1].id(), "T") - rc * 2.0 / 36.0).abs() < tol);
+    assert!((c.get(n[0].id(), "q", n[2].id(), "T") - rc * 1.0 / 36.0).abs() < tol);
 
     let total: f64 = c.to_dmatrix()?.sum();
     assert!((total - rc * 1.0).abs() < 1e-10, "total capacity = {total}");
@@ -108,9 +108,9 @@ fn lumped_mass_is_diagonal_and_conserves_total() -> Result<()> {
     let tol = 1e-12;
 
     // Each diagonal = its consistent-mass row sum = ρ·(4+2+1+2)/36 = ρ/4.
-    assert!((lumped.get(n[0].id(), "f_x", n[0].id(), "u_x")? - RHO / 4.0).abs() < tol);
+    assert!((lumped.get(n[0].id(), "f_x", n[0].id(), "u_x") - RHO / 4.0).abs() < tol);
     // Off-diagonals vanish.
-    assert!(lumped.get(n[0].id(), "f_x", n[1].id(), "u_x")?.abs() < tol);
+    assert!(lumped.get(n[0].id(), "f_x", n[1].id(), "u_x").abs() < tol);
 
     // Total mass is conserved by row-sum lumping.
     let (mc, ml): (f64, f64) = (m.to_dmatrix()?.sum(), lumped.to_dmatrix()?.sum());

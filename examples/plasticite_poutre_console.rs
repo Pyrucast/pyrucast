@@ -230,7 +230,7 @@ fn main() -> Result<()> {
             unreachable!("évolution à valeur nodale")
         };
         // Norme de la charge du pas (échelle relative du résidu) : xᵀx du champ.
-        let ext_norm = load_scaled.xtx()?.sqrt();
+        let ext_norm = load_scaled.xtx().sqrt();
         let tol = 1e-6 * ext_norm + 1e-12;
 
         // Newton modifié : itère jusqu'à résidu (forces déséquilibrées aux DDL
@@ -257,7 +257,7 @@ fn main() -> Result<()> {
             //   à `free_mesh` puis `xtx` (les nœuds encastrés portent la réaction).
             let f_ext = restrict_like(&load_scaled, &f_int)?;
             let residual = (f_ext - f_int)?;
-            res_norm = restrict(&residual, &free_mesh)?.xtx()?.sqrt();
+            res_norm = restrict(&residual, &free_mesh)?.xtx().sqrt();
             last_state = Some(out);
 
             if res_norm <= tol {

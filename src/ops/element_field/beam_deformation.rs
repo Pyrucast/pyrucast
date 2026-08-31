@@ -112,7 +112,7 @@ pub fn beam_deformation(
     fespace: &FiniteElementSpace,
     material: &ElementField,
 ) -> Result<ElementField> {
-    let components = Field::components(field)?;
+    let components = Field::components(field);
     let view = field.view()?;
     let mut out = ElementField::empty();
     for sub in fespace {

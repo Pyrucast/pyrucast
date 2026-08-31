@@ -56,9 +56,9 @@ fn exporter_un_sous_maillage_en_svg() -> Result<()> {
     sm.add_cell(&[a.id(), b.id(), c.id()])?;
 
     // Export vectoriel.
-    sm.plot(Some(View::iso()), Some(&dossier.join("triangle.svg")))?;
+    sm.plot(View::iso(), Some(&dossier.join("triangle.svg")))?;
     // Fenêtre interactive (feature `viz-interactive`).
-    // sm.plot(None, None).unwrap();
+    // sm.plot(View::default(), None).unwrap();
     Ok(())
 }
 // ANCHOR_END: export
@@ -74,7 +74,7 @@ fn chaque_zone_porte_sa_couleur() -> Result<()> {
     // La même couleur pour **toutes** les zones d'un maillage, sans boucle :
     // la méthode rend le maillage, donc elle s'enchaîne.
     let bleu = RgbColor::new(60, 60, 220);
-    assert_eq!(maillage.set_face_color(bleu).cell_count()?, 1);
+    assert_eq!(maillage.set_face_color(bleu).cell_count(), 1);
     assert!(maillage.iter().all(|z| z.read().face_color() == bleu));
     Ok(())
 }
@@ -94,7 +94,7 @@ fn tracer_un_champ_avec_son_echelle() -> Result<()> {
 
     // Échelle auto, viridis, première composante, rendu interpolé niveau 4.
     mesh.plot_with_field(
-        None,
+        View::default(),
         Some(&dossier.join("ux.svg")),
         FieldArg::Node(&u),
         None,
@@ -110,7 +110,7 @@ fn tracer_un_champ_avec_son_echelle() -> Result<()> {
         vmax: Some(1.0),
     };
     mesh.plot_with_field(
-        None,
+        View::default(),
         Some(&dossier.join("uy.svg")),
         FieldArg::Node(&u),
         Some("UY"),
@@ -129,14 +129,14 @@ fn peau_opaque_ou_fil_de_fer() -> Result<()> {
 
     // Peau opaque (équivalent de plot).
     mesh.plot_styled(
-        Some(View::iso()),
+        View::iso(),
         Some(&dossier.join("solide.svg")),
         MeshStyle::Surface,
         None, // titre
     )?;
     // Fil de fer : toutes les arêtes.
     mesh.plot_styled(
-        Some(View::iso()),
+        View::iso(),
         Some(&dossier.join("fil.svg")),
         MeshStyle::Wireframe,
         None, // titre
@@ -170,7 +170,7 @@ fn le_corps_de_revolution_se_demande_dans_la_vue() -> Result<()> {
         revolve: Some(Revolve::full()),
         ..View::iso()
     };
-    mesh.plot(Some(vue), Some(&dossier.join("piece.svg")))?;
+    mesh.plot(vue, Some(&dossier.join("piece.svg")))?;
 
     // Balayage partiel, ou finesse angulaire choisie à la main.
     let _ = Revolve::new(270.0).unwrap(); // un secteur par 10°

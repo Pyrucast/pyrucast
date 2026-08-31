@@ -93,9 +93,9 @@ pub(crate) fn check_components(kind: &str, components: &[String]) -> Result<()> 
 /// # temp.get(0).unwrap().write().add_to_component("T", 4.0).unwrap();
 /// // Le jumeau Rust de l'argument Python `str | list[str]` : les
 /// // opérateurs de composantes se lisent pareil dans les deux sens.
-/// assert_eq!(temp.filter_components("T")?.components()?, vec!["T".to_string()]);
-/// assert_eq!(temp.filter_components(["T"])?.components()?, vec!["T".to_string()]);
-/// assert_eq!(temp.filter_components(vec!["T".to_string()])?.components()?,
+/// assert_eq!(temp.filter_components("T")?.components(), vec!["T".to_string()]);
+/// assert_eq!(temp.filter_components(["T"])?.components(), vec!["T".to_string()]);
+/// assert_eq!(temp.filter_components(vec!["T".to_string()])?.components(),
 ///            vec!["T".to_string()]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -1049,7 +1049,7 @@ macro_rules! __field_op {
 /// # temp.get(0).unwrap().write().add_to_component("T", 4.0).unwrap();
 /// // Ce que l'agrégat ajoute au contrat de zone : les vues d'ensemble et
 /// // les opérations qui traversent toutes les zones.
-/// assert_eq!(temp.components()?, vec!["T".to_string()]);
+/// assert_eq!(temp.components(), vec!["T".to_string()]);
 /// assert_eq!(temp.map_subs(|s| Ok(s.map_all(f64::sqrt)))?
 ///     .get(0)?.read().value(n[0].id(), "T")?, 2.0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -1059,7 +1059,7 @@ where
     Self::Sub: SubField,
 {
     /// Union of the subs' component names, first-seen order.
-    fn components(&self) -> Result<Vec<String>> {
+    fn components(&self) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
         for h in self.iter() {
             let s = h.read();
@@ -1069,7 +1069,7 @@ where
                 }
             }
         }
-        Ok(out)
+        out
     }
 
     /// Smallest value of `component` across the subs defining it — or, with
@@ -1122,12 +1122,12 @@ where
 
     /// Squared Euclidean norm `xᵀx = Σ v²` over every value of every zone
     /// (Cast3M `XTX`). Thread-count-dependent to the last ULP.
-    fn xtx(&self) -> Result<f64> {
+    fn xtx(&self) -> f64 {
         let mut acc = 0.0;
         for h in self.iter() {
             acc += SubField::xtx(&*h.read());
         }
-        Ok(acc)
+        acc
     }
 
     /// Squared Euclidean norm restricted to the named `components`, summed over
@@ -1161,7 +1161,7 @@ where
     /// **in place** in the store for the lifetime of the view.
     fn view(&self) -> Result<FieldView<Self::Sub>> {
         Ok(FieldView {
-            components: self.components()?,
+            components: self.components(),
             zones: self.iter().map(|h| h.read()).collect(),
         })
     }
@@ -1802,7 +1802,7 @@ mod tests {
     #[test]
     fn field_components_union_first_seen_order() {
         let ef = make_two_zone_element_field();
-        assert_eq!(Field::components(&ef).unwrap(), vec!["k", "E"]);
+        assert_eq!(Field::components(&ef), vec!["k", "E"]);
     }
 
     #[test]
@@ -1869,7 +1869,7 @@ mod tests {
         // xtx over the whole field = Σ of the per-zone xtx.
         let x0 = SubField::xtx(&*ef.get(0).unwrap().read());
         let x1 = SubField::xtx(&*ef.get(1).unwrap().read());
-        assert!((Field::xtx(&ef).unwrap() - (x0 + x1)).abs() < 1e-9);
+        assert!((Field::xtx(&ef) - (x0 + x1)).abs() < 1e-9);
         assert!(Field::sum(&ef, "missing").is_err());
     }
 
@@ -1962,7 +1962,7 @@ mod tests {
         // Single-name ergonomic input.
         let out = ef.filter_components("k").unwrap();
         assert_eq!(out.len(), 2);
-        assert_eq!(Field::components(&out).unwrap(), vec!["k"]);
+        assert_eq!(Field::components(&out), vec!["k"]);
         // zone0 handle shared untouched; zone1 rebuilt (fresh slot).
         assert!(out.get(0).unwrap().same_object(&ef.get(0).unwrap()));
         assert!(!out.get(1).unwrap().same_object(&ef.get(1).unwrap()));
@@ -1970,7 +1970,7 @@ mod tests {
         // Keep only "E": zone0 (no E) is dropped, zone1 kept.
         let only_e = ef.filter_components("E").unwrap();
         assert_eq!(only_e.len(), 1);
-        assert_eq!(Field::components(&only_e).unwrap(), vec!["E"]);
+        assert_eq!(Field::components(&only_e), vec!["E"]);
 
         // No zone carries any requested component ⇒ error.
         assert!(ef.filter_components("missing").is_err());
@@ -1990,9 +1990,9 @@ mod tests {
         let primal = f
             .filter_components(vec!["u_x".to_string(), "u_y".to_string(), "T".to_string()])
             .unwrap();
-        assert_eq!(Field::components(&primal).unwrap(), vec!["u_x", "u_y"]);
+        assert_eq!(Field::components(&primal), vec!["u_x", "u_y"]);
         assert_eq!(primal.value(nodes[0].id(), "u_x").unwrap(), 1.0);
-        assert!(primal.value_opt(nodes[0].id(), "lambda").unwrap().is_none());
+        assert!(primal.value_opt(nodes[0].id(), "lambda").is_none());
     }
 
     #[test]
@@ -2001,7 +2001,7 @@ mod tests {
         let out = ef.rename_component("E", "young").unwrap();
         // zone0 has no E ⇒ handle shared; zone1 rebuilt with the new name.
         assert!(out.get(0).unwrap().same_object(&ef.get(0).unwrap()));
-        assert_eq!(Field::components(&out).unwrap(), vec!["k", "young"]);
+        assert_eq!(Field::components(&out), vec!["k", "young"]);
         // No zone carries the source ⇒ error.
         assert!(ef.rename_component("missing", "x").is_err());
     }

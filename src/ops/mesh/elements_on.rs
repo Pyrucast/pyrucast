@@ -42,8 +42,8 @@ use std::collections::HashSet;
 /// // faut que *tous* les nœuds de la maille y soient.
 /// let l = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[2.0, 0.0, 0.0]), 2, ElementType::SEG2)?;
 /// let bout = mesh::poi1_from_nodes(&[l.node(0, 0, 0)?])?;
-/// assert_eq!(mesh::elements_on(&l, &bout, false)?.cell_count()?, 1);
-/// assert_eq!(mesh::elements_on(&l, &bout, true)?.cell_count()?, 0);
+/// assert_eq!(mesh::elements_on(&l, &bout, false)?.cell_count(), 1);
+/// assert_eq!(mesh::elements_on(&l, &bout, true)?.cell_count(), 0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn elements_on(mesh: &Mesh, points: &Mesh, strict: bool) -> Result<Mesh> {

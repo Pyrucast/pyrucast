@@ -117,7 +117,7 @@ mod tests {
         let b = poi1_field(&coords, &[&n], vec!["P".into()]);
         let c = merge(&a, &b).unwrap();
         assert_eq!(c.len(), 2, "distinct supports ⇒ separate zones");
-        assert_eq!(Field::components(&c).unwrap(), vec!["T", "P"]);
+        assert_eq!(Field::components(&c), vec!["T", "P"]);
     }
 
     #[test]

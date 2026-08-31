@@ -72,7 +72,7 @@ fn un_maillage_se_compose_de_zones() -> Result<()> {
     let sm_handle = Handle::new(sm);
     let mut mesh = Mesh::empty(); // l'agrégat ne porte pas la `Coords`
     mesh.add_sub(sm_handle)?;
-    assert_eq!(mesh.cell_count()?, 1);
+    assert_eq!(mesh.cell_count(), 1);
     Ok(())
 }
 // ANCHOR_END: maillage
@@ -198,7 +198,7 @@ fn sauver_et_relire_un_graphe_d_objets() -> Result<()> {
     let mesh2 = objets.mesh("maillage fin")?; // erreur nommant clef, type attendu, type trouvé
     let dt = objets.float("pas de temps")?;
 
-    assert_eq!(mesh2.cell_count()?, 1);
+    assert_eq!(mesh2.cell_count(), 1);
     assert_eq!(dt, 0.05);
     Ok(())
 }
@@ -220,7 +220,7 @@ fn mailler_une_surface_depuis_un_contour() -> Result<()> {
 
     let mesh = mesh::triangulate_surface(&contour, ElementType::TRI3, Some(1.0))?;
 
-    assert!(mesh.cell_count()? > 0);
+    assert!(mesh.cell_count() > 0);
     Ok(())
 }
 // ANCHOR_END: mailler_en_rust

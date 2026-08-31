@@ -316,7 +316,7 @@ impl PyNodeField {
     /// Union of the zones' component names, first-seen order.
     fn components(&self) -> PyResult<Vec<String>> {
         use crate::containers::field::Field;
-        Ok(Field::components(&self.inner)?)
+        Ok(Field::components(&self.inner))
     }
 
     /// Value at `node` for the named `component` — the first zone
@@ -401,7 +401,7 @@ impl PyNodeField {
             vmax,
         };
         self.inner.plot(
-            Some(view),
+            view,
             save.as_deref(),
             component.as_deref(),
             scale,

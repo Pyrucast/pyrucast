@@ -35,7 +35,7 @@ impl PyCell {
     /// Element type name of this cell (e.g. `"TRI3"`).
     #[getter]
     fn element_type(&self) -> PyResult<String> {
-        Ok(self.inner.element_type()?.name().to_string())
+        Ok(self.inner.element_type().name().to_string())
     }
 
     /// Materialised nodes (each one refcounted on the
@@ -46,20 +46,20 @@ impl PyCell {
     }
 
     fn __len__(&self) -> PyResult<usize> {
-        Ok(self.inner.nodes_per_cell()?)
+        Ok(self.inner.nodes_per_cell())
     }
 
     /// `cell[j]` — j-th node of the cell. Supports negative indices
     /// and raises `IndexError` out of range so `for node in cell:` works.
     fn __getitem__(&self, idx: isize) -> PyResult<PyNode> {
-        let npc = self.inner.nodes_per_cell()? as isize;
+        let npc = self.inner.nodes_per_cell() as isize;
         let normalized = if idx < 0 { npc + idx } else { idx };
         if normalized < 0 || normalized >= npc {
             return Err(PyIndexError::new_err(format!(
                 "cell index {idx} out of range (len={npc})"
             )));
         }
-        let ids = self.inner.node_ids()?;
+        let ids = self.inner.node_ids();
         let id = ids[normalized as usize];
         let coords = self.inner.sm.read().coords();
         let node = Node::acquire(coords, id)?;

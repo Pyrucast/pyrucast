@@ -315,7 +315,7 @@ fn closest_on_facet(element_type: ElementType, coords: &[Vec<f64>], x: &[f64]) -
             }
         }
         // Gauss–Newton step (least squares on the tangent), then clamp.
-        let dxi = solve_normal(&jac, &r, sdim, tdim)?;
+        let dxi = solve_normal(&jac, &r, sdim, tdim);
         let mut step = 0.0;
         for j in 0..tdim {
             xi[j] += dxi[j];

@@ -214,7 +214,7 @@ mod tests {
         let gsub = grad.get(0).unwrap().read();
         let s = fes.get(0).unwrap().read();
         let mut lhs = 0.0;
-        for cell in 0..s.cell_count().unwrap() {
+        for cell in 0..s.cell_count() {
             for g in 0..s.gauss_count() {
                 let w = s.det_jacobian(cell, g).unwrap() * s.gauss_weight(g).unwrap();
                 lhs += (gsub.value(cell, g, "grad_f_x").unwrap() * 1.3

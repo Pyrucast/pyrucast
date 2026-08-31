@@ -261,7 +261,7 @@ impl PyElementField {
     /// Union of the sub-fields' component names, first-seen order.
     fn components(&self) -> PyResult<Vec<String>> {
         use crate::containers::field::Field;
-        Ok(Field::components(&self.inner)?)
+        Ok(Field::components(&self.inner))
     }
 
     /// Visualize this field on its own support: each zone knows its
@@ -298,7 +298,7 @@ impl PyElementField {
             vmax,
         };
         self.inner.plot(
-            Some(view),
+            view,
             save.as_deref(),
             component.as_deref(),
             scale,

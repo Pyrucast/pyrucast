@@ -22,7 +22,18 @@ use std::collections::HashMap;
 
 /// Default coplanarity threshold: two boundary facets whose outward normals
 /// differ by at most this angle are treated as part of the same flat face.
-const DEFAULT_ANGLE_DEG: f64 = 1.0;
+///
+/// Public because [`skin`] takes the angle **by value**: a caller with no
+/// opinion passes this constant rather than a `None` the operator would have
+/// to test for.
+///
+/// ```
+/// # use pyrucast::ops::mesh;
+/// // Le seuil par défaut se **transmet**, il ne se devine pas : `skin` reçoit
+/// // un angle, jamais une absence à tester.
+/// assert_eq!(mesh::skin::DEFAULT_ANGLE_DEG, 1.0);
+/// ```
+pub const DEFAULT_ANGLE_DEG: f64 = 1.0;
 
 /// Undirected edge key: the two node ids sorted, so an edge and its reverse
 /// share the same key (adjacency is orientation-agnostic).
@@ -129,12 +140,11 @@ fn facet_normal(c: &Coords, nodes: &[NodeId]) -> Result<[f64; 3]> {
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::HEX8);
 /// # sm.add_cell(&n.iter().map(|x| x.id()).collect::<Vec<_>>())?;
 /// let cube = Mesh::from_submesh(sm);
-/// assert_eq!(mesh::skin(&cube, None)?.cell_count()?, 6);
+/// assert_eq!(mesh::skin(&cube, mesh::skin::DEFAULT_ANGLE_DEG)?.cell_count(), 6);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn skin(mesh: &Mesh, angle_deg: Option<f64>) -> Result<Mesh> {
-    let angle = angle_deg.unwrap_or(DEFAULT_ANGLE_DEG);
-    let cos_tol = angle.to_radians().cos();
+pub fn skin(mesh: &Mesh, angle_deg: f64) -> Result<Mesh> {
+    let cos_tol = angle_deg.to_radians().cos();
 
     let coords = mesh.coords()?;
     {
@@ -347,7 +357,7 @@ mod tests {
         let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::HEX8));
         m.add_cell(&n).unwrap();
 
-        let sk = skin(&m, None).unwrap();
+        let sk = skin(&m, DEFAULT_ANGLE_DEG).unwrap();
         assert_eq!(sk.len(), 6, "six flat faces of the cube");
         assert_eq!(
             sk.element_types().unwrap(),
@@ -378,7 +388,7 @@ mod tests {
         let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::PYRA5));
         m.add_cell(&n).unwrap();
 
-        let sk = skin(&m, None).unwrap();
+        let sk = skin(&m, DEFAULT_ANGLE_DEG).unwrap();
         assert_eq!(sk.len(), 5, "the base and the four slanted sides");
         let types = sk.element_types().unwrap();
         assert_eq!(
@@ -420,7 +430,7 @@ mod tests {
         let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TET10));
         m.add_cell(&n).unwrap();
 
-        let sk = skin(&m, None).unwrap();
+        let sk = skin(&m, DEFAULT_ANGLE_DEG).unwrap();
         assert_eq!(sk.len(), 4, "four faces at sharp dihedral angles");
         assert_eq!(sk.element_types().unwrap(), vec![ElementType::TRI6; 4]);
 
@@ -457,7 +467,7 @@ mod tests {
         let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::HEX27));
         m.add_cell(&n).unwrap();
 
-        let sk = skin(&m, None).unwrap();
+        let sk = skin(&m, DEFAULT_ANGLE_DEG).unwrap();
         assert_eq!(sk.len(), 6);
         assert_eq!(sk.element_types().unwrap(), vec![ElementType::QUA9; 6]);
         assert_eq!(sk.cell_counts().unwrap(), vec![1; 6]);
@@ -473,7 +483,7 @@ mod tests {
         let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TET4));
         m.add_cell(&[a.id(), b.id(), c.id(), d.id()]).unwrap();
 
-        let sk = skin(&m, None).unwrap();
+        let sk = skin(&m, DEFAULT_ANGLE_DEG).unwrap();
         // A tet's four faces meet at sharp dihedral angles → four groups.
         assert_eq!(sk.len(), 4);
         assert_eq!(sk.element_types().unwrap(), vec![ElementType::TRI3; 4]);
@@ -505,7 +515,7 @@ mod tests {
         m.add_cell(&[l1[0], l1[1], l1[2], l1[3], l2[0], l2[1], l2[2], l2[3]])
             .unwrap();
 
-        let sk = skin(&m, None).unwrap();
+        let sk = skin(&m, DEFAULT_ANGLE_DEG).unwrap();
         assert_eq!(sk.len(), 6, "still six flat faces after the split");
         // The four lateral faces have two quads each; caps have one.
         let mut counts = sk.cell_counts().unwrap();
@@ -529,7 +539,7 @@ mod tests {
         let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::PENTA6));
         m.add_cell(&n).unwrap();
 
-        let sk = skin(&m, None).unwrap();
+        let sk = skin(&m, DEFAULT_ANGLE_DEG).unwrap();
         assert_eq!(sk.len(), 5, "two caps + three sides");
         let n_tri = sk
             .element_types()
@@ -558,7 +568,7 @@ mod tests {
         m.add_cell(&n).unwrap();
 
         // A 180° threshold makes every adjacent facet "coplanar": one group.
-        let sk = skin(&m, Some(180.0)).unwrap();
+        let sk = skin(&m, 180.0).unwrap();
         assert_eq!(sk.len(), 1);
         assert_eq!(sk.cell_counts().unwrap(), vec![6]);
     }
@@ -572,7 +582,7 @@ mod tests {
 
         // corner 0 is used by 3 of the cube's 6 faces.
         let before = coords.read().refcount(n[0]);
-        let sk = skin(&m, None).unwrap();
+        let sk = skin(&m, DEFAULT_ANGLE_DEG).unwrap();
         assert_eq!(coords.read().refcount(n[0]), before + 3);
         drop(sk);
         assert_eq!(coords.read().refcount(n[0]), before);
@@ -586,7 +596,7 @@ mod tests {
         let c = Node::create_in(coords.clone(), &[0.0, 1.0, 0.0]).unwrap();
         let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
         m.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
-        assert!(skin(&m, None).is_err());
+        assert!(skin(&m, DEFAULT_ANGLE_DEG).is_err());
     }
 
     #[test]
@@ -595,6 +605,6 @@ mod tests {
         let a = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0]).unwrap();
         let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::POI1));
         m.add_cell(&[a.id()]).unwrap();
-        assert!(skin(&m, None).is_err());
+        assert!(skin(&m, DEFAULT_ANGLE_DEG).is_err());
     }
 }

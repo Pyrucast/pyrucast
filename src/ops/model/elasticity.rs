@@ -35,7 +35,7 @@ use crate::models::tensor::Kinematics;
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// let m = model::elasticity(&fes, Kinematics::PlaneStress)?;
-/// assert_eq!(m.dual_vars()?, vec!["f_x".to_string(), "f_y".to_string()]);
+/// assert_eq!(m.dual_vars(), vec!["f_x".to_string(), "f_y".to_string()]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn elasticity(fes: &FiniteElementSpace, kinematics: Kinematics) -> Result<Model> {

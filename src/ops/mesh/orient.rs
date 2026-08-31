@@ -166,7 +166,7 @@ pub fn invert(mesh: &Mesh) -> Result<Mesh> {
 /// # }
 /// // Réoriente les mailles de proche en proche pour qu'elles s'accordent.
 /// let o = mesh::orient(&maillage)?;
-/// assert_eq!(o.cell_count()?, maillage.cell_count()?);
+/// assert_eq!(o.cell_count(), maillage.cell_count());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn orient(mesh: &Mesh) -> Result<Mesh> {
@@ -371,7 +371,7 @@ mod tests {
     fn conn_of(mesh: &Mesh, sub: usize) -> Vec<Vec<u32>> {
         mesh.cells(sub)
             .unwrap()
-            .map(|c| c.node_ids().unwrap().into_iter().map(|n| n.0).collect())
+            .map(|c| c.node_ids().into_iter().map(|n| n.0).collect())
             .collect()
     }
 

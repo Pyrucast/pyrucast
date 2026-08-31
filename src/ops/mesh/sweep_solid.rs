@@ -29,7 +29,7 @@ use crate::error::Result;
 /// # let bas = Mesh::from_submesh(sm);
 /// let haut = mesh::translate(&bas, &[0.0, 0.0, 1.0])?;
 /// let v = mesh::sweep_solid(&bas, &haut, 2)?;
-/// assert_eq!(v.cell_count()?, 2);
+/// assert_eq!(v.cell_count(), 2);
 /// assert_eq!(v.element_types()?, vec![ElementType::HEX8]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -65,7 +65,7 @@ mod tests {
 
         let solid = sweep_solid(&a, &b, 2).unwrap();
         assert_eq!(solid.element_types().unwrap(), vec![ElementType::PENTA6]);
-        assert_eq!(solid.cell_count().unwrap(), 2);
+        assert_eq!(solid.cell_count(), 2);
 
         // Bottom of the first prism reuses mesh_a nodes.
         assert_eq!(solid.node(0, 0, 0).unwrap().id(), na[0].id());
@@ -101,7 +101,7 @@ mod tests {
         b.add_cell(&[b1.id(), b3.id(), b2.id()]).unwrap();
 
         let solid = sweep_solid(&a, &b, 3).unwrap();
-        assert_eq!(solid.cell_count().unwrap(), 6);
+        assert_eq!(solid.cell_count(), 6);
         // Node a1 is shared by both source triangles; both prisms of the
         // first layer must reference the same node for it.
         assert_eq!(

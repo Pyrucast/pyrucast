@@ -28,7 +28,7 @@ use crate::error::Result;
 /// // Un SEG2 extrudé devient un QUA4 : une couche, une maille.
 /// let l = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[1.0, 0.0, 0.0]), 1, ElementType::SEG2)?;
 /// let s = mesh::extrude(&l, &[0.0, 1.0, 0.0], 3)?;
-/// assert_eq!(s.cell_count()?, 3);
+/// assert_eq!(s.cell_count(), 3);
 /// assert_eq!(s.element_types()?, vec![ElementType::QUA4]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -55,7 +55,7 @@ mod tests {
 
         let qua = extrude(&seg, &[0.0, 3.0], 3).unwrap();
         assert_eq!(qua.element_types().unwrap(), vec![ElementType::QUA4]);
-        assert_eq!(qua.cell_count().unwrap(), 6);
+        assert_eq!(qua.cell_count(), 6);
 
         let n = qua.node(0, 0, 0).unwrap();
         assert_eq!(n.position().unwrap(), vec![0.0, 0.0]);
@@ -91,7 +91,7 @@ mod tests {
 
         let hex = extrude(&qua_mesh, &[0.0, 0.0, 2.0], 1).unwrap();
         assert_eq!(hex.element_types().unwrap(), vec![ElementType::HEX8]);
-        assert_eq!(hex.cell_count().unwrap(), 1);
+        assert_eq!(hex.cell_count(), 1);
 
         assert_eq!(hex.node(0, 0, 0).unwrap().id(), n0.id());
         assert_eq!(hex.node(0, 0, 1).unwrap().id(), n1.id());
@@ -112,7 +112,7 @@ mod tests {
 
         let penta = extrude(&tri, &[0.0, 0.0, 2.0], 2).unwrap();
         assert_eq!(penta.element_types().unwrap(), vec![ElementType::PENTA6]);
-        assert_eq!(penta.cell_count().unwrap(), 2);
+        assert_eq!(penta.cell_count(), 2);
 
         // First layer: bottom triangle reuses the source nodes.
         assert_eq!(penta.node(0, 0, 0).unwrap().id(), n0.id());

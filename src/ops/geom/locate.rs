@@ -392,7 +392,7 @@ fn invert_cell(
             }
         }
         // Solve J·δξ = r in the least-squares sense (normal equations, tdim ≤ 3).
-        let dxi = solve_normal(&jac, &r, sdim, tdim)?;
+        let dxi = solve_normal(&jac, &r, sdim, tdim);
         let mut step = 0.0;
         for j in 0..tdim {
             xi[j] += dxi[j];
@@ -424,7 +424,7 @@ fn invert_cell(
 
 /// Solve the (possibly rectangular) system `J·δ = r` via normal equations
 /// `(JᵀJ)·δ = Jᵀr`, with `J` stored row-major `sdim × tdim`. `tdim ≤ 3`.
-pub(super) fn solve_normal(jac: &[f64], r: &[f64], sdim: usize, tdim: usize) -> Result<Vec<f64>> {
+pub(super) fn solve_normal(jac: &[f64], r: &[f64], sdim: usize, tdim: usize) -> Vec<f64> {
     // A = JᵀJ (tdim × tdim), b = Jᵀr (tdim).
     let mut a = vec![0.0; tdim * tdim];
     let mut b = vec![0.0; tdim];
@@ -448,7 +448,7 @@ pub(super) fn solve_normal(jac: &[f64], r: &[f64], sdim: usize, tdim: usize) -> 
 /// In-place Gaussian elimination with partial pivoting for `n ≤ 3`. A singular
 /// system yields a zero step (the Newton iteration then simply stalls and the
 /// cell is rejected by the residual test).
-fn solve_small(a: &mut [f64], b: &mut [f64], n: usize) -> Result<Vec<f64>> {
+fn solve_small(a: &mut [f64], b: &mut [f64], n: usize) -> Vec<f64> {
     for col in 0..n {
         // Partial pivot.
         let mut piv = col;
@@ -458,7 +458,7 @@ fn solve_small(a: &mut [f64], b: &mut [f64], n: usize) -> Result<Vec<f64>> {
             }
         }
         if a[piv * n + col].abs() < 1e-300 {
-            return Ok(vec![0.0; n]);
+            return vec![0.0; n];
         }
         if piv != col {
             for k in 0..n {
@@ -482,7 +482,7 @@ fn solve_small(a: &mut [f64], b: &mut [f64], n: usize) -> Result<Vec<f64>> {
         }
         x[col] = s / a[col * n + col];
     }
-    Ok(x)
+    x
 }
 
 /// A characteristic length of a cell (its bbox diagonal) for scaling residuals.

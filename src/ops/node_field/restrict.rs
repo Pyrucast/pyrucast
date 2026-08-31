@@ -9,7 +9,7 @@ use crate::handle::Handle;
 /// component by component, node by node: a `(node, component)` pair that
 /// `source` covers is copied, one it does not is left at `0.0`. Shared by
 /// [`restrict`] and [`restrict_like`].
-fn fill_from(sub: &mut SubNodeField, source: &NodeFieldView) -> Result<()> {
+fn fill_from(sub: &mut SubNodeField, source: &NodeFieldView) {
     let components = sub.components().to_vec();
     let nodes = sub.node_ids();
     // The source's component positions, resolved **once** per zone; the gather
@@ -18,7 +18,6 @@ fn fill_from(sub: &mut SubNodeField, source: &NodeFieldView) -> Result<()> {
     // `NodeId` and searched the component name — per node and per component.
     let reads = source.resolve_reads(&components);
     source.gather_cell(&nodes, &reads, sub.values_mut());
-    Ok(())
 }
 
 /// Restrict `field` to the nodes used by `mesh`.
@@ -94,12 +93,12 @@ pub fn restrict(field: &NodeField, mesh: &Mesh) -> Result<NodeField> {
         ));
     }
 
-    let components = Field::components(field)?;
+    let components = Field::components(field);
     let view = field.view()?;
     let mut out = NodeField::default();
     for sm in mesh {
         let mut sub = SubNodeField::from_support(sm, components.clone())?;
-        fill_from(&mut sub, &view)?;
+        fill_from(&mut sub, &view);
         out.add_sub(Handle::new(sub))?;
     }
     Ok(out)
@@ -178,7 +177,7 @@ pub fn restrict_like(field: &NodeField, target: &NodeField) -> Result<NodeField>
         // supports are shared as-is), so the output pairs with `target` under
         // `same_support` — the precondition of the field operators.
         let mut sub = SubNodeField::from_support(&zone.support(), zone.components().to_vec())?;
-        fill_from(&mut sub, &view)?;
+        fill_from(&mut sub, &view);
         out.add_sub(Handle::new(sub))?;
     }
     Ok(out)
@@ -230,11 +229,11 @@ mod tests {
         let r = restrict(&f, &m).unwrap();
         assert_eq!(r.len(), 1);
         assert_eq!(r.node_count().unwrap(), 2);
-        assert_eq!(Field::components(&r).unwrap(), vec!["T", "P"]);
+        assert_eq!(Field::components(&r), vec!["T", "P"]);
         assert_eq!(r.value(nodes[0].id(), "T").unwrap(), 1.0);
         assert_eq!(r.value(nodes[2].id(), "T").unwrap(), 3.0);
         assert_eq!(r.value(nodes[0].id(), "P").unwrap(), 0.0); // absent → 0
-        assert_eq!(r.value_opt(nodes[1].id(), "T").unwrap(), None); // dropped
+        assert_eq!(r.value_opt(nodes[1].id(), "T"), None); // dropped
     }
 
     #[test]
@@ -299,7 +298,7 @@ mod tests {
         let source = NodeField::from_sub(ss);
 
         let out = restrict_like(&source, &target).unwrap();
-        assert_eq!(Field::components(&out).unwrap(), vec!["u_x", "u_y"]);
+        assert_eq!(Field::components(&out), vec!["u_x", "u_y"]);
         assert_eq!(out.node_count().unwrap(), 2); // n2 dropped
         assert_eq!(out.value(n0.id(), "u_x").unwrap(), 1.0);
         assert_eq!(out.value(n1.id(), "u_y").unwrap(), 2.0);

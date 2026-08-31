@@ -56,8 +56,8 @@ use crate::handle::Handle;
 /// // Une vue légère sur **une** maille : sa connectivité, sans les
 /// // fonctions de forme — c'est `Element` qui les porte.
 /// let c = maillage.cell(0, 0)?;
-/// assert_eq!(c.node_ids()?.len(), 3);
-/// assert_eq!(c.element_type()?, ElementType::TRI3);
+/// assert_eq!(c.node_ids().len(), 3);
+/// assert_eq!(c.element_type(), ElementType::TRI3);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Clone)]
@@ -129,10 +129,10 @@ impl Cell {
     /// # let mut sm = SubMesh::new(coords, ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let sm = Handle::new(sm);
-    /// assert_eq!(Cell::new(sm, 0).unwrap().element_type().unwrap(), ElementType::TRI3);
+    /// assert_eq!(Cell::new(sm, 0).unwrap().element_type(), ElementType::TRI3);
     /// ```
-    pub fn element_type(&self) -> Result<ElementType> {
-        Ok(self.sm.read().element_type())
+    pub fn element_type(&self) -> ElementType {
+        self.sm.read().element_type()
     }
 
     /// Number of nodes that make up this cell (= `element_type().nodes_per_cell()`).
@@ -149,10 +149,10 @@ impl Cell {
     /// # let mut sm = SubMesh::new(coords, ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let sm = Handle::new(sm);
-    /// assert_eq!(Cell::new(sm, 0).unwrap().nodes_per_cell().unwrap(), 3); // TRI3
+    /// assert_eq!(Cell::new(sm, 0).unwrap().nodes_per_cell(), 3); // TRI3
     /// ```
-    pub fn nodes_per_cell(&self) -> Result<usize> {
-        Ok(self.sm.read().element_type().nodes_per_cell())
+    pub fn nodes_per_cell(&self) -> usize {
+        self.sm.read().element_type().nodes_per_cell()
     }
 
     /// Raw connectivity (node ids) of this cell, in submesh order.
@@ -169,13 +169,13 @@ impl Cell {
     /// # let mut sm = SubMesh::new(coords, ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let sm = Handle::new(sm);
-    /// let ids = Cell::new(sm, 0).unwrap().node_ids().unwrap();
+    /// let ids = Cell::new(sm, 0).unwrap().node_ids();
     /// assert_eq!(ids, vec![n[0].id(), n[1].id(), n[2].id()]); // dans l'ordre d'ajout
     /// ```
-    pub fn node_ids(&self) -> Result<Vec<NodeId>> {
+    pub fn node_ids(&self) -> Vec<NodeId> {
         let s = self.sm.read();
         let npc = s.element_type().nodes_per_cell();
-        Ok(s.connectivity()[self.idx * npc..(self.idx + 1) * npc].to_vec())
+        s.connectivity()[self.idx * npc..(self.idx + 1) * npc].to_vec()
     }
 
     /// Materialise the cell's nodes as a `Vec<Node>`. Each `Node`
@@ -201,7 +201,7 @@ impl Cell {
     /// ```
     pub fn nodes(&self) -> Result<Vec<Node>> {
         let coords = self.sm.read().coords();
-        let ids = self.node_ids()?;
+        let ids = self.node_ids();
         ids.into_iter()
             .map(|id| Node::acquire(coords.clone(), id))
             .collect()
@@ -216,27 +216,19 @@ impl fmt::Debug for Cell {
 
 impl fmt::Display for Cell {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match (self.element_type(), self.node_ids()) {
-            (Ok(et), Ok(ids)) => {
-                let raw: Vec<u32> = ids.into_iter().map(|n| n.0).collect();
-                write!(f, "Cell<{}> #{}: {:?}", et, self.idx, raw)
-            }
-            _ => write!(f, "Cell #{}", self.idx),
-        }
+        let raw: Vec<u32> = self.node_ids().into_iter().map(|n| n.0).collect();
+        write!(f, "Cell<{}> #{}: {:?}", self.element_type(), self.idx, raw)
     }
 }
 
 impl crate::dump::Dump for Cell {
     fn render(&self, opts: &crate::dump::DumpOptions) -> String {
         use crate::dump::{fmt_float, table};
-        let header = match self.element_type() {
-            Ok(et) => format!("Cell<{et}> #{}", self.idx),
-            Err(_) => format!("Cell #{}", self.idx),
-        };
+        let header = format!("Cell<{}> #{}", self.element_type(), self.idx);
         // Per-node coordinate table (one lock on the Coords).
         let body = (|| -> Result<String> {
             let coords = self.sm.read().coords();
-            let ids = self.node_ids()?;
+            let ids = self.node_ids();
             let c = coords.read();
             let mut rows: Vec<Vec<String>> = Vec::with_capacity(ids.len());
             let mut dim = 0usize;
@@ -338,9 +330,9 @@ mod tests {
         let h = Handle::new(sm);
 
         let cell = Cell::new(h, 0).unwrap();
-        assert_eq!(cell.element_type().unwrap(), ElementType::TRI3);
-        assert_eq!(cell.nodes_per_cell().unwrap(), 3);
-        assert_eq!(cell.node_ids().unwrap(), vec![a.id(), b.id(), c.id()]);
+        assert_eq!(cell.element_type(), ElementType::TRI3);
+        assert_eq!(cell.nodes_per_cell(), 3);
+        assert_eq!(cell.node_ids(), vec![a.id(), b.id(), c.id()]);
         let nodes = cell.nodes().unwrap();
         assert_eq!(nodes.len(), 3);
         assert_eq!(nodes[0].id(), a.id());
@@ -388,7 +380,7 @@ mod tests {
         assert_eq!(cells.len(), 2);
         assert_eq!(cells[0].index(), 0);
         assert_eq!(cells[1].index(), 1);
-        assert_eq!(cells[0].node_ids().unwrap(), vec![a.id(), b.id()]);
-        assert_eq!(cells[1].node_ids().unwrap(), vec![b.id(), c.id()]);
+        assert_eq!(cells[0].node_ids(), vec![a.id(), b.id()]);
+        assert_eq!(cells[1].node_ids(), vec![b.id(), c.id()]);
     }
 }

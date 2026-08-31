@@ -1103,7 +1103,7 @@ pub struct GmshBlock<'a> {
 /// let regions = mesh::from_gmsh_arrays(coords.clone(), &tags, &xyz, &blocs)?;
 /// assert_eq!(regions.len(), 1);
 /// assert_eq!(regions[0].0, "plaque");
-/// assert_eq!(regions[0].1.cell_count()?, 2);
+/// assert_eq!(regions[0].1.cell_count(), 2);
 /// assert_eq!(coords.read().node_count(), 4);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -1181,7 +1181,7 @@ pub fn from_gmsh_arrays(
 /// let coords = Handle::new(Coords::new(2)?);
 /// assert_eq!(coords.read().node_count(), 0);
 /// let regions = mesh::read_gmsh(coords.clone(), &chemin)?;
-/// assert_eq!(regions[0].1.cell_count()?, 1);
+/// assert_eq!(regions[0].1.cell_count(), 1);
 /// assert_eq!(coords.read().node_count(), 3);
 /// # let _ = std::fs::remove_file(&chemin);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -1207,7 +1207,7 @@ pub fn read_gmsh(coords: Handle<Coords>, path: &Path) -> Result<Vec<(String, Mes
 /// let coords = Handle::new(Coords::new(2)?);
 /// let regions = mesh::read_gmsh_str(coords.clone(), maillage_gmsh)?;
 /// assert_eq!(regions.len(), 1);
-/// assert_eq!(regions[0].1.cell_count()?, 1);
+/// assert_eq!(regions[0].1.cell_count(), 1);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn read_gmsh_str(coords: Handle<Coords>, text: &str) -> Result<Vec<(String, Mesh)>> {
@@ -1229,7 +1229,7 @@ pub fn read_gmsh_str(coords: Handle<Coords>, text: &str) -> Result<Vec<(String, 
 /// // La même chose depuis des octets bruts — ASCII **ou** binaire.
 /// let coords = Handle::new(Coords::new(2)?);
 /// let regions = mesh::gmsh::read_gmsh_bytes(coords.clone(), maillage_gmsh.as_bytes())?;
-/// assert_eq!(regions[0].1.cell_count()?, 1);
+/// assert_eq!(regions[0].1.cell_count(), 1);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn read_gmsh_bytes(coords: Handle<Coords>, bytes: &[u8]) -> Result<Vec<(String, Mesh)>> {
@@ -1280,11 +1280,11 @@ $EndElements
 
         let (_, bottom) = &groups[0];
         assert_eq!(bottom.element_types().unwrap(), vec![ElementType::SEG2]);
-        assert_eq!(bottom.cell_count().unwrap(), 1);
+        assert_eq!(bottom.cell_count(), 1);
 
         let (_, plate) = &groups[1];
         assert_eq!(plate.element_types().unwrap(), vec![ElementType::TRI3]);
-        assert_eq!(plate.cell_count().unwrap(), 2);
+        assert_eq!(plate.cell_count(), 2);
     }
 
     #[test]
@@ -1348,7 +1348,7 @@ $EndElements
 
         let (_, plate) = groups.iter().find(|(n, _)| n == "plate").unwrap();
         assert_eq!(plate.element_types().unwrap(), vec![ElementType::TRI3]);
-        assert_eq!(plate.cell_count().unwrap(), 2);
+        assert_eq!(plate.cell_count(), 2);
 
         let (_, bottom) = groups.iter().find(|(n, _)| n == "bottom").unwrap();
         assert_eq!(bottom.element_types().unwrap(), vec![ElementType::SEG2]);
@@ -1456,7 +1456,7 @@ $EndElements
         assert_eq!(groups.len(), 1);
         let m = &groups[0].1;
         assert_eq!(m.element_types().unwrap(), vec![ElementType::PYRA5]);
-        assert_eq!(m.cell_count().unwrap(), 1);
+        assert_eq!(m.cell_count(), 1);
         assert_eq!(
             m.node(0, 0, 4).unwrap().position().unwrap(),
             vec![0.0, 0.0, 1.0]
@@ -1495,7 +1495,7 @@ $EndElements
         let g = read_gmsh_str(coords(3), mesh).unwrap();
         let (_, m) = &g[0];
         assert_eq!(m.element_types().unwrap(), vec![ElementType::TET10]);
-        assert_eq!(m.cell_count().unwrap(), 1);
+        assert_eq!(m.cell_count(), 1);
         // Local node 8 = edge (1,3) midpoint, node 9 = edge (2,3) midpoint.
         assert_eq!(
             m.node(0, 0, 8).unwrap().position().unwrap(),
@@ -1738,10 +1738,10 @@ $EndElements
         assert_eq!(names, vec!["bottom", "plate"]);
         let (_, plate) = groups.iter().find(|(n, _)| n == "plate").unwrap();
         assert_eq!(plate.element_types().unwrap(), vec![ElementType::TRI3]);
-        assert_eq!(plate.cell_count().unwrap(), 2);
+        assert_eq!(plate.cell_count(), 2);
         let (_, bottom) = groups.iter().find(|(n, _)| n == "bottom").unwrap();
         assert_eq!(bottom.element_types().unwrap(), vec![ElementType::SEG2]);
-        assert_eq!(bottom.cell_count().unwrap(), 1);
+        assert_eq!(bottom.cell_count(), 1);
         // node 3 sits at (1, 1) — checks the f64 payload decoded right.
         assert_eq!(
             plate.node(0, 0, 2).unwrap().position().unwrap(),
@@ -1886,8 +1886,8 @@ $EndElements
         let got: Vec<&str> = groups.iter().map(|(n, _)| n.as_str()).collect();
         assert_eq!(got, vec!["plate", "everything"]);
         // One cell, counted in both — the node is shared, not duplicated.
-        assert_eq!(groups[0].1.cell_count().unwrap(), 1);
-        assert_eq!(groups[1].1.cell_count().unwrap(), 1);
+        assert_eq!(groups[0].1.cell_count(), 1);
+        assert_eq!(groups[1].1.cell_count(), 1);
     }
 
     #[test]
@@ -1903,7 +1903,7 @@ $EndElements
             groups: &names,
         }];
         let groups = from_gmsh_arrays(coords(2), &tags, &xyz, &blocks).unwrap();
-        assert_eq!(groups[0].1.cell_count().unwrap(), 1);
+        assert_eq!(groups[0].1.cell_count(), 1);
     }
 
     #[test]

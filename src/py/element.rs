@@ -34,7 +34,7 @@ impl PyElement {
     /// Spatial dimension the element lives in.
     #[getter]
     fn space_dim(&self) -> PyResult<usize> {
-        Ok(self.inner.space_dim()?)
+        Ok(self.inner.space_dim())
     }
 
     /// Reference (parametric) dimension of the element.

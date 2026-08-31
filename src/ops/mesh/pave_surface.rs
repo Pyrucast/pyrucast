@@ -100,7 +100,7 @@ use crate::ops::mesh::{contour, paving};
 /// // Le pavage frontal : des quadrangles posés en rangées qui suivent le
 /// // contour, plutôt que des triangles appariés après coup.
 /// let m = mesh::pave_surface(&contour, ElementType::QUA4, Some(0.5), false, mesh::FrontRelax::Free)?;
-/// assert!(m.cell_count()? > 0);
+/// assert!(m.cell_count() > 0);
 /// // `all_quad` exige que rien ne reste triangulaire — ce qui n'est
 /// // possible que si le contour a un nombre **pair** de segments.
 /// assert!(mesh::pave_surface(&contour, ElementType::QUA4, Some(0.5), true, mesh::FrontRelax::Free).is_ok());
@@ -605,12 +605,8 @@ mod tests {
             FrontRelax::Along,
         )
         .unwrap();
-        assert!(
-            free.cell_count().unwrap() > 500,
-            "{}",
-            free.cell_count().unwrap()
-        );
-        assert_eq!(along.cell_count().unwrap(), 400);
+        assert!(free.cell_count() > 500, "{}", free.cell_count());
+        assert_eq!(along.cell_count(), 400);
         // And every one of them a unit square, to the last digit the
         // smoothing leaves.
         for si in 0..along.len() {

@@ -88,7 +88,7 @@ fn stacked_layers() -> Mesh {
 
 fn bench_merge_nodes(c: &mut Criterion) {
     let stack = stacked_layers();
-    let cells = stack.cell_count().unwrap();
+    let cells = stack.cell_count();
     c.bench_function(&format!("merge_nodes (copy) on {cells} HEX8"), |bch| {
         bch.iter(|| black_box(mesh::merge_nodes(&stack, 1e-9, false).unwrap()))
     });
@@ -96,7 +96,7 @@ fn bench_merge_nodes(c: &mut Criterion) {
 
 fn bench_translate(c: &mut Criterion) {
     let stack = stacked_layers();
-    let cells = stack.cell_count().unwrap();
+    let cells = stack.cell_count();
     c.bench_function(&format!("translate {cells} HEX8"), |bch| {
         bch.iter(|| black_box(mesh::translate(&stack, &[0.0, 0.0, 1.0]).unwrap()))
     });

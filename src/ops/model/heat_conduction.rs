@@ -43,7 +43,7 @@ use crate::models::symmetry::MaterialSymmetry;
 /// // Un sous-modèle par sous-espace : le modèle couvre **tout** l'espace EF.
 /// let m = model::heat_conduction(&fes)?;
 /// assert_eq!(m.len(), fes.len());
-/// assert_eq!(m.primal_vars()?, vec!["T".to_string()]);
+/// assert_eq!(m.primal_vars(), vec!["T".to_string()]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn heat_conduction(fes: &FiniteElementSpace) -> Result<Model> {

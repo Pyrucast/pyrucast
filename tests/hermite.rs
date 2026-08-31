@@ -160,7 +160,7 @@ fn a_whole_beam_mesh_can_be_hermite() -> Result<()> {
     }
     let fes = FiniteElementSpace::new(&mesh, Interpolation::Hermite3)?;
     let s = fes.get(0)?.read();
-    assert_eq!(s.cell_count()?, 3);
+    assert_eq!(s.cell_count(), 3);
     assert_eq!(s.shape_count()?, 4);
     Ok(())
 }

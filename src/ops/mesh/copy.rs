@@ -40,7 +40,7 @@ use crate::error::Result;
 /// // La même connectivité sur les **mêmes** nœuds : un calque, pas un double.
 /// let calque = mesh::copy(&barre, false)?;
 /// assert_eq!(calque.node(0, 0, 0)?.id(), barre.node(0, 0, 0)?.id());
-/// assert_eq!(calque.cell_count()?, barre.cell_count()?);
+/// assert_eq!(calque.cell_count(), barre.cell_count());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn copy(mesh: &Mesh, new_nodes: bool) -> Result<Mesh> {
@@ -85,7 +85,7 @@ mod tests {
         let (_coords, mesh, n) = two_triangles();
         let copie = copy(&mesh, true).unwrap();
 
-        assert_eq!(copie.cell_count().unwrap(), 2);
+        assert_eq!(copie.cell_count(), 2);
         // Every node is new…
         for cell in 0..2 {
             for i in 0..3 {
@@ -97,7 +97,7 @@ mod tests {
         }
         // …but the two cells still share the edge (b, c): 4 distinct nodes,
         // not 6.
-        assert_eq!(copie.to_poi1().unwrap().cell_count().unwrap(), 4);
+        assert_eq!(copie.to_poi1().unwrap().cell_count(), 4);
         // The source keeps its own nodes, unmoved.
         assert_eq!(mesh.node(0, 0, 0).unwrap().id(), n[0].id());
     }
@@ -132,8 +132,8 @@ mod tests {
             let mut copie = copy(&mesh, new_nodes).unwrap();
             assert!(!copie.get(0).unwrap().read().is_sealed());
             copie.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-            assert_eq!(copie.cell_count().unwrap(), 3);
-            assert_eq!(mesh.cell_count().unwrap(), 2, "l'original n'a pas bougé");
+            assert_eq!(copie.cell_count(), 3);
+            assert_eq!(mesh.cell_count(), 2, "l'original n'a pas bougé");
         }
     }
 

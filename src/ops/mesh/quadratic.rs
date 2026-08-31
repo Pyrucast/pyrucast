@@ -58,7 +58,7 @@ type PendingZone = (ElementType, usize, crate::atoms::RgbColor, Vec<NodeId>);
 /// let l = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[2.0, 0.0, 0.0]), 2, ElementType::SEG2)?;
 /// let q = mesh::to_quadratic(&l)?;
 /// assert_eq!(q.element_types()?, vec![ElementType::SEG3]);
-/// assert_eq!(q.cell_count()?, 2);
+/// assert_eq!(q.cell_count(), 2);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn to_quadratic(mesh: &Mesh) -> Result<Mesh> {
@@ -152,7 +152,7 @@ mod tests {
 
         let quad = to_quadratic(&tri).unwrap();
         assert_eq!(quad.element_types().unwrap(), vec![ElementType::TRI6]);
-        assert_eq!(quad.cell_count().unwrap(), 2);
+        assert_eq!(quad.cell_count(), 2);
 
         // Corners are re-used verbatim.
         assert_eq!(quad.node(0, 0, 0).unwrap().id(), a.id());

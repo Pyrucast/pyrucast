@@ -444,7 +444,7 @@ impl Cube {
                     &format!("f_{}", AXES[ia]),
                     self.nodes[jn].id(),
                     &format!("u_{}", AXES[ja]),
-                )?;
+                );
                 if (fd - analytic).abs() > tol * (analytic.abs() + 1.0) {
                     return Err(pyrucast::PyrucastError::Message(format!(
                         "K_t[{i},{j}] analytic {analytic} vs symmetrised finite difference {fd}"

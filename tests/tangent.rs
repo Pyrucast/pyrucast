@@ -92,7 +92,7 @@ fn check_tangent_fd(
                 &format!("f_{}", AXES[ia]),
                 nodes[jn].id(),
                 &format!("u_{}", AXES[ja]),
-            )?;
+            );
             assert!(
                 (fd - analytic).abs() < 1e-4 * (analytic.abs() + 1.0),
                 "K_t[{i},{j}] analytic {analytic} vs FD {fd}"
@@ -232,8 +232,8 @@ fn elastic_regime_tangent_equals_stiffness() -> Result<()> {
         for a in ["f_x", "f_y"] {
             for j in 0..4 {
                 for b in ["u_x", "u_y"] {
-                    let t = kt.get(n[i].id(), a, n[j].id(), b)?;
-                    let s = k.get(n[i].id(), a, n[j].id(), b)?;
+                    let t = kt.get(n[i].id(), a, n[j].id(), b);
+                    let s = k.get(n[i].id(), a, n[j].id(), b);
                     assert!(
                         (t - s).abs() < tol * (s.abs() + 1.0),
                         "{a}{i} {b}{j}: {t} ≠ {s}"
