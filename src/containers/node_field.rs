@@ -1235,8 +1235,39 @@ impl NodeField {
     /// ```
     pub fn check(&self) -> Result<()> {
         use crate::containers::field::SubField;
-        use std::collections::HashMap;
-        let mut seen: HashMap<(NodeId, String), f64> = HashMap::new();
+        use std::collections::{HashMap, HashSet};
+        // A lone zone agrees with itself. This runs at the end of every union,
+        // whose common case is exactly that.
+        if self.len() < 2 {
+            return Ok(());
+        }
+
+        // Which nodes are carried by more than one zone: one hash per node,
+        // not per value. Zones on disjoint node clouds stop here, without ever
+        // touching a value buffer.
+        let total: usize = self.iter().map(|h| h.read().node_count()).sum();
+        let mut seen_nodes: HashSet<NodeId> = HashSet::with_capacity(total);
+        let mut shared: HashSet<NodeId> = HashSet::new();
+        for h in self {
+            let s = h.read();
+            let support = s.support();
+            let support = support.read();
+            for &nid in s.nodes_with(&support) {
+                if !seen_nodes.insert(nid) {
+                    shared.insert(nid);
+                }
+            }
+        }
+        if shared.is_empty() {
+            return Ok(());
+        }
+        drop(seen_nodes);
+
+        // Only a shared node can disagree. Component names are interned once
+        // per zone: keyed by name, the map would allocate a `String` per
+        // value — a copy of the whole field, on every union.
+        let mut ids: HashMap<String, u32> = HashMap::new();
+        let mut seen: HashMap<(NodeId, u32), f64> = HashMap::new();
         for h in self {
             let s = h.read();
             let support = s.support();
@@ -1247,16 +1278,27 @@ impl NodeField {
                 s.values(),
             );
             let ncomp = comps.len();
+            let gids: Vec<u32> = comps
+                .iter()
+                .map(|c| {
+                    let next = ids.len() as u32;
+                    *ids.entry(c.clone()).or_insert(next)
+                })
+                .collect();
             for (ni, &nid) in nodes.iter().enumerate() {
-                for (ci, comp) in comps.iter().enumerate() {
-                    let v = values[ni * ncomp + ci];
-                    match seen.entry((nid, comp.clone())) {
+                if !shared.contains(&nid) {
+                    continue;
+                }
+                let row = &values[ni * ncomp..(ni + 1) * ncomp];
+                for (ci, &gid) in gids.iter().enumerate() {
+                    let v = row[ci];
+                    match seen.entry((nid, gid)) {
                         std::collections::hash_map::Entry::Occupied(e) => {
                             if *e.get() != v {
                                 return Err(PyrucastError::Message(format!(
-                                    "incoherent NodeField: node {}, component {}: {} ≠ {}",
+                                    "incoherent NodeField: node {}, component {}: {} \u{2260} {}",
                                     nid,
-                                    comp,
+                                    comps[ci],
                                     e.get(),
                                     v
                                 )));

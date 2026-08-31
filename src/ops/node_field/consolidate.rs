@@ -20,11 +20,11 @@
 //! no copy) in the result.
 
 use crate::aggregate::Aggregate;
-use crate::atoms::NodeId;
 use crate::containers::field::SubField;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::Result;
 use crate::handle::Handle;
+use crate::parallel::*;
 
 /// Fuse the zones of `field` that share the same support `SubMesh`.
 ///
@@ -68,96 +68,113 @@ use crate::handle::Handle;
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn consolidate(field: &NodeField) -> Result<NodeField> {
-    // Snapshot every sub once (one lock each, never nested), keeping its
-    // support handle for grouping and the singleton-sharing case.
-    struct Snap {
-        handle: Handle<SubNodeField>,
-        support: Handle<crate::containers::mesh::SubMesh>,
-        nodes: Vec<NodeId>,
-        components: Vec<String>,
-        values: Vec<f64>,
-    }
-    let mut snaps: Vec<Snap> = Vec::with_capacity(field.len());
+    // Group the zone handles by support identity, first-seen order. Only the
+    // support handle is read here, never the values: a group of one must cost
+    // nothing.
+    let mut groups: Vec<Vec<Handle<SubNodeField>>> = Vec::new();
     for h in field {
-        let (support, nodes, components, values) = {
-            let s = h.read();
-            (
-                s.support(),
-                s.node_ids(),
-                s.components().to_vec(),
-                s.values().to_vec(),
-            )
-        };
-        snaps.push(Snap {
-            handle: h.clone(),
-            support,
-            nodes,
-            components,
-            values,
-        });
-    }
-
-    // Group sub indices by support handle identity, first-seen order.
-    let mut groups: Vec<Vec<usize>> = Vec::new();
-    for (i, snap) in snaps.iter().enumerate() {
+        let support = h.read().support();
         match groups
             .iter_mut()
-            .find(|idxs| snaps[idxs[0]].support.same_object(&snap.support))
+            .find(|g| g[0].read().support().same_object(&support))
         {
-            Some(idxs) => idxs.push(i),
-            None => groups.push(vec![i]),
+            Some(g) => g.push(h.clone()),
+            None => groups.push(vec![h.clone()]),
         }
     }
 
     let mut out = NodeField::default();
-    for idxs in &groups {
-        if let [single] = idxs.as_slice() {
-            // Nothing to fuse: share the sub-field as-is.
-            out.add_sub(snaps[*single].handle.clone())?;
+    for group in &groups {
+        // A group of one keeps its zone: shared, never copied. Snapshotting it
+        // would copy a whole displacement field to hand it back unchanged.
+        if let [single] = group.as_slice() {
+            out.add_sub(single.clone())?;
             continue;
         }
 
-        // Union of the group's components, first-seen order across the subs.
+        // Component lists only — a few names per zone. The value buffers stay
+        // where they are, and the fused zone is built *before* the long read
+        // guards: its support seals itself, and no guard must span that.
+        let comps: Vec<Vec<String>> = group
+            .iter()
+            .map(|h| h.read().components().to_vec())
+            .collect();
+
+        // Union of the group's components, first-seen order across the zones.
         let mut components: Vec<String> = Vec::new();
-        for &i in idxs {
-            for c in &snaps[i].components {
+        for cs in &comps {
+            for c in cs {
                 if !components.contains(c) {
                     components.push(c.clone());
                 }
             }
         }
 
-        // All subs in the group share the same support, hence the same node
-        // list; build the fused sub on that very support (shared handle).
-        let support = snaps[idxs[0]].support.clone();
-        let mut fused = SubNodeField::from_support(&support, components)?;
+        // All zones in the group share the support, hence the same node list
+        // and the same row order: the fused buffer lines up positionally with
+        // every source buffer.
+        let support = group[0].read().support();
+        let mut fused = SubNodeField::from_support(&support, components.clone())?;
+        let out_nc = components.len();
+        // The node ids serve the error message alone; read them once, before
+        // the guards and outside the parallel pass.
+        let nodes = fused.node_ids();
 
-        // Fill from every sub; a component shared by several subs must agree
-        // at each node (exact comparison) — first writer sets, later writers
-        // must match.
-        let mut seen: std::collections::HashSet<(NodeId, String)> =
-            std::collections::HashSet::new();
-        for &i in idxs {
-            let snap = &snaps[i];
-            let ncomp = snap.components.len();
-            for (ni, &nid) in snap.nodes.iter().enumerate() {
-                for (ci, comp) in snap.components.iter().enumerate() {
-                    let v = snap.values[ni * ncomp + ci];
-                    if seen.insert((nid, comp.clone())) {
-                        fused.set_value(nid, comp, v)?;
-                    } else {
-                        let existing = fused.value(nid, comp)?;
-                        if existing != v {
+        // Resolve, **once per zone**, where each of its components lands in the
+        // fused layout and whether this zone is the one that writes it. Looking
+        // the name up at every node instead would re-prove, once per value, a
+        // property of the zone.
+        let mut written = vec![false; out_nc];
+        let plans: Vec<Vec<(usize, usize, bool)>> = comps
+            .iter()
+            .map(|cs| {
+                cs.iter()
+                    .enumerate()
+                    .map(|(ci, comp)| {
+                        let oc = components
+                            .iter()
+                            .position(|c| c == comp)
+                            .expect("the union of the group's components contains each of them");
+                        let first = !written[oc];
+                        written[oc] = true;
+                        (ci, oc, first)
+                    })
+                    .collect()
+            })
+            .collect();
+
+        // Read the group's zones for the whole fusion — concurrent shared
+        // locks, no copy.
+        let zones: Vec<_> = group.iter().map(|h| h.read()).collect();
+
+        // One flat pass per zone, parallel over the node rows: each row of the
+        // fused buffer is written by one task alone. A component several zones
+        // carry must agree at every node — checked by index, in the same pass.
+        for (z, plan) in zones.iter().zip(&plans) {
+            let src_nc = z.component_count();
+            let src = z.values();
+            fused
+                .values_mut()
+                .par_chunks_mut(out_nc)
+                .with_min_len((MIN_PARALLEL_LEN / out_nc.max(1)).max(1))
+                .enumerate()
+                .try_for_each(|(row, dst)| -> Result<()> {
+                    for &(ci, oc, first) in plan {
+                        let v = src[row * src_nc + ci];
+                        if first {
+                            dst[oc] = v;
+                        } else if dst[oc] != v {
                             return Err(crate::error::PyrucastError::Message(format!(
                                 "incoherent NodeField on shared support: node {}, \
-                                 component {}: {} ≠ {}",
-                                nid, comp, existing, v
+                                 component {}: {} \u{2260} {}",
+                                nodes[row], components[oc], dst[oc], v
                             )));
                         }
                     }
-                }
-            }
+                    Ok(())
+                })?;
         }
+        drop(zones);
         out.add_sub(Handle::new(fused))?;
     }
 

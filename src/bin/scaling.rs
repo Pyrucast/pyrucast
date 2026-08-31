@@ -27,7 +27,7 @@
 //! beside each timing, the memory each intermediate of the assembler costs at
 //! that size. It is the before/after reference for the assembly work.
 
-use pyrucast::ops::model;
+use pyrucast::ops::{mesh, model};
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 
@@ -270,6 +270,33 @@ fn run_cube(n: usize, reps: u32) {
         element_field::consolidate(&deux).unwrap()
     });
     debug_assert_eq!(une.len(), 1);
+
+    // Le pendant nodal de l'union. Deux zones à composantes disjointes sur un
+    // même support : la fusion, qui parcourt tous les nœuds. Puis la même
+    // union avec un support distinct : il n'y a rien à fusionner, et cette
+    // phase mesure que rien n'est recopié non plus.
+    let support = fespace.get(0).unwrap().read().submesh();
+    let coords = support.read().coords();
+    let depl = NodeField::from_sub(
+        SubNodeField::from_support(&support, vec!["UX".into(), "UY".into(), "UZ".into()]).unwrap(),
+    );
+    let temp = NodeField::from_sub(SubNodeField::from_support(&support, vec!["T".into()]).unwrap());
+    let fusion = phase("node_field union (même support)", || {
+        depl.union(&temp).unwrap()
+    });
+    debug_assert_eq!(fusion.len(), 1);
+
+    let ailleurs = {
+        let loin: Vec<Node> = (0..8)
+            .map(|i| Node::create_in(coords.clone(), &[-1.0 - i as f64, -1.0, -1.0]).unwrap())
+            .collect();
+        let poi1 = mesh::poi1_from_nodes(&loin).unwrap().get(0).unwrap();
+        NodeField::from_sub(SubNodeField::from_poi1(&poi1, vec!["T".into()]).unwrap())
+    };
+    let separees = phase("node_field union (2 supports)", || {
+        depl.union(&ailleurs).unwrap()
+    });
+    debug_assert_eq!(separees.len(), 2);
 
     // The first assembly pays the symbolic phase (DOF numbering + sparsity);
     // every later one reuses the pattern memoised on the model.
