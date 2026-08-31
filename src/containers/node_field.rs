@@ -593,6 +593,13 @@ impl SubNodeField {
         Some(self.values[node_idx * self.components.len() + ci])
     }
 
+    /// [`component_value_at`](Self::component_value_at) with the component
+    /// already resolved to its index — the form a gather uses, having resolved
+    /// the names once for the whole zone.
+    pub(crate) fn component_value_at_index(&self, node_idx: usize, ci: usize) -> f64 {
+        self.values[node_idx * self.components.len() + ci]
+    }
+
     // ── Accès idiomatique ───────────────────────────────────────────────────
 
     /// Read a value by `(NodeId, component name)`.
@@ -1303,6 +1310,59 @@ impl NodeField {
             .collect())
     }
 
+    /// [`gather`](Self::gather) over packed
+    /// [`DofKey`](crate::containers::matrix::DofKey)s, `vars` naming the
+    /// variable each key's slot refers to.
+    ///
+    /// The same values, read without a `String` per DOF: the components are
+    /// resolved against every zone once, up front, and each DOF is then a pair
+    /// of index lookups. This is the form the solver uses — a right-hand side is
+    /// gathered at every row of the matrix, so the names would otherwise be
+    /// compared thirty million times over for a property of the zone.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::matrix::dof_key;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::node_field::{NodeField, SubNodeField};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let support = mesh::poi1_from_nodes(&n)?;
+    /// # let mut z = SubNodeField::from_poi1(&support.get(0)?, vec!["T".into()])?;
+    /// # z.set_value(n[0].id(), "T", 10.0)?;
+    /// # z.set_value(n[1].id(), "T", 50.0)?;
+    /// # let f = NodeField::from_sub(z);
+    /// // Les mêmes valeurs que `gather`, sans une `String` par DDL.
+    /// let noms = vec!["T".to_string()];
+    /// let cles = vec![dof_key(n[0].id(), 0), dof_key(n[1].id(), 0)];
+    /// assert_eq!(f.gather_keys(&cles, &noms)?, vec![10.0, 50.0]);
+    /// // Un DDL qu'aucune zone ne définit vaut zéro, comme partout ailleurs.
+    /// assert_eq!(f.gather_keys(&[dof_key(n[0].id(), 1)], &["absente".into()])?, vec![0.0]);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn gather_keys(
+        &self,
+        keys: &[crate::containers::matrix::DofKey],
+        vars: &[String],
+    ) -> Result<Vec<f64>> {
+        use crate::containers::matrix::{dof_node, dof_var};
+        let view = self.view()?;
+        let reads = view.resolve_reads(vars);
+        Ok(keys
+            .iter()
+            .map(|&k| {
+                view.value_at_slot(dof_node(k), dof_var(k) as usize, &reads)
+                    .unwrap_or(0.0)
+            })
+            .collect())
+    }
+
     /// Build a fresh single-zone `NodeField` on `coords` holding `values` at
     /// `dofs` (`(node, component)` pairs, in `values` order). The support is a
     /// POI1 submesh over the distinct nodes (first-seen order); the components
@@ -1447,6 +1507,33 @@ impl NodeFieldView {
             .find_map(|(zone, support)| {
                 let ni = *support.node_index().get(&nid)?;
                 zone.component_value_at(ni, component)
+            })
+    }
+
+    /// Value at `(node, variable slot)`, the components having been resolved
+    /// once by [`resolve_reads`](Self::resolve_reads).
+    ///
+    /// Same first-zone-wins rule as [`value_opt`](Self::value_opt), and the same
+    /// answer — only the component is found by index instead of by comparing
+    /// its name at every DOF.
+    pub(crate) fn value_at_slot(
+        &self,
+        nid: NodeId,
+        slot: usize,
+        reads: &[Vec<u32>],
+    ) -> Option<f64> {
+        self.inner
+            .zones
+            .iter()
+            .zip(&self.supports)
+            .zip(reads)
+            .find_map(|((zone, support), idx)| {
+                let ci = *idx.get(slot)?;
+                if ci == crate::containers::field::ABSENT_COMPONENT {
+                    return None;
+                }
+                let ni = *support.node_index().get(&nid)?;
+                Some(zone.component_value_at_index(ni, ci as usize))
             })
     }
 

@@ -19,7 +19,7 @@
 //! parallel colour-driven scatter (the actual speed-up) builds on this same
 //! pattern.
 
-use crate::containers::matrix::{AssemblyPattern, BlockSlots, Matrix, NamedDof};
+use crate::containers::matrix::{dof_node, dof_var, AssemblyPattern, BlockSlots, DofKey, Matrix};
 use crate::error::{PyrucastError, Result};
 use crate::models::kernel;
 use crate::ops::coloring;
@@ -27,6 +27,59 @@ use crate::parallel::*;
 use nalgebra_sparse::CsrMatrix;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicU64;
+
+/// DOF key → global index, for the one lookup the symbolic phase does per block
+/// DOF.
+///
+/// A `HashMap<(NodeId, String), usize>` was thirty million string hashes on a
+/// solid mesh. Node ids index `Coords` directly, so `node × n_vars + var` is a
+/// perfect hash — a plain slice indexed in constant time, with no hashing at
+/// all. It only stops paying when the id space is far larger than the DOF set
+/// it holds (a `Coords` riddled with deletions), and there the compact `u64`
+/// keys still hash for a fraction of a string's cost.
+enum DofIndex {
+    Dense { at: Vec<u32>, n_vars: usize },
+    Sparse(HashMap<DofKey, usize>),
+}
+
+impl DofIndex {
+    /// Index `keys` by their position, `n_vars` naming the variable table's width.
+    fn build(keys: &[DofKey], n_vars: usize) -> Self {
+        let n_vars = n_vars.max(1);
+        let max_node = keys.iter().map(|&k| dof_node(k).0).max().unwrap_or(0);
+        let slots = (max_node as usize + 1).saturating_mul(n_vars);
+        if slots <= keys.len().saturating_mul(8).max(1024) {
+            let mut at = vec![u32::MAX; slots];
+            for (i, &k) in keys.iter().enumerate() {
+                at[dof_node(k).0 as usize * n_vars + dof_var(k) as usize] = i as u32;
+            }
+            DofIndex::Dense { at, n_vars }
+        } else {
+            DofIndex::Sparse(keys.iter().enumerate().map(|(i, &k)| (k, i)).collect())
+        }
+    }
+
+    /// The global index of `key`, which the caller's block is known to carry.
+    #[inline]
+    fn get(&self, key: DofKey) -> Result<usize> {
+        let found = match self {
+            DofIndex::Dense { at, n_vars } => at
+                .get(dof_node(key).0 as usize * *n_vars + dof_var(key) as usize)
+                .copied()
+                .filter(|&i| i != u32::MAX)
+                .map(|i| i as usize),
+            DofIndex::Sparse(map) => map.get(&key).copied(),
+        };
+        found.ok_or_else(|| {
+            PyrucastError::Message(format!(
+                "build_pattern: DOF (node {:?}, variable slot {}) is absent from \
+                 the global numbering",
+                dof_node(key),
+                dof_var(key)
+            ))
+        })
+    }
+}
 
 /// Build the global CSR sparsity [`AssemblyPattern`] for `k` from its blocks'
 /// topology alone — no kernel evaluation. Each block contributes its global
@@ -73,22 +126,19 @@ use std::sync::atomic::AtomicU64;
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn build_pattern(k: &Matrix) -> Result<AssemblyPattern> {
-    let row_dofs = k.row_dofs()?;
-    let col_dofs = k.col_dofs()?;
-    let row_map: HashMap<NamedDof, usize> = row_dofs
+    let vars = k.dof_vars()?;
+    let row_keys = k.row_dof_keys()?;
+    let col_keys = k.col_dof_keys()?;
+    let slot_of: HashMap<String, u32> = vars
         .iter()
         .cloned()
         .enumerate()
-        .map(|(i, d)| (d, i))
+        .map(|(i, v)| (v, i as u32))
         .collect();
-    let col_map: HashMap<NamedDof, usize> = col_dofs
-        .iter()
-        .cloned()
-        .enumerate()
-        .map(|(i, d)| (d, i))
-        .collect();
+    let row_map = DofIndex::build(&row_keys, vars.len());
+    let col_map = DofIndex::build(&col_keys, vars.len());
 
-    let nrows = row_dofs.len();
+    let nrows = row_keys.len();
     // Per row, the columns it touches (with duplicates; deduped below).
     let mut row_cols: Vec<Vec<usize>> = vec![Vec::new(); nrows];
     // Per block (in `subs` order), its global entries as `(r, c)` in the exact
@@ -103,8 +153,16 @@ pub fn build_pattern(k: &Matrix) -> Result<AssemblyPattern> {
     let mut block_entries: Vec<BlockEntries> = Vec::new();
     for blk_h in k {
         let blk = blk_h.read();
-        let trow: Vec<usize> = blk.row_dofs().iter().map(|d| row_map[d]).collect();
-        let tcol: Vec<usize> = blk.col_dofs().iter().map(|d| col_map[d]).collect();
+        let trow: Vec<usize> = blk
+            .row_dof_keys(&slot_of)?
+            .iter()
+            .map(|&d| row_map.get(d))
+            .collect::<Result<_>>()?;
+        let tcol: Vec<usize> = blk
+            .col_dof_keys(&slot_of)?
+            .iter()
+            .map(|&d| col_map.get(d))
+            .collect::<Result<_>>()?;
         match blk.recipe() {
             Some(recipe) => {
                 // A non-empty `col_fespaces` marks an inter-mesh block: rows and
@@ -173,8 +231,9 @@ pub fn build_pattern(k: &Matrix) -> Result<AssemblyPattern> {
     }
 
     let mut pattern = AssemblyPattern {
-        row_dofs,
-        col_dofs,
+        vars,
+        row_keys,
+        col_keys,
         row_offsets,
         col_indices,
         block_slots: Vec::new(),
@@ -250,8 +309,8 @@ pub fn build_pattern(k: &Matrix) -> Result<AssemblyPattern> {
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix<f64>> {
-    let nrows = pattern.row_dofs.len();
-    let ncols = pattern.col_dofs.len();
+    let nrows = pattern.row_keys.len();
+    let ncols = pattern.col_keys.len();
 
     let mut values = vec![0.0f64; pattern.nnz()];
     for (bi, blk_h) in k.into_iter().enumerate() {
@@ -410,8 +469,8 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<CsrMatrix<f64>> {
-    let nrows = pattern.row_dofs.len();
-    let ncols = pattern.col_dofs.len();
+    let nrows = pattern.row_keys.len();
+    let ncols = pattern.col_keys.len();
 
     // f64 values held as bits so the colour-parallel scatter can write them
     // through shared references (see `add_atomic`).

@@ -85,8 +85,7 @@
 //! assert!((solution.value(b.id(), "T").unwrap() - 1.0).abs() < 1e-12);
 //! ```
 
-use crate::atoms::NodeId;
-use crate::containers::matrix::Matrix;
+use crate::containers::matrix::{DofKey, Matrix};
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::{Cancel, NoCancel};
@@ -309,7 +308,11 @@ impl Default for SolveOptions {
 /// ```
 pub struct Factorization {
     lu: SparseLu,
-    row_dofs: Vec<(NodeId, String)>,
+    /// The row numbering the factorization is valid for, in packed form: a
+    /// materialised `(NodeId, String)` list would hold one heap allocation per
+    /// degree of freedom for the whole life of the cached factorization.
+    vars: Arc<Vec<String>>,
+    row_keys: Vec<DofKey>,
 }
 
 impl Factorization {
@@ -350,17 +353,18 @@ impl Factorization {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(matrix: &Matrix) -> Result<Self> {
-        let row_dofs = matrix.row_dofs()?;
-        let col_dofs = matrix.col_dofs()?;
-        if row_dofs.len() != col_dofs.len() {
+        let vars = matrix.dof_vars()?;
+        let row_keys = matrix.row_dof_keys()?;
+        let n_cols = matrix.col_dof_keys()?.len();
+        if row_keys.len() != n_cols {
             return Err(PyrucastError::Message(format!(
                 "solve: matrix must be square; got {}×{}",
-                row_dofs.len(),
-                col_dofs.len()
+                row_keys.len(),
+                n_cols
             )));
         }
         let lu = factorize_csc(&matrix.to_csc()?)?;
-        Ok(Self { lu, row_dofs })
+        Ok(Self { lu, vars, row_keys })
     }
 
     /// Solve `A·x = b` for one right-hand side (descent/back-substitution only).
@@ -613,7 +617,7 @@ fn solve_inner(
 
     // ── Step 2 — build the b vector at the row DOFs ────────────────────
     // "No zone defines this DOF" means "no imposed value here" — zero.
-    let b = rhs.gather(&fact.row_dofs)?;
+    let b = rhs.gather_keys(&fact.row_keys, &fact.vars)?;
 
     // ── Step 3 — substitution ──────────────────────────────────────────
     let x = fact.solve_vec(&b);
@@ -906,7 +910,11 @@ mod tests {
     }
 
     /// A solvable 1×1 system `2·T = b` and a rhs carrying `b` at the row DOF.
-    fn tiny_system() -> (crate::containers::matrix::Matrix, NodeField, NodeId) {
+    fn tiny_system() -> (
+        crate::containers::matrix::Matrix,
+        NodeField,
+        crate::atoms::NodeId,
+    ) {
         use crate::containers::matrix::{DofOrdering, SubMatrix};
         let coords = Handle::new(Coords::new(1).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0]).unwrap();

@@ -40,7 +40,7 @@
 //! that is itself a slave elsewhere) are out of scope for v1.
 
 use crate::atoms::NodeId;
-use crate::containers::matrix::Matrix;
+use crate::containers::matrix::{dof_key, dof_node, DofKey, Matrix};
 use crate::containers::model::Model;
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
@@ -51,8 +51,6 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use super::lu::{self, factorize_csc, lu_solve_vec, SolveOptions, SparseLu};
-
-type NamedDof = (NodeId, String);
 
 /// One eliminated slave DOF and the data needed to build `u₀` and recover its
 /// reaction. The masters are folded into `T` at build time, so they are not kept.
@@ -122,10 +120,12 @@ pub struct Condensation {
     k_phys: CsrMatrix<f64>,
     /// LU factorization of the reduced `K̂ = Tᵀ K T` (`n_free × n_free`).
     reduced: SparseLu,
+    /// The variable name table the DOF keys below index.
+    vars: Arc<Vec<String>>,
     /// Physics dual (row) DOFs, in shared physics-index order — where `f` is read.
-    phys_row_dofs: Vec<NamedDof>,
+    phys_row_keys: Vec<DofKey>,
     /// Physics primal (col) DOFs, in shared physics-index order — the output `u`.
-    phys_col_dofs: Vec<NamedDof>,
+    phys_col_keys: Vec<DofKey>,
     /// One entry per eliminated slave.
     slaves: Vec<SlaveInfo>,
 }
@@ -362,8 +362,8 @@ fn solve_inner(
     cancel.check()?;
 
     // ── Step 2 — build u₀ from the right-hand sides g ──────────────────
-    let n_phys = cond.phys_col_dofs.len();
-    let g_dofs: Vec<NamedDof> = cond
+    let n_phys = cond.phys_col_keys.len();
+    let g_dofs: Vec<(NodeId, String)> = cond
         .slaves
         .iter()
         .map(|s| (s.multiplier_node, s.imposed_value_slot.clone()))
@@ -375,7 +375,7 @@ fn solve_inner(
     }
 
     // ── Step 3 — reduce the right-hand side: f̂ = Tᵀ (f − K·u₀) ─────────
-    let f_phys = DVector::from_vec(rhs.gather(&cond.phys_row_dofs)?);
+    let f_phys = DVector::from_vec(rhs.gather_keys(&cond.phys_row_keys, &cond.vars)?);
     let rhs_full = &f_phys - &cond.k_phys * &u0;
     let rhs_hat = &cond.tt * &rhs_full;
     cancel.check()?;
@@ -402,7 +402,16 @@ fn solve_inner(
     // (multiplier columns are condensed out, and the reactions land on **dual**
     // variables at the slave nodes — row-flavoured DOFs). Keep the explicit
     // materialised support here.
-    let mut out_dofs = cond.phys_col_dofs.clone();
+    let mut out_dofs: Vec<(NodeId, String)> = cond
+        .phys_col_keys
+        .iter()
+        .map(|&k| {
+            (
+                dof_node(k),
+                cond.vars[crate::containers::matrix::dof_var(k) as usize].clone(),
+            )
+        })
+        .collect();
     let mut out_vals: Vec<f64> = u_phys.iter().copied().collect();
     for s in &cond.slaves {
         out_dofs.push((s.slave_node, s.target_dual.clone()));
@@ -450,42 +459,48 @@ fn build_condensation(model: &Model, matrix: &Matrix) -> Result<Condensation> {
 
     // ── Partition the matrix DOFs: multiplier nodes vs physics ─────────
     let mult_nodes: HashSet<NodeId> = relations.iter().map(|(r, _)| r.multiplier_node).collect();
-    let full_row = matrix.row_dofs()?;
-    let full_col = matrix.col_dofs()?;
+    let vars = matrix.dof_vars()?;
+    let slot_of: HashMap<&str, u32> = vars
+        .iter()
+        .enumerate()
+        .map(|(i, v)| (v.as_str(), i as u32))
+        .collect();
+    let full_row = matrix.row_dof_keys()?;
+    let full_col = matrix.col_dof_keys()?;
 
     // Physics DOFs, in first-seen (matrix) order. Row (dual) and column (primal)
     // must line up node-for-node so a single physics index `k` names the
     // conjugate pair — required for T to apply on both the primal (u) and the
     // dual (f) sides. Validate that alignment.
-    let mut phys_row_dofs = Vec::new();
+    let mut phys_row_keys = Vec::new();
     let mut full_row_to_phys = vec![usize::MAX; full_row.len()];
-    for (i, dof) in full_row.iter().enumerate() {
-        if !mult_nodes.contains(&dof.0) {
-            full_row_to_phys[i] = phys_row_dofs.len();
-            phys_row_dofs.push(dof.clone());
+    for (i, &dof) in full_row.iter().enumerate() {
+        if !mult_nodes.contains(&dof_node(dof)) {
+            full_row_to_phys[i] = phys_row_keys.len();
+            phys_row_keys.push(dof);
         }
     }
-    let mut phys_col_dofs = Vec::new();
+    let mut phys_col_keys = Vec::new();
     let mut full_col_to_phys = vec![usize::MAX; full_col.len()];
-    let mut pos_of_col: HashMap<NamedDof, usize> = HashMap::new();
-    for (j, dof) in full_col.iter().enumerate() {
-        if !mult_nodes.contains(&dof.0) {
-            let idx = phys_col_dofs.len();
+    let mut pos_of_col: HashMap<DofKey, usize> = HashMap::new();
+    for (j, &dof) in full_col.iter().enumerate() {
+        if !mult_nodes.contains(&dof_node(dof)) {
+            let idx = phys_col_keys.len();
             full_col_to_phys[j] = idx;
-            pos_of_col.insert(dof.clone(), idx);
-            phys_col_dofs.push(dof.clone());
+            pos_of_col.insert(dof, idx);
+            phys_col_keys.push(dof);
         }
     }
-    let n_phys = phys_col_dofs.len();
-    if phys_row_dofs.len() != n_phys {
+    let n_phys = phys_col_keys.len();
+    if phys_row_keys.len() != n_phys {
         return Err(PyrucastError::Message(format!(
             "elimination: physics block is not square ({} dual rows vs {} primal cols)",
-            phys_row_dofs.len(),
+            phys_row_keys.len(),
             n_phys
         )));
     }
     for k in 0..n_phys {
-        if phys_row_dofs[k].0 != phys_col_dofs[k].0 {
+        if dof_node(phys_row_keys[k]) != dof_node(phys_col_keys[k]) {
             return Err(PyrucastError::Message(
                 "elimination: physics row/column DOFs are not conjugate-aligned; \
                  this physics is unsupported by the elimination solver"
@@ -523,8 +538,10 @@ fn build_condensation(model: &Model, matrix: &Matrix) -> Result<Condensation> {
         let mut resolved: Vec<(usize, &crate::models::ConstraintTerm)> =
             Vec::with_capacity(rel.terms.len());
         for term in &rel.terms {
-            let idx = *pos_of_col
-                .get(&(term.node, term.variable.clone()))
+            let idx = slot_of
+                .get(term.variable.as_str())
+                .and_then(|&s| pos_of_col.get(&dof_key(term.node, s)))
+                .copied()
                 .ok_or_else(|| {
                     PyrucastError::Message(format!(
                         "elimination: term ({:?}, '{}') is not a physics DOF of the matrix",
@@ -640,8 +657,9 @@ fn build_condensation(model: &Model, matrix: &Matrix) -> Result<Condensation> {
         tt,
         k_phys,
         reduced,
-        phys_row_dofs,
-        phys_col_dofs,
+        vars,
+        phys_row_keys,
+        phys_col_keys,
         slaves,
     })
 }

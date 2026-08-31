@@ -187,7 +187,12 @@ pub fn assemble_kind(
     // scattered into it in parallel by cell colour ([`crate::ops::scatter::scatter_parallel`]).
     let pattern = model.matrix_pattern(kind, || crate::ops::scatter::build_pattern(&k))?;
     let csr = crate::ops::scatter::scatter_parallel(&k, pattern.as_ref())?;
-    k.set_assembled(pattern.row_dofs.clone(), pattern.col_dofs.clone(), csr);
+    k.set_assembled(
+        pattern.vars.clone(),
+        pattern.row_keys.clone(),
+        pattern.col_keys.clone(),
+        csr,
+    );
     Ok(k)
 }
 
@@ -222,7 +227,7 @@ impl Matrix {
     pub fn assemble(&mut self) -> Result<()> {
         let pattern = crate::ops::scatter::build_pattern(self)?;
         let csr = crate::ops::scatter::scatter_parallel(self, &pattern)?;
-        self.set_assembled(pattern.row_dofs, pattern.col_dofs, csr);
+        self.set_assembled(pattern.vars, pattern.row_keys, pattern.col_keys, csr);
         Ok(())
     }
 }
@@ -460,8 +465,9 @@ pub fn tangent(model: &Model, materials: &ElementField, state: &ElementField) ->
 /// ```
 pub fn lump(m: &Matrix) -> Result<Matrix> {
     let csr = m.to_csr()?;
-    let row_dofs = m.row_dofs()?;
-    let col_dofs = m.col_dofs()?;
+    let vars = m.dof_vars()?;
+    let row_keys = m.row_dof_keys()?;
+    let col_keys = m.col_dof_keys()?;
     let n = csr.nrows();
     if csr.ncols() != n {
         return Err(crate::error::PyrucastError::Message(format!(
@@ -484,7 +490,7 @@ pub fn lump(m: &Matrix) -> Result<Matrix> {
         .map_err(|e| crate::error::PyrucastError::Message(format!("lump: invalid COO: {e}")))?;
     let diag = CsrMatrix::from(&coo);
     let mut out = Matrix::empty();
-    out.set_assembled(row_dofs, col_dofs, diag);
+    out.set_assembled(vars, row_keys, col_keys, diag);
     Ok(out)
 }
 

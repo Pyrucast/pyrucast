@@ -1218,6 +1218,58 @@ impl SubMatrix {
             .collect()
     }
 
+    /// Row DOFs as packed [`DofKey`]s, in the same order as [`row_dofs`] —
+    /// the allocation-free twin the assembler numbers with.
+    ///
+    /// `slot_of` names each variable by its index in the aggregate's table
+    /// ([`Matrix::dof_vars`]); it is resolved **once per block**, so no DOF ever
+    /// touches a string.
+    pub(crate) fn row_dof_keys(&self, slot_of: &HashMap<String, u32>) -> Result<Vec<DofKey>> {
+        let slots = self.var_slots(&self.dual_vars, slot_of)?;
+        Ok(Self::keys(
+            &self.row_nodes,
+            &slots,
+            self.ordering,
+            self.coo.nrows(),
+        ))
+    }
+
+    /// Column DOFs as packed [`DofKey`]s — the column twin of
+    /// [`row_dof_keys`](Self::row_dof_keys).
+    pub(crate) fn col_dof_keys(&self, slot_of: &HashMap<String, u32>) -> Result<Vec<DofKey>> {
+        let slots = self.var_slots(&self.primal_vars, slot_of)?;
+        Ok(Self::keys(
+            &self.col_nodes,
+            &slots,
+            self.ordering,
+            self.coo.ncols(),
+        ))
+    }
+
+    /// This block's variable names as slots in the aggregate's table.
+    fn var_slots(&self, vars: &[String], slot_of: &HashMap<String, u32>) -> Result<Vec<u32>> {
+        vars.iter()
+            .map(|v| {
+                slot_of.get(v).copied().ok_or_else(|| {
+                    PyrucastError::Message(format!(
+                        "row_dof_keys: variable '{v}' is absent from the matrix name table"
+                    ))
+                })
+            })
+            .collect()
+    }
+
+    /// `n` DOF keys in matrix order, from a node list and its variables' slots.
+    fn keys(nodes: &[NodeId], slots: &[u32], ordering: DofOrdering, n: usize) -> Vec<DofKey> {
+        let (n_nodes, n_vars) = (nodes.len(), slots.len());
+        (0..n)
+            .map(|i| {
+                let (nl, vi) = ordering.from_index(i, n_nodes, n_vars);
+                dof_key(nodes[nl], slots[vi])
+            })
+            .collect()
+    }
+
     /// Append an entry at `(row_node, row_var) × (col_node, col_var)`.
     ///
     /// Returns an error if either `row_node` / `col_node` is not in its
@@ -1919,10 +1971,16 @@ mod coo_serde {
 
 // ─── Matrix (aggregate) ────────────────────────────────────────────────────
 
-/// Snapshot produced by [`Matrix::finalize`]: DOF tables + assembled CSR.
+/// Snapshot produced by [`Matrix::finalize`]: DOF numbering + assembled CSR.
+///
+/// The numbering is held as packed [`DofKey`]s over a shared name table, not as
+/// a `Vec<(NodeId, String)>`: on a solid mesh the materialised form is thirty
+/// million `String`s, rebuilt at every assembly, for a handful of distinct
+/// names.
 struct AssembledData {
-    row_dofs: Vec<NamedDof>,
-    col_dofs: Vec<NamedDof>,
+    vars: std::sync::Arc<Vec<String>>,
+    row_keys: Vec<DofKey>,
+    col_keys: Vec<DofKey>,
     csr: CsrMatrix<f64>,
 }
 
@@ -2034,6 +2092,116 @@ crate::impl_aggregate!(Matrix, SubMatrix, sub_matrix, "sub-matrix(es)", {
 /// ```
 pub type NamedDof = (NodeId, String);
 
+/// A DOF in **packed** form: the node id in the high 32 bits, the index of its
+/// variable in the matrix's name table in the low 32.
+///
+/// The materialised [`NamedDof`] carries a `String` per DOF. That is one heap
+/// allocation, one hash of a string and one clone for every degree of freedom
+/// of the problem — thirty million of each on a solid mesh, paid again at every
+/// assembly, to re-express what a handful of variable names already say. The
+/// key says the same thing in eight bytes, and the names live once in the
+/// table the key indexes ([`Matrix::dof_vars`]).
+///
+/// ```
+/// # use pyrucast::atoms::NodeId;
+/// # use pyrucast::containers::matrix::{dof_key, dof_node, dof_var, DofKey};
+/// // Le nœud en haut, la variable en bas : deux entiers dans un `u64`.
+/// let k: DofKey = dof_key(NodeId(7), 2);
+/// assert_eq!(dof_node(k), NodeId(7));
+/// assert_eq!(dof_var(k), 2);
+/// // L'ordre des clés est celui des nœuds, puis des variables — un tri par
+/// // clé range donc les DDL nœud par nœud.
+/// assert!(dof_key(NodeId(7), 2) < dof_key(NodeId(8), 0));
+/// ```
+pub type DofKey = u64;
+
+/// Pack `(node, var_slot)` into a [`DofKey`].
+///
+/// ```
+/// # use pyrucast::atoms::NodeId;
+/// # use pyrucast::containers::matrix::{dof_key, dof_node, dof_var};
+/// // Le nœud en haut, la variable en bas : les deux tiennent dans un `u64`.
+/// let k = dof_key(NodeId(7), 2);
+/// assert_eq!((dof_node(k), dof_var(k)), (NodeId(7), 2));
+/// ```
+#[inline]
+pub fn dof_key(node: NodeId, var_slot: u32) -> DofKey {
+    ((node.0 as u64) << 32) | var_slot as u64
+}
+
+/// The node of a [`DofKey`].
+///
+/// ```
+/// # use pyrucast::atoms::NodeId;
+/// # use pyrucast::containers::matrix::{dof_key, dof_node};
+/// assert_eq!(dof_node(dof_key(NodeId(7), 2)), NodeId(7));
+/// ```
+#[inline]
+pub fn dof_node(key: DofKey) -> NodeId {
+    NodeId((key >> 32) as u32)
+}
+
+/// The variable slot of a [`DofKey`] — an index into the matrix's name table
+/// ([`Matrix::dof_vars`]).
+///
+/// ```
+/// # use pyrucast::atoms::NodeId;
+/// # use pyrucast::containers::matrix::{dof_key, dof_var};
+/// assert_eq!(dof_var(dof_key(NodeId(7), 2)), 2);
+/// ```
+#[inline]
+pub fn dof_var(key: DofKey) -> u32 {
+    (key & 0xffff_ffff) as u32
+}
+
+/// A **seen-set** over DOF keys, direct-addressed when the node ids are dense
+/// enough to make that cheaper than hashing.
+///
+/// Node ids index `Coords` directly, so `node × n_vars + var` is a perfect hash
+/// whenever the id space is not riddled with holes. When it is — a long-lived
+/// `Coords` that has seen many deletions — the flat table would dwarf the DOF
+/// set it describes, and a `HashSet` of the (already compact) keys is the
+/// honest fallback.
+enum DofSeen {
+    /// One flag per `(node, var)` slot: `node × n_vars + var`.
+    Dense {
+        flags: Vec<bool>,
+        n_vars: usize,
+    },
+    Sparse(std::collections::HashSet<DofKey>),
+}
+
+impl DofSeen {
+    /// Sized for `n_vars` variables over node ids up to `max_node`, holding
+    /// `n_dofs` DOFs. Goes dense unless the flat table would cost more than
+    /// eight flags per DOF actually stored.
+    fn new(max_node: u32, n_vars: usize, n_dofs: usize) -> Self {
+        let slots = (max_node as usize + 1).saturating_mul(n_vars.max(1));
+        if slots <= n_dofs.saturating_mul(8).max(1024) {
+            DofSeen::Dense {
+                flags: vec![false; slots],
+                n_vars: n_vars.max(1),
+            }
+        } else {
+            DofSeen::Sparse(std::collections::HashSet::with_capacity(n_dofs))
+        }
+    }
+
+    /// Record `key`; `true` the first time it is seen.
+    #[inline]
+    fn insert(&mut self, key: DofKey) -> bool {
+        match self {
+            DofSeen::Dense { flags, n_vars } => {
+                let i = dof_node(key).0 as usize * *n_vars + dof_var(key) as usize;
+                let fresh = !flags[i];
+                flags[i] = true;
+                fresh
+            }
+            DofSeen::Sparse(set) => set.insert(key),
+        }
+    }
+}
+
 /// Global CSR sparsity pattern plus the DOF numbering it indexes.
 ///
 /// A pure function of a model's **block structure** — not of the material
@@ -2077,16 +2245,19 @@ pub type NamedDof = (NodeId, String);
 /// // construite une fois, réutilisée d'un assemblage à l'autre.
 /// let motif = scatter::build_pattern(&k)?;
 /// assert_eq!(motif.nnz(), 4);
-/// assert_eq!(motif.row_offsets.len(), motif.row_dofs.len() + 1);
+/// assert_eq!(motif.row_offsets.len(), motif.row_keys.len() + 1);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Clone)]
 pub struct AssemblyPattern {
-    /// Global row DOFs, in CSR row order.
-    pub row_dofs: Vec<NamedDof>,
-    /// Global column DOFs, in CSR column order.
-    pub col_dofs: Vec<NamedDof>,
-    /// CSR row offsets, length `row_dofs.len() + 1`.
+    /// The variable name table the DOF keys index — interned once for the whole
+    /// pattern, rows and columns together.
+    pub vars: std::sync::Arc<Vec<String>>,
+    /// Global row DOFs as packed [`DofKey`]s, in CSR row order.
+    pub row_keys: Vec<DofKey>,
+    /// Global column DOFs as packed [`DofKey`]s, in CSR column order.
+    pub col_keys: Vec<DofKey>,
+    /// CSR row offsets, length `row_keys.len() + 1`.
     pub row_offsets: Vec<usize>,
     /// CSR column indices, sorted within each row, length `row_offsets[nrows]`.
     pub col_indices: Vec<usize>,
@@ -2210,6 +2381,78 @@ impl AssemblyPattern {
     /// ```
     pub fn nnz(&self) -> usize {
         self.col_indices.len()
+    }
+
+    /// The row DOFs in materialised `(node, variable name)` form.
+    ///
+    /// The pattern numbers with packed keys; this is the translation for the
+    /// callers that speak names, and it allocates a `String` per DOF — so it
+    /// belongs at an API edge, never inside an assembly.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::Model;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::{element_field, matrix, scatter};
+    /// # use pyrucast::ops::model;
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+    /// # let k = matrix::stiffness(&model, &materials).unwrap();
+    /// # let motif = scatter::build_pattern(&k)?;
+    /// // Le motif numérote en clés ; les noms, il les rend sur demande.
+    /// assert_eq!(motif.row_dofs()[0], (a.id(), "q".to_string()));
+    /// assert_eq!(motif.row_dofs().len(), motif.row_keys.len());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn row_dofs(&self) -> Vec<NamedDof> {
+        self.named(&self.row_keys)
+    }
+
+    /// The column DOFs in materialised form — see
+    /// [`row_dofs`](Self::row_dofs).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::Model;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::{element_field, matrix, scatter};
+    /// # use pyrucast::ops::model;
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+    /// # let k = matrix::stiffness(&model, &materials).unwrap();
+    /// # let motif = scatter::build_pattern(&k)?;
+    /// // Côté colonne, la variable primale.
+    /// assert_eq!(motif.col_dofs()[0], (a.id(), "T".to_string()));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn col_dofs(&self) -> Vec<NamedDof> {
+        self.named(&self.col_keys)
+    }
+
+    fn named(&self, keys: &[DofKey]) -> Vec<NamedDof> {
+        keys.iter()
+            .map(|&k| (dof_node(k), self.vars[dof_var(k) as usize].clone()))
+            .collect()
     }
 }
 
@@ -2360,13 +2603,15 @@ impl Matrix {
                 ));
             }
         }
-        let row_dofs = self.collect_row_dofs()?;
-        let col_dofs = self.collect_col_dofs()?;
-        let triplets = self.build_global_triplets(&row_dofs, &col_dofs)?;
-        let csr = csr_from_triplets_parallel(row_dofs.len(), col_dofs.len(), triplets)?;
+        let vars = std::sync::Arc::new(self.field_names()?);
+        let row_keys = self.collect_dof_keys(true, &vars)?;
+        let col_keys = self.collect_dof_keys(false, &vars)?;
+        let triplets = self.build_global_triplets(&vars, &row_keys, &col_keys)?;
+        let csr = csr_from_triplets_parallel(row_keys.len(), col_keys.len(), triplets)?;
         self.assembled = Some(AssembledData {
-            row_dofs,
-            col_dofs,
+            vars,
+            row_keys,
+            col_keys,
             csr,
         });
         Ok(())
@@ -2381,13 +2626,15 @@ impl Matrix {
     /// reach into the model/kernel — the cycle Option B avoids).
     pub(crate) fn set_assembled(
         &mut self,
-        row_dofs: Vec<NamedDof>,
-        col_dofs: Vec<NamedDof>,
+        vars: std::sync::Arc<Vec<String>>,
+        row_keys: Vec<DofKey>,
+        col_keys: Vec<DofKey>,
         csr: CsrMatrix<f64>,
     ) {
         self.assembled = Some(AssembledData {
-            row_dofs,
-            col_dofs,
+            vars,
+            row_keys,
+            col_keys,
             csr,
         });
     }
@@ -2495,41 +2742,70 @@ impl Matrix {
 
     // ── Block-traversal helpers (no finalize required) ──────────────────
 
-    fn collect_row_dofs(&self) -> Result<Vec<NamedDof>> {
-        self.collect_dofs(true)
-    }
-
-    fn collect_col_dofs(&self) -> Result<Vec<NamedDof>> {
-        self.collect_dofs(false)
-    }
-
-    /// Deduplicated concatenation of the blocks' row (or col) DOFs — the global
-    /// DOF list. O(total block DOFs) via a hash set (no quadratic `contains`).
+    /// Deduplicated concatenation of the blocks' row (or col) DOFs, as packed
+    /// [`DofKey`]s — the global DOF numbering.
+    ///
+    /// O(total block DOFs), and **allocation-free per DOF**: the variable names
+    /// are resolved to slots once per block, the dedup runs on a direct-addressed
+    /// seen-set over the packed keys ([`DofSeen`]), and nothing here builds a
+    /// `String`.
     ///
     /// Order: **solver order** when the backing `Coords` carries a
     /// [`permutation`](crate::coords::Coords::permutation) (stable
     /// sort by the node's permutation index, so the per-node variable order is
     /// preserved); otherwise **first-seen** (identical to the historical
     /// behaviour, hence bit-for-bit stable when no permutation is set).
-    fn collect_dofs(&self, row: bool) -> Result<Vec<NamedDof>> {
-        let mut seen: std::collections::HashSet<NamedDof> = std::collections::HashSet::new();
-        let mut out: Vec<NamedDof> = Vec::new();
+    fn collect_dof_keys(&self, row: bool, vars: &[String]) -> Result<Vec<DofKey>> {
+        let slot_of: HashMap<String, u32> = vars
+            .iter()
+            .cloned()
+            .enumerate()
+            .map(|(i, v)| (v, i as u32))
+            .collect();
+
+        // Size the seen-set before filling it: the DOF total bounds the output,
+        // the largest node id bounds the direct-addressed table.
+        let (mut total, mut max_node) = (0usize, 0u32);
         for h in self {
             let sub = h.read();
-            let dofs = if row { sub.row_dofs() } else { sub.col_dofs() };
-            for d in dofs {
-                if seen.insert(d.clone()) {
-                    out.push(d);
+            let nodes = if row { &sub.row_nodes } else { &sub.col_nodes };
+            total += if row { sub.n_rows() } else { sub.n_cols() };
+            for n in nodes {
+                max_node = max_node.max(n.0);
+            }
+        }
+
+        let mut seen = DofSeen::new(max_node, vars.len(), total);
+        let mut out: Vec<DofKey> = Vec::with_capacity(total);
+        for h in self {
+            let sub = h.read();
+            let keys = if row {
+                sub.row_dof_keys(&slot_of)?
+            } else {
+                sub.col_dof_keys(&slot_of)?
+            };
+            for k in keys {
+                if seen.insert(k) {
+                    out.push(k);
                 }
             }
         }
+
         if let Some(first) = self.iter().next() {
             let coords_h = first.read().coords()?;
             if let Some(perm) = coords_h.read().permutation() {
-                out.sort_by_key(|(n, _)| perm[n.0 as usize]);
+                // Stable, so a node's variables keep their relative order.
+                out.par_sort_by_key(|&k| perm[dof_node(k).0 as usize]);
             }
         }
         Ok(out)
+    }
+
+    /// Materialise packed keys into `(node, variable name)` pairs.
+    fn name_dofs(keys: &[DofKey], vars: &[String]) -> Vec<NamedDof> {
+        keys.iter()
+            .map(|&k| (dof_node(k), vars[dof_var(k) as usize].clone()))
+            .collect()
     }
 
     /// Map every block's **local** triplets to global `(row, col, value)`
@@ -2540,27 +2816,34 @@ impl Matrix {
     /// search.
     fn build_global_triplets(
         &self,
-        row_dofs: &[NamedDof],
-        col_dofs: &[NamedDof],
+        vars: &[String],
+        row_keys: &[DofKey],
+        col_keys: &[DofKey],
     ) -> Result<Vec<(usize, usize, f64)>> {
-        let row_map: HashMap<NamedDof, usize> = row_dofs
+        let slot_of: HashMap<String, u32> = vars
             .iter()
             .cloned()
             .enumerate()
-            .map(|(i, d)| (d, i))
+            .map(|(i, v)| (v, i as u32))
             .collect();
-        let col_map: HashMap<NamedDof, usize> = col_dofs
-            .iter()
-            .cloned()
-            .enumerate()
-            .map(|(i, d)| (d, i))
-            .collect();
+        let row_map: HashMap<DofKey, usize> =
+            row_keys.iter().enumerate().map(|(i, &k)| (k, i)).collect();
+        let col_map: HashMap<DofKey, usize> =
+            col_keys.iter().enumerate().map(|(i, &k)| (k, i)).collect();
         let mut out: Vec<(usize, usize, f64)> = Vec::new();
         for h in self {
             let sub = h.read();
             // local DOF index → global index (the "simple remap").
-            let trow: Vec<usize> = sub.row_dofs().iter().map(|d| row_map[d]).collect();
-            let tcol: Vec<usize> = sub.col_dofs().iter().map(|d| col_map[d]).collect();
+            let trow: Vec<usize> = sub
+                .row_dof_keys(&slot_of)?
+                .iter()
+                .map(|k| row_map[k])
+                .collect();
+            let tcol: Vec<usize> = sub
+                .col_dof_keys(&slot_of)?
+                .iter()
+                .map(|k| col_map[k])
+                .collect();
             let (lr, lc, lv) = sub.local_coo_arrays();
             let factor = sub.factor();
             let block: Vec<(usize, usize, f64)> = (0..lv.len())
@@ -2643,10 +2926,8 @@ impl Matrix {
     /// assert_eq!(lignes[0].1, "q");
     /// ```
     pub fn row_dofs(&self) -> Result<Vec<NamedDof>> {
-        if let Some(a) = &self.assembled {
-            return Ok(a.row_dofs.clone());
-        }
-        self.collect_row_dofs()
+        let vars = self.dof_vars()?;
+        Ok(Self::name_dofs(&self.row_dof_keys()?, &vars))
     }
 
     /// Union of all column DOFs across blocks, in first-seen order.
@@ -2676,10 +2957,122 @@ impl Matrix {
     /// assert_eq!(k.col_dofs().unwrap()[0].1, "T");
     /// ```
     pub fn col_dofs(&self) -> Result<Vec<NamedDof>> {
+        let vars = self.dof_vars()?;
+        Ok(Self::name_dofs(&self.col_dof_keys()?, &vars))
+    }
+
+    /// The matrix's **variable name table** — the names a [`DofKey`]'s slot
+    /// indexes. Interned once, rows and columns together.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::{dof_node, dof_var, Matrix};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::Model;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::{element_field, matrix};
+    /// # use pyrucast::ops::model;
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+    /// # let k = matrix::stiffness(&model, &materials).unwrap();
+    /// // La forme compacte et la forme nommée disent la même chose : les noms
+    /// // vivent dans la table, la clé n'en porte que l'indice.
+    /// let noms = k.dof_vars()?;
+    /// let cles = k.row_dof_keys()?;
+    /// let nommes = k.row_dofs()?;
+    /// assert_eq!(dof_node(cles[0]), nommes[0].0);
+    /// assert_eq!(noms[dof_var(cles[0]) as usize], nommes[0].1);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn dof_vars(&self) -> Result<std::sync::Arc<Vec<String>>> {
         if let Some(a) = &self.assembled {
-            return Ok(a.col_dofs.clone());
+            return Ok(a.vars.clone());
         }
-        self.collect_col_dofs()
+        Ok(std::sync::Arc::new(self.field_names()?))
+    }
+
+    /// Row DOFs as packed [`DofKey`]s, in CSR row order — the numbering the
+    /// assembler and the solver index with.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::{dof_node, dof_var, Matrix};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::Model;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::{element_field, matrix};
+    /// # use pyrucast::ops::model;
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+    /// # let k = matrix::stiffness(&model, &materials).unwrap();
+    /// // La forme compacte d'un DDL de ligne : le nœud, et l'indice du nom
+    /// // dual dans la table — pas le nom lui-même.
+    /// let cles = k.row_dof_keys()?;
+    /// assert_eq!(dof_node(cles[0]), a.id());
+    /// assert_eq!(k.dof_vars()?[dof_var(cles[0]) as usize], "q");
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn row_dof_keys(&self) -> Result<Vec<DofKey>> {
+        if let Some(a) = &self.assembled {
+            return Ok(a.row_keys.clone());
+        }
+        let vars = self.field_names()?;
+        self.collect_dof_keys(true, &vars)
+    }
+
+    /// Column DOFs as packed [`DofKey`]s, in CSR column order — the column twin
+    /// of [`row_dof_keys`](Self::row_dof_keys).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::{dof_node, dof_var, Matrix};
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::Model;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::{element_field, matrix};
+    /// # use pyrucast::ops::model;
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+    /// # let k = matrix::stiffness(&model, &materials).unwrap();
+    /// // Même forme côté colonne, sur les variables **primales**.
+    /// let cles = k.col_dof_keys()?;
+    /// assert_eq!(dof_node(cles[0]), a.id());
+    /// assert_eq!(k.dof_vars()?[dof_var(cles[0]) as usize], "T");
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn col_dof_keys(&self) -> Result<Vec<DofKey>> {
+        if let Some(a) = &self.assembled {
+            return Ok(a.col_keys.clone());
+        }
+        let vars = self.field_names()?;
+        self.collect_dof_keys(false, &vars)
     }
 
     /// Union of all field names (dual + primal) across blocks.
@@ -2770,7 +3163,7 @@ impl Matrix {
     /// assert_eq!(k.n_rows().unwrap(), 2); // deux nœuds, une variable duale
     /// ```
     pub fn n_rows(&self) -> Result<usize> {
-        Ok(self.row_dofs()?.len())
+        Ok(self.row_dof_keys()?.len())
     }
 
     /// Number of distinct column DOFs.
@@ -2798,7 +3191,7 @@ impl Matrix {
     /// assert_eq!(k.n_cols().unwrap(), 2);
     /// ```
     pub fn n_cols(&self) -> Result<usize> {
-        Ok(self.col_dofs()?.len())
+        Ok(self.col_dof_keys()?.len())
     }
 
     /// Total COO entries stored across all blocks (counting duplicates).
@@ -2876,14 +3269,12 @@ impl Matrix {
         // *computed* block's values live (its COO is empty). Fall back to the
         // per-block COO sum only for an unassembled (literal) matrix.
         if let Some(a) = &self.assembled {
-            let r = a
-                .row_dofs
-                .iter()
-                .position(|(n, v)| *n == row_node && v == row_field);
-            let c = a
-                .col_dofs
-                .iter()
-                .position(|(n, v)| *n == col_node && v == col_field);
+            let slot = |name: &str| a.vars.iter().position(|v| v == name).map(|i| i as u32);
+            let find = |keys: &[DofKey], node: NodeId, name: &str| {
+                slot(name).and_then(|s| keys.iter().position(|&k| k == dof_key(node, s)))
+            };
+            let r = find(&a.row_keys, row_node, row_field);
+            let c = find(&a.col_keys, col_node, col_field);
             return Ok(match (r, c) {
                 (Some(r), Some(c)) => a.csr.get_entry(r, c).map(|e| e.into_value()).unwrap_or(0.0),
                 _ => 0.0,
@@ -2991,8 +3382,8 @@ impl Matrix {
     /// ```
     pub fn to_dmatrix(&self) -> Result<DMatrix<f64>> {
         let a = self.assembled_or_err()?;
-        let nr = a.row_dofs.len();
-        let nc = a.col_dofs.len();
+        let nr = a.row_keys.len();
+        let nc = a.col_keys.len();
         let mut out = DMatrix::<f64>::zeros(nr, nc);
         for (r, c, &v) in a.csr.triplet_iter() {
             out[(r, c)] += v;
@@ -3064,7 +3455,7 @@ impl Matrix {
     /// ```
     pub fn to_coo(&self) -> Result<CooMatrix<f64>> {
         let a = self.assembled_or_err()?;
-        let mut coo = CooMatrix::<f64>::new(a.row_dofs.len(), a.col_dofs.len());
+        let mut coo = CooMatrix::<f64>::new(a.row_keys.len(), a.col_keys.len());
         for (r, c, &v) in a.csr.triplet_iter() {
             coo.push(r, c, v);
         }
@@ -3126,7 +3517,7 @@ impl Matrix {
     /// ```
     pub fn mul_dense(&self, x: &[f64]) -> Result<Vec<f64>> {
         let a = self.assembled_or_err()?;
-        let nc = a.col_dofs.len();
+        let nc = a.col_keys.len();
         if x.len() != nc {
             return Err(PyrucastError::Message(format!(
                 "mul_dense: x has length {} but matrix has {} columns",
@@ -3420,20 +3811,22 @@ impl Matrix {
     /// Shared body of `field_from_{col,row}_values` (`rows` picks the side).
     fn field_from_flat_values(&self, values: &[f64], rows: bool) -> Result<NodeField> {
         let a = self.assembled_or_err()?;
-        let dofs = if rows { &a.row_dofs } else { &a.col_dofs };
-        if values.len() != dofs.len() {
+        let keys = if rows { &a.row_keys } else { &a.col_keys };
+        if values.len() != keys.len() {
             return Err(PyrucastError::Message(format!(
                 "field_from_{}_values: {} value(s) for {} DOF(s)",
                 if rows { "row" } else { "col" },
                 values.len(),
-                dofs.len()
+                keys.len()
             )));
         }
-        // Global (node, variable) → flat index, one hash pass.
-        let index: HashMap<(NodeId, &str), usize> = dofs
+        // Global DOF key → flat index, one hash pass over eight-byte keys.
+        let index: HashMap<DofKey, usize> = keys.iter().enumerate().map(|(i, &k)| (k, i)).collect();
+        let slot_of: HashMap<&str, u32> = a
+            .vars
             .iter()
             .enumerate()
-            .map(|(i, (nid, name))| ((*nid, name.as_str()), i))
+            .map(|(i, v)| (v.as_str(), i as u32))
             .collect();
 
         // Group the blocks by support slot; union their variables per group.
@@ -3477,9 +3870,16 @@ impl Matrix {
             let mut sub = SubNodeField::from_poi1(&g.support, g.vars.clone())?;
             let ncomp = g.vars.len();
             let vals = sub.values_mut();
+            // The variables are resolved to slots once per zone, never per node.
+            let slots: Vec<Option<u32>> = g
+                .vars
+                .iter()
+                .map(|v| slot_of.get(v.as_str()).copied())
+                .collect();
             for (ni, nid) in g.nodes.iter().enumerate() {
-                for (ci, var) in g.vars.iter().enumerate() {
-                    if let Some(&gi) = index.get(&(*nid, var.as_str())) {
+                for (ci, slot) in slots.iter().enumerate() {
+                    let Some(slot) = slot else { continue };
+                    if let Some(&gi) = index.get(&dof_key(*nid, *slot)) {
                         vals[ni * ncomp + ci] = values[gi];
                     }
                 }
@@ -3635,16 +4035,23 @@ impl crate::dump::Dump for Matrix {
             // whose values the literal triplet path does not carry). Otherwise
             // build the labelled grid on the fly from the literal blocks.
             let (row_dofs, col_dofs, data) = if let Some(a) = &self.assembled {
-                let nc = a.col_dofs.len();
-                let mut data = vec![0.0f64; a.row_dofs.len() * nc];
+                let nc = a.col_keys.len();
+                let mut data = vec![0.0f64; a.row_keys.len() * nc];
                 for (r, c, v) in a.csr.triplet_iter() {
                     data[r * nc + c] = *v;
                 }
-                (a.row_dofs.clone(), a.col_dofs.clone(), data)
+                (
+                    Self::name_dofs(&a.row_keys, &a.vars),
+                    Self::name_dofs(&a.col_keys, &a.vars),
+                    data,
+                )
             } else {
-                let row_dofs = self.collect_row_dofs()?;
-                let col_dofs = self.collect_col_dofs()?;
-                let triplets = self.build_global_triplets(&row_dofs, &col_dofs)?;
+                let vars = self.field_names()?;
+                let row_keys = self.collect_dof_keys(true, &vars)?;
+                let col_keys = self.collect_dof_keys(false, &vars)?;
+                let triplets = self.build_global_triplets(&vars, &row_keys, &col_keys)?;
+                let row_dofs = Self::name_dofs(&row_keys, &vars);
+                let col_dofs = Self::name_dofs(&col_keys, &vars);
                 let nc = col_dofs.len();
                 let mut data = vec![0.0f64; row_dofs.len() * nc];
                 for (r, c, v) in triplets {
