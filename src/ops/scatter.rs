@@ -21,10 +21,11 @@
 //! parallel colour-driven scatter (the actual speed-up) builds on this same
 //! pattern.
 
-use crate::containers::matrix::{dof_node, dof_var, AssemblyPattern, BlockSlots, DofKey, Matrix};
+use crate::containers::matrix::{
+    dof_node, dof_var, AssemblyPattern, BlockSlots, DofKey, DofOrdering, Matrix,
+};
 use crate::error::{PyrucastError, Result};
 use crate::models::kernel;
-use crate::ops::coloring;
 use crate::parallel::*;
 
 use std::collections::HashMap;
@@ -141,35 +142,36 @@ pub fn build_pattern(k: &Matrix) -> Result<AssemblyPattern> {
     let col_map = DofIndex::build(&col_keys, vars.len());
 
     let nrows = row_keys.len();
-    // Per row, the columns it touches (with duplicates; deduped below).
-    let mut row_cols: Vec<Vec<usize>> = vec![Vec::new(); nrows];
-    // Per block (in `subs` order), its global entries as `(r, c)` in the exact
-    // order the numeric scatter emits them — kept so the second pass can map
-    // each to its CSR slot once, and cache the result on the pattern.
-    enum BlockEntries {
-        /// One `(r, c)` list per cell (computed block).
-        Computed(Vec<Vec<(usize, usize)>>),
-        /// One `(r, c)` per COO entry (literal block).
-        Literal(Vec<(usize, usize)>),
+
+    // Per block, the compact shape the two passes below walk: a computed block
+    // is its [`kernel::BlockPattern`] plus the local→global DOF translation; a
+    // literal one is its global `(r, c)` entries.
+    enum BlockShape {
+        Computed {
+            pat: kernel::BlockPattern,
+            trow: Vec<u32>,
+            tcol: Vec<u32>,
+        },
+        Literal(Vec<(u32, u32)>),
     }
-    let mut block_entries: Vec<BlockEntries> = Vec::new();
+    let mut shapes: Vec<BlockShape> = Vec::new();
     for blk_h in k {
         let blk = blk_h.read();
-        let trow: Vec<usize> = blk
+        let trow: Vec<u32> = blk
             .row_dof_keys(&slot_of)?
             .iter()
-            .map(|&d| row_map.get(d))
+            .map(|&d| row_map.get(d).map(|i| i as u32))
             .collect::<Result<_>>()?;
-        let tcol: Vec<usize> = blk
+        let tcol: Vec<u32> = blk
             .col_dof_keys(&slot_of)?
             .iter()
-            .map(|&d| col_map.get(d))
+            .map(|&d| col_map.get(d).map(|i| i as u32))
             .collect::<Result<_>>()?;
-        match blk.recipe() {
+        shapes.push(match blk.recipe() {
             Some(recipe) => {
                 // A non-empty `col_fespaces` marks an inter-mesh block: rows and
                 // columns are walked on two facing connectivities instead of one.
-                let (_, _, per_cell) = match recipe.col_fespaces.first() {
+                let pat = match recipe.col_fespaces.first() {
                     Some(col_fe) => kernel::coupling_block_pattern(
                         &recipe.fespaces[0],
                         col_fe,
@@ -188,49 +190,120 @@ pub fn build_pattern(k: &Matrix) -> Result<AssemblyPattern> {
                         blk.ordering(),
                     )?,
                 };
-                let cells: Vec<Vec<(usize, usize)>> = per_cell
-                    .iter()
-                    .map(|cell| {
-                        cell.iter()
-                            .map(|&(ri, ci)| {
-                                let (gr, gc) = (trow[ri], tcol[ci]);
-                                row_cols[gr].push(gc);
-                                (gr, gc)
-                            })
-                            .collect()
-                    })
-                    .collect();
-                block_entries.push(BlockEntries::Computed(cells));
+                BlockShape::Computed { pat, trow, tcol }
             }
             None => {
                 let (lr, lc, _) = blk.local_coo_arrays();
-                let entries: Vec<(usize, usize)> = (0..lr.len())
-                    .map(|k| {
-                        let (gr, gc) = (trow[lr[k]], tcol[lc[k]]);
-                        row_cols[gr].push(gc);
-                        (gr, gc)
-                    })
-                    .collect();
-                block_entries.push(BlockEntries::Literal(entries));
+                BlockShape::Literal((0..lr.len()).map(|k| (trow[lr[k]], tcol[lc[k]])).collect())
+            }
+        });
+    }
+
+    // ── Pass 1: how many columns each row is handed (duplicates included) ───
+    //
+    // A computed block hands row `(li, di)` of a cell one run of
+    // `col_nodes × n_primal` columns, so counting needs no column enumerated at
+    // all. This is what a `Vec<Vec<usize>>` — one growing vector per row, thirty
+    // million of them — used to discover the hard way.
+    let mut counts = vec![0usize; nrows];
+    for shape in &shapes {
+        match shape {
+            BlockShape::Computed { pat, trow, .. } => {
+                let run = pat.col_nodes_per_cell * pat.n_primal;
+                for cell in 0..pat.n_cells {
+                    for li in 0..pat.row_nodes_per_cell {
+                        for di in 0..pat.n_dual {
+                            counts[trow[pat.row_index(cell, li, di)] as usize] += run;
+                        }
+                    }
+                }
+            }
+            BlockShape::Literal(entries) => {
+                for &(r, _) in entries {
+                    counts[r as usize] += 1;
+                }
+            }
+        }
+    }
+    let mut starts = vec![0usize; nrows + 1];
+    for r in 0..nrows {
+        starts[r + 1] = starts[r] + counts[r];
+    }
+
+    // ── Pass 2: write the columns into each row's run ───────────────────────
+    let mut dup_cols = vec![0u32; starts[nrows]];
+    let mut cursor = starts[..nrows].to_vec();
+    for shape in &shapes {
+        match shape {
+            BlockShape::Computed { pat, trow, tcol } => {
+                for cell in 0..pat.n_cells {
+                    for li in 0..pat.row_nodes_per_cell {
+                        for di in 0..pat.n_dual {
+                            let r = trow[pat.row_index(cell, li, di)] as usize;
+                            let at = cursor[r];
+                            let mut w = at;
+                            for lj in 0..pat.col_nodes_per_cell {
+                                for pj in 0..pat.n_primal {
+                                    dup_cols[w] = tcol[pat.col_index(cell, lj, pj)];
+                                    w += 1;
+                                }
+                            }
+                            cursor[r] = w;
+                        }
+                    }
+                }
+            }
+            BlockShape::Literal(entries) => {
+                for &(r, c) in entries {
+                    dup_cols[cursor[r as usize]] = c;
+                    cursor[r as usize] += 1;
+                }
             }
         }
     }
 
-    // Sort + dedup each row's columns independently → parallel across rows.
-    row_cols
-        .par_iter_mut()
-        .with_min_len(MIN_PARALLEL_LEN)
-        .for_each(|cols| {
-            cols.sort_unstable();
-            cols.dedup();
-        });
-    // Concatenate into the CSR arrays (serial: O(nnz) appends + prefix sum).
-    let mut row_offsets = vec![0usize; nrows + 1];
-    let mut col_indices: Vec<usize> = Vec::new();
-    for r in 0..nrows {
-        col_indices.extend_from_slice(&row_cols[r]);
-        row_offsets[r + 1] = col_indices.len();
+    // ── Pass 3: sort + dedup each row's run, then compact ───────────────────
+    //
+    // Rows are independent, so this fans out; each run is sorted in place inside
+    // the one buffer, and `kept` records how much of it survives.
+    let mut kept = vec![0usize; nrows];
+    {
+        let mut rest: &mut [u32] = &mut dup_cols;
+        let mut segments: Vec<&mut [u32]> = Vec::with_capacity(nrows);
+        for r in 0..nrows {
+            let (seg, tail) = rest.split_at_mut(counts[r]);
+            segments.push(seg);
+            rest = tail;
+        }
+        segments
+            .par_iter_mut()
+            .with_min_len(MIN_PARALLEL_LEN)
+            .zip(kept.par_iter_mut())
+            .for_each(|(seg, kept)| {
+                seg.sort_unstable();
+                let mut n = 0usize;
+                for i in 0..seg.len() {
+                    if n == 0 || seg[n - 1] != seg[i] {
+                        seg[n] = seg[i];
+                        n += 1;
+                    }
+                }
+                *kept = n;
+            });
     }
+    let mut row_offsets = vec![0usize; nrows + 1];
+    for r in 0..nrows {
+        row_offsets[r + 1] = row_offsets[r] + kept[r];
+    }
+    let mut col_indices: Vec<usize> = Vec::with_capacity(row_offsets[nrows]);
+    for r in 0..nrows {
+        col_indices.extend(
+            dup_cols[starts[r]..starts[r] + kept[r]]
+                .iter()
+                .map(|&c| c as usize),
+        );
+    }
+    drop(dup_cols);
 
     let mut pattern = AssemblyPattern {
         vars,
@@ -241,28 +314,114 @@ pub fn build_pattern(k: &Matrix) -> Result<AssemblyPattern> {
         block_slots: Vec::new(),
     };
 
-    // Second pass: map every block entry to its CSR value slot once, so the
-    // numeric scatter reads slots directly instead of binary-searching per
-    // entry on every assembly. Parallel across blocks (independent output).
-    // No `with_min_len` here: an item is a whole block (all its cells, all
-    // their entries), so blocks are few and each is heavy — the grain policy
-    // counts leaf items and would serialise this loop outright.
-    pattern.block_slots = block_entries
+    // ── Pass 4: every entry's CSR slot, resolved once and cached ────────────
+    //
+    // The numeric scatter then reads its slots directly instead of
+    // binary-searching per entry on every assembly. Parallel across blocks
+    // (independent output). No `with_min_len` here: an item is a whole block —
+    // all its cells, all their entries — so blocks are few and each is heavy,
+    // and the grain policy, which counts leaf items, would serialise this loop.
+    if pattern.nnz() > u32::MAX as usize {
+        return Err(PyrucastError::Message(format!(
+            "build_pattern: {} stored entries exceed the {} a 32-bit slot index \
+             can name — this problem is past what an assembled matrix holds",
+            pattern.nnz(),
+            u32::MAX
+        )));
+    }
+    pattern.block_slots = shapes
         .into_par_iter()
-        .map(|be| match be {
-            BlockEntries::Computed(cells) => BlockSlots::Computed(
-                cells
-                    .into_iter()
-                    .map(|cell| cell.iter().map(|&(r, c)| pattern.slot(r, c)).collect())
-                    .collect(),
-            ),
-            BlockEntries::Literal(entries) => {
-                BlockSlots::Literal(entries.iter().map(|&(r, c)| pattern.slot(r, c)).collect())
+        .map(|shape| match shape {
+            BlockShape::Computed { pat, trow, tcol } => {
+                Ok(computed_slots(&pattern, &pat, &trow, &tcol))
             }
+            BlockShape::Literal(entries) => Ok(BlockSlots::Literal(
+                entries
+                    .iter()
+                    .map(|&(r, c)| pattern.slot(r as usize, c as usize))
+                    .collect(),
+            )),
         })
-        .collect();
+        .collect::<Result<_>>()?;
 
     Ok(pattern)
+}
+
+/// The CSR slots of one computed block, in the kernel's `(li, di, lj, pj)`
+/// emission order.
+///
+/// Takes the **blocked** form when the block's own numbering makes a node's
+/// primal columns consecutive — which [`DofOrdering::NodesThenVars`] intends,
+/// but which only the global numbering can settle, so it is checked rather than
+/// assumed. That check is what lets one base slot stand for `n_primal` of them.
+fn computed_slots(
+    pattern: &AssemblyPattern,
+    pat: &kernel::BlockPattern,
+    trow: &[u32],
+    tcol: &[u32],
+) -> BlockSlots {
+    let blocked = pat.n_primal > 1
+        && pat.ordering == DofOrdering::NodesThenVars
+        && (0..pat.n_col_support).all(|q| {
+            let base = tcol[pat.ordering.to_index(q, 0, pat.n_col_support, pat.n_primal)];
+            (1..pat.n_primal).all(|pj| {
+                tcol[pat
+                    .ordering
+                    .to_index(q, pj, pat.n_col_support, pat.n_primal)]
+                    == base + pj as u32
+            })
+        });
+
+    let rows_per_cell = pat.row_nodes_per_cell * pat.n_dual;
+    if blocked {
+        let stride = rows_per_cell * pat.col_nodes_per_cell;
+        let mut bases = vec![0u32; pat.n_cells * stride];
+        bases
+            .par_chunks_mut(stride)
+            .with_min_len((MIN_PARALLEL_LEN / stride.max(1)).max(1))
+            .enumerate()
+            .for_each(|(cell, out)| {
+                let mut w = 0;
+                for li in 0..pat.row_nodes_per_cell {
+                    for di in 0..pat.n_dual {
+                        let r = trow[pat.row_index(cell, li, di)] as usize;
+                        for lj in 0..pat.col_nodes_per_cell {
+                            let c = tcol[pat.col_index(cell, lj, 0)] as usize;
+                            out[w] = pattern.slot(r, c) as u32;
+                            w += 1;
+                        }
+                    }
+                }
+            });
+        return BlockSlots::ComputedBlocked {
+            bases,
+            stride,
+            n_primal: pat.n_primal,
+        };
+    }
+
+    let stride = pat.entries_per_cell();
+    let mut slots = vec![0u32; pat.n_cells * stride];
+    slots
+        .par_chunks_mut(stride.max(1))
+        .with_min_len((MIN_PARALLEL_LEN / stride.max(1)).max(1))
+        .enumerate()
+        .for_each(|(cell, out)| {
+            let mut w = 0;
+            for li in 0..pat.row_nodes_per_cell {
+                for di in 0..pat.n_dual {
+                    let r = trow[pat.row_index(cell, li, di)] as usize;
+                    for lj in 0..pat.col_nodes_per_cell {
+                        for pj in 0..pat.n_primal {
+                            let c = tcol[pat.col_index(cell, lj, pj)] as usize;
+                            out[w] = pattern.slot(r, c) as u32;
+                            w += 1;
+                        }
+                    }
+                }
+            }
+        });
+    BlockSlots::Computed { slots, stride }
 }
 
 /// Assemble `k` into a CSR by scattering each block's contribution into
@@ -374,32 +533,24 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<Vec<f64>>
                         },
                     )?
                 };
-                let per_cell = cell_values.chunks(ke_len.max(1));
-                let slots = match &pattern.block_slots[bi] {
-                    BlockSlots::Computed(s) => s,
-                    BlockSlots::Literal(_) => {
-                        return Err(PyrucastError::Message(
-                            "scatter_serial: pattern/block kind mismatch (computed block)".into(),
-                        ))
-                    }
-                };
+                let slots = &pattern.block_slots[bi];
+                if matches!(slots, BlockSlots::Literal(_)) {
+                    return Err(PyrucastError::Message(
+                        "scatter_serial: pattern/block kind mismatch (computed block)".into(),
+                    ));
+                }
                 let factor = blk.factor();
-                for (cell, cell_slots) in per_cell.zip(slots) {
-                    for (&v, &slot) in cell.iter().zip(cell_slots) {
-                        values[slot] += v * factor;
-                    }
+                for (cell, ke) in cell_values.chunks(ke_len.max(1)).enumerate() {
+                    slots.each_entry(cell, ke, |slot, v| values[slot] += v * factor);
                 }
             }
             None => {
                 let (_, _, lv) = blk.local_coo_arrays();
                 let factor = blk.factor();
-                let slots = match &pattern.block_slots[bi] {
-                    BlockSlots::Literal(s) => s,
-                    BlockSlots::Computed(_) => {
-                        return Err(PyrucastError::Message(
-                            "scatter_serial: pattern/block kind mismatch (literal block)".into(),
-                        ))
-                    }
+                let BlockSlots::Literal(slots) = &pattern.block_slots[bi] else {
+                    return Err(PyrucastError::Message(
+                        "scatter_serial: pattern/block kind mismatch (literal block)".into(),
+                    ));
                 };
                 for (&slot, &v) in slots.iter().zip(lv) {
                     values[slot] += v * factor;
@@ -498,10 +649,22 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<Vec<f64
                     let state = recipe.state.as_ref().map(|h| h.read());
                     domain.element_layout(recipe.kind, &mat, state.as_deref())?
                 };
-                // Element matrices, evaluated in parallel — values only, sliced
-                // cell by cell for the colour-driven scatter.
-                let (cell_values, ke_len) = if recipe.col_fespaces.is_empty() {
-                    kernel::element_block_values_per_cell(
+                let slots = &pattern.block_slots[bi];
+                if matches!(slots, BlockSlots::Literal(_)) {
+                    return Err(PyrucastError::Message(
+                        "scatter_parallel: pattern/block kind mismatch (computed block)".into(),
+                    ));
+                }
+                let factor = blk.factor();
+
+                if recipe.col_fespaces.is_empty() {
+                    // Evaluation and scatter in the same breath, colour by
+                    // colour: each cell's `ke` is produced on a per-task scratch
+                    // and poured straight into its precomputed slots. Within a
+                    // colour the cells touch disjoint DOFs, so the atomic stores
+                    // never race; the colours run in sequence, so each slot
+                    // accumulates in a fixed order whatever the thread count.
+                    kernel::element_block_colored(
                         &recipe.fespaces,
                         blk.dual_vars().len(),
                         blk.primal_vars().len(),
@@ -510,9 +673,21 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<Vec<f64
                         |geoms, m, state, ke| {
                             phys.matrix_element(recipe.kind, geoms, m, &lay, state, ke)
                         },
-                    )?
+                        |cell, ke| {
+                            slots.each_entry(cell, ke, |slot, v| {
+                                add_atomic(&values[slot], v * factor)
+                            });
+                            Ok(())
+                        },
+                    )?;
                 } else {
-                    kernel::coupling_block_values_per_cell(
+                    // An inter-mesh block writes rows on one mesh and columns on
+                    // another: a colouring of *one* connectivity no longer proves
+                    // the slots disjoint. Its element matrices are still evaluated
+                    // in parallel; only the scatter is serial, as for a literal
+                    // block. An interface carries a boundary mesh's worth of
+                    // cells, so this costs nothing worth a two-sided colouring.
+                    let (cell_values, ke_len) = kernel::coupling_block_values_per_cell(
                         &recipe.fespaces,
                         &recipe.col_fespaces,
                         blk.dual_vars().len(),
@@ -521,75 +696,19 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<Vec<f64
                         |row_geoms, col_geoms, m, ke| {
                             domain.coupling_element(recipe.kind, row_geoms, col_geoms, m, &lay, ke)
                         },
-                    )?
-                };
-                let per_cell = cell_values.chunks(ke_len.max(1));
-                let slots = match &pattern.block_slots[bi] {
-                    BlockSlots::Computed(s) => s,
-                    BlockSlots::Literal(_) => {
-                        return Err(PyrucastError::Message(
-                            "scatter_parallel: pattern/block kind mismatch (computed block)".into(),
-                        ))
-                    }
-                };
-
-                let factor = blk.factor();
-                if recipe.col_fespaces.is_empty() {
-                    // Cell colouring (cached on the primary FE subspace): two cells
-                    // sharing a node conflict, so one colour's cells touch disjoint DOFs.
-                    let fe = recipe.fespaces[0].read();
-                    let submesh = fe.submesh();
-                    let submesh_g = submesh.read();
-                    let conn = submesh_g.connectivity();
-                    let n_cells = fe.cell_count()?;
-                    let keys_per_cell = conn.len().checked_div(n_cells).unwrap_or(0);
-                    let coloring = fe.coloring(|| {
-                        coloring::greedy_color_nodes(
-                            n_cells,
-                            keys_per_cell,
-                            conn,
-                            submesh_g.coords().read().node_count(),
-                        )
-                    });
-
-                    // Scatter colour by colour: within a colour, cells write disjoint
-                    // slots ⇒ the parallel atomic stores never race. Slots are
-                    // precomputed (indexed cell-for-cell, entry-for-entry).
-                    let per_cell: Vec<&[f64]> = per_cell.collect();
-                    for color in coloring {
-                        color
-                            .par_iter()
-                            .with_min_len(MIN_PARALLEL_LEN)
-                            .for_each(|&cell| {
-                                for (&v, &slot) in per_cell[cell].iter().zip(&slots[cell]) {
-                                    add_atomic(&values[slot], v * factor);
-                                }
-                            });
-                    }
-                } else {
-                    // An inter-mesh block writes rows on one mesh and columns on
-                    // another: a colouring of *one* connectivity no longer proves
-                    // the slots disjoint. Its element matrices are still evaluated
-                    // in parallel above; only the scatter is serial, as for a
-                    // literal block. An interface carries a boundary mesh's worth
-                    // of cells, so this costs nothing worth a two-sided colouring.
-                    for (cell_values, cell_slots) in per_cell.zip(slots) {
-                        for (&v, &slot) in cell_values.iter().zip(cell_slots) {
-                            add_atomic(&values[slot], v * factor);
-                        }
+                    )?;
+                    for (cell, ke) in cell_values.chunks(ke_len.max(1)).enumerate() {
+                        slots.each_entry(cell, ke, |slot, v| add_atomic(&values[slot], v * factor));
                     }
                 }
             }
             None => {
                 let (_, _, lv) = blk.local_coo_arrays();
                 let factor = blk.factor();
-                let slots = match &pattern.block_slots[bi] {
-                    BlockSlots::Literal(s) => s,
-                    BlockSlots::Computed(_) => {
-                        return Err(PyrucastError::Message(
-                            "scatter_parallel: pattern/block kind mismatch (literal block)".into(),
-                        ))
-                    }
+                let BlockSlots::Literal(slots) = &pattern.block_slots[bi] else {
+                    return Err(PyrucastError::Message(
+                        "scatter_parallel: pattern/block kind mismatch (literal block)".into(),
+                    ));
                 };
                 for (&slot, &v) in slots.iter().zip(lv) {
                     add_atomic(&values[slot], v * factor);

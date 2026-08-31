@@ -1875,14 +1875,23 @@ pub fn element_block_triplets_per_cell(
     Ok((nrows, ncols, per_cell))
 }
 
-/// `(nrows, ncols, per-cell block-local (row, col) index pairs)` — the shape
-/// returned by [`element_block_pattern`].
+/// The **symbolic** structure of a computed block, in compact form.
+///
+/// It used to be the `(row, col)` index pair of every entry of every cell —
+/// five hundred and seventy-six pairs per `HEX8` in elasticity, ninety-two
+/// gigabytes for ten million cells, built only to be walked twice and thrown
+/// away. Every one of those pairs is a pure function of two things the cell
+/// already carries: where each of its nodes sits in the row support, and where
+/// it sits in the column support. So that is what is kept — eight numbers per
+/// cell per side — and the pairs are **regenerated** where they are wanted.
+///
+/// Carries no geometry and evaluates no kernel: only connectivity and the DOF
+/// `ordering`. An assembler builds the global CSR sparsity from it, caches the
+/// result, and runs the numeric kernel only when values are needed.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::element_field::{ElementField, SubElementField};
-/// # use pyrucast::containers::field::SubField;
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
 /// # use pyrucast::containers::matrix::DofOrdering;
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
@@ -1893,34 +1902,160 @@ pub fn element_block_triplets_per_cell(
 /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
+/// # let zone = fes.get(0)?;
+/// # let support = zone.read().submesh().read().to_poi1()?;
 /// // Le **motif** seul, sans valeurs : c'est lui qui est mis en cache et
 /// // réutilisé d'un assemblage à l'autre, la matière ne le changeant pas.
-/// let (nr, nc, motif): kernel::BlockPattern = kernel::element_block_pattern(
+/// let motif = kernel::element_block_pattern(
 ///     &zone, &support, &support, 1, 1, DofOrdering::NodesThenVars,
 /// )?;
-/// assert_eq!((nr, nc), (3, 3));
-/// assert_eq!(motif[0].len(), 3 * 3); // toutes les paires d'une maille
+/// assert_eq!((motif.nrows, motif.ncols), (3, 3));
+/// assert_eq!(motif.entries_per_cell(), 3 * 3); // toutes les paires d'une maille
+/// // La paire `(ligne, colonne)` d'une entrée se regénère à la demande.
+/// assert_eq!(motif.row_index(0, 0, 0), 0);
+/// assert_eq!(motif.col_index(0, 2, 0), 2);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub type BlockPattern = (usize, usize, Vec<Vec<(usize, usize)>>);
+pub struct BlockPattern {
+    /// Number of block rows.
+    pub nrows: usize,
+    /// Number of block columns.
+    pub ncols: usize,
+    /// Number of cells the block walks.
+    pub n_cells: usize,
+    /// Row-support position of each entry of the row connectivity,
+    /// `n_cells × row_nodes_per_cell`.
+    pub row_slot: Vec<u32>,
+    /// Column-support position of each entry of the column connectivity,
+    /// `n_cells × col_nodes_per_cell`.
+    pub col_slot: Vec<u32>,
+    /// Nodes per cell on the row side.
+    pub row_nodes_per_cell: usize,
+    /// Nodes per cell on the column side (equal to the row count except on an
+    /// inter-mesh coupling block).
+    pub col_nodes_per_cell: usize,
+    /// Nodes in the row support — the width the DOF ordering needs.
+    pub n_row_support: usize,
+    /// Nodes in the column support.
+    pub n_col_support: usize,
+    /// Dual variables per row node.
+    pub n_dual: usize,
+    /// Primal variables per column node.
+    pub n_primal: usize,
+    /// How `(node, variable)` maps to a flat index.
+    pub ordering: DofOrdering,
+}
 
-/// The **symbolic** structure of a computed stiffness block: for each cell, the
-/// block-**local** `(row, col)` index pairs it writes, in the exact order
-/// [`element_block_triplets`] emits their values (`li, di, lj, pj`). Carries no
-/// geometry and evaluates no kernel — only connectivity + the DOF `ordering` —
-/// so an assembler can build the global CSR sparsity pattern (and, from it,
-/// per-cell scatter slots) cheaply and cache it, then run the numeric kernel
-/// only when values are needed. Returns `(nrows, ncols, per_cell_pairs)`.
+impl BlockPattern {
+    /// Block-local **row** index of the entry at local node `li`, dual variable
+    /// `di` of `cell`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::kernel;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
+    /// # let zone = fes.get(0)?;
+    /// # let support = zone.read().submesh().read().to_poi1()?;
+    /// # let motif = kernel::element_block_pattern(
+    /// #     &zone, &support, &support, 1, 1, DofOrdering::NodesThenVars)?;
+    /// // La ligne d'une entrée, regénérée depuis la position du nœud.
+    /// assert_eq!(motif.row_index(0, 0, 0), 0);
+    /// assert_eq!(motif.row_index(0, 2, 0), 2);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    #[inline]
+    pub fn row_index(&self, cell: usize, li: usize, di: usize) -> usize {
+        let p = self.row_slot[cell * self.row_nodes_per_cell + li] as usize;
+        self.ordering
+            .to_index(p, di, self.n_row_support, self.n_dual)
+    }
+
+    /// Block-local **column** index of the entry at local node `lj`, primal
+    /// variable `pj` of `cell`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::kernel;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
+    /// # let zone = fes.get(0)?;
+    /// # let support = zone.read().submesh().read().to_poi1()?;
+    /// # let motif = kernel::element_block_pattern(
+    /// #     &zone, &support, &support, 1, 1, DofOrdering::NodesThenVars)?;
+    /// // La colonne, de même — le motif ne stocke aucune paire.
+    /// assert_eq!(motif.col_index(0, 1, 0), 1);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    #[inline]
+    pub fn col_index(&self, cell: usize, lj: usize, pj: usize) -> usize {
+        let p = self.col_slot[cell * self.col_nodes_per_cell + lj] as usize;
+        self.ordering
+            .to_index(p, pj, self.n_col_support, self.n_primal)
+    }
+
+    /// Entries one cell contributes — the length of its `ke`, and the number of
+    /// `(row, col)` pairs the loops above regenerate.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::kernel;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
+    /// # let zone = fes.get(0)?;
+    /// # let support = zone.read().submesh().read().to_poi1()?;
+    /// # let motif = kernel::element_block_pattern(
+    /// #     &zone, &support, &support, 1, 1, DofOrdering::NodesThenVars)?;
+    /// // Un TRI3 scalaire : trois nœuds au carré.
+    /// assert_eq!(motif.entries_per_cell(), 3 * 3);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    #[inline]
+    pub fn entries_per_cell(&self) -> usize {
+        (self.row_nodes_per_cell * self.n_dual) * (self.col_nodes_per_cell * self.n_primal)
+    }
+}
+
+/// The [`BlockPattern`] of a computed stiffness block — where each cell's nodes
+/// sit in the row and column supports, plus the DOF layout that turns those
+/// positions into `(row, col)` pairs in the `(li, di, lj, pj)` order
+/// [`element_block_triplets`] emits its values.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::element_field::{ElementField, SubElementField};
-/// # use pyrucast::containers::field::SubField;
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
 /// # use pyrucast::containers::matrix::DofOrdering;
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
@@ -1931,17 +2066,16 @@ pub type BlockPattern = (usize, usize, Vec<Vec<(usize, usize)>>);
 /// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
-/// // Le **motif** seul, sans valeurs : c'est lui qui est mis en cache et
-/// // réutilisé d'un assemblage à l'autre, la matière ne le changeant pas.
-/// let (nr, nc, motif): kernel::BlockPattern = kernel::element_block_pattern(
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
+/// # let zone = fes.get(0)?;
+/// # let support = zone.read().submesh().read().to_poi1()?;
+/// // Le motif compact : la position de chaque nœud dans les deux supports.
+/// let motif = kernel::element_block_pattern(
 ///     &zone, &support, &support, 1, 1, DofOrdering::NodesThenVars,
 /// )?;
-/// assert_eq!((nr, nc), (3, 3));
-/// assert_eq!(motif[0].len(), 3 * 3); // toutes les paires d'une maille
+/// assert_eq!((motif.nrows, motif.ncols), (3, 3));
+/// assert_eq!(motif.row_slot.len(), 3); // une maille, trois nœuds
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn element_block_pattern(
@@ -1961,61 +2095,22 @@ pub fn element_block_pattern(
 
     let row_nodes: Vec<NodeId> = row_support.read().connectivity().to_vec();
     let col_nodes: Vec<NodeId> = col_support.read().connectivity().to_vec();
-    let n_row_nodes = row_nodes.len();
-    let n_col_nodes = col_nodes.len();
-    let nrows = n_row_nodes * n_dual;
-    let ncols = n_col_nodes * n_primal;
-    let pos_map = |nodes: &[NodeId]| -> HashMap<NodeId, u32> {
-        let mut m = HashMap::with_capacity(nodes.len());
-        for (i, &n) in nodes.iter().enumerate() {
-            m.entry(n).or_insert(i as u32);
-        }
-        m
-    };
-    let row_pos = pos_map(&row_nodes);
-    let col_pos = pos_map(&col_nodes);
+    let (n_row_support, n_col_support) = (row_nodes.len(), col_nodes.len());
 
-    // La position de chaque nœud de la connectivité, d'un seul parcours.
-    let lookup = |pos: &HashMap<NodeId, u32>, side: &str| -> Result<Vec<u32>> {
-        conn.iter()
-            .map(|nid| {
-                pos.get(nid).copied().ok_or_else(|| {
-                    PyrucastError::Message(format!(
-                        "element_block_pattern: node {nid:?} not in {side} support"
-                    ))
-                })
-            })
-            .collect()
-    };
-    let row_slot = lookup(&row_pos, "row")?;
-    let col_slot = lookup(&col_pos, "col")?;
-    let (row_slot, col_slot): (&[u32], &[u32]) = (&row_slot, &col_slot);
-
-    let per_cell: Vec<Vec<(usize, usize)>> = (0..n_cells)
-        .into_par_iter()
-        .with_min_len((MIN_PARALLEL_LEN / n_nodes.max(1)).max(1))
-        .map(|cell| -> Result<Vec<(usize, usize)>> {
-            let base = cell * n_nodes;
-            let rpos = &row_slot[base..base + n_nodes];
-            let cpos = &col_slot[base..base + n_nodes];
-            let mut pairs = Vec::with_capacity(n_nodes * n_dual * n_nodes * n_primal);
-            for li in 0..n_nodes {
-                for di in 0..n_dual {
-                    let ri = ordering.to_index(rpos[li] as usize, di, n_row_nodes, n_dual);
-                    for lj in 0..n_nodes {
-                        for pj in 0..n_primal {
-                            let ci =
-                                ordering.to_index(cpos[lj] as usize, pj, n_col_nodes, n_primal);
-                            pairs.push((ri, ci));
-                        }
-                    }
-                }
-            }
-            Ok(pairs)
-        })
-        .collect::<Result<_>>()?;
-
-    Ok((nrows, ncols, per_cell))
+    Ok(BlockPattern {
+        nrows: n_row_support * n_dual,
+        ncols: n_col_support * n_primal,
+        n_cells,
+        row_slot: local_positions(conn, &position_map(&row_nodes), "row")?,
+        col_slot: local_positions(conn, &position_map(&col_nodes), "column")?,
+        row_nodes_per_cell: n_nodes,
+        col_nodes_per_cell: n_nodes,
+        n_row_support,
+        n_col_support,
+        n_dual,
+        n_primal,
+        ordering,
+    })
 }
 
 // ─── Inter-mesh coupling blocks ─────────────────────────────────────────────
@@ -2178,11 +2273,11 @@ pub fn coupling_block_triplets_per_cell(
             for (li, &rl) in rpos.iter().enumerate() {
                 for di in 0..n_dual {
                     let r = li * n_dual + di;
-                    let ri = ordering.to_index(rl, di, n_row_support, n_dual);
+                    let ri = ordering.to_index(rl as usize, di, n_row_support, n_dual);
                     for (lj, &cl) in cpos.iter().enumerate() {
                         for pj in 0..n_primal {
                             let c = lj * n_primal + pj;
-                            let ci = ordering.to_index(cl, pj, n_col_support, n_primal);
+                            let ci = ordering.to_index(cl as usize, pj, n_col_support, n_primal);
                             trips.push((ri, ci, ke[r * n_cols_loc + c]));
                         }
                     }
@@ -2311,6 +2406,140 @@ pub fn element_block_values_per_cell(
     Ok((values, ke_len))
 }
 
+/// Drive a computed block's element kernel **cell by cell, colour by colour**,
+/// handing each `ke` straight to `emit` instead of materialising them all.
+///
+/// [`element_block_values_per_cell`] returns every element matrix of the block
+/// at once. On a solid mesh that is one buffer of `n_cells × ke_len` doubles —
+/// forty-six gigabytes for ten million `HEX8` in elasticity — written in full,
+/// then read back in full by the scatter that follows. The values have no life
+/// of their own between the two: each is produced, consumed once, and never
+/// looked at again.
+///
+/// So this form produces and consumes them in the same breath. Each task keeps
+/// **one** `ke` scratch, reused from one cell to the next; `emit(cell, ke)`
+/// receives it and scatters it wherever the caller keeps its accumulator.
+///
+/// The cells are visited in the colouring's order (cached on the primary FE
+/// subspace, keyed on shared nodes): within a colour the cells touch
+/// pairwise-disjoint nodes, so their scatters do not race, and the colours run
+/// in sequence. `emit` therefore sees every cell of colour 0 before any cell of
+/// colour 1 — the same order the two-phase form's caller imposed, hence the same
+/// accumulation order and the same result.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::kernel;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
+/// # let zone = fes.get(0)?;
+/// # let mat = Handle::new(SubElementField::from_uniform_per_component(
+/// #     zone.clone(), vec!["k".into()], &[1.0])?);
+/// // Les mêmes valeurs que la forme en deux temps, mailles jamais toutes
+/// // matérialisées : chaque `ke` est produite puis consommée sur-le-champ.
+/// let noyau = |geoms: &[kernel::CellGeom], _m: &SubElementField,
+///              _s: Option<&SubElementField>, ke: &mut [f64]| {
+///     ke[0] = geoms[0].det_j_w(0);
+///     Ok(())
+/// };
+/// let (attendu, ke_len) = kernel::element_block_values_per_cell(
+///     std::slice::from_ref(&zone), 1, 1, &mat, None, noyau)?;
+/// let vu = std::sync::Mutex::new(vec![0.0; attendu.len()]);
+/// kernel::element_block_colored(
+///     std::slice::from_ref(&zone), 1, 1, &mat, None, noyau,
+///     |maille, ke| {
+///         vu.lock().unwrap()[maille * ke_len..(maille + 1) * ke_len]
+///             .copy_from_slice(ke);
+///         Ok(())
+///     },
+/// )?;
+/// assert_eq!(vu.into_inner().unwrap(), attendu);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
+pub fn element_block_colored(
+    fespaces: &[Handle<SubFiniteElementSpace>],
+    n_dual: usize,
+    n_primal: usize,
+    material: &Handle<SubElementField>,
+    state: Option<&Handle<SubElementField>>,
+    element: impl Fn(&[CellGeom], &SubElementField, Option<&SubElementField>, &mut [f64]) -> Result<()>
+        + Sync,
+    emit: impl Fn(usize, &[f64]) -> Result<()> + Sync,
+) -> Result<()> {
+    // Same block prologue as `element_block_values_per_cell`: reference data,
+    // coordinates and material resolved once, guards held for the whole drive so
+    // the per-cell work stays lock-free.
+    let primary = fespaces
+        .first()
+        .ok_or_else(|| PyrucastError::Message("element_block_colored: no FE subspace".into()))?;
+    let fe = primary.read();
+    let submesh = fe.submesh();
+    let sm = submesh.read();
+    let coords_h = sm.coords();
+    let coords = coords_h.read();
+    let mat_guard = material.read();
+    let state_guard = state.map(|h| h.read());
+
+    let mut rds = Vec::with_capacity(fespaces.len());
+    rds.push(RefData::snapshot(&fe)?);
+    for h in &fespaces[1..] {
+        let f = h.read();
+        if !f.submesh().same_object(&submesh) {
+            return Err(PyrucastError::Message(
+                "element_block_colored: all FE subspaces of a block must share one submesh".into(),
+            ));
+        }
+        rds.push(RefData::snapshot(&f)?);
+    }
+
+    let n_cells = fe.cell_count()?;
+    let n_nodes = rds[0].n_nodes;
+    let conn: &[NodeId] = sm.connectivity();
+    coords.ensure_all_alive(conn)?;
+    let rds_ref: &[RefData] = &rds;
+    let coords_ref: &Coords = &coords;
+    let mat_ref: &SubElementField = &mat_guard;
+    let state_ref: Option<&SubElementField> = state_guard.as_deref();
+    let ke_len = (n_nodes * n_dual) * (n_nodes * n_primal);
+
+    let coloring =
+        fe.coloring(|| coloring::greedy_color_nodes(n_cells, n_nodes, conn, coords.node_count()));
+
+    for color in coloring {
+        color
+            .par_iter()
+            .with_min_len((MIN_PARALLEL_LEN / n_nodes.max(1)).max(1))
+            .try_for_each_init(
+                // One `ke` and one geometry list per task, reused across its
+                // cells: no per-cell allocation, and no element set held whole.
+                || (vec![0.0_f64; ke_len], Vec::with_capacity(rds_ref.len())),
+                |(ke, geoms), &cell| -> Result<()> {
+                    geoms.clear();
+                    geoms.extend(
+                        rds_ref
+                            .iter()
+                            .map(|rd| CellGeom::new(rd, coords_ref, conn, cell)),
+                    );
+                    ke.iter_mut().for_each(|v| *v = 0.0);
+                    element(geoms, mat_ref, state_ref, ke)?;
+                    emit(cell, ke)
+                },
+            )?;
+    }
+    Ok(())
+}
+
 /// [`element_block_values_per_cell`] for an **inter-mesh coupling** block.
 ///
 /// Same contract: the concatenated `ke` of every facing cell pair, row-major,
@@ -2419,8 +2648,10 @@ pub fn coupling_block_values_per_cell(
     Ok((values, ke_len))
 }
 
-/// The **symbolic** structure of an inter-mesh block — the coupling counterpart
-/// of [`element_block_pattern`], carrying no geometry and evaluating no kernel.
+/// The [`BlockPattern`] of an inter-mesh block — the coupling counterpart of
+/// [`element_block_pattern`], carrying no geometry and evaluating no kernel.
+/// Its rows are read on one mesh and its columns on the facing one, so the two
+/// sides carry their own node counts.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -2430,22 +2661,22 @@ pub fn coupling_block_values_per_cell(
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::kernel::{self, assemble_block};
+/// # use pyrucast::models::kernel;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// # let zone = fes.get(0).unwrap();
-/// # let support = zone.read().submesh().read().to_poi1().unwrap();
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
+/// # let zone = fes.get(0)?;
+/// # let support = zone.read().submesh().read().to_poi1()?;
 /// // Un bloc **hors diagonale** : ses lignes vivent sur un maillage, ses
 /// // colonnes sur celui d'en face. C'est ce qu'exige une loi d'interface.
 /// // Ici les deux côtés sont le même, ce qui suffit à montrer la forme.
-/// let (nr, nc, motif) = kernel::coupling_block_pattern(
+/// let motif = kernel::coupling_block_pattern(
 ///     &zone, &zone, &support, &support, 1, 1, DofOrdering::NodesThenVars)?;
-/// assert_eq!((nr, nc), (3, 3));
-/// assert_eq!(motif[0].len(), 3 * 3);
+/// assert_eq!((motif.nrows, motif.ncols), (3, 3));
+/// assert_eq!(motif.entries_per_cell(), 3 * 3);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn coupling_block_pattern(
@@ -2462,43 +2693,27 @@ pub fn coupling_block_pattern(
     let (row_sm, col_sm) = (row_sm_h.read(), col_sm_h.read());
     let row_conn: &[NodeId] = row_sm.connectivity();
     let col_conn: &[NodeId] = col_sm.connectivity();
-    let (n_cells, n_row_nodes_cell, n_col_nodes_cell) =
+    let (n_cells, row_nodes_per_cell, col_nodes_per_cell) =
         check_conforming(&row_fe, &col_fe, row_conn, col_conn)?;
 
     let row_nodes: Vec<NodeId> = row_support.read().connectivity().to_vec();
     let col_nodes: Vec<NodeId> = col_support.read().connectivity().to_vec();
     let (n_row_support, n_col_support) = (row_nodes.len(), col_nodes.len());
-    let (nrows, ncols) = (n_row_support * n_dual, n_col_support * n_primal);
-    let row_pos = position_map(&row_nodes);
-    let col_pos = position_map(&col_nodes);
 
-    // Les deux connectivités, d'un seul parcours chacune.
-    let row_slot = local_positions(row_conn, &row_pos, "row")?;
-    let col_slot = local_positions(col_conn, &col_pos, "column")?;
-    let (row_slot, col_slot): (&[usize], &[usize]) = (&row_slot, &col_slot);
-
-    let per_cell: Vec<Vec<(usize, usize)>> = (0..n_cells)
-        .into_par_iter()
-        .with_min_len((MIN_PARALLEL_LEN / n_row_nodes_cell.max(1)).max(1))
-        .map(|cell| -> Result<Vec<(usize, usize)>> {
-            let rpos = &row_slot[cell * n_row_nodes_cell..(cell + 1) * n_row_nodes_cell];
-            let cpos = &col_slot[cell * n_col_nodes_cell..(cell + 1) * n_col_nodes_cell];
-            let mut pairs = Vec::with_capacity(rpos.len() * n_dual * cpos.len() * n_primal);
-            for &rl in rpos {
-                for di in 0..n_dual {
-                    let ri = ordering.to_index(rl, di, n_row_support, n_dual);
-                    for &cl in cpos {
-                        for pj in 0..n_primal {
-                            pairs.push((ri, ordering.to_index(cl, pj, n_col_support, n_primal)));
-                        }
-                    }
-                }
-            }
-            Ok(pairs)
-        })
-        .collect::<Result<_>>()?;
-
-    Ok((nrows, ncols, per_cell))
+    Ok(BlockPattern {
+        nrows: n_row_support * n_dual,
+        ncols: n_col_support * n_primal,
+        n_cells,
+        row_slot: local_positions(row_conn, &position_map(&row_nodes), "row")?,
+        col_slot: local_positions(col_conn, &position_map(&col_nodes), "column")?,
+        row_nodes_per_cell,
+        col_nodes_per_cell,
+        n_row_support,
+        n_col_support,
+        n_dual,
+        n_primal,
+        ordering,
+    })
 }
 
 /// Node → position in a support (first occurrence wins).
@@ -2511,10 +2726,10 @@ fn position_map(nodes: &[NodeId]) -> HashMap<NodeId, u32> {
 }
 
 /// Positions of a cell's nodes in a support, erroring by name on a stray node.
-fn local_positions(ids: &[NodeId], pos: &HashMap<NodeId, u32>, side: &str) -> Result<Vec<usize>> {
+fn local_positions(ids: &[NodeId], pos: &HashMap<NodeId, u32>, side: &str) -> Result<Vec<u32>> {
     ids.iter()
         .map(|nid| {
-            pos.get(nid).map(|&p| p as usize).ok_or_else(|| {
+            pos.get(nid).copied().ok_or_else(|| {
                 PyrucastError::Message(format!(
                     "coupling block: node {nid:?} is not in the {side} support"
                 ))

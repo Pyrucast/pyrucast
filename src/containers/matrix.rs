@@ -2369,16 +2369,75 @@ pub struct AssemblyPattern {
 /// let motif = scatter::build_pattern(&k)?;
 /// match &motif.block_slots[0] {
 ///     BlockSlots::Literal(slots) => assert_eq!(slots.len(), 4),
-///     BlockSlots::Computed(_) => unreachable!("ce bloc porte ses valeurs"),
+///     _ => unreachable!("ce bloc porte ses valeurs"),
 /// }
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Clone)]
 pub enum BlockSlots {
-    /// One slot list per cell (computed block).
-    Computed(Vec<Vec<usize>>),
+    /// A computed block, one **flat** run of `stride` slots per cell, in the
+    /// kernel's `(li, di, lj, pj)` emission order.
+    ///
+    /// A `Vec` per cell meant ten million allocations on a solid mesh, each
+    /// holding a few hundred indices. One buffer holds them all instead, and
+    /// `u32` is twice as narrow as the `usize` it replaces.
+    Computed { slots: Vec<u32>, stride: usize },
+    /// A computed block whose trailing primal variable is **factored out**:
+    /// `stride` base slots per cell in `(li, di, lj)` order, the entry for
+    /// primal variable `pj` sitting at `base + pj`.
+    ///
+    /// The columns of one node are consecutive integers under
+    /// [`DofOrdering::NodesThenVars`], and a CSR row keeps its columns sorted,
+    /// so they land in consecutive slots. Storing one base instead of
+    /// `n_primal` slots divides this block's index memory by as much — three,
+    /// for a 3-D elasticity. The assembler only takes this form after
+    /// **checking** the consecutiveness on the block's own numbering.
+    ComputedBlocked {
+        bases: Vec<u32>,
+        stride: usize,
+        n_primal: usize,
+    },
     /// One slot per COO entry (literal block).
     Literal(Vec<usize>),
+}
+
+impl BlockSlots {
+    /// Hand `add(slot, value)` every entry of `cell`, pairing that cell's `ke`
+    /// with the CSR slot each value lands in.
+    ///
+    /// The two computed forms differ only in how the slot is found, and both
+    /// walk `ke` in the kernel's `(li, di, lj, pj)` emission order — so the
+    /// scatter is written once, and the compression stays an implementation
+    /// detail of the pattern. A literal block has no cells and contributes
+    /// nothing here.
+    pub(crate) fn each_entry(&self, cell: usize, ke: &[f64], mut add: impl FnMut(usize, f64)) {
+        match self {
+            BlockSlots::Computed { slots, stride } => {
+                let base = cell * stride;
+                for (k, &v) in ke.iter().enumerate() {
+                    add(slots[base + k] as usize, v);
+                }
+            }
+            BlockSlots::ComputedBlocked {
+                bases,
+                stride,
+                n_primal,
+            } => {
+                // `k = (…, lj) · n_primal + pj`, and the pattern checked that a
+                // node's primal columns sit in consecutive slots — so one base
+                // per `(li, di, lj)` names all `n_primal` of them.
+                let row = &bases[cell * stride..(cell + 1) * stride];
+                let mut k = 0;
+                for &base in row {
+                    for pj in 0..*n_primal {
+                        add(base as usize + pj, ke[k]);
+                        k += 1;
+                    }
+                }
+            }
+            BlockSlots::Literal(_) => {}
+        }
+    }
 }
 
 impl AssemblyPattern {

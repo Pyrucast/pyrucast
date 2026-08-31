@@ -291,14 +291,21 @@ fn run_cube(n: usize, reps: u32) {
     );
 
     println!("\n── mémoire des intermédiaires (nnz = {nnz}) ──");
-    let pair = std::mem::size_of::<(usize, usize)>();
     let row = |name: &str, b: usize| println!("{name:<34} {}", bytes(b));
-    row("paires (r,c) du motif", cells * ke_len * pair);
-    row("block_slots", cells * ke_len * std::mem::size_of::<usize>());
-    row("ke matérialisées d'un coup", cells * ke_len * 8);
+    // Ce que l'assembleur alloue réellement aujourd'hui.
+    row("motif : position des nœuds", 2 * cells * 8 * 4);
+    row("motif : colonnes avant dédup", cells * ke_len * 4);
+    row("block_slots (bases par nœud)", cells * (8 * 3 * 8) * 4);
     row("CSR : valeurs", nnz * 8);
     row("CSR : col_indices", nnz * std::mem::size_of::<usize>());
     row("tampon atomique du scatter", nnz * 8);
+    // Ce qu'il allouait avant, pour l'échelle.
+    println!(
+        "\n   (avant : paires (r,c) {} ; block_slots {} ; ke toutes matérialisées {})",
+        bytes(cells * ke_len * std::mem::size_of::<(usize, usize)>()),
+        bytes(cells * ke_len * std::mem::size_of::<usize>()),
+        bytes(cells * ke_len * 8)
+    );
 
     println!(
         "\nNote : « à froid » inclut la numérotation des ddl et le motif de \

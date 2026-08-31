@@ -69,16 +69,30 @@ L'**assemblage** suit un schéma en deux temps. Le motif creux global (sparsité
 CSR) est construit depuis la seule **topologie des blocs** — indépendant des
 matériaux — puis **mémoïsé sur le `Model`**, donc réutilisé tel quel d'un
 assemblage à l'autre (le gain majeur pour une boucle de Newton, où seuls les
-matériaux changent). Les matrices élémentaires sont calculées en parallèle, puis
-**dispersées dans le CSR par coloration des cellules** : deux cellules d'une même
-couleur ne partagent aucun DOF, donc les cellules d'une couleur écrivent **en
-parallèle** dans des cases disjointes — via un `Vec<AtomicU64>` (`Relaxed`, soit
-un simple `mov` sur x86, sans `unsafe`) — les couleurs étant traitées en
-séquence. La coloration étant fixe, le résultat est **déterministe** (indépendant
-du nombre de threads), mais **pas bit-à-bit** face à une réduction séquentielle :
-la somme de chaque case est réordonnée par couleur. Un chemin de scatter
-**séquentiel** (en ordre de bloc), lui bit-à-bit, est conservé comme référence de
-test.
+matériaux changent). L'état assemblé **partage** ses tableaux d'indices avec ce
+motif : d'un assemblage au suivant, seules les valeurs sont neuves.
+
+La phase numérique **calcule et disperse dans la même passe**, cellule par
+cellule, **par coloration** : deux cellules d'une même couleur ne partagent aucun
+DOF, donc les cellules d'une couleur écrivent **en parallèle** dans des cases
+disjointes — via un `Vec<AtomicU64>` (`Relaxed`, soit un simple `mov` sur x86,
+sans `unsafe`) — les couleurs étant traitées en séquence. Chaque tâche garde
+**une** matrice élémentaire de travail, réutilisée d'une cellule à l'autre :
+aucun ensemble élémentaire n'est matérialisé, là où les matérialiser toutes
+coûtait, sur un solide, des dizaines de gigaoctets écrits puis relus une fois.
+La coloration étant fixe, le résultat est **déterministe** (indépendant du nombre
+de threads), mais **pas bit-à-bit** face à une réduction séquentielle : la somme
+de chaque case est réordonnée par couleur. Un chemin de scatter **séquentiel**
+(en ordre de bloc), lui bit-à-bit, est conservé comme référence de test — c'est
+le seul qui calcule encore toutes les matrices élémentaires d'abord.
+
+Le motif lui-même ne matérialise **pas** les paires `(ligne, colonne)` de chaque
+entrée : elles se déduisent de la position de chaque nœud dans les supports
+ligne et colonne, soit une poignée d'entiers par cellule au lieu d'une paire par
+entrée. Les cases CSR, elles, sont résolues une fois et gardées à plat ; quand
+l'ordre des DDL rend consécutives les colonnes d'un même nœud — ce que
+`NodesThenVars` vise, et que l'assembleur **vérifie** plutôt que de le supposer —
+une case de base suffit pour toutes les variables primales de ce nœud.
 
 Le noyau élémentaire reçoit **un `CellGeom` par espace EF** du bloc : un seul
 pour une physique de continuum, plusieurs — partageant un maillage, ne différant
@@ -96,8 +110,8 @@ noyau élémentaire et disperse aux nœuds »), qui s'appuie sur le helper
 `parallel::colored_scatter` : **scatter par coloration** (couleur = nœuds
 disjoints, `Vec<AtomicU64>`), le tampon local tenant **par thread** — aucun
 ensemble élémentaire n'est matérialisé, et calcul et scatter se font dans la
-**même passe parallèle** (contrairement à l'assemblage, qui calcule d'abord les
-matrices élémentaires). Le driver est **agnostique à l'intégrande** : l'appelant
+**même passe parallèle** — comme l'assemblage matriciel, qui suit le même
+schéma. Le driver est **agnostique à l'intégrande** : l'appelant
 capture le sien (champ de contrainte, densité de flux…) dans la closure
 élémentaire. `internal_forces` *est* une divergence (de la contrainte), et
 `ops::node_field::divergence` en est le cas scalaire (`n_dual = 1`) ; `flux` en est
