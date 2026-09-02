@@ -43,11 +43,11 @@ pub mod law;
 use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
-use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
-use crate::error::{PyrucastError, Result};
+use crate::error::Result;
 use crate::handle::Handle;
-use crate::models::elasticity::{self};
+use crate::models::continuum::material::MatRead;
+use crate::models::continuum::Continuum;
 use crate::models::owned_components;
 use crate::models::plasticity::law::MAX_INTERNAL_VARS;
 use crate::models::tensor::Kinematics;
@@ -56,7 +56,7 @@ use crate::models::tensor::{stress_count, stress_names, voigt_stress};
 use crate::models::ZoneLayout;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use crate::models::{ElementLayout, MatrixKind};
-use law::{DamageLaw, MatRead};
+use law::DamageLaw;
 use serde::{Deserialize, Serialize};
 
 /// Damage on an FE subspace. Same supports as
@@ -88,11 +88,7 @@ use serde::{Deserialize, Serialize};
 /// ```
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Damage {
-    pub(crate) fespace: Handle<SubFiniteElementSpace>,
-    /// POI1 support over the subspace's unique nodes (row/col support).
-    pub(crate) support: Handle<SubMesh>,
-    pub(crate) space_dim: usize,
-    pub(crate) kinematics: Kinematics,
+    pub(crate) continuum: Continuum,
     pub(crate) law: DamageLaw,
 }
 
@@ -162,48 +158,8 @@ impl Damage {
         kinematics: Kinematics,
         law: DamageLaw,
     ) -> Result<Self> {
-        let (submesh, space_dim, ref_dim, axisymmetric) = {
-            let s = fespace.read();
-            (
-                s.submesh(),
-                s.space_dim(),
-                s.ref_dim()?,
-                s.is_axisymmetric(),
-            )
-        };
-        crate::models::elasticity::check_continuum_dimensions("Damage", space_dim, ref_dim)?;
-        #[allow(clippy::match_like_matches_macro)]
-        let ok = match (space_dim, kinematics) {
-            (2, Kinematics::PlaneStress | Kinematics::PlaneStrain) => true,
-            (2, Kinematics::Axisymmetric) => true,
-            (3, Kinematics::Full3D) => true,
-            _ => false,
-        };
-        if !ok {
-            return Err(PyrucastError::Message(format!(
-                "Damage: kinematics {kinematics:?} is incompatible with a {space_dim}-D space \
-                 (2-D ⇒ plane_stress|plane_strain|axisymmetric, 3-D ⇒ full_3d)"
-            )));
-        }
-        // Same two-way agreement as `Elasticity::new`.
-        if axisymmetric != kinematics.is_axisymmetric() {
-            return Err(PyrucastError::Message(if axisymmetric {
-                format!(
-                    "Damage: kinematics {kinematics:?} on an axisymmetric geometry — a body of \
-                     revolution requires the `axisymmetric` kinematics"
-                )
-            } else {
-                "Damage: the `axisymmetric` kinematics requires an axisymmetric geometry \
-                 (build the Coords with Coords::axisymmetric)"
-                    .into()
-            }));
-        }
-        let support = submesh.read().to_poi1()?;
         Ok(Self {
-            fespace,
-            support,
-            space_dim,
-            kinematics,
+            continuum: Continuum::new(fespace, kinematics, "Damage")?,
             law,
         })
     }
@@ -211,11 +167,11 @@ impl Damage {
 
 impl SubModelKind for Damage {
     fn primal_vars(&self) -> Vec<String> {
-        (0..self.space_dim).map(primal_name).collect()
+        (0..self.continuum.space_dim()).map(primal_name).collect()
     }
 
     fn dual_vars(&self) -> Vec<String> {
-        (0..self.space_dim).map(dual_name).collect()
+        (0..self.continuum.space_dim()).map(dual_name).collect()
     }
 
     fn as_domain(&self) -> Option<&dyn Domain> {
@@ -224,8 +180,8 @@ impl SubModelKind for Damage {
 
     fn stiffness_layout(&self) -> Option<MatrixLayout> {
         Some(MatrixLayout {
-            fespaces: vec![self.fespace.clone()],
-            support: self.support.clone(),
+            fespaces: vec![self.continuum.fespace()],
+            support: self.continuum.support(),
             dual_vars: self.dual_vars(),
             primal_vars: self.primal_vars(),
             ordering: DofOrdering::NodesThenVars,
@@ -256,26 +212,27 @@ impl SubModelKind for Damage {
     fn render(&self, _opts: &DumpOptions) -> String {
         let primal = self.primal_vars().join(", ");
         let dual = self.dual_vars().join(", ");
-        let n = self.support.read().cell_count();
+        let n = self.continuum.support().read().cell_count();
         format!(
             "SubModel<Damage({:?}, {})>\n  primal var(s): {primal}\n  dual var(s):   {dual}\n  \
              support: {n} node(s)",
-            self.kinematics, self.law
+            self.continuum.kinematics(),
+            self.law
         )
     }
 }
 
 impl Domain for Damage {
     fn material_fespace(&self) -> Handle<SubFiniteElementSpace> {
-        self.fespace.clone()
+        self.continuum.fespace()
     }
 
     fn material_components(&self) -> Vec<String> {
-        owned_components(self.law.material_components(self.space_dim))
+        owned_components(self.law.material_components(self.continuum.space_dim()))
     }
 
     /// `alpha` (thermal expansion) and `rho` (density) — the same pair
-    /// [`elasticity`] accepts, and for the same
+    /// [`elasticity`](crate::models::elasticity) accepts, and for the same
     /// reasons.
     ///
     /// `alpha` is read by an **ancillary** operator,
@@ -293,11 +250,11 @@ impl Domain for Damage {
     }
 
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
-        self.fespace.clone()
+        self.continuum.fespace()
     }
 
     fn behavior_output_components(&self) -> Vec<String> {
-        let mut comps = stress_names(self.space_dim, self.kinematics);
+        let mut comps = stress_names(self.continuum.space_dim(), self.continuum.kinematics());
         comps.push("damage".into());
         // The law's own history and per-direction damages.
         comps.extend(self.law.internal_names());
@@ -307,7 +264,7 @@ impl Domain for Damage {
     /// One damage step at a Gauss point. Output layout = stress (Voigt, `v`) +
     /// the reported `damage` + the law's own internal variables.
     fn deformation_reads(&self) -> Vec<String> {
-        elasticity::strain_reads(self.space_dim, self.kinematics)
+        self.continuum.strain_reads()
     }
 
     /// The law's own internal variables — `κ` for Mazars, one per direction for
@@ -327,18 +284,15 @@ impl Domain for Damage {
         _dt: f64,
         out: &mut [f64],
     ) -> Result<()> {
-        let d = self.space_dim;
-        let read = MatRead {
-            row: material,
-            idx: &lay.material,
-        };
+        let d = self.continuum.space_dim();
+        let read = MatRead::new(material, &lay.material, &lay.optional_material);
         // `nu` is the second component of every damage contract.
         let eps = read_strain(
             deformation,
             &lay.deformation,
             d,
             read.get(1),
-            self.kinematics,
+            self.continuum.kinematics(),
         );
         // Always present: the state at rest is materialized once, before the
         // first step, so no law has to recognise « no state yet » here.
@@ -349,9 +303,9 @@ impl Domain for Damage {
         }
 
         let update = self.law.update(&eps, &vars[..n_vars], &read, d)?;
-        let v = stress_count(d, self.kinematics);
+        let v = stress_count(d, self.continuum.kinematics());
         for r in 0..v {
-            out[r] = voigt_stress(&update.sigma, d, self.kinematics, r);
+            out[r] = voigt_stress(&update.sigma, d, self.continuum.kinematics(), r);
         }
         out[v] = update.damage;
         for (i, value) in update.internal().iter().enumerate() {
@@ -362,7 +316,7 @@ impl Domain for Damage {
 
     /// Les mêmes noyaux que l'élasticité, donc les mêmes lectures d'état.
     fn element_state_reads(&self, kind: MatrixKind) -> Vec<String> {
-        elasticity::continuum_element_state_reads(kind, self.space_dim, self.kinematics)
+        self.continuum.element_state_reads(kind)
     }
 
     fn element_matrix(
@@ -373,14 +327,13 @@ impl Domain for Damage {
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
-        // Iteration operator = elastic (undamaged) stiffness. Reuse the
-        // elasticity element kernel; it reads only `E` and `nu`.
+        // Iteration operator = elastic (undamaged) stiffness. The continuum's
+        // own kernel; it reads only `E` and `nu`.
         let mat = material;
-        elasticity::element_stiffness(
+        self.continuum.element_stiffness(
             geom,
             mat,
             lay,
-            self.kinematics,
             crate::models::symmetry::MaterialSymmetry::Isotropic,
             ke,
         )
@@ -395,7 +348,7 @@ impl Domain for Damage {
     ) -> Result<()> {
         let geom = &geoms[0];
         let mat = material;
-        elasticity::element_mass(geom, mat, lay, ke)
+        self.continuum.element_mass(geom, mat, lay, ke)
     }
 
     fn element_geometric(
@@ -408,7 +361,7 @@ impl Domain for Damage {
     ) -> Result<()> {
         let geom = &geoms[0];
         let stress = state;
-        elasticity::element_geometric(geom, stress, lay, ke)
+        self.continuum.element_geometric(geom, stress, lay, ke)
     }
 }
 
@@ -463,7 +416,7 @@ mod tests {
     use crate::atoms::{ElementType, Node};
     use crate::containers::field::SubField;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::Mesh;
+    use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
     use crate::handle::Handle;
 
@@ -481,7 +434,7 @@ mod tests {
 
     fn material(mz: &Damage) -> Handle<SubElementField> {
         let mut mat = SubElementField::new(
-            mz.fespace.clone(),
+            mz.continuum.fespace(),
             mazars::MATERIAL.iter().map(|s| s.to_string()).collect(),
         )
         .unwrap();
@@ -497,7 +450,7 @@ mod tests {
 
     fn strain_field(mz: &Damage, eps_xx: f64) -> Handle<SubElementField> {
         let mut s = SubElementField::new(
-            mz.fespace.clone(),
+            mz.continuum.fespace(),
             vec!["eps_xx".into(), "eps_xy".into(), "eps_yy".into()],
         )
         .unwrap();
@@ -599,7 +552,7 @@ mod tests {
         let mz = Damage::new(fes.get(0).unwrap(), Kinematics::Full3D).unwrap();
         let mat = material(&mz);
         let mut s = SubElementField::new(
-            mz.fespace.clone(),
+            mz.continuum.fespace(),
             ["xx", "yy", "zz", "yz", "xz", "xy"]
                 .iter()
                 .map(|x| format!("eps_{x}"))

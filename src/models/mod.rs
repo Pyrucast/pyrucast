@@ -38,13 +38,13 @@ use crate::containers::node_field::SubNodeField;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
-use crate::models::kernel::MAX_CELL_DOFS;
 use serde::{Deserialize, Serialize};
 
 pub mod beam;
 pub mod bernoulli;
 pub mod boundary_transfer;
 pub mod contact;
+pub mod continuum;
 pub mod damage;
 pub mod dirichlet;
 pub mod elasticity;
@@ -66,10 +66,6 @@ pub mod transfer;
 pub mod truss;
 
 pub use kernel::CellGeom;
-
-/// Axis suffixes used by the continuum-mechanics internal-force kernel to read
-/// Voigt-named stress components (`sigma_xx`, `sigma_xy`, …).
-const VOIGT_AXES: [&str; 3] = ["x", "y", "z"];
 
 /// The kind of element matrix a physics contributes — the discriminant that
 /// makes the whole assembly pipeline (recipe → scatter → per-kind pattern cache)
@@ -797,7 +793,7 @@ pub trait SubModelKind: Sync {
             return Vec::new();
         };
         let space_dim = layout.fespaces[0].read().space_dim();
-        let mut names = stress_matrix_reads(space_dim);
+        let mut names = continuum::internal_force::stress_matrix_reads(space_dim);
         if layout.fespaces[0].read().is_axisymmetric() {
             names.push("sigma_zz".to_string());
         }
@@ -811,7 +807,7 @@ pub trait SubModelKind: Sync {
         lay: &[u32],
         fe: &mut [f64],
     ) -> Result<()> {
-        continuum_internal_force_element(geoms, stress, lay, fe)
+        continuum::internal_force::continuum_internal_force_element(geoms, stress, lay, fe)
     }
 
     /// Internal nodal forces `f = ∫ Bᵀ σ dΩ` of this physics (Cast3m `BSIG`),
@@ -1702,97 +1698,6 @@ pub trait Domain: Sync {
                 self.integrate_point(geom, g, &lay, def, prev, mat, dt, out)
             },
         )
-    }
-}
-
-/// Continuum-mechanics internal-force element kernel `f_{i,a} = Σ_g Σ_b
-/// (∂N_i/∂x_b) σ_ab |J| w` — one [`crate::ops::node_field::divergence`](fn@crate::ops::node_field::divergence)
-/// per row of the symmetric stress tensor `σ` (read in Voigt naming). Backs both
-/// the [`SubModelKind::internal_force_element`] default (elasticity, Mazars,
-/// plasticity) and the model-free
-/// [`crate::ops::node_field::internal_forces_continuum`] operator. Fills
-/// `fe` node-major / axis-minor (`fe[i * space_dim + a]`).
-///
-/// On an **axisymmetric** geometry the radial row gains the hoop term
-/// `f_{i,r} += (N_i / r) σ_θθ` — the transpose of the `N_i / r` row the
-/// strain-displacement matrix `B` carries there, so `∫ Bᵀσ` keeps matching `K·u`
-/// for a linear law.
-pub(crate) fn continuum_internal_force_element(
-    geoms: &[CellGeom],
-    stress: &SubElementField,
-    lay: &[u32],
-    fe: &mut [f64],
-) -> Result<()> {
-    let geom = &geoms[0];
-    let d = geom.space_dim;
-    let n_nodes = geom.n_nodes;
-    let stride = stress.component_count();
-    let values = stress.values();
-    let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
-    for g in 0..geom.n_gauss {
-        let dn = &mut dn_buf[..n_nodes * d]; // [i * d + b]
-        geom.dn_dx(g, dn)?;
-        let w = geom.det_j_w(g);
-        let start = (geom.cell * geom.n_gauss + g) * stride;
-        let row = &values[start..start + stride];
-        let mut sig = [0.0_f64; 9]; // [a * d + b]
-        voigt_stress_matrix(row, lay, d, &mut sig);
-        // `sigma_zz` is the hoop stress and only exists on a body of revolution.
-        let hoop = if geom.axisymmetric {
-            Some((
-                geom.n_at_g(g),
-                // The hoop closes the continuum's read list.
-                row[lay[lay.len() - 1] as usize] / geom.radius(g),
-            ))
-        } else {
-            None
-        };
-        for i in 0..n_nodes {
-            for a in 0..d {
-                let mut s = 0.0;
-                for b in 0..d {
-                    s += dn[i * d + b] * sig[a * d + b];
-                }
-                fe[i * d + a] += s * w;
-            }
-            if let Some((n, s_hoop)) = hoop {
-                fe[i * d] += n[i] * s_hoop * w;
-            }
-        }
-    }
-    Ok(())
-}
-
-/// Read the symmetric `d×d` stress tensor at `(cell, g)` from a Voigt-named
-/// stress field (`sigma_xx`, `sigma_yy`, `sigma_xy`, …), as a flat row-major
-/// matrix `[a * d + b]`. Backs the continuum-mechanics
-/// [`SubModelKind::internal_force_element`] default; reads by component name, so a
-/// state field carrying extra `VAR1` components (Mazars) is handled transparently.
-pub(crate) fn stress_matrix_reads(space_dim: usize) -> Vec<String> {
-    let mut names = Vec::with_capacity(space_dim * (space_dim + 1) / 2);
-    for i in 0..space_dim {
-        for j in i..space_dim {
-            names.push(format!("sigma_{}{}", VOIGT_AXES[i], VOIGT_AXES[j]));
-        }
-    }
-    names
-}
-
-/// The symmetric stress tensor of one Gauss point, from its row.
-///
-/// `idx` gives the position of each [`stress_matrix_reads`] name, resolved once
-/// per zone; the tensor lands in a caller-owned `d × d` buffer. Neither the
-/// names nor the buffer are built here: this runs once per Gauss point of every
-/// cell, and it used to spend a `format!` per component doing it.
-pub(crate) fn voigt_stress_matrix(row: &[f64], idx: &[u32], d: usize, sig: &mut [f64; 9]) {
-    let mut k = 0;
-    for i in 0..d {
-        for j in i..d {
-            let v = row[idx[k] as usize];
-            k += 1;
-            sig[i * d + j] = v;
-            sig[j * d + i] = v; // symmetric
-        }
     }
 }
 

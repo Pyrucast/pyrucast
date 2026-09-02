@@ -87,12 +87,28 @@ main, chacun avec sa raison :
 
 ### Ajouter une loi plutôt qu'une physique
 
-Une loi d'écoulement ou d'endommagement n'est **pas** une physique : c'est un
-attribut de la plasticité ou de l'endommagement, qui en partagent les DDL,
-l'opérateur élastique et l'état. Elle coûte son fichier sous
-`src/models/plastic/` ou `src/models/damage/` — struct unitaire, `impl YieldLaw`
-ou `impl DamageKind`, façade une façade `physics_operator!` déléguant à l'opérateur générique — plus une
-variante d'énuméré et un bras dans `as_law()`.
+Une loi de comportement n'est **pas** une physique : c'est un attribut d'une
+physique existante, qui en partage les DDL, la modélisation et les layouts. Elle
+coûte son fichier sous `src/models/<physique>/` — struct unitaire, `impl` du
+trait de sa famille, façade `physics_operator!` déléguant à l'opérateur
+générique — plus une variante d'énuméré et un bras dans `as_law()`.
+
+Deux niveaux, et ils ne disent pas la même chose : l'**énuméré** porte l'identité
+physique — c'est lui que `bincode` archive, et une nouvelle variante va donc
+toujours en fin de liste — tandis que le **trait** porte la *structure
+d'intégration*, celle qui fixe sa signature. D'où trois familles, nommées d'après
+cette structure et non d'après la physique :
+
+| trait | ce que le sous-modèle fait avant d'appeler la loi | signature | énuméré |
+|---|---|---|---|
+| `StatelessLawKind` | rien : la loi ne voit ni état, ni `dt` | `stress(ε, matériau)` | `ElasticLaw` |
+| `ReturnMapLawKind` | le prédicteur élastique | `return_map(σ_essai, prev, matériau, dt)` | `PlasticLaw` |
+| `DirectUpdateLawKind` | rien : la loi reçoit ε et l'état de A | `update(ε, prev, matériau)` | `DamageLaw` |
+
+C'est bien la structure qui décide, pas le nom : `ViscoplasticLemaitreChaboche`
+est physiquement « viscoplasticité **+ endommagement** » et siège du côté
+plastique, parce qu'elle est de forme retour radial. Une loi hyperélastique
+rejoindrait `StatelessLawKind` ; une loi viscoélastique, `DirectUpdateLawKind`.
 
 Tout le reste est générique et **ne change pas**.
 
@@ -250,6 +266,16 @@ sous-trait **et** redéfinir le seam correspondant pour rendre `Some(self)` :
   fois par zone**, dans `zone_layout`, où un champ fabriqué à la main dans un
   autre ordre est refusé avec un message qui nomme le champ et l'écart. Les
   branchements qui restent sont ceux de la physique.
+  **La modélisation, elle, ne s'écrit pas ici.** Une physique du continu en
+  petites déformations tient un `Continuum` (`src/models/continuum/`) au lieu de
+  redéclarer sa géométrie : il porte le sous-espace EF, le support POI1, la
+  dimension et la cinématique, valide les trois cohérences à la construction
+  (élément solide et non variété, cinématique possible dans cet espace, accord
+  géométrie ↔ axisymétrie), et fournit les noyaux `element_stiffness`,
+  `element_mass`, `element_geometric` et `element_tangent_from_state` ainsi que
+  la nomenclature Voigt. Élasticité, plasticité et endommagement s'en servent
+  toutes trois — c'est ce qui rend le produit *modélisation × loi* réel plutôt
+  qu'une délégation d'une physique vers sa voisine.
 - **Contrainte** (multiplicateurs de Lagrange) : `impl Constraint`
   (`multiplier_mesh()` + `relations()`) + `as_constraint()`.
   `SubModel::multiplier_nodes()` et `multiplier_mesh()` en découlent. C'est le

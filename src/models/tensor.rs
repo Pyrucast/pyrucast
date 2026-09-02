@@ -16,11 +16,11 @@ use serde::{Deserialize, Serialize};
 ///
 /// ```
 /// # use pyrucast::models::tensor::Kinematics;
-/// # use pyrucast::models::elasticity::{self};
+/// # use pyrucast::models::continuum::elastic;
 /// // La cinématique choisie décide du nombre de composantes de Voigt.
-/// assert_eq!(elasticity::constitutive(210e3, 0.3, Kinematics::PlaneStress, 2).len(), 3);
-/// assert_eq!(elasticity::constitutive(210e3, 0.3, Kinematics::Axisymmetric, 2).len(), 4);
-/// assert_eq!(elasticity::constitutive(210e3, 0.3, Kinematics::Full3D, 3).len(), 6);
+/// assert_eq!(elastic::constitutive(210e3, 0.3, Kinematics::PlaneStress, 2).len(), 3);
+/// assert_eq!(elastic::constitutive(210e3, 0.3, Kinematics::Axisymmetric, 2).len(), 4);
+/// assert_eq!(elastic::constitutive(210e3, 0.3, Kinematics::Full3D, 3).len(), 6);
 /// ```
 /// # use pyrucast::models::tensor::Kinematics;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,7 +48,7 @@ impl Kinematics {
     ///
     /// ```
     /// # use pyrucast::models::tensor::Kinematics;
-    /// # use pyrucast::models::elasticity::{self};
+    /// # use pyrucast::models::continuum::elastic;
     /// // Seul le plan méridien d'un corps de révolution porte la déformation
     /// // orthoradiale ε_θθ = u_r / r.
     /// assert!(Kinematics::Axisymmetric.is_axisymmetric());

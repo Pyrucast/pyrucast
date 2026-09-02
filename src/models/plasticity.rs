@@ -57,11 +57,10 @@ pub mod von_mises;
 use crate::containers::element_field::SubElementField;
 use crate::containers::field::SubField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
-use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
-use crate::error::{PyrucastError, Result};
+use crate::error::Result;
 use crate::handle::Handle;
-use crate::models::elasticity::{self};
+use crate::models::continuum::Continuum;
 use crate::models::owned_components;
 use crate::models::tensor::Kinematics;
 use crate::models::tensor::{dual_name, primal_name};
@@ -141,11 +140,7 @@ fn echoes_sigma_zz(space_dim: usize, kinematics: Kinematics) -> bool {
 /// ```
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Plasticity {
-    pub(crate) fespace: Handle<SubFiniteElementSpace>,
-    /// POI1 support over the subspace's unique nodes (row/col support).
-    pub(crate) support: Handle<SubMesh>,
-    pub(crate) space_dim: usize,
-    pub(crate) kinematics: Kinematics,
+    pub(crate) continuum: Continuum,
     pub(crate) law: PlasticLaw,
 }
 
@@ -218,49 +213,8 @@ impl Plasticity {
         kinematics: Kinematics,
         law: PlasticLaw,
     ) -> Result<Self> {
-        let (submesh, space_dim, ref_dim, axisymmetric) = {
-            let s = fespace.read();
-            (
-                s.submesh(),
-                s.space_dim(),
-                s.ref_dim()?,
-                s.is_axisymmetric(),
-            )
-        };
-        elasticity::check_continuum_dimensions("Plasticity", space_dim, ref_dim)?;
-        #[allow(clippy::match_like_matches_macro)]
-        let ok = match (space_dim, kinematics) {
-            (2, Kinematics::PlaneStress | Kinematics::PlaneStrain) => true,
-            (2, Kinematics::Axisymmetric) => true,
-            (3, Kinematics::Full3D) => true,
-            _ => false,
-        };
-        if !ok {
-            return Err(PyrucastError::Message(format!(
-                "Plasticity: kinematics {kinematics:?} is incompatible with a {space_dim}-D space \
-                 (2-D ⇒ plane_stress|plane_strain|axisymmetric, 3-D ⇒ full_3d)"
-            )));
-        }
-        // Same two-way agreement as `Elasticity::new`: the 2πr measure comes
-        // from the geometry, the hoop component from the kinematics.
-        if axisymmetric != kinematics.is_axisymmetric() {
-            return Err(PyrucastError::Message(if axisymmetric {
-                format!(
-                    "Plasticity: kinematics {kinematics:?} on an axisymmetric geometry — a body of \
-                     revolution requires the `axisymmetric` kinematics"
-                )
-            } else {
-                "Plasticity: the `axisymmetric` kinematics requires an axisymmetric geometry \
-                 (build the Coords with Coords::axisymmetric)"
-                    .into()
-            }));
-        }
-        let support = submesh.read().to_poi1()?;
         Ok(Self {
-            fespace,
-            support,
-            space_dim,
-            kinematics,
+            continuum: Continuum::new(fespace, kinematics, "Plasticity")?,
             law,
         })
     }
@@ -268,11 +222,11 @@ impl Plasticity {
 
 impl SubModelKind for Plasticity {
     fn primal_vars(&self) -> Vec<String> {
-        (0..self.space_dim).map(primal_name).collect()
+        (0..self.continuum.space_dim()).map(primal_name).collect()
     }
 
     fn dual_vars(&self) -> Vec<String> {
-        (0..self.space_dim).map(dual_name).collect()
+        (0..self.continuum.space_dim()).map(dual_name).collect()
     }
 
     fn as_domain(&self) -> Option<&dyn Domain> {
@@ -281,8 +235,8 @@ impl SubModelKind for Plasticity {
 
     fn stiffness_layout(&self) -> Option<MatrixLayout> {
         Some(MatrixLayout {
-            fespaces: vec![self.fespace.clone()],
-            support: self.support.clone(),
+            fespaces: vec![self.continuum.fespace()],
+            support: self.continuum.support(),
             dual_vars: self.dual_vars(),
             primal_vars: self.primal_vars(),
             ordering: crate::containers::matrix::DofOrdering::NodesThenVars,
@@ -320,18 +274,18 @@ impl SubModelKind for Plasticity {
     fn render(&self, _opts: &DumpOptions) -> String {
         let primal = self.primal_vars().join(", ");
         let dual = self.dual_vars().join(", ");
-        let n = self.support.read().cell_count();
+        let n = self.continuum.support().read().cell_count();
         format!(
             "SubModel<Plasticity({:?})>\n  primal var(s): {primal}\n  dual var(s):   {dual}\n  \
              support: {n} node(s)",
-            self.kinematics
+            self.continuum.kinematics()
         )
     }
 }
 
 impl Domain for Plasticity {
     fn material_fespace(&self) -> Handle<SubFiniteElementSpace> {
-        self.fespace.clone()
+        self.continuum.fespace()
     }
 
     fn material_components(&self) -> Vec<String> {
@@ -339,7 +293,7 @@ impl Domain for Plasticity {
     }
 
     /// `alpha` (thermal expansion) and `rho` (density) — the same pair
-    /// [`elasticity`] accepts, and for the same
+    /// [`elasticity`](crate::models::elasticity) accepts, and for the same
     /// reasons.
     ///
     /// `alpha` is read by an **ancillary** operator,
@@ -368,22 +322,22 @@ impl Domain for Plasticity {
     }
 
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
-        self.fespace.clone()
+        self.continuum.fespace()
     }
 
     fn behavior_output_components(&self) -> Vec<String> {
-        let mut comps = stress_names(self.space_dim, self.kinematics);
+        let mut comps = stress_names(self.continuum.space_dim(), self.continuum.kinematics());
         comps.extend(state_names());
-        comps.extend(echo_names(self.space_dim, self.kinematics));
+        comps.extend(echo_names(
+            self.continuum.space_dim(),
+            self.continuum.kinematics(),
+        ));
         // The law's **own** internal variables (a back stress, a damage…), which
         // is how a law grows its state without any other file changing.
         comps.extend(self.law.internal_names());
         // Consistent algorithmic tangent D_alg (upper triangle) — consumed by
         // the tangent assembler (`crate::ops::matrix::tangent`).
-        comps.extend(elasticity::tangent_component_names(
-            self.space_dim,
-            self.kinematics,
-        ));
+        comps.extend(self.continuum.tangent_component_names());
         comps
     }
 
@@ -402,7 +356,7 @@ impl Domain for Plasticity {
 
     fn initial_state(&self, material: &SubElementField) -> Result<SubElementField> {
         let mut state =
-            SubElementField::new(self.fespace.clone(), self.behavior_output_components())?;
+            SubElementField::new(self.continuum.fespace(), self.behavior_output_components())?;
         let sources = self.law.as_law().initial_internal_sources();
         if sources.is_empty() {
             return Ok(state);
@@ -424,7 +378,7 @@ impl Domain for Plasticity {
     /// cumulated plastic strain `p` (1) + echoed strain `ε(B)` (full 3-D, 6)
     /// [+ `sigma_zz` in 2-D], matching `stress_names ++ state_names ++ echo_names`.
     fn deformation_reads(&self) -> Vec<String> {
-        elasticity::strain_reads(self.space_dim, self.kinematics)
+        self.continuum.strain_reads()
     }
 
     /// What the law reads back from the state at A: the echoed strain ε(A), the
@@ -433,10 +387,10 @@ impl Domain for Plasticity {
     /// variables — a **subset of what this same physics wrote** last step, so a
     /// missing one is a real inconsistency, caught once per zone.
     fn state_reads(&self) -> Vec<String> {
-        let d = self.space_dim;
+        let d = self.continuum.space_dim();
         let mut v: Vec<String> = TENSOR_SUFFIXES.iter().map(|s| format!("eps_{s}")).collect();
-        v.extend(stress_names(d, self.kinematics));
-        if echoes_sigma_zz(d, self.kinematics) {
+        v.extend(stress_names(d, self.continuum.kinematics()));
+        if echoes_sigma_zz(d, self.continuum.kinematics()) {
             v.push("sigma_zz".into());
         }
         v.extend(state_names());
@@ -455,19 +409,19 @@ impl Domain for Plasticity {
         dt: f64,
         out: &mut [f64],
     ) -> Result<()> {
-        let d = self.space_dim;
+        let d = self.continuum.space_dim();
         let params = MatParams::new(material, &lay.material, &lay.optional_material);
 
         // End-of-step strain ε(B).
         let eps_b = read_tensor(
             deformation,
             &lay.deformation,
-            strain_slots(d, self.kinematics),
+            strain_slots(d, self.continuum.kinematics()),
         );
 
         // The state at A, in `state_reads` order: ε(A), σ(A), ε_p(A), p, then
         // the law's own variables.
-        let n_stress = stress_slots(d, self.kinematics).len();
+        let n_stress = stress_slots(d, self.continuum.kinematics()).len();
         let (i_sigma, i_eps_p, i_p, i_vars) = (6, 6 + n_stress, 12 + n_stress, 13 + n_stress);
         let mut vars = [0.0_f64; MAX_INTERNAL_VARS];
         let n_vars = lay.state.len() - i_vars;
@@ -479,7 +433,7 @@ impl Domain for Plasticity {
             sigma: read_tensor(
                 prev,
                 &lay.state[i_sigma..],
-                stress_slots(d, self.kinematics),
+                stress_slots(d, self.continuum.kinematics()),
             ),
             eps_p: read_tensor(prev, &lay.state[i_eps_p..], &[0, 1, 2, 3, 4, 5]),
             p: prev[lay.state[i_p] as usize],
@@ -490,13 +444,13 @@ impl Domain for Plasticity {
             &eps_b,
             &prev_state,
             &params,
-            self.kinematics,
+            self.continuum.kinematics(),
             dt,
         )?;
 
-        let v = n_stress - usize::from(echoes_sigma_zz(d, self.kinematics));
+        let v = n_stress - usize::from(echoes_sigma_zz(d, self.continuum.kinematics()));
         for r in 0..v {
-            out[r] = voigt_stress(&step.sigma, d, self.kinematics, r);
+            out[r] = voigt_stress(&step.sigma, d, self.continuum.kinematics(), r);
         }
         out[v..v + 6].copy_from_slice(&step.eps_p); // ε_p(B)
         out[v + 6] = step.p; // p(B)
@@ -506,7 +460,7 @@ impl Domain for Plasticity {
         // The plane 2-D duals omit σ_zz; echo it so σ(A) is fully recoverable.
         // Axisymmetric already carries it (the hoop), so it must not be echoed.
         let mut base = v + 13;
-        if echoes_sigma_zz(d, self.kinematics) {
+        if echoes_sigma_zz(d, self.continuum.kinematics()) {
             out[base] = step.sigma[2];
             base += 1;
         }
@@ -524,7 +478,11 @@ impl Domain for Plasticity {
             .as_law()
             .consistent_tangent(&eps_b_full, &prev_state, &params, dt)?;
         let mut dv = [[0.0_f64; 6]; 6];
-        let n = crate::models::symmetry::reduce_to_model_into(&d3, self.kinematics, &mut dv);
+        let n = crate::models::symmetry::reduce_to_model_into(
+            &d3,
+            self.continuum.kinematics(),
+            &mut dv,
+        );
         let mut idx = base;
         for i in 0..n {
             for j in i..n {
@@ -537,7 +495,7 @@ impl Domain for Plasticity {
 
     /// Les mêmes noyaux que l'élasticité, donc les mêmes lectures d'état.
     fn element_state_reads(&self, kind: MatrixKind) -> Vec<String> {
-        elasticity::continuum_element_state_reads(kind, self.space_dim, self.kinematics)
+        self.continuum.element_state_reads(kind)
     }
 
     fn element_matrix(
@@ -554,11 +512,10 @@ impl Domain for Plasticity {
         // [`crate::ops::matrix::tangent`]. Reuse the elasticity element kernel
         // verbatim; it reads only `E` and `nu` from the material.
         let mat = material;
-        elasticity::element_stiffness(
+        self.continuum.element_stiffness(
             geom,
             mat,
             lay,
-            self.kinematics,
             crate::models::symmetry::MaterialSymmetry::Isotropic,
             ke,
         )
@@ -573,7 +530,7 @@ impl Domain for Plasticity {
     ) -> Result<()> {
         let geom = &geoms[0];
         let mat = material;
-        elasticity::element_mass(geom, mat, lay, ke)
+        self.continuum.element_mass(geom, mat, lay, ke)
     }
 
     fn element_geometric(
@@ -586,7 +543,7 @@ impl Domain for Plasticity {
     ) -> Result<()> {
         let geom = &geoms[0];
         let stress = state;
-        elasticity::element_geometric(geom, stress, lay, ke)
+        self.continuum.element_geometric(geom, stress, lay, ke)
     }
 
     fn element_tangent(
@@ -599,7 +556,7 @@ impl Domain for Plasticity {
     ) -> Result<()> {
         let geom = &geoms[0];
         let st = state;
-        elasticity::element_tangent_from_state(geom, st, lay, self.kinematics, ke)
+        self.continuum.element_tangent_from_state(geom, st, lay, ke)
     }
 }
 
@@ -615,7 +572,7 @@ impl Domain for Plasticity {
 /// Plane strain forces the out-of-plane components to zero; plane stress leaves
 /// `eps_zz` as the trial elastic guess (it is overwritten by the return map).
 /// Which slots of the full 3-D tensor the **strain** of this kinematics spans,
-/// in the order [`crate::models::elasticity::strain_reads`] declares them.
+/// in the order [`Continuum::strain_reads`](crate::models::continuum::Continuum::strain_reads) declares them.
 ///
 /// Plane models span `[xx, yy, xy]`; axisymmetry adds the *measured* hoop
 /// `θθ`; a solid spans all six. The slots left out stay zero — `ε_yz`/`ε_xz`
@@ -681,7 +638,7 @@ mod tests {
     use crate::atoms::{ElementType, Node, NodeId};
     use crate::containers::field::SubField;
     use crate::containers::finite_element_space::FiniteElementSpace;
-    use crate::containers::mesh::Mesh;
+    use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
     use crate::handle::Handle;
     use crate::models::tensor;
@@ -720,7 +677,7 @@ mod tests {
 
     fn material(pl: &Plasticity, e: f64, nu: f64, sy: f64) -> Handle<SubElementField> {
         let mut mat = SubElementField::new(
-            pl.fespace.clone(),
+            pl.continuum.fespace(),
             vec!["E".into(), "nu".into(), "sigma_y".into()],
         )
         .unwrap();
@@ -750,7 +707,7 @@ mod tests {
         let mat = material(&pl, e, nu, sy);
         // Small uniaxial strain well below yield (σ ≈ E·ε = 21 MPa < 250).
         let mut strain = SubElementField::new(
-            pl.fespace.clone(),
+            pl.continuum.fespace(),
             TENSOR_SUFFIXES.iter().map(|s| format!("eps_{s}")).collect(),
         )
         .unwrap();
@@ -760,7 +717,7 @@ mod tests {
             .integrate_behavior(&strain, &rest(&pl, &mat), &mat, 0.0)
             .unwrap();
         // Confined uniaxial *strain* (only ε_xx ≠ 0): σ_xx = (λ+2μ)·ε.
-        let (lambda, mu) = elasticity::lame(e, nu);
+        let (lambda, mu) = crate::models::continuum::elastic::lame(e, nu);
         for g in 0..out.gauss_count() {
             assert!(
                 (out.value(0, g, "sigma_xx").unwrap() - (lambda + 2.0 * mu) * 1e-4).abs() < 1e-6
@@ -778,7 +735,7 @@ mod tests {
         let mat = material(&pl, e, nu, sy);
         // Large uniaxial strain (elastic trial ≈ 2100 MPa ≫ 250).
         let mut strain = SubElementField::new(
-            pl.fespace.clone(),
+            pl.continuum.fespace(),
             TENSOR_SUFFIXES.iter().map(|s| format!("eps_{s}")).collect(),
         )
         .unwrap();
@@ -814,7 +771,7 @@ mod tests {
         let mat = material(&pl, e, nu, sy);
         let eps0 = 1e-3;
         let mut strain = SubElementField::new(
-            pl.fespace.clone(),
+            pl.continuum.fespace(),
             vec!["eps_xx".into(), "eps_xy".into(), "eps_yy".into()],
         )
         .unwrap();
@@ -838,7 +795,7 @@ mod tests {
     /// component names) on a `unit_hex`.
     fn uniaxial(pl: &Plasticity, val: f64) -> Handle<SubElementField> {
         let comps: Vec<String> = TENSOR_SUFFIXES.iter().map(|s| format!("eps_{s}")).collect();
-        let mut s = SubElementField::new(pl.fespace.clone(), comps).unwrap();
+        let mut s = SubElementField::new(pl.continuum.fespace(), comps).unwrap();
         s.set_uniform("eps_xx", val).unwrap();
         Handle::new(s)
     }
@@ -956,7 +913,7 @@ mod tests {
         let mat = material(&pl, 200.0, 0.3, 250.0);
         let blocks = pl.build_stiffness_blocks(&mat).unwrap();
         let k = &blocks[0];
-        let nodes: Vec<NodeId> = pl.support.read().connectivity().to_vec();
+        let nodes: Vec<NodeId> = pl.continuum.support().read().connectivity().to_vec();
         for &ni in &nodes {
             for &nj in &nodes {
                 for a in ["x", "y"] {

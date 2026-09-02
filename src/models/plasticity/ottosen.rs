@@ -36,13 +36,13 @@
 //! criterion is then exact, and the gradient accurate to `O(h²)`. Trading an
 //! unverifiable analytic gradient for a numerical one that cannot be
 //! mis-derived is the right trade here; the consistent tangent follows the same
-//! reasoning (`PlasticLawKind::consistent_tangent`).
+//! reasoning (`ReturnMapLawKind::consistent_tangent`).
 //!
 //! Flow is **associated** (`g = f`), the usual choice for this criterion.
 
-use super::law::PlasticLawKind;
+use super::law::ReturnMapLawKind;
 use crate::error::{PyrucastError, Result};
-use crate::models::elasticity::elastic_stress;
+use crate::models::continuum::elastic::elastic_stress;
 use crate::models::plasticity::law::{
     require_positive, MatParams, PlasticLaw, PlasticStep, PrevState,
 };
@@ -223,7 +223,7 @@ pub fn return_map(trial: &[f64; 6], prev: &PrevState, mat: &MatParams) -> Result
 /// Ottosen's four-parameter criterion for concrete.
 pub(crate) struct Ottosen;
 
-impl PlasticLawKind for Ottosen {
+impl ReturnMapLawKind for Ottosen {
     fn material_components(&self) -> &'static [&'static str] {
         &["E", "nu", "a", "b", "k_1", "k_2", "sigma_c"]
     }

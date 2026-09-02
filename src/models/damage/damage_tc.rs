@@ -32,11 +32,12 @@
 //! `r₀⁺ = f_t/√E` and `r₀⁻ = f_c/√E` are the thresholds; `A_t` and `A_c` set how
 //! fast each branch softens.
 
-use super::law::DamageLawKind;
+use super::law::DirectUpdateLawKind;
 use crate::error::Result;
+use crate::models::continuum::elastic::{elastic_stress, lame};
+use crate::models::continuum::material::MatRead;
 use crate::models::damage::law::DamageLaw;
-use crate::models::damage::law::{pos, DamageUpdate, MatRead};
-use crate::models::elasticity::{elastic_stress, lame};
+use crate::models::damage::law::{pos, DamageUpdate};
 use crate::models::tensor::Kinematics;
 use nalgebra::Matrix3;
 
@@ -59,7 +60,8 @@ const A_C: usize = 5;
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::models::damage::{self};
-/// # use pyrucast::models::damage::law::{DamageLaw, MatRead};
+/// # use pyrucast::models::continuum::material::MatRead;
+/// # use pyrucast::models::damage::law::DamageLaw;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -70,7 +72,7 @@ const A_C: usize = 5;
 /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "f_t".into(), "f_c".into(), "A_t".into(), "A_c".into()], &[30000.0, 0.2, 3.0, 30.0, 0.5, 0.5]).unwrap();
 /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
 /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
-/// # let mat = MatRead { row: materiau.point_values(0, 0).unwrap(), idx: &idx_mat };
+/// # let mat = MatRead::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &[]);
 /// // Deux résistances et deux fragilités : traction et compression sont
 /// // suivies séparément.
 /// assert!(damage::damage_tc::MATERIAL.contains(&"f_t"));
@@ -93,7 +95,8 @@ pub const MATERIAL: &[&str] = &["E", "nu", "f_t", "f_c", "A_t", "A_c"];
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::models::damage::{self};
-/// # use pyrucast::models::damage::law::{DamageLaw, MatRead};
+/// # use pyrucast::models::continuum::material::MatRead;
+/// # use pyrucast::models::damage::law::DamageLaw;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -104,7 +107,7 @@ pub const MATERIAL: &[&str] = &["E", "nu", "f_t", "f_c", "A_t", "A_c"];
 /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "f_t".into(), "f_c".into(), "A_t".into(), "A_c".into()], &[30000.0, 0.2, 3.0, 30.0, 0.5, 0.5]).unwrap();
 /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
 /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
-/// # let mat = MatRead { row: materiau.point_values(0, 0).unwrap(), idx: &idx_mat };
+/// # let mat = MatRead::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &[]);
 /// // Deux endommagements distincts : la traction en active un, la
 /// // compression l'autre — c'est ce qui **restitue la raideur** quand une
 /// // fissure se referme.
@@ -220,7 +223,7 @@ pub fn update(eps: &[f64; 6], prev: &[f64], mat: &MatRead) -> Result<DamageUpdat
 /// Damage-TC — separate tension and compression damages.
 pub(crate) struct DamageTc;
 
-impl DamageLawKind for DamageTc {
+impl DirectUpdateLawKind for DamageTc {
     fn material_components(&self, _space_dim: usize) -> &'static [&'static str] {
         MATERIAL
     }

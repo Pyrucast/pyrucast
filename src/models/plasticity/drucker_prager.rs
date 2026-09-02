@@ -89,7 +89,7 @@
 //! meaning. Detecting it is the one branch this law needs, and it is exactly the
 //! case a naive implementation gets wrong under strong tension.
 
-use super::law::PlasticLawKind;
+use super::law::ReturnMapLawKind;
 use crate::error::Result;
 use crate::models::plasticity::law::{
     require_positive, MatParams, PlasticLaw, PlasticStep, PrevState,
@@ -389,7 +389,7 @@ fn apex_return(
 // ─── On the tangent ─────────────────────────────────────────────────────────
 //
 // Drucker-Prager takes its consistent tangent by finite differences, from
-// `PlasticLawKind::consistent_tangent`.
+// `ReturnMapLawKind::consistent_tangent`.
 //
 // That is a deliberate reversal of an earlier hand derivation. Non-associated
 // flow makes `∂σ/∂ε` pick up an `m⊗n` term with `m ≠ n`, and getting its
@@ -409,7 +409,7 @@ fn apex_return(
 /// Drucker-Prager: pressure-sensitive, non-associated flow.
 pub(crate) struct DruckerPrager;
 
-impl PlasticLawKind for DruckerPrager {
+impl ReturnMapLawKind for DruckerPrager {
     /// The general surface is nine numbers, six of which default to the simple
     /// cone: they ride the optional channel so a three-parameter kinematics stays
     /// writable in three numbers.

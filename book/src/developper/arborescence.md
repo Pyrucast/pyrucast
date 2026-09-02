@@ -57,14 +57,25 @@ src/
 │   ├── heat_conduction.rs
 │   ├── boundary_transfer.rs # échange de surface avec une ambiante (Robin / film)
 │   ├── transfer.rs         # le noyau h∫NiNj partagé par les deux échanges
+│   ├── continuum/          # LA MODÉLISATION continue, partagée par les trois
+│   │   │                   #   familles mécaniques — pas une physique
+│   │   ├── mod.rs          #     Continuum + les noyaux K, M, Kg, Kt
+│   │   ├── voigt.rs        #     nomenclature ε / σ / D_alg, lecture par indice
+│   │   ├── elastic.rs      #     l'opérateur élastique (D, λ, μ) — prédicteur
+│   │   │                   #     de la plasticité, module sain de l'endommagement
+│   │   ├── material.rs     #     MatRead : la ligne matériau lue par position
+│   │   └── internal_force.rs #   Bᵀσ (BSIG), aussi appelé sans sous-modèle
 │   ├── truss.rs
-│   ├── elasticity.rs
+│   ├── elasticity.rs       # LA physique élastique, pour toute loi sans état
+│   ├── elasticity/         #   ElasticLaw (identité) + StatelessLawKind
+│   │   └── linear.rs       #     σ = D:ε
 │   ├── plasticity.rs       # LA physique élastoplastique, pour toute loi
-│   ├── plastic/            #   la machinerie des lois d'écoulement…
-│   │   ├── mod.rs          #     PlasticLaw (identité) + YieldLaw (comportement)
+│   ├── plasticity/         #   la machinerie des lois d'écoulement…
+│   │   ├── law.rs          #     PlasticLaw (identité) + ReturnMapLawKind
 │   │   └── von_mises.rs, drucker_prager.rs, ottosen.rs, viscous.rs, gurson.rs
 │   ├── damage.rs           # LA physique d'endommagement, pour toute loi
-│   ├── damage/             #   DamageLaw + DamageKind, puis une loi par fichier
+│   ├── damage/             #   DamageLaw (identité) + DirectUpdateLawKind,
+│   │   │                   #   puis une loi par fichier
 │   │   └── mazars.rs, damage_tc.rs, sic_sic.rs
 │   ├── timoshenko.rs
 │   ├── frame.rs           # portique 2D

@@ -40,14 +40,14 @@
 //! factor at all: `C_ijkl = D[voigt(i,j)][voigt(k,l)]`.
 //!
 //! **Isotropy is left untouched**: it short-circuits to
-//! [`elasticity::constitutive`] and to
+//! [`elastic::constitutive`] and to
 //! the plain scalar conductivity, so every existing assembly keeps its exact
 //! numbers.
 
 use crate::containers::element_field::SubElementField;
 use crate::containers::field::SubField;
 use crate::error::{PyrucastError, Result};
-use crate::models::elasticity::{self};
+use crate::models::continuum::elastic;
 use crate::models::tensor::Kinematics;
 use nalgebra::{Matrix3, Vector3};
 use serde::{Deserialize, Serialize};
@@ -663,7 +663,7 @@ fn anisotropic_stiffness(v: impl Fn(usize) -> f64) -> [[f64; 6]; 6] {
 /// The constitutive (Voigt) matrix of a cell, in **global** axes and reduced to
 /// `kinematics` — the single entry point every mechanical kernel uses.
 ///
-/// Isotropy short-circuits to [`elasticity::constitutive`], keeping its exact
+/// Isotropy short-circuits to [`elastic::constitutive`], keeping its exact
 /// closed forms (and therefore the exact numbers of every assembly that predates
 /// this module). The other two build the full 3-D stiffness in the material
 /// axes, rotate it by the frame, then reduce.
@@ -705,7 +705,7 @@ pub fn elastic_constitutive(
     kinematics: Kinematics,
     space_dim: usize,
 ) -> Result<Vec<Vec<f64>>> {
-    let contract = elasticity::material_contract(symmetry, space_dim);
+    let contract = elastic::material_contract(symmetry, space_dim);
     let idx = material.resolve_components(contract, "material")?;
     let row = material.point_values(cell, 0)?;
     let mut d = [[0.0_f64; 6]; 6];
@@ -758,7 +758,7 @@ pub fn elastic_constitutive_into(
 ) -> Result<usize> {
     let v = |k: usize| material[idx[k] as usize];
     if symmetry == MaterialSymmetry::Isotropic {
-        return Ok(elasticity::constitutive_into(
+        return Ok(elastic::constitutive_into(
             v(0),
             v(1),
             kinematics,
@@ -836,7 +836,7 @@ pub fn reduce_to_model(d3: &[[f64; 6]; 6], kinematics: Kinematics) -> Vec<Vec<f6
 /// thirty-six numbers, which is nothing once per assembly and a great deal once
 /// per Gauss point of every iteration.
 /// ```
-/// # use pyrucast::models::{elasticity, symmetry};
+/// # use pyrucast::models::symmetry;
 /// # use pyrucast::models::tensor::Kinematics;
 /// // La même réduction que `reduce_to_model`, sur la pile.
 /// let d3 = symmetry::orthotropic_from_constants(
@@ -1131,7 +1131,7 @@ mod tests {
     }
 
     fn isotropic_6x6(e: f64, nu: f64) -> [[f64; 6]; 6] {
-        let d = elasticity::constitutive(e, nu, Kinematics::Full3D, 3);
+        let d = elastic::constitutive(e, nu, Kinematics::Full3D, 3);
         let mut out = [[0.0; 6]; 6];
         for (i, row) in d.iter().enumerate() {
             out[i].copy_from_slice(row);
@@ -1234,7 +1234,7 @@ mod tests {
         // plane-stress matrix.
         let (e, nu) = (210e9, 0.3);
         let reduced = reduce_to_model(&isotropic_6x6(e, nu), Kinematics::PlaneStress);
-        let expect = elasticity::constitutive(e, nu, Kinematics::PlaneStress, 2);
+        let expect = elastic::constitutive(e, nu, Kinematics::PlaneStress, 2);
         for i in 0..3 {
             for j in 0..3 {
                 assert!(

@@ -52,9 +52,9 @@
 //! both a deviatoric and a volumetric part, which is exactly what makes the
 //! plastic flow dilatant.
 
-use super::law::PlasticLawKind;
+use super::law::ReturnMapLawKind;
 use crate::error::{PyrucastError, Result};
-use crate::models::elasticity::elastic_stress;
+use crate::models::continuum::elastic::elastic_stress;
 use crate::models::plasticity::law::{
     require_positive, MatParams, PlasticLaw, PlasticStep, PrevState,
 };
@@ -242,7 +242,7 @@ pub fn return_map(trial: &[f64; 6], prev: &PrevState, mat: &MatParams) -> Result
 /// Gurson-Tvergaard-Needleman porous plasticity.
 pub(crate) struct Gurson;
 
-impl PlasticLawKind for Gurson {
+impl ReturnMapLawKind for Gurson {
     fn material_components(&self) -> &'static [&'static str] {
         &[
             "E", "nu", "sigma_y", "q_1", "q_2", "q_3", "f_0", "f_c", "f_f",

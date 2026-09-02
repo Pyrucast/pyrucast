@@ -29,7 +29,8 @@ use crate::containers::model::Model;
 use crate::containers::node_field::NodeField;
 use crate::error::Result;
 use crate::handle::Handle;
-use crate::models::{continuum_internal_force_element, kernel};
+use crate::models::continuum::internal_force::continuum_internal_force_element;
+use crate::models::kernel;
 
 /// Axis suffixes for the displacement/force components of the model-free
 /// continuum operator (`f_x`, `f_y`, `f_z`).
@@ -156,7 +157,7 @@ pub fn internal_forces_continuum(
         let stress = stresses.sub_for_fespace(sub)?;
         let stress_guard = stress.read();
         // Resolved once for the zone, before the parallel region.
-        let mut names = crate::models::stress_matrix_reads(space_dim);
+        let mut names = crate::models::continuum::internal_force::stress_matrix_reads(space_dim);
         if sub.read().is_axisymmetric() {
             names.push("sigma_zz".to_string());
         }

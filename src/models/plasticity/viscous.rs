@@ -47,7 +47,7 @@ use crate::error::{PyrucastError, Result};
 use crate::models::plasticity::law::{
     require_positive, MatParams, PlasticLaw, PlasticStep, PrevState,
 };
-use crate::models::plasticity::law::{PlasticLawKind, MAX_INTERNAL_VARS, TENSOR_SUFFIXES};
+use crate::models::plasticity::law::{ReturnMapLawKind, MAX_INTERNAL_VARS, TENSOR_SUFFIXES};
 use crate::models::tensor::Kinematics;
 use crate::models::tensor::{deviator, i1, von_mises_stress};
 
@@ -594,7 +594,7 @@ pub fn chaboche(
 /// Norton-Odqvist secondary creep, `ṗ = (q/K)^n`.
 pub(crate) struct CreepNorton;
 
-impl PlasticLawKind for CreepNorton {
+impl ReturnMapLawKind for CreepNorton {
     fn material_components(&self) -> &'static [&'static str] {
         &["E", "nu", "K", "n"]
     }
@@ -617,7 +617,7 @@ impl PlasticLawKind for CreepNorton {
 /// Blackburn creep — primary **and** secondary, hence its own state.
 pub(crate) struct CreepBlackburn;
 
-impl PlasticLawKind for CreepBlackburn {
+impl ReturnMapLawKind for CreepBlackburn {
     fn material_components(&self) -> &'static [&'static str] {
         &["E", "nu", "A_1", "alpha_1", "r_1", "B_s", "beta_s"]
     }
@@ -646,7 +646,7 @@ impl PlasticLawKind for CreepBlackburn {
 /// Lemaitre creep, `ṗ = (q/K)^N · p^(−M)`.
 pub(crate) struct CreepLemaitre;
 
-impl PlasticLawKind for CreepLemaitre {
+impl ReturnMapLawKind for CreepLemaitre {
     fn material_components(&self) -> &'static [&'static str] {
         &["E", "nu", "K", "N", "M"]
     }
@@ -669,7 +669,7 @@ impl PlasticLawKind for CreepLemaitre {
 /// Chaboche viscoplasticity — kinematic **and** isotropic hardening.
 pub(crate) struct ViscoplasticChaboche;
 
-impl PlasticLawKind for ViscoplasticChaboche {
+impl ReturnMapLawKind for ViscoplasticChaboche {
     fn material_components(&self) -> &'static [&'static str] {
         &["E", "nu", "k", "K", "n", "C_1", "gamma_1", "b", "Q"]
     }
@@ -697,7 +697,7 @@ impl PlasticLawKind for ViscoplasticChaboche {
 /// Chaboche coupled with Lemaitre damage.
 pub(crate) struct ViscoplasticLemaitreChaboche;
 
-impl PlasticLawKind for ViscoplasticLemaitreChaboche {
+impl ReturnMapLawKind for ViscoplasticLemaitreChaboche {
     fn material_components(&self) -> &'static [&'static str] {
         &[
             "E", "nu", "k", "K", "n", "C_1", "gamma_1", "b", "Q", "S", "s", "D_c",

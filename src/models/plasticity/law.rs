@@ -60,7 +60,8 @@
 //! everything.
 
 use crate::error::{PyrucastError, Result};
-use crate::models::elasticity::{elastic_stress, lame};
+use crate::models::continuum::elastic::{elastic_stress, lame};
+use crate::models::continuum::material::MatRead;
 use crate::models::tensor::symmetrise;
 use crate::models::tensor::Kinematics;
 use serde::{Deserialize, Serialize};
@@ -106,7 +107,7 @@ pub const MAX_INTERNAL_VARS: usize = 8;
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity;
+/// # use pyrucast::models::continuum::elastic;
 /// # use pyrucast::models::tensor;
 /// # use pyrucast::models::plasticity::law::{self, MatParams, PlasticLaw, PlasticStep, PrevState};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
@@ -164,22 +165,34 @@ pub enum PlasticLaw {
     Gurson,
 }
 
-/// What a yield law has to say about itself.
+/// The **return-map** family of constitutive laws: the sub-model applies the
+/// elastic predictor, the law projects the trial stress back onto its surface.
 ///
-/// Every elastoplastic law shares the same physics — same DOFs, same elastic
+/// The trait is named after that **integration structure**, not after a physical
+/// family, because the structure is what fixes its signature — a trial stress in,
+/// a [`PlasticStep`] out. That is also why
+/// [`ViscoplasticLemaitreChaboche`](PlasticLaw::ViscoplasticLemaitreChaboche),
+/// physically « viscoplasticity + ductile damage », lives here rather than with
+/// the damage laws: it is return-map-shaped. Its siblings are
+/// [`StatelessLawKind`](crate::models::elasticity::law::StatelessLawKind)
+/// (`σ = f(ε)`, no state) and
+/// [`DirectUpdateLawKind`](crate::models::damage::law::DirectUpdateLawKind)
+/// (state, but no predictor).
+///
+/// Every law of this family shares the same physics — same DOFs, same elastic
 /// operator, same incremental A → B mounting, same state. A law differs only by
 /// its **yield surface**, its flow rule, and what those two need. This trait is
 /// that difference, and nothing else.
 ///
-/// Same shape as [`SubModelKind`](crate::models::SubModelKind) one level up:
-/// the enum [`PlasticLaw`] carries the **identity** — it is what an archive
-/// stores, and a closure has no name — and the trait carries the **behaviour**,
-/// so that a single `match` (`PlasticLaw::as_law`) relates the two and no
-/// other code dispatches per law.
+/// Same division of labour as [`SubModelKind`](crate::models::SubModelKind) one
+/// level up: the enum [`PlasticLaw`] carries the **physical identity** — it is
+/// what an archive stores, and a closure has no name — and the trait carries the
+/// **integration structure**, so that a single `match` (`PlasticLaw::as_law`)
+/// relates the two and no other code dispatches per law.
 ///
 /// Adding a law: a unit struct and its `impl` in the law's own file, plus one
 /// arm in `as_law`. Nothing else in this module changes.
-pub(crate) trait PlasticLawKind: Sync {
+pub(crate) trait ReturnMapLawKind: Sync {
     /// The material components the law reads, in the order they are documented.
     fn material_components(&self) -> &'static [&'static str];
 
@@ -403,7 +416,7 @@ impl PlasticLaw {
     /// The behaviour behind this identity — **the only `match` per law**, on
     /// the kinematics of [`SubModel::as_kind`](crate::containers::model::SubModel::as_kind).
     /// The enum is what an archive stores; the trait is what the physics calls.
-    pub(crate) fn as_law(self) -> &'static dyn PlasticLawKind {
+    pub(crate) fn as_law(self) -> &'static dyn ReturnMapLawKind {
         match self {
             Self::Perfect => &super::von_mises::Perfect,
             Self::Isotropic => &super::von_mises::Isotropic,
@@ -717,7 +730,7 @@ impl std::fmt::Display for PlasticLaw {
 /// looked up by name, so adding a law adds no plumbing here.
 ///
 /// ```
-/// # use pyrucast::models::elasticity;
+/// # use pyrucast::models::continuum::elastic;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::SubElementField;
@@ -741,7 +754,7 @@ impl std::fmt::Display for PlasticLaw {
 /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
 /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
 /// let m = MatParams::new(materiau.point_values(0, 0)?, &idx_mat, &opt_mat);
-/// assert_eq!((m.lambda, m.mu), elasticity::lame(210_000.0, 0.3));
+/// assert_eq!((m.lambda, m.mu), elastic::lame(210_000.0, 0.3));
 /// assert_eq!(m.get(2), 250.0); // σ_y, troisième du contrat
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -750,9 +763,10 @@ pub struct MatParams<'a> {
     pub lambda: f64,
     /// Shear modulus.
     pub mu: f64,
-    row: &'a [f64],
-    idx: &'a [u32],
-    opt_idx: &'a [u32],
+    /// The material row and its position tables — the reader the three law
+    /// families share. `MatParams` is that reader plus the two constants every
+    /// plastic contract opens with.
+    mat: MatRead<'a>,
 }
 
 impl<'a> MatParams<'a> {
@@ -772,7 +786,7 @@ impl<'a> MatParams<'a> {
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::elasticity;
+    /// # use pyrucast::models::continuum::elastic;
     /// # use pyrucast::models::plasticity::law::{MatParams, PlasticLaw};
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -787,7 +801,7 @@ impl<'a> MatParams<'a> {
     /// let idx = materiau.resolve_components(
     ///     PlasticLaw::Perfect.material_components(), "material")?;
     /// let m = MatParams::new(materiau.point_values(0, 0)?, &idx, &[]);
-    /// assert_eq!((m.lambda, m.mu), elasticity::lame(210_000.0, 0.3));
+    /// assert_eq!((m.lambda, m.mu), elastic::lame(210_000.0, 0.3));
     /// assert_eq!(m.get(2), 250.0); // σ_y, troisième du contrat
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -796,9 +810,7 @@ impl<'a> MatParams<'a> {
         Self {
             lambda,
             mu,
-            row,
-            idx,
-            opt_idx,
+            mat: MatRead::new(row, idx, opt_idx),
         }
     }
 
@@ -831,7 +843,7 @@ impl<'a> MatParams<'a> {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn get(&self, k: usize) -> f64 {
-        self.row[self.idx[k] as usize]
+        self.mat.get(k)
     }
 
     /// The `k`-th component of this law's
@@ -871,10 +883,7 @@ impl<'a> MatParams<'a> {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn optional(&self, k: usize, default: f64) -> f64 {
-        match self.opt_idx[k] {
-            crate::containers::field::ABSENT_COMPONENT => default,
-            i => self.row[i as usize],
-        }
+        self.mat.optional(k, default)
     }
 
     /// Bulk modulus `K = λ + 2μ/3`.
@@ -1138,7 +1147,7 @@ impl PlasticStep {
 /// (with `σ(A)` rotated and `Δε` an objective increment).
 ///
 /// ```
-/// # use pyrucast::models::elasticity;
+/// # use pyrucast::models::continuum::elastic;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::SubElementField;
@@ -1168,7 +1177,7 @@ impl PlasticStep {
 /// let trial = law::elastic_predictor(&eps_b, &repos, mat.lambda, mat.mu);
 /// assert!(trial[0] > 0.0);
 /// // Partant du repos, elle coïncide avec C:ε.
-/// let direct = elasticity::elastic_stress(&eps_b, mat.lambda, mat.mu);
+/// let direct = elastic::elastic_stress(&eps_b, mat.lambda, mat.mu);
 /// assert!((trial[0] - direct[0]).abs() < 1e-9);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```

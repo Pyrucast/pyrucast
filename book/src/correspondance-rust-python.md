@@ -257,7 +257,7 @@ un sujet qu'on transforme.
 | `contact(slave, master, components, multiplier, imposed_value) -> Model` | `contact(slave, master, components, multiplier=None, imposed_value=None) -> Model` |
 
 **Les deux plis du catalogue.** Rust nomme la symétrie et la loi par une
-**enum** (`MaterialSymmetry`, `PlasticLaw`, `DamageLaw`) ; Python n'expose pas
+**enum** (`MaterialSymmetry`, `ElasticLaw`, `PlasticLaw`, `DamageLaw`) ; Python n'expose pas
 ces enums, et replie donc la symétrie en mot-clé `symmetry=` et déplie les lois
 en une fonction chacune. Le catalogue est le même des deux côtés — les
 dérogations correspondantes sont enregistrées, avec leur raison, dans

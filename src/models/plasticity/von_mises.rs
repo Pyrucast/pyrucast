@@ -25,9 +25,9 @@
 //! That closed form is why von Mises does not go through the cutting plane: an
 //! exact answer beats a converged one.
 
-use super::law::PlasticLawKind;
+use super::law::ReturnMapLawKind;
 use crate::error::Result;
-use crate::models::elasticity::elastic_tangent;
+use crate::models::continuum::elastic::elastic_tangent;
 use crate::models::plasticity::law::PlasticLaw;
 use crate::models::plasticity::law::{MatParams, PlasticStep, PrevState};
 use crate::models::tensor::Kinematics;
@@ -53,7 +53,7 @@ const H: usize = 3;
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::models::plasticity;
-/// # use pyrucast::models::elasticity;
+/// # use pyrucast::models::continuum::elastic;
 /// # use pyrucast::models::tensor;
 /// # use pyrucast::models::plasticity::law::{self, MatParams, PlasticLaw, PrevState};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
@@ -121,7 +121,7 @@ pub fn return_map(
 /// D = K·1⊗1 + 2μθ·I_dev − 2μθ̄·n̂⊗n̂
 /// θ = σ_y(p+Δp)/q_trial          θ̄ = 3μ/(3μ + H) − (1 − θ)
 /// ```
-/// # use pyrucast::models::elasticity;
+/// # use pyrucast::models::continuum::elastic;
 ///
 /// with `n̂ = s_trial/‖s_trial‖` the **unit** deviatoric direction. For `H = 0`
 /// the two coefficients collapse (`θ̄ = θ`) and this is exactly the perfect-J2
@@ -140,7 +140,7 @@ pub fn return_map(
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::elasticity;
+/// # use pyrucast::models::continuum::elastic;
 /// # use pyrucast::models::plasticity;
 /// # use pyrucast::models::plasticity::law::{self, MatParams, PlasticLaw, PrevState};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
@@ -159,7 +159,7 @@ pub fn return_map(
 /// // Sous le seuil, la tangente cohérente **est** la tangente élastique.
 /// let sous = [100.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 /// let d = plasticity::von_mises::tangent(&sous, &mat, 0.0, 0.0);
-/// assert_eq!(d, elasticity::elastic_tangent(mat.lambda, mat.mu));
+/// assert_eq!(d, elastic::elastic_tangent(mat.lambda, mat.mu));
 ///
 /// // Au-delà, elle s'assouplit : le module apparent chute.
 /// let au_dela = [400.0, 0.0, 0.0, 0.0, 0.0, 0.0];
@@ -218,7 +218,7 @@ pub fn tangent(trial: &[f64; 6], mat: &MatParams, hardening: f64, p_prev: f64) -
 /// The perfect von Mises law — no hardening.
 pub(crate) struct Perfect;
 
-impl PlasticLawKind for Perfect {
+impl ReturnMapLawKind for Perfect {
     fn material_components(&self) -> &'static [&'static str] {
         &["E", "nu", "sigma_y"]
     }
@@ -246,7 +246,7 @@ impl PlasticLawKind for Perfect {
 /// von Mises with **linear isotropic hardening**, `σ_y(p) = σ_y + H·p`.
 pub(crate) struct Isotropic;
 
-impl PlasticLawKind for Isotropic {
+impl ReturnMapLawKind for Isotropic {
     fn material_components(&self) -> &'static [&'static str] {
         &["E", "nu", "sigma_y", "H"]
     }

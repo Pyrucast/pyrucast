@@ -11,11 +11,12 @@
 //!
 //! The single history variable is `κ = max_t ε̃`: damage never heals.
 
-use super::law::DamageLawKind;
+use super::law::DirectUpdateLawKind;
 use crate::error::Result;
+use crate::models::continuum::elastic::{elastic_stress, lame};
+use crate::models::continuum::material::MatRead;
 use crate::models::damage::law::DamageLaw;
-use crate::models::damage::law::{pos, DamageUpdate, MatRead};
-use crate::models::elasticity::{elastic_stress, lame};
+use crate::models::damage::law::{pos, DamageUpdate};
 use crate::models::tensor::Kinematics;
 use nalgebra::Matrix3;
 
@@ -39,7 +40,7 @@ const B_C: usize = 6;
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::models::damage::{self};
-/// # use pyrucast::models::damage::law::{MatRead};
+/// # use pyrucast::models::continuum::material::MatRead;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -52,7 +53,7 @@ const B_C: usize = 6;
 /// #     &[30_000.0, 0.2, 1e-4, 0.8, 20_000.0, 1.4, 1_850.0])?;
 /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
 /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
-/// # let mat = MatRead { row: materiau.point_values(0, 0).unwrap(), idx: &idx_mat };
+/// # let mat = MatRead::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &[]);
 /// // Les paramètres de Mazars, lus une fois par maille : le seuil `eps_d0`
 /// // et les deux branches, traction et compression. Ils ne sont pas
 /// // exposés champ par champ — c'est `update` qui les emploie.
@@ -147,7 +148,8 @@ fn mazars_update(eps: &[f64; 6], kappa_old: f64, p: &MazarsParams) -> ([f64; 6],
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::models::damage::{self};
-/// # use pyrucast::models::damage::law::{DamageLaw, MatRead};
+/// # use pyrucast::models::continuum::material::MatRead;
+/// # use pyrucast::models::damage::law::DamageLaw;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -158,7 +160,7 @@ fn mazars_update(eps: &[f64; 6], kappa_old: f64, p: &MazarsParams) -> ([f64; 6],
 /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
 /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
 /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
-/// # let mat = MatRead { row: materiau.point_values(0, 0).unwrap(), idx: &idx_mat };
+/// # let mat = MatRead::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &[]);
 /// // Un seuil `eps_d0`, puis deux branches : traction (A_t, B_t) et
 /// // compression (A_c, B_c), mélangées par la part de traction.
 /// assert!(damage::mazars::MATERIAL.contains(&"eps_d0"));
@@ -177,7 +179,8 @@ pub const MATERIAL: &[&str] = &["E", "nu", "eps_d0", "A_t", "B_t", "A_c", "B_c"]
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::models::damage::{self};
-/// # use pyrucast::models::damage::law::{DamageLaw, MatRead};
+/// # use pyrucast::models::continuum::material::MatRead;
+/// # use pyrucast::models::damage::law::DamageLaw;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -188,7 +191,7 @@ pub const MATERIAL: &[&str] = &["E", "nu", "eps_d0", "A_t", "B_t", "A_c", "B_c"]
 /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_d0".into(), "A_t".into(), "B_t".into(), "A_c".into(), "B_c".into()], &[30000.0, 0.2, 0.0001, 0.8, 20000.0, 1.4, 1850.0]).unwrap();
 /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
 /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
-/// # let mat = MatRead { row: materiau.point_values(0, 0).unwrap(), idx: &idx_mat };
+/// # let mat = MatRead::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &[]);
 /// // `kappa` est la mémoire de la loi : il **ne décroît pas**. Décharger
 /// // après avoir endommagé ne répare rien.
 /// let grand = [1e-3, 0.0, 0.0, 0.0, 0.0, 0.0];
@@ -221,7 +224,7 @@ pub fn update(eps: &[f64; 6], prev: &[f64], mat: &MatRead) -> Result<DamageUpdat
 /// Mazars isotropic damage — the classical concrete law.
 pub(crate) struct Mazars;
 
-impl DamageLawKind for Mazars {
+impl DirectUpdateLawKind for Mazars {
     fn material_components(&self, _space_dim: usize) -> &'static [&'static str] {
         MATERIAL
     }

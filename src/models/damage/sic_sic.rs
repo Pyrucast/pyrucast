@@ -34,11 +34,12 @@
 //! along its tows. A law that let the damage reach one would predict a collapse
 //! that does not happen.
 
-use super::law::DamageLawKind;
+use super::law::DirectUpdateLawKind;
 use crate::error::Result;
+use crate::models::continuum::elastic::lame;
+use crate::models::continuum::material::MatRead;
 use crate::models::damage::law::DamageLaw;
-use crate::models::damage::law::{pos, DamageUpdate, MatRead};
-use crate::models::elasticity::lame;
+use crate::models::damage::law::{pos, DamageUpdate};
 use crate::models::symmetry;
 use crate::models::tensor::Kinematics;
 use nalgebra::Matrix3;
@@ -63,7 +64,8 @@ const FRAME_AT: usize = 11;
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::models::damage::{self};
-/// # use pyrucast::models::damage::law::{DamageLaw, MatRead};
+/// # use pyrucast::models::continuum::material::MatRead;
+/// # use pyrucast::models::damage::law::DamageLaw;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -74,7 +76,7 @@ const FRAME_AT: usize = 11;
 /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_0_1".into(), "eps_c_1".into(), "d_max_1".into(), "eps_0_2".into(), "eps_c_2".into(), "d_max_2".into(), "eps_0_3".into(), "eps_c_3".into(), "d_max_3".into(), "V1X".into(), "V1Y".into()], &[200000.0, 0.2, 0.0001, 0.01, 0.9, 0.0001, 0.01, 0.9, 0.0001, 0.01, 0.9, 1.0, 0.0]).unwrap();
 /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
 /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
-/// # let mat = MatRead { row: materiau.point_values(0, 0).unwrap(), idx: &idx_mat };
+/// # let mat = MatRead::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &[]);
 /// // Trois directions de tissage, chacune avec son seuil, sa saturation et
 /// // son endommagement maximal — plus l'axe du repère matériau.
 /// assert!(damage::sic_sic::MATERIAL_2D.contains(&"V1X"));
@@ -96,7 +98,8 @@ pub const MATERIAL_2D: &[&str] = &[
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::models::damage::{self};
-/// # use pyrucast::models::damage::law::{DamageLaw, MatRead};
+/// # use pyrucast::models::continuum::material::MatRead;
+/// # use pyrucast::models::damage::law::DamageLaw;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -107,7 +110,7 @@ pub const MATERIAL_2D: &[&str] = &[
 /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_0_1".into(), "eps_c_1".into(), "d_max_1".into(), "eps_0_2".into(), "eps_c_2".into(), "d_max_2".into(), "eps_0_3".into(), "eps_c_3".into(), "d_max_3".into(), "V1X".into(), "V1Y".into()], &[200000.0, 0.2, 0.0001, 0.01, 0.9, 0.0001, 0.01, 0.9, 0.0001, 0.01, 0.9, 1.0, 0.0]).unwrap();
 /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
 /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
-/// # let mat = MatRead { row: materiau.point_values(0, 0).unwrap(), idx: &idx_mat };
+/// # let mat = MatRead::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &[]);
 /// // En 3-D, le repère demande deux axes ; le troisième est V1 × V2.
 /// assert!(damage::sic_sic::MATERIAL_3D.contains(&"V2X"));
 /// assert!(damage::sic_sic::MATERIAL_3D.len() > damage::sic_sic::MATERIAL_2D.len());
@@ -132,7 +135,8 @@ pub const MATERIAL_3D: &[&str] = &[
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::models::damage::{self};
-/// # use pyrucast::models::damage::law::{DamageLaw, MatRead};
+/// # use pyrucast::models::continuum::material::MatRead;
+/// # use pyrucast::models::damage::law::DamageLaw;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -143,7 +147,7 @@ pub const MATERIAL_3D: &[&str] = &[
 /// #     fes.get(0).unwrap(), vec!["E".into(), "nu".into(), "eps_0_1".into(), "eps_c_1".into(), "d_max_1".into(), "eps_0_2".into(), "eps_c_2".into(), "d_max_2".into(), "eps_0_3".into(), "eps_c_3".into(), "d_max_3".into(), "V1X".into(), "V1Y".into()], &[200000.0, 0.2, 0.0001, 0.01, 0.9, 0.0001, 0.01, 0.9, 0.0001, 0.01, 0.9, 1.0, 0.0]).unwrap();
 /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
 /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
-/// # let mat = MatRead { row: materiau.point_values(0, 0).unwrap(), idx: &idx_mat };
+/// # let mat = MatRead::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &[]);
 /// // Un endommagement **par direction de tissage** : l'état en porte six,
 /// // trois seuils et trois endommagements.
 /// let u = damage::sic_sic::update(&[1e-3, 0.0, 0.0, 0.0, 0.0, 0.0], &[0.0; 6], &mat, 2)?;
@@ -233,7 +237,7 @@ pub fn update(
 /// SiC/SiC — orthotropic damage, three directions.
 pub(crate) struct SicSic;
 
-impl DamageLawKind for SicSic {
+impl DirectUpdateLawKind for SicSic {
     fn material_components(&self, space_dim: usize) -> &'static [&'static str] {
         if space_dim == 2 {
             MATERIAL_2D
