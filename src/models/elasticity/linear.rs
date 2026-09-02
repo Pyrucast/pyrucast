@@ -22,6 +22,9 @@ impl StatelessLawKind for Linear {
         owned_components(elastic::material_contract(symmetry, space_dim))
     }
 
+    /// `#[inline]` n'est pas décoratif : sans lui, la frontière de module
+    /// coûtait ~5 % sur `behavior::integrate` (mesuré à `target/` neuf des deux
+    /// côtés, le seul protocole où le chiffre veut dire quelque chose).
     #[inline]
     fn stress(
         &self,

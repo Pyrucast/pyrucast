@@ -269,14 +269,15 @@ impl Domain for Elasticity {
             self.continuum.kinematics(),
         );
         let mat = MatRead::new(material, &lay.material, &lay.optional_material);
-        // Dispatch **statique**. Un `match` sur une énumération `Copy` ne coûte
-        // rien et laisse le noyau s'inliner ; passer par `as_law()` mettait un
-        // appel virtuel à *chaque point de Gauss*, mesuré à +10 % sur
-        // `behavior::integrate` (205,9 ms → 225,8 ms sur la grille du bench).
-        // La plasticité peut se le permettre — son retour radial amortit
-        // l'appel — mais ici le noyau est un produit matrice-vecteur 3×3, et
-        // l'appel le domine. `as_law()` reste la voie des déclarations de
-        // **zone**, où son coût est nul.
+        // Dispatch **statique** : un `match` sur une énumération `Copy` ne coûte
+        // rien et laisse le noyau s'inliner. Ce qu'on a mesuré, et non supposé :
+        // remplacer `as_law()` par ce `match` n'a **rien** changé (p = 0,86) —
+        // le surcoût venait de la frontière de module que le noyau doit
+        // franchir, et c'est `#[inline]` sur `Linear::stress` qui l'a rendu.
+        // Le `match` reste parce qu'il est gratuit et qu'il tient la boucle la
+        // plus chaude hors du dispatch dynamique par construction, plutôt que
+        // par la bonne volonté de l'optimiseur. `as_law()` sert les
+        // déclarations de **zone**, où son coût est nul.
         match self.law {
             ElasticLaw::Linear => {
                 linear::Linear.stress(&strain, &mat, &self.continuum, self.symmetry, out)
@@ -321,6 +322,11 @@ impl Domain for Elasticity {
         // A linear law's consistent tangent **is** its elastic stiffness, so it
         // reads the material and ignores the moduli it also declared. A law whose
         // tangent depends on `ε` wrote `D_alg` into the state; read it back.
+        //
+        // Ce `is_linear()` est lu **par maille**, non par zone — la signature du
+        // trait est par maille. C'est sans conséquence : l'appel s'amortit sur
+        // l'intégration complète d'une maille (`n_gauss × v × dofs²`), là où au
+        // point de Gauss il aurait dominé.
         if self.law.as_law().is_linear() {
             self.continuum
                 .element_stiffness(&geoms[0], material, lay, self.symmetry, ke)
