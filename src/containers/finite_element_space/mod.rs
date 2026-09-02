@@ -1392,7 +1392,8 @@ fn inverse_small(m: &[f64], n: usize, inv: &mut [f64; MAX_JACOBIAN]) -> Result<(
     // that a NaN determinant — and a matrix of zeros, whose scale is nil — is
     // rejected too.
     let scale = m[..n * n].iter().fold(0.0_f64, |acc, v| acc.max(v.abs()));
-    if !(det.abs() > SINGULAR_RATIO * scale.powi(n as i32)) {
+    let sound = det.abs() > SINGULAR_RATIO * scale.powi(n as i32);
+    if !sound {
         return Err(PyrucastError::Message(
             "inverse_small: singular matrix".into(),
         ));
