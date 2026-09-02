@@ -384,10 +384,9 @@ cisaillement sont divisées par deux en sortie, ce qui transforme `∂σ/∂ε_i
 > remplacée ne peut pas être mal dérivée, coûte douze évaluations d'une mise à
 > jour fermée, et laisse la convergence de Newton quadratique.
 
-**La tangente stockée est symétrique.** `D_alg` voyage dans le champ d'état sous
-forme de triangle supérieur (`ktan_i_j`, i ≤ j) et est relue en miroir : le format
-ne peut pas porter la tangente réellement **non symétrique** d'une loi non
-associée. Celle de Drucker-Prager est donc symétrisée — le compromis d'ingénierie
+**La tangente est symétrisée.** `D_alg` est réduit au triangle supérieur puis relu
+en miroir, un format qui ne peut pas porter la tangente réellement **non
+symétrique** d'une loi non associée. Celle de Drucker-Prager est donc symétrisée — le compromis d'ingénierie
 usuel, qui coûte à Newton son taux quadratique sur cette loi et rien d'autre, et
 garde symétriques tous les consommateurs en aval.
 

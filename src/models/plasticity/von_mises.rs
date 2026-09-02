@@ -233,6 +233,10 @@ impl ReturnMapLawKind for Perfect {
         return_map(trial, prev, mat, 0.0)
     }
 
+    fn tangent_source(&self) -> crate::models::TangentSource {
+        crate::models::TangentSource::Analytic
+    }
+
     fn analytic_tangent(
         &self,
         trial: &[f64; 6],
@@ -259,6 +263,10 @@ impl ReturnMapLawKind for Isotropic {
         _dt: f64,
     ) -> Result<PlasticStep> {
         return_map(trial, prev, mat, mat.get(H))
+    }
+
+    fn tangent_source(&self) -> crate::models::TangentSource {
+        crate::models::TangentSource::Analytic
     }
 
     fn analytic_tangent(

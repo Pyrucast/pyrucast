@@ -191,6 +191,32 @@ impl MatrixKind {
     }
 }
 
+/// How a physics obtains its consistent tangent — a property of the **law**,
+/// declared once, not re-derived at every Gauss point.
+///
+/// Purely **informative**: nothing branches on it. The guard against paying for
+/// a tangent is having to call [`crate::ops::matrix::tangent`] at all. What this
+/// buys is that a caller can know the price *before* paying it — a Newton loop
+/// facing a `Numerical` law may legitimately prefer the elastic stiffness as its
+/// iteration operator.
+///
+/// ```
+/// # use pyrucast::models::TangentSource;
+/// # use pyrucast::models::plasticity::law::PlasticLaw;
+/// // Deux lois seulement ont une forme fermée ; les autres dérivent le retour
+/// // radial par différences centrées — douze retours par point de Gauss.
+/// assert_eq!(PlasticLaw::Perfect.tangent_source(), TangentSource::Analytic);
+/// assert_eq!(PlasticLaw::Gurson.tangent_source(), TangentSource::Numerical);
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TangentSource {
+    /// Closed form: a few dozen operations.
+    Analytic,
+    /// Central differences on the return map: **twelve return maps per Gauss
+    /// point**.
+    Numerical,
+}
+
 /// Structural declaration a volumetric physics gives so the **global**
 /// assembler ([`crate::ops::matrix::stiffness`]) can build its stiffness
 /// contribution as a *computed* [`SubMatrix`] — a recipe, no eagerly
@@ -593,7 +619,7 @@ pub trait SubModelKind: Sync {
         geoms: &[CellGeom],
         material: &SubElementField,
         lay: &ElementLayout,
-        state: Option<&SubElementField>,
+        inputs: &KernelState,
         ke: &mut [f64],
     ) -> Result<()> {
         // The **one** bridge between the base contract and the element kernels,
@@ -605,26 +631,28 @@ pub trait SubModelKind: Sync {
                 self.label()
             ))
         })?;
-        // The state exists for the two kinds that read it and for no other:
-        // **that** is what the `Option` says, and it dies here rather than in
-        // each kernel below.
-        let with_state = |what: &str| -> Result<&SubElementField> {
-            state.ok_or_else(|| {
-                PyrucastError::Message(format!(
-                    "{}: the {what} matrix reads a state field, and none was supplied",
-                    self.label()
-                ))
-            })
-        };
-        match kind {
-            MatrixKind::Stiffness => domain.element_matrix(geoms, material, lay, ke),
-            MatrixKind::Mass => domain.element_mass(geoms, material, lay, ke),
-            MatrixKind::Geometric => {
-                domain.element_geometric(geoms, material, lay, with_state("geometric")?, ke)
+        // Le genre et ses entrées sont **appariés par construction** : le
+        // désaccord ne peut venir que d'une recette bâtie à la main, et il se
+        // nomme ici plutôt que dans chaque noyau.
+        match (kind, inputs) {
+            (MatrixKind::Stiffness, _) => domain.element_matrix(geoms, material, lay, ke),
+            (MatrixKind::Mass, _) => domain.element_mass(geoms, material, lay, ke),
+            (MatrixKind::Geometric, KernelState::State(state)) => {
+                domain.element_geometric(geoms, material, lay, state, ke)
             }
-            MatrixKind::Tangent => {
-                domain.element_tangent(geoms, material, lay, with_state("tangent")?, ke)
-            }
+            (
+                MatrixKind::Tangent,
+                KernelState::Behavior {
+                    lay: zone,
+                    deformation,
+                    prev,
+                    dt,
+                },
+            ) => domain.element_tangent(geoms, zone, deformation, prev, material, *dt, ke),
+            (kind, _) => Err(PyrucastError::Message(format!(
+                "{}: the {kind:?} matrix was given the wrong inputs",
+                self.label()
+            ))),
         }
     }
 
@@ -1278,6 +1306,34 @@ pub struct ElementLayout {
     pub state: Vec<u32>,
 }
 
+/// The borrowed twin of [`KernelInputs`](crate::containers::matrix::KernelInputs):
+/// what a matrix kernel reads besides its material, already borrowed and, for the
+/// tangent, already resolved.
+///
+/// The `ZoneLayout` travels **inside** the tangent variant because it belongs to
+/// it: no other kind resolves one, and hanging an `Option<&ZoneLayout>` on the
+/// signature would be a slot for three kinds to leave empty.
+///
+/// ```
+/// # use pyrucast::models::KernelState;
+/// // Ce qu'une raideur reçoit : rien de plus que son matériau.
+/// let inputs = KernelState::MaterialOnly;
+/// assert!(matches!(inputs, KernelState::MaterialOnly));
+/// ```
+pub enum KernelState<'a> {
+    /// Stiffness, mass.
+    MaterialOnly,
+    /// Geometric stiffness: the current stress.
+    State(&'a SubElementField),
+    /// Consistent tangent, evaluated at the point.
+    Behavior {
+        lay: &'a ZoneLayout,
+        deformation: &'a SubElementField,
+        prev: &'a SubElementField,
+        dt: f64,
+    },
+}
+
 /// A **domain** sub-model — an optional capability, not part of the base
 /// [`SubModelKind`] contract. A domain is a physics defined *over a region*: it
 /// reads material data **and** integrates a constitutive law over its cells. A
@@ -1541,12 +1597,15 @@ pub trait Domain: Sync {
     /// `state` carries the algorithmic tangent moduli produced by
     /// [`integrate_point`](Self::integrate_point), read by `lay.state[k]`.
     /// Default errors: a linear law has no tangent of its own.
+    #[allow(clippy::too_many_arguments)]
     fn element_tangent(
         &self,
         _geoms: &[CellGeom],
+        _lay: &ZoneLayout,
+        _deformation: &SubElementField,
+        _prev: &SubElementField,
         _material: &SubElementField,
-        _lay: &ElementLayout,
-        _state: &SubElementField,
+        _dt: f64,
         _ke: &mut [f64],
     ) -> Result<()> {
         Err(PyrucastError::Message(
@@ -1608,6 +1667,47 @@ pub trait Domain: Sync {
     /// millions of times to say the same thing.
     fn requires_dt(&self) -> bool {
         false
+    }
+
+    /// Where this physics' consistent tangent comes from — see
+    /// [`TangentSource`]. Default: `Analytic`, which is the truth for every
+    /// physics whose tangent is a closed form. A physics that differentiates its
+    /// own law numerically says so, and a caller can then decide whether it
+    /// wants to pay.
+    fn tangent_source(&self) -> TangentSource {
+        TangentSource::Analytic
+    }
+
+    /// The consistent tangent `D_alg` at **one Gauss point** — the mirror of
+    /// [`integrate_point`](Self::integrate_point), and its exact inputs.
+    ///
+    /// It takes the same row slices for the same reason: the algorithmic tangent
+    /// is the derivative of the *step* `ε(B) ↦ σ(B)` at frozen state A, not a
+    /// tangent to a surface at a point. Both ends of the step are part of its
+    /// definition — and a law differentiated by finite differences literally
+    /// re-runs its return map from `prev`.
+    ///
+    /// Writes the full-3-D `6×6` modulus into `d`, a **caller-owned** buffer
+    /// living outside the Gauss loop: this kernel allocates nothing, exactly
+    /// like [`integrate_point`](Self::integrate_point). The reduction to the
+    /// kinematics' Voigt size is the caller's business.
+    ///
+    /// Default: errors — not every physics has a tangent of its own.
+    #[allow(clippy::too_many_arguments)]
+    fn tangent_point(
+        &self,
+        _geom: &CellGeom,
+        _g: usize,
+        _lay: &ZoneLayout,
+        _deformation: &[f64],
+        _prev: &[f64],
+        _material: &[f64],
+        _dt: f64,
+        _d: &mut [[f64; 6]; 6],
+    ) -> Result<()> {
+        Err(PyrucastError::Message(
+            "no tangent kernel — tangent_point is undefined for this physics".into(),
+        ))
     }
 
     /// Constitutive law at **one Gauss point** — the pure, sequential kernel a

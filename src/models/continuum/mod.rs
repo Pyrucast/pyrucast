@@ -41,7 +41,7 @@ use crate::models::tensor::{stress_names, Kinematics};
 use crate::models::{CellGeom, ElementLayout, MatrixKind};
 
 use elastic::RHO_SLOT;
-use voigt::{b_matrix_into, read_tangent_matrix_into, voigt_size, VoigtRows};
+use voigt::{b_matrix_into, voigt_size, VoigtRows};
 
 /// Reject an FE subspace whose elements are a **manifold** in their space
 /// (`ref_dim < space_dim`) for a continuum-mechanics physics named `label`.
@@ -345,33 +345,6 @@ impl Continuum {
         stress_names(self.space_dim, self.kinematics)
     }
 
-    /// The `ktan_i_j` names of the consistent tangent under this kinematics.
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::continuum::Continuum;
-    /// # use pyrucast::models::tensor::Kinematics;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
-    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
-    /// # let c = Continuum::new(fes.get(0)?, Kinematics::PlaneStress, "Elasticity")?;
-    /// // Le triangle supérieur d'un module 3×3 symétrique : six noms.
-    /// assert_eq!(c.tangent_component_names().len(), 6);
-    /// assert_eq!(c.tangent_component_names()[0], "ktan_0_0");
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn tangent_component_names(&self) -> Vec<String> {
-        voigt::tangent_component_names(self.space_dim, self.kinematics)
-    }
-
     /// What a continuum-mechanics **matrix** kernel reads from the state field,
     /// by [`MatrixKind`] — the shared declaration of elasticity, plasticity and
     /// damage, which run the very same kernels.
@@ -397,6 +370,8 @@ impl Continuum {
     /// assert!(c.element_state_reads(MatrixKind::Stiffness).is_empty());
     /// assert_eq!(c.element_state_reads(MatrixKind::Geometric),
     ///            ["sigma_xx", "sigma_xy", "sigma_yy"]);
+    /// // La tangente non plus : elle est évaluée au point, pas relue.
+    /// assert!(c.element_state_reads(MatrixKind::Tangent).is_empty());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn element_state_reads(&self, kind: MatrixKind) -> Vec<String> {
@@ -410,10 +385,10 @@ impl Continuum {
                 }
                 names
             }
-            // The upper triangle of the algorithmic modulus the integrator wrote.
-            MatrixKind::Tangent => self.tangent_component_names(),
-            // A stiffness or a mass reads the material and nothing else.
-            MatrixKind::Stiffness | MatrixKind::Mass => Vec::new(),
+            // A stiffness, a mass and — depuis que la tangente est évaluée au
+            // point plutôt que relue d'un champ — une tangente ne lisent que le
+            // matériau.
+            MatrixKind::Stiffness | MatrixKind::Mass | MatrixKind::Tangent => Vec::new(),
         }
     }
 
@@ -746,81 +721,88 @@ impl Continuum {
         Ok(())
     }
 
-    /// Element kernel: local **consistent tangent** `K_t = Σ_g Bᵀ D_alg B |J| w`
-    /// of one cell, with the per-Gauss algorithmic modulus `D_alg` read from
-    /// `state` (the constitutive integrator's `ktan_*` output). Same `ke` layout
-    /// as [`element_stiffness`](Self::element_stiffness); law-independent given
-    /// `D_alg`, so plasticity and Mazars share it — only the `D_alg` they
-    /// produce differs.
+    /// La délégation complète : `∫ Bᵀ D B` d'une maille, où `D` vient du
+    /// `tangent_point` de `domain`. C'est tout ce qu'une physique du continuum a
+    /// à écrire pour son `element_tangent` — une ligne.
+    ///
+    /// Générique sur `D`, donc monomorphisé : le `tangent_point` appelé à chaque
+    /// point de Gauss est un appel **statique**.
+    #[allow(clippy::too_many_arguments)]
+    /// La délégation complète : `∫ Bᵀ D B` d'une maille, où `D` vient du
+    /// `tangent_point` de `domain`. C'est tout ce qu'une physique du continuum a
+    /// à écrire pour son `element_tangent` — une ligne.
+    ///
+    /// Générique sur `D`, donc monomorphisé : le `tangent_point` appelé à chaque
+    /// point de Gauss est un appel **statique**.
     ///
     /// ```
-    /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::element_field::SubElementField;
-    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::element_field::ElementField;
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::DofOrdering;
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::continuum::{elastic, Continuum};
-    /// # use pyrucast::models::kernel::assemble_block;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
+    /// # use pyrucast::models::tensor::Kinematics;
+    /// # use pyrucast::ops::{element_field, matrix, model};
     /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-    /// # let vars = || (vec!["f_x".to_string(), "f_y".to_string()],
-    /// #                vec!["u_x".to_string(), "u_y".to_string()]);
-    /// # let c = Continuum::new(zone.clone(), Kinematics::PlaneStress, "Elasticity")?;
-    /// // Indépendante de la loi une fois `D_alg` donné : plasticité et Mazars
-    /// // partagent ce noyau, seul le module algorithmique qu'elles produisent
-    /// // diffère. Avec le module **élastique** en entrée, on retrouve la
-    /// // raideur élastique.
-    /// # let noms = c.tangent_component_names();
-    /// # let d0 = elastic::constitutive(210e3, 0.3, Kinematics::PlaneStress, 2);
-    /// # let mut e = SubElementField::new(zone.clone(), noms.clone())?;
-    /// # let mut k = 0;
-    /// # for i in 0..3 { for j in i..3 { e.set_uniform(&noms[k], d0[i][j])?; k += 1; } }
-    /// # let etat = Handle::new(e);
-    /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
-    /// #     zone.clone(), vec!["E".into(), "nu".into()], &[210_000.0, 0.3])?);
-    /// # use pyrucast::models::ElementLayout;
-    /// // Les six `ktan_i_j` ont été écrits dans l'ordre du triangle supérieur,
-    /// // et `E`, `nu` dans celui du contrat : deux identités.
-    /// let tan_lay = ElementLayout {
-    ///     material: vec![], optional_material: vec![], state: (0..6).collect(),
-    /// };
-    /// let mat_lay = ElementLayout {
-    ///     material: vec![0, 1], optional_material: vec![], state: vec![],
-    /// };
-    /// let (duals, primals) = vars();
-    /// let tangente = assemble_block(
-    ///     std::slice::from_ref(&zone), &support, &support, duals.clone(), primals.clone(),
-    ///     DofOrdering::NodesThenVars, true, &mat, Some(&etat),
-    ///     |geoms, _m, s, ke| c.element_tangent_from_state(&geoms[0], s.unwrap(), &tan_lay, ke),
-    /// )?;
-    /// let raideur = assemble_block(
-    ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
-    ///     DofOrdering::NodesThenVars, true, &mat, None,
-    ///     |geoms, m, _s, ke| c.element_stiffness(
-    ///         &geoms[0], m, &mat_lay, MaterialSymmetry::Isotropic, ke),
-    /// )?;
-    /// assert_eq!(tangente.dense(), raideur.dense());
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
+    /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id(), n[3].id()])?;
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh)?;
+    /// # let modele = model::elasticity(&fes, Kinematics::PlaneStress)?;
+    /// # let materiaux = element_field::material_field(
+    /// #     &modele, &[("E", 210_000.0), ("nu", 0.3)])?;
+    /// # let eps = ElementField::new(
+    /// #     &fes, vec!["eps_xx".into(), "eps_yy".into(), "eps_xy".into()])?;
+    /// // Bout en bout : la tangente d'une loi linéaire **est** sa raideur, et
+    /// // elle l'atteint par la voie commune — sans qu'aucun champ de modules
+    /// // n'ait été matérialisé pour l'y porter.
+    /// let kt = matrix::tangent(&modele, &materiaux, &eps, None, None)?;
+    /// let k = matrix::stiffness(&modele, &materiaux)?;
+    /// assert_eq!(kt.dense()?, k.dense()?);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn element_tangent_from_state(
+    pub fn element_tangent_of<D: crate::models::Domain + ?Sized>(
         &self,
-        geom: &CellGeom,
-        state: &SubElementField,
-        lay: &ElementLayout,
+        domain: &D,
+        geoms: &[CellGeom],
+        lay: &crate::models::ZoneLayout,
+        deformation: &SubElementField,
+        prev: &SubElementField,
+        material: &SubElementField,
+        dt: f64,
         ke: &mut [f64],
     ) -> Result<()> {
+        let geom = &geoms[0];
+        self.element_tangent_with(
+            geom,
+            |g, d| {
+                domain.tangent_point(
+                    geom,
+                    g,
+                    lay,
+                    deformation.row(geom.cell, g),
+                    prev.row(geom.cell, g),
+                    material.row(geom.cell, g),
+                    dt,
+                    d,
+                )
+            },
+            ke,
+        )
+    }
+
+    pub(crate) fn element_tangent_with<F>(
+        &self,
+        geom: &CellGeom,
+        mut d_at: F,
+        ke: &mut [f64],
+    ) -> Result<()>
+    where
+        F: FnMut(usize, &mut [[f64; 6]; 6]) -> Result<()>,
+    {
         let n_nodes = geom.n_nodes;
         let space_dim = geom.space_dim;
         let dofs = space_dim * n_nodes;
@@ -845,7 +827,10 @@ impl Continuum {
                 hoop,
                 &mut b,
             );
-            read_tangent_matrix_into(state.row(geom.cell, g), &lay.state, v, &mut d);
+            // Le fournisseur écrit `D` dans le tampon de l'appelant. Il est
+            // **générique**, jamais un `&dyn Fn` : un appel virtuel par point de
+            // Gauss se voit, et ce noyau en fait un par point.
+            d_at(g, &mut d)?;
             // DB = D·B (voigt × dofs), then Kᵉ += Bᵀ (DB) · |J| w.
             for r in 0..v {
                 for c in 0..dofs {

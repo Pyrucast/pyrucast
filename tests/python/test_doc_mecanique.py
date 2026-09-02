@@ -102,8 +102,7 @@ materials = pyrucast.element_field.material_field(
     [("E", 20_000.0), ("nu", 0.2), ("friction", 0.3), ("k", 30.0), ("psi", 0.1)],
 )
 strain = pyrucast.element_field.deformation(u, fes)
-state = pyrucast.element_field.integrate_behavior(model, strain, materials)
-k_t = pyrucast.matrix.tangent(model, materials, state)
+k_t = pyrucast.matrix.tangent(model, materials, strain)
 # ANCHOR_END: drucker_prager
 assert k_t.n_rows() == k_t.n_cols()
 

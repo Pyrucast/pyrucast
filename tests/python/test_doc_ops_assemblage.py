@@ -151,8 +151,7 @@ for noeud, x in zip(noeuds, [0.0, 1.0, 1.0, 0.0]):
     u[0].set_value(noeud, "u_y", 0.0)
 # ANCHOR: tangent
 strain = pyrucast.element_field.deformation(u, fes)
-state = pyrucast.element_field.integrate_behavior(model, strain, materials)
-Kt = pyrucast.matrix.tangent(model, materials, state)
+Kt = pyrucast.matrix.tangent(model, materials, strain)
 # ANCHOR_END: tangent
 assert Kt.n_rows() == Kt.n_cols()
 

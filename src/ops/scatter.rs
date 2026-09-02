@@ -21,11 +21,13 @@
 //! parallel colour-driven scatter (the actual speed-up) builds on this same
 //! pattern.
 
+use crate::containers::matrix::KernelInputs;
 use crate::containers::matrix::{
     dof_node, dof_var, AssemblyPattern, BlockSlots, DofKey, DofOrdering, Matrix,
 };
 use crate::error::{PyrucastError, Result};
 use crate::models::kernel;
+use crate::models::KernelState;
 use crate::parallel::*;
 
 use std::collections::HashMap;
@@ -501,10 +503,50 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<Vec<f64>>
                 // the closures below capture the table, so no cell ever matches
                 // a component name. The guards are dropped straight away — the
                 // drivers take the handles and hold their own.
-                let lay = {
+                // Les gardes des entrées vivent le temps du bloc : `inputs` pointe
+                // dedans. Celle du matériau, elle, est relâchée aussitôt — les
+                // pilotes prennent la poignée et tiennent la leur.
+                let state_guard = match &recipe.inputs {
+                    KernelInputs::State(h) => Some(h.read()),
+                    _ => None,
+                };
+                let behavior_guards = match &recipe.inputs {
+                    KernelInputs::Behavior {
+                        deformation, prev, ..
+                    } => Some((deformation.read(), prev.read())),
+                    _ => None,
+                };
+                // Résolus **une fois pour le bloc**, avant la région parallèle :
+                // les fermetures capturent les tables, donc aucune maille ne
+                // compare jamais un nom de composante.
+                let (lay, zone) = {
                     let mat = material.read();
-                    let state = recipe.state.as_ref().map(|h| h.read());
-                    domain.element_layout(recipe.kind, &mat, state.as_deref())?
+                    let zone = match &behavior_guards {
+                        Some((def, prev)) => Some(domain.zone_layout(def, prev, &mat)?),
+                        None => None,
+                    };
+                    (
+                        domain.element_layout(recipe.kind, &mat, state_guard.as_deref())?,
+                        zone,
+                    )
+                };
+                let inputs = match (&recipe.inputs, &state_guard, &behavior_guards, &zone) {
+                    (KernelInputs::MaterialOnly, ..) => KernelState::MaterialOnly,
+                    (KernelInputs::State(_), Some(g), ..) => KernelState::State(g),
+                    (KernelInputs::Behavior { dt, .. }, _, Some((def, prev)), Some(z)) => {
+                        KernelState::Behavior {
+                            lay: z,
+                            deformation: def,
+                            prev,
+                            dt: *dt,
+                        }
+                    }
+                    _ => {
+                        return Err(PyrucastError::Message(format!(
+                            "{}: computed block inputs do not match its matrix kind",
+                            phys.label()
+                        )))
+                    }
                 };
                 // Values only: `ke` comes out row-major, which is exactly the
                 // order the precomputed slots were built in. Asking for the
@@ -516,9 +558,8 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<Vec<f64>>
                         blk.dual_vars().len(),
                         blk.primal_vars().len(),
                         material,
-                        recipe.state.as_ref(),
-                        |geoms, m, state, ke| {
-                            phys.matrix_element(recipe.kind, geoms, m, &lay, state, ke)
+                        |geoms, m, ke| {
+                            phys.matrix_element(recipe.kind, geoms, m, &lay, &inputs, ke)
                         },
                     )?
                 } else {
@@ -644,10 +685,50 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<Vec<f64
                 // the closures below capture the table, so no cell ever matches
                 // a component name. The guards are dropped straight away — the
                 // drivers take the handles and hold their own.
-                let lay = {
+                // Les gardes des entrées vivent le temps du bloc : `inputs` pointe
+                // dedans. Celle du matériau, elle, est relâchée aussitôt — les
+                // pilotes prennent la poignée et tiennent la leur.
+                let state_guard = match &recipe.inputs {
+                    KernelInputs::State(h) => Some(h.read()),
+                    _ => None,
+                };
+                let behavior_guards = match &recipe.inputs {
+                    KernelInputs::Behavior {
+                        deformation, prev, ..
+                    } => Some((deformation.read(), prev.read())),
+                    _ => None,
+                };
+                // Résolus **une fois pour le bloc**, avant la région parallèle :
+                // les fermetures capturent les tables, donc aucune maille ne
+                // compare jamais un nom de composante.
+                let (lay, zone) = {
                     let mat = material.read();
-                    let state = recipe.state.as_ref().map(|h| h.read());
-                    domain.element_layout(recipe.kind, &mat, state.as_deref())?
+                    let zone = match &behavior_guards {
+                        Some((def, prev)) => Some(domain.zone_layout(def, prev, &mat)?),
+                        None => None,
+                    };
+                    (
+                        domain.element_layout(recipe.kind, &mat, state_guard.as_deref())?,
+                        zone,
+                    )
+                };
+                let inputs = match (&recipe.inputs, &state_guard, &behavior_guards, &zone) {
+                    (KernelInputs::MaterialOnly, ..) => KernelState::MaterialOnly,
+                    (KernelInputs::State(_), Some(g), ..) => KernelState::State(g),
+                    (KernelInputs::Behavior { dt, .. }, _, Some((def, prev)), Some(z)) => {
+                        KernelState::Behavior {
+                            lay: z,
+                            deformation: def,
+                            prev,
+                            dt: *dt,
+                        }
+                    }
+                    _ => {
+                        return Err(PyrucastError::Message(format!(
+                            "{}: computed block inputs do not match its matrix kind",
+                            phys.label()
+                        )))
+                    }
                 };
                 let slots = &pattern.block_slots[bi];
                 if matches!(slots, BlockSlots::Literal(_)) {
@@ -669,9 +750,8 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<Vec<f64
                         blk.dual_vars().len(),
                         blk.primal_vars().len(),
                         material,
-                        recipe.state.as_ref(),
-                        |geoms, m, state, ke| {
-                            phys.matrix_element(recipe.kind, geoms, m, &lay, state, ke)
+                        |geoms, m, ke| {
+                            phys.matrix_element(recipe.kind, geoms, m, &lay, &inputs, ke)
                         },
                         |cell, ke| {
                             slots.each_entry(cell, ke, |slot, v| {

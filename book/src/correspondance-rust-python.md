@@ -271,7 +271,7 @@ dérogations correspondantes sont enregistrées, avec leur raison, dans
 | `mass(model: &Model, materials: &ElementField) -> Matrix` | `mass(model, materials) -> Matrix` |
 | `lump(m: &Matrix) -> Matrix` | `lump(matrix) -> Matrix` |
 | `geometric(model: &Model, materials: &ElementField, stress: &ElementField) -> Matrix` | `geometric(model, materials, stress) -> Matrix` |
-| `tangent(model: &Model, materials: &ElementField, state: &ElementField) -> Matrix` | `tangent(model, materials, state) -> Matrix` |
+| `tangent(model, materials, deformation, prev: Option<&ElementField>, dt: Option<f64>) -> Matrix` | `tangent(model, materials, deformation, prev=None, dt=None) -> Matrix` |
 
 ### `ops::solver` — résolution
 

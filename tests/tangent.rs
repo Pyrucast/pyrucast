@@ -71,8 +71,7 @@ fn check_tangent_fd(
 
     // The analytical tangent, evaluated at the converged state of `base`.
     let strain = deformation(&build_u(nodes, dim, base)?, fes)?;
-    let state = integrate(model, &strain, None, &materials, None)?;
-    let kt = tangent(model, &materials, &state)?;
+    let kt = tangent(model, &materials, &strain, None, None)?;
 
     let ndof = nodes.len() * dim;
     let h = 1e-8;
@@ -223,9 +222,8 @@ fn elastic_regime_tangent_equals_stiffness() -> Result<()> {
     // Tiny displacement ⇒ everywhere elastic.
     let base: Vec<f64> = plastic_disp_2d().iter().map(|d| d * 1e-4).collect();
     let strain = deformation(&build_u(&n, 2, &base)?, &fes)?;
-    let state = integrate(&model, &strain, None, &materials, None)?;
 
-    let kt = tangent(&model, &materials, &state)?;
+    let kt = tangent(&model, &materials, &strain, None, None)?;
     let k = stiffness(&model, &materials)?;
     let tol = 1e-9;
     for i in 0..4 {

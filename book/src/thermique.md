@@ -245,9 +245,9 @@ qu'une matrice de film constante. `T⁴` ne l'est pas, d'où **trois** termes :
 Linéariser la rigidité autour de \\(T_\infty\\) plutôt qu'autour de l'état
 courant est ce qui la laisse être une matrice **constante** : c'est l'opérateur
 dont on part pour une boucle de Newton, et à lui seul une itération de Picard
-tout à fait utilisable. La **tangente** porte la vraie non-linéarité : elle relit
-`T` dans l'état produit par l'intégration du comportement — le même couple
-producteur/consommateur que le `D_alg` plastique.
+tout à fait utilisable. La **tangente** porte la vraie non-linéarité : elle évalue `4σεT³` à la
+température courante, au point de Gauss, quand on la demande — comme le `D_alg`
+plastique, et pour la même raison : personne d'autre ne la lirait.
 
 #### Deux natures
 

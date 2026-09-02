@@ -221,8 +221,12 @@ pub trait Domain: Sync {
         lay: &ElementLayout, ke: &mut [f64]) -> Result<()>;                     // ∫ ρ Nᵀ N
     fn element_geometric(&self, geoms: &[CellGeom], material: &SubElementField,
         lay: &ElementLayout, state: &SubElementField, ke: &mut [f64]) -> Result<()>;   // ∫ Gᵀ σ̂ G
-    fn element_tangent(&self, geoms: &[CellGeom], material: &SubElementField,
-        lay: &ElementLayout, state: &SubElementField, ke: &mut [f64]) -> Result<()>;   // ∫ Bᵀ D_alg B
+    fn element_tangent(&self, geoms: &[CellGeom], lay: &ZoneLayout,
+        deformation: &SubElementField, prev: &SubElementField,
+        material: &SubElementField, dt: f64, ke: &mut [f64]) -> Result<()>;     // ∫ Bᵀ D_alg B
+    fn tangent_point(&self, geom: &CellGeom, g: usize, lay: &ZoneLayout,
+        deformation: &[f64], prev: &[f64], material: &[f64], dt: f64,
+        d: &mut [[f64; 6]; 6]) -> Result<()>;                          // D_alg en un point
     fn coupling_element(&self, kind: MatrixKind, row_geoms: &[CellGeom],
         col_geoms: &[CellGeom], material: &SubElementField,
         lay: &ElementLayout, ke: &mut [f64]) -> Result<()>;                     // interface
@@ -321,11 +325,18 @@ simplement. Côté opérateurs, un point d'entrée par genre —
 `ops::matrix::{stiffness, mass, geometric, tangent}`, plus `lump` — tous adossés
 au même `assemble_kind`.
 
-Les deux genres à état (`Geometric`, `Tangent`) reçoivent en plus un `state` : le
-champ produit par `integrate_behavior` (contrainte courante pour la raideur
-géométrique, modules tangents algorithmiques `D_alg` pour la tangente cohérente).
-C'est le couple producteur/consommateur — le noyau de comportement écrit `D_alg`
-dans ses composantes de sortie, `element_tangent` les relit.
+La raideur **géométrique** reçoit en plus un `state` : la contrainte courante,
+produite par `integrate_behavior`. C'est le couple producteur/consommateur.
+
+La **tangente**, elle, ne reçoit aucun champ d'état : `D_alg` est évalué **au
+point de Gauss** par `tangent_point`, à partir des mêmes entrées que
+`integrate_point`. Un champ de modules n'aurait eu que l'assembleur pour lecteur,
+et il pesait de 6 à 21 réels par point — jusqu'à plus de la moitié de la ligne de
+comportement en 3-D. Surtout, l'émettre depuis COMP faisait payer sa dérivation à
+**chaque** itération : pour les huit lois plastiques sans forme fermée, treize
+retours radiaux par point au lieu d'un. La tangente se demande donc, en appelant
+`ops::matrix::tangent`, et `Domain::tangent_source()` dit d'avance ce qu'elle
+coûtera.
 
 ### Les forces internes
 

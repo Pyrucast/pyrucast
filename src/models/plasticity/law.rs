@@ -64,6 +64,7 @@ use crate::models::continuum::elastic::{elastic_stress, lame};
 use crate::models::continuum::material::MatRead;
 use crate::models::tensor::symmetrise;
 use crate::models::tensor::Kinematics;
+use crate::models::TangentSource;
 use serde::{Deserialize, Serialize};
 
 /// Full 3-D tensor component suffixes, in the internal state order
@@ -250,6 +251,13 @@ pub(crate) trait ReturnMapLawKind: Sync {
         &["alpha", "rho"]
     }
 
+    /// Where this law's tangent comes from. Default: `Numerical` — a law says
+    /// nothing, so it is differentiated. The two von Mises variants say
+    /// otherwise.
+    fn tangent_source(&self) -> TangentSource {
+        TangentSource::Numerical
+    }
+
     fn analytic_tangent(
         &self,
         _trial: &[f64; 6],
@@ -413,6 +421,19 @@ pub(crate) trait ReturnMapLawKind: Sync {
 }
 
 impl PlasticLaw {
+    /// Where this law's tangent comes from — what it costs, in one word.
+    ///
+    /// ```
+    /// # use pyrucast::models::TangentSource;
+    /// # use pyrucast::models::plasticity::law::PlasticLaw;
+    /// // Von Mises a sa forme fermée ; Drucker-Prager est dérivé numériquement.
+    /// assert_eq!(PlasticLaw::Isotropic.tangent_source(), TangentSource::Analytic);
+    /// assert_eq!(PlasticLaw::DruckerPrager.tangent_source(), TangentSource::Numerical);
+    /// ```
+    pub fn tangent_source(self) -> TangentSource {
+        self.as_law().tangent_source()
+    }
+
     /// The behaviour behind this identity — **the only `match` per law**, on
     /// the kinematics of [`SubModel::as_kind`](crate::containers::model::SubModel::as_kind).
     /// The enum is what an archive stores; the trait is what the physics calls.

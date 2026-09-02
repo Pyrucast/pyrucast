@@ -1758,7 +1758,6 @@ pub fn element_block_triplets_per_cell(
     let coords_h = sm.coords();
     let coords = coords_h.read();
     let mat_guard = material.read();
-    let state_guard = state.map(|h| h.read());
 
     // Reference data of every subspace, snapshotted once (they share the submesh
     // ⇒ one connectivity + coords drive every CellGeom; only quadrature differs).
@@ -1783,8 +1782,9 @@ pub fn element_block_triplets_per_cell(
     coords.ensure_all_alive(conn)?;
     let rds_ref: &[RefData] = &rds;
     let coords_ref: &Coords = &coords;
-    let mat_ref: &SubElementField = &mat_guard;
+    let state_guard = state.map(|h| h.read());
     let state_ref: Option<&SubElementField> = state_guard.as_deref();
+    let mat_ref: &SubElementField = &mat_guard;
 
     let n_cols_loc = n_nodes * n_primal;
     let ke_len = (n_nodes * n_dual) * n_cols_loc;
@@ -2326,8 +2326,8 @@ pub fn coupling_block_triplets_per_cell(
 /// // Un noyau qui écrit l'identité : on retrouve `ke` en ligne-major,
 /// // maille après maille, et rien d'autre — ni ligne, ni colonne.
 /// let (valeurs, ke_len) = kernel::element_block_values_per_cell(
-///     std::slice::from_ref(&zone), 1, 1, &mat, None,
-///     |geoms, _m, _s, ke| {
+///     std::slice::from_ref(&zone), 1, 1, &mat,
+///     |geoms, _m, ke| {
 ///         let n = geoms[0].n_nodes;
 ///         for i in 0..n {
 ///             ke[i * n + i] = 1.0;
@@ -2346,9 +2346,7 @@ pub fn element_block_values_per_cell(
     n_dual: usize,
     n_primal: usize,
     material: &Handle<SubElementField>,
-    state: Option<&Handle<SubElementField>>,
-    element: impl Fn(&[CellGeom], &SubElementField, Option<&SubElementField>, &mut [f64]) -> Result<()>
-        + Sync,
+    element: impl Fn(&[CellGeom], &SubElementField, &mut [f64]) -> Result<()> + Sync,
 ) -> Result<(Vec<f64>, usize)> {
     let primary = fespaces.first().ok_or_else(|| {
         PyrucastError::Message("element_block_values_per_cell: no FE subspace".into())
@@ -2359,7 +2357,6 @@ pub fn element_block_values_per_cell(
     let coords_h = sm.coords();
     let coords = coords_h.read();
     let mat_guard = material.read();
-    let state_guard = state.map(|h| h.read());
 
     let mut rds = Vec::with_capacity(fespaces.len());
     rds.push(RefData::snapshot(&fe)?);
@@ -2381,7 +2378,6 @@ pub fn element_block_values_per_cell(
     let rds_ref: &[RefData] = &rds;
     let coords_ref: &Coords = &coords;
     let mat_ref: &SubElementField = &mat_guard;
-    let state_ref: Option<&SubElementField> = state_guard.as_deref();
 
     let ke_len = (n_nodes * n_dual) * (n_nodes * n_primal);
     // One flat buffer, written by disjoint chunks: each cell owns its own slice,
@@ -2400,7 +2396,7 @@ pub fn element_block_values_per_cell(
                         .iter()
                         .map(|rd| CellGeom::new(rd, coords_ref, conn, cell)),
                 );
-                element(geoms, mat_ref, state_ref, ke)
+                element(geoms, mat_ref, ke)
             },
         )?;
     Ok((values, ke_len))
@@ -2448,16 +2444,15 @@ pub fn element_block_values_per_cell(
 /// #     zone.clone(), vec!["k".into()], &[1.0])?);
 /// // Les mêmes valeurs que la forme en deux temps, mailles jamais toutes
 /// // matérialisées : chaque `ke` est produite puis consommée sur-le-champ.
-/// let noyau = |geoms: &[kernel::CellGeom], _m: &SubElementField,
-///              _s: Option<&SubElementField>, ke: &mut [f64]| {
+/// let noyau = |geoms: &[kernel::CellGeom], _m: &SubElementField, ke: &mut [f64]| {
 ///     ke[0] = geoms[0].det_j_w(0);
 ///     Ok(())
 /// };
 /// let (attendu, ke_len) = kernel::element_block_values_per_cell(
-///     std::slice::from_ref(&zone), 1, 1, &mat, None, noyau)?;
+///     std::slice::from_ref(&zone), 1, 1, &mat, noyau)?;
 /// let vu = std::sync::Mutex::new(vec![0.0; attendu.len()]);
 /// kernel::element_block_colored(
-///     std::slice::from_ref(&zone), 1, 1, &mat, None, noyau,
+///     std::slice::from_ref(&zone), 1, 1, &mat, noyau,
 ///     |maille, ke| {
 ///         vu.lock().unwrap()[maille * ke_len..(maille + 1) * ke_len]
 ///             .copy_from_slice(ke);
@@ -2472,9 +2467,7 @@ pub fn element_block_colored(
     n_dual: usize,
     n_primal: usize,
     material: &Handle<SubElementField>,
-    state: Option<&Handle<SubElementField>>,
-    element: impl Fn(&[CellGeom], &SubElementField, Option<&SubElementField>, &mut [f64]) -> Result<()>
-        + Sync,
+    element: impl Fn(&[CellGeom], &SubElementField, &mut [f64]) -> Result<()> + Sync,
     emit: impl Fn(usize, &[f64]) -> Result<()> + Sync,
 ) -> Result<()> {
     // Same block prologue as `element_block_values_per_cell`: reference data,
@@ -2489,7 +2482,6 @@ pub fn element_block_colored(
     let coords_h = sm.coords();
     let coords = coords_h.read();
     let mat_guard = material.read();
-    let state_guard = state.map(|h| h.read());
 
     let mut rds = Vec::with_capacity(fespaces.len());
     rds.push(RefData::snapshot(&fe)?);
@@ -2510,7 +2502,6 @@ pub fn element_block_colored(
     let rds_ref: &[RefData] = &rds;
     let coords_ref: &Coords = &coords;
     let mat_ref: &SubElementField = &mat_guard;
-    let state_ref: Option<&SubElementField> = state_guard.as_deref();
     let ke_len = (n_nodes * n_dual) * (n_nodes * n_primal);
 
     let coloring =
@@ -2532,7 +2523,7 @@ pub fn element_block_colored(
                             .map(|rd| CellGeom::new(rd, coords_ref, conn, cell)),
                     );
                     ke.iter_mut().for_each(|v| *v = 0.0);
-                    element(geoms, mat_ref, state_ref, ke)?;
+                    element(geoms, mat_ref, ke)?;
                     emit(cell, ke)
                 },
             )?;

@@ -98,9 +98,7 @@ fn the_tangent_is_the_derivative_of_the_residual() -> Result<()> {
     let t0 = T_WALL;
     let temperature = uniform_temperature(&fixture, t0)?;
     let at_gauss = element_field::interp_to_gauss(&temperature, &fixture.boundary_fes)?;
-    let state =
-        element_field::behavior::integrate(&fixture.radiation, &at_gauss, None, &materials, None)?;
-    let kt = pyrucast::ops::matrix::tangent(&fixture.radiation, &materials, &state)?;
+    let kt = pyrucast::ops::matrix::tangent(&fixture.radiation, &materials, &at_gauss, None, None)?;
     let dense = kt.dense()?;
     let n = kt.row_dofs()?.len();
     let analytic: Vec<f64> = (0..n)
@@ -146,9 +144,13 @@ fn no_flux_at_equilibrium() -> Result<()> {
     let sub = state.get(0)?.read();
     for g in 0..sub.gauss_count() {
         assert!(sub.value(0, g, "flux")?.abs() < 1e-20);
-        // …but the tangent is not zero: the law is still stiff there.
-        assert!(sub.value(0, g, "ktan")? > 0.0);
     }
+    // …but la tangente n'est pas nulle : la loi reste raide en ce point. Elle ne
+    // sort plus du comportement — on la demande, ce qui est tout l'objet de la
+    // séparation.
+    let kt = pyrucast::ops::matrix::tangent(&fixture.radiation, &materials, &at_gauss, None, None)?;
+    let dense = kt.dense()?;
+    assert!(dense.iter().any(|v| v.abs() > 0.0));
     Ok(())
 }
 

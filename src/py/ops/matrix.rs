@@ -55,16 +55,27 @@ pub fn geometric(
 }
 
 /// Assemble the consistent (algorithmic) tangent `K_t = ∫ Bᵀ D_alg B` of `model`
-/// (Cast3M `KTAN`), from the behaviour `state` (which carries `D_alg` besides the
-/// stress). `materials` resolves each zone, like [`stiffness`].
+/// (Cast3M `KTAN`). `D_alg` is evaluated **at the Gauss point**, from the same
+/// inputs `integrate_behavior` takes — no field of moduli is materialised, since
+/// this assembler would be its only reader. `prev=None` means the rest state.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
+#[pyo3(signature = (model, materials, deformation, prev=None, dt=None))]
 pub fn tangent(
     model: PyRef<PyModel>,
     materials: PyRef<PyElementField>,
-    state: PyRef<PyElementField>,
+    deformation: PyRef<PyElementField>,
+    prev: Option<PyRef<PyElementField>>,
+    dt: Option<f64>,
 ) -> PyResult<PyMatrix> {
-    let m = crate::ops::matrix::tangent(&model.inner, &materials.inner, &state.inner)?;
+    let prev_inner = prev.as_ref().map(|p| &p.inner);
+    let m = crate::ops::matrix::tangent(
+        &model.inner,
+        &materials.inner,
+        &deformation.inner,
+        prev_inner,
+        dt,
+    )?;
     Ok(PyMatrix { inner: m })
 }
 
@@ -99,12 +110,15 @@ impl PyModel {
     }
 
     /// Voir `pyrucast.matrix.tangent`.
+    #[pyo3(signature = (materials, deformation, prev=None, dt=None))]
     fn tangent_matrix(
         slf: PyRef<'_, Self>,
         materials: PyRef<PyElementField>,
-        state: PyRef<PyElementField>,
+        deformation: PyRef<PyElementField>,
+        prev: Option<PyRef<PyElementField>>,
+        dt: Option<f64>,
     ) -> PyResult<PyMatrix> {
-        super::matrix::tangent(slf, materials, state)
+        super::matrix::tangent(slf, materials, deformation, prev, dt)
     }
 }
 

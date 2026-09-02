@@ -27,8 +27,10 @@
 
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
-use crate::containers::matrix::{ComputedRecipe, Matrix, SubMatrix};
+use crate::containers::finite_element_space::SubFiniteElementSpace;
+use crate::containers::matrix::{ComputedRecipe, KernelInputs, Matrix, SubMatrix};
 use crate::containers::model::{Model, SubModel};
+use crate::error::PyrucastError;
 use crate::error::Result;
 use crate::handle::Handle;
 use crate::models::{Contribution, MatrixKind};
@@ -68,7 +70,90 @@ use crate::models::{Contribution, MatrixKind};
 /// assert_eq!(k.get(a.id(), "q", a.id(), "T"), 1.0);
 /// ```
 pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
-    assemble_kind(model, materials, MatrixKind::Stiffness, None)
+    assemble_kind(
+        model,
+        materials,
+        MatrixKind::Stiffness,
+        AssemblyInputs::MaterialOnly,
+    )
+}
+
+/// What the kernels of a given [`MatrixKind`] read **besides** the material,
+/// at the aggregate level — the outermost of the three forms the same fact
+/// takes (`AssemblyInputs` borrows aggregates, `KernelInputs` owns per-zone
+/// handles, `KernelState` borrows resolved sub-fields).
+///
+/// ```
+/// # use pyrucast::ops::matrix::AssemblyInputs;
+/// // `stiffness` et `mass` passent par là ; `tangent` par la variante qui
+/// // porte les entrées de la loi.
+/// assert!(matches!(AssemblyInputs::MaterialOnly, AssemblyInputs::MaterialOnly));
+/// ```
+pub enum AssemblyInputs<'a> {
+    /// Stiffness, mass.
+    MaterialOnly,
+    /// Geometric stiffness: the current stress.
+    State(&'a ElementField),
+    /// Consistent tangent: exactly what `behavior::integrate` receives. `prev`
+    /// is optional **here and nowhere below** — `None` means the rest state,
+    /// which is materialised per sub-model before any recipe is built.
+    Behavior {
+        deformation: &'a ElementField,
+        prev: Option<&'a ElementField>,
+        dt: Option<f64>,
+    },
+}
+
+impl AssemblyInputs<'_> {
+    /// The per-zone form, for the sub-model whose material lives on `fespace`.
+    fn for_sub(
+        &self,
+        sub: &SubModel,
+        fespace: &Handle<SubFiniteElementSpace>,
+    ) -> Result<KernelInputs> {
+        Ok(match self {
+            Self::MaterialOnly => KernelInputs::MaterialOnly,
+            Self::State(sf) => KernelInputs::State(sf.sub_for_fespace(fespace)?),
+            Self::Behavior {
+                deformation,
+                prev,
+                dt,
+            } => {
+                let dt = match (dt, sub.requires_dt()) {
+                    (Some(dt), _) => *dt,
+                    (None, false) => 0.0,
+                    (None, true) => {
+                        return Err(PyrucastError::Message(format!(
+                            "{}: this law is rate-dependent and needs a time increment — \
+                             pass `dt` to tangent",
+                            sub.as_kind().label()
+                        )))
+                    }
+                };
+                let deformation = deformation.sub_for_fespace(fespace)?;
+                // Sous cette ligne, `prev` est toujours un champ réel.
+                let prev = match prev {
+                    Some(p) => p.sub_for_fespace(fespace)?,
+                    None => Handle::new(
+                        sub.as_kind()
+                            .as_domain()
+                            .ok_or_else(|| {
+                                PyrucastError::Message(format!(
+                                    "{}: a tangent needs a behaviour",
+                                    sub.as_kind().label()
+                                ))
+                            })?
+                            .initial_state(&deformation.read())?,
+                    ),
+                };
+                KernelInputs::Behavior {
+                    deformation,
+                    prev,
+                    dt,
+                }
+            }
+        })
+    }
 }
 
 /// Assemble the element matrix of a given [`MatrixKind`] for `model` — the
@@ -110,9 +195,9 @@ pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
 /// #     &[("k", 1.0), ("rho", 2.0), ("cp", 3.0)]).unwrap();
 /// // Une seule machinerie pour les quatre natures : `stiffness` et `mass`
 /// // n'en sont que les formes nommées.
-/// let k = matrix::assemble_kind(&modele, &materiaux, MatrixKind::Stiffness, None)?;
+/// let k = matrix::assemble_kind(&modele, &materiaux, MatrixKind::Stiffness, matrix::AssemblyInputs::MaterialOnly)?;
 /// assert_eq!(k.dense()?, matrix::stiffness(&modele, &materiaux)?.dense()?);
-/// let m = matrix::assemble_kind(&modele, &materiaux, MatrixKind::Mass, None)?;
+/// let m = matrix::assemble_kind(&modele, &materiaux, MatrixKind::Mass, matrix::AssemblyInputs::MaterialOnly)?;
 /// // La capacité somme à ρ·c_p × aire ; la conduction, elle, somme à zéro.
 /// assert!((m.dense()?.iter().sum::<f64>() - 2.0 * 3.0 * 0.5).abs() < 1e-9);
 /// assert!(k.dense()?.iter().sum::<f64>().abs() < 1e-9);
@@ -122,7 +207,7 @@ pub fn assemble_kind(
     model: &Model,
     materials: &ElementField,
     kind: MatrixKind,
-    state: Option<&ElementField>,
+    inputs: AssemblyInputs,
 ) -> Result<Matrix> {
     let mut k = Matrix::empty();
 
@@ -157,9 +242,9 @@ pub fn assemble_kind(
             // Resolve the sub-model's own state sub-field (stress / tangent) the
             // same way, when a state aggregate is supplied and the physics reads
             // material on a cell fespace.
-            let state_sub = match (state, sub.material_fespace()) {
-                (Some(sf), Some(fespace)) => Some(sf.sub_for_fespace(&fespace)?),
-                _ => None,
+            let kernel_inputs = match sub.material_fespace() {
+                Some(fespace) => inputs.for_sub(&sub, &fespace)?,
+                None => KernelInputs::MaterialOnly,
             };
             let mut blocks = Vec::new();
             for c in sub.as_kind().contributions(kind, material.as_ref())? {
@@ -168,7 +253,7 @@ pub fn assemble_kind(
                     sub_h,
                     material.clone(),
                     kind,
-                    state_sub.clone(),
+                    kernel_inputs.clone(),
                 )?);
             }
             blocks
@@ -242,7 +327,7 @@ fn build_contribution(
     sub_h: &Handle<SubModel>,
     material: Option<Handle<SubElementField>>,
     kind: MatrixKind,
-    state: Option<Handle<SubElementField>>,
+    inputs: KernelInputs,
 ) -> Result<Vec<SubMatrix>> {
     let mut blocks = match contribution {
         Contribution::Computed(layout) => {
@@ -251,7 +336,7 @@ fn build_contribution(
                 fespaces: layout.fespaces,
                 material,
                 kind,
-                state,
+                inputs,
                 col_fespaces: Vec::new(),
             };
             vec![SubMatrix::computed(
@@ -273,7 +358,7 @@ fn build_contribution(
                 fespaces: layout.fespaces,
                 material,
                 kind,
-                state,
+                inputs,
                 col_fespaces: layout.col_fespaces,
             };
             vec![SubMatrix::computed(
@@ -334,7 +419,12 @@ fn build_contribution(
 /// assert!((total - 2.0).abs() < 1e-12);
 /// ```
 pub fn mass(model: &Model, materials: &ElementField) -> Result<Matrix> {
-    assemble_kind(model, materials, MatrixKind::Mass, None)
+    assemble_kind(
+        model,
+        materials,
+        MatrixKind::Mass,
+        AssemblyInputs::MaterialOnly,
+    )
 }
 
 /// Assemble the **geometric (initial-stress) stiffness** `K_g` for `model`
@@ -378,7 +468,12 @@ pub fn mass(model: &Model, materials: &ElementField) -> Result<Matrix> {
 /// assert_eq!(kg.n_rows().unwrap(), kg.n_cols().unwrap());
 /// ```
 pub fn geometric(model: &Model, materials: &ElementField, stress: &ElementField) -> Result<Matrix> {
-    assemble_kind(model, materials, MatrixKind::Geometric, Some(stress))
+    assemble_kind(
+        model,
+        materials,
+        MatrixKind::Geometric,
+        AssemblyInputs::State(stress),
+    )
 }
 
 /// Assemble the **consistent (algorithmic) tangent** `K_t = ∫ Bᵀ D_alg B` for
@@ -387,9 +482,10 @@ pub fn geometric(model: &Model, materials: &ElementField, stress: &ElementField)
 ///
 /// `state` is the behaviour field produced by [`crate::ops::element_field::behavior::integrate`]
 /// at the current iterate: besides the stress it carries the per-Gauss
-/// algorithmic modulus `D_alg` (the `ktan_*` components), which this assembler
-/// reads back. For a **linear** physics (elasticity) the tangent is the elastic
-/// stiffness and `state` is ignored. `materials` resolves each zone like
+/// évalué **au point de Gauss**, à partir de ce que la loi demande — les mêmes
+/// entrées que `behavior::integrate`. Aucun champ de modules n'est matérialisé :
+/// il n'aurait eu que cet assembleur pour lecteur. `prev` à `None` vaut l'état de
+/// repos, résolu ici et jamais plus bas. `materials` résout chaque zone comme
 /// [`stiffness`].
 ///
 /// ```
@@ -413,15 +509,32 @@ pub fn geometric(model: &Model, materials: &ElementField, stress: &ElementField)
 /// #     element_field::material_field(&model, &[("E", 210.0), ("nu", 0.3)]).unwrap();
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::ops::model;
-/// // Élasticité : la tangente **est** la raideur, l'état est ignoré.
-/// let state = ElementField::new(&fes, vec!["sigma_xx".into()]).unwrap();
-/// let kt = matrix::tangent(&model, &materials, &state).unwrap();
+/// // Élasticité : sa tangente est constante, et l'on retrouve la raideur —
+/// // sans qu'aucun champ de modules n'ait été matérialisé pour l'y porter.
+/// let strain = ElementField::new(
+///     &fes, vec!["eps_xx".into(), "eps_yy".into(), "eps_xy".into()]).unwrap();
+/// let kt = matrix::tangent(&model, &materials, &strain, None, None).unwrap();
 /// let k = matrix::stiffness(&model, &materials).unwrap();
 ///
 /// assert_eq!(kt.dense().unwrap(), k.dense().unwrap());
 /// ```
-pub fn tangent(model: &Model, materials: &ElementField, state: &ElementField) -> Result<Matrix> {
-    assemble_kind(model, materials, MatrixKind::Tangent, Some(state))
+pub fn tangent(
+    model: &Model,
+    materials: &ElementField,
+    deformation: &ElementField,
+    prev: Option<&ElementField>,
+    dt: Option<f64>,
+) -> Result<Matrix> {
+    assemble_kind(
+        model,
+        materials,
+        MatrixKind::Tangent,
+        AssemblyInputs::Behavior {
+            deformation,
+            prev,
+            dt,
+        },
+    )
 }
 
 /// **Lump** an assembled matrix into a diagonal one by **row-sum concentration**
@@ -520,8 +633,14 @@ impl Model {
     }
 
     /// Voir [`matrix::tangent`](fn@crate::ops::matrix::tangent).
-    pub fn tangent_matrix(&self, materials: &ElementField, state: &ElementField) -> Result<Matrix> {
-        tangent(self, materials, state)
+    pub fn tangent_matrix(
+        &self,
+        materials: &ElementField,
+        deformation: &ElementField,
+        prev: Option<&ElementField>,
+        dt: Option<f64>,
+    ) -> Result<Matrix> {
+        tangent(self, materials, deformation, prev, dt)
     }
 }
 
@@ -760,8 +879,14 @@ mod tests {
                     .unwrap()
                 {
                     blocks.extend(
-                        build_contribution(c, sub_h, material.clone(), MatrixKind::Stiffness, None)
-                            .unwrap(),
+                        build_contribution(
+                            c,
+                            sub_h,
+                            material.clone(),
+                            MatrixKind::Stiffness,
+                            KernelInputs::MaterialOnly,
+                        )
+                        .unwrap(),
                     );
                 }
                 blocks
@@ -1022,7 +1147,7 @@ mod tests {
                             fespaces: layout.fespaces,
                             material,
                             kind: MatrixKind::Stiffness,
-                            state: None,
+                            inputs: KernelInputs::MaterialOnly,
                             col_fespaces: Vec::new(),
                         },
                     )

@@ -56,8 +56,8 @@ use crate::error::Result;
 use crate::handle::Handle;
 use crate::models::owned_components;
 use crate::models::ElementLayout;
+use crate::models::ZoneLayout;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
-use crate::models::{MatrixKind, ZoneLayout};
 use serde::{Deserialize, Serialize};
 
 /// Column DOF name (temperature) — shared with heat conduction.
@@ -111,7 +111,6 @@ const INPUT_COMPONENT: &str = PRIMAL_VAR;
 /// Behaviour-**output**: the radiated flux density, and the tangent coefficient
 /// `4σεT³` that [`Domain::element_tangent`] reads back.
 const OUTPUT_FLUX: &str = "flux";
-const OUTPUT_TANGENT: &str = "ktan";
 
 /// Radiation to infinity on a boundary FE subspace.
 ///
@@ -280,7 +279,7 @@ impl Domain for Radiation {
     }
 
     fn behavior_output_components(&self) -> Vec<String> {
-        vec![OUTPUT_FLUX.to_string(), OUTPUT_TANGENT.to_string()]
+        vec![OUTPUT_FLUX.to_string()]
     }
 
     /// `σε(T⁴ − T_∞⁴)` and its derivative `4σεT³`, at one Gauss point. Emitting
@@ -312,18 +311,10 @@ impl Domain for Radiation {
         let t_inf = material[lay.material[1] as usize];
         let t = deformation[lay.deformation[0] as usize];
         out[0] = sigma * emis * (t.powi(4) - t_inf.powi(4));
-        out[1] = 4.0 * sigma * emis * t.powi(3);
         Ok(())
     }
 
     /// La tangente radiative lit le coefficient que le comportement a produit.
-    fn element_state_reads(&self, kind: MatrixKind) -> Vec<String> {
-        match kind {
-            MatrixKind::Tangent => vec![OUTPUT_TANGENT.to_string()],
-            _ => Vec::new(),
-        }
-    }
-
     /// The **linearised** radiative film, about the far-field temperature:
     /// `h_r = 4σεT_∞³`, a constant. See the module docs for why the
     /// linearisation is taken there rather than at the current state.
@@ -349,18 +340,66 @@ impl Domain for Radiation {
         })
     }
 
-    /// The consistent tangent `4σεT³ ∫ N_i N_j`, reading the coefficient from
-    /// the state the behaviour integration produced.
+    /// `4σεT³` au point — la vraie non-linéarité, évaluée à la température
+    /// courante. `element_matrix` en donne la **linéarisation** autour de `T_∞`,
+    /// qui reste un opérateur constant ; voir la doc du module.
+    fn tangent_point(
+        &self,
+        _geom: &CellGeom,
+        _g: usize,
+        lay: &ZoneLayout,
+        deformation: &[f64],
+        _prev: &[f64],
+        material: &[f64],
+        _dt: f64,
+        d: &mut [[f64; 6]; 6],
+    ) -> Result<()> {
+        let sigma = match lay.optional_material[0] {
+            ABSENT_COMPONENT => STEFAN_BOLTZMANN,
+            i => material[i as usize],
+        };
+        let emis = material[lay.material[0] as usize];
+        let t = deformation[lay.deformation[0] as usize];
+        // Un transport scalaire : le « module » tient dans une case.
+        d[0][0] = 4.0 * sigma * emis * t.powi(3);
+        Ok(())
+    }
+
+    /// The consistent tangent `4σεT³ ∫ N_i N_j`, evaluated point by point.
     fn element_tangent(
         &self,
         geoms: &[CellGeom],
-        _material: &SubElementField,
-        lay: &ElementLayout,
-        state: &SubElementField,
+        lay: &ZoneLayout,
+        deformation: &SubElementField,
+        prev: &SubElementField,
+        material: &SubElementField,
+        dt: f64,
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
-        surface_mass(geom, ke, |g| state.row(geom.cell, g)[lay.state[0] as usize])
+        let n_nodes = geom.n_nodes;
+        // Le tampon vit **hors** de la boucle des points, comme partout ailleurs.
+        let mut d = [[0.0_f64; 6]; 6];
+        for g in 0..geom.n_gauss {
+            self.tangent_point(
+                geom,
+                g,
+                lay,
+                deformation.row(geom.cell, g),
+                prev.row(geom.cell, g),
+                material.row(geom.cell, g),
+                dt,
+                &mut d,
+            )?;
+            let shape = geom.n_at_g(g);
+            let w = geom.det_j_w(g) * d[0][0];
+            for i in 0..n_nodes {
+                for j in 0..n_nodes {
+                    ke[i * n_nodes + j] += shape[i] * shape[j] * w;
+                }
+            }
+        }
+        Ok(())
     }
 }
 

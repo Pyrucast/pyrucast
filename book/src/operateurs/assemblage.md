@@ -71,18 +71,22 @@ pour le flambement et les analyses précontraintes. Le noyau
 {{#include ../../../tests/python/test_doc_ops_assemblage.py:geometric}}
 ```
 
-## `tangent(model, materials, state)` → `Matrix`
+## `tangent(model, materials, deformation, prev=None, dt=None)` → `Matrix`
 
 Assemble la **matrice tangente cohérente (algorithmique)** `K_t = ∫ Bᵀ D_alg B`
 (Cast3M `KTAN`), qui donne la convergence quadratique du Newton non-linéaire.
 
-`state` est le champ de comportement produit par `behavior.integrate` à l'itéré
-courant : en plus de la contrainte, il porte le module algorithmique `D_alg` par
-point de Gauss (les composantes `ktan_*`), que cet assembleur relit. Pour une
-physique **linéaire** (élasticité) la tangente vaut la rigidité élastique et
-`state` est ignoré. Le module cohérent est le **producteur/consommateur** :
-`integrate_point` (plasticité J2, Mazars) émet `D_alg`, cet opérateur le
-consomme. `materials` résout chaque zone comme `stiffness`.
+Il prend **les mêmes arguments que `behavior.integrate`**, et pour la même
+raison : `D_alg` est la dérivée du *pas* `ε(B) ↦ σ(B)` à état A figé, donc les
+deux extrémités du pas sont dans sa définition. `prev=None` vaut l'état de repos.
+
+Aucun champ de modules n'est matérialisé : il n'aurait eu que cet assembleur pour
+lecteur, et il pesait de 6 à 21 réels par point de Gauss. `D_alg` est évalué au
+point, ce qui a aussi sorti sa dérivation de `behavior.integrate` — pour les huit
+lois plastiques sans forme fermée, COMP payait treize retours radiaux par point
+au lieu d'un, à chaque itération, que la tangente serve ou non.
+`model.tangent_source()` dit d'avance ce qu'une tangente coûtera.
+`materials` résout chaque zone comme `stiffness`.
 
 ```python
 {{#include ../../../tests/python/test_doc_ops_assemblage.py:tangent}}

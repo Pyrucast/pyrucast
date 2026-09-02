@@ -23,7 +23,7 @@ use crate::error::Result;
 use crate::handle::Handle;
 use crate::models::continuum::material::MatRead;
 use crate::models::continuum::{elastic, voigt, Continuum};
-use crate::models::symmetry::MaterialSymmetry;
+use crate::models::symmetry::{self, MaterialSymmetry};
 use crate::models::tensor::{dual_name, primal_name, Kinematics};
 use crate::models::ZoneLayout;
 use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
@@ -235,15 +235,8 @@ impl Domain for Elasticity {
         self.continuum.fespace()
     }
 
-    /// The stress, plus — for a law whose tangent depends on `ε` — the
-    /// algorithmic modulus the tangent assembler will read back. A linear law
-    /// emits the stress alone: its tangent **is** its stiffness.
     fn behavior_output_components(&self) -> Vec<String> {
-        let mut comps = self.continuum.stress_names();
-        if !self.law.as_law().is_linear() {
-            comps.extend(self.continuum.tangent_component_names());
-        }
-        comps
+        self.continuum.stress_names()
     }
 
     /// Linear stress σ = D·ε at one Gauss point (material constants per cell).
@@ -285,19 +278,10 @@ impl Domain for Elasticity {
         }
     }
 
-    /// The geometric stiffness reads the current stress; the consistent tangent,
-    /// the algorithmic moduli the integrator wrote. Both are declared here, once
-    /// per zone, so the kernels below index instead of searching.
+    /// La raideur géométrique lit la contrainte courante ; la tangente, elle,
+    /// ne lit plus rien — elle est évaluée au point.
     fn element_state_reads(&self, kind: MatrixKind) -> Vec<String> {
-        match kind {
-            // La tangente d'une loi **linéaire** est sa raideur : elle lit le
-            // matériau, et surtout pas des modules algorithmiques qu'aucun
-            // intégrateur n'a écrits ici. Déclarer ces lectures ferait échouer
-            // la résolution de zone sur un état qui n'a aucune raison de les
-            // porter. Une loi non linéaire, elle, les produit et les relit.
-            MatrixKind::Tangent if self.law.as_law().is_linear() => Vec::new(),
-            _ => self.continuum.element_state_reads(kind),
-        }
+        self.continuum.element_state_reads(kind)
     }
 
     fn element_geometric(
@@ -311,29 +295,42 @@ impl Domain for Elasticity {
         self.continuum.element_geometric(&geoms[0], state, lay, ke)
     }
 
+    /// The consistent tangent of a linear law is its elastic modulus — constant,
+    /// but a tangent all the same, and it travels the same road as the others.
+    fn tangent_point(
+        &self,
+        _geom: &CellGeom,
+        _g: usize,
+        lay: &ZoneLayout,
+        _deformation: &[f64],
+        _prev: &[f64],
+        material: &[f64],
+        _dt: f64,
+        d: &mut [[f64; 6]; 6],
+    ) -> Result<()> {
+        symmetry::elastic_constitutive_into(
+            material,
+            &lay.material,
+            self.symmetry,
+            self.continuum.kinematics(),
+            self.continuum.space_dim(),
+            d,
+        )?;
+        Ok(())
+    }
+
     fn element_tangent(
         &self,
         geoms: &[CellGeom],
+        lay: &ZoneLayout,
+        deformation: &SubElementField,
+        prev: &SubElementField,
         material: &SubElementField,
-        lay: &ElementLayout,
-        state: &SubElementField,
+        dt: f64,
         ke: &mut [f64],
     ) -> Result<()> {
-        // A linear law's consistent tangent **is** its elastic stiffness, so it
-        // reads the material and ignores the moduli it also declared. A law whose
-        // tangent depends on `ε` wrote `D_alg` into the state; read it back.
-        //
-        // Ce `is_linear()` est lu **par maille**, non par zone — la signature du
-        // trait est par maille. C'est sans conséquence : l'appel s'amortit sur
-        // l'intégration complète d'une maille (`n_gauss × v × dofs²`), là où au
-        // point de Gauss il aurait dominé.
-        if self.law.as_law().is_linear() {
-            self.continuum
-                .element_stiffness(&geoms[0], material, lay, self.symmetry, ke)
-        } else {
-            self.continuum
-                .element_tangent_from_state(&geoms[0], state, lay, ke)
-        }
+        self.continuum
+            .element_tangent_of(self, geoms, lay, deformation, prev, material, dt, ke)
     }
 
     fn element_matrix(

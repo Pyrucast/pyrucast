@@ -279,6 +279,37 @@ impl crate::dump::Dump for DofOrdering {
 
 // ─── SubMatrix ─────────────────────────────────────────────────────────────
 
+/// What a computed block's kernel reads **besides** its material, named per
+/// [`MatrixKind`] rather than encoded in an `Option`.
+///
+/// A stiffness and a mass need nothing; a geometric stiffness needs the current
+/// stress; a consistent tangent needs what the constitutive law needs — because
+/// it is evaluated at the Gauss point rather than read back from a field that
+/// nobody else would consume.
+///
+/// ```
+/// # use pyrucast::containers::matrix::KernelInputs;
+/// // Une raideur ne lit que son matériau — et c'est le défaut, parce que
+/// // c'est le cas de trois genres de matrice sur quatre.
+/// assert!(matches!(KernelInputs::default(), KernelInputs::MaterialOnly));
+/// ```
+#[derive(Clone, Default, Serialize, Deserialize)]
+pub enum KernelInputs {
+    /// Stiffness, mass: the material is enough.
+    #[default]
+    MaterialOnly,
+    /// Geometric stiffness: the current stress.
+    State(Handle<SubElementField>),
+    /// Consistent tangent: exactly what `behavior::integrate` is given. `prev`
+    /// is **not** an `Option` — the rest state is materialised at the operator
+    /// boundary, so below that line there is always a real field.
+    Behavior {
+        deformation: Handle<SubElementField>,
+        prev: Handle<SubElementField>,
+        dt: f64,
+    },
+}
+
 /// One sparse COO block whose DOF layout is fully described by two POI1
 /// sub-meshes and variable-name lists.
 ///
@@ -298,7 +329,7 @@ impl crate::dump::Dump for DofOrdering {
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::ElementField;
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::matrix::{ComputedRecipe, DofOrdering, SubMatrix};
+/// # use pyrucast::containers::matrix::{ComputedRecipe, DofOrdering, KernelInputs, SubMatrix};
 /// # use pyrucast::models::MatrixKind;
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::containers::model::Model;
@@ -323,7 +354,7 @@ impl crate::dump::Dump for DofOrdering {
 ///     fespaces: vec![zone.clone()],
 ///     material: Some(mat.get(0)?),
 ///     kind: MatrixKind::Stiffness,
-///     state: None,
+///     inputs: KernelInputs::MaterialOnly,
 ///     col_fespaces: Vec::new(),
 /// };
 /// let z = SubMatrix::computed(
@@ -355,10 +386,10 @@ pub struct ComputedRecipe {
     /// Defaults to [`MatrixKind::Stiffness`] for backward-compatible deserialization.
     #[serde(default)]
     pub kind: MatrixKind,
-    /// Current stress / algorithmic-tangent field the kernel reads — `Some` only
-    /// for the state-dependent kinds (geometric stiffness, consistent tangent).
+    /// What this kind's kernel reads **besides** the material — see
+    /// [`KernelInputs`].
     #[serde(default)]
-    pub state: Option<Handle<SubElementField>>,
+    pub inputs: KernelInputs,
     /// FE subspaces carrying the **columns** when this block couples two meshes
     /// (an interface exchange law). **Empty** — the overwhelming case — means
     /// rows and columns live on the same mesh and `fespaces` drives both; the
@@ -532,7 +563,7 @@ impl SubMatrix {
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::element_field::ElementField;
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::{ComputedRecipe, DofOrdering, SubMatrix};
+    /// # use pyrucast::containers::matrix::{ComputedRecipe, DofOrdering, KernelInputs, SubMatrix};
     /// # use pyrucast::models::MatrixKind;
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::containers::model::Model;
@@ -560,7 +591,7 @@ impl SubMatrix {
     ///         fespaces: vec![zone.clone()],
     ///         material: Some(mat.get(0)?),
     ///         kind: MatrixKind::Stiffness,
-    ///         state: None,
+    ///         inputs: KernelInputs::MaterialOnly,
     ///         col_fespaces: Vec::new(),
     ///     })?;
     /// assert!(z.recipe().is_some());

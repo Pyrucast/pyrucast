@@ -97,7 +97,7 @@ opérateurs (`from_name`) : c'est ce qu'on écrit, pas une paraphrase.
 |---|---|---|---|---|---|
 | [`heat_conduction`](thermique.md)<br>`isotropic` `orthotropic` `anisotropic` | — | — | capacité `ρ·cp` | flux `K·∇T` | Symétrie matériau **iso / ortho / aniso**. La conductivité isotrope est lue **par point de Gauss** — donc variable à l'intérieur d'une maille ; les constantes orientées le sont par maille. |
 | [`boundary_transfer`](echanges.md)<br>composantes libres | — | — | — | `h·a` | **Aveugle à l'orientation** du maillage de bord : la normale est déjà consommée en écrivant `q·n = h(T − T_ext)`, et la mesure d'intégration est une magnitude. |
-| [`radiation`](thermique.md#rayonnement-à-linfini-stefan-boltzmann) | **analytique**<br>`4σεT³` | — | — | `σε(T⁴ − T_∞⁴)`<br>**+** `ktan` | Non linéaire. La rigidité est le film **linéarisé autour de `T_∞`**, donc constante : c'est l'opérateur dont part Newton. La tangente porte la vraie non-linéarité. Seule physique à déclarer **deux natures**, `[Thermal, Radiation]`. |
+| [`radiation`](thermique.md#rayonnement-à-linfini-stefan-boltzmann) | **analytique**<br>`4σεT³` | — | — | `σε(T⁴ − T_∞⁴)` | Non linéaire. La rigidité est le film **linéarisé autour de `T_∞`**, donc constante : c'est l'opérateur dont part Newton. La tangente porte la vraie non-linéarité. Seule physique à déclarer **deux natures**, `[Thermal, Radiation]`. |
 
 ### Diffusion — primale `c_<espèce>`, duale `j_<espèce>`, `filter("diffusion")`
 
@@ -111,7 +111,7 @@ opérateurs (`from_name`) : c'est ce qu'on écrit, pas une paraphrase.
 | Physique | `tangent` | `geometric` | `mass` | Comportement (`COMP`) | Particularité de calcul |
 |---|---|---|---|---|---|
 | [`elasticity`](mecanique/elasticite.md)<br>`plane_stress` `plane_strain` `axisymmetric` `full_3d` · `isotropic` `orthotropic` `anisotropic` | **analytique**<br>c'est `K` | oui | oui | `σ = D·ε` | Loi linéaire, donc **la tangente *est* la rigidité**. Symétrie matériau iso/ortho/aniso : le repère d'orthotropie passe par des vecteurs du champ matériau, et la rotation du tenseur se fait à l'**ordre 4** plutôt que par une matrice de Bond. |
-| [`plasticity`](mecanique/lois-plastiques.md) — 10 lois<br>`perfect` `isotropic` `drucker_prager` `ottosen` `gurson` `creep_norton` `creep_blackburn` `creep_lemaitre` `viscoplastic_chaboche` `viscoplastic_lemaitre_chaboche` | **analytique** ×2<br>**perturbation** ×8 | oui | oui | `σ`, `ε_p`, `p`<br>+ variables de la loi<br>+ `D_alg` (`ktan_i_j`) | La loi d'écoulement est un **attribut**. Tangente analytique pour les deux lois von Mises, **par perturbation** pour les huit autres — et toujours **symétrisée**. Les cinq lois visqueuses (Norton, Blackburn, Lemaitre, Chaboche…) **erronent sans `dt`** plutôt que d'intégrer comme si le temps n'existait pas. |
+| [`plasticity`](mecanique/lois-plastiques.md) — 10 lois<br>`perfect` `isotropic` `drucker_prager` `ottosen` `gurson` `creep_norton` `creep_blackburn` `creep_lemaitre` `viscoplastic_chaboche` `viscoplastic_lemaitre_chaboche` | **analytique** ×2<br>**perturbation** ×8 | oui | oui | `σ`, `ε_p`, `p`<br>+ variables de la loi | La loi d'écoulement est un **attribut**. Tangente analytique pour les deux lois von Mises, **par perturbation** pour les huit autres — et toujours **symétrisée**. Les cinq lois visqueuses (Norton, Blackburn, Lemaitre, Chaboche…) **erronent sans `dt`** plutôt que d'intégrer comme si le temps n'existait pas. |
 | [`damage`](mecanique/endommagement.md) — 3 lois<br>`mazars` `damage_tc` `sic_sic` | *aucune* | oui | oui | `σ`, `damage`<br>+ histoire de la loi | **Pas de tangente**, délibérément : l'opérateur d'itération reste la rigidité **non endommagée**. Damage TC porte deux histoires indépendantes — c'est ce qui laisse une fissure refermée reprendre toute sa charge, ce qu'un scalaire ne peut pas. |
 
 ### Mécanique — structurel, efforts de section, `filter("mechanical")`
@@ -174,9 +174,9 @@ rayonnement et le transfert d'interface pondèrent par `N` et non par `Bᵀ` —
 leur intégrande est une densité surfacique, pas une grandeur conjuguée d'un
 gradient.
 
-**La tangente stockée est symétrique.** `D_alg` transite par le champ d'état sous
-forme de **triangle supérieur** (`ktan_i_j`, i ≤ j) et est relue en miroir : le
-format ne peut structurellement pas porter une matrice non symétrique. Or un
+**La tangente est symétrisée.** `D_alg` est réduit au triangle supérieur puis
+relu en miroir, un format qui ne peut structurellement pas porter une matrice non
+symétrique. Or un
 écoulement **non associé** — Drucker-Prager, dont la dilatance diffère du
 frottement — en a une. Elle est donc symétrisée, ce qui coûte à Newton son taux
 quadratique sur cette loi, et rien d'autre. Voir

@@ -412,8 +412,7 @@ impl Cube {
     /// Prager) it is the exact statement of what is promised.
     fn check_tangent(&self, base: &[f64], tol: f64) -> Result<()> {
         let strain = deformation(&self.displacement(base)?, &self.fes)?;
-        let state = integrate(&self.model, &strain, None, &self.materials, None)?;
-        let kt = tangent(&self.model, &self.materials, &state)?;
+        let kt = tangent(&self.model, &self.materials, &strain, None, None)?;
 
         let ndof = self.nodes.len() * 3;
         let h = 1e-8;

@@ -118,12 +118,4 @@ pub(crate) trait StatelessLawKind: Sync {
         symmetry: MaterialSymmetry,
         out: &mut [f64],
     ) -> Result<()>;
-
-    /// Whether the tangent is independent of `ε`. Read **once per zone** — it
-    /// decides whether the stiffness *is* the tangent, or merely its
-    /// linearisation at `ε = 0`, and whether the law must emit `D_alg` as state.
-    /// Never consulted at a Gauss point.
-    fn is_linear(&self) -> bool {
-        true
-    }
 }

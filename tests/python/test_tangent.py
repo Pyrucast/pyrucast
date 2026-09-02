@@ -35,8 +35,7 @@ def _uniform_strain(c, nodes, exx):
 
 def _tangent_for(model, fes, materials, u):
     strain = pyrucast.element_field.deformation(u, fes)
-    state = pyrucast.element_field.integrate_behavior(model, strain, materials)
-    return pyrucast.matrix.tangent(model, materials, state)
+    return pyrucast.matrix.tangent(model, materials, strain)
 
 
 def test_elastic_tangent_equals_stiffness():

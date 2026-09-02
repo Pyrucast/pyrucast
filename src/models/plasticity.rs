@@ -220,6 +220,54 @@ impl Plasticity {
     }
 }
 
+impl Plasticity {
+    /// Le préambule commun aux deux noyaux de point : la matière lue par
+    /// position, `ε(B)`, et l'état en A reconstruit en 3-D plein.
+    ///
+    /// Passé par fermeture parce que `PrevState` emprunte un tableau de pile —
+    /// et générique, donc monomorphisé : aucun appel virtuel n'entre ici.
+    fn with_law_inputs<R>(
+        &self,
+        lay: &ZoneLayout,
+        deformation: &[f64],
+        prev: &[f64],
+        material: &[f64],
+        f: impl FnOnce(&MatParams, &[f64; 6], &PrevState) -> Result<R>,
+    ) -> Result<R> {
+        let d = self.continuum.space_dim();
+        let params = MatParams::new(material, &lay.material, &lay.optional_material);
+
+        // End-of-step strain ε(B).
+        let eps_b = read_tensor(
+            deformation,
+            &lay.deformation,
+            strain_slots(d, self.continuum.kinematics()),
+        );
+
+        // The state at A, in `state_reads` order: ε(A), σ(A), ε_p(A), p, then
+        // the law's own variables.
+        let n_stress = stress_slots(d, self.continuum.kinematics()).len();
+        let (i_sigma, i_eps_p, i_p, i_vars) = (6, 6 + n_stress, 12 + n_stress, 13 + n_stress);
+        let mut vars = [0.0_f64; MAX_INTERNAL_VARS];
+        let n_vars = lay.state.len() - i_vars;
+        for (k, v) in vars[..n_vars].iter_mut().enumerate() {
+            *v = prev[lay.state[i_vars + k] as usize];
+        }
+        let prev_state = PrevState {
+            eps: read_tensor(prev, &lay.state[..6], &[0, 1, 2, 3, 4, 5]),
+            sigma: read_tensor(
+                prev,
+                &lay.state[i_sigma..],
+                stress_slots(d, self.continuum.kinematics()),
+            ),
+            eps_p: read_tensor(prev, &lay.state[i_eps_p..], &[0, 1, 2, 3, 4, 5]),
+            p: prev[lay.state[i_p] as usize],
+            vars: &vars[..n_vars],
+        };
+        f(&params, &eps_b, &prev_state)
+    }
+}
+
 impl SubModelKind for Plasticity {
     fn primal_vars(&self) -> Vec<String> {
         (0..self.continuum.space_dim()).map(primal_name).collect()
@@ -335,9 +383,6 @@ impl Domain for Plasticity {
         // The law's **own** internal variables (a back stress, a damage…), which
         // is how a law grows its state without any other file changing.
         comps.extend(self.law.internal_names());
-        // Consistent algorithmic tangent D_alg (upper triangle) — consumed by
-        // the tangent assembler (`crate::ops::matrix::tangent`).
-        comps.extend(self.continuum.tangent_component_names());
         comps
     }
 
@@ -350,6 +395,10 @@ impl Domain for Plasticity {
     /// first step at a Gauss point.
     /// True for the creep and viscoplastic laws, whose answer depends on how
     /// long the step lasted.
+    fn tangent_source(&self) -> crate::models::TangentSource {
+        self.law.tangent_source()
+    }
+
     fn requires_dt(&self) -> bool {
         self.law.is_viscous()
     }
@@ -409,88 +458,90 @@ impl Domain for Plasticity {
         dt: f64,
         out: &mut [f64],
     ) -> Result<()> {
-        let d = self.continuum.space_dim();
-        let params = MatParams::new(material, &lay.material, &lay.optional_material);
-
-        // End-of-step strain ε(B).
-        let eps_b = read_tensor(
+        self.with_law_inputs(
+            lay,
             deformation,
-            &lay.deformation,
-            strain_slots(d, self.continuum.kinematics()),
-        );
+            prev,
+            material,
+            |params, eps_b, prev_state| {
+                let d = self.continuum.space_dim();
+                let n_stress = stress_slots(d, self.continuum.kinematics()).len();
+                let (step, eps_b_full) = self.law.as_law().incremental_step(
+                    eps_b,
+                    prev_state,
+                    params,
+                    self.continuum.kinematics(),
+                    dt,
+                )?;
 
-        // The state at A, in `state_reads` order: ε(A), σ(A), ε_p(A), p, then
-        // the law's own variables.
-        let n_stress = stress_slots(d, self.continuum.kinematics()).len();
-        let (i_sigma, i_eps_p, i_p, i_vars) = (6, 6 + n_stress, 12 + n_stress, 13 + n_stress);
-        let mut vars = [0.0_f64; MAX_INTERNAL_VARS];
-        let n_vars = lay.state.len() - i_vars;
-        for (k, v) in vars[..n_vars].iter_mut().enumerate() {
-            *v = prev[lay.state[i_vars + k] as usize];
-        }
-        let prev_state = PrevState {
-            eps: read_tensor(prev, &lay.state[..6], &[0, 1, 2, 3, 4, 5]),
-            sigma: read_tensor(
-                prev,
-                &lay.state[i_sigma..],
-                stress_slots(d, self.continuum.kinematics()),
-            ),
-            eps_p: read_tensor(prev, &lay.state[i_eps_p..], &[0, 1, 2, 3, 4, 5]),
-            p: prev[lay.state[i_p] as usize],
-            vars: &vars[..n_vars],
-        };
+                let v = n_stress - usize::from(echoes_sigma_zz(d, self.continuum.kinematics()));
+                for r in 0..v {
+                    out[r] = voigt_stress(&step.sigma, d, self.continuum.kinematics(), r);
+                }
+                out[v..v + 6].copy_from_slice(&step.eps_p); // ε_p(B)
+                out[v + 6] = step.p; // p(B)
+                                     // Echo the full-3-D end-of-step strain ε(B), so `prev` carries ε(A) next
+                                     // step (in plane stress this includes the solved out-of-plane ε_zz).
+                out[v + 7..v + 13].copy_from_slice(&eps_b_full);
+                // The plane 2-D duals omit σ_zz; echo it so σ(A) is fully recoverable.
+                // Axisymmetric already carries it (the hoop), so it must not be echoed.
+                let mut base = v + 13;
+                if echoes_sigma_zz(d, self.continuum.kinematics()) {
+                    out[base] = step.sigma[2];
+                    base += 1;
+                }
+                // The law's own internal variables, right after the common state.
+                for (i, value) in step.internal().iter().enumerate() {
+                    out[base + i] = *value;
+                }
+                Ok(())
+            },
+        )
+    }
 
-        let (step, eps_b_full) = self.law.as_law().incremental_step(
-            &eps_b,
-            &prev_state,
-            &params,
-            self.continuum.kinematics(),
-            dt,
-        )?;
-
-        let v = n_stress - usize::from(echoes_sigma_zz(d, self.continuum.kinematics()));
-        for r in 0..v {
-            out[r] = voigt_stress(&step.sigma, d, self.continuum.kinematics(), r);
-        }
-        out[v..v + 6].copy_from_slice(&step.eps_p); // ε_p(B)
-        out[v + 6] = step.p; // p(B)
-                             // Echo the full-3-D end-of-step strain ε(B), so `prev` carries ε(A) next
-                             // step (in plane stress this includes the solved out-of-plane ε_zz).
-        out[v + 7..v + 13].copy_from_slice(&eps_b_full);
-        // The plane 2-D duals omit σ_zz; echo it so σ(A) is fully recoverable.
-        // Axisymmetric already carries it (the hoop), so it must not be echoed.
-        let mut base = v + 13;
-        if echoes_sigma_zz(d, self.continuum.kinematics()) {
-            out[base] = step.sigma[2];
-            base += 1;
-        }
-        // The law's own internal variables, right after the common state.
-        for (i, value) in step.internal().iter().enumerate() {
-            out[base + i] = *value;
-        }
-        base += step.n_vars;
-
-        // Consistent tangent D_alg at the converged step, evaluated at the solved
-        // ε(B) (which carries the plane-stress ε_zz). Emitted (upper triangle)
-        // right after the state, in `ktan_i_j` order.
-        let d3 = self
-            .law
-            .as_law()
-            .consistent_tangent(&eps_b_full, &prev_state, &params, dt)?;
-        let mut dv = [[0.0_f64; 6]; 6];
-        let n = crate::models::symmetry::reduce_to_model_into(
-            &d3,
-            self.continuum.kinematics(),
-            &mut dv,
-        );
-        let mut idx = base;
-        for i in 0..n {
-            for j in i..n {
-                out[idx] = dv[i][j];
-                idx += 1;
-            }
-        }
-        Ok(())
+    /// Le module algorithmique `D_alg` au point — la dérivée du **pas**
+    /// `ε(B) ↦ σ(B)` à état A figé, non une tangente à une surface en un point.
+    /// C'est pourquoi il reçoit exactement les entrées d'`integrate_point` : les
+    /// deux extrémités du pas sont dans sa définition, et une loi dérivée par
+    /// différences finies relance littéralement son retour radial depuis `prev`.
+    ///
+    /// Il n'est appelé que par `ops::matrix::tangent`, jamais par COMP : c'est
+    /// tout l'objet de la séparation, puisque huit lois sur dix le paient douze
+    /// retours radiaux.
+    fn tangent_point(
+        &self,
+        _geom: &CellGeom,
+        _g: usize,
+        lay: &ZoneLayout,
+        deformation: &[f64],
+        prev: &[f64],
+        material: &[f64],
+        dt: f64,
+        d: &mut [[f64; 6]; 6],
+    ) -> Result<()> {
+        self.with_law_inputs(
+            lay,
+            deformation,
+            prev,
+            material,
+            |params, eps_b, prev_state| {
+                // Le pas d'abord : en contraintes planes, c'est lui qui résout la
+                // composante hors plan que la tangente évalue ensuite.
+                let (_, eps_b_full) = self.law.as_law().incremental_step(
+                    eps_b,
+                    prev_state,
+                    params,
+                    self.continuum.kinematics(),
+                    dt,
+                )?;
+                let d3 =
+                    self.law
+                        .as_law()
+                        .consistent_tangent(&eps_b_full, prev_state, params, dt)?;
+                crate::models::symmetry::reduce_to_model_into(&d3, self.continuum.kinematics(), d);
+                Ok(())
+            },
+        )
     }
 
     /// Les mêmes noyaux que l'élasticité, donc les mêmes lectures d'état.
@@ -549,14 +600,15 @@ impl Domain for Plasticity {
     fn element_tangent(
         &self,
         geoms: &[CellGeom],
-        _material: &SubElementField,
-        lay: &ElementLayout,
-        state: &SubElementField,
+        lay: &ZoneLayout,
+        deformation: &SubElementField,
+        prev: &SubElementField,
+        material: &SubElementField,
+        dt: f64,
         ke: &mut [f64],
     ) -> Result<()> {
-        let geom = &geoms[0];
-        let st = state;
-        self.continuum.element_tangent_from_state(geom, st, lay, ke)
+        self.continuum
+            .element_tangent_of(self, geoms, lay, deformation, prev, material, dt, ke)
     }
 }
 
