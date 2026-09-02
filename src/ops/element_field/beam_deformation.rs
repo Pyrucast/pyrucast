@@ -8,15 +8,12 @@
 //! the 1-D beam and a `beam_deformation` for the oriented ones — which was the
 //! same irregularity, one layer down, as the three beam models it served.
 //!
-//! Per element it:
-//!
-//! 1. builds the element's **local axes** (`x'` along the beam; `y'`/`z'` from
-//!    the same automatic reference as the stiffness kernels) — a no-op in 1-D,
-//!    where there is nothing to rotate;
-//! 2. rotates the nodal displacement/rotation into that frame; then
-//! 3. evaluates the generalised strains from the **local** DOFs: axial
-//!    `ε = u'`, curvature `κ = θ'`, and **reduced** shear `γ = w' − θ` with the
-//!    rotation taken at the element centre.
+//! Per element it applies the beam's own strain-displacement matrix
+//! [`crate::models::beam::b_into`] to the nodal degrees of freedom — the
+//! strains *are* `B · u`, and this operator is that product and nothing else.
+//! `B` carries the local axes (`x'` along the beam, `y'`/`z'` from the same
+//! automatic reference as the stiffness kernels) inside its own columns, so
+//! there is no frame to build here and nothing to rotate back.
 //!
 //! The **material** is required, `Φ = 12EI/(G·A_s·L²)` deciding how the
 //! curvature is distributed. A material carrying no shear constants — a
@@ -30,15 +27,15 @@
 //! | 2-D | `u_x, u_y, r_z` | `eps, kappa, gamma` |
 //! | 3-D | six | `eps, kappa_y, kappa_z, torsion, gamma_y, gamma_z` |
 //!
-//! All strains are **element-constant**, written at every Gauss point. Sampling
-//! the shear at the centre rather than at the full Gauss points avoids the
-//! spurious oscillation that reduced integration exists to remove.
+//! The strains are evaluated **at each Gauss point** from the element's own
+//! interpolation: the curvature varies along an unloaded span (`M' = V`) and
+//! only the shear is constant (`V' = 0`). The axial and torsional terms stay
+//! element-constant, their fields being genuinely linear.
 //!
-//! > Since the beams moved to their **exact** closed form, the curvature of the
-//! > real solution varies across the element while this recovery reports a mean.
-//! > It is therefore an approximation owned by the formulation, not a
-//! > consequence of a mis-declared basis — see
-//! > [`crate::models::timoshenko`].
+//! The transpose of the same `B` is what
+//! [`crate::ops::node_field::internal_forces`](fn@crate::ops::node_field::internal_forces)
+//! integrates against the section forces, so a beam's residual and its strains
+//! cannot drift apart.
 //!
 //! Feed the result to [`crate::ops::element_field::behavior::integrate`]; the
 //! beam physics turns it into the section forces.
@@ -51,17 +48,7 @@ use crate::containers::node_field::{NodeField, NodeFieldView};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
-
-/// Output component names of the 1-D beam section strains.
-const COMPONENTS_1D: &[&str] = &["kappa", "gamma"];
-/// Output component names of the 2-D frame section strains.
-const COMPONENTS_2D: &[&str] = &["eps", "kappa", "gamma"];
-/// Output component names of the 3-D frame section strains.
-const COMPONENTS_3D: &[&str] = &["eps", "kappa_y", "kappa_z", "torsion", "gamma_y", "gamma_z"];
-/// Displacement + rotation DOFs read from the nodal field, per space dim.
-const DOFS_1D: &[&str] = &["w", "theta"];
-const DOFS_2D: &[&str] = &["u_x", "u_y", "r_z"];
-const DOFS_3D: &[&str] = &["u_x", "u_y", "u_z", "r_x", "r_y", "r_z"];
+use crate::models::beam::{BeamB, BeamModel};
 
 /// Generalised section strains of a frame displacement/rotation `field` at the
 /// Gauss points of every subspace of `fespace`.
@@ -138,16 +125,11 @@ fn subspace_beam_deformation(
     // One read guard on the subspace, held for every property we read off it.
     let s = fespace.read();
     let space_dim = s.space_dim();
-    let (dofs, out_comps): (&[&str], &[&str]) = match space_dim {
-        1 => (DOFS_1D, COMPONENTS_1D),
-        2 => (DOFS_2D, COMPONENTS_2D),
-        3 => (DOFS_3D, COMPONENTS_3D),
-        d => {
-            return Err(PyrucastError::Message(format!(
-                "beam_deformation: a beam lives in a 1-, 2- or 3-D configuration, got {d}-D"
-            )))
-        }
-    };
+    // La configuration se lit sur la dimension, et avec elle les DDL lus et
+    // les déformations produites — l'opérateur n'a pas sa propre table.
+    let model = BeamModel::from_space_dim(space_dim)
+        .map_err(|e| PyrucastError::Message(format!("beam_deformation: {e}")))?;
+    let (dofs, out_comps) = (model.primal(), model.strains());
     let n_nodes = s.nodes_per_cell()?;
     let n_g = s.gauss_count();
     if n_nodes != 2 {
@@ -193,45 +175,52 @@ fn subspace_beam_deformation(
     };
 
     let n_cells = conn.len() / n_nodes;
+    let n_dof = 2 * model.dofs_per_node();
+    // Les deux tampons vivent hors des boucles : `b_into` réécrit tout le bloc
+    // qu'il occupe, et le vecteur des DDL tient dans douze nombres.
+    let mut b: BeamB = [[0.0; 12]; 6];
+    let mut d = [0.0_f64; 12];
     for cell in 0..n_cells {
         let ids = &conn[cell * n_nodes..(cell + 1) * n_nodes];
         // La ligne matériau de la maille : elle ne change pas d'un point de
         // Gauss au suivant.
         let row = mat.row(cell, 0);
-        // Nodal DOFs and coordinates of the two endpoints.
+        // Nodal DOFs and coordinates of the two endpoints. `d` follows the
+        // columns of `B`: node-major, variable-minor.
         let xa = coords.position(ids[0])?;
         let xb = coords.position(ids[1])?;
-        let da: Vec<f64> = dofs
-            .iter()
-            .map(|c| view.value(ids[0], c))
-            .collect::<Result<_>>()?;
-        let db: Vec<f64> = dofs
-            .iter()
-            .map(|c| view.value(ids[1], c))
-            .collect::<Result<_>>()?;
+        for (k, c) in dofs.iter().enumerate() {
+            d[k] = view.value(ids[0], c)?;
+            d[dofs.len() + k] = view.value(ids[1], c)?;
+        }
+        // `Φ` too is a fact of the cell: it depends on the material and the
+        // span, neither of which moves between Gauss points.
+        let l = span(xa, xb);
+        let mut phi = [0.0_f64; 2];
+        for (plane, slot) in slots.iter().enumerate() {
+            phi[plane] = slot.phi(row, l);
+        }
 
-        // Evaluated **at each Gauss point** from the element's own
-        // interpolation: the curvature varies along an unloaded span (`M' = V`)
-        // and only the shear is constant (`V' = 0`). The previous recovery
-        // reported one element-constant value for both, because a linear
-        // element has nothing else to report.
         for g in 0..n_g {
-            let xi = s.gauss_xi(g)?[0];
             // SEG2's reference runs over [-1, 1]; the beam's own functions over
             // [0, 1].
-            let t = 0.5 * (xi + 1.0);
-            let strains = match space_dim {
-                1 => strains_1d(&slots, row, xa, xb, &da, &db, t)?,
-                2 => strains_2d(&slots, row, xa, xb, &da, &db, t)?,
-                _ => strains_3d(&slots, row, xa, xb, &da, &db, t)?,
-            };
-            debug_assert_eq!(strains.len(), n_comp);
-            for (c, &v) in strains.iter().enumerate() {
-                field.set(cell, g, c, v)?;
+            let xi = 0.5 * (s.gauss_xi(g)?[0] + 1.0);
+            crate::models::beam::b_into(model, xa, xb, phi, xi, &mut b);
+            for (c, brow) in b[..n_comp].iter().enumerate() {
+                field.set(cell, g, c, (0..n_dof).map(|i| brow[i] * d[i]).sum())?;
             }
         }
     }
     Ok(field)
+}
+
+/// The length of a cell, from its two endpoints — the span `Φ` is built on.
+fn span(xa: &[f64], xb: &[f64]) -> f64 {
+    xa.iter()
+        .zip(xb)
+        .map(|(a, b)| (b - a) * (b - a))
+        .sum::<f64>()
+        .sqrt()
 }
 
 /// Where a bending plane's section constants sit in the material row, resolved
@@ -277,152 +266,6 @@ impl BendingSlots {
         let gas = self.shear.map(|(g, a_s)| row[g] * row[a_s]);
         crate::models::beam::phi(ei, gas, l)
     }
-}
-
-/// 1-D beam section strains `(kappa, gamma)` at `t = x/L`, from the nodal DOFs
-/// `[w, theta]`.
-///
-/// There is no local frame to build and no axial term: the axis *is* the mesh,
-/// and a pure-bending beam has no direction to stretch along.
-#[allow(clippy::too_many_arguments)]
-fn strains_1d(
-    slots: &[BendingSlots],
-    row: &[f64],
-    xa: &[f64],
-    xb: &[f64],
-    da: &[f64],
-    db: &[f64],
-    t: f64,
-) -> Result<Vec<f64>> {
-    let l = (xb[0] - xa[0]).abs();
-    let ph = slots[0].phi(row, l);
-    let d = [da[0], da[1], db[0], db[1]];
-    let (kappa, gamma) = crate::models::beam::section_strains(ph, l, &d, t);
-    Ok(vec![kappa, gamma])
-}
-
-/// 2-D frame section strains `(eps, kappa, gamma)` in the element's local
-/// frame, at `t = x/L`, from the nodal DOFs `[u_x, u_y, r_z]`.
-///
-/// The axial strain stays **element-constant**, and correctly so: the axial
-/// field of a bar really is linear.
-#[allow(clippy::too_many_arguments)]
-fn strains_2d(
-    slots: &[BendingSlots],
-    row: &[f64],
-    xa: &[f64],
-    xb: &[f64],
-    da: &[f64],
-    db: &[f64],
-    t: f64,
-) -> Result<Vec<f64>> {
-    let (dx, dy) = (xb[0] - xa[0], xb[1] - xa[1]);
-    let l = (dx * dx + dy * dy).sqrt();
-    let (c, s) = (dx / l, dy / l);
-    // Rotate the in-plane displacement into local axial (u') / transverse (w').
-    let ua = c * da[0] + s * da[1];
-    let wa = -s * da[0] + c * da[1];
-    let ub = c * db[0] + s * db[1];
-    let wb = -s * db[0] + c * db[1];
-    let (ta, tb) = (da[2], db[2]); // rotation is frame-invariant in 2-D
-
-    let eps = (ub - ua) / l;
-    let ph = slots[0].phi(row, l);
-    let (kappa, gamma) = crate::models::beam::section_strains(ph, l, &[wa, ta, wb, tb], t);
-    Ok(vec![eps, kappa, gamma])
-}
-
-/// 3-D frame section strains
-/// `(eps, kappa_y, kappa_z, torsion, gamma_y, gamma_z)` in the element's local
-/// frame, at `t = x/L`, from the nodal DOFs `[u_x, u_y, u_z, r_x, r_y, r_z]`.
-///
-/// The local axes match the [`frame3d`](crate::models::frame3d) stiffness
-/// kernel (`x'` along the beam, `y'`/`z'` from an automatic global reference).
-/// The two bending planes each carry their **own** `Φ`, through `A_sy` and
-/// `A_sz`; the axial and the torsion stay element-constant, their fields being
-/// genuinely linear.
-#[allow(clippy::too_many_arguments)]
-fn strains_3d(
-    slots: &[BendingSlots],
-    row: &[f64],
-    xa: &[f64],
-    xb: &[f64],
-    da: &[f64],
-    db: &[f64],
-    t: f64,
-) -> Result<Vec<f64>> {
-    let d = [xb[0] - xa[0], xb[1] - xa[1], xb[2] - xa[2]];
-    let l = norm(d);
-    let r = local_axes(d); // rows: x', y', z' in global coords
-    let ua = rotate(&r, &da[0..3]);
-    let ra = rotate(&r, &da[3..6]);
-    let ub = rotate(&r, &db[0..3]);
-    let rb = rotate(&r, &db[3..6]);
-
-    let eps = (ub[0] - ua[0]) / l; // u'_,x
-    let torsion = (rb[0] - ra[0]) / l; // θx'_,x
-
-    // x'-y' plane: deflection v', rotation θz' — the pair maps straight onto the
-    // (w, θ) of the shared block, giving `κ_z = θz'_,x` and `γ_y = v'_,x − θz'`.
-    let phi_y = slots[0].phi(row, l);
-    let (kappa_z, gamma_y) =
-        crate::models::beam::section_strains(phi_y, l, &[ua[1], ra[2], ub[1], rb[2]], t);
-    // x'-z' plane: the rotation's sign is opposite — a positive θy' bends
-    // towards −z — so it is fed negated. The curvature comes back negated with
-    // it; the shear does not, `γ_z = w'_,x + θy'` being exactly what the flip
-    // produces.
-    let phi_z = slots[1].phi(row, l);
-    let (minus_kappa_y, gamma_z) =
-        crate::models::beam::section_strains(phi_z, l, &[ua[2], -ra[1], ub[2], -rb[1]], t);
-    Ok(vec![
-        eps,
-        -minus_kappa_y,
-        kappa_z,
-        torsion,
-        gamma_y,
-        gamma_z,
-    ])
-}
-
-// ─── 3-D geometry helpers (mirror `models::frame3d`) ─────────────────────────
-
-fn cross(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
-    [
-        a[1] * b[2] - a[2] * b[1],
-        a[2] * b[0] - a[0] * b[2],
-        a[0] * b[1] - a[1] * b[0],
-    ]
-}
-fn norm(a: [f64; 3]) -> f64 {
-    (a[0] * a[0] + a[1] * a[1] + a[2] * a[2]).sqrt()
-}
-fn normalize(a: [f64; 3]) -> [f64; 3] {
-    let n = norm(a);
-    [a[0] / n, a[1] / n, a[2] / n]
-}
-
-/// Local axes `R = [x'; y'; z']` (rows, in global coords) from the beam
-/// direction `d` — identical to the [`frame3d`](crate::models::frame3d)
-/// stiffness kernel so strains and forces share one orientation convention.
-fn local_axes(d: [f64; 3]) -> [[f64; 3]; 3] {
-    let x = normalize(d);
-    let z_ref = if x[2].abs() > 0.999 {
-        [0.0, 1.0, 0.0]
-    } else {
-        [0.0, 0.0, 1.0]
-    };
-    let y = normalize(cross(z_ref, x));
-    let z = cross(x, y);
-    [x, y, z]
-}
-
-/// `R · v`: express the global 3-vector `v` in the local axes `R`.
-fn rotate(r: &[[f64; 3]; 3], v: &[f64]) -> [f64; 3] {
-    [
-        r[0][0] * v[0] + r[0][1] * v[1] + r[0][2] * v[2],
-        r[1][0] * v[0] + r[1][1] * v[1] + r[1][2] * v[2],
-        r[2][0] * v[0] + r[2][1] * v[1] + r[2][2] * v[2],
-    ]
 }
 
 // ─── Unit tests ────────────────────────────────────────────────────────────

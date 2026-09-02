@@ -43,7 +43,9 @@
 //! [`ModelEmbedded`](crate::atoms::Interpolation::ModelEmbedded) — the
 //! formulation owns its interpolation — and this file is where it is owned.
 
+use crate::containers::element_field::SubElementField;
 use crate::error::{PyrucastError, Result};
+use crate::models::CellGeom;
 use serde::{Deserialize, Serialize};
 
 /// Which configuration a beam is in — the kinematics, not the theory.
@@ -129,6 +131,29 @@ impl BeamModel {
             Self::Planar1d => &["f_w", "m_theta"],
             Self::Frame2d => &["f_x", "f_y", "m_z"],
             Self::Frame3d => &["f_x", "f_y", "f_z", "m_x", "m_y", "m_z"],
+        }
+    }
+
+    /// The **generalised strains** the configuration carries, in the order the
+    /// deformation operator writes them and the section forces are conjugate to.
+    ///
+    /// A pure-bending beam has no direction to stretch along; a space frame
+    /// bends about two axes and twists about the third. The list is the row
+    /// order of [`b_into`].
+    ///
+    /// ```
+    /// # use pyrucast::models::beam::{self, BeamModel};
+    /// assert_eq!(BeamModel::Planar1d.strains(), &["kappa", "gamma"]);
+    /// // Les efforts de section leur sont **appariés par position** : la
+    /// // théorie qui n'a pas de cisaillement s'arrête simplement plus tôt.
+    /// assert_eq!(BeamModel::Frame2d.strains()[0], "eps");
+    /// assert_eq!(BeamModel::Frame3d.strains().len(), 6);
+    /// ```
+    pub fn strains(self) -> &'static [&'static str] {
+        match self {
+            Self::Planar1d => &["kappa", "gamma"],
+            Self::Frame2d => &["eps", "kappa", "gamma"],
+            Self::Frame3d => &["eps", "kappa_y", "kappa_z", "torsion", "gamma_y", "gamma_z"],
         }
     }
 
@@ -305,16 +330,46 @@ pub fn mass_4x4(rho_a: f64, rho_i: f64, ei: f64, gas: Option<f64>, l: f64) -> [[
 ///          - beam::section_strains(0.5, 2.0, &d, 0.9).0).abs() > 1e-9);
 /// ```
 pub fn section_strains(phi: f64, l: f64, d: &[f64; 4], xi: f64) -> (f64, f64) {
+    let b = bending_b(phi, l, xi);
+    (
+        (0..4).map(|i| b[0][i] * d[i]).sum(),
+        (0..4).map(|i| b[1][i] * d[i]).sum(),
+    )
+}
+
+/// The bending block's **strain-displacement matrix** at `ξ = x/L ∈ [0, 1]`,
+/// over `[w_A, θ_A, w_B, θ_B]`: the curvature row `κ = θ'` and the shear row
+/// `γ = w' − θ`.
+///
+/// It is what [`section_strains`] applies to a displacement — the strains *are*
+/// `B · d`, and they used to be written as that product with `B` never named.
+/// Naming it is what lets the internal forces exist: `∫ Bᵀ σ` is the transpose
+/// of this very operator, not a second derivation to keep in step with it.
+///
+/// ```
+/// # use pyrucast::models::beam::{self, BeamModel};
+/// // Les déformations sont `B · d` : l'une des deux écritures est la même
+/// // que l'autre, et c'est celle-ci que la transposée réclame.
+/// let d = [0.1, -0.2, 0.5, 0.3];
+/// let b = beam::bending_b(0.7, 2.0, 0.3);
+/// let (kappa, gamma) = beam::section_strains(0.7, 2.0, &d, 0.3);
+/// assert!(((0..4).map(|i| b[0][i] * d[i]).sum::<f64>() - kappa).abs() < 1e-15);
+/// assert!(((0..4).map(|i| b[1][i] * d[i]).sum::<f64>() - gamma).abs() < 1e-15);
+/// // Sans souplesse de cisaillement la ligne de distorsion est **nulle**,
+/// // ce qui est l'énoncé même d'Euler-Bernoulli.
+/// assert!(beam::bending_b(0.0, 2.0, 0.3)[1].iter().all(|v| v.abs() < 1e-15));
+/// ```
+pub fn bending_b(phi: f64, l: f64, xi: f64) -> [[f64; 4]; 2] {
     let dd = 1.0 / (1.0 + phi);
-    // ∂N_θ/∂ξ — the curvature is its physical derivative, `κ = (1/L)·∂N_θ/∂ξ·d`.
+    // ∂N_θ/∂ξ — the curvature is its physical derivative, `κ = (1/L)·∂N_θ/∂ξ`.
     let dn_t = [
         dd * (6.0 / l) * (2.0 * xi - 1.0),
         dd * (6.0 * xi - (4.0 + phi)),
         dd * (6.0 / l) * (1.0 - 2.0 * xi),
         dd * (6.0 * xi - (2.0 - phi)),
     ];
-    // ∂N_w/∂ξ, for `γ = (1/L)·∂N_w/∂ξ·d − N_θ·d`.
-    let (x2, _) = (xi * xi, ());
+    // ∂N_w/∂ξ, for `γ = (1/L)·∂N_w/∂ξ − N_θ`.
+    let x2 = xi * xi;
     let dn_w = [
         dd * (6.0 * x2 - 6.0 * xi - phi),
         dd * l * (3.0 * x2 - (4.0 + phi) * xi + 1.0 + phi / 2.0),
@@ -322,9 +377,12 @@ pub fn section_strains(phi: f64, l: f64, d: &[f64; 4], xi: f64) -> (f64, f64) {
         dd * l * (3.0 * x2 - (2.0 - phi) * xi - phi / 2.0),
     ];
     let (_, n_t) = shape_functions(phi, l, xi);
-    let kappa: f64 = (0..4).map(|i| dn_t[i] * d[i]).sum::<f64>() / l;
-    let gamma: f64 = (0..4).map(|i| (dn_w[i] / l - n_t[i]) * d[i]).sum();
-    (kappa, gamma)
+    let mut b = [[0.0_f64; 4]; 2];
+    for i in 0..4 {
+        b[0][i] = dn_t[i] / l;
+        b[1][i] = dn_w[i] / l - n_t[i];
+    }
+    b
 }
 
 /// `Φ = 12EI/(G·A_s·L²)`, the ratio the whole element hangs on. `gas = None`
@@ -343,6 +401,224 @@ pub fn phi(ei: f64, gas: Option<f64>, l: f64) -> f64 {
         Some(g) if g.abs() > f64::MIN_POSITIVE => 12.0 * ei / (g * l * l),
         _ => 0.0,
     }
+}
+
+// ─── The strain-displacement matrix ─────────────────────────────────────────
+
+/// A beam's generalised strain-displacement matrix, on the stack.
+///
+/// Rows are the configuration's generalised strains, in the order
+/// [`BeamModel::strains`] names them; columns are the two nodes' **global**
+/// degrees of freedom, node-major and variable-minor — the order every element
+/// matrix of this crate uses. Six by twelve is the space frame's size, and the
+/// two narrower configurations fill the leading block: one buffer serves the
+/// three, and none of them allocates.
+pub type BeamB = [[f64; 12]; 6];
+
+/// The generalised strain-displacement matrix `B` of one beam element at
+/// `ξ = x/L ∈ [0, 1]`: the strains are `B · d`, `d` being the two nodes' global
+/// degrees of freedom.
+///
+/// `phi` carries the shear ratio of each bending plane — one in a 1-D or 2-D
+/// configuration, two in 3-D (`x'-y'` first, then `x'-z'`); a theory with no
+/// shear compliance passes zeros, and its shear rows come back zero with them.
+/// The `[0, 1]` parametrisation is the beam's own, not the `SEG2` reference's.
+///
+/// Every entry of the `strains × 2·dofs_per_node` block is written, so a
+/// caller's buffer needs no clearing between Gauss points; nothing outside that
+/// block is touched.
+///
+/// This is the matrix both directions of the beam were already using without
+/// naming it: the deformation operator applies it to a displacement, the
+/// internal forces integrate its transpose against the section forces. Naming
+/// it makes them one derivation read forwards and backwards, instead of two
+/// kept in step by hand.
+///
+/// ```
+/// # use pyrucast::models::beam::{self, BeamModel};
+/// // `B · d` **est** ce que `section_strains` calcule : la configuration
+/// // 1-D n'est rien d'autre que le bloc de flexion.
+/// let mut b: beam::BeamB = [[0.0; 12]; 6];
+/// beam::b_into(BeamModel::Planar1d, &[0.0], &[2.0], [0.8, 0.0], 0.3, &mut b);
+/// let d = [0.1, -0.2, 0.5, 0.3];
+/// let (kappa, _) = beam::section_strains(0.8, 2.0, &d, 0.3);
+/// assert!(((0..4).map(|i| b[0][i] * d[i]).sum::<f64>() - kappa).abs() < 1e-15);
+/// // Un mouvement de **corps rigide** ne déforme rien : le portique plan
+/// // translaté en bloc ne s'allonge, ne fléchit ni ne distord.
+/// beam::b_into(BeamModel::Frame2d, &[0.0, 0.0], &[3.0, 4.0], [0.5, 0.0], 0.4, &mut b);
+/// let t = [1.0, 2.0, 0.0, 1.0, 2.0, 0.0];
+/// for row in &b[..3] {
+///     assert!((0..6).map(|i| row[i] * t[i]).sum::<f64>().abs() < 1e-12);
+/// }
+/// ```
+pub fn b_into(model: BeamModel, xa: &[f64], xb: &[f64], phi: [f64; 2], xi: f64, b: &mut BeamB) {
+    match model {
+        // No local frame to build and no axial term: the axis *is* the mesh,
+        // and a pure-bending beam has no direction to stretch along.
+        BeamModel::Planar1d => {
+            let l = (xb[0] - xa[0]).abs();
+            let bb = bending_b(phi[0], l, xi);
+            b[0][..4].copy_from_slice(&bb[0]);
+            b[1][..4].copy_from_slice(&bb[1]);
+        }
+        BeamModel::Frame2d => {
+            let (dx, dy) = (xb[0] - xa[0], xb[1] - xa[1]);
+            let l = (dx * dx + dy * dy).sqrt();
+            let (c, s) = (dx / l, dy / l);
+            // ε = (u'_B − u'_A)/L, the axial displacement being the global pair
+            // projected on the axis. It stays element-constant, and correctly
+            // so: the axial field of a bar really is linear.
+            b[0][..6].copy_from_slice(&[-c / l, -s / l, 0.0, c / l, s / l, 0.0]);
+            // The bending block reads the transverse deflection — the global
+            // pair projected on the normal — and the rotation, which is frame
+            // invariant in 2-D.
+            let bb = bending_b(phi[0], l, xi);
+            for (row, out) in bb.iter().zip(b[1..3].iter_mut()) {
+                out[..6].copy_from_slice(&[
+                    -s * row[0],
+                    c * row[0],
+                    row[1],
+                    -s * row[2],
+                    c * row[2],
+                    row[3],
+                ]);
+            }
+        }
+        BeamModel::Frame3d => {
+            let d = [xb[0] - xa[0], xb[1] - xa[1], xb[2] - xa[2]];
+            let l = norm(d);
+            let r = local_axes(d); // rows: x', y', z' in global coordinates
+                                   // ε = u'_,x and the torsion θx'_,x — the axis row of the triad,
+                                   // differenced over the span. Both stay element-constant, their
+                                   // fields being genuinely linear.
+            for j in 0..3 {
+                let axis = r[0][j] / l;
+                (b[0][j], b[0][3 + j], b[0][6 + j], b[0][9 + j]) = (-axis, 0.0, axis, 0.0);
+                (b[3][j], b[3][3 + j], b[3][6 + j], b[3][9 + j]) = (0.0, -axis, 0.0, axis);
+            }
+            // x'-y' plane: the deflection v' is the y' row on the translations,
+            // the rotation θz' the z' row on the rotations — the pair maps
+            // straight onto the (w, θ) of the shared block, giving `κ_z` and
+            // `γ_y`.
+            let bxy = bending_b(phi[0], l, xi);
+            plane_rows(&bxy[0], &r[1], &r[2], 1.0, &mut b[2]);
+            plane_rows(&bxy[1], &r[1], &r[2], 1.0, &mut b[4]);
+            // x'-z' plane: the rotation's sign is opposite — a positive θy'
+            // bends towards −z — so it is fed negated. The curvature comes back
+            // negated with it; the shear does not, `γ_z = w'_,x + θy'` being
+            // exactly what the flip produces.
+            let bxz = bending_b(phi[1], l, xi);
+            plane_rows(&bxz[0], &r[2], &r[1], -1.0, &mut b[1]);
+            for v in b[1].iter_mut() {
+                *v = -*v;
+            }
+            plane_rows(&bxz[1], &r[2], &r[1], -1.0, &mut b[5]);
+        }
+    }
+}
+
+/// One row of a bending block, scattered onto the twelve global degrees of
+/// freedom of a space frame: its `[w_A, θ_A, w_B, θ_B]` are the triad row
+/// `deflection` on each node's translation triple, and `rotation` — taken with
+/// `sign` — on each rotation triple.
+fn plane_rows(
+    row: &[f64; 4],
+    deflection: &[f64; 3],
+    rotation: &[f64; 3],
+    sign: f64,
+    out: &mut [f64; 12],
+) {
+    for j in 0..3 {
+        out[j] = row[0] * deflection[j];
+        out[3 + j] = row[1] * sign * rotation[j];
+        out[6 + j] = row[2] * deflection[j];
+        out[9 + j] = row[3] * sign * rotation[j];
+    }
+}
+
+/// Internal forces of one beam cell, `f += Σ_g Bᵀ σ |J| w` — the transpose of
+/// [`b_into`], integrated against the section forces.
+///
+/// `forces` gives, in the [`BeamModel::strains`] order, where each section force
+/// sits in the state row. It may be **short**: the strains a theory conjugates a
+/// force with are the leading ones, so a theory that reports no shear force
+/// simply stops before the shear rows, and those rows then weigh nothing.
+/// `shear` gives where the shear ratios `Φ` sit — empty where the theory has no
+/// shear compliance, one entry per bending plane otherwise.
+///
+/// No validation and no allocation: this runs at every Gauss point of every
+/// cell, and the caller resolved the layout once for the zone.
+pub(crate) fn internal_force_into(
+    model: BeamModel,
+    geom: &CellGeom,
+    stress: &SubElementField,
+    forces: &[u32],
+    shear: &[u32],
+    fe: &mut [f64],
+) {
+    let n_dof = 2 * model.dofs_per_node();
+    let (xa, xb) = (geom.node_coord(0), geom.node_coord(1));
+    // Le tampon vit hors de la boucle des points de Gauss, comme partout
+    // ailleurs : `b_into` réécrit tout le bloc qu'il occupe.
+    let mut b: BeamB = [[0.0; 12]; 6];
+    for g in 0..geom.n_gauss {
+        let row = stress.row(geom.cell, g);
+        // Absent, `Φ` vaut zéro — et cette absence *est* l'énoncé qu'il n'y a
+        // pas de souplesse au cisaillement, non un repli.
+        let mut phi = [0.0_f64; 2];
+        for (plane, &slot) in shear.iter().enumerate() {
+            phi[plane] = row[slot as usize];
+        }
+        // The `SEG2` reference runs over [−1, 1], the beam's own functions
+        // over [0, 1].
+        let xi = 0.5 * (geom.gauss_xi(g)[0] + 1.0);
+        b_into(model, xa, xb, phi, xi, &mut b);
+        let w = geom.det_j_w(g);
+        for (k, &slot) in forces.iter().enumerate() {
+            let s = row[slot as usize] * w;
+            for i in 0..n_dof {
+                fe[i] += b[k][i] * s;
+            }
+        }
+    }
+}
+
+// ─── The 3-D triad ──────────────────────────────────────────────────────────
+
+fn cross(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+
+fn norm(a: [f64; 3]) -> f64 {
+    (a[0] * a[0] + a[1] * a[1] + a[2] * a[2]).sqrt()
+}
+
+fn normalize(a: [f64; 3]) -> [f64; 3] {
+    let n = norm(a);
+    [a[0] / n, a[1] / n, a[2] / n]
+}
+
+/// Local axes `R = [x'; y'; z']` (rows, in global coordinates) of a member
+/// pointing along `d`: `x'` along the beam, `y'`/`z'` from an automatic
+/// global-Z reference (global Y for a member within a thousandth of vertical).
+///
+/// The same convention as the [`frame3d`](crate::models::frame3d) stiffness
+/// kernel, so strains, forces and stiffness share one orientation — which is
+/// what makes `∫ Bᵀσ` and `K·u` comparable at all.
+fn local_axes(d: [f64; 3]) -> [[f64; 3]; 3] {
+    let x = normalize(d);
+    let z_ref = if x[2].abs() > 0.999 {
+        [0.0, 1.0, 0.0]
+    } else {
+        [0.0, 0.0, 1.0]
+    };
+    let y = normalize(cross(z_ref, x));
+    let z = cross(x, y);
+    [x, y, z]
 }
 
 #[cfg(test)]
