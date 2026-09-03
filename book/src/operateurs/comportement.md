@@ -16,7 +16,8 @@ l'état convergé du **début de pas A** et la déformation de **fin de pas B**.
 
 1. l'**entrée de déformation** `ε(B)` est construite **séparément et
    géométriquement** par [`gradient`](champs.md) (`∇T`…), [`deformation`](champs.md)
-   (`ε`) ou [`beam_deformation`](champs.md) (`κ, γ`) — ces opérateurs ne dépendent
+   (`ε`), [`beam_deformation`](champs.md) (`κ, γ`) ou
+   [`shell_deformation`](champs.md) (`ε, κ, γ`) — ces opérateurs ne dépendent
    que de l'espace EF, pas du modèle ; le choix de *quelle* déformation nourrir
    reste donc à l'appelant ;
 2. `prev` est l'**état convergé de A** — la **sortie du pas précédent** : la
@@ -57,6 +58,15 @@ tout l'intérêt d'intégrer le comportement exactement.
 
 ```python
 {{#include ../../../tests/python/test_doc_ops_physiques.py:beam_deformation}}
+```
+
+## Exemple : résultantes d'une coque
+
+Le même montage, avec la formulation en argument : ce sont ses lignes de
+flexion qui distinguent `thick` de `kirchhoff`.
+
+```python
+{{#include ../../../tests/python/test_doc_ops_physiques.py:shell_deformation}}
 ```
 
 Les pages [Barre](../mecanique/truss.md), [Élasticité](../mecanique/elasticite.md)

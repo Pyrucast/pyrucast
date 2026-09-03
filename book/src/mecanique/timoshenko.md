@@ -172,6 +172,16 @@ L'opérateur **exige le matériau**, et c'est la signature honnête : `Φ` en
 dépend, donc la distribution de courbure aussi. On ne reconstitue pas la
 courbure d'une poutre sans connaître sa raideur de cisaillement.
 
+**Le résidu, et pourquoi `Φ` est dans l'état.** Les forces internes intègrent le
+transposé du **même** `B` (`models::beam::b_into`), si bien que `∫ Bᵀσ` vaut
+`K·u` exactement — la loi de section étant linéaire. Mais le noyau qui les
+calcule reçoit la géométrie et l'état, jamais le matériau : le `B` d'un
+continuum est le gradient symétrique et ignore tout module, ce seam n'a donc
+jamais eu à en porter un. Le comportement rend par conséquent `Φ` (`phi`, ou
+`phi_y` et `phi_z` en spatial) à côté des efforts de section. C'est la seule
+grandeur non conjuguée que ce dépôt garde en état, et elle le mérite : le résidu
+la relit à **chaque** itération de Newton.
+
 Le repère local, lui, est déduit automatiquement de la géométrie (référence
 globale Z, ou Y pour une barre verticale), ce qui convient aux sections
 symétriques.

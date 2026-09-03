@@ -413,6 +413,15 @@ pub fn phi(ei: f64, gas: Option<f64>, l: f64) -> f64 {
 /// matrix of this crate uses. Six by twelve is the space frame's size, and the
 /// two narrower configurations fill the leading block: one buffer serves the
 /// three, and none of them allocates.
+///
+/// ```
+/// # use pyrucast::models::beam::{self, BeamModel};
+/// // Six lignes sur douze colonnes : la taille du portique spatial, celle
+/// // qui contient les deux autres.
+/// let b: beam::BeamB = [[0.0; 12]; 6];
+/// assert_eq!(b.len(), BeamModel::Frame3d.strains().len());
+/// assert_eq!(b[0].len(), 2 * BeamModel::Frame3d.dofs_per_node());
+/// ```
 pub type BeamB = [[f64; 12]; 6];
 
 /// The generalised strain-displacement matrix `B` of one beam element at

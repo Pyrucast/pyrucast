@@ -369,7 +369,7 @@ impl SubModelKind for Shell {
     }
 
     /// Internal forces `f = ∫ Bᵀ σ dA` — the **transpose** of the `B` this
-    /// physics builds its stiffness from ([`b_into`], [`shear_b_into`]),
+    /// physics builds its stiffness from (`b_into`, `shear_b_into`),
     /// integrated against the generalised forces. The continuum default reads a
     /// Voigt stress tensor, which a field carrying `N`, `M` and `Q` has never
     /// had.
@@ -712,6 +712,11 @@ pub(crate) fn drilling_law(e: f64, nu: f64, h: f64) -> f64 {
 /// interpolated field and whose curvature is therefore its plain gradient; the
 /// mid-side elimination for [discrete Kirchhoff](kirchhoff), which is where that
 /// formulation's whole content lives.
+// `Direct` carries nothing and `Discrete` a kilobyte and a half of elimination.
+// Boxing would even the two out, at the price of one heap allocation **per
+// cell**, in a loop where everything else — the 24×24 element matrix included —
+// lives on the stack. The waste is a stack offset; the cure would be a malloc.
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum BendingSetup {
     /// The rotation is a field of its own: nothing to eliminate first.
     Direct,

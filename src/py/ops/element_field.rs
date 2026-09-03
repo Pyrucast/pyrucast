@@ -132,6 +132,36 @@ pub fn beam_deformation(
     Ok(PyElementField { inner: ef })
 }
 
+/// Generalised **strains of a shell** at the Gauss points — the geometric
+/// producer of the behaviour input for `shell`.
+///
+/// `shell_deformation(field, fespace, model)` with `model` the formulation
+/// (`"thick"` or `"kirchhoff"`), which decides the bending rows and whether a
+/// transverse shear is reported at all:
+///
+/// | formulation | components produced |
+/// |---|---|
+/// | `thick` | `eps_xx…eps_xy`, `kappa_xx…kappa_xy`, `drill`, `gamma_xz, gamma_yz` |
+/// | `kirchhoff` | the same, without the two shear strains |
+///
+/// All in the element's **local** frame. The transverse shear is
+/// element-constant, sampled at the reduced point the stiffness integrates it
+/// at — anywhere else would report a strain the element does not carry.
+///
+/// Feed the result to `integrate_behavior` to obtain the generalised forces
+/// (`N = D_m·eps`, `M = D_b·kappa`, `Q = D_s·gamma`, and the drilling moment).
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn shell_deformation(
+    field: PyRef<PyNodeField>,
+    fespace: PyRef<PyFiniteElementSpace>,
+    model: &str,
+) -> PyResult<PyElementField> {
+    let model = <crate::models::shell::ShellModel as crate::named::Named>::parse(model)?;
+    let ef = crate::ops::element_field::shell_deformation(&field.inner, &fespace.inner, model)?;
+    Ok(PyElementField { inner: ef })
+}
+
 /// Build the material `SubElementField` of one sub-model.
 ///
 /// `sub_material_field(sub_model, [("k", 1.0), ...])` — fresh

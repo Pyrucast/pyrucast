@@ -45,6 +45,12 @@ matière) et non une béquille numérique. Une pénalité diagonale serait le ra
 tentant, et serait **fausse** : elle s'oppose à une rotation rigide de la facette
 autour de sa normale, qui ne coûte aucune énergie. C'est ce que vérifie un test.
 
+Et puisque cette contrainte **travaille**, elle a un effort conjugué : le
+comportement rend `M_drill = α·G·h·(θ_z − ω_z)` au même titre que `N_xx` ou
+`M_xx`. Il a longtemps manqué à la liste — non par choix, mais parce que
+personne n'avait encore demandé à une coque son résidu. Un `∫ Bᵀσ` qui
+l'omettrait serait faux du terme même qui désingularise l'élément.
+
 ## Le repère local est par élément
 
 Les DDL nodaux étant globaux, la rotation local → global doit être une matrice
@@ -244,8 +250,24 @@ tenir cohérente avec la première.
 
 Pas de déformation de cisaillement, donc pas de \\( Q \\) issu d'une loi de
 comportement : l'effort tranchant d'une plaque mince est une **réaction**,
-retrouvée par le gradient des moments. Le comportement s'arrête aux six
-résultantes de membrane et de flexion, là où `thick` en rend huit.
+retrouvée par le gradient des moments. Le comportement s'arrête aux sept
+résultantes de membrane, de flexion et de vrillage, là où `thick` en rend neuf.
+
+## Un seul `B`, lu dans les deux sens
+
+Les deux formulations bâtissent leurs lignes de `B` au même endroit
+(`models::shell::b_into`), et ne diffèrent que par les trois de flexion — ce qui
+*est* la différence entre elles. La rigidité en intègre `Bᵀ D B`, les
+[forces internes](../operateurs/champs.md) le transposé `Bᵀ σ`, puis ramènent le
+résultat aux axes globaux par la transposée du trièdre de la facette.
+
+Les déformations, elles, s'obtiennent par
+[`shell_deformation`](../operateurs/champs.md) — le produit `B · u`. Sa
+particularité tient à la double quadrature : membrane, flexion et vrillage à
+chaque point de Gauss, cisaillement transverse **au seul point réduit**, écrit
+ensuite à tous. C'est le pendant de l'intégration réduite de la rigidité, et
+c'est ce qui fait tomber `∫ Bᵀσ` exactement sur `K·u` — ce que mesure
+`tests/internal_forces.rs`, pour les deux formulations sur TRI3 et QUA4.
 
 ## Mise en donnée (Rust, testé)
 

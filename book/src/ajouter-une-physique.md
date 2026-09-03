@@ -346,8 +346,23 @@ disperse aux nœuds de son support. Le noyau élémentaire par défaut est celui
 la mécanique des milieux continus — `f_{i,a} = Σ_g Σ_b (∂N_i/∂x_b) σ_ab`, lu en
 nommage Voigt (`sigma_xx`, `sigma_xy`, …), terme de cerceau compris en
 axisymétrie. Une physique dont le dual n'est **pas** un vecteur déplacement
-(thermique, barre, poutre) redéfinit `internal_force_element`. Pour une loi
-linéaire, le résultat vaut `K·u`.
+(thermique, barre, poutre, coque) redéfinit `internal_force_element`. Pour une
+loi linéaire, le résultat vaut `K·u`.
+
+Redéfinir, c'est écrire le transposé du `B` que la physique intègre déjà dans sa
+rigidité — non en dériver un second. Les structurels rendent donc ce `B`
+explicite et le partagent entre les deux sens : `models::beam::b_into` pour les
+poutres, `models::shell::b_into` pour les coques. `tests/internal_forces.rs`
+mesure l'égalité `f_int == K·u` qui en découle, et elle est **exacte** : la loi
+d'un élément structurel est linéaire, il n'y a pas de tolérance physique à
+choisir.
+
+Le noyau reçoit la géométrie et l'**état**, jamais le matériau — le `B` d'un
+continuum est le gradient symétrique, il ignore tout module. Une physique dont
+le `B` dépend, lui, du matériau doit donc lui faire porter ce dont il a besoin :
+[`Timoshenko`](mecanique/timoshenko.md) ajoute `Φ` à son comportement, seule
+grandeur non conjuguée que ce dépôt garde en état, et elle se justifie parce que
+le résidu la relit à **chaque** itération de Newton.
 
 ### Le parallélisme est gratuit (et invisible)
 

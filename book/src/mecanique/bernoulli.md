@@ -132,6 +132,17 @@ Le comportement (`COMP`) rend les efforts de section — `M` en 1-D, `N, M` en
 plan, `N, M_y, M_z, T` dans l'espace — par une loi linéaire, comme tout élément
 structural.
 
+Elle n'en rend **aucun** de cisaillement, et la liste s'arrête donc plus tôt que
+celle de [Timoshenko](timoshenko.md). Ce n'est pas une omission : Euler-Bernoulli
+*est* `Φ = 0`, donc les lignes de cisaillement de son `B` sont nulles, et il n'y
+a rien à leur apparier. Les deux absences sont un seul énoncé — c'est aussi
+pourquoi cette théorie n'a pas à porter `Φ` dans son état, là où l'autre le doit.
+
+Les **forces internes** intègrent le transposé du même `B`
+(`models::beam::b_into`) que la rigidité : `∫ Bᵀσ` vaut `K·u` exactement, la loi
+étant linéaire. C'est ce que mesure `tests/internal_forces.rs`, dans les trois
+configurations.
+
 ## Mise en donnée (Rust, testé)
 
 ```rust,ignore

@@ -16,6 +16,7 @@ from ._pyrucast import (
     interp_to_gauss as interp_to_gauss,
     material_field as material_field,
     material_field_per_sub_model as material_field_per_sub_model,
+    shell_deformation as shell_deformation,
     sub_material_field as sub_material_field,
     thermal_strain as thermal_strain,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "interp_to_gauss",
     "material_field",
     "material_field_per_sub_model",
+    "shell_deformation",
     "sub_material_field",
     "thermal_strain",
 ]

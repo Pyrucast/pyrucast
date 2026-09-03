@@ -82,7 +82,7 @@ Résolution;KRES;Résolution avec conditions (rigidité + blocages);solve
 Résolution;CONDENSATION;Élimination des relations linéaires (maître/esclave) au lieu de multiplicateurs;solve_eliminate
 Résolution;RESO (INEG);Résolution avec relations unilatérales (statut actif/inactif);solve_unilateral
 Champs - dérivation;GRAD;Gradient d'un champ aux points de Gauss;gradient
-Champs - dérivation;EPSI;Déformations à partir d'un déplacement;deformation / beam_deformation
+Champs - dérivation;EPSI;Déformations à partir d'un déplacement;deformation / beam_deformation / shell_deformation
 Champs - dérivation;SIGM;Contraintes à partir des déformations;integrate_behavior
 Champs - dérivation;REAC;Réactions nodales;—
 Champs - extraction;EXCO;Extrait/renomme une composante d'un champ;filter_components (extraction, str ou liste) / rename_component (renommage)

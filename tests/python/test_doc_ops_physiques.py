@@ -154,6 +154,30 @@ forces = pyrucast.element_field.integrate_behavior(model, eps, materials)
 # ANCHOR_END: beam_deformation
 assert len(forces) == 1
 
+# ── shell deformation ──────────────────────────────────────
+
+_espace = pyrucast.Coords(3)
+_c = [_espace.add_node(p) for p in ([0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0])]
+_coques = pyrucast.Mesh(_espace, "TRI3")
+_coques.unit().add_cell(_c)
+fes = pyrucast.FiniteElementSpace(_coques)
+model = pyrucast.model.shell(fes, "thick")
+materials = pyrucast.element_field.material_field(
+    model, [("E", 210_000.0), ("nu", 0.3), ("h", 2e-2)]
+)
+solution = pyrucast.NodeField(
+    pyrucast.mesh.poi1_from_nodes(_c),
+    ["u_x", "u_y", "u_z", "r_x", "r_y", "r_z"],
+)
+# ANCHOR: shell_deformation
+# Solution (six DDL par nœud) déjà obtenue par le solveur.
+eps = pyrucast.element_field.shell_deformation(solution, fes, "thick")
+forces = pyrucast.element_field.integrate_behavior(model, eps, materials)
+# forces porte les résultantes de membrane N, de flexion M, le moment de
+# vrillage M_drill, et — en `thick` — l'effort tranchant Q.
+# ANCHOR_END: shell_deformation
+assert len(forces) == 1
+
 # ── forces internes ────────────────────────────────────────
 
 _, _, fes, n = _plaque_2d()

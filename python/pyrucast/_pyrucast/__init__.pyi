@@ -122,6 +122,7 @@ __all__ = [
     "select",
     "set_positions",
     "shell",
+    "shell_deformation",
     "sin",
     "sinh",
     "skin",
@@ -1506,7 +1507,7 @@ class Model:
         r"""
         Voir `pyrucast.matrix.geometric`.
         """
-    def tangent_matrix(self, materials: ElementField, state: ElementField) -> Matrix:
+    def tangent_matrix(self, materials: ElementField, deformation: ElementField, prev: typing.Optional[ElementField] = None, dt: typing.Optional[builtins.float] = None) -> Matrix:
         r"""
         Voir `pyrucast.matrix.tangent`.
         """
@@ -4121,6 +4122,28 @@ def shell(fespace: FiniteElementSpace, model: builtins.str) -> Model:
     has no constitutive `Q`, only a reaction.
     """
 
+def shell_deformation(field: NodeField, fespace: FiniteElementSpace, model: builtins.str) -> ElementField:
+    r"""
+    Generalised **strains of a shell** at the Gauss points — the geometric
+    producer of the behaviour input for `shell`.
+    
+    `shell_deformation(field, fespace, model)` with `model` the formulation
+    (`"thick"` or `"kirchhoff"`), which decides the bending rows and whether a
+    transverse shear is reported at all:
+    
+    | formulation | components produced |
+    |---|---|
+    | `thick` | `eps_xx…eps_xy`, `kappa_xx…kappa_xy`, `drill`, `gamma_xz, gamma_yz` |
+    | `kirchhoff` | the same, without the two shear strains |
+    
+    All in the element's **local** frame. The transverse shear is
+    element-constant, sampled at the reduced point the stiffness integrates it
+    at — anywhere else would report a strain the element does not carry.
+    
+    Feed the result to `integrate_behavior` to obtain the generalised forces
+    (`N = D_m·eps`, `M = D_b·kappa`, `Q = D_s·gamma`, and the drilling moment).
+    """
+
 def sin(field: typing.Any) -> typing.Any:
     r"""
     Element-wise sine of a field (radians).
@@ -4303,11 +4326,12 @@ def tan(field: typing.Any) -> typing.Any:
     Element-wise tangent of a field (radians).
     """
 
-def tangent(model: Model, materials: ElementField, state: ElementField) -> Matrix:
+def tangent(model: Model, materials: ElementField, deformation: ElementField, prev: typing.Optional[ElementField] = None, dt: typing.Optional[builtins.float] = None) -> Matrix:
     r"""
     Assemble the consistent (algorithmic) tangent `K_t = ∫ Bᵀ D_alg B` of `model`
-    (Cast3M `KTAN`), from the behaviour `state` (which carries `D_alg` besides the
-    stress). `materials` resolves each zone, like [`stiffness`].
+    (Cast3M `KTAN`). `D_alg` is evaluated **at the Gauss point**, from the same
+    inputs `integrate_behavior` takes — no field of moduli is materialised, since
+    this assembler would be its only reader. `prev=None` means the rest state.
     """
 
 def tanh(field: typing.Any) -> typing.Any:

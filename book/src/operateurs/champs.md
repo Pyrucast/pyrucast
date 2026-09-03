@@ -269,14 +269,53 @@ composantes (`F_x, F_y, F_z`) ; chaque sous-espace donne une zone de sortie à
 une composante `"div"`. Ce sont des **quantités intégrées**, pas les valeurs
 ponctuelles de `∇·F` (pas de projection L²).
 
-### `beam_deformation(field, fespace)` → `ElementField`
+### `beam_deformation(field, fespace, material)` → `ElementField`
 
-Déformations de section d'une poutre de [Timoshenko](../mecanique/timoshenko.md)
-à partir d'un champ `(w, theta)` : la **courbure** `κ = θ'` et la **distorsion
-de cisaillement** `γ = w' − θ`. Les deux sont pris **constants par élément** —
-`γ` échantillonné au **centre** (point réduit), ce qui élimine le cisaillement
-parasite. Le champ doit porter les composantes `"w"` et `"theta"`. Le résultat
-se donne au [comportement](comportement.md) pour obtenir les efforts de section.
+Déformations **généralisées** d'une poutre — [Bernoulli](../mecanique/bernoulli.md)
+comme [Timoshenko](../mecanique/timoshenko.md) — à partir d'un champ de
+déplacements et de rotations. Un opérateur pour les trois configurations, lues
+sur la dimension du maillage :
+
+| `Coords` | DDL lus | composantes produites |
+|---|---|---|
+| 1-D | `w, theta` | `kappa, gamma` |
+| 2-D | `u_x, u_y, r_z` | `eps, kappa, gamma` |
+| 3-D | six | `eps, kappa_y, kappa_z, torsion, gamma_y, gamma_z` |
+
+C'est le produit `B · u`, avec le `B` de l'élément
+(`models::beam::b_into`) — celui-là même dont la rigidité intègre `Bᵀ D B` et
+dont les [forces internes](champs.md) intègrent le transposé. Les déformations
+sont évaluées **à chaque point de Gauss** : la courbure varie le long d'une
+travée non chargée (`M' = V`), seul le cisaillement est constant (`V' = 0`).
+
+Le **matériau** est exigé, et c'est la signature honnête : `Φ = 12EI/(G·A_s·L²)`
+décide de la distribution de courbure. Un matériau sans constantes de
+cisaillement — celui d'une poutre de Bernoulli, qui ne demande ni `G` ni `A_s` —
+signifie `Φ = 0`, si bien que le même opérateur sert les deux théories sans
+qu'on ait à lui dire laquelle. Le résultat se donne au
+[comportement](comportement.md) pour obtenir les efforts de section.
+
+### `shell_deformation(field, fespace, model)` → `ElementField`
+
+Déformations généralisées d'une [coque](../mecanique/coques.md), depuis les six
+DDL `u_x…u_z, r_x…r_z`. `model` est la formulation, `"thick"` ou
+`"kirchhoff"` : les lignes de membrane, de vrillage et de cisaillement sont
+partagées, mais celles de **flexion** sont toute la différence entre les deux.
+
+| formulation | composantes produites |
+|---|---|
+| `thick` | `eps_xx, eps_yy, eps_xy`, `kappa_xx, kappa_yy, kappa_xy`, `drill`, `gamma_xz, gamma_yz` |
+| `kirchhoff` | les mêmes, sans les deux déformations de cisaillement |
+
+Toutes dans le repère **local** de la facette. `drill` est le résidu de
+vrillage `θ_z − ω_z`, dont l'effort conjugué est un moment que la rigidité
+intègre comme les autres.
+
+Le cisaillement transverse est **constant par élément**, échantillonné au point
+réduit — le point même où la rigidité l'intègre. Ce n'est pas une
+simplification : c'est l'intégration réduite qui empêche une coque mince de
+bloquer, lue de l'autre côté. L'échantillonner ailleurs rapporterait une
+déformation que l'élément ne porte pas.
 
 ## Maths élément par élément
 

@@ -120,8 +120,8 @@ opérateurs (`from_name`) : c'est ce qu'on écrit, pas une paraphrase.
 |---|---|---|---|---|---|
 | [`truss`](mecanique/truss.md) | — | oui `N/L·P` | oui `ρA` | `N = E·A·ε` | Forme fermée **globale** : la direction vient des coordonnées, sans matrice de repère. Marche en 1-D, 2-D et 3-D sans changement. |
 | [`bernoulli`](mecanique/bernoulli.md)<br>`aucun tag` | — | oui¹ | oui | `M`<br>`N, M`<br>`N, M_y, M_z, T` | Seule physique bâtie sur une interpolation **C¹** : elle exige un espace `HERMITE3`, dont la base cubique la rend **exacte aux nœuds** — un élément par barre suffit. La configuration (1-D, plan, spatial) se **déduit** de la dimension du maillage. Ne demande **ni `G` ni `A_s`** : réclamer une constante qu'une théorie n'utilise pas, c'est inviter la mauvaise. |
-| [`timoshenko`](mecanique/timoshenko.md)<br>`aucun tag` | — | oui¹ | oui | `M, V`<br>`N, M, V`<br>`N, M_y, M_z, T, V_y, V_z` | **Une** physique pour les trois configurations, lues sur la dimension du maillage — elle remplace `frame` et `frame3d`. Élément **exact** (forme fermée en `Φ = 12EI/G·A_s·L²`), donc espace `MODEL_EMBEDDED` : la base dépend du matériau, aucun espace ne peut la tabuler. ¹ sauf en flexion pure, qui n'a pas d'effort axial. |
-| [`shell`](mecanique/coques.md)<br>`thick`, `kirchhoff` | — | — | — | `N_xx…N_xy`<br>`M_xx…M_xy`<br>`Q_xz, Q_yz` (`thick` seul) | **Six DDL** par nœud, les mêmes que la poutre en configuration spatiale, donc coque et portique partagent des nœuds sans adaptateur. Le vrillage est lié à la rotation de membrane, pas pénalisé : une pénalité diagonale s'opposerait à une rotation rigide, qui ne coûte rien. `thick` (Reissner-Mindlin) est **multi-quadrature** — membrane et flexion au Gauss complet, cisaillement transverse en intégration réduite, ce qui empêche le blocage. `kirchhoff` (DKT/DKQ) n'a aucun cisaillement : `γ = 0` est imposé aux sommets et le long de chaque arête, la limite mince est donc exacte par construction et il ne reste rien à bloquer — mais aussi aucun `Q` de comportement, l'effort tranchant d'une plaque mince étant une réaction. |
+| [`timoshenko`](mecanique/timoshenko.md)<br>`aucun tag` | — | oui¹ | oui | `M, V`<br>`N, M, V`<br>`N, M_y, M_z, T, V_y, V_z`<br>+ `phi` | **Une** physique pour les trois configurations, lues sur la dimension du maillage — elle remplace `frame` et `frame3d`. Élément **exact** (forme fermée en `Φ = 12EI/G·A_s·L²`), donc espace `MODEL_EMBEDDED` : la base dépend du matériau, aucun espace ne peut la tabuler. Seule physique à porter dans son état une grandeur qui n'est pas un effort : `Φ` lui-même, parce que son `B` en dépend et que le noyau de forces internes reçoit l'état, non le matériau. ¹ sauf en flexion pure, qui n'a pas d'effort axial. |
+| [`shell`](mecanique/coques.md)<br>`thick`, `kirchhoff` | — | — | — | `N_xx…N_xy`<br>`M_xx…M_xy`<br>`M_drill`<br>`Q_xz, Q_yz` (`thick` seul) | **Six DDL** par nœud, les mêmes que la poutre en configuration spatiale, donc coque et portique partagent des nœuds sans adaptateur. Le vrillage est lié à la rotation de membrane, pas pénalisé : une pénalité diagonale s'opposerait à une rotation rigide, qui ne coûte rien. Il travaille, donc il a un effort conjugué (`M_drill`) : un résidu qui l'omettrait serait faux du terme même qui désingularise l'élément. `thick` (Reissner-Mindlin) est **multi-quadrature** — membrane et flexion au Gauss complet, cisaillement transverse en intégration réduite, ce qui empêche le blocage. `kirchhoff` (DKT/DKQ) n'a aucun cisaillement : `γ = 0` est imposé aux sommets et le long de chaque arête, la limite mince est donc exacte par construction et il ne reste rien à bloquer — mais aussi aucun `Q` de comportement, l'effort tranchant d'une plaque mince étant une réaction. |
 
 ### Contraintes — multiplicateurs de Lagrange, `filter("constraint")`
 
@@ -173,6 +173,18 @@ diffusion appliquent `Bᵀ` à un flux scalaire, tandis que la convection, le
 rayonnement et le transfert d'interface pondèrent par `N` et non par `Bᵀ` —
 leur intégrande est une densité surfacique, pas une grandeur conjuguée d'un
 gradient.
+
+Les **structurels** le redéfinissent aussi, pour une autre raison : leur `B`
+existe, mais ce n'est pas le gradient symétrique. Barre, poutres et coques
+intègrent chacun le transposé du leur — `truss::internal_force_element`,
+`beam::internal_force_into`, `shell::b_into` — et c'est le **même** `B` que
+leur rigidité, ce que mesure `tests/internal_forces.rs` : la loi structurelle
+étant linéaire, `∫ Bᵀσ` vaut `K·u` **exactement**, à l'arrondi près.
+
+Deux d'entre eux ont fallu payer un prix pour cela. Une poutre de Timoshenko
+porte `Φ` dans son état, son interpolation en dépendant. Une coque a gagné un
+effort conjugué, `M_drill` : le vrillage travaillait dans `K` sans figurer
+nulle part ailleurs.
 
 **La tangente est symétrisée.** `D_alg` est réduit au triangle supérieur puis
 relu en miroir, un format qui ne peut structurellement pas porter une matrice non

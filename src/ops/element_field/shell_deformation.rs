@@ -1,13 +1,12 @@
 //! Generalised **strains of a shell**, at the Gauss points — the geometric
 //! producer of the behaviour input for [`Shell`](crate::models::shell::Shell).
 //!
-//! Per element it applies the facet's own strain-displacement matrix
-//! ([`crate::models::shell::b_into`]) to the nodal degrees of freedom, rotated
-//! into the element's triad: the strains *are* `B · u`, and this operator is
-//! that product and nothing else. Which is why it takes the
-//! [`ShellModel`](crate::models::shell::ShellModel): the membrane, drilling and
-//! shear rows are shared, but the **bending** ones are the whole difference
-//! between the two formulations — a plain gradient of the fibre rotation for
+//! Per element it applies the facet's own strain-displacement matrix — the very
+//! `shell::b_into` its stiffness integrates — to the nodal degrees of freedom,
+//! rotated into the element's triad: the strains *are* `B · u`, and this
+//! operator is that product and nothing else. Which is why it takes the
+//! [`ShellModel`]: the membrane, drilling and shear rows are shared, but the
+//! **bending** ones are the whole difference between the two formulations — a plain gradient of the fibre rotation for
 //! Reissner-Mindlin, the discrete-Kirchhoff elimination for the other.
 //!
 //! | formulation | components produced |
