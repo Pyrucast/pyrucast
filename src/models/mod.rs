@@ -50,6 +50,7 @@ pub mod dirichlet;
 pub mod elasticity;
 pub mod embedded;
 pub mod fick;
+pub mod flux;
 pub mod frame;
 pub mod frame3d;
 pub mod heat_conduction;

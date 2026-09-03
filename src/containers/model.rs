@@ -129,7 +129,7 @@ use crate::handle::Handle;
 use crate::models::symmetry::MaterialSymmetry;
 use crate::models::tensor::Kinematics;
 use crate::models::{
-    bernoulli, boundary_transfer, contact, damage, dirichlet, elasticity, embedded, fick,
+    bernoulli, boundary_transfer, contact, damage, dirichlet, elasticity, embedded, fick, flux,
     heat_conduction, interface_transfer, mpc, plasticity, radiation, shell, timoshenko, truss,
     Constraint, MatrixKind, Physics, RelationSense, SubModelKind,
 };
@@ -251,6 +251,9 @@ pub enum SubModel {
     Bernoulli(bernoulli::Bernoulli),
     /// Shell — see [`shell::Shell`].
     Shell(shell::Shell),
+    /// Distributed load — see [`flux::Flux`]. The first variant whose whole term
+    /// is on the right of `Σ f_int = Σ f_ext`.
+    Flux(flux::Flux),
 }
 
 impl SubModel {
@@ -305,7 +308,39 @@ impl SubModel {
             SubModel::Radiation(p) => p,
             SubModel::Bernoulli(p) => p,
             SubModel::Shell(p) => p,
+            SubModel::Flux(p) => p,
         }
+    }
+
+    /// Distributed-load sub-model on an FE subspace: `∫ φ N dΓ` into the `dual`
+    /// row, the density supplied at assembly time as `phi_<dual>`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::SubModel;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::{Physics, SubModelKind};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+    /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// let charge = SubModel::flux(zone, "q".into(), Physics::Thermal)?;
+    /// assert_eq!(charge.as_kind().label(), "Flux");
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn flux(
+        fespace: Handle<SubFiniteElementSpace>,
+        dual: String,
+        physics: Physics,
+    ) -> Result<Self> {
+        Ok(SubModel::Flux(flux::Flux::new(fespace, dual, physics)?))
     }
 
     /// Heat-conduction sub-model on an FE subspace.
