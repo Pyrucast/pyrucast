@@ -1516,7 +1516,7 @@ class Model:
         r"""
         Voir `pyrucast.node_field.internal_forces`.
         """
-    def external_forces(self) -> NodeField:
+    def external_forces(self, materials: ElementField) -> NodeField:
         r"""
         Voir `pyrucast.node_field.external_forces`.
         """
@@ -3209,7 +3209,7 @@ def export_vtk(mesh: Mesh, path: builtins.str, field: typing.Optional[typing.Any
     field must come from a space built on **this** mesh, so its cells line up.
     """
 
-def external_forces(model: Model) -> NodeField:
+def external_forces(model: Model, materials: ElementField) -> NodeField:
     r"""
     External nodal forces of `model` — the right side of `Σ f_int = Σ f_ext`.
     

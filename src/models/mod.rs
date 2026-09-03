@@ -963,6 +963,28 @@ pub trait SubModelKind: Sync {
         }
     }
 
+    /// Local **external** force vector of one cell — the per-cell kernel of an
+    /// integrated given term, `∫ N φ dΩ`. The counterpart of
+    /// [`internal_force_element`](Self::internal_force_element) on the other
+    /// side of the equals sign, and it reads the **material**, where the given
+    /// density lives, rather than a state.
+    ///
+    /// Fills `fe` node-major / variable-minor, like its twin. Default errors:
+    /// only a physics that declares a
+    /// [`ResidualContribution::Computed`] on the external side ever reaches it.
+    fn external_force_element(
+        &self,
+        _geoms: &[CellGeom],
+        _material: &SubElementField,
+        _lay: &ElementLayout,
+        _fe: &mut [f64],
+    ) -> Result<()> {
+        Err(PyrucastError::Message(format!(
+            "{}: no external kernel — external_force_element is undefined for this physics",
+            self.label()
+        )))
+    }
+
     /// This sub-model's contributions to the **external** side of
     /// `Σ f_int = Σ f_ext` — the given data of its terms, on the right of the
     /// equals sign — empty when it has none.

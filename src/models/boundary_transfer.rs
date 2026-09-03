@@ -49,7 +49,8 @@ use crate::dump::DumpOptions;
 use crate::error::Result;
 use crate::handle::Handle;
 use crate::models::transfer::{
-    coefficient_name, exchange_matrix, flux_name, internal_force, material_contract, physics_slice,
+    ambient_name, coefficient_name, exchange_matrix, flux_name, internal_force, material_contract,
+    physics_slice,
 };
 use crate::models::ElementLayout;
 use crate::models::ZoneLayout;
@@ -179,6 +180,26 @@ impl SubModelKind for BoundaryTransfer {
         Some(self)
     }
 
+    /// The ambient, integrated on the same boundary as the film it belongs to.
+    /// This is the term that used to be written by hand through the free `flux`
+    /// operator, where forgetting it read as an ambient of zero.
+    fn external_force_contribution(&self) -> Vec<crate::models::ResidualContribution> {
+        self.stiffness_layout()
+            .map(crate::models::ResidualContribution::Computed)
+            .into_iter()
+            .collect()
+    }
+
+    fn external_force_element(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        fe: &mut [f64],
+    ) -> Result<()> {
+        self.ambient_element(geoms, material, lay, fe)
+    }
+
     fn stiffness_layout(&self) -> Option<MatrixLayout> {
         Some(MatrixLayout {
             fespaces: vec![self.fespace.clone()],
@@ -237,11 +258,14 @@ impl Domain for BoundaryTransfer {
     /// One coefficient per transferred quantity, named after it — `h_T`,
     /// `h_c_H2`, `h_u_x`. Derived, which is why the contract had to become
     /// owned.
+    /// The coefficients first, then the ambients — `h_T, …, a_ext_T, …`. The
+    /// order matters and is the contract: the exchange kernel indexes the head
+    /// of the list, the ambient kernel its tail, so adding the second family
+    /// left every existing index where it was.
     fn material_components(&self) -> Vec<String> {
-        self.components
-            .iter()
-            .map(|(p, _)| coefficient_name(p))
-            .collect()
+        let h = self.components.iter().map(|(p, _)| coefficient_name(p));
+        let a = self.components.iter().map(|(p, _)| ambient_name(p));
+        h.chain(a).collect()
     }
 
     /// The film matrix — the exchange kernel with both sides on the same cell,
@@ -255,7 +279,14 @@ impl Domain for BoundaryTransfer {
     ) -> Result<()> {
         let geom = &geoms[0];
         let mat = material;
-        exchange_matrix(geom, geom, mat, lay, 1.0, ke)
+        exchange_matrix(
+            geom,
+            geom,
+            mat,
+            &lay.material[..self.components.len()],
+            1.0,
+            ke,
+        )
     }
 }
 
@@ -291,6 +322,41 @@ impl Behavior for BoundaryTransfer {
         for v in 0..self.components.len() {
             let h = material[lay.material[v] as usize];
             out[v] = h * deformation[lay.deformation[v] as usize];
+        }
+        Ok(())
+    }
+}
+
+impl BoundaryTransfer {
+    /// The ambient term `∫ h·a_ext·N dΓ` of one cell — the half of the film law
+    /// that does not depend on `u`, and so belongs on the right of the equals
+    /// sign rather than in the matrix.
+    ///
+    /// It reads the tail of the material layout, the ambients, and the head of
+    /// it, the coefficients: the product `h·a_ext` is what the weak form
+    /// integrates, not either factor alone.
+    fn ambient_element(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        fe: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        let n = self.components.len();
+        for g in 0..geom.n_gauss {
+            let shape = geom.n_at_g(g);
+            let w = geom.det_j_w(g);
+            let row = material.row(geom.cell, g);
+            for v in 0..n {
+                let hw = row[lay.material[v] as usize] * row[lay.material[n + v] as usize] * w;
+                if hw == 0.0 {
+                    continue;
+                }
+                for i in 0..geom.n_nodes {
+                    fe[i * n + v] += hw * shape[i];
+                }
+            }
         }
         Ok(())
     }

@@ -77,9 +77,11 @@ def main() -> None:
         right_fes, [("T", "q")], "thermal"
     )
 
-    # Matériau : k pour la conduction, h pour la convection (chaque sous-modèle
-    # prélève la composante qu'il requiert).
-    materials = pyrucast.element_field.material_field(model, [("k", K), ("h_T", H)])
+    # Matériau : k pour la conduction, h et l'ambiant pour la convection (chaque
+    # sous-modèle prélève la composante qu'il requiert).
+    materials = pyrucast.element_field.material_field(
+        model, [("k", K), ("h_T", H), ("a_ext_T", T_EXT)]
+    )
 
     # ── Chargement ───────────────────────────────────────────────────────────
     # Source : flux uniforme (densité Q) sur le bord gauche.
@@ -89,8 +91,9 @@ def main() -> None:
     left_fes = pyrucast.FiniteElementSpace(left_edge)
     source = pyrucast.node_field.flux(left_fes, Q, "q")
 
-    # Convection : la part externe h·T_ext du flux de Robin, via le même `flux`.
-    conv_load = pyrucast.node_field.flux(right_fes, H * T_EXT, "q")
+    # Convection : la part externe h·T_ext appartient au sous-modèle, qui la
+    # déclare avec son ambiant. On la lui demande — l'oublier n'est plus possible.
+    conv_load = pyrucast.node_field.external_forces(model, materials)
 
     # Chargement = source du bord gauche + charge de convection du bord droit.
     rhs = source | conv_load

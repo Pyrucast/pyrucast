@@ -14,7 +14,7 @@ le milieu d'en face** :
 
 | modèle | l'autre côté est… | où il va |
 |---|---|---|
-| [`boundary_transfer`](#échange-avec-une-ambiante) | une **donnée** (une valeur ambiante) | au second membre, \\( h\\,a_\text{ext}\int N\\,d\Gamma \\) |
+| [`boundary_transfer`](#échange-avec-une-ambiante) | une **donnée** (une valeur ambiante, `a_ext_<primale>`) | au second membre, \\( h\\,a_\text{ext}\int N\\,d\Gamma \\), rendu par `external_forces` |
 | [`interface_transfer`](#échange-entre-deux-maillages) | une **inconnue** (le champ de l'autre maillage) | dans la matrice, en bloc de couplage |
 
 Le bloc hors-diagonale *est* le second membre rendu implicite. C'est pourquoi les
@@ -60,9 +60,14 @@ sous-modèle ne porte que le premier :
 \underbrace{f_i = h\\,a_\text{ext} \int_\Gamma N_i\\,d\Gamma}_{\text{charge (second membre)}}
 \\]
 
-La part ambiante est un **chargement**, bâti avec l'opérateur `flux` — le même
-que pour une source. Le terme de film rend la matrice **définie** : un problème
-purement Neumann + échange est bien posé **sans Dirichlet**.
+La part ambiante est un **chargement**, et le sous-modèle le porte : `a_ext` est
+une composante matériau **exigée**, à côté de son coefficient, et le terme se
+récupère par [`external_forces`](operateurs/comportement.md). Elle a longtemps
+été bâtie à la main avec l'opérateur `flux`, ce qui laissait l'oublier — et un
+ambiant oublié ne se voit pas : il se lit comme un ambiant nul, donc comme une
+paroi qui échange avec le zéro absolu. Le terme de film rend par ailleurs la
+matrice **définie** : un problème purement Neumann + échange est bien posé
+**sans Dirichlet**.
 
 **Aucune normale à choisir.** Elle est déjà consommée en passant de
 \\( q\cdot n \\) à \\( h(a - a_\text{ext}) \\) ; ce qui reste sous l'intégrale

@@ -312,6 +312,7 @@ d'un `HeatConduction` :
 | **primale** | `"T"` | température (partagée avec `HeatConduction`) |
 | **duale** | `"q"` | flux de chaleur (partagé) |
 | **matériau** | `"h_T"` | coefficient d'échange (film), nommé d'après la grandeur |
+| **matériau** | `"a_ext_T"` | température ambiante du fluide, **exigée** — l'omettre échouerait à l'assemblage plutôt que de valoir zéro en silence |
 
 > Ce modèle n'a rien de thermique : la même loi décrit un transfert de masse en
 > surface ou une fondation élastique, selon les composantes qu'on lui donne, et

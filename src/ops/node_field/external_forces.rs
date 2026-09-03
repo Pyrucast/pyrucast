@@ -19,26 +19,35 @@
 //! transfer and a distributed flux load do.
 
 use crate::aggregate::Aggregate;
+use crate::containers::element_field::ElementField;
 use crate::containers::model::Model;
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
-use crate::models::ResidualContribution;
+use crate::handle::Handle;
+use crate::models::{kernel, MatrixKind, ResidualContribution};
 
 /// External nodal forces of `model` — the right side of `Σ f_int = Σ f_ext`.
 ///
 /// Asks every sub-model for its terms on this side, through
 /// [`SubModelKind::external_force_contribution`](crate::models::SubModelKind::external_force_contribution),
-/// and gathers them into one [`NodeField`], one zone per contributing term in
-/// model order. A model whose every term is a response to `u` yields an empty
-/// field — which is the honest answer, not a failure.
+/// resolves the material each integrated term reads — exactly as
+/// [`crate::ops::matrix::assemble_kind()`] resolves it before asking for a
+/// block — drives the kernel and gathers the result. One zone per contributing
+/// term, in model order.
+///
+/// A model whose every term is a response to `u` yields an empty field, which is
+/// the honest answer rather than a failure.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::element_field::ElementField;
+/// # use pyrucast::containers::field::SubField;
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::Physics;
 /// # use pyrucast::ops::{model, node_field};
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -46,13 +55,15 @@ use crate::models::ResidualContribution;
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// let modele = model::heat_conduction(&fes)?;
+/// # let mut mat = ElementField::new(&fes, vec!["k".into()])?;
+/// # mat.get(0)?.write().set_uniform("k", 1.0)?;
+/// let volume = model::heat_conduction(&fes)?;
 /// // La conduction seule n'a aucun terme à droite du signe égal : le champ
-/// // extérieur est vide, et c'est la réponse juste.
-/// assert_eq!(node_field::external_forces(&modele)?.len(), 0);
+/// // revient vide, et c'est la réponse juste.
+/// assert_eq!(node_field::external_forces(&volume, &mat)?.len(), 0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn external_forces(model: &Model) -> Result<NodeField> {
+pub fn external_forces(model: &Model, materials: &ElementField) -> Result<NodeField> {
     let mut out = NodeField::empty();
     for sub_h in model {
         let built = {
@@ -64,13 +75,30 @@ pub fn external_forces(model: &Model) -> Result<NodeField> {
                     ResidualContribution::Literal(field) => {
                         zones.extend(field.iter().cloned());
                     }
-                    ResidualContribution::Computed(_) => {
-                        return Err(PyrucastError::Message(format!(
-                            "{}: an integrated external term needs a per-cell kernel, which \
-                             no physics declares yet — the boundary ambient and the \
-                             distributed load bring the first ones",
-                            kind.label()
-                        )));
+                    ResidualContribution::Computed(layout) => {
+                        // The operator resolves what the term reads, as
+                        // `assemble_kind` resolves the material before asking
+                        // for a block. The sub-model resolved nothing.
+                        let domain = kind.as_domain().ok_or_else(|| {
+                            PyrucastError::Message(format!(
+                                "{}: declares an integrated external term but no material \
+                                 subspace to read its density on",
+                                kind.label()
+                            ))
+                        })?;
+                        let mat = materials.sub_for_fespace_with(
+                            &domain.material_fespace(),
+                            &domain.material_components(),
+                        )?;
+                        let guard = mat.read();
+                        // Resolved once for the zone, before the parallel region.
+                        let lay = domain.element_layout(MatrixKind::Stiffness, &guard, None)?;
+                        zones.push(Handle::new(kernel::scatter_to_nodes(
+                            &layout.fespaces,
+                            &layout.support,
+                            layout.dual_vars,
+                            |geoms, fe| kind.external_force_element(geoms, &guard, &lay, fe),
+                        )?));
                     }
                 }
             }

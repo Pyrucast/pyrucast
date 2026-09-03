@@ -181,8 +181,11 @@ pub fn internal_forces(
 /// subtraction lives in the caller.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn external_forces(model: PyRef<PyModel>) -> PyResult<PyNodeField> {
-    let nf = crate::ops::node_field::external_forces(&model.inner)?;
+pub fn external_forces(
+    model: PyRef<PyModel>,
+    materials: PyRef<PyElementField>,
+) -> PyResult<PyNodeField> {
+    let nf = crate::ops::node_field::external_forces(&model.inner, &materials.inner)?;
     Ok(PyNodeField { inner: nf })
 }
 
@@ -297,8 +300,11 @@ impl PyModel {
     }
 
     /// Voir `pyrucast.node_field.external_forces`.
-    fn external_forces(slf: PyRef<'_, Self>) -> PyResult<PyNodeField> {
-        super::node_field::external_forces(slf)
+    fn external_forces(
+        slf: PyRef<'_, Self>,
+        materials: PyRef<PyElementField>,
+    ) -> PyResult<PyNodeField> {
+        super::node_field::external_forces(slf, materials)
     }
 }
 

@@ -324,7 +324,7 @@ impl Domain for InterfaceTransfer {
     ) -> Result<()> {
         let geom = &geoms[0];
         let mat = material;
-        exchange_matrix(geom, geom, mat, lay, 1.0, ke)
+        exchange_matrix(geom, geom, mat, &lay.material, 1.0, ke)
     }
 
     /// An off-diagonal block: `−h ∫_Γ N_i^row N_j^col dΓ`. The sign lives here
@@ -339,7 +339,7 @@ impl Domain for InterfaceTransfer {
         ke: &mut [f64],
     ) -> Result<()> {
         let mat = material;
-        exchange_matrix(&row_geoms[0], &col_geoms[0], mat, lay, -1.0, ke)
+        exchange_matrix(&row_geoms[0], &col_geoms[0], mat, &lay.material, -1.0, ke)
     }
 }
 

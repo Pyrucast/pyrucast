@@ -86,9 +86,12 @@ fn thermal_convection_recovers_analytical_solution() -> Result<()> {
         model::boundary_transfer(&right_fes, vec![("T".into(), "q".into())], Physics::Thermal)?;
     let model = conduction.union(&convection)?;
 
-    // Matériau : k pour la conduction, h pour la convection (chaque sous-modèle
-    // prélève la composante qu'il requiert dans la liste fournie).
-    let materials = pyrucast::ops::element_field::material_field(&model, &[("k", K), ("h_T", H)])?;
+    // Matériau : k pour la conduction, h et l'ambiant pour la convection (chaque
+    // sous-modèle prélève la composante qu'il requiert dans la liste fournie).
+    let materials = pyrucast::ops::element_field::material_field(
+        &model,
+        &[("k", K), ("h_T", H), ("a_ext_T", T_EXT)],
+    )?;
 
     // ── Chargement ─────────────────────────────────────────────────────────
     // Source : flux uniforme (densité Q) sur le bord gauche, en charges nodales
@@ -104,13 +107,10 @@ fn thermal_convection_recovers_analytical_solution() -> Result<()> {
         "q",
     )?;
 
-    // Convection : la part externe h·T_ext du flux de Robin est un second membre,
-    // bâti avec le MÊME opérateur `flux` (densité h·T_ext) — aucune normale.
-    let conv_load = pyrucast::ops::node_field::flux(
-        &right_fes,
-        pyrucast::ops::node_field::FluxDensity::Uniform(H * T_EXT),
-        "q",
-    )?;
+    // Convection : la part externe h·T_ext du flux de Robin appartient au
+    // sous-modèle, qui la déclare avec son ambiant. On la lui demande, au lieu
+    // de la rebâtir à la main — l'oublier n'est plus possible.
+    let conv_load = pyrucast::ops::node_field::external_forces(&model, &materials)?;
 
     let rhs = source.union(&conv_load)?;
 

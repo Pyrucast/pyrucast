@@ -104,7 +104,16 @@ fn each_direction_carries_its_own_stiffness() -> Result<()> {
 
     let materials = pyrucast::ops::element_field::material_field(
         &model,
-        &[("E", E), ("nu", NU), ("h_u_x", h_x), ("h_u_y", h_y)],
+        // L'ambiant d'une fondation élastique est le déplacement vers lequel
+        // elle rappelle : zéro ici, mais il se déclare, il ne s'oublie pas.
+        &[
+            ("E", E),
+            ("nu", NU),
+            ("h_u_x", h_x),
+            ("h_u_y", h_y),
+            ("a_ext_u_x", 0.0),
+            ("a_ext_u_y", 0.0),
+        ],
     )?;
 
     // A traction along x, and one along y, applied together.
@@ -223,7 +232,7 @@ fn free_face_displacement(n: usize, h: f64) -> Result<f64> {
 
     let materials = pyrucast::ops::element_field::material_field(
         &model,
-        &[("E", E), ("nu", NU), ("h_u_x", h)],
+        &[("E", E), ("nu", NU), ("h_u_x", h), ("a_ext_u_x", 0.0)],
     )?;
     let traction = pyrucast::ops::node_field::flux(&right, FluxDensity::Uniform(Q), "f_x")?;
 

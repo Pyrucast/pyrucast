@@ -216,17 +216,19 @@ def main() -> None:
     )
     modele = modele | pc.model.dirichlet("T", "q", alesage, multiplicateur_T)
 
-    # FR — Un seul champ matériau : « k » pour la conduction, « h » pour le film.
-    # EN — A single material field: "k" for conduction, "h" for the film.
+    # FR — Un seul champ matériau : « k » pour la conduction, « h » et son
+    #      ambiant pour le film.
+    # EN — A single material field: "k" for conduction, "h" and its ambient for
+    #      the film.
     materiaux = pc.element_field.material_field(
-        modele, [("k", K_COND), ("h_T", H_CONV)]
+        modele, [("k", K_COND), ("h_T", H_CONV), ("a_ext_T", T_EXT)]
     )
     # ANCHOR_END: modele_complet
 
     # ANCHOR: charges_complet
-    # FR — Terme externe de la convection, h·T_ext : le même opérateur `flux`.
-    # EN — The convection's external term, h·T_ext: the same `flux` operator.
-    charge_convection = pc.node_field.flux(basse_fes, H_CONV * T_EXT, "q")
+    # FR — Terme externe de la convection, h·T_ext : le modèle le porte.
+    # EN — The convection's external term, h·T_ext: the model carries it.
+    charge_convection = pc.node_field.external_forces(modele, materiaux)
 
     # FR — Source volumique : `flux` sur des HEX8, donc une densité volumique.
     # EN — Volume source: `flux` over HEX8 cells, hence a volume density.

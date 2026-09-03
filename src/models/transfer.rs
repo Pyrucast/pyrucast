@@ -43,7 +43,7 @@
 use crate::containers::element_field::SubElementField;
 use crate::containers::field::SubField;
 use crate::error::{PyrucastError, Result};
-use crate::models::{CellGeom, ElementLayout, Physics};
+use crate::models::{CellGeom, Physics};
 
 /// The material component carrying the exchange coefficient of one transferred
 /// quantity — `h_T`, `h_c_H2`, `h_u_x`.
@@ -72,6 +72,23 @@ pub fn coefficient_name(primal: &str) -> String {
 /// ```
 pub fn flux_name(primal: &str) -> String {
     format!("flux_{primal}")
+}
+
+/// The **ambient** of one transferred quantity across a boundary: the far-field
+/// value `a_ext` the exchange drives towards, named after the quantity —
+/// `a_ext_T`, `a_ext_c_H2`.
+///
+/// It is a material component like the coefficient beside it, and **required**
+/// for the same reason `T_inf` is required of radiation: the term
+/// `∫ h·a_ext·N` exists whether or not anyone remembers it, and a forgotten
+/// ambient silently reads as zero.
+///
+/// ```
+/// # use pyrucast::models::transfer;
+/// assert_eq!(transfer::ambient_name("T"), "a_ext_T");
+/// ```
+pub fn ambient_name(primal: &str) -> String {
+    format!("a_ext_{primal}")
 }
 
 /// The behaviour **input** component of an interface law: the jump of one
@@ -199,7 +216,7 @@ pub fn physics_slice(physics: Physics) -> &'static [Physics] {
 ///     vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
 ///     &mat, None,
 ///     |geoms, m, _s, ke| {
-///         transfer::exchange_matrix(&geoms[0], &geoms[0], m, &lay, 1.0, ke)
+///         transfer::exchange_matrix(&geoms[0], &geoms[0], m, &lay.material, 1.0, ke)
 ///     },
 /// )?;
 /// // La somme des entrées vaut h × la longueur du segment.
@@ -211,13 +228,14 @@ pub fn exchange_matrix(
     row_geom: &CellGeom,
     col_geom: &CellGeom,
     material: &SubElementField,
-    lay: &ElementLayout,
+    coefficients: &[u32],
     sign: f64,
     ke: &mut [f64],
 ) -> Result<()> {
-    // One coefficient `h_<primal>` per transferred pair, in the order
-    // `material_components` declares — resolved once for the zone.
-    let coefficients = &lay.material;
+    // One coefficient `h_<primal>` per transferred pair, resolved once for the
+    // zone. Taken as a slice rather than read off the whole material layout: a
+    // boundary transfer also declares its ambient there, and the exchange is
+    // not the only term that reads material.
     let n_vars = coefficients.len();
     let row_stride = col_geom.n_nodes * n_vars;
     for g in 0..row_geom.n_gauss {

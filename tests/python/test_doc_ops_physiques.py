@@ -193,7 +193,7 @@ sig = pyrucast.element_field.integrate_behavior(model, eps, materials)  # COMP :
 f_int = pyrucast.node_field.internal_forces(model, sig)  # BSIG : ∫ Bᵀ σ
 # L'autre côté du bilan. L'élasticité seule n'a aucun terme donné : le champ
 # revient vide, et tout l'extérieur vient du chargement construit à la main.
-f_ext_modele = pyrucast.node_field.external_forces(model)
+f_ext_modele = pyrucast.node_field.external_forces(model, materials)
 residu = f_ext - f_int  # Σ f_ext − Σ f_int
 # ANCHOR_END: forces_internes
 assert residu.node_count() > 0
@@ -337,7 +337,9 @@ semelle = peau
 model = pyrucast.model.heat_conduction(fes) | pyrucast.model.boundary_transfer(
     peau, [("T", "q")], "thermal"
 )
-materials = pyrucast.element_field.material_field(model, [("k", 5.0), ("h_T", 12.0)])
+materials = pyrucast.element_field.material_field(
+    model, [("k", 5.0), ("h_T", 12.0), ("a_ext_T", 20.0)]
+)
 
 # Résistance de contact entre deux maillages.
 joint = pyrucast.model.interface_transfer(
