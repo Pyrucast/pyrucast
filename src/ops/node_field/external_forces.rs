@@ -21,7 +21,8 @@
 use crate::aggregate::Aggregate;
 use crate::containers::model::Model;
 use crate::containers::node_field::NodeField;
-use crate::error::Result;
+use crate::error::{PyrucastError, Result};
+use crate::models::ResidualContribution;
 
 /// External nodal forces of `model` — the right side of `Σ f_int = Σ f_ext`.
 ///
@@ -53,10 +54,30 @@ use crate::error::Result;
 /// ```
 pub fn external_forces(model: &Model) -> Result<NodeField> {
     let mut out = NodeField::empty();
-    for h in model {
-        let contribution = h.read().as_kind().external_force_contribution();
-        for sub in &contribution {
-            out.add_sub(sub.clone())?;
+    for sub_h in model {
+        let built = {
+            let sub = sub_h.read();
+            let kind = sub.as_kind();
+            let mut zones = Vec::new();
+            for c in kind.external_force_contribution() {
+                match c {
+                    ResidualContribution::Literal(field) => {
+                        zones.extend(field.iter().cloned());
+                    }
+                    ResidualContribution::Computed(_) => {
+                        return Err(PyrucastError::Message(format!(
+                            "{}: an integrated external term needs a per-cell kernel, which \
+                             no physics declares yet — the boundary ambient and the \
+                             distributed load bring the first ones",
+                            kind.label()
+                        )));
+                    }
+                }
+            }
+            zones
+        };
+        for zone in built {
+            out.add_sub(zone)?;
         }
     }
     Ok(out)

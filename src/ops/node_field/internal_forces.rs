@@ -30,10 +30,11 @@ use crate::containers::field::SubField;
 use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::containers::model::Model;
 use crate::containers::node_field::NodeField;
-use crate::error::Result;
+use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::continuum::internal_force::continuum_internal_force_element;
 use crate::models::kernel;
+use crate::models::ResidualContribution;
 
 /// Axis suffixes for the displacement/force components of the model-free
 /// continuum operator (`f_x`, `f_y`, `f_z`).
@@ -88,10 +89,49 @@ const AXES: [&str; 3] = ["x", "y", "z"];
 /// ```
 pub fn internal_forces(model: &Model, state: &ElementField) -> Result<NodeField> {
     let mut out = NodeField::empty();
-    for h in model {
-        let contribution = h.read().as_kind().internal_force_contribution(state)?;
-        for sub in &contribution {
-            out.add_sub(sub.clone())?;
+    for sub_h in model {
+        // Build the zone(s) under a read guard, then drop it before `add_sub`,
+        // which takes the aggregate's write lock.
+        let built = {
+            let sub = sub_h.read();
+            let kind = sub.as_kind();
+            let mut zones = Vec::new();
+            for c in kind.internal_force_contribution() {
+                match c {
+                    ResidualContribution::Literal(field) => {
+                        zones.extend(field.iter().cloned());
+                    }
+                    ResidualContribution::Computed(layout) => {
+                        // The operator resolves what the term reads — its own
+                        // state zone — exactly as `assemble_kind` resolves the
+                        // material before asking for a block. The sub-model
+                        // resolved nothing, which is why it could not fail.
+                        let beh = sub.behavior_fespace().ok_or_else(|| {
+                            PyrucastError::Message(format!(
+                                "{}: declares a computed internal force but integrates no \
+                                 behaviour, so there is no state to apply Bᵀ to",
+                                kind.label()
+                            ))
+                        })?;
+                        let stress = state.sub_for_fespace(&beh)?;
+                        let guard = stress.read();
+                        // Resolved once for the zone, before the parallel region.
+                        let names = kind.internal_force_reads();
+                        let refs: Vec<&str> = names.iter().map(String::as_str).collect();
+                        let lay = guard.resolve_components(&refs, "stress")?;
+                        zones.push(Handle::new(kernel::scatter_to_nodes(
+                            &layout.fespaces,
+                            &layout.support,
+                            layout.dual_vars,
+                            |geoms, fe| kind.internal_force_element(geoms, &guard, &lay, fe),
+                        )?));
+                    }
+                }
+            }
+            zones
+        };
+        for zone in built {
+            out.add_sub(zone)?;
         }
     }
     Ok(out)

@@ -28,14 +28,13 @@
 //! Everything else is generic. See the book chapter *« Ajouter une
 //! physique »* for the full walkthrough.
 
-use crate::aggregate::Aggregate;
 use crate::atoms::NodeId;
-use crate::containers::element_field::{ElementField, SubElementField};
+use crate::containers::element_field::SubElementField;
 use crate::containers::field::SubField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::{Mesh, SubMesh};
-use crate::containers::node_field::{NodeField, SubNodeField};
+use crate::containers::node_field::NodeField;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
@@ -348,6 +347,51 @@ pub enum Contribution {
     /// separate layout rather than an extra field there: adding one would have
     /// touched every existing physics for a need none of them has.
     Coupling(CouplingLayout),
+}
+
+/// One sub-model's declaration of a term of the residual — the nodal twin of
+/// [`Contribution`], and the same idea: a **recipe**, never an assembled
+/// container. [`crate::ops::node_field::internal_forces()`] and
+/// [`crate::ops::node_field::external_forces()`] consume it exactly as
+/// [`crate::ops::matrix::assemble_kind`] consumes a `Contribution` — they
+/// resolve what the term reads, run the machinery, and gather the result.
+///
+/// That split is what keeps the declaration total: a sub-model that resolves
+/// nothing cannot fail, and the one `Result` of the whole path sits on the
+/// operator, where a caller can act on it.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::SubModel;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::{ResidualContribution, SubModelKind};
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// # let volume = SubModel::heat_conduction(zone).unwrap();
+/// // Une physique qui intègre une loi déclare une recette calculée, sur son
+/// // propre layout — jamais le champ, que l'opérateur produira.
+/// let declare = volume.as_kind().internal_force_contribution();
+/// assert!(matches!(declare[..], [ResidualContribution::Computed(_)]));
+/// ```
+pub enum ResidualContribution {
+    /// A term integrated on the fly and scattered to the nodes: the fast path
+    /// of every physics whose term is an integral. The layout is the sub-model's
+    /// own (its stiffness layout for `∫ Bᵀ σ`), and the per-cell kernel is
+    /// [`SubModelKind::internal_force_element`].
+    Computed(MatrixLayout),
+    /// A field the sub-model has already filled in — a constraint's reaction
+    /// `Cᵀ λ`, a hand-made load. The twin of
+    /// [`Contribution::Literal`].
+    Literal(NodeField),
 }
 
 /// Structural declaration of an **inter-mesh** block: rows integrated on one
@@ -839,62 +883,35 @@ pub trait SubModelKind: Sync {
         continuum::internal_force::continuum_internal_force_element(geoms, stress, lay, fe)
     }
 
-    /// Internal nodal forces `f = ∫ Bᵀ σ dΩ` of this physics (Cast3m `BSIG`),
-    /// scattered to a [`SubNodeField`] on the block's node support. `stress` is
-    /// this physics' [`Domain::integrate_behavior`] output.
+    /// This sub-model's contributions to the **internal** side of the balance
+    /// `Σ f_int = Σ f_ext` — empty when it has no term there.
     ///
-    /// **Provided**: drives [`internal_force_element`](Self::internal_force_element)
-    /// in parallel over the FE subspaces of
-    /// [`stiffness_layout`](Self::stiffness_layout) (same geometry as the
-    /// stiffness) and scatters to that layout's node support. A physics with no
-    /// stiffness layout (a constraint such as `Dirichlet`) has no internal-force
-    /// contribution and errors here. For a **linear** law the result equals
-    /// `K·u` (the stiffness applied to the solution).
-    fn build_internal_forces(&self, stress: &Handle<SubElementField>) -> Result<SubNodeField> {
-        let Some(layout) = self.stiffness_layout() else {
-            return Err(PyrucastError::Message(format!(
-                "{}: build_internal_forces has no default without a stiffness_layout \
-                 (e.g. a constraint such as Dirichlet)",
-                self.label()
-            )));
-        };
-        let stress_guard = stress.read();
-        // Resolved once for the zone, before the parallel region.
-        let names = self.internal_force_reads();
-        let refs: Vec<&str> = names.iter().map(String::as_str).collect();
-        let lay = stress_guard.resolve_components(&refs, "stress")?;
-        kernel::scatter_to_nodes(
-            &layout.fespaces,
-            &layout.support,
-            layout.dual_vars,
-            |geoms, fe| self.internal_force_element(geoms, &stress_guard, &lay, fe),
-        )
-    }
-
-    /// This sub-model's contribution to the **internal** side of the balance
-    /// `Σ f_int = Σ f_ext` — an **empty** field if it has no term there.
+    /// The nodal twin of [`contributions`](Self::contributions), and it works
+    /// the same way: a sub-model declares a **recipe**, never an assembled
+    /// container. [`crate::ops::node_field::internal_forces()`] resolves the
+    /// state zone, drives the kernel and gathers the field, exactly as
+    /// [`crate::ops::matrix::assemble_kind`] resolves the material, drives the
+    /// block and gathers the matrix. Nothing here can fail, because nothing
+    /// here is resolved.
     ///
     /// With [`external_force_contribution`](Self::external_force_contribution)
-    /// it forms the nodal mirror of [`contributions`](Self::contributions):
-    /// where that one yields the blocks of `∂r/∂u`, these two yield `r` itself.
-    /// The residual is the gap between the two sums, so **no physics ever
-    /// writes a sign** — an author places their term on one side of the equals
-    /// sign or the other, which is a question of physics, and the single
+    /// the pair yields `r` itself, where `contributions` yields the blocks of
+    /// `∂r/∂u`. The residual is the gap between the two sums, so **no physics
+    /// ever writes a sign**: an author places their term on one side of the
+    /// equals sign or the other, which is a question of physics, and the single
     /// subtraction lives in the caller.
     ///
-    /// **Default**: the behaviour-bearing domain path, `∫ Bᵀ σ` built by
-    /// [`build_internal_forces`](Self::build_internal_forces) from the state
-    /// this sub-model's law produced. A sub-model that is not a [`Domain`]
-    /// contributes nothing here.
+    /// **Default**: one [`ResidualContribution::Computed`] on the stiffness
+    /// layout for a sub-model that integrates a law — the `∫ Bᵀ σ` whose kernel
+    /// is [`internal_force_element`](Self::internal_force_element). A
+    /// constraint, having no such layout, declares nothing.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::element_field::ElementField;
-    /// # use pyrucast::containers::field::SubField;
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::{Model, SubModel};
+    /// # use pyrucast::containers::model::SubModel;
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::models::{RelationSense, SubModelKind};
@@ -910,44 +927,33 @@ pub trait SubModelKind: Sync {
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
     /// #     None, None, RelationSense::Equality).unwrap();
-    /// # let mut etat = ElementField::new(&fes, vec!["flux_x".into(), "flux_y".into()])?;
-    /// # etat.get(0)?.write().set_uniform("flux_x", 1.0)?;
-    /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-    /// // Une physique de volume rend son ∫Bᵀq ; un appui n'a pas de terme ici
-    /// // (il rendra sa réaction en la redéfinissant).
-    /// assert_eq!(volume.as_kind().internal_force_contribution(&etat)?.len(), 1);
-    /// assert_eq!(appui.as_kind().internal_force_contribution(&etat)?.len(), 0);
-    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// # let volume = SubModel::heat_conduction(zone).unwrap();
+    /// // Une physique de volume déclare son intégrale ; un appui n'a pas de
+    /// // terme ici (il déclarera sa réaction en redéfinissant la méthode).
+    /// assert_eq!(volume.as_kind().internal_force_contribution().len(), 1);
+    /// assert!(appui.as_kind().internal_force_contribution().is_empty());
     /// ```
-    fn internal_force_contribution(&self, state: &ElementField) -> Result<NodeField> {
-        let mut out = NodeField::empty();
-        let Some(domain) = self.as_domain() else {
-            return Ok(out);
-        };
-        let stress = state.sub_for_fespace(&domain.behavior_fespace())?;
-        out.add_sub(Handle::new(self.build_internal_forces(&stress)?))?;
-        Ok(out)
+    fn internal_force_contribution(&self) -> Vec<ResidualContribution> {
+        match (self.as_domain(), self.stiffness_layout()) {
+            (Some(_), Some(layout)) => vec![ResidualContribution::Computed(layout)],
+            _ => Vec::new(),
+        }
     }
 
-    /// This sub-model's contribution to the **external** side of
+    /// This sub-model's contributions to the **external** side of
     /// `Σ f_int = Σ f_ext` — the given data of its terms, on the right of the
-    /// equals sign — an **empty** field if it has none.
-    ///
-    /// No `Result`: with nothing but `&self` to read, a sub-model already knows
-    /// at construction what it owes here, and nothing can fail. The day this
-    /// receives the given values it integrates, resolving their component names
-    /// can fail, and it will earn one.
+    /// equals sign — empty when it has none.
     ///
     /// **Default**: nothing. A physics whose term is entirely a response to `u`
     /// (elasticity, conduction, a bar) declares none; the ambient of a boundary
-    /// transfer and a distributed flux load declare one.
+    /// transfer and a distributed flux load will declare one.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::{Model, SubModel};
+    /// # use pyrucast::containers::model::SubModel;
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::models::SubModelKind;
@@ -960,11 +966,10 @@ pub trait SubModelKind: Sync {
     /// # let zone = fes.get(0).unwrap();
     /// # let volume = SubModel::heat_conduction(zone).unwrap();
     /// // La conduction ne répond qu'à `u` : rien à droite du signe égal.
-    /// assert_eq!(volume.as_kind().external_force_contribution().len(), 0);
-    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// assert!(volume.as_kind().external_force_contribution().is_empty());
     /// ```
-    fn external_force_contribution(&self) -> NodeField {
-        NodeField::empty()
+    fn external_force_contribution(&self) -> Vec<ResidualContribution> {
+        Vec::new()
     }
 
     /// Short type label, e.g. `"HeatConduction"` (used by `Debug` and the
