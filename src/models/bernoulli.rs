@@ -243,6 +243,32 @@ impl SubModelKind for Bernoulli {
         }
     }
 
+    /// Internal forces `f = ∫ Bᵀ σ dx` — the **transpose** of the very `B` this
+    /// physics' deformation operator applies
+    /// ([`crate::models::beam::b_into`]), integrated against the section
+    /// forces. The continuum default reads a Voigt stress tensor, which a field
+    /// carrying `N` and `M` has never had.
+    ///
+    /// There is no shear ratio to read, and that is the theory speaking:
+    /// Euler-Bernoulli *is* `Φ = 0`, so the shear rows of `B` vanish — and the
+    /// beam reports no shear force to weigh them with. Its read list therefore
+    /// stops where its section forces do, the remaining rows of `B` weighing
+    /// nothing. The two absences are one statement.
+    fn internal_force_reads(&self) -> Vec<String> {
+        owned_components(behavior_of(self.model))
+    }
+
+    fn internal_force_element(
+        &self,
+        geoms: &[CellGeom],
+        stress: &SubElementField,
+        lay: &[u32],
+        fe: &mut [f64],
+    ) -> Result<()> {
+        crate::models::beam::internal_force_into(self.model, &geoms[0], stress, lay, &[], fe);
+        Ok(())
+    }
+
     fn physics(&self) -> &'static [Physics] {
         &[Physics::Mechanical]
     }

@@ -583,6 +583,16 @@ pub(crate) fn internal_force_into(
     }
 }
 
+/// The length of a cell, from its two endpoints — the span `Φ` is built on,
+/// and the one piece of geometry a beam's law needs beyond its material.
+pub(crate) fn span(xa: &[f64], xb: &[f64]) -> f64 {
+    xa.iter()
+        .zip(xb)
+        .map(|(a, b)| (b - a) * (b - a))
+        .sum::<f64>()
+        .sqrt()
+}
+
 // ─── The 3-D triad ──────────────────────────────────────────────────────────
 
 fn cross(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {

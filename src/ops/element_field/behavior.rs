@@ -341,10 +341,20 @@ mod tests {
         let state = integrate(&model, &def, None, &materials, None).unwrap();
         assert_eq!(state.len(), 1);
         let s = state.get(0).unwrap().read();
+        // Le champ d'état porte les efforts de section **et** `Φ` : la poutre
+        // exacte tient son interpolation du matériau, et son résidu relit ce
+        // rapport à chaque itération.
         assert_eq!(
             s.components(),
-            &["N".to_string(), "M".to_string(), "V".to_string()]
+            &[
+                "N".to_string(),
+                "M".to_string(),
+                "V".to_string(),
+                "phi".to_string()
+            ]
         );
+        // Φ = 12EI/(G·A_s·L²) = 12·3·2/(5·2·4).
+        assert!((s.value(0, 0, "phi").unwrap() - 1.8).abs() < 1e-12);
         let sub = fes.get(0).unwrap().read();
         // The axial force is constant — a bar's field really is linear — and so
         // is the shear, an unloaded span carrying a constant `V`.

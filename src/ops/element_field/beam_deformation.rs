@@ -195,7 +195,7 @@ fn subspace_beam_deformation(
         }
         // `Φ` too is a fact of the cell: it depends on the material and the
         // span, neither of which moves between Gauss points.
-        let l = span(xa, xb);
+        let l = crate::models::beam::span(xa, xb);
         let mut phi = [0.0_f64; 2];
         for (plane, slot) in slots.iter().enumerate() {
             phi[plane] = slot.phi(row, l);
@@ -212,15 +212,6 @@ fn subspace_beam_deformation(
         }
     }
     Ok(field)
-}
-
-/// The length of a cell, from its two endpoints — the span `Φ` is built on.
-fn span(xa: &[f64], xb: &[f64]) -> f64 {
-    xa.iter()
-        .zip(xb)
-        .map(|(a, b)| (b - a) * (b - a))
-        .sum::<f64>()
-        .sqrt()
 }
 
 /// Where a bending plane's section constants sit in the material row, resolved

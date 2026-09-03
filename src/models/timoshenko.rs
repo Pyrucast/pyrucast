@@ -55,7 +55,7 @@ use crate::containers::model::SubModel;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
-use crate::models::beam::{bending_4x4, mass_4x4, BeamModel};
+use crate::models::beam::{self, bending_4x4, mass_4x4, BeamModel};
 use crate::models::owned_components;
 use crate::models::ZoneLayout;
 use crate::models::{frame, frame3d, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
@@ -79,6 +79,15 @@ fn behavior_of(model: BeamModel) -> &'static [&'static str] {
         BeamModel::Planar1d => &["M", "V"],
         BeamModel::Frame2d => &["N", "M", "V"],
         BeamModel::Frame3d => &["N", "M_y", "M_z", "T", "V_y", "V_z"],
+    }
+}
+
+/// The shear ratios the state carries beside the section forces — one per
+/// bending plane, `Φ = 12EI/(G·A_s·L²)`.
+fn shear_ratios_of(model: BeamModel) -> &'static [&'static str] {
+    match model {
+        BeamModel::Frame3d => &["phi_y", "phi_z"],
+        _ => &["phi"],
     }
 }
 
@@ -225,6 +234,38 @@ impl SubModelKind for Timoshenko {
         }
     }
 
+    /// Internal forces `f = ∫ Bᵀ σ dx` — the **transpose** of the very `B` this
+    /// physics' deformation operator applies
+    /// ([`crate::models::beam::b_into`]), integrated against the section
+    /// forces. The continuum default reads a Voigt stress tensor, which a field
+    /// carrying `N`, `M` and `V` has never had.
+    ///
+    /// The read list is the behaviour's own output, in its own order: the
+    /// section forces first, conjugate to the leading rows of `B`, then the
+    /// shear ratios its interpolation is built on.
+    fn internal_force_reads(&self) -> Vec<String> {
+        Domain::behavior_output_components(self)
+    }
+
+    fn internal_force_element(
+        &self,
+        geoms: &[CellGeom],
+        stress: &SubElementField,
+        lay: &[u32],
+        fe: &mut [f64],
+    ) -> Result<()> {
+        let forces = behavior_of(self.model).len();
+        beam::internal_force_into(
+            self.model,
+            &geoms[0],
+            stress,
+            &lay[..forces],
+            &lay[forces..],
+            fe,
+        );
+        Ok(())
+    }
+
     fn physics(&self) -> &'static [Physics] {
         &[Physics::Mechanical]
     }
@@ -267,9 +308,26 @@ impl Domain for Timoshenko {
         self.fespace.clone()
     }
 
+    /// The section forces — **and** the shear ratio `Φ` of each bending plane.
+    ///
+    /// `Φ` is not a section force, and nothing else in this crate keeps in the
+    /// state a quantity its consumer could recompute. It is the one exception,
+    /// and a deliberate one. The exact element's *interpolation* depends on the
+    /// material through `Φ`, so its `B` — and with it `∫ Bᵀσ` — cannot be
+    /// written without it; but the internal-force kernel is handed the state and
+    /// not the material, that seam having never needed one (a continuum's `B` is
+    /// the symmetric gradient, and knows nothing of any modulus). Carrying `Φ`
+    /// in the state is what lets a beam's residual exist without giving every
+    /// physics in the crate a material argument it would ignore.
+    ///
+    /// It earns its place in the field rather than being recomputed because the
+    /// residual re-reads it at **every** Newton iteration — which is the same
+    /// test the consistent tangent was measured against before it stopped being
+    /// stored.
     fn behavior_output_components(&self) -> Vec<String> {
         behavior_of(self.model)
             .iter()
+            .chain(shear_ratios_of(self.model))
             .map(|s| s.to_string())
             .collect()
     }
@@ -288,7 +346,7 @@ impl Domain for Timoshenko {
 
     fn integrate_point(
         &self,
-        _geom: &CellGeom,
+        geom: &CellGeom,
         _g: usize,
         lay: &ZoneLayout,
         deformation: &[f64],
@@ -299,17 +357,21 @@ impl Domain for Timoshenko {
     ) -> Result<()> {
         let m = |k: usize| material[lay.material[k] as usize];
         let e = |k: usize| deformation[lay.deformation[k] as usize];
+        // La portée : la seule géométrie dont `Φ` ait besoin, et elle est là.
+        let l = beam::span(geom.node_coord(0), geom.node_coord(1));
         match self.model {
             // [E, I, G, A_s] × [κ, γ]
             BeamModel::Planar1d => {
                 out[0] = m(0) * m(1) * e(0); // E·I·κ
                 out[1] = m(2) * m(3) * e(1); // G·A_s·γ
+                out[2] = beam::phi(m(0) * m(1), Some(m(2) * m(3)), l);
             }
             // [E, A, I, G, A_s] × [ε, κ, γ]
             BeamModel::Frame2d => {
                 out[0] = m(0) * m(1) * e(0); // E·A·ε
                 out[1] = m(0) * m(2) * e(1); // E·I·κ
                 out[2] = m(3) * m(4) * e(2); // G·A_s·γ
+                out[3] = beam::phi(m(0) * m(2), Some(m(3) * m(4)), l);
             }
             // [E, A, I_y, I_z, J, G, A_sy, A_sz] × [ε, κ_y, κ_z, torsion, γ_y, γ_z]
             BeamModel::Frame3d => {
@@ -319,6 +381,11 @@ impl Domain for Timoshenko {
                 out[3] = m(5) * m(4) * e(3); // G·J·torsion
                 out[4] = m(5) * m(6) * e(4); // G·A_sy·γ_y
                 out[5] = m(5) * m(7) * e(5); // G·A_sz·γ_z
+                                             // Un plan de flexion par `Φ`, chacun avec son inertie et sa
+                                             // section réduite : x'-y' porte `I_z` et `A_sy`, x'-z' l'autre
+                                             // paire — l'appariement que `b_into` attend.
+                out[6] = beam::phi(m(0) * m(3), Some(m(5) * m(6)), l);
+                out[7] = beam::phi(m(0) * m(2), Some(m(5) * m(7)), l);
             }
         }
         Ok(())
