@@ -522,7 +522,15 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<Vec<f64>>
                 let (lay, zone) = {
                     let mat = material.read();
                     let zone = match &behavior_guards {
-                        Some((def, prev)) => Some(domain.zone_layout(def, prev, &mat)?),
+                        Some((def, prev)) => {
+                            let behavior = phys.as_behavior().ok_or_else(|| {
+                                PyrucastError::Message(format!(
+                                    "{}: a behaviour recipe needs a law",
+                                    phys.label()
+                                ))
+                            })?;
+                            Some(behavior.zone_layout(def, prev, &mat)?)
+                        }
                         None => None,
                     };
                     (
@@ -704,7 +712,15 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<Vec<f64
                 let (lay, zone) = {
                     let mat = material.read();
                     let zone = match &behavior_guards {
-                        Some((def, prev)) => Some(domain.zone_layout(def, prev, &mat)?),
+                        Some((def, prev)) => {
+                            let behavior = phys.as_behavior().ok_or_else(|| {
+                                PyrucastError::Message(format!(
+                                    "{}: a behaviour recipe needs a law",
+                                    phys.label()
+                                ))
+                            })?;
+                            Some(behavior.zone_layout(def, prev, &mat)?)
+                        }
                         None => None,
                     };
                     (

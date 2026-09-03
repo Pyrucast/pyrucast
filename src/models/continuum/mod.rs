@@ -764,9 +764,9 @@ impl Continuum {
     /// assert_eq!(kt.dense()?, k.dense()?);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn element_tangent_of<D: crate::models::Domain + ?Sized>(
+    pub fn element_tangent_of<B: crate::models::Behavior + ?Sized>(
         &self,
-        domain: &D,
+        behavior: &B,
         geoms: &[CellGeom],
         lay: &crate::models::ZoneLayout,
         deformation: &SubElementField,
@@ -779,7 +779,7 @@ impl Continuum {
         self.element_tangent_with(
             geom,
             |g, d| {
-                domain.tangent_point(
+                behavior.tangent_point(
                     geom,
                     g,
                     lay,

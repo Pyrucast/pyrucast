@@ -35,7 +35,7 @@ résolution non linéaire. Deux invariants l'encadrent :
 
 La vérification n'est pas supprimée, elle est **déplacée** : un champ peut avoir
 été fabriqué à la main, on contrôle donc ses composantes *et leur ordre* une fois
-par zone, avant la région parallèle (`Domain::zone_layout` pour la voie point,
+par zone, avant la région parallèle (`Behavior::zone_layout` pour la voie point,
 `Domain::element_layout` pour la voie matrice, `kernel::element_pointwise`), avec
 un message qui nomme le champ et l'écart. Le
 noyau reçoit alors **la ligne** de son point — une tranche empruntée du tampon —

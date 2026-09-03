@@ -18,7 +18,7 @@ use crate::models::owned_components;
 use crate::models::symmetry::{self, MaterialSymmetry};
 use crate::models::ElementLayout;
 use crate::models::ZoneLayout;
-use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{Behavior, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use serde::{Deserialize, Serialize};
 
 /// Column DOF name (temperature).
@@ -309,6 +309,10 @@ impl SubModelKind for HeatConduction {
         Some(self)
     }
 
+    fn as_behavior(&self) -> Option<&dyn Behavior> {
+        Some(self)
+    }
+
     fn stiffness_layout(&self) -> Option<MatrixLayout> {
         Some(MatrixLayout {
             fespaces: vec![self.fespace.clone()],
@@ -398,6 +402,28 @@ impl Domain for HeatConduction {
         CAPACITY_COMPONENTS
     }
 
+    fn element_matrix(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        element_stiffness(&geoms[0], material, lay, self.symmetry, ke)
+    }
+
+    fn element_mass(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        element_capacity(&geoms[0], material, lay, ke)
+    }
+}
+
+impl Behavior for HeatConduction {
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.fespace.clone()
     }
@@ -438,26 +464,6 @@ impl Domain for HeatConduction {
             out[a] = acc;
         }
         Ok(())
-    }
-
-    fn element_matrix(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        lay: &ElementLayout,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        element_stiffness(&geoms[0], material, lay, self.symmetry, ke)
-    }
-
-    fn element_mass(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        lay: &ElementLayout,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        element_capacity(&geoms[0], material, lay, ke)
     }
 }
 
@@ -653,8 +659,8 @@ mod tests {
 
     /// The rest state of `d` on its material — the `prev` of a first step,
     /// which the behaviour operator materializes for a caller who has none.
-    fn rest<D: Domain>(d: &D, mat: &Handle<SubElementField>) -> Handle<SubElementField> {
-        Handle::new(d.initial_state(&mat.read()).unwrap())
+    fn rest<B: Behavior>(b: &B, mat: &Handle<SubElementField>) -> Handle<SubElementField> {
+        Handle::new(b.initial_state(&mat.read()).unwrap())
     }
     use crate::aggregate::Aggregate;
     use crate::atoms::{ElementType, Node};

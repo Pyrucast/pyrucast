@@ -34,7 +34,7 @@ pub(crate) fn voigt_size(space_dim: usize, kinematics: Kinematics) -> usize {
 
 /// The strain components a continuum law reads, **in Voigt order** — the
 /// convention its indices assume, declared for
-/// [`crate::models::Domain::deformation_reads`].
+/// [`crate::models::Behavior::deformation_reads`].
 ///
 /// Axisymmetry is the odd one: its fourth slot is the *measured* hoop `eps_zz`,
 /// produced by

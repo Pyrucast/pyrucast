@@ -54,7 +54,7 @@ use crate::handle::Handle;
 use crate::models::kernel::MAX_CELL_DOFS;
 use crate::models::owned_components;
 use crate::models::ZoneLayout;
-use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{Behavior, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use crate::models::{ElementLayout, MatrixKind};
 use serde::{Deserialize, Serialize};
 
@@ -218,6 +218,10 @@ impl SubModelKind for Bernoulli {
         Some(self)
     }
 
+    fn as_behavior(&self) -> Option<&dyn Behavior> {
+        Some(self)
+    }
+
     fn stiffness_layout(&self) -> Option<MatrixLayout> {
         Some(MatrixLayout {
             fespaces: vec![self.fespace.clone()],
@@ -305,60 +309,6 @@ impl Domain for Bernoulli {
             BeamModel::Planar1d => &["A", "rho"],
             _ => &["rho"],
         }
-    }
-
-    fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
-        self.fespace.clone()
-    }
-
-    fn behavior_output_components(&self) -> Vec<String> {
-        behavior_of(self.model)
-            .iter()
-            .map(|s| s.to_string())
-            .collect()
-    }
-
-    /// The section forces from the generalised strains — a **linear** law, as it
-    /// is for every structural element: `N = EA·ε`, `M = EI·κ`, `T = GJ·φ'`.
-    fn deformation_reads(&self) -> Vec<String> {
-        owned_components(match self.model {
-            BeamModel::Planar1d => &["kappa"][..],
-            BeamModel::Frame2d => &["eps", "kappa"][..],
-            BeamModel::Frame3d => &["eps", "kappa_y", "kappa_z", "torsion"][..],
-        })
-    }
-
-    fn integrate_point(
-        &self,
-        _geom: &CellGeom,
-        _g: usize,
-        lay: &ZoneLayout,
-        deformation: &[f64],
-        _prev: &[f64],
-        material: &[f64],
-        _dt: f64,
-        out: &mut [f64],
-    ) -> Result<()> {
-        // Both orders are this physics' own: `material_of` for the constants,
-        // `deformation_reads` for the section strains.
-        let m = |k: usize| material[lay.material[k] as usize];
-        let e = |k: usize| deformation[lay.deformation[k] as usize];
-        match self.model {
-            BeamModel::Planar1d => {
-                out[0] = m(0) * m(1) * e(0); // E·I·κ
-            }
-            BeamModel::Frame2d => {
-                out[0] = m(0) * m(1) * e(0); // E·A·ε
-                out[1] = m(0) * m(2) * e(1); // E·I·κ
-            }
-            BeamModel::Frame3d => {
-                out[0] = m(0) * m(1) * e(0); // E·A·ε
-                out[1] = m(0) * m(2) * e(1); // E·I_y·κ_y
-                out[2] = m(0) * m(3) * e(2); // E·I_z·κ_z
-                out[3] = m(5) * m(4) * e(3); // G·J·torsion
-            }
-        }
-        Ok(())
     }
 
     /// La raideur géométrique de la poutre lit son effort normal.
@@ -471,6 +421,62 @@ impl Domain for Bernoulli {
                 let local = space_frame(geom, e * m(1), e * m(2), e * m(3), m(5) * m(4), l)?;
                 let t = rotation_3d(&dir);
                 congruent(&local, &t, ke, 12);
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Behavior for Bernoulli {
+    fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
+        self.fespace.clone()
+    }
+
+    fn behavior_output_components(&self) -> Vec<String> {
+        behavior_of(self.model)
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
+    }
+
+    /// The section forces from the generalised strains — a **linear** law, as it
+    /// is for every structural element: `N = EA·ε`, `M = EI·κ`, `T = GJ·φ'`.
+    fn deformation_reads(&self) -> Vec<String> {
+        owned_components(match self.model {
+            BeamModel::Planar1d => &["kappa"][..],
+            BeamModel::Frame2d => &["eps", "kappa"][..],
+            BeamModel::Frame3d => &["eps", "kappa_y", "kappa_z", "torsion"][..],
+        })
+    }
+
+    fn integrate_point(
+        &self,
+        _geom: &CellGeom,
+        _g: usize,
+        lay: &ZoneLayout,
+        deformation: &[f64],
+        _prev: &[f64],
+        material: &[f64],
+        _dt: f64,
+        out: &mut [f64],
+    ) -> Result<()> {
+        // Both orders are this physics' own: `material_of` for the constants,
+        // `deformation_reads` for the section strains.
+        let m = |k: usize| material[lay.material[k] as usize];
+        let e = |k: usize| deformation[lay.deformation[k] as usize];
+        match self.model {
+            BeamModel::Planar1d => {
+                out[0] = m(0) * m(1) * e(0); // E·I·κ
+            }
+            BeamModel::Frame2d => {
+                out[0] = m(0) * m(1) * e(0); // E·A·ε
+                out[1] = m(0) * m(2) * e(1); // E·I·κ
+            }
+            BeamModel::Frame3d => {
+                out[0] = m(0) * m(1) * e(0); // E·A·ε
+                out[1] = m(0) * m(2) * e(1); // E·I_y·κ_y
+                out[2] = m(0) * m(3) * e(2); // E·I_z·κ_z
+                out[3] = m(5) * m(4) * e(3); // G·J·torsion
             }
         }
         Ok(())

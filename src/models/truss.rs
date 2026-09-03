@@ -25,7 +25,7 @@ use crate::handle::Handle;
 use crate::models::owned_components;
 use crate::models::tensor::{dual_name, primal_name};
 use crate::models::ZoneLayout;
-use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{Behavior, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use crate::models::{ElementLayout, MatrixKind};
 use serde::{Deserialize, Serialize};
 
@@ -145,6 +145,10 @@ impl SubModelKind for Truss {
         Some(self)
     }
 
+    fn as_behavior(&self) -> Option<&dyn Behavior> {
+        Some(self)
+    }
+
     fn stiffness_layout(&self) -> Option<MatrixLayout> {
         Some(MatrixLayout {
             fespaces: vec![self.fespace.clone()],
@@ -229,6 +233,47 @@ impl Domain for Truss {
         &["rho"]
     }
 
+    /// La raideur géométrique de la barre lit son effort normal.
+    fn element_state_reads(&self, kind: MatrixKind) -> Vec<String> {
+        match kind {
+            MatrixKind::Geometric => vec!["n".to_string()],
+            _ => Vec::new(),
+        }
+    }
+
+    fn element_matrix(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        element_stiffness(&geoms[0], material, lay, ke)
+    }
+
+    fn element_mass(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        element_mass(&geoms[0], material, lay, ke)
+    }
+
+    fn element_geometric(
+        &self,
+        geoms: &[CellGeom],
+        _material: &SubElementField,
+        lay: &ElementLayout,
+        state: &SubElementField,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        element_geometric(&geoms[0], state, lay, ke)
+    }
+}
+
+impl Behavior for Truss {
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.fespace.clone()
     }
@@ -277,45 +322,6 @@ impl Domain for Truss {
         }
         out[0] = e * a * eps_axial;
         Ok(())
-    }
-
-    /// La raideur géométrique de la barre lit son effort normal.
-    fn element_state_reads(&self, kind: MatrixKind) -> Vec<String> {
-        match kind {
-            MatrixKind::Geometric => vec!["n".to_string()],
-            _ => Vec::new(),
-        }
-    }
-
-    fn element_matrix(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        lay: &ElementLayout,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        element_stiffness(&geoms[0], material, lay, ke)
-    }
-
-    fn element_mass(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        lay: &ElementLayout,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        element_mass(&geoms[0], material, lay, ke)
-    }
-
-    fn element_geometric(
-        &self,
-        geoms: &[CellGeom],
-        _material: &SubElementField,
-        lay: &ElementLayout,
-        state: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        element_geometric(&geoms[0], state, lay, ke)
     }
 }
 
@@ -572,8 +578,8 @@ mod tests {
 
     /// The rest state of `d` on its material — the `prev` of a first step,
     /// which the behaviour operator materializes for a caller who has none.
-    fn rest<D: Domain>(d: &D, mat: &Handle<SubElementField>) -> Handle<SubElementField> {
-        Handle::new(d.initial_state(&mat.read()).unwrap())
+    fn rest<B: Behavior>(b: &B, mat: &Handle<SubElementField>) -> Handle<SubElementField> {
+        Handle::new(b.initial_state(&mat.read()).unwrap())
     }
     use crate::aggregate::Aggregate;
     use crate::atoms::{ElementType, Node, NodeId};

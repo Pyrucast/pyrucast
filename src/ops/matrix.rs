@@ -136,7 +136,7 @@ impl AssemblyInputs<'_> {
                     Some(p) => p.sub_for_fespace(fespace)?,
                     None => Handle::new(
                         sub.as_kind()
-                            .as_domain()
+                            .as_behavior()
                             .ok_or_else(|| {
                                 PyrucastError::Message(format!(
                                     "{}: a tangent needs a behaviour",

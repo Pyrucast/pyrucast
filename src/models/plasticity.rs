@@ -66,7 +66,7 @@ use crate::models::tensor::Kinematics;
 use crate::models::tensor::{dual_name, primal_name};
 use crate::models::tensor::{stress_names, voigt_stress};
 use crate::models::ZoneLayout;
-use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{Behavior, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use crate::models::{ElementLayout, MatrixKind};
 use law::{MatParams, PlasticLaw, PrevState, MAX_INTERNAL_VARS};
 use serde::{Deserialize, Serialize};
@@ -281,6 +281,10 @@ impl SubModelKind for Plasticity {
         Some(self)
     }
 
+    fn as_behavior(&self) -> Option<&dyn Behavior> {
+        Some(self)
+    }
+
     fn stiffness_layout(&self) -> Option<MatrixLayout> {
         Some(MatrixLayout {
             fespaces: vec![self.continuum.fespace()],
@@ -305,7 +309,7 @@ impl SubModelKind for Plasticity {
     }
 
     /// The consistent tangent shares the stiffness layout; the algorithmic
-    /// modulus `D_alg` (emitted by [`Domain::integrate_point`]) is read from the
+    /// modulus `D_alg` (emitted by [`Behavior::integrate_point`]) is read from the
     /// behaviour state.
     fn tangent_layout(&self) -> Option<MatrixLayout> {
         self.stiffness_layout()
@@ -369,6 +373,61 @@ impl Domain for Plasticity {
         self.law.as_law().optional_material_components()
     }
 
+    /// Les mêmes noyaux que l'élasticité, donc les mêmes lectures d'état.
+    fn element_state_reads(&self, kind: MatrixKind) -> Vec<String> {
+        self.continuum.element_state_reads(kind)
+    }
+
+    fn element_matrix(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        // The plain "stiffness" kernel is the *elastic* stiffness (the simple
+        // iteration operator). The consistent algorithmic tangent `K_t` is a
+        // separate operator — see [`element_tangent`](Self::element_tangent) and
+        // [`crate::ops::matrix::tangent`]. Reuse the elasticity element kernel
+        // verbatim; it reads only `E` and `nu` from the material.
+        let mat = material;
+        self.continuum.element_stiffness(
+            geom,
+            mat,
+            lay,
+            crate::models::symmetry::MaterialSymmetry::Isotropic,
+            ke,
+        )
+    }
+
+    fn element_mass(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        let mat = material;
+        self.continuum.element_mass(geom, mat, lay, ke)
+    }
+
+    fn element_geometric(
+        &self,
+        geoms: &[CellGeom],
+        _material: &SubElementField,
+        lay: &ElementLayout,
+        state: &SubElementField,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        let stress = state;
+        self.continuum.element_geometric(geom, stress, lay, ke)
+    }
+}
+
+impl Behavior for Plasticity {
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.continuum.fespace()
     }
@@ -544,59 +603,6 @@ impl Domain for Plasticity {
         )
     }
 
-    /// Les mêmes noyaux que l'élasticité, donc les mêmes lectures d'état.
-    fn element_state_reads(&self, kind: MatrixKind) -> Vec<String> {
-        self.continuum.element_state_reads(kind)
-    }
-
-    fn element_matrix(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        lay: &ElementLayout,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let geom = &geoms[0];
-        // The plain "stiffness" kernel is the *elastic* stiffness (the simple
-        // iteration operator). The consistent algorithmic tangent `K_t` is a
-        // separate operator — see [`element_tangent`](Self::element_tangent) and
-        // [`crate::ops::matrix::tangent`]. Reuse the elasticity element kernel
-        // verbatim; it reads only `E` and `nu` from the material.
-        let mat = material;
-        self.continuum.element_stiffness(
-            geom,
-            mat,
-            lay,
-            crate::models::symmetry::MaterialSymmetry::Isotropic,
-            ke,
-        )
-    }
-
-    fn element_mass(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        lay: &ElementLayout,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let geom = &geoms[0];
-        let mat = material;
-        self.continuum.element_mass(geom, mat, lay, ke)
-    }
-
-    fn element_geometric(
-        &self,
-        geoms: &[CellGeom],
-        _material: &SubElementField,
-        lay: &ElementLayout,
-        state: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let geom = &geoms[0];
-        let stress = state;
-        self.continuum.element_geometric(geom, stress, lay, ke)
-    }
-
     fn element_tangent(
         &self,
         geoms: &[CellGeom],
@@ -683,8 +689,8 @@ mod tests {
 
     /// The rest state of `d` on its material — the `prev` of a first step,
     /// which the behaviour operator materializes for a caller who has none.
-    fn rest<D: Domain>(d: &D, mat: &Handle<SubElementField>) -> Handle<SubElementField> {
-        Handle::new(d.initial_state(&mat.read()).unwrap())
+    fn rest<B: Behavior>(b: &B, mat: &Handle<SubElementField>) -> Handle<SubElementField> {
+        Handle::new(b.initial_state(&mat.read()).unwrap())
     }
     use crate::aggregate::Aggregate;
     use crate::atoms::{ElementType, Node, NodeId};

@@ -1885,7 +1885,7 @@ impl SubModel {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn behavior_fespace(&self) -> Option<Handle<SubFiniteElementSpace>> {
-        self.as_kind().as_domain().map(|d| d.behavior_fespace())
+        self.as_kind().as_behavior().map(|b| b.behavior_fespace())
     }
 
     /// Integrate this sub-model's constitutive law (Cast3m `COMP`), stepping
@@ -1903,7 +1903,7 @@ impl SubModel {
         dt: f64,
     ) -> Result<SubElementField> {
         self.as_kind()
-            .as_domain()
+            .as_behavior()
             .ok_or_else(|| {
                 crate::error::PyrucastError::Message(format!(
                     "{}: no behaviour — integrate_behavior is undefined",
@@ -1916,7 +1916,9 @@ impl SubModel {
     /// Whether this sub-model's law needs the time increment — `false` for a
     /// sub-model with no behaviour at all.
     pub(crate) fn requires_dt(&self) -> bool {
-        self.as_kind().as_domain().is_some_and(|d| d.requires_dt())
+        self.as_kind()
+            .as_behavior()
+            .is_some_and(|b| b.requires_dt())
     }
 
     /// This sub-model's material state **at rest** — the `prev` of a first step,
@@ -1927,7 +1929,7 @@ impl SubModel {
         material: &Handle<SubElementField>,
     ) -> Result<SubElementField> {
         self.as_kind()
-            .as_domain()
+            .as_behavior()
             .ok_or_else(|| {
                 crate::error::PyrucastError::Message(format!(
                     "{}: no behaviour — initial_state is undefined",

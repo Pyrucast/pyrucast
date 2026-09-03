@@ -57,7 +57,7 @@ use crate::handle::Handle;
 use crate::models::owned_components;
 use crate::models::ElementLayout;
 use crate::models::ZoneLayout;
-use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{Behavior, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use serde::{Deserialize, Serialize};
 
 /// Column DOF name (temperature) — shared with heat conduction.
@@ -109,7 +109,7 @@ pub const STEFAN_BOLTZMANN: f64 = 5.670_374_419e-8;
 /// points (via [`crate::ops::element_field::interp_to_gauss`]).
 const INPUT_COMPONENT: &str = PRIMAL_VAR;
 /// Behaviour-**output**: the radiated flux density, and the tangent coefficient
-/// `4σεT³` that [`Domain::element_tangent`] reads back.
+/// `4σεT³` that [`Behavior::element_tangent`] reads back.
 const OUTPUT_FLUX: &str = "flux";
 
 /// Radiation to infinity on a boundary FE subspace.
@@ -206,6 +206,10 @@ impl SubModelKind for Radiation {
         Some(self)
     }
 
+    fn as_behavior(&self) -> Option<&dyn Behavior> {
+        Some(self)
+    }
+
     fn stiffness_layout(&self) -> Option<MatrixLayout> {
         Some(self.layout())
     }
@@ -274,6 +278,34 @@ impl Domain for Radiation {
         OPTIONAL_COMPONENTS
     }
 
+    /// La tangente radiative lit le coefficient que le comportement a produit.
+    /// The **linearised** radiative film, about the far-field temperature:
+    /// `h_r = 4σεT_∞³`, a constant. See the module docs for why the
+    /// linearisation is taken there rather than at the current state.
+    fn element_matrix(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        surface_mass(geom, ke, |g| {
+            // `emis`, `T_inf`, and the Stefan-Boltzmann constant when it was
+            // supplied — all by index, exactly as `integrate_point` reads them.
+            let row = material.row(geom.cell, g);
+            let sigma = match lay.optional_material[0] {
+                ABSENT_COMPONENT => STEFAN_BOLTZMANN,
+                i => row[i as usize],
+            };
+            let emis = row[lay.material[0] as usize];
+            let t_inf = row[lay.material[1] as usize];
+            4.0 * sigma * emis * t_inf.powi(3)
+        })
+    }
+}
+
+impl Behavior for Radiation {
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.fespace.clone()
     }
@@ -312,32 +344,6 @@ impl Domain for Radiation {
         let t = deformation[lay.deformation[0] as usize];
         out[0] = sigma * emis * (t.powi(4) - t_inf.powi(4));
         Ok(())
-    }
-
-    /// La tangente radiative lit le coefficient que le comportement a produit.
-    /// The **linearised** radiative film, about the far-field temperature:
-    /// `h_r = 4σεT_∞³`, a constant. See the module docs for why the
-    /// linearisation is taken there rather than at the current state.
-    fn element_matrix(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        lay: &ElementLayout,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let geom = &geoms[0];
-        surface_mass(geom, ke, |g| {
-            // `emis`, `T_inf`, and the Stefan-Boltzmann constant when it was
-            // supplied — all by index, exactly as `integrate_point` reads them.
-            let row = material.row(geom.cell, g);
-            let sigma = match lay.optional_material[0] {
-                ABSENT_COMPONENT => STEFAN_BOLTZMANN,
-                i => row[i as usize],
-            };
-            let emis = row[lay.material[0] as usize];
-            let t_inf = row[lay.material[1] as usize];
-            4.0 * sigma * emis * t_inf.powi(3)
-        })
     }
 
     /// `4σεT³` au point — la vraie non-linéarité, évaluée à la température

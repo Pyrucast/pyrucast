@@ -53,7 +53,7 @@ use crate::models::transfer::{
 };
 use crate::models::ElementLayout;
 use crate::models::ZoneLayout;
-use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{Behavior, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use serde::{Deserialize, Serialize};
 
 /// Surface exchange with an imposed ambient, on a boundary FE subspace.
@@ -175,6 +175,10 @@ impl SubModelKind for BoundaryTransfer {
         Some(self)
     }
 
+    fn as_behavior(&self) -> Option<&dyn Behavior> {
+        Some(self)
+    }
+
     fn stiffness_layout(&self) -> Option<MatrixLayout> {
         Some(MatrixLayout {
             fespaces: vec![self.fespace.clone()],
@@ -240,6 +244,22 @@ impl Domain for BoundaryTransfer {
             .collect()
     }
 
+    /// The film matrix — the exchange kernel with both sides on the same cell,
+    /// which is exactly what an interface's diagonal block is.
+    fn element_matrix(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        let mat = material;
+        exchange_matrix(geom, geom, mat, lay, 1.0, ke)
+    }
+}
+
+impl Behavior for BoundaryTransfer {
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.fespace.clone()
     }
@@ -273,20 +293,6 @@ impl Domain for BoundaryTransfer {
             out[v] = h * deformation[lay.deformation[v] as usize];
         }
         Ok(())
-    }
-
-    /// The film matrix — the exchange kernel with both sides on the same cell,
-    /// which is exactly what an interface's diagonal block is.
-    fn element_matrix(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        lay: &ElementLayout,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let geom = &geoms[0];
-        let mat = material;
-        exchange_matrix(geom, geom, mat, lay, 1.0, ke)
     }
 }
 

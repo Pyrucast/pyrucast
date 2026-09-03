@@ -26,6 +26,7 @@ SubModelKind  (trait de base : le dénominateur commun de tout sous-modèle)
 ├── primal_vars / dual_vars                      ── les variables
 ├── physics       -> &'static [Physics]          ── la nature (requise)
 ├── as_domain     -> Option<&dyn Domain>        (défaut : None)  ── seam capacité
+├── as_behavior   -> Option<&dyn Behavior>      (défaut : None)  ── seam capacité
 ├── as_constraint -> Option<&dyn Constraint>    (défaut : None)  ── seam capacité
 │   └── matrix_element(kind, …)                  (le pont vers Domain, fourni)
 ├── stiffness_layout / mass_layout               (blocs calculés ; défaut : None)
@@ -34,15 +35,19 @@ SubModelKind  (trait de base : le dénominateur commun de tout sous-modèle)
 ├── contributions(kind, material)                (défaut : dérivé du layout)
 ├── build_stiffness_blocks                       (défaut : dérivé du layout)
 ├── internal_force_element                       (défaut : continuum Bᵀσ)
-├── build_internal_forces                        (fourni : pilote le précédent)
+├── internal_force_contribution                  (défaut : Computed(layout))
+├── external_force_contribution                  (défaut : rien)
 └── label / display / render
 
 Sous-traits « capacité », miroir des natures de sous-modèle (une struct
 n'implémente que celui qui la concerne) :
 ├── Domain      { material_fespace, material_components,
 │                 optional_material_components,
-│                 behavior_fespace, behavior_output_components,
-│                 integrate_point, integrate_behavior (fourni) }
+│                 element_matrix & consorts (tous fournis) }
+├── Behavior: Domain
+│              { behavior_fespace, behavior_output_components,
+│                deformation_reads, integrate_point,
+│                zone_layout, integrate_behavior, element_tangent (fournis) }
 └── Constraint  { multiplier_mesh, relations }
 ```
 
@@ -117,9 +122,14 @@ Tout le reste est générique et **ne change pas**.
 Défini dans `src/models/mod.rs`. Le trait de base ne porte que le **dénominateur
 commun** de tout sous-modèle ; chaque **capacité optionnelle** est un **sous-trait
 séparé**, exposé par un *seam* `as_*()` qui rend `None` par défaut. Ces
-sous-traits **font miroir des natures** de sous-modèle : `Domain` (physique
-définie sur une région : matériau + comportement) et `Constraint`
-(multiplicateurs de Lagrange). Une struct n'implémente **que** la capacité qui la
+sous-traits nomment chacun **un** fait, et un seul : `Domain` — *j'intègre sur
+un espace EF, avec du matériau* —, `Behavior` — *et j'ai une loi évaluée en
+chaque point* —, `Constraint` — *mes relations existent sous forme neutre, on
+peut m'imposer autrement que par mes blocs*. `Behavior` a `Domain` pour
+supertrait : toute loi s'intègre, toute intégration n'a pas de loi. C'est
+précisément ce qui manquait — un transfert de bord intègre `∫ h NᵀN` et n'a
+aucune loi ; tant que les deux faits étaient un seul, il devait s'en inventer
+une. Une struct n'implémente **que** la capacité qui la
 concerne : elle n'a donc jamais de méthode « présente mais qui erronerait ». Un
 domaine typique implémente `primal_vars`, `dual_vars`, `physics`, `as_domain` +
 `Domain`, le noyau `element_matrix`, `stiffness_layout`, `label` et `render`. Il
@@ -173,8 +183,8 @@ pub trait SubModelKind: Sync {
 }
 
 // Capacités optionnelles — implémentées à part, jamais sur le trait de base.
-// Un DOMAINE lit un matériau ET intègre un comportement : les deux sont UNE
-// capacité, car le matériau paramètre la loi (σ = D(E,ν):ε, M = E·I·κ, …).
+// Un DOMAINE lit un matériau et intègre sur un espace EF. Rien de plus :
+// avoir une loi est l'affaire de `Behavior`, juste en dessous.
 pub trait Domain: Sync {
     fn material_fespace(&self) -> Handle<SubFiniteElementSpace>;
     // Les constantes exigées, dans l'ordre où le noyau les indexera ;
@@ -239,14 +249,14 @@ pub trait Constraint {
 }
 ```
 
-`Domain` porte donc **deux voies**, et elles ont la même forme : la physique
-déclare ce qu'elle lit, la zone le traduit en positions une fois, le noyau
-indexe. Un noyau ne compare jamais un nom de composante.
+Les deux capacités portent chacune une voie, et elles ont la même forme : la
+physique déclare ce qu'elle lit, la zone le traduit en positions une fois, le
+noyau indexe. Un noyau ne compare jamais un nom de composante.
 
 | | déclare | résout (1× par zone) | consomme |
 |---|---|---|---|
-| voie **point de Gauss** | `deformation_reads` / `state_reads` | `zone_layout` → `ZoneLayout` | `integrate_point` |
-| voie **matrice** | `material_components` / `element_state_reads` | `element_layout` → `ElementLayout` | `element_matrix` & consorts |
+| voie **point de Gauss** (`Behavior`) | `deformation_reads` / `state_reads` | `zone_layout` → `ZoneLayout` | `integrate_point` |
+| voie **matrice** (`Domain`) | `material_components` / `element_state_reads` | `element_layout` → `ElementLayout` | `element_matrix` & consorts |
 
 Conséquences pratiques — pour donner une capacité à une physique, implémenter le
 sous-trait **et** redéfinir le seam correspondant pour rendre `Some(self)` :
@@ -254,12 +264,17 @@ sous-trait **et** redéfinir le seam correspondant pour rendre `Some(self)` :
 - **Domaine** (physique sur une région) : `impl Domain` + `as_domain()`. Déclarer
   `material_fespace()` (+ `material_components()`) — l'assembleur
   (`src/ops/matrix.rs`) sélectionne et valide le `SubElementField`
-  automatiquement ; `behavior_fespace()` + `behavior_output_components()` +
+  automatiquement — et les noyaux de matrice qu'on a. Tous sont **fournis** et
+  erronent par défaut : une physique peut intégrer sans produire de matrice d'un
+  genre donné, voire aucune.
+- **Comportement** (une loi au point) : `impl Behavior` + `as_behavior()`.
+  Déclarer `behavior_fespace()` + `behavior_output_components()` +
   `deformation_reads()` + `integrate_point(...)`, la loi de constitution **en un
   point de Gauss**. `integrate_behavior` est **fourni** : il résout la zone, puis
-  pilote ce noyau en parallèle sur toutes les cellules. Matériau et comportement
-  vont **ensemble** : même un élément linéaire (barre, poutre) a un comportement,
-  simplement trivial (`N = E·A·ε`).
+  pilote ce noyau en parallèle sur toutes les cellules. Un élément linéaire en a
+  bien une, simplement triviale (`N = E·A·ε`) ; un transfert de bord, lui, n'en a
+  pas — son `h·a` est le coefficient de son propre opérateur appliqué en un
+  point, et son résidu suit de l'opérateur.
 
   **Deux invariants tiennent dans ce noyau**, et ils décident de la forme du
   reste : aucun test que l'amont a déjà tranché — présence d'une composante,
@@ -335,7 +350,7 @@ et il pesait de 6 à 21 réels par point — jusqu'à plus de la moitié de la l
 comportement en 3-D. Surtout, l'émettre depuis COMP faisait payer sa dérivation à
 **chaque** itération : pour les huit lois plastiques sans forme fermée, treize
 retours radiaux par point au lieu d'un. La tangente se demande donc, en appelant
-`ops::matrix::tangent`, et `Domain::tangent_source()` dit d'avance ce qu'elle
+`ops::matrix::tangent`, et `Behavior::tangent_source()` dit d'avance ce qu'elle
 coûtera.
 
 ### Les forces internes

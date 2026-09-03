@@ -26,7 +26,7 @@ use crate::models::continuum::{elastic, voigt, Continuum};
 use crate::models::symmetry::{self, MaterialSymmetry};
 use crate::models::tensor::{dual_name, primal_name, Kinematics};
 use crate::models::ZoneLayout;
-use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{Behavior, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use crate::models::{ElementLayout, MatrixKind};
 use law::{ElasticLaw, StatelessLawKind};
 use serde::{Deserialize, Serialize};
@@ -164,6 +164,10 @@ impl SubModelKind for Elasticity {
         Some(self)
     }
 
+    fn as_behavior(&self) -> Option<&dyn Behavior> {
+        Some(self)
+    }
+
     fn stiffness_layout(&self) -> Option<MatrixLayout> {
         Some(MatrixLayout {
             fespaces: vec![self.continuum.fespace()],
@@ -231,6 +235,46 @@ impl Domain for Elasticity {
         elastic::OPTIONAL_COMPONENTS
     }
 
+    /// La raideur géométrique lit la contrainte courante ; la tangente, elle,
+    /// ne lit plus rien — elle est évaluée au point.
+    fn element_state_reads(&self, kind: MatrixKind) -> Vec<String> {
+        self.continuum.element_state_reads(kind)
+    }
+
+    fn element_geometric(
+        &self,
+        geoms: &[CellGeom],
+        _material: &SubElementField,
+        lay: &ElementLayout,
+        state: &SubElementField,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        self.continuum.element_geometric(&geoms[0], state, lay, ke)
+    }
+
+    fn element_matrix(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        self.continuum
+            .element_stiffness(&geoms[0], material, lay, self.symmetry, ke)
+    }
+
+    fn element_mass(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        self.continuum.element_mass(&geoms[0], material, lay, ke)
+    }
+}
+
+impl Behavior for Elasticity {
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.continuum.fespace()
     }
@@ -278,23 +322,6 @@ impl Domain for Elasticity {
         }
     }
 
-    /// La raideur géométrique lit la contrainte courante ; la tangente, elle,
-    /// ne lit plus rien — elle est évaluée au point.
-    fn element_state_reads(&self, kind: MatrixKind) -> Vec<String> {
-        self.continuum.element_state_reads(kind)
-    }
-
-    fn element_geometric(
-        &self,
-        geoms: &[CellGeom],
-        _material: &SubElementField,
-        lay: &ElementLayout,
-        state: &SubElementField,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        self.continuum.element_geometric(&geoms[0], state, lay, ke)
-    }
-
     /// The consistent tangent of a linear law is its elastic modulus — constant,
     /// but a tangent all the same, and it travels the same road as the others.
     fn tangent_point(
@@ -332,27 +359,6 @@ impl Domain for Elasticity {
         self.continuum
             .element_tangent_of(self, geoms, lay, deformation, prev, material, dt, ke)
     }
-
-    fn element_matrix(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        lay: &ElementLayout,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        self.continuum
-            .element_stiffness(&geoms[0], material, lay, self.symmetry, ke)
-    }
-
-    fn element_mass(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        lay: &ElementLayout,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        self.continuum.element_mass(&geoms[0], material, lay, ke)
-    }
 }
 
 #[cfg(test)]
@@ -361,8 +367,8 @@ mod tests {
 
     /// The rest state of `d` on its material — the `prev` of a first step,
     /// which the behaviour operator materializes for a caller who has none.
-    fn rest<D: Domain>(d: &D, mat: &Handle<SubElementField>) -> Handle<SubElementField> {
-        Handle::new(d.initial_state(&mat.read()).unwrap())
+    fn rest<B: Behavior>(b: &B, mat: &Handle<SubElementField>) -> Handle<SubElementField> {
+        Handle::new(b.initial_state(&mat.read()).unwrap())
     }
     use crate::aggregate::Aggregate;
     use crate::atoms::{ElementType, Node, NodeId};

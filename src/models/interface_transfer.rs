@@ -76,7 +76,8 @@ use crate::models::transfer::{
 use crate::models::ElementLayout;
 use crate::models::ZoneLayout;
 use crate::models::{
-    CellGeom, Contribution, CouplingLayout, Domain, MatrixKind, MatrixLayout, Physics, SubModelKind,
+    Behavior, CellGeom, Contribution, CouplingLayout, Domain, MatrixKind, MatrixLayout, Physics,
+    SubModelKind,
 };
 use serde::{Deserialize, Serialize};
 
@@ -232,6 +233,10 @@ impl SubModelKind for InterfaceTransfer {
         Some(self)
     }
 
+    fn as_behavior(&self) -> Option<&dyn Behavior> {
+        Some(self)
+    }
+
     /// The four blocks of the exchange law — two diagonal, two coupling. Nothing
     /// but the stiffness: an interface law adds no mass, no geometric stiffness.
     fn contributions(
@@ -309,6 +314,36 @@ impl Domain for InterfaceTransfer {
             .collect()
     }
 
+    /// A diagonal block: `+h ∫_Γ N_i N_j dΓ`.
+    fn element_matrix(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let geom = &geoms[0];
+        let mat = material;
+        exchange_matrix(geom, geom, mat, lay, 1.0, ke)
+    }
+
+    /// An off-diagonal block: `−h ∫_Γ N_i^row N_j^col dΓ`. The sign lives here
+    /// rather than in a factor, because the two kernels are already distinct.
+    fn coupling_element(
+        &self,
+        _kind: MatrixKind,
+        row_geoms: &[CellGeom],
+        col_geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        let mat = material;
+        exchange_matrix(&row_geoms[0], &col_geoms[0], mat, lay, -1.0, ke)
+    }
+}
+
+impl Behavior for InterfaceTransfer {
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.side_a.clone()
     }
@@ -339,34 +374,6 @@ impl Domain for InterfaceTransfer {
             out[v] = h * deformation[lay.deformation[v] as usize];
         }
         Ok(())
-    }
-
-    /// A diagonal block: `+h ∫_Γ N_i N_j dΓ`.
-    fn element_matrix(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        lay: &ElementLayout,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let geom = &geoms[0];
-        let mat = material;
-        exchange_matrix(geom, geom, mat, lay, 1.0, ke)
-    }
-
-    /// An off-diagonal block: `−h ∫_Γ N_i^row N_j^col dΓ`. The sign lives here
-    /// rather than in a factor, because the two kernels are already distinct.
-    fn coupling_element(
-        &self,
-        _kind: MatrixKind,
-        row_geoms: &[CellGeom],
-        col_geoms: &[CellGeom],
-        material: &SubElementField,
-        lay: &ElementLayout,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        let mat = material;
-        exchange_matrix(&row_geoms[0], &col_geoms[0], mat, lay, -1.0, ke)
     }
 }
 

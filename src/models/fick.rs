@@ -57,7 +57,7 @@ use crate::models::kernel::MAX_CELL_DOFS;
 use crate::models::symmetry::{self, MaterialSymmetry};
 use crate::models::ElementLayout;
 use crate::models::ZoneLayout;
-use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{Behavior, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use serde::{Deserialize, Serialize};
 
 /// Column DOF name of a species — `c_H2`.
@@ -345,6 +345,10 @@ impl SubModelKind for Fick {
         Some(self)
     }
 
+    fn as_behavior(&self) -> Option<&dyn Behavior> {
+        Some(self)
+    }
+
     fn stiffness_layout(&self) -> Option<MatrixLayout> {
         Some(MatrixLayout {
             fespaces: vec![self.fespace.clone()],
@@ -434,6 +438,28 @@ impl Domain for Fick {
         STORAGE_COMPONENTS
     }
 
+    fn element_matrix(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        element_stiffness(&geoms[0], material, lay, self.symmetry, ke)
+    }
+
+    fn element_mass(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        element_storage(&geoms[0], material, lay, ke)
+    }
+}
+
+impl Behavior for Fick {
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.fespace.clone()
     }
@@ -472,26 +498,6 @@ impl Domain for Fick {
             out[a] = acc;
         }
         Ok(())
-    }
-
-    fn element_matrix(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        lay: &ElementLayout,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        element_stiffness(&geoms[0], material, lay, self.symmetry, ke)
-    }
-
-    fn element_mass(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        lay: &ElementLayout,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        element_storage(&geoms[0], material, lay, ke)
     }
 }
 

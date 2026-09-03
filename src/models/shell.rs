@@ -64,7 +64,7 @@ use crate::models::kernel::MAX_CELL_DOFS;
 use crate::models::owned_components;
 use crate::models::ElementLayout;
 use crate::models::ZoneLayout;
-use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{Behavior, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use serde::{Deserialize, Serialize};
 
 /// Primal DOF names — three translations and three rotations, as for a space
@@ -347,6 +347,10 @@ impl SubModelKind for Shell {
         Some(self)
     }
 
+    fn as_behavior(&self) -> Option<&dyn Behavior> {
+        Some(self)
+    }
+
     /// **Two** FE subspaces where there is a shear to integrate: the full
     /// quadrature drives the cell loop and the membrane/bending terms, the
     /// reduced one the transverse shear. That is the whole of the
@@ -377,7 +381,7 @@ impl SubModelKind for Shell {
     /// The read list is the behaviour's own output, in its own order, so the
     /// `k`-th force is conjugate to the `k`-th row of `B`.
     fn internal_force_reads(&self) -> Vec<String> {
-        Domain::behavior_output_components(self)
+        Behavior::behavior_output_components(self)
     }
 
     /// The two quadratures again, on the other side of the same `B`: membrane,
@@ -478,6 +482,21 @@ impl Domain for Shell {
         }
     }
 
+    fn element_matrix(
+        &self,
+        geoms: &[CellGeom],
+        material: &SubElementField,
+        lay: &ElementLayout,
+        ke: &mut [f64],
+    ) -> Result<()> {
+        match self.model {
+            ShellModel::Thick => thick::element_stiffness(&geoms[0], &geoms[1], material, lay, ke),
+            ShellModel::Kirchhoff => kirchhoff::element_stiffness(&geoms[0], material, lay, ke),
+        }
+    }
+}
+
+impl Behavior for Shell {
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.fespace.clone()
     }
@@ -547,19 +566,6 @@ impl Domain for Shell {
             }
         }
         Ok(())
-    }
-
-    fn element_matrix(
-        &self,
-        geoms: &[CellGeom],
-        material: &SubElementField,
-        lay: &ElementLayout,
-        ke: &mut [f64],
-    ) -> Result<()> {
-        match self.model {
-            ShellModel::Thick => thick::element_stiffness(&geoms[0], &geoms[1], material, lay, ke),
-            ShellModel::Kirchhoff => kirchhoff::element_stiffness(&geoms[0], material, lay, ke),
-        }
     }
 }
 
