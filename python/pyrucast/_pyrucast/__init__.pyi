@@ -57,6 +57,7 @@ __all__ = [
     "embedded",
     "exp",
     "export_vtk",
+    "external_forces",
     "extrude",
     "fick",
     "flux",
@@ -1510,6 +1511,14 @@ class Model:
     def tangent_matrix(self, materials: ElementField, deformation: ElementField, prev: typing.Optional[ElementField] = None, dt: typing.Optional[builtins.float] = None) -> Matrix:
         r"""
         Voir `pyrucast.matrix.tangent`.
+        """
+    def internal_forces(self, state: ElementField) -> NodeField:
+        r"""
+        Voir `pyrucast.node_field.internal_forces`.
+        """
+    def external_forces(self) -> NodeField:
+        r"""
+        Voir `pyrucast.node_field.external_forces`.
         """
 
 @typing.final
@@ -3200,6 +3209,22 @@ def export_vtk(mesh: Mesh, path: builtins.str, field: typing.Optional[typing.Any
     field must come from a space built on **this** mesh, so its cells line up.
     """
 
+def external_forces(model: Model) -> NodeField:
+    r"""
+    External nodal forces of `model` — the right side of `Σ f_int = Σ f_ext`.
+    
+    The counterpart of `internal_forces(model, state)`. Every sub-model is asked
+    for its terms of the residual on the external side: the given data of its
+    weak form, on the right of the equals sign. A physics whose term is entirely
+    a response to `u` (elasticity, conduction, a bar) has none, so a model made
+    only of those yields an empty field — which is the honest answer, not a
+    failure.
+    
+    Splitting the two sides is what keeps signs out of the physics: an author
+    writes both halves positively, as the weak form reads, and the single
+    subtraction lives in the caller.
+    """
+
 def extrude(mesh: Mesh, direction: typing.Sequence[builtins.float], n_layers: builtins.int) -> Mesh:
     r"""
     Extrude `mesh` by `n_layers` layers along `direction` (the total
@@ -3447,19 +3472,23 @@ def interface_transfer(side_a: FiniteElementSpace, side_b: FiniteElementSpace, c
     node it could not. The jump is `q/h` for a flux density `q`.
     """
 
-def internal_forces(stresses: ElementField, model: Model) -> NodeField:
+def internal_forces(model: Model, state: ElementField) -> NodeField:
     r"""
-    Internal nodal forces `f = ∫ Bᵀ σ dΩ` of `model` (Cast3m `BSIG`).
+    Internal nodal forces of `model` — the left side of `Σ f_int = Σ f_ext`
+    (Cast3m `BSIG` for a continuum).
     
-    `stresses` is the material-state field produced by `integrate_behavior`
-    (`COMP`). Each behaviour-bearing sub-model applies its own `Bᵀ` (continuum
-    solid, bar or beam) and the forces are scattered to the nodes. Returns a
-    `NodeField` whose components are each sub-model's dual variables (`f_x`, …
-    for a solid/bar; `f_w`, `m_theta` for a beam).
+    The nodal mirror of `matrix.stiffness(model, materials)`: every sub-model is
+    asked for its term of the residual on the internal side. `state` is the
+    material-state field produced by `integrate_behavior` (`COMP`); a
+    behaviour-bearing sub-model applies its own `Bᵀ` (continuum solid, bar or
+    beam), a sub-model with no term here declares none. Returns a `NodeField`
+    whose components are each sub-model's dual variables (`f_x`, … for a
+    solid/bar; `f_w`, `m_theta` for a beam).
     
     For a linear law the result equals the assembled stiffness applied to the
-    solution (`K·u`); a non-linear law gives the exact internal forces, so
-    `r = f_ext − f_int` is the residual.
+    solution (`K·u`); a non-linear law gives the exact internal forces. Its
+    counterpart is `external_forces(model)`, and the gap between the two sums is
+    the residual.
     """
 
 def internal_forces_continuum(stresses: ElementField, fespace: FiniteElementSpace) -> NodeField:
@@ -3471,7 +3500,7 @@ def internal_forces_continuum(stresses: ElementField, fespace: FiniteElementSpac
     `B` is the universal symmetric gradient: it needs only the geometry
     (`fespace`) and the Voigt stress (`sigma_xx`, `sigma_xy`, …). Returns a
     `NodeField` with `space_dim` components `f_x, f_y, f_z` per node. **Bars and
-    beams are not covered** — use `internal_forces(stresses, model)` for those.
+    beams are not covered** — use `internal_forces(model, state)` for those.
     """
 
 def interp_to_gauss(field: NodeField, fespace: FiniteElementSpace) -> ElementField:

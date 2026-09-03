@@ -50,7 +50,7 @@ fn the_radiated_flux_matches_stefan_boltzmann() -> Result<()> {
     let at_gauss = element_field::interp_to_gauss(&temperature, &fixture.boundary_fes)?;
     let state =
         element_field::behavior::integrate(&fixture.radiation, &at_gauss, None, &materials, None)?;
-    let reaction = pyrucast::ops::node_field::internal_forces(&state, &fixture.radiation)?;
+    let reaction = pyrucast::ops::node_field::internal_forces(&fixture.radiation, &state)?;
 
     // The radiating edge has unit length, so the total flux is the density.
     let expected = STEFAN_BOLTZMANN * EMIS * (T_WALL.powi(4) - T_INF.powi(4));
@@ -85,7 +85,7 @@ fn the_tangent_is_the_derivative_of_the_residual() -> Result<()> {
             &materials,
             None,
         )?;
-        let f = pyrucast::ops::node_field::internal_forces(&state, &fixture.radiation)?;
+        let f = pyrucast::ops::node_field::internal_forces(&fixture.radiation, &state)?;
         Ok(fixture
             .edge
             .iter()

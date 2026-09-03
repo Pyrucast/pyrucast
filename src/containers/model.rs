@@ -1936,17 +1936,6 @@ impl SubModel {
             })?
             .initial_state(&material.read())
     }
-
-    /// Internal nodal forces `f = ∫ Bᵀ σ dΩ` of this sub-model (Cast3m `BSIG`).
-    /// The caller ([`crate::ops::node_field::internal_forces`]) supplies the
-    /// matching per-zone `stress` (this sub-model's
-    /// [`integrate_behavior`](Self::integrate_behavior) output).
-    pub(crate) fn build_internal_forces(
-        &self,
-        stress: &Handle<SubElementField>,
-    ) -> Result<crate::containers::node_field::SubNodeField> {
-        self.as_kind().build_internal_forces(stress)
-    }
 }
 
 impl fmt::Debug for SubModel {

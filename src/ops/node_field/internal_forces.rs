@@ -13,13 +13,16 @@
 //! its own `Bᵀ` kernel ([`crate::models::SubModelKind::internal_force_element`]), and
 //! this layer only orchestrates the per-zone pairing and aggregation.
 //!
-//! `stresses` is the material-state aggregate produced by
+//! The state read here is the material-state aggregate produced by
 //! [`crate::ops::element_field::behavior::integrate`] (`COMP`). For a **linear** law the result
 //! equals `K·u` (the assembled stiffness applied to the solution); a non-linear
 //! law departs from that tangent — which is the point of forming the residual
-//! from the exact stresses (`r = f_ext − f_int`).
+//! from the exact stresses.
 //!
-//! Constraint sub-models (`Dirichlet`, …) carry no behaviour and are skipped.
+//! This is the **internal** half of the balance `Σ f_int = Σ f_ext`; its
+//! counterpart is [`crate::ops::node_field::external_forces`](fn@crate::ops::node_field::external_forces),
+//! and the gap between the two sums is the residual. Every sub-model is asked
+//! for its term — a physics with none on this side simply declares none.
 
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::ElementField;
@@ -36,14 +39,18 @@ use crate::models::kernel;
 /// continuum operator (`f_x`, `f_y`, `f_z`).
 const AXES: [&str; 3] = ["x", "y", "z"];
 
-/// Internal nodal forces `f = ∫ Bᵀ σ dΩ` of `model` (Cast3m `BSIG`).
+/// Internal nodal forces of `model` — the left side of `Σ f_int = Σ f_ext`
+/// (Cast3m `BSIG` for a continuum).
 ///
-/// `stresses` is the material-state aggregate from
-/// [`crate::ops::element_field::behavior::integrate`]. For each behaviour-bearing sub-model the
-/// matching stress sub-field is paired by FE subspace (its behaviour FE
-/// subspace), its `Bᵀ` kernel is integrated cell-by-cell and scattered to the
-/// nodes. Returns a [`NodeField`] with one zone per behaviour-bearing sub-model
-/// in model order, its components the sub-model's dual variables.
+/// The nodal mirror of [`crate::ops::matrix::stiffness`](fn@crate::ops::matrix::stiffness):
+/// where that one asks every sub-model for its blocks of `∂r/∂u`, this asks
+/// every sub-model for its term of `r` on the internal side, through
+/// [`SubModelKind::internal_force_contribution`](crate::models::SubModelKind::internal_force_contribution).
+/// A behaviour-bearing domain
+/// pairs its state sub-field by FE subspace and integrates its `Bᵀ` kernel
+/// cell-by-cell; a sub-model with no term here declares none and is absent from
+/// the result. Returns a [`NodeField`] with one zone per contributing
+/// sub-model, in model order, its components that sub-model's dual variables.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -74,21 +81,18 @@ const AXES: [&str; 3] = ["x", "y", "z"];
 /// # let mut s = ElementField::new(&fes,
 /// #     vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_xy".into()])?;
 /// # s.get(0)?.write().set_uniform("sigma_xx", 100.0)?;
-/// let f = node_field::internal_forces(&s, &modele)?;
+/// let f = node_field::internal_forces(&modele, &s)?;
 /// assert_eq!(f.get(0)?.read().components(),
 ///            &["f_x".to_string(), "f_y".to_string()]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn internal_forces(stresses: &ElementField, model: &Model) -> Result<NodeField> {
+pub fn internal_forces(model: &Model, state: &ElementField) -> Result<NodeField> {
     let mut out = NodeField::empty();
     for h in model {
-        let beh_fespace = h.read().behavior_fespace();
-        let Some(beh_fespace) = beh_fespace else {
-            continue; // constraint sub-model — no behaviour, no internal force
-        };
-        let stress = stresses.sub_for_fespace(&beh_fespace)?;
-        let sub = h.read().build_internal_forces(&stress)?;
-        out.add_sub(Handle::new(sub))?;
+        let contribution = h.read().as_kind().internal_force_contribution(state)?;
+        for sub in &contribution {
+            out.add_sub(sub.clone())?;
+        }
     }
     Ok(out)
 }
@@ -223,7 +227,7 @@ mod tests {
         // f_int = ∫ Bᵀ σ  vs  K·u.
         let strain = deformation(&u, &fes).unwrap();
         let stress = integrate(&model, &strain, None, &materials, None).unwrap();
-        let f_int = internal_forces(&stress, &model).unwrap();
+        let f_int = internal_forces(&model, &stress).unwrap();
 
         let k = crate::ops::matrix::stiffness(&model, &materials).unwrap();
         let ku = (&k * &u).unwrap();
@@ -272,7 +276,7 @@ mod tests {
         let strain = deformation(&u, &fes).unwrap();
         let stress = integrate(&model, &strain, None, &materials, None).unwrap();
 
-        let via_model = internal_forces(&stress, &model).unwrap();
+        let via_model = internal_forces(&model, &stress).unwrap();
         let via_fespace = internal_forces_continuum(&stress, &fes).unwrap();
 
         let m = via_model.view().unwrap();
@@ -317,7 +321,7 @@ mod tests {
 
         let strain = deformation(&u, &fes).unwrap();
         let stress = integrate(&model, &strain, None, &materials, None).unwrap();
-        let f_int = internal_forces(&stress, &model).unwrap();
+        let f_int = internal_forces(&model, &stress).unwrap();
 
         let n = e * area * eps; // axial force
         let fv = f_int.view().unwrap();

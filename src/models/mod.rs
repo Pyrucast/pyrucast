@@ -28,13 +28,14 @@
 //! Everything else is generic. See the book chapter *« Ajouter une
 //! physique »* for the full walkthrough.
 
+use crate::aggregate::Aggregate;
 use crate::atoms::NodeId;
-use crate::containers::element_field::SubElementField;
+use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::field::SubField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::{Mesh, SubMesh};
-use crate::containers::node_field::SubNodeField;
+use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
@@ -868,6 +869,97 @@ pub trait SubModelKind: Sync {
             layout.dual_vars,
             |geoms, fe| self.internal_force_element(geoms, &stress_guard, &lay, fe),
         )
+    }
+
+    /// This sub-model's contribution to the **internal** side of the balance
+    /// `Σ f_int = Σ f_ext` — an **empty** field if it has no term there.
+    ///
+    /// With [`external_force_contribution`](Self::external_force_contribution)
+    /// it forms the nodal mirror of [`contributions`](Self::contributions):
+    /// where that one yields the blocks of `∂r/∂u`, these two yield `r` itself.
+    /// The residual is the gap between the two sums, so **no physics ever
+    /// writes a sign** — an author places their term on one side of the equals
+    /// sign or the other, which is a question of physics, and the single
+    /// subtraction lives in the caller.
+    ///
+    /// **Default**: the behaviour-bearing domain path, `∫ Bᵀ σ` built by
+    /// [`build_internal_forces`](Self::build_internal_forces) from the state
+    /// this sub-model's law produced. A sub-model that is not a [`Domain`]
+    /// contributes nothing here.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::element_field::ElementField;
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::{Model, SubModel};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::{RelationSense, SubModelKind};
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
+    /// # let mult = mesh::barycenter(&impose).unwrap();
+    /// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
+    /// #     None, None, RelationSense::Equality).unwrap();
+    /// # let mut etat = ElementField::new(&fes, vec!["flux_x".into(), "flux_y".into()])?;
+    /// # etat.get(0)?.write().set_uniform("flux_x", 1.0)?;
+    /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
+    /// // Une physique de volume rend son ∫Bᵀq ; un appui n'a pas de terme ici
+    /// // (il rendra sa réaction en la redéfinissant).
+    /// assert_eq!(volume.as_kind().internal_force_contribution(&etat)?.len(), 1);
+    /// assert_eq!(appui.as_kind().internal_force_contribution(&etat)?.len(), 0);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    fn internal_force_contribution(&self, state: &ElementField) -> Result<NodeField> {
+        let mut out = NodeField::empty();
+        let Some(domain) = self.as_domain() else {
+            return Ok(out);
+        };
+        let stress = state.sub_for_fespace(&domain.behavior_fespace())?;
+        out.add_sub(Handle::new(self.build_internal_forces(&stress)?))?;
+        Ok(out)
+    }
+
+    /// This sub-model's contribution to the **external** side of
+    /// `Σ f_int = Σ f_ext` — the given data of its terms, on the right of the
+    /// equals sign — an **empty** field if it has none.
+    ///
+    /// **Default**: nothing. A physics whose term is entirely a response to `u`
+    /// (elasticity, conduction, a bar) declares none; the ambient of a boundary
+    /// transfer and a distributed flux load declare one.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::{Model, SubModel};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::SubModelKind;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let zone = fes.get(0).unwrap();
+    /// # let volume = SubModel::heat_conduction(zone).unwrap();
+    /// // La conduction ne répond qu'à `u` : rien à droite du signe égal.
+    /// assert_eq!(volume.as_kind().external_force_contribution()?.len(), 0);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    fn external_force_contribution(&self) -> Result<NodeField> {
+        Ok(NodeField::empty())
     }
 
     /// Short type label, e.g. `"HeatConduction"` (used by `Debug` and the

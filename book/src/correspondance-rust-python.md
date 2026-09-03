@@ -169,7 +169,8 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `consolidate(field: &NodeField) -> NodeField` | `consolidate(field) -> NodeField` |
 | `mask(field: &NodeField, band: &Band, …) -> NodeField` | `mask(field, ge=None, gt=None, le=None, lt=None, components=None) -> NodeField` (champ `0/1` de même structure ; sucre `field >= x`). Accepte aussi un `SubNodeField` |
 | `flux(fespace: &FiniteElementSpace, density: FluxDensity, component: &str) -> NodeField` | `flux(fespace, density, component) -> NodeField` |
-| `internal_forces(model: &Model, stresses: &ElementField) -> NodeField` | `internal_forces(stresses, model) -> NodeField` |
+| `internal_forces(model: &Model, state: &ElementField) -> NodeField` | `internal_forces(model, state) -> NodeField` |
+| `external_forces(model: &Model) -> NodeField` | `external_forces(model) -> NodeField` |
 | `internal_forces_continuum(stresses: &ElementField, fespace: &FiniteElementSpace) -> NodeField` | `internal_forces_continuum(stresses, fespace) -> NodeField` |
 
 `flux` et `internal_forces` (`BSIG`, `∫ Bᵀ σ`) sont des **assemblages**,

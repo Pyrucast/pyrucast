@@ -256,7 +256,7 @@ def main():
             out = pyrucast.element_field.integrate_behavior(
                 model, strain, materials, prev=state
             )
-            f_int = pyrucast.node_field.internal_forces(out, model)
+            f_int = pyrucast.node_field.internal_forces(model, out)
             f_ext = pyrucast.node_field.restrict_like(load_scaled, f_int)
             residual = f_ext - f_int
             free_res = (

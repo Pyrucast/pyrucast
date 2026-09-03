@@ -142,24 +142,47 @@ pub fn flux(
     Ok(PyNodeField { inner })
 }
 
-/// Internal nodal forces `f = ∫ Bᵀ σ dΩ` of `model` (Cast3m `BSIG`).
+/// Internal nodal forces of `model` — the left side of `Σ f_int = Σ f_ext`
+/// (Cast3m `BSIG` for a continuum).
 ///
-/// `stresses` is the material-state field produced by `integrate_behavior`
-/// (`COMP`). Each behaviour-bearing sub-model applies its own `Bᵀ` (continuum
-/// solid, bar or beam) and the forces are scattered to the nodes. Returns a
-/// `NodeField` whose components are each sub-model's dual variables (`f_x`, …
-/// for a solid/bar; `f_w`, `m_theta` for a beam).
+/// The nodal mirror of `matrix.stiffness(model, materials)`: every sub-model is
+/// asked for its term of the residual on the internal side. `state` is the
+/// material-state field produced by `integrate_behavior` (`COMP`); a
+/// behaviour-bearing sub-model applies its own `Bᵀ` (continuum solid, bar or
+/// beam), a sub-model with no term here declares none. Returns a `NodeField`
+/// whose components are each sub-model's dual variables (`f_x`, … for a
+/// solid/bar; `f_w`, `m_theta` for a beam).
 ///
 /// For a linear law the result equals the assembled stiffness applied to the
-/// solution (`K·u`); a non-linear law gives the exact internal forces, so
-/// `r = f_ext − f_int` is the residual.
+/// solution (`K·u`); a non-linear law gives the exact internal forces. Its
+/// counterpart is `external_forces(model)`, and the gap between the two sums is
+/// the residual.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn internal_forces(
-    stresses: PyRef<PyElementField>,
     model: PyRef<PyModel>,
+    state: PyRef<PyElementField>,
 ) -> PyResult<PyNodeField> {
-    let nf = crate::ops::node_field::internal_forces(&stresses.inner, &model.inner)?;
+    let nf = crate::ops::node_field::internal_forces(&model.inner, &state.inner)?;
+    Ok(PyNodeField { inner: nf })
+}
+
+/// External nodal forces of `model` — the right side of `Σ f_int = Σ f_ext`.
+///
+/// The counterpart of `internal_forces(model, state)`. Every sub-model is asked
+/// for its terms of the residual on the external side: the given data of its
+/// weak form, on the right of the equals sign. A physics whose term is entirely
+/// a response to `u` (elasticity, conduction, a bar) has none, so a model made
+/// only of those yields an empty field — which is the honest answer, not a
+/// failure.
+///
+/// Splitting the two sides is what keeps signs out of the physics: an author
+/// writes both halves positively, as the weak form reads, and the single
+/// subtraction lives in the caller.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn external_forces(model: PyRef<PyModel>) -> PyResult<PyNodeField> {
+    let nf = crate::ops::node_field::external_forces(&model.inner)?;
     Ok(PyNodeField { inner: nf })
 }
 
@@ -170,7 +193,7 @@ pub fn internal_forces(
 /// `B` is the universal symmetric gradient: it needs only the geometry
 /// (`fespace`) and the Voigt stress (`sigma_xx`, `sigma_xy`, …). Returns a
 /// `NodeField` with `space_dim` components `f_x, f_y, f_z` per node. **Bars and
-/// beams are not covered** — use `internal_forces(stresses, model)` for those.
+/// beams are not covered** — use `internal_forces(model, state)` for those.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn internal_forces_continuum(
@@ -259,6 +282,23 @@ impl PyMesh {
     #[pyo3(signature = (components=None))]
     fn positions(slf: PyRef<'_, Self>, components: Option<Vec<String>>) -> PyResult<PyNodeField> {
         super::node_field::positions(slf, components)
+    }
+}
+
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[pymethods]
+impl PyModel {
+    /// Voir `pyrucast.node_field.internal_forces`.
+    fn internal_forces(
+        slf: PyRef<'_, Self>,
+        state: PyRef<PyElementField>,
+    ) -> PyResult<PyNodeField> {
+        super::node_field::internal_forces(slf, state)
+    }
+
+    /// Voir `pyrucast.node_field.external_forces`.
+    fn external_forces(slf: PyRef<'_, Self>) -> PyResult<PyNodeField> {
+        super::node_field::external_forces(slf)
     }
 }
 

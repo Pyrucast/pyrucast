@@ -76,7 +76,7 @@ variables internes (`VAR0` → `VAR1`), voir
 [Plasticité parfaite](../mecanique/plasticite.md) (retour radial von Mises) et
 [Endommagement de Mazars](../mecanique/mazars.md).
 
-## `internal_forces(stresses, model)` → `NodeField`
+## `internal_forces(model, state)` → `NodeField`
 
 Les **forces internes** `f = ∫ Bᵀ σ dΩ` (le `BSIG` de cast3m) sont la
 **transposée** de l'opérateur de déformation `B` : là où
@@ -86,7 +86,7 @@ nœuds. C'est la **généralisation mécanique** de [`divergence`](champs.md) (q
 est exactement `Bᵀ q` pour un transport scalaire) : une composante de sortie par
 DDL dual.
 
-`stresses` est le champ d'état matériau renvoyé par `integrate_behavior`. Chaque
+`state` est le champ d'état matériau renvoyé par `integrate_behavior`. Chaque
 sous-modèle porteur d'un comportement applique **son propre** `Bᵀ` — c'est
 pourquoi l'opérateur prend un **modèle** et pas un simple espace EF : un même
 `SEG2` peut être une barre (`Bᵀ` axial, DDL déplacement) ou une poutre (`Bᵀ` à
@@ -94,12 +94,30 @@ deux quadratures flexion + cisaillement, DDL `w, θ`), et seul le modèle tranch
 Solides continus, barres et poutres sont donc tous couverts.
 
 Pour une loi **linéaire**, le résultat égale la rigidité appliquée à la solution
-(`K·u`) ; pour une loi **non linéaire**, il donne les forces internes exactes, de
-sorte que `r = f_ext − f_int` est le **résidu** d'équilibre.
+(`K·u`) ; pour une loi **non linéaire**, il donne les forces internes exactes.
+
+C'est le côté **intérieur** du bilan `Σ f_int = Σ f_ext`, dont l'écart est le
+résidu d'équilibre. Le miroir nodal de [`stiffness`](assemblage.md) : là où
+l'assemblage demande à chaque sous-modèle ses blocs de `∂r/∂u`, celui-ci lui
+demande son terme de `r`. Un sous-modèle qui n'a pas de terme de ce côté n'en
+déclare aucun et n'apparaît pas dans le résultat.
 
 ```python
 {{#include ../../../tests/python/test_doc_ops_physiques.py:forces_internes}}
 ```
+
+## `external_forces(model)` → `NodeField`
+
+L'autre côté du bilan : la **donnée** de chaque terme, à droite du signe égal.
+Une physique dont le terme n'est qu'une réponse à `u` — élasticité, conduction,
+barre — n'en a aucun, si bien qu'un modèle qui n'en contient que de celles-là
+rend un champ **vide**, ce qui est la réponse juste et non un échec.
+
+Séparer les deux côtés est ce qui garde les signes hors des fichiers de physique
+: l'auteur écrit ses deux moitiés positivement, comme la forme faible se lit, et
+l'unique soustraction vit chez l'appelant. De quel côté un terme se range est
+une question de physique — le côté du signe égal où il se trouve — et non de
+comptabilité.
 
 ### `internal_forces_continuum(stresses, fespace)` → `NodeField`
 
@@ -108,5 +126,5 @@ plasticité), où `B` est le gradient symétrique universel et les DDL sont touj
 un déplacement : elle ne demande que la géométrie (`fespace`) et la contrainte en
 notation de Voigt (`sigma_xx`, `sigma_xy`…), et renvoie `space_dim` composantes
 `f_x, f_y, f_z` par nœud. **Barres et poutres ne sont pas couvertes** — leur `B`
-n'est pas le gradient symétrique — : utiliser `internal_forces(stresses, model)`
+n'est pas le gradient symétrique — : utiliser `internal_forces(model, state)`
 pour celles-ci.

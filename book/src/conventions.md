@@ -105,9 +105,11 @@ composantes que d'axes — vérifié par comptage, jamais par nom), une exigence
 **sens porté par les noms de composantes** ne l'est pas.
 
 Pour tester la condition sans se tromper, lire la méthode avec un receveur
-**quelconque**, pas avec l'exemple bien nommé : `stresses.internal_forces(model)`
-sonne juste, mais c'est le nom de la variable qui fait le travail —
-`field.internal_forces()` révèle que le type ne promet rien.
+**quelconque**, pas avec l'exemple bien nommé :
+`stresses.internal_forces_continuum(fespace)` sonne juste, mais c'est le nom de
+la variable qui fait le travail — `field.internal_forces_continuum(fespace)`
+révèle que le type ne promet rien. Son homonyme `internal_forces`, lui, a bien
+une méthode : son sujet est le **modèle**, qui promet ses physiques.
 
 ```python
 {{#include ../../tests/python/test_doc_conventions.py:chainage}}

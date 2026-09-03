@@ -59,7 +59,7 @@ def _uniform_temperature(c, grid, fes, value):
 def _thermal_load(model, materials, eps_th):
     """Equivalent nodal thermal load f_th = ∫ Bᵀ D ε_th (BSIG of σ_th = D:ε_th)."""
     sig_th = pyrucast.element_field.integrate_behavior(model, eps_th, materials)
-    return pyrucast.node_field.internal_forces(sig_th, model)
+    return pyrucast.node_field.internal_forces(model, sig_th)
 
 
 def _displacement(solution, c, grid):

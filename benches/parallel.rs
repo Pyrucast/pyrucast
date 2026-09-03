@@ -292,7 +292,7 @@ fn bench_axisymmetric(c: &mut Criterion) {
             &format!("internal_forces {tag} {ASSEMBLY_N}x{ASSEMBLY_N} QUA4"),
             |b| {
                 b.iter(|| {
-                    black_box(pyrucast::ops::node_field::internal_forces(&state, &g.model).unwrap())
+                    black_box(pyrucast::ops::node_field::internal_forces(&g.model, &state).unwrap())
                 })
             },
         );

@@ -293,6 +293,7 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::matrix::tangent, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::node_field::flux, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::node_field::internal_forces, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::node_field::external_forces, m)?)?;
     m.add_function(wrap_pyfunction!(
         py::ops::node_field::internal_forces_continuum,
         m

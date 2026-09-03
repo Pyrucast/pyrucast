@@ -190,10 +190,14 @@ f_ext = pyrucast.NodeField(support, ["f_x", "f_y"])
 # Solution déjà obtenue par le solveur.
 eps = pyrucast.element_field.deformation(solution, fes)  # ε = B·u
 sig = pyrucast.element_field.integrate_behavior(model, eps, materials)  # COMP : σ
-f_int = pyrucast.node_field.internal_forces(sig, model)  # BSIG : ∫ Bᵀ σ
-residu = f_ext - f_int  # équilibre
+f_int = pyrucast.node_field.internal_forces(model, sig)  # BSIG : ∫ Bᵀ σ
+# L'autre côté du bilan. L'élasticité seule n'a aucun terme donné : le champ
+# revient vide, et tout l'extérieur vient du chargement construit à la main.
+f_ext_modele = pyrucast.node_field.external_forces(model)
+residu = f_ext - f_int  # Σ f_ext − Σ f_int
 # ANCHOR_END: forces_internes
 assert residu.node_count() > 0
+assert f_ext_modele.node_count() == 0
 
 # ── Construction du champ matériau ──────────────────────────────────────────
 

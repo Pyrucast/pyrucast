@@ -142,7 +142,7 @@ fn check_beam(
     let u = primal_of(&solution, nodes, &model.primal_vars())?;
     let strain = beam_deformation(&u, fes, &materials)?;
     let state = behavior::integrate(model, &strain, None, &materials, None)?;
-    let f_int = internal_forces(&state, model)?;
+    let f_int = internal_forces(model, &state)?;
     let k = pyrucast::ops::matrix::stiffness(model, &materials)?;
     let gap = residual_gap(&k, &f_int, &u, nodes)?;
     assert!(gap < 1e-10, "f_int vs K·u: relative gap {gap:e}");
@@ -314,7 +314,7 @@ fn truss_internal_forces_still_match_k_times_u() -> Result<()> {
 
     let strain = deformation(&u, &fes)?;
     let state = behavior::integrate(&model, &strain, None, &materials, None)?;
-    let f_int = internal_forces(&state, &model)?;
+    let f_int = internal_forces(&model, &state)?;
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let gap = residual_gap(&k, &f_int, &u, &nodes)?;
     assert!(gap < 1e-10, "f_int vs K·u: relative gap {gap:e}");
@@ -376,7 +376,7 @@ fn check_shell(
 
     let strain = shell_deformation(&u, &fes, formulation)?;
     let state = behavior::integrate(&model, &strain, None, &materials, None)?;
-    let f_int = internal_forces(&state, &model)?;
+    let f_int = internal_forces(&model, &state)?;
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let gap = residual_gap(&k, &f_int, &u, &nodes)?;
     assert!(gap < 1e-10, "f_int vs K·u: relative gap {gap:e}");

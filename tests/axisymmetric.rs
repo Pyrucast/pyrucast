@@ -449,7 +449,7 @@ fn internal_forces_match_stiffness_times_displacement() -> Result<()> {
     let strain = element_field::deformation(&u, &fes)?;
     let stress =
         pyrucast::ops::element_field::behavior::integrate(&model, &strain, None, &materials, None)?;
-    let bsig = pyrucast::ops::node_field::internal_forces(&stress, &model)?;
+    let bsig = pyrucast::ops::node_field::internal_forces(&model, &stress)?;
 
     let stiffness = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let ku = stiffness.mul_field(&u)?;

@@ -71,7 +71,6 @@ NO_METHOD = {
     "beam_deformation": "exige déplacements + rotations",
     "shell_deformation": "exige les six DDL de coque, et la formulation",
     "thermal_strain": "exige une température, et alpha dans le matériau",
-    "internal_forces": "exige la contrainte de Voigt (sigma_xx, sigma_zz…)",
     "internal_forces_continuum": "exige la contrainte de Voigt",
     "merge": "symétrique — `a | b` est déjà sa forme",
     "psca": "symétrique — l'ordre ne compte pas",
