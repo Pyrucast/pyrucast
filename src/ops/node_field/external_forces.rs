@@ -54,7 +54,7 @@ use crate::error::Result;
 pub fn external_forces(model: &Model) -> Result<NodeField> {
     let mut out = NodeField::empty();
     for h in model {
-        let contribution = h.read().as_kind().external_force_contribution()?;
+        let contribution = h.read().as_kind().external_force_contribution();
         for sub in &contribution {
             out.add_sub(sub.clone())?;
         }

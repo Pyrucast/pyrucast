@@ -933,6 +933,11 @@ pub trait SubModelKind: Sync {
     /// `Σ f_int = Σ f_ext` — the given data of its terms, on the right of the
     /// equals sign — an **empty** field if it has none.
     ///
+    /// No `Result`: with nothing but `&self` to read, a sub-model already knows
+    /// at construction what it owes here, and nothing can fail. The day this
+    /// receives the given values it integrates, resolving their component names
+    /// can fail, and it will earn one.
+    ///
     /// **Default**: nothing. A physics whose term is entirely a response to `u`
     /// (elasticity, conduction, a bar) declares none; the ambient of a boundary
     /// transfer and a distributed flux load declare one.
@@ -955,11 +960,11 @@ pub trait SubModelKind: Sync {
     /// # let zone = fes.get(0).unwrap();
     /// # let volume = SubModel::heat_conduction(zone).unwrap();
     /// // La conduction ne répond qu'à `u` : rien à droite du signe égal.
-    /// assert_eq!(volume.as_kind().external_force_contribution()?.len(), 0);
+    /// assert_eq!(volume.as_kind().external_force_contribution().len(), 0);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    fn external_force_contribution(&self) -> Result<NodeField> {
-        Ok(NodeField::empty())
+    fn external_force_contribution(&self) -> NodeField {
+        NodeField::empty()
     }
 
     /// Short type label, e.g. `"HeatConduction"` (used by `Debug` and the
