@@ -8,10 +8,13 @@
 //! wrongly, a rotation applied to one side only, a Gauss weight counted twice
 //! would all show up here at once.
 //!
-//! Each case solves a clamped, loaded member and compares the internal forces
-//! of the state it settles in with the assembled stiffness applied to that same
-//! displacement. `Truss` is here as the **witness**: it is the one structural
-//! element that already had a `Bᵀ`, so it must not move.
+//! The beams solve a clamped, loaded member and compare the internal forces of
+//! the state it settles in with the assembled stiffness applied to that same
+//! displacement. The bar and the shell are checked on an **imposed**
+//! displacement instead — the identity holds for any, and it lets a shell be
+//! tried in both formulations on both element shapes. `Truss` is here as the
+//! **witness**: it is the one structural element that already had a `Bᵀ`, so it
+//! must not move.
 //!
 //! The mirror of `tests/tangent.rs`, which checks the consistent tangent against
 //! the finite-difference derivative of these same internal forces.
@@ -27,7 +30,10 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
-use pyrucast::ops::element_field::{beam_deformation, behavior, deformation, material_field};
+use pyrucast::models::shell::ShellModel;
+use pyrucast::ops::element_field::{
+    beam_deformation, behavior, deformation, material_field, shell_deformation,
+};
 use pyrucast::ops::node_field::internal_forces;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::ops::{mesh, model};
@@ -313,4 +319,109 @@ fn truss_internal_forces_still_match_k_times_u() -> Result<()> {
     let gap = residual_gap(&k, &f_int, &u, &nodes)?;
     assert!(gap < 1e-10, "f_int vs K·u: relative gap {gap:e}");
     Ok(())
+}
+
+// ─── Shells, in both formulations and on both element shapes ────────────────
+
+/// A plate of `cells`, laid out on a plane **tilted** away from the global
+/// axes: local and global frames then differ, and a `Bᵀ` that forgot to rotate
+/// the forces back would show it.
+fn plate(
+    kind: ElementType,
+    plan: &[[f64; 2]],
+    cells: &[&[usize]],
+) -> Result<(FiniteElementSpace, Vec<Node>)> {
+    const E1: [f64; 3] = [0.8, 0.6, 0.0];
+    const E2: [f64; 3] = [-0.36, 0.48, 0.8];
+    let coords = Handle::new(Coords::new(3)?);
+    let nodes: Vec<Node> = plan
+        .iter()
+        .map(|p| {
+            let x: Vec<f64> = (0..3).map(|k| p[0] * E1[k] + p[1] * E2[k]).collect();
+            Node::create_in(coords.clone(), &x)
+        })
+        .collect::<Result<_>>()?;
+    let mut m = Mesh::from_submesh(SubMesh::new(coords, kind));
+    for c in cells {
+        m.add_cell(&c.iter().map(|&i| nodes[i].id()).collect::<Vec<_>>())?;
+    }
+    Ok((FiniteElementSpace::lagrange1(&m)?, nodes))
+}
+
+/// An arbitrary displacement/rotation state on every node — nothing rigid, so
+/// every row of `B` carries something.
+fn imposed(model: &Model, nodes: &[Node]) -> Result<NodeField> {
+    let support = Handle::new(SubMesh::poi1_from_nodes(nodes)?);
+    let vars = model.primal_vars();
+    let mut u = SubNodeField::from_poi1(&support, vars.clone())?;
+    for (i, n) in nodes.iter().enumerate() {
+        for (j, v) in vars.iter().enumerate() {
+            u.set_value(n.id(), v, 1e-3 * (0.4 + i as f64) * (0.9 - 0.25 * j as f64))?;
+        }
+    }
+    Ok(NodeField::from_sub(u))
+}
+
+/// `f_int == K·u` on one plate.
+fn check_shell(
+    kind: ElementType,
+    plan: &[[f64; 2]],
+    cells: &[&[usize]],
+    formulation: ShellModel,
+) -> Result<()> {
+    let (fes, nodes) = plate(kind, plan, cells)?;
+    let model = model::shell(&fes, formulation)?;
+    let materials = material_field(&model, &[("E", 210_000.0), ("nu", 0.3), ("h", 0.02)])?;
+    let u = imposed(&model, &nodes)?;
+
+    let strain = shell_deformation(&u, &fes, formulation)?;
+    let state = behavior::integrate(&model, &strain, None, &materials, None)?;
+    let f_int = internal_forces(&state, &model)?;
+    let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
+    let gap = residual_gap(&k, &f_int, &u, &nodes)?;
+    assert!(gap < 1e-10, "f_int vs K·u: relative gap {gap:e}");
+    Ok(())
+}
+
+/// The plan of a plate: two triangles, or one quadrangle, over four corners.
+const CORNERS: [[f64; 2]; 4] = [[0.0, 0.0], [2.0, 0.0], [2.2, 1.5], [-0.1, 1.4]];
+
+#[test]
+fn thick_shell_tri3_internal_forces_match_k_times_u() -> Result<()> {
+    check_shell(
+        ElementType::TRI3,
+        &CORNERS,
+        &[&[0, 1, 2], &[0, 2, 3]],
+        ShellModel::Thick,
+    )
+}
+
+#[test]
+fn thick_shell_qua4_internal_forces_match_k_times_u() -> Result<()> {
+    check_shell(
+        ElementType::QUA4,
+        &CORNERS,
+        &[&[0, 1, 2, 3]],
+        ShellModel::Thick,
+    )
+}
+
+#[test]
+fn discrete_kirchhoff_tri3_internal_forces_match_k_times_u() -> Result<()> {
+    check_shell(
+        ElementType::TRI3,
+        &CORNERS,
+        &[&[0, 1, 2], &[0, 2, 3]],
+        ShellModel::Kirchhoff,
+    )
+}
+
+#[test]
+fn discrete_kirchhoff_qua4_internal_forces_match_k_times_u() -> Result<()> {
+    check_shell(
+        ElementType::QUA4,
+        &CORNERS,
+        &[&[0, 1, 2, 3]],
+        ShellModel::Kirchhoff,
+    )
 }

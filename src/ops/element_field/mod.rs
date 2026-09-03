@@ -6,6 +6,7 @@
 //!   [`deformation`](fn@deformation) (the linearized strain `ε` of a
 //!   displacement field) and its structural variants
 //!   [`beam_deformation`](fn@beam_deformation),
+//!   [`shell_deformation`](fn@shell_deformation),
 //!   [`interp_to_gauss`](fn@interp_to_gauss),
 //!   [`thermal_strain`](fn@thermal_strain);
 //! - *material data* — [`material_field`](fn@material_field) & co., the
@@ -24,6 +25,7 @@ pub mod interp_to_gauss;
 pub mod mask;
 pub mod material_field;
 pub mod methods;
+pub mod shell_deformation;
 pub mod thermal_strain;
 
 pub use beam_deformation::beam_deformation;
@@ -33,4 +35,5 @@ pub use gradient::gradient;
 pub use interp_to_gauss::interp_to_gauss;
 pub use mask::{mask, mask_sub};
 pub use material_field::{material_field, material_field_per_sub_model, sub_material_field};
+pub use shell_deformation::shell_deformation;
 pub use thermal_strain::thermal_strain;

@@ -52,8 +52,8 @@ use crate::containers::element_field::SubElementField;
 use crate::containers::field::ABSENT_COMPONENT;
 use crate::error::Result;
 use crate::models::shell::{
-    accumulate, local_derivatives_into, local_frame, membrane_and_drilling, to_global, ShellMatrix,
-    ShellNodes2, ShellRows2, ShellRows3, MAX_SHELL_DOFS,
+    accumulate, accumulate_scalar, b_into, drilling_law, local_frame, shear_b_into, to_global,
+    BendingSetup, ShellB, ShellMatrix, MAX_SHELL_DOFS, SHEAR_ROW, SHELL_STRAINS,
 };
 use crate::models::{CellGeom, ElementLayout};
 
@@ -243,67 +243,33 @@ pub fn element_stiffness(
         row[lay.material[1] as usize],
         row[lay.material[2] as usize],
     );
+    let dm = membrane_law(e, nu, h);
     let db = bending_law(e, nu, h);
+    let kd = drilling_law(e, nu, h);
     let ds = shear_law(e, nu, h, shear_factor(row, lay));
 
     let frame = local_frame(full)?;
+    // La rotation de fibre est un champ à part entière : sa courbure est son
+    // gradient, et il n'y a rien à éliminer d'abord.
+    let setup = BendingSetup::Direct;
     // Toute la matrice tient sur la pile : `Shell::new` a déjà refusé tout
     // élément plus large qu'un QUA4.
     let mut local: ShellMatrix = [0.0; MAX_SHELL_DOFS * MAX_SHELL_DOFS];
+    let mut b: ShellB = [[0.0; MAX_SHELL_DOFS]; SHELL_STRAINS];
 
-    // ── Membrane and drilling: the part shared with every formulation ──────
-    membrane_and_drilling(full, &frame, e, nu, h, &mut local)?;
-
-    // ── Bending: full quadrature, on the independent fibre rotation ────────
-    let mut dn: ShellNodes2 = [[0.0; 2]; 4];
-    let mut bb: ShellRows3 = [[0.0; MAX_SHELL_DOFS]; 3];
+    // ── Membrane, bending and drilling: full quadrature ───────────────────
     for g in 0..full.n_gauss {
-        local_derivatives_into(full, &frame, g, &mut dn)?;
+        b_into(full, &frame, &setup, g, &mut b)?;
         let w = full.det_j_w(g);
-
-        // Bending `κ` on (θ_x, θ_y) — local DOFs 6i+3, 6i+4.
-        for row in bb.iter_mut() {
-            row[..side].fill(0.0);
-        }
-        for i in 0..n {
-            let (dx, dy) = (dn[i][0], dn[i][1]);
-            let (tx, ty) = (6 * i + 3, 6 * i + 4);
-            bb[0][ty] = dx;
-            bb[1][tx] = -dy;
-            bb[2][ty] = dy;
-            bb[2][tx] = -dx;
-        }
-        accumulate(&mut local, &bb, &db, w, side);
+        accumulate(&mut local, &b[0..3], &dm, w, side);
+        accumulate(&mut local, &b[3..6], &db, w, side);
+        accumulate_scalar(&mut local, &b[6..SHEAR_ROW], kd, w, side);
     }
 
-    // ── Transverse shear: reduced quadrature, against locking ──────────────
-    let mut bs: ShellRows2 = [[0.0; MAX_SHELL_DOFS]; 2];
+    // ── Transverse shear: reduced quadrature, against locking ─────────────
     for g in 0..reduced.n_gauss {
-        local_derivatives_into(reduced, &frame, g, &mut dn)?;
-        let shape = reduced.n_at_g(g);
-        let w = reduced.det_j_w(g);
-        // `γ` on (w, θ_x, θ_y) — local DOFs 6i+2, 6i+3, 6i+4.
-        for row in bs.iter_mut() {
-            row[..side].fill(0.0);
-        }
-        for i in 0..n {
-            let (dx, dy) = (dn[i][0], dn[i][1]);
-            let (wz, tx, ty) = (6 * i + 2, 6 * i + 3, 6 * i + 4);
-            bs[0][wz] = dx;
-            bs[0][ty] = shape[i];
-            bs[1][wz] = dy;
-            bs[1][tx] = -shape[i];
-        }
-        for a in 0..side {
-            for row in bs.iter() {
-                if row[a] == 0.0 {
-                    continue;
-                }
-                for b in 0..side {
-                    local[a * MAX_SHELL_DOFS + b] += ds * row[a] * row[b] * w;
-                }
-            }
-        }
+        shear_b_into(reduced, &frame, g, &mut b)?;
+        accumulate_scalar(&mut local, &b[SHEAR_ROW..], ds, reduced.det_j_w(g), side);
     }
 
     to_global(&local, &frame, n, ke);

@@ -57,8 +57,8 @@ use crate::atoms::ElementType;
 use crate::containers::element_field::SubElementField;
 use crate::error::{PyrucastError, Result};
 use crate::models::shell::{
-    accumulate, local_coords_into, local_frame, membrane_and_drilling, to_global, ShellMatrix,
-    ShellNodes2, ShellRows3, MAX_SHELL_DOFS,
+    accumulate, accumulate_scalar, b_into, drilling_law, local_coords_into, local_frame, to_global,
+    BendingSetup, ShellB, ShellMatrix, ShellNodes2, MAX_SHELL_DOFS, SHELL_STRAINS,
 };
 use crate::models::{CellGeom, ElementLayout};
 
@@ -164,6 +164,42 @@ fn element_pair(n: usize, cell: usize) -> Result<(ElementType, ElementType)> {
     }
 }
 
+/// What a discrete-Kirchhoff cell settles before its Gauss loop: the in-plane
+/// node coordinates, the two eliminations built from them, and the
+/// linear/quadratic element pair.
+///
+/// All three are facts of the **cell**; asking for them again at each Gauss
+/// point would reprove what the caller has just established.
+pub(crate) struct Setup {
+    p: ShellNodes2,
+    n: usize,
+    cx: Elimination,
+    cy: Elimination,
+    pair: (ElementType, ElementType),
+}
+
+impl Setup {
+    /// The elimination of one facet, from its geometry.
+    pub(crate) fn new(geom: &CellGeom, frame: &[[f64; 3]; 3]) -> Result<Self> {
+        let n = geom.n_nodes;
+        let mut p: ShellNodes2 = [[0.0; 2]; 4];
+        local_coords_into(geom, frame, &mut p);
+        let pair = element_pair(n, geom.cell)?;
+        let (cx, cy) = constraint_matrices(&p[..n], geom.cell)?;
+        Ok(Self { p, n, cx, cy, pair })
+    }
+
+    /// The three curvature rows at Gauss point `g`.
+    pub(crate) fn bending_into(
+        &self,
+        geom: &CellGeom,
+        g: usize,
+        b: &mut [[f64; MAX_SHELL_DOFS]],
+    ) -> Result<()> {
+        bending_b(geom, &self.p[..self.n], &self.cx, &self.cy, self.pair, g, b)
+    }
+}
+
 /// The curvature operator `B_b` (3 × 6n) at Gauss point `g`, on the **shell**
 /// degrees of freedom `[u, v, w, θ_x, θ_y, θ_z]` per node.
 ///
@@ -178,7 +214,7 @@ fn bending_b(
     cy: &Elimination,
     pair: (ElementType, ElementType),
     g: usize,
-    b: &mut ShellRows3,
+    b: &mut [[f64; MAX_SHELL_DOFS]],
 ) -> Result<()> {
     let n = p.len();
     let cell = geom.cell;
@@ -319,20 +355,22 @@ pub fn element_stiffness(
     );
     let db = bending_law(e, nu, h);
 
+    let dm = super::thick::membrane_law(e, nu, h);
+    let kd = drilling_law(e, nu, h);
+
     let frame = local_frame(geom)?;
-    let mut p: ShellNodes2 = [[0.0; 2]; 4];
-    local_coords_into(geom, &frame, &mut p);
-    let p = &p[..n];
-    // Le couple linéaire/quadratique, tranché **une fois** pour la maille.
-    let pair = element_pair(n, cell)?;
-    let (cx, cy) = constraint_matrices(p, cell)?;
+    // Le couple linéaire/quadratique et l'élimination, tranchés **une fois**
+    // pour la maille.
+    let setup = BendingSetup::Discrete(Setup::new(geom, &frame)?);
 
     let mut local: ShellMatrix = [0.0; MAX_SHELL_DOFS * MAX_SHELL_DOFS];
-    membrane_and_drilling(geom, &frame, e, nu, h, &mut local)?;
-    let mut bb: ShellRows3 = [[0.0; MAX_SHELL_DOFS]; 3];
+    let mut b: ShellB = [[0.0; MAX_SHELL_DOFS]; SHELL_STRAINS];
     for g in 0..geom.n_gauss {
-        bending_b(geom, p, &cx, &cy, pair, g, &mut bb)?;
-        accumulate(&mut local, &bb, &db, geom.det_j_w(g), side);
+        b_into(geom, &frame, &setup, g, &mut b)?;
+        let w = geom.det_j_w(g);
+        accumulate(&mut local, &b[0..3], &dm, w, side);
+        accumulate(&mut local, &b[3..6], &db, w, side);
+        accumulate_scalar(&mut local, &b[6..7], kd, w, side);
     }
 
     to_global(&local, &frame, n, ke);

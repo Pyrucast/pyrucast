@@ -82,19 +82,48 @@ pub(crate) const MAX_SHELL_DOFS: usize = 24;
 
 /// Une matrice de coque, `MAX_SHELL_DOFS²` à plat.
 pub(crate) type ShellMatrix = [f64; MAX_SHELL_DOFS * MAX_SHELL_DOFS];
-/// Trois lignes d'opérateur (membrane, flexion) sur la largeur d'une coque.
-pub(crate) type ShellRows3 = [[f64; MAX_SHELL_DOFS]; 3];
-/// Deux lignes d'opérateur (cisaillement transverse).
-pub(crate) type ShellRows2 = [[f64; MAX_SHELL_DOFS]; 2];
 /// Les dérivées locales aux nœuds d'une coque.
 pub(crate) type ShellNodes2 = [[f64; 2]; 4];
-/// The generalised forces a shell behaviour reports: membrane, bending, and —
-/// where the formulation has one — transverse shear.
-const BEHAVIOR: [&str; 8] = [
-    "N_xx", "N_yy", "N_xy", "M_xx", "M_yy", "M_xy", "Q_xz", "Q_yz",
+
+/// A shell's generalised strain-displacement matrix, on the stack.
+///
+/// Rows are the generalised strains in the order [`Shell::deformation_reads`]
+/// names them; columns are the facet's **local** degrees of freedom, six per
+/// node (`6i + k`). Nine by twenty-four is a `QUA4`'s size, and a formulation
+/// with no transverse shear fills the leading block.
+pub(crate) type ShellB = [[f64; MAX_SHELL_DOFS]; SHELL_STRAINS];
+
+/// Rows of a [`ShellB`]: three membrane, three bending, one drilling, two
+/// transverse shear.
+pub(crate) const SHELL_STRAINS: usize = 9;
+/// Where each block of rows begins. The first seven are integrated at **full**
+/// quadrature and the last two at the **reduced** point, which is why the
+/// drilling row sits between the bending and the shear rather than last: the
+/// order is the order of integration.
+const MEMBRANE_ROW: usize = 0;
+const BENDING_ROW: usize = 3;
+const DRILL_ROW: usize = 6;
+pub(crate) const SHEAR_ROW: usize = 7;
+/// The generalised strains a shell carries, in the row order of its `B` —
+/// paired **by position** with the forces below.
+const STRAINS: [&str; SHELL_STRAINS] = [
+    "eps_xx", "eps_yy", "eps_xy", "kappa_xx", "kappa_yy", "kappa_xy", "drill", "gamma_xz",
+    "gamma_yz",
 ];
-/// The six a formulation without transverse shear reports: `BEHAVIOR` cut short.
-const BEHAVIOR_NO_SHEAR: usize = 6;
+
+/// The generalised forces a shell behaviour reports: membrane, bending, the
+/// **drilling** moment, and — where the formulation has one — transverse shear.
+///
+/// `M_drill` is conjugate to the drilling residual `θ_z − ω_z`, and it is an
+/// internal force like any other: the constraint does work, so a residual that
+/// omitted it would not equal `K·u`. It was missing only because nothing had
+/// ever asked a shell for its internal forces.
+const BEHAVIOR: [&str; SHELL_STRAINS] = [
+    "N_xx", "N_yy", "N_xy", "M_xx", "M_yy", "M_xy", "M_drill", "Q_xz", "Q_yz",
+];
+/// The seven a formulation without transverse shear reports: `BEHAVIOR` cut
+/// short at the rows the reduced quadrature would have carried.
+const BEHAVIOR_NO_SHEAR: usize = SHEAR_ROW;
 
 /// Which shell formulation a [`Shell`] uses.
 ///
@@ -159,6 +188,31 @@ impl crate::named::Named for ShellModel {
 
     fn name(self) -> &'static str {
         ShellModel::name(self)
+    }
+}
+
+impl ShellModel {
+    /// The **generalised strains** this formulation carries, in the row order of
+    /// its `B` — and therefore in the order its section forces are conjugate to.
+    ///
+    /// The first seven are integrated at full quadrature (membrane, bending,
+    /// drilling); the last two, the transverse shear, at the reduced point. A
+    /// formulation without one simply stops after the seventh.
+    ///
+    /// ```
+    /// # use pyrucast::models::shell::{self, ShellModel};
+    /// assert_eq!(ShellModel::Thick.strains().len(), 9);
+    /// // Kirchhoff discret n'a pas de cisaillement transverse : sa liste
+    /// // s'arrête là où la quadrature réduite commençait.
+    /// assert_eq!(ShellModel::Kirchhoff.strains().len(), 7);
+    /// assert_eq!(ShellModel::Kirchhoff.strains()[6], "drill");
+    /// ```
+    pub fn strains(self) -> &'static [&'static str] {
+        &STRAINS[..if self.has_transverse_shear() {
+            SHELL_STRAINS
+        } else {
+            SHEAR_ROW
+        }]
     }
 }
 
@@ -314,6 +368,77 @@ impl SubModelKind for Shell {
         })
     }
 
+    /// Internal forces `f = ∫ Bᵀ σ dA` — the **transpose** of the `B` this
+    /// physics builds its stiffness from ([`b_into`], [`shear_b_into`]),
+    /// integrated against the generalised forces. The continuum default reads a
+    /// Voigt stress tensor, which a field carrying `N`, `M` and `Q` has never
+    /// had.
+    ///
+    /// The read list is the behaviour's own output, in its own order, so the
+    /// `k`-th force is conjugate to the `k`-th row of `B`.
+    fn internal_force_reads(&self) -> Vec<String> {
+        Domain::behavior_output_components(self)
+    }
+
+    /// The two quadratures again, on the other side of the same `B`: membrane,
+    /// bending and drilling at the full Gauss points, the transverse shear at
+    /// the **reduced** one — the point its stiffness integrates it at, and
+    /// therefore the only point at which `∫ Bᵀσ` can equal `K·u`.
+    ///
+    /// The shear force is element-constant, a shell-deformation operator having
+    /// sampled its strain at that same reduced point, so which full Gauss row it
+    /// is read from does not matter.
+    fn internal_force_element(
+        &self,
+        geoms: &[CellGeom],
+        stress: &SubElementField,
+        lay: &[u32],
+        fe: &mut [f64],
+    ) -> Result<()> {
+        let full = &geoms[0];
+        let (n, cell) = (full.n_nodes, full.cell);
+        let side = 6 * n;
+        let frame = local_frame(full)?;
+        let setup = bending_setup(self.model, full, &frame)?;
+        // Les forces s'accumulent dans le repère **local**, celui où `B` est
+        // écrit ; la rotation vers les axes globaux vient à la fin, une fois.
+        let mut b: ShellB = [[0.0; MAX_SHELL_DOFS]; SHELL_STRAINS];
+        let mut local = [0.0_f64; MAX_SHELL_DOFS];
+        for g in 0..full.n_gauss {
+            b_into(full, &frame, &setup, g, &mut b)?;
+            let row = stress.row(cell, g);
+            let w = full.det_j_w(g);
+            for (k, brow) in b[..SHEAR_ROW].iter().enumerate() {
+                let s = row[lay[k] as usize] * w;
+                for i in 0..side {
+                    local[i] += brow[i] * s;
+                }
+            }
+        }
+        if let Some(reduced) = geoms.get(1) {
+            let row = stress.row(cell, 0);
+            for g in 0..reduced.n_gauss {
+                shear_b_into(reduced, &frame, g, &mut b)?;
+                let w = reduced.det_j_w(g);
+                for (k, brow) in b[SHEAR_ROW..].iter().enumerate() {
+                    let s = row[lay[SHEAR_ROW + k] as usize] * w;
+                    for i in 0..side {
+                        local[i] += brow[i] * s;
+                    }
+                }
+            }
+        }
+        // `Tᵀ f_loc` : la transposée de la rotation qu'ont subie les DDL, par
+        // triplet — translations puis rotations de chaque nœud.
+        for blk in 0..(side / 3) {
+            let o = blk * 3;
+            for i in 0..3 {
+                fe[o + i] += (0..3).map(|k| frame[k][i] * local[o + k]).sum::<f64>();
+            }
+        }
+        Ok(())
+    }
+
     fn physics(&self) -> &'static [Physics] {
         &[Physics::Mechanical]
     }
@@ -377,13 +502,7 @@ impl Domain for Shell {
     /// The strains come in as the components a shell-deformation operator would
     /// produce (`eps_xx`, `kappa_xx`, `gamma_xz`, …), all in the **local** frame.
     fn deformation_reads(&self) -> Vec<String> {
-        let mut names = owned_components(&[
-            "eps_xx", "eps_yy", "eps_xy", "kappa_xx", "kappa_yy", "kappa_xy",
-        ]);
-        if self.model.has_transverse_shear() {
-            names.extend(owned_components(&["gamma_xz", "gamma_yz"]));
-        }
-        names
+        owned_components(self.model.strains())
     }
 
     fn integrate_point(
@@ -412,6 +531,9 @@ impl Domain for Shell {
             out[i] = (0..3).map(|j| dm[i][j] * eps[j]).sum();
             out[3 + i] = (0..3).map(|j| db[i][j] * kappa[j]).sum();
         }
+        // Le moment de vrillage : `α·G·h·(θ_z − ω_z)`, la loi d'une contrainte
+        // dont la déformation est un seul nombre.
+        out[DRILL_ROW] = drilling_law(e, nu, h) * d(DRILL_ROW);
         if self.model.has_transverse_shear() {
             // `k_s` overrides the 5/6 of a homogeneous rectangular section; which
             // of the two applies is a fact of the zone, settled in the layout.
@@ -420,9 +542,8 @@ impl Domain for Shell {
                 i => material[i as usize],
             };
             let ds = thick::shear_law(e, nu, h, k_s);
-            let gamma = [d(6), d(7)];
             for i in 0..2 {
-                out[6 + i] = ds * gamma[i];
+                out[SHEAR_ROW + i] = ds * d(SHEAR_ROW + i);
             }
         }
         Ok(())
@@ -575,74 +696,173 @@ pub(crate) fn local_coords_into(geom: &CellGeom, frame: &[[f64; 3]; 3], out: &mu
 /// several decades — which is what one wants from a regularisation.
 const DRILLING_WEIGHT: f64 = 1e-3;
 
-/// The membrane and drilling terms, at full quadrature — the part of a flat
-/// facet that owes nothing to the bending theory, and which every formulation
-/// therefore shares.
+/// The drilling modulus `α·G·h` — the « law » of a constraint whose strain is a
+/// single number.
 ///
-/// `local` is the `6 n × 6 n` matrix in the element frame, accumulated into.
+/// It sits beside [`thick::membrane_law`] and the rest because it is one of
+/// them: a modulus, on the `D` side, with nothing of the geometry in it.
+pub(crate) fn drilling_law(e: f64, nu: f64, h: f64) -> f64 {
+    DRILLING_WEIGHT * e / (2.0 * (1.0 + nu)) * h
+}
+
+/// What a formulation settles **once per cell** before it can write a bending
+/// row of `B`.
 ///
-pub(crate) fn membrane_and_drilling(
+/// Nothing at all for [Reissner-Mindlin](thick), whose fibre rotation is an
+/// interpolated field and whose curvature is therefore its plain gradient; the
+/// mid-side elimination for [discrete Kirchhoff](kirchhoff), which is where that
+/// formulation's whole content lives.
+pub(crate) enum BendingSetup {
+    /// The rotation is a field of its own: nothing to eliminate first.
+    Direct,
+    /// The discrete-Kirchhoff elimination, and the in-plane geometry it was
+    /// built from.
+    Discrete(kirchhoff::Setup),
+}
+
+/// The per-cell setup a formulation needs, settled from the geometry alone.
+pub(crate) fn bending_setup(
+    model: ShellModel,
     geom: &CellGeom,
     frame: &[[f64; 3]; 3],
-    e: f64,
-    nu: f64,
-    h: f64,
-    local: &mut ShellMatrix,
-) -> Result<()> {
-    let n = geom.n_nodes;
-    let side = 6 * n;
-    let dm = thick::membrane_law(e, nu, h);
-    let g_mod = e / (2.0 * (1.0 + nu));
+) -> Result<BendingSetup> {
+    Ok(match model {
+        ShellModel::Thick => BendingSetup::Direct,
+        ShellModel::Kirchhoff => BendingSetup::Discrete(kirchhoff::Setup::new(geom, frame)?),
+    })
+}
 
-    // Trois tampons, hors de la boucle de Gauss et sur la pile.
-    let mut dn: ShellNodes2 = [[0.0; 2]; 4];
-    let mut bm: ShellRows3 = [[0.0; MAX_SHELL_DOFS]; 3];
-    let mut bd = [0.0_f64; MAX_SHELL_DOFS];
-    for g in 0..geom.n_gauss {
-        local_derivatives_into(geom, frame, g, &mut dn)?;
-        let shape = geom.n_at_g(g);
-        let w = geom.det_j_w(g);
-
-        // Membrane `ε` on (u, v) — local DOFs 6i+0, 6i+1 — and the drilling
-        // residual `θ_z − ω_z` on (u, v, θ_z). Both are rewritten in full at
-        // each point, so the previous point leaves nothing behind.
-        for row in bm.iter_mut() {
-            row[..side].fill(0.0);
-        }
-        bd[..side].fill(0.0);
-        for i in 0..n {
-            let (dx, dy) = (dn[i][0], dn[i][1]);
-            let (u, v, tz) = (6 * i, 6 * i + 1, 6 * i + 5);
-            bm[0][u] = dx;
-            bm[1][v] = dy;
-            bm[2][u] = dy;
-            bm[2][v] = dx;
-
-            // ω_z = ½(∂v/∂x − ∂u/∂y), so the residual picks up its negative.
-            bd[u] = 0.5 * dy;
-            bd[v] = -0.5 * dx;
-            bd[tz] = shape[i];
-        }
-        accumulate(local, &bm, &dm, w, side);
-        // The drilling constraint is a scalar: its « law » is one coefficient.
-        let kd = DRILLING_WEIGHT * g_mod * h * w;
-        for a in 0..side {
-            if bd[a] == 0.0 {
-                continue;
-            }
-            for b in 0..side {
-                local[a * MAX_SHELL_DOFS + b] += kd * bd[a] * bd[b];
+/// The cell's degrees of freedom in the element's **local** frame — the columns
+/// `B` is written on.
+///
+/// `dofs` is a node-major gather of the six global components; `out` is the
+/// `6n` local vector, each node's translation and rotation triple rotated by
+/// the triad. The exact inverse of the `Tᵀ` an internal force comes back
+/// through.
+pub(crate) fn local_dofs(n_nodes: usize, frame: &[[f64; 3]; 3], dofs: &[f64], out: &mut [f64]) {
+    for i in 0..n_nodes {
+        for triple in 0..2 {
+            let o = 6 * i + 3 * triple;
+            for k in 0..3 {
+                out[o + k] = (0..3).map(|c| frame[k][c] * dofs[o + c]).sum();
             }
         }
     }
+}
+
+/// The rows of `B` a facet integrates at **full** quadrature — membrane,
+/// bending and drilling — in the element's local frame, at Gauss point `g`.
+///
+/// Every entry of the `7 × 6n` block is written, so a caller's buffer needs no
+/// clearing between points.
+///
+/// This is the one place a shell says how its degrees of freedom become strains.
+/// The stiffness integrates `Bᵀ D B` with it and the internal forces `Bᵀ σ`,
+/// which is what keeps a residual and a tangent describing the same element —
+/// and what the two formulations share, differing only in the bending rows.
+pub(crate) fn b_into(
+    geom: &CellGeom,
+    frame: &[[f64; 3]; 3],
+    setup: &BendingSetup,
+    g: usize,
+    b: &mut ShellB,
+) -> Result<()> {
+    let n = geom.n_nodes;
+    let side = 6 * n;
+    for row in b[..SHEAR_ROW].iter_mut() {
+        row[..side].fill(0.0);
+    }
+    let mut dn: ShellNodes2 = [[0.0; 2]; 4];
+    local_derivatives_into(geom, frame, g, &mut dn)?;
+    let shape = geom.n_at_g(g);
+    for i in 0..n {
+        let (dx, dy) = (dn[i][0], dn[i][1]);
+        let (u, v, tz) = (6 * i, 6 * i + 1, 6 * i + 5);
+        // Membrane `ε` on the in-plane translations.
+        b[MEMBRANE_ROW][u] = dx;
+        b[MEMBRANE_ROW + 1][v] = dy;
+        b[MEMBRANE_ROW + 2][u] = dy;
+        b[MEMBRANE_ROW + 2][v] = dx;
+        // The drilling residual `θ_z − ω_z`, with `ω_z = ½(∂v/∂x − ∂u/∂y)`, so
+        // the residual picks up its negative.
+        b[DRILL_ROW][u] = 0.5 * dy;
+        b[DRILL_ROW][v] = -0.5 * dx;
+        b[DRILL_ROW][tz] = shape[i];
+    }
+    match setup {
+        BendingSetup::Direct => {
+            // `κ` on the independent fibre rotation — local DOFs 6i+3, 6i+4.
+            for i in 0..n {
+                let (dx, dy) = (dn[i][0], dn[i][1]);
+                let (tx, ty) = (6 * i + 3, 6 * i + 4);
+                b[BENDING_ROW][ty] = dx;
+                b[BENDING_ROW + 1][tx] = -dy;
+                b[BENDING_ROW + 2][ty] = dy;
+                b[BENDING_ROW + 2][tx] = -dx;
+            }
+        }
+        BendingSetup::Discrete(dk) => dk.bending_into(geom, g, &mut b[BENDING_ROW..DRILL_ROW])?,
+    }
     Ok(())
+}
+
+/// The transverse-shear rows of `B`, at Gauss point `g` of the **reduced**
+/// geometry — the point the stiffness integrates them at, and the point a
+/// deformation operator must sample them at for the two to agree.
+pub(crate) fn shear_b_into(
+    geom: &CellGeom,
+    frame: &[[f64; 3]; 3],
+    g: usize,
+    b: &mut ShellB,
+) -> Result<()> {
+    let n = geom.n_nodes;
+    let side = 6 * n;
+    for row in b[SHEAR_ROW..].iter_mut() {
+        row[..side].fill(0.0);
+    }
+    let mut dn: ShellNodes2 = [[0.0; 2]; 4];
+    local_derivatives_into(geom, frame, g, &mut dn)?;
+    let shape = geom.n_at_g(g);
+    for i in 0..n {
+        let (dx, dy) = (dn[i][0], dn[i][1]);
+        let (wz, tx, ty) = (6 * i + 2, 6 * i + 3, 6 * i + 4);
+        // `γ` on the deflection and the two fibre rotations.
+        b[SHEAR_ROW][wz] = dx;
+        b[SHEAR_ROW][ty] = shape[i];
+        b[SHEAR_ROW + 1][wz] = dy;
+        b[SHEAR_ROW + 1][tx] = -shape[i];
+    }
+    Ok(())
+}
+
+/// `local += Σ_r modulus · b_rᵀ b_r · w` — the law of a strain whose modulus is
+/// a single number: the drilling constraint (one row), and the transverse shear
+/// (two rows sharing one).
+pub(crate) fn accumulate_scalar(
+    local: &mut ShellMatrix,
+    b: &[[f64; MAX_SHELL_DOFS]],
+    modulus: f64,
+    w: f64,
+    side: usize,
+) {
+    let k = modulus * w;
+    for row in b {
+        for a in 0..side {
+            if row[a] == 0.0 {
+                continue;
+            }
+            for col in 0..side {
+                local[a * MAX_SHELL_DOFS + col] += k * row[a] * row[col];
+            }
+        }
+    }
 }
 
 /// `local += Bᵀ D B · w` for a 3-component strain.
 ///
 pub(crate) fn accumulate(
     local: &mut ShellMatrix,
-    b: &ShellRows3,
+    b: &[[f64; MAX_SHELL_DOFS]],
     d: &[[f64; 3]; 3],
     w: f64,
     side: usize,
@@ -650,7 +870,7 @@ pub(crate) fn accumulate(
     // `D B` first: three rows, so the inner loop stays short and the intermediate
     // is what a reader can check against the law above. It lives on the stack —
     // this runs at every Gauss point of every cell.
-    let mut db: ShellRows3 = [[0.0; MAX_SHELL_DOFS]; 3];
+    let mut db = [[0.0_f64; MAX_SHELL_DOFS]; 3];
     for r in 0..3 {
         for c in 0..side {
             db[r][c] = (0..3).map(|k| d[r][k] * b[k][c]).sum();
@@ -774,7 +994,7 @@ mod tests {
     #[test]
     fn accumulate_is_b_transpose_d_b() {
         let mut local: ShellMatrix = [0.0; MAX_SHELL_DOFS * MAX_SHELL_DOFS];
-        let mut b: ShellRows3 = [[0.0; MAX_SHELL_DOFS]; 3];
+        let mut b = [[0.0_f64; MAX_SHELL_DOFS]; 3];
         for (k, row) in b.iter_mut().enumerate() {
             row[k] = 1.0;
         }
@@ -825,17 +1045,43 @@ mod tests {
         .unwrap();
     }
 
-    /// La part que toute formulation de facette plane partage : elle charge les
-    /// DDL de translation dans le plan, et ne touche pas à la flèche hors plan,
-    /// qui relève de la flexion.
+    /// Chaque bloc de lignes de `B` lit **ses** degrés de liberté : la membrane
+    /// les translations dans le plan, la flexion les rotations de fibre, le
+    /// vrillage la rotation autour de la normale. La flèche hors plan
+    /// n'apparaît dans aucun des trois — elle est au cisaillement, intégré
+    /// ailleurs.
     #[test]
-    fn membrane_and_drilling_leaves_the_bending_alone() {
+    fn each_block_of_b_reads_its_own_degrees_of_freedom() {
         reduce_cells(&facette(), |geom| {
             let f = local_frame(geom)?;
-            let mut local: ShellMatrix = [0.0; MAX_SHELL_DOFS * MAX_SHELL_DOFS];
-            membrane_and_drilling(geom, &f, 210_000.0, 0.3, 0.01, &mut local)?;
-            assert!(local[0] > 0.0);
-            assert_eq!(local[2 * MAX_SHELL_DOFS + 2], 0.0);
+            let mut b: ShellB = [[0.0; MAX_SHELL_DOFS]; SHELL_STRAINS];
+            b_into(geom, &f, &BendingSetup::Direct, 0, &mut b)?;
+            // Membrane : `u` du premier nœud, jamais sa flèche `w`.
+            assert!(b[MEMBRANE_ROW][0] != 0.0);
+            assert_eq!(b[MEMBRANE_ROW][2], 0.0);
+            // Flexion : les rotations de fibre, jamais les translations.
+            assert!(b[BENDING_ROW + 2][3] != 0.0 || b[BENDING_ROW + 2][4] != 0.0);
+            assert_eq!(b[BENDING_ROW][0], 0.0);
+            // Vrillage : `θ_z` vaut la fonction de forme, et une rotation
+            // **d'ensemble** autour de la normale ne coûte rien — c'est ce
+            // qu'une pénalité diagonale aurait manqué.
+            assert!(b[DRILL_ROW][5] != 0.0);
+            let rigide: f64 = (0..geom.n_nodes).map(|i| b[DRILL_ROW][6 * i + 5]).sum();
+            assert!((rigide - 1.0).abs() < 1e-12); // partition de l'unité
+            Ok(0.0)
+        })
+        .unwrap();
+    }
+
+    /// Les lignes de cisaillement, elles, lisent la flèche — et c'est le point
+    /// réduit qui les porte.
+    #[test]
+    fn the_shear_rows_read_the_deflection() {
+        reduce_cells(&facette(), |geom| {
+            let f = local_frame(geom)?;
+            let mut b: ShellB = [[0.0; MAX_SHELL_DOFS]; SHELL_STRAINS];
+            shear_b_into(geom, &f, 0, &mut b)?;
+            assert!(b[SHEAR_ROW][2] != 0.0 || b[SHEAR_ROW + 1][2] != 0.0);
             Ok(0.0)
         })
         .unwrap();
