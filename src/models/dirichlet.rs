@@ -238,8 +238,6 @@ impl Dirichlet {
                 target.primal_vars()
             ))
         })?;
-        let multiplier = Some(default_multiplier(variable));
-        let imposed_value = Some(default_imposed_value(variable));
         if imposed_mesh.cell_count() == 0 {
             return Err(PyrucastError::Message(
                 "Dirichlet: imposed_mesh must constrain at least one node".into(),
@@ -291,9 +289,8 @@ impl Dirichlet {
             }
         }
 
-        let multiplier = multiplier.unwrap_or_else(|| default_multiplier(&imposed_variable));
-        let imposed_value =
-            imposed_value.unwrap_or_else(|| default_imposed_value(&imposed_variable));
+        let multiplier = default_multiplier(&imposed_variable);
+        let imposed_value = default_imposed_value(&imposed_variable);
 
         Ok(Self {
             imposed_variable,

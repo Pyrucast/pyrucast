@@ -278,8 +278,6 @@ impl Contact {
             })?;
             components.push((v.clone(), dual));
         }
-        let multiplier: Option<String> = None;
-        let imposed_value: Option<String> = None;
 
         // Slave and master must live in the same Coords (node ids are relative).
         let coords = slave.coords()?;
@@ -357,8 +355,8 @@ impl Contact {
             support_mesh,
             pairings,
             components,
-            multiplier: multiplier.unwrap_or_else(default_multiplier),
-            imposed_value: imposed_value.unwrap_or_else(default_imposed_value),
+            multiplier: default_multiplier(),
+            imposed_value: default_imposed_value(),
         })
     }
 

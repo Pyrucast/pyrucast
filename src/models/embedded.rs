@@ -294,25 +294,9 @@ impl Embedded {
             })?;
             components.push((v.clone(), dual));
         }
-        let multipliers: Option<Vec<String>> = None;
-        let imposed_values: Option<Vec<String>> = None;
         if components.is_empty() {
             return Err(PyrucastError::Message(
                 "Embedded: at least one component is required".into(),
-            ));
-        }
-        if let Some(m) = &multipliers
-            && m.len() != components.len()
-        {
-            return Err(PyrucastError::Message(
-                "Embedded: multipliers length must match components".into(),
-            ));
-        }
-        if let Some(iv) = &imposed_values
-            && iv.len() != components.len()
-        {
-            return Err(PyrucastError::Message(
-                "Embedded: imposed_values length must match components".into(),
             ));
         }
 
@@ -383,18 +367,14 @@ impl Embedded {
             Mesh::from_submesh(SubMesh::poi1_from_node_ids(coords, &support_ids)?);
 
         // Materialise the components with their (defaulted) variable names.
-        let multipliers = multipliers.unwrap_or_else(|| {
-            components
-                .iter()
-                .map(|(v, _)| default_multiplier(v))
-                .collect()
-        });
-        let imposed_values = imposed_values.unwrap_or_else(|| {
-            components
-                .iter()
-                .map(|(v, _)| default_imposed_value(v))
-                .collect()
-        });
+        let multipliers: Vec<String> = components
+            .iter()
+            .map(|(v, _)| default_multiplier(v))
+            .collect();
+        let imposed_values: Vec<String> = components
+            .iter()
+            .map(|(v, _)| default_imposed_value(v))
+            .collect();
         let components = components
             .into_iter()
             .zip(multipliers)

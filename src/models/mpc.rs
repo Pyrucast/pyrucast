@@ -348,8 +348,6 @@ impl Mpc {
         // default, and `default_multiplier` is public for whoever needs the
         // name. Two relations do not collide either — their DOFs differ by
         // multiplier *node*, not by name.
-        let multiplier: Option<String> = Some(default_multiplier());
-        let imposed_value: Option<String> = Some(default_imposed_value());
         if terms.is_empty() {
             return Err(PyrucastError::Message(
                 "Mpc: at least one term is required".into(),
@@ -418,8 +416,8 @@ impl Mpc {
         Ok(Self {
             terms,
             multiplier_mesh: share(multiplier_mesh)?,
-            multiplier: multiplier.unwrap_or_else(default_multiplier),
-            imposed_value: imposed_value.unwrap_or_else(default_imposed_value),
+            multiplier: default_multiplier(),
+            imposed_value: default_imposed_value(),
             sense,
         })
     }
