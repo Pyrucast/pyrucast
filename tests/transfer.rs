@@ -34,7 +34,6 @@ use pyrucast::models::tensor::Kinematics;
 use pyrucast::models::Physics;
 use pyrucast::ops::mesh;
 use pyrucast::ops::model;
-use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
 
@@ -102,6 +101,11 @@ fn each_direction_carries_its_own_stiffness() -> Result<()> {
         model = model.union(&clamp(&left, var, dual)?)?;
     }
 
+    // A traction along x, and one along y, applied together.
+    for dual in ["f_x", "f_y"] {
+        model = model.union(&model::flux(&right, dual.into(), Physics::Mechanical)?)?;
+    }
+
     let materials = pyrucast::ops::element_field::material_field(
         &model,
         // L'ambiant d'une fondation élastique est le déplacement vers lequel
@@ -113,13 +117,11 @@ fn each_direction_carries_its_own_stiffness() -> Result<()> {
             ("h_u_y", h_y),
             ("a_ext_u_x", 0.0),
             ("a_ext_u_y", 0.0),
+            ("phi_f_x", Q),
+            ("phi_f_y", Q),
         ],
     )?;
-
-    // A traction along x, and one along y, applied together.
-    let load_x = pyrucast::ops::node_field::flux(&right, FluxDensity::Uniform(Q), "f_x")?;
-    let load_y = pyrucast::ops::node_field::flux(&right, FluxDensity::Uniform(Q), "f_y")?;
-    let load = (load_x + load_y)?;
+    let load = pyrucast::ops::node_field::external_forces(&model, &materials)?;
 
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let solution = solve(&k, &load)?;
@@ -230,11 +232,19 @@ fn free_face_displacement(n: usize, h: f64) -> Result<f64> {
     let bottom: Vec<Node> = (0..=n).map(|i| grid[idx(i, 0)].clone()).collect();
     model = model.union(&clamp(&bottom, "u_y", "f_y")?)?;
 
+    model = model.union(&model::flux(&right, "f_x".into(), Physics::Mechanical)?)?;
+
     let materials = pyrucast::ops::element_field::material_field(
         &model,
-        &[("E", E), ("nu", NU), ("h_u_x", h), ("a_ext_u_x", 0.0)],
+        &[
+            ("E", E),
+            ("nu", NU),
+            ("h_u_x", h),
+            ("a_ext_u_x", 0.0),
+            ("phi_f_x", Q),
+        ],
     )?;
-    let traction = pyrucast::ops::node_field::flux(&right, FluxDensity::Uniform(Q), "f_x")?;
+    let traction = pyrucast::ops::node_field::external_forces(&model, &materials)?;
 
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let solution = solve(&k, &traction)?;

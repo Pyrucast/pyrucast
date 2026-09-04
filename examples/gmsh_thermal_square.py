@@ -138,11 +138,12 @@ def main() -> None:
     model = pyrucast.model.heat_conduction(fes) | pyrucast.model.dirichlet(
         "T", "q", imposed, multiplier
     )
-    materials = pyrucast.element_field.material_field(model, [("k", K)])
 
     # ── 3. Chargement : flux réparti sur le bord gauche + T imposée ──────────
     left_fes = pyrucast.FiniteElementSpace(left)
-    source = pyrucast.node_field.flux(left_fes, Q, "q")
+    model = model | pyrucast.model.flux(left_fes, "q", "thermal")
+    materials = pyrucast.element_field.material_field(model, [("k", K), ("phi_q", Q)])
+    source = pyrucast.node_field.external_forces(model, materials)
 
     imposed_mesh = pyrucast.Mesh(coords, "POI1")
     for m in mults:

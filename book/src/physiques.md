@@ -127,6 +127,7 @@ opérateurs (`from_name`) : c'est ce qu'on écrit, pas une paraphrase.
 
 | Physique | `tangent` | `geometric` | `mass` | Comportement (`COMP`) | Particularité de calcul |
 |---|---|---|---|---|---|
+| [`flux`](operateurs/assemblage.md) | — | — | — | — | La seule physique dont le terme entier siège à **droite** du signe égal : sa dérivée est nulle, elle ne contribue à aucune matrice. Premier domaine **sans comportement** — elle intègre sur un espace EF et y lit sa densité `phi_<dual>`, sans loi à évaluer. Elle n'a pas de primale non plus : elle écrit dans la ligne duale d'une autre physique. |
 | [`dirichlet`](contraintes/dirichlet.md) · [`mpc`](contraintes/mpc.md) · [`embedded`](contraintes/embedded.md) · [`contact`](contraintes/contact.md) | — | — | — | — | Aucun layout, rien d'intégré sur une maille : elles redéfinissent directement `contributions()` et rendent leurs blocs **C / Cᵀ** en `Literal`. L'assembleur reste sans le moindre cas particulier « Dirichlet ». |
 
 ### « Par perturbation » veut dire différences centrées

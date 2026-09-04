@@ -50,7 +50,7 @@ use voigt::{b_matrix_into, voigt_size, VoigtRows};
 /// *tangent* gradient: the resulting `Bᵀ D B` would be rank-deficient in the
 /// normal direction and silently meaningless. A boundary sub-mesh (`SEG2` in
 /// 2-D, `TRI3` in 3-D) is a support for loads
-/// ([`flux`](fn@crate::ops::node_field::flux)) or convection, not a solid — and a
+/// ([`flux`](crate::models::flux)) or convection, not a solid — and a
 /// structural element (bar, beam) is a different physics with its own kernel.
 fn check_continuum_dimensions(label: &str, space_dim: usize, ref_dim: usize) -> Result<()> {
     if ref_dim != space_dim {

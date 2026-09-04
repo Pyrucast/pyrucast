@@ -86,14 +86,15 @@ def main() -> None:
     modele = pc.model.plasticity_perfect(fes, "plane_stress")
     modele = modele | pc.model.dirichlet("u_x", "f_x", encastrement, multiplicateur)
     modele = modele | pc.model.dirichlet("u_y", "f_y", encastrement, multiplicateur)
-    materiaux = pc.element_field.material_field(
-        modele, [("E", E), ("nu", NU), ("sigma_y", SIGMA_Y)]
-    )
     # ANCHOR_END: modele_plastique
 
     # ANCHOR: chargement_evolution
     pression = -FACTEUR_CHARGE * MASSE * G / (2.0 * 3.14159265 * RAYON_TROU)
-    effort_final = pc.node_field.flux(arc_fes, pression, "f_y")
+    modele = modele | pc.model.flux(arc_fes, "f_y", "mechanical")
+    materiaux = pc.element_field.material_field(
+        modele, [("E", E), ("nu", NU), ("sigma_y", SIGMA_Y), ("phi_f_y", pression)]
+    )
+    effort_final = pc.node_field.external_forces(modele, materiaux)
     charge = pc.Evolution(
         [(0.0, effort_final * 0.0), (1.0, effort_final)], out_of_range="clamp"
     )

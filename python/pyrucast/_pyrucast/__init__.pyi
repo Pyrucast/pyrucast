@@ -833,10 +833,6 @@ class FiniteElementSpace:
         structure. Returns nothing.
         """
     def __len__(self) -> builtins.int: ...
-    def flux(self, density: typing.Any, component: builtins.str) -> NodeField:
-        r"""
-        Voir `pyrucast.node_field.flux`.
-        """
 
 @typing.final
 class Matrix:
@@ -3251,17 +3247,21 @@ def fick(fespace: FiniteElementSpace, species: builtins.str, symmetry: typing.Op
     medium, not to what diffuses through it.
     """
 
-def flux(fespace: FiniteElementSpace, density: typing.Any, component: builtins.str) -> NodeField:
+def flux(fespace: FiniteElementSpace, dual: builtins.str, physics: builtins.str) -> Model:
     r"""
-    Consistent nodal loads of a distributed flux over `fespace` — the analogue
-    of Cast3m `FLUX` / `PRES`: `∫ density · N_i dΓ`, returned as a `NodeField`
-    with one zone per FE subspace, each carrying the single component
-    `component` (the model's dual variable, e.g. `"q"` for heat conduction).
+    `model.flux(fespace, dual, physics)` — une **charge répartie** :
+    les forces nodales cohérentes `∫ φ N dΓ` d'une densité donnée, versées dans
+    la ligne duale `dual` (`"q"` pour une source de chaleur, `"f_x"` pour une
+    traction).
     
-    `density` is either a **float** (uniform density) or a single-component
-    `ElementField` (per-Gauss density) holding exactly one zone on each subspace
-    of `fespace`. The element measure comes from the FE subspace, so a `SEG2`
-    edge in a 2-D mesh integrates as a line, a surface mesh as an area.
+    Matériau : `phi_<dual>` — la densité, uniforme ou variable par point de
+    Gauss selon le champ fourni.
+    
+    Sa dérivée par rapport à la solution est **nulle** : elle ne contribue à
+    aucune matrice, seulement au second membre, qu'on récupère par
+    `node_field.external_forces(model, materials)`. C'est ce qui la distingue
+    d'une physique : elle n'introduit aucune inconnue et écrit dans la ligne
+    duale d'une autre.
     """
 
 def from_gmsh_arrays(coords: Coords, node_tags: typing.Any, node_coords: typing.Any, blocks: typing.Any) -> dict:

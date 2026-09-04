@@ -431,9 +431,10 @@ impl SubModel {
     /// Naming the bulk physics' own DOFs is what makes the boundary term couple
     /// straight into it — `[("T", "q")]` beside a conduction, `[("c_H2",
     /// "j_H2")]` beside a diffusion, the three displacement pairs for an elastic
-    /// foundation. The coefficients `h_<primal>` are supplied at assembly time
-    /// via [`crate::ops::matrix::stiffness`]; the ambient value enters as a load
-    /// (`h·a_ext ∫N_i dΓ`) built with [`flux`](fn@crate::ops::node_field::flux).
+    /// foundation. The coefficients `h_<primal>` **and** the ambients
+    /// `a_ext_<primal>` are supplied at assembly time, in the material: the
+    /// exchange goes into the matrix, the ambient term `h·a_ext ∫N_i dΓ` comes
+    /// out of [`crate::ops::node_field::external_forces()`].
     /// See [`boundary_transfer::BoundaryTransfer::new`].
     ///
     /// ```

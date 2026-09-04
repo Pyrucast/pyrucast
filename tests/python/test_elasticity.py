@@ -39,14 +39,17 @@ def test_plane_stress_uniaxial_tension():
     model = model | _clamp(left, "u_x", "f_x")
     model = model | _clamp(bottom, "u_y", "f_y")
 
-    materials = pyrucast.element_field.material_field(model, [("E", E), ("nu", NU)])
-
-    # Traction S on the right edge → consistent nodal forces (op flux).
+    # Traction S on the right edge → consistent nodal forces. The load is a
+    # term of the model: it joins it, its density joins the material.
     right_edge = pyrucast.Mesh(c, "SEG2")
     for j in range(N):
         right_edge.unit().add_cell([grid[idx(N, j)], grid[idx(N, j + 1)]])
     right_fes = pyrucast.FiniteElementSpace(right_edge)
-    rhs = pyrucast.node_field.flux(right_fes, S, "f_x")
+    model = model | pyrucast.model.flux(right_fes, "f_x", "mechanical")
+    materials = pyrucast.element_field.material_field(
+        model, [("E", E), ("nu", NU), ("phi_f_x", S)]
+    )
+    rhs = pyrucast.node_field.external_forces(model, materials)
 
     K = pyrucast.matrix.stiffness(model, materials)
     solution = pyrucast.solver.solve(K, rhs)

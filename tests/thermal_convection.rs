@@ -88,11 +88,6 @@ fn thermal_convection_recovers_analytical_solution() -> Result<()> {
 
     // Matériau : k pour la conduction, h et l'ambiant pour la convection (chaque
     // sous-modèle prélève la composante qu'il requiert dans la liste fournie).
-    let materials = pyrucast::ops::element_field::material_field(
-        &model,
-        &[("k", K), ("h_T", H), ("a_ext_T", T_EXT)],
-    )?;
-
     // ── Chargement ─────────────────────────────────────────────────────────
     // Source : flux uniforme (densité Q) sur le bord gauche, en charges nodales
     // cohérentes via `flux`.
@@ -101,18 +96,17 @@ fn thermal_convection_recovers_analytical_solution() -> Result<()> {
         left_edge.add_cell(&[grid[idx(0, j)].id(), grid[idx(0, j + 1)].id()])?;
     }
     let left_fes = FiniteElementSpace::lagrange1(&left_edge)?;
-    let source = pyrucast::ops::node_field::flux(
-        &left_fes,
-        pyrucast::ops::node_field::FluxDensity::Uniform(Q),
-        "q",
+    let model = model.union(&model::flux(&left_fes, "q".into(), Physics::Thermal)?)?;
+
+    let materials = pyrucast::ops::element_field::material_field(
+        &model,
+        &[("k", K), ("h_T", H), ("a_ext_T", T_EXT), ("phi_q", Q)],
     )?;
 
-    // Convection : la part externe h·T_ext du flux de Robin appartient au
-    // sous-modèle, qui la déclare avec son ambiant. On la lui demande, au lieu
-    // de la rebâtir à la main — l'oublier n'est plus possible.
-    let conv_load = pyrucast::ops::node_field::external_forces(&model, &materials)?;
-
-    let rhs = source.union(&conv_load)?;
+    // Les deux termes donnés — la source du bord gauche et la part externe
+    // h·T_ext de la convection — appartiennent tous deux au modèle, qui les
+    // rend ensemble. Plus rien à unioner à la main, donc plus rien à oublier.
+    let rhs = pyrucast::ops::node_field::external_forces(&model, &materials)?;
 
     // ── Assemblage + résolution (K rendue définie par le terme de film) ────
     let stiffness = pyrucast::ops::matrix::stiffness(&model, &materials)?;

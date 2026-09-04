@@ -103,7 +103,7 @@ sans machinerie supplémentaire : seul le noyau numérique lit plusieurs géomé
 
 Les **scatters nodaux** — les opérateurs `Bᵀ` (`ops::node_field::divergence` et les
 forces internes `ops::node_field::internal_forces`, Cast3m `BSIG`) et la charge répartie
-`ops::node_field::flux` (`∫ φ N`) — dispersent tous de la même façon : chaque
+la charge répartie (`∫ φ N`) — dispersent tous de la même façon : chaque
 cellule calcule sa contribution locale, puis l'accumule dans ses nœuds. Ils
 passent tous par le **même driver** `kernel::scatter_to_nodes` (« intègre un
 noyau élémentaire et disperse aux nœuds »), qui s'appuie sur le helper

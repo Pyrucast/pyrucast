@@ -201,18 +201,20 @@ def main():
     multiplier = pyrucast.mesh.translate(imposed_mesh, [0.0, 0.0])
     model = model | pyrucast.model.dirichlet("u_x", "f_x", imposed_mesh, multiplier)
     model = model | pyrucast.model.dirichlet("u_y", "f_y", imposed_mesh, multiplier)
+    # ── Charge de référence : cisaillement unitaire (densité −1) sur la face
+    #    droite, en efforts nodaux cohérents. Terme du modèle. ────────────────
+    right_fes = pyrucast.FiniteElementSpace(right_edge)
+    model = model | pyrucast.model.flux(right_fes, "f_y", "mechanical")
+
     materials = pyrucast.element_field.material_field(
-        model, [("E", young), ("nu", nu), ("sigma_y", sigma_y)]
+        model,
+        [("E", young), ("nu", nu), ("sigma_y", sigma_y), ("phi_f_y", -1.0)],
     )
+    load_unit = pyrucast.node_field.external_forces(model, materials)
 
     # Rigidité ÉLASTIQUE : opérateur d'itération du Newton modifié. Assemblée une
     # fois ; `solve` met la factorisation en cache et la réutilise.
     k = pyrucast.matrix.stiffness(model, materials)
-
-    # ── Charge de référence : cisaillement unitaire (densité −1) sur la face
-    #    droite, réparti en efforts nodaux cohérents (op `flux`). ──────────────
-    right_fes = pyrucast.FiniteElementSpace(right_edge)
-    load_unit = pyrucast.node_field.flux(right_fes, -1.0, "f_y")
 
     # ── Histoire de chargement : Evolution à valeur CHAMP (t ∈ [0, 1]) ───────
     zero_frame = load_unit * 0.0

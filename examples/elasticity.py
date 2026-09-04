@@ -61,14 +61,16 @@ def main() -> None:
     model = model | _clamp(left, "u_x", "f_x")
     model = model | _clamp(bottom, "u_y", "f_y")
 
-    materials = pyrucast.element_field.material_field(model, [("E", E), ("nu", NU)])
-
     # Traction S sur le bord droit → charges nodales cohérentes (op flux).
     right = pyrucast.Mesh(c, "SEG2")
     for j in range(N):
         right.unit().add_cell([grid[idx(N, j)], grid[idx(N, j + 1)]])
     right_fes = pyrucast.FiniteElementSpace(right)
-    rhs = pyrucast.node_field.flux(right_fes, S, "f_x")
+    model = model | pyrucast.model.flux(right_fes, "f_x", "mechanical")
+    materials = pyrucast.element_field.material_field(
+        model, [("E", E), ("nu", NU), ("phi_f_x", S)]
+    )
+    rhs = pyrucast.node_field.external_forces(model, materials)
 
     solution = pyrucast.solver.solve(pyrucast.matrix.stiffness(model, materials), rhs)
 

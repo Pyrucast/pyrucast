@@ -81,6 +81,14 @@ def resoudre(angle_deg):
 
     # Le repère matériau est une donnée matériau comme une autre.
     a = math.radians(angle_deg)
+    # Traction S sur le bord droit, en charges nodales cohérentes : un terme du
+    # modèle, dont la densité vit dans le matériau.
+    bord = pyrucast.Mesh(c, "SEG2")
+    for j in range(N):
+        bord.unit().add_cell([grid[j][N], grid[j + 1][N]])
+    bord_fes = pyrucast.FiniteElementSpace(bord)
+    model = model | pyrucast.model.flux(bord_fes, "f_x", "mechanical")
+
     materials = pyrucast.element_field.material_field(
         model,
         [
@@ -95,15 +103,10 @@ def resoudre(angle_deg):
             ("G_23", G12),
             ("V1X", math.cos(a)),
             ("V1Y", math.sin(a)),
+            ("phi_f_x", S),
         ],
     )
-
-    # Traction S sur le bord droit, en charges nodales cohérentes.
-    bord = pyrucast.Mesh(c, "SEG2")
-    for j in range(N):
-        bord.unit().add_cell([grid[j][N], grid[j + 1][N]])
-    bord_fes = pyrucast.FiniteElementSpace(bord)
-    rhs = pyrucast.node_field.flux(bord_fes, S, "f_x")
+    rhs = pyrucast.node_field.external_forces(model, materials)
 
     solution = pyrucast.solver.solve(pyrucast.matrix.stiffness(model, materials), rhs)
     coin = grid[0][N]  # (1, 0)

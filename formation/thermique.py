@@ -146,16 +146,20 @@ def main() -> None:
     multiplicateur_T = pc.mesh.translate(alesage, [0.0, 0.0, 0.0])
     modele = modele | pc.model.dirichlet("T", "q", alesage, multiplicateur_T)
 
-    # FR — La conduction ne réclame qu'un coefficient, « k ».
-    # EN — Conduction asks for a single coefficient, "k".
-    materiaux = pc.element_field.material_field(modele, [("k", K_COND)])
+    # FR — Le flux imposé sur la face gauche est un terme du modèle.
+    # EN — The imposed flux on the left face is a term of the model.
+    gauche_fes = pc.FiniteElementSpace(face_gauche)
+    modele = modele | pc.model.flux(gauche_fes, "q", "thermal")
+
+    # FR — La conduction réclame « k », la charge sa densité.
+    # EN — Conduction asks for "k", the load for its density.
+    materiaux = pc.element_field.material_field(
+        modele, [("k", K_COND), ("phi_q", FLUX_IMPOSE)]
+    )
     # ANCHOR_END: modele_conduction
 
     # ANCHOR: charges_conduction
-    # FR — Flux imposé sur la face gauche.
-    # EN — Imposed flux on the left face.
-    gauche_fes = pc.FiniteElementSpace(face_gauche)
-    flux_gauche = pc.node_field.flux(gauche_fes, FLUX_IMPOSE, "q")
+    flux_gauche = pc.node_field.external_forces(modele, materiaux)
 
     # FR — Température imposée, posée sur le maillage des multiplicateurs.
     # EN — Imposed temperature, set on the multipliers' mesh.
@@ -230,10 +234,19 @@ def main() -> None:
     # EN — The convection's external term, h·T_ext: the model carries it.
     charge_convection = pc.node_field.external_forces(modele, materiaux)
 
-    # FR — Source volumique : `flux` sur des HEX8, donc une densité volumique.
-    # EN — Volume source: `flux` over HEX8 cells, hence a volume density.
+    # FR — Source volumique sur des HEX8, donc une densité volumique. Une
+    #      charge ne contribuant à aucune matrice, elle se tient très bien en
+    #      modèle à elle seule — avec sa propre densité, distincte de celle du
+    #      flux de bord bien qu'elles alimentent la même ligne « q ».
+    # EN — A volume source over HEX8 cells. A load contributes to no matrix, so
+    #      it stands perfectly well as a model of its own — with its own
+    #      density, distinct from the boundary flux's though both feed "q".
     source_fes = pc.FiniteElementSpace(zone_source)
-    charge_source = pc.node_field.flux(source_fes, SOURCE_VOLUMIQUE, "q")
+    source = pc.model.flux(source_fes, "q", "thermal")
+    densite_source = pc.element_field.material_field(
+        source, [("phi_q", SOURCE_VOLUMIQUE)]
+    )
+    charge_source = pc.node_field.external_forces(source, densite_source)
     # ANCHOR_END: charges_complet
 
     # ANCHOR: second_membre

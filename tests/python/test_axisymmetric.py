@@ -77,14 +77,17 @@ def test_lame_thick_cylinder_under_internal_pressure():
     ends = [grid[idx(i, j)] for i in range(NR + 1) for j in (0, NZ)]
     model = pyrucast.model.elasticity(fes, "axisymmetric")
     model = model | _clamp(ends, "u_y", "f_y")
-    materials = pyrucast.element_field.material_field(model, [("E", E), ("nu", NU)])
-
-    # Internal pressure on r = a. The geometry being axisymmetric, `flux`
+    # Internal pressure on r = a. The geometry being axisymmetric, the load
     # integrates ∫ 2πr N p — the true ring force, with no manual factor.
     inner = pyrucast.Mesh(c, "SEG2")
     for j in range(NZ):
         inner.unit().add_cell([grid[idx(0, j)], grid[idx(0, j + 1)]])
-    rhs = pyrucast.node_field.flux(pyrucast.FiniteElementSpace(inner), P, "f_x")
+    inner_fes = pyrucast.FiniteElementSpace(inner)
+    model = model | pyrucast.model.flux(inner_fes, "f_x", "mechanical")
+    materials = pyrucast.element_field.material_field(
+        model, [("E", E), ("nu", NU), ("phi_f_x", P)]
+    )
+    rhs = pyrucast.node_field.external_forces(model, materials)
 
     K = pyrucast.matrix.stiffness(model, materials)
     solution = pyrucast.solver.solve(K, rhs)

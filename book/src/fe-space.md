@@ -261,7 +261,7 @@ champ :
 
 | opérateur | ce qu'il interpole |
 |---|---|
-| `node_field::flux` | la fonction test d'une charge répartie |
+| `models::flux` | la fonction test d'une charge répartie |
 | `element_field::deformation` | `u_r`, pour la déformation orthoradiale |
 | `element_field::interp_to_gauss` | nodal → points de Gauss |
 | `measure::integral` | le champ intégré |

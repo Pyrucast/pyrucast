@@ -172,10 +172,14 @@ for i in reversed(range(N)):
 slave = pyrucast.mesh.poi1_from_nodes([top[idx(i, 0)] for i in range(N + 1)])
 
 contact = pyrucast.model.contact(slave, master, [("u_x", "f_x"), ("u_y", "f_y")])
-model = elasticite | appuis | contact
-materials = pyrucast.element_field.material_field(model, [("E", 210.0), ("nu", 0.0)])
+# La pression du bord supérieur est un terme du modèle, comme le contact.
+charge = pyrucast.model.flux(edge_fes, "f_y", "mechanical")
+model = elasticite | appuis | contact | charge
+materials = pyrucast.element_field.material_field(
+    model, [("E", 210.0), ("nu", 0.0), ("phi_f_y", -S)]
+)
 
-rhs = pyrucast.node_field.flux(edge_fes, -S, "f_y") | model.contact_gaps()
+rhs = pyrucast.node_field.external_forces(model, materials) | model.contact_gaps()
 solution = pyrucast.solver.solve_unilateral(
     pyrucast.matrix.stiffness(model, materials), model, rhs
 )
@@ -185,7 +189,7 @@ assert solution.node_count() > 0
 
 # ── Le second membre géométrique du contact ─────────────────────────────────
 
-traction = pyrucast.node_field.flux(edge_fes, -S, "f_y")
+traction = pyrucast.node_field.external_forces(model, materials)
 
 # ANCHOR: contact_gaps
 rhs = traction | model.contact_gaps()

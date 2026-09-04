@@ -113,14 +113,15 @@ def main() -> None:
     modele = pc.model.elasticity(fes, "plane_stress")
     modele = modele | pc.model.dirichlet("u_x", "f_x", encastrement, multiplicateur)
     modele = modele | pc.model.dirichlet("u_y", "f_y", encastrement, multiplicateur)
-    materiaux = pc.element_field.material_field(
-        modele, [("E", E), ("nu", NU), ("alpha", ALPHA)]
-    )
 
     # Effort de la masse suspendue, réparti sur la moitié basse du trou —
     # analogue de FSUR 'MASS' / PRES 'MASS' (Cast3M section 6).
     pression = -MASSE * G / (2.0 * 3.14159265 * RAYON_TROU)
-    effort = pc.node_field.flux(arc_fes, pression, "f_y")
+    modele = modele | pc.model.flux(arc_fes, "f_y", "mechanical")
+    materiaux = pc.element_field.material_field(
+        modele, [("E", E), ("nu", NU), ("alpha", ALPHA), ("phi_f_y", pression)]
+    )
+    effort = pc.node_field.external_forces(modele, materiaux)
 
     K = pc.matrix.stiffness(modele, materiaux)
     # ANCHOR_END: modele_elastique

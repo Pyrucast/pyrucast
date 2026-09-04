@@ -56,7 +56,6 @@ def main():
     model = model | pyrucast.model.dirichlet(
         "u_y", "f_y", imposed, pyrucast.mesh.barycenter(imposed)
     )
-    materials = pyrucast.element_field.material_field(model, [("E", E), ("nu", NU)])
 
     # ── Chargement : pression interne sur r = a ────────────────────────────
     # La géométrie étant axisymétrique, `flux` intègre ∫ 2πr N p et donne
@@ -64,7 +63,13 @@ def main():
     inner = pyrucast.Mesh(c, "SEG2")
     for j in range(NZ):
         inner.unit().add_cell([grid[idx(0, j)], grid[idx(0, j + 1)]])
-    rhs = pyrucast.node_field.flux(pyrucast.FiniteElementSpace(inner), P, "f_x")
+    model = model | pyrucast.model.flux(
+        pyrucast.FiniteElementSpace(inner), "f_x", "mechanical"
+    )
+    materials = pyrucast.element_field.material_field(
+        model, [("E", E), ("nu", NU), ("phi_f_x", P)]
+    )
+    rhs = pyrucast.node_field.external_forces(model, materials)
 
     # ── Assemblage + résolution ────────────────────────────────────────────
     k = pyrucast.matrix.stiffness(model, materials)

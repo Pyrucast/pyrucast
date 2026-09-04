@@ -99,18 +99,20 @@ def main():
     model = pyrucast.model.plasticity_perfect(fes, "plane_stress")
     model = model | pyrucast.model.dirichlet("u_x", "f_x", imposed_mesh, multiplier)
     model = model | pyrucast.model.dirichlet("u_y", "f_y", imposed_mesh, multiplier)
+
+    # ── Charge de référence : cisaillement unitaire (densité −1) sur la face
+    #    droite, en efforts nodaux cohérents. C'est un terme du modèle : il le
+    #    rejoint, sa densité rejoint le matériau. ─────────────────────────────
+    right_fes = pyrucast.FiniteElementSpace(right_edge)
+    model = model | pyrucast.model.flux(right_fes, "f_y", "mechanical")
     materials = pyrucast.element_field.material_field(
-        model, [("E", young), ("nu", nu), ("sigma_y", sigma_y)]
+        model, [("E", young), ("nu", nu), ("sigma_y", sigma_y), ("phi_f_y", -1.0)]
     )
+    load_unit = pyrucast.node_field.external_forces(model, materials)
 
     # Rigidité ÉLASTIQUE : opérateur d'itération du Newton modifié. Assemblée une
     # fois ; `solve` met la factorisation en cache et la réutilise.
     k = pyrucast.matrix.stiffness(model, materials)
-
-    # ── Charge de référence : cisaillement unitaire (densité −1) sur la face
-    #    droite, réparti en efforts nodaux cohérents (op `flux`). ──────────────
-    right_fes = pyrucast.FiniteElementSpace(right_edge)
-    load_unit = pyrucast.node_field.flux(right_fes, -1.0, "f_y")
 
     # ── Histoire de chargement : une Evolution à valeur CHAMP, tabulée en
     #    pseudo-temps t ∈ [0, 1]. Deux keyframes du champ d'effort nodal — nul en

@@ -173,7 +173,7 @@ impl Scatter<'_> {
 /// *Determinism* note). It is the shared mechanism behind the `Bᵀ` divergence
 /// ([`crate::models::kernel::scatter_to_nodes`], behind the `Bᵀ` divergence,
 /// the internal forces and the distributed flux load
-/// [`crate::ops::node_field::flux`](fn@crate::ops::node_field::flux)). Returns the
+/// [`crate::models::flux`]). Returns the
 /// accumulator as plain `f64`.
 ///
 /// ```

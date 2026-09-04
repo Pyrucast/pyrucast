@@ -2,7 +2,6 @@
 //! produce a `NodeField`.
 
 use crate::handle::Handle;
-use crate::ops::node_field::FluxDensity;
 use crate::py::element_field::PyElementField;
 use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::py::mesh::PyMesh;
@@ -112,34 +111,6 @@ pub fn consolidate(field: PyRef<PyNodeField>) -> PyResult<PyNodeField> {
 pub fn divergence(field: PyRef<PyElementField>) -> PyResult<PyNodeField> {
     let nf = crate::ops::node_field::divergence(&field.inner)?;
     Ok(PyNodeField { inner: nf })
-}
-
-/// Consistent nodal loads of a distributed flux over `fespace` — the analogue
-/// of Cast3m `FLUX` / `PRES`: `∫ density · N_i dΓ`, returned as a `NodeField`
-/// with one zone per FE subspace, each carrying the single component
-/// `component` (the model's dual variable, e.g. `"q"` for heat conduction).
-///
-/// `density` is either a **float** (uniform density) or a single-component
-/// `ElementField` (per-Gauss density) holding exactly one zone on each subspace
-/// of `fespace`. The element measure comes from the FE subspace, so a `SEG2`
-/// edge in a 2-D mesh integrates as a line, a surface mesh as an area.
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-#[pyfunction]
-pub fn flux(
-    fespace: PyRef<PyFiniteElementSpace>,
-    density: &Bound<'_, PyAny>,
-    component: &str,
-) -> PyResult<PyNodeField> {
-    let inner = if let Ok(value) = density.extract::<f64>() {
-        crate::ops::node_field::flux(&fespace.inner, FluxDensity::Uniform(value), component)?
-    } else if let Ok(field) = density.extract::<PyRef<PyElementField>>() {
-        crate::ops::node_field::flux(&fespace.inner, FluxDensity::Field(&field.inner), component)?
-    } else {
-        return Err(PyValueError::new_err(
-            "flux: `density` doit être un float ou un ElementField",
-        ));
-    };
-    Ok(PyNodeField { inner })
 }
 
 /// Internal nodal forces of `model` — the left side of `Σ f_int = Σ f_ext`
@@ -314,18 +285,5 @@ impl PyElementField {
     /// Voir `pyrucast.node_field.divergence`.
     fn divergence(slf: PyRef<'_, Self>) -> PyResult<PyNodeField> {
         super::node_field::divergence(slf)
-    }
-}
-
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[pymethods]
-impl PyFiniteElementSpace {
-    /// Voir `pyrucast.node_field.flux`.
-    fn flux(
-        slf: PyRef<'_, Self>,
-        density: &Bound<'_, PyAny>,
-        component: &str,
-    ) -> PyResult<PyNodeField> {
-        super::node_field::flux(slf, density, component)
     }
 }

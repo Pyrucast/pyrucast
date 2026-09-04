@@ -14,7 +14,7 @@ dans le même ordre que le support original — élasticité linéaire (sections
 
 Le modèle : élasticité (contraintes planes), encastrement `u_x = u_y = 0`
 sur le bord gauche, effort réparti sur l'arc bas du trou (Cast3M
-`FSUR 'MASS'`/`PRES 'MASS'`, ici `pyrucast.node_field.flux` en composante
+`FSUR 'MASS'`/`PRES 'MASS'`, ici `pyrucast.model.flux` en composante
 `f_y`) :
 
 ```python

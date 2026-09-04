@@ -19,10 +19,10 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::embedded::DEFAULT_TOL;
 use pyrucast::models::tensor::Kinematics;
+use pyrucast::models::Physics;
 use pyrucast::ops::matrix::stiffness;
 use pyrucast::ops::mesh::barycenter;
 use pyrucast::ops::model;
-use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
 
@@ -202,13 +202,17 @@ fn immersed_node_follows_host_displacement_field() -> Result<()> {
         DEFAULT_TOL,
     )?)?;
 
-    let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("nu", NU)])?;
-
     // Traction S on the x = 1 face (QUA4 [1, 2, 6, 5]).
     let mut face = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
     face.add_cell(&[nodes[1].id(), nodes[2].id(), nodes[6].id(), nodes[5].id()])?;
     let face_fes = FiniteElementSpace::lagrange1(&face)?;
-    let rhs = pyrucast::ops::node_field::flux(&face_fes, FluxDensity::Uniform(S), "f_x")?;
+    let model = model.union(&model::flux(&face_fes, "f_x".into(), Physics::Mechanical)?)?;
+
+    let materials = pyrucast::ops::element_field::material_field(
+        &model,
+        &[("E", E), ("nu", NU), ("phi_f_x", S)],
+    )?;
+    let rhs = pyrucast::ops::node_field::external_forces(&model, &materials)?;
 
     let solution = solve(&stiffness(&model, &materials)?, &rhs)?;
 
@@ -295,12 +299,16 @@ fn embedded_per_component_offset() -> Result<()> {
     emb_model.add_sub(Handle::new(embedded))?;
     model = model.union(&emb_model)?;
 
-    let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("nu", NU)])?;
-
     let mut face = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
     face.add_cell(&[nodes[1].id(), nodes[2].id(), nodes[6].id(), nodes[5].id()])?;
     let face_fes = FiniteElementSpace::lagrange1(&face)?;
-    let mut rhs = pyrucast::ops::node_field::flux(&face_fes, FluxDensity::Uniform(S), "f_x")?;
+    let model = model.union(&model::flux(&face_fes, "f_x".into(), Physics::Mechanical)?)?;
+
+    let materials = pyrucast::ops::element_field::material_field(
+        &model,
+        &[("E", E), ("nu", NU), ("phi_f_x", S)],
+    )?;
+    let mut rhs = pyrucast::ops::node_field::external_forces(&model, &materials)?;
     for sm in &emb_rhs {
         rhs.add_sub(sm.clone())?;
     }

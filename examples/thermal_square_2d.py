@@ -77,7 +77,6 @@ def main() -> None:
     )
 
     # ── Matériau : k uniforme (Dirichlet ignoré automatiquement) ─────────────
-    materials = pyrucast.element_field.material_field(model, [("k", K)])
 
     # ── Chargement ───────────────────────────────────────────────────────────
     # Source : flux uniforme (densité Q) sur le bord gauche, transformé en
@@ -88,7 +87,9 @@ def main() -> None:
     for j in range(N):
         left_edge.unit().add_cell([grid[idx(0, j)], grid[idx(0, j + 1)]])
     left_fes = pyrucast.FiniteElementSpace(left_edge)
-    source = pyrucast.node_field.flux(left_fes, Q, "q")
+    model = model | pyrucast.model.flux(left_fes, "q", "thermal")
+    materials = pyrucast.element_field.material_field(model, [("k", K), ("phi_q", Q)])
+    source = pyrucast.node_field.external_forces(model, materials)
 
     # Valeur imposée T = 20 au slot "imposed_T" des nœuds-multiplicateurs.
     imposed_mesh = pyrucast.mesh.poi1_from_nodes(mults)

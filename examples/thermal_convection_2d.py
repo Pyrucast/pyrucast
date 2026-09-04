@@ -25,7 +25,7 @@ Mise en donnée de la convection
 Le modèle ``model.boundary_transfer`` fournit la **matrice de film** (variables
 ``T``/``q`` partagées avec la conduction ⇒ couplage direct). La part externe
 ``h·T_ext·∫N_i dΓ`` est un **second membre**, bâti avec le même opérateur
-``flux`` que la source (densité ``h·T_ext``) — aucune normale n'est requise.
+son ambiant, comme la source porte sa densité — aucune normale n'est requise.
 
 C'est l'équivalent Python du test d'intégration ``tests/thermal_convection.rs``.
 
@@ -77,26 +77,25 @@ def main() -> None:
         right_fes, [("T", "q")], "thermal"
     )
 
-    # Matériau : k pour la conduction, h et l'ambiant pour la convection (chaque
-    # sous-modèle prélève la composante qu'il requiert).
-    materials = pyrucast.element_field.material_field(
-        model, [("k", K), ("h_T", H), ("a_ext_T", T_EXT)]
-    )
-
     # ── Chargement ───────────────────────────────────────────────────────────
-    # Source : flux uniforme (densité Q) sur le bord gauche.
+    # Source : flux uniforme (densité Q) sur le bord gauche. C'est un terme du
+    # modèle comme un autre.
     left_edge = pyrucast.Mesh(c, "SEG2")
     for j in range(N):
         left_edge.unit().add_cell([grid[idx(0, j)], grid[idx(0, j + 1)]])
     left_fes = pyrucast.FiniteElementSpace(left_edge)
-    source = pyrucast.node_field.flux(left_fes, Q, "q")
+    model = model | pyrucast.model.flux(left_fes, "q", "thermal")
 
-    # Convection : la part externe h·T_ext appartient au sous-modèle, qui la
-    # déclare avec son ambiant. On la lui demande — l'oublier n'est plus possible.
-    conv_load = pyrucast.node_field.external_forces(model, materials)
+    # Matériau : k pour la conduction, h et l'ambiant pour la convection, la
+    # densité pour la source (chaque sous-modèle prélève ce qu'il requiert).
+    materials = pyrucast.element_field.material_field(
+        model, [("k", K), ("h_T", H), ("a_ext_T", T_EXT), ("phi_q", Q)]
+    )
 
-    # Chargement = source du bord gauche + charge de convection du bord droit.
-    rhs = source | conv_load
+    # Les deux termes donnés — la source et la part externe h·T_ext de la
+    # convection — appartiennent au modèle, qui les rend ensemble.
+
+    rhs = pyrucast.node_field.external_forces(model, materials)
 
     # ── Assemblage + résolution (K rendue définie par le terme de film) ──────
     K_mat = pyrucast.matrix.stiffness(model, materials)

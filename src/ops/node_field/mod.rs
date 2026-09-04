@@ -9,10 +9,11 @@
 //!   [`consolidate`](fn@consolidate);
 //! - *nodal assembly* — [`internal_forces`](fn@internal_forces) and
 //!   [`external_forces`](fn@external_forces), the two sides of the balance
-//!   `Σ f_int = Σ f_ext` whose gap is the residual, plus [`flux`](fn@flux)
-//!   (the distributed-load right-hand side). They are assemblies like the
-//!   ones in [`crate::ops::matrix`], but their result is a vector, not an
-//!   operator.
+//!   `Σ f_int = Σ f_ext` whose gap is the residual. They are assemblies like
+//!   the ones in [`crate::ops::matrix`], but their result is a vector, not an
+//!   operator. A distributed load is no longer among them: it is a sub-model
+//!   ([`crate::models::flux`]), and its term comes out of `external_forces`
+//!   with every other given term.
 //!
 //! Resolution (`A · x = b`) also produces a nodal field; it keeps its own
 //! module, [`crate::ops::solver`] — the single named exception to the
@@ -21,7 +22,6 @@
 pub mod consolidate;
 pub mod divergence;
 pub mod external_forces;
-pub mod flux;
 pub mod internal_forces;
 pub mod mask;
 pub mod merge;
@@ -32,7 +32,6 @@ pub mod restrict;
 pub use consolidate::consolidate;
 pub use divergence::divergence;
 pub use external_forces::external_forces;
-pub use flux::{flux, FluxDensity};
 pub use internal_forces::{internal_forces, internal_forces_continuum};
 pub use mask::{mask, mask_sub};
 pub use merge::merge;

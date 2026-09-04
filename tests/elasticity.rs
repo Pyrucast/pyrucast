@@ -20,9 +20,9 @@ use pyrucast::containers::model::Model;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::tensor::Kinematics;
+use pyrucast::models::Physics;
 use pyrucast::ops::mesh;
 use pyrucast::ops::model;
-use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
 
@@ -79,16 +79,21 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
     model = model.union(&roller(&left, "u_x", "f_x")?)?;
     model = model.union(&roller(&bottom, "u_y", "f_y")?)?;
 
-    let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("nu", NU)])?;
-
-    // ── Chargement : traction S sur le bord droit (charges nodales cohérentes
-    //    via l'opérateur flux, sur la composante f_x) ────────────────────────
+    // ── Chargement : traction S sur le bord droit (charges nodales cohérentes,
+    //    sur la composante f_x). La charge est un sous-modèle : elle rejoint le
+    //    modèle, sa densité le matériau. ─────────────────────────────────────
     let mut right_edge = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
     for j in 0..N {
         right_edge.add_cell(&[grid[idx(N, j)].id(), grid[idx(N, j + 1)].id()])?;
     }
     let right_fes = FiniteElementSpace::lagrange1(&right_edge)?;
-    let rhs = pyrucast::ops::node_field::flux(&right_fes, FluxDensity::Uniform(S), "f_x")?;
+    model = model.union(&model::flux(&right_fes, "f_x".into(), Physics::Mechanical)?)?;
+
+    let materials = pyrucast::ops::element_field::material_field(
+        &model,
+        &[("E", E), ("nu", NU), ("phi_f_x", S)],
+    )?;
+    let rhs = pyrucast::ops::node_field::external_forces(&model, &materials)?;
 
     // ── Assemblage + résolution ────────────────────────────────────────────
     let stiffness = pyrucast::ops::matrix::stiffness(&model, &materials)?;
@@ -158,13 +163,17 @@ fn elasticity_unit_cube_uniaxial_tension() -> Result<()> {
     model = model.union(&clamp(&pick(&[0, 1, 4, 5]), "u_y", "f_y")?)?; // y = 0 face
     model = model.union(&clamp(&pick(&[0, 1, 2, 3]), "u_z", "f_z")?)?; // z = 0 face
 
-    let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("nu", NU)])?;
-
     // Traction S on the x = 1 face (QUA4 [1, 2, 6, 5]).
     let mut face = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
     face.add_cell(&[nodes[1].id(), nodes[2].id(), nodes[6].id(), nodes[5].id()])?;
     let face_fes = FiniteElementSpace::lagrange1(&face)?;
-    let rhs = pyrucast::ops::node_field::flux(&face_fes, FluxDensity::Uniform(S), "f_x")?;
+    model = model.union(&model::flux(&face_fes, "f_x".into(), Physics::Mechanical)?)?;
+
+    let materials = pyrucast::ops::element_field::material_field(
+        &model,
+        &[("E", E), ("nu", NU), ("phi_f_x", S)],
+    )?;
+    let rhs = pyrucast::ops::node_field::external_forces(&model, &materials)?;
 
     let solution = solve(&pyrucast::ops::matrix::stiffness(&model, &materials)?, &rhs)?;
 

@@ -36,9 +36,9 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::shell::ShellModel;
+use pyrucast::models::Physics;
 use pyrucast::ops::mesh;
 use pyrucast::ops::model;
-use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
 
@@ -223,16 +223,19 @@ fn membrane_stretch(formulation: ShellModel) -> Result<()> {
     ] {
         model = model.union(&clamp(&all, var, dual)?)?;
     }
-    let materials =
-        pyrucast::ops::element_field::material_field(&model, &[("E", E), ("nu", NU), ("h", h)])?;
-
     // A uniform traction on the x = 1 edge.
     let mut edge = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
     for j in 0..n {
         edge.add_cell(&[grid[idx(n, j)].id(), grid[idx(n, j + 1)].id()])?;
     }
     let edge_fes = FiniteElementSpace::lagrange1(&edge)?;
-    let traction = pyrucast::ops::node_field::flux(&edge_fes, FluxDensity::Uniform(Q * h), "f_x")?;
+    model = model.union(&model::flux(&edge_fes, "f_x".into(), Physics::Mechanical)?)?;
+
+    let materials = pyrucast::ops::element_field::material_field(
+        &model,
+        &[("E", E), ("nu", NU), ("h", h), ("phi_f_x", Q * h)],
+    )?;
+    let traction = pyrucast::ops::node_field::external_forces(&model, &materials)?;
 
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let solution = solve(&k, &traction)?;
@@ -495,11 +498,14 @@ fn central_deflection(
             model = model.union(&clamp(&interior, var, dual)?)?;
         }
     }
-    let materials =
-        pyrucast::ops::element_field::material_field(&model, &[("E", E), ("nu", NU), ("h", h)])?;
-
     // The uniform pressure, as consistent nodal loads on the surface itself.
-    let load = pyrucast::ops::node_field::flux(&fes, FluxDensity::Uniform(Q), "f_z")?;
+    model = model.union(&model::flux(&fes, "f_z".into(), Physics::Mechanical)?)?;
+
+    let materials = pyrucast::ops::element_field::material_field(
+        &model,
+        &[("E", E), ("nu", NU), ("h", h), ("phi_f_z", Q)],
+    )?;
+    let load = pyrucast::ops::node_field::external_forces(&model, &materials)?;
     let _ = coords;
 
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;

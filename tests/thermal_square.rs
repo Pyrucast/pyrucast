@@ -26,6 +26,7 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
+use pyrucast::models::Physics;
 use pyrucast::ops::mesh;
 use pyrucast::ops::model;
 use pyrucast::ops::solver::lu::solve;
@@ -84,8 +85,6 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
         Default::default(),
     )?;
     let model = conduction.union(&dirichlet)?;
-    let materials = pyrucast::ops::element_field::material_field(&model, &[("k", K)])?;
-
     // ── Chargement ─────────────────────────────────────────────────────────
     // Source : flux uniforme (densité Q) sur le bord gauche, transformé en
     // charges nodales cohérentes par l'opérateur `flux` (Cast3m FLUX) — plus de
@@ -96,11 +95,11 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
         left_edge.add_cell(&[grid[idx(0, j)].id(), grid[idx(0, j + 1)].id()])?;
     }
     let left_fes = FiniteElementSpace::lagrange1(&left_edge)?;
-    let source = pyrucast::ops::node_field::flux(
-        &left_fes,
-        pyrucast::ops::node_field::FluxDensity::Uniform(Q),
-        "q",
-    )?;
+    let model = model.union(&model::flux(&left_fes, "q".into(), Physics::Thermal)?)?;
+
+    let materials =
+        pyrucast::ops::element_field::material_field(&model, &[("k", K), ("phi_q", Q)])?;
+    let source = pyrucast::ops::node_field::external_forces(&model, &materials)?;
 
     // Valeur imposée T = 20 au slot "imposed_T" des nœuds-multiplicateurs.
     let mut imposed_sm = SubMesh::new(coords.clone(), ElementType::POI1);

@@ -72,6 +72,7 @@ use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::tensor::Kinematics;
+use pyrucast::models::Physics;
 use pyrucast::ops::element_field::behavior::integrate;
 use pyrucast::ops::element_field::deformation;
 use pyrucast::ops::element_field::mask;
@@ -80,8 +81,7 @@ use pyrucast::ops::matrix::stiffness;
 use pyrucast::ops::mesh::select_nodes;
 use pyrucast::ops::mesh::{line, sweep, to_poi1, translate};
 use pyrucast::ops::model;
-use pyrucast::ops::node_field::internal_forces;
-use pyrucast::ops::node_field::{flux, FluxDensity};
+use pyrucast::ops::node_field::{external_forces, internal_forces};
 use pyrucast::ops::node_field::{positions, restrict, restrict_like};
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
@@ -196,7 +196,23 @@ fn main() -> Result<()> {
         Default::default(),
     )?)?;
 
-    let materials = material_field(&model, &[("E", young), ("nu", nu), ("sigma_y", sigma_y)])?;
+    // La charge de référence est un terme du modèle : elle le rejoint, sa
+    // densité rejoint le matériau.
+    let right_fes = FiniteElementSpace::lagrange1(&right_edge)?;
+    let model = model.union(&pyrucast::ops::model::flux(
+        &right_fes,
+        "f_y".into(),
+        Physics::Mechanical,
+    )?)?;
+    let materials = material_field(
+        &model,
+        &[
+            ("E", young),
+            ("nu", nu),
+            ("sigma_y", sigma_y),
+            ("phi_f_y", -1.0),
+        ],
+    )?;
 
     // Rigidité ÉLASTIQUE : opérateur d'itération du Newton modifié. Assemblée
     // une fois ; `solve` met la factorisation en cache et la réutilise à chaque
@@ -209,12 +225,9 @@ fn main() -> Result<()> {
     // ── Charge de référence : cisaillement unitaire (densité −1) sur la face
     //    droite, réparti en efforts nodaux cohérents (∫ densité·N dΓ, op `flux`).
     println!("▸ Charge de référence + histoire de chargement…");
-    let right_fes = FiniteElementSpace::lagrange1(&right_edge)?;
-    // `flux` rend un agrégat ; l'histoire de chargement se tabule zone par zone.
-    let load_unit = flux(&right_fes, FluxDensity::Uniform(-1.0), "f_y")?
-        .get(0)?
-        .read()
-        .clone();
+    // `external_forces` rend un agrégat ; l'histoire de chargement se tabule
+    // zone par zone.
+    let load_unit = external_forces(&model, &materials)?.get(0)?.read().clone();
 
     // ── Histoire de chargement : une Evolution à valeur CHAMP, tabulée en
     //    pseudo-temps t ∈ [0, 1]. Deux keyframes du champ d'effort nodal — nul en

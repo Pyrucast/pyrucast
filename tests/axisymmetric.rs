@@ -25,10 +25,10 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
 use pyrucast::models::tensor::Kinematics;
+use pyrucast::models::Physics;
 use pyrucast::ops::model;
 
 use pyrucast::handle::Handle;
-use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::ops::{element_field, measure, mesh, node_field};
 use pyrucast::Result;
@@ -320,9 +320,13 @@ fn lame_case(nr: usize, quadratic: bool) -> Result<(f64, f64)> {
         .collect();
     let mut model = model::elasticity(&fes, Kinematics::Axisymmetric)?;
     model = model.union(&clamp(&ends, "u_y", "f_y")?)?;
-    let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("nu", NU)])?;
+    let model = model.union(&model::flux(&edge_fes, "f_x".into(), Physics::Mechanical)?)?;
+    let materials = pyrucast::ops::element_field::material_field(
+        &model,
+        &[("E", E), ("nu", NU), ("phi_f_x", P)],
+    )?;
 
-    let load = pyrucast::ops::node_field::flux(&edge_fes, FluxDensity::Uniform(P), "f_x")?;
+    let load = pyrucast::ops::node_field::external_forces(&model, &materials)?;
     let stiffness = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let solution = solve(&stiffness, &load)?;
 

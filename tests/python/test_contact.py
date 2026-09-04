@@ -78,7 +78,11 @@ def test_patch_test_uniform_pressure_through_contact():
     for i in range(N):
         top_edge.unit().add_cell([top[idx(i, N)], top[idx(i + 1, N)]])
     edge_fes = pyrucast.FiniteElementSpace(top_edge)
-    traction = pyrucast.node_field.flux(edge_fes, -S, "f_y")
+    model = model | pyrucast.model.flux(edge_fes, "f_y", "mechanical")
+    materials = pyrucast.element_field.material_field(
+        model, [("E", E), ("nu", 0.0), ("phi_f_y", -S)]
+    )
+    traction = pyrucast.node_field.external_forces(model, materials)
     rhs = traction | model.contact_gaps()
 
     k = pyrucast.matrix.stiffness(model, materials)
@@ -110,8 +114,6 @@ def test_separation_releases_every_pair():
     top_edge_nodes = [top[idx(i, N)] for i in range(N + 1)]
     lift_model = _clamp(top_edge_nodes, "u_y", "f_y")
     model = model | lift_model
-    materials = pyrucast.element_field.material_field(model, [("E", E), ("nu", 0.0)])
-
     rhs = lift_model.constraint_rhs([(n, lift) for n in top_edge_nodes])
     rhs = rhs | model.contact_gaps()
 

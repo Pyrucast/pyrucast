@@ -105,7 +105,13 @@ pub fn external_forces(model: &Model, materials: &ElementField) -> Result<NodeFi
             zones
         };
         for zone in built {
-            out.add_sub(zone)?;
+            // `r = Σ rᵢ` est une **somme**, pas un empilement : deux termes
+            // peuvent charger le même nœud dans la même composante, et une
+            // vue d'agrégat en choisirait un au lieu de les ajouter. `+` fait
+            // l'union des supports et somme ce qui se recouvre.
+            let mut one = NodeField::empty();
+            one.add_sub(zone)?;
+            out = (&out + &one)?;
         }
     }
     Ok(out)

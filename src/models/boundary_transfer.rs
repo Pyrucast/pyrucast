@@ -14,7 +14,7 @@
 //! ```text
 //! K_ij = h ∫_Γ N_i N_j dΓ    (this sub-model, into the stiffness),
 //! f_i  = h·a_ext ∫_Γ N_i dΓ  (a right-hand side, built with
-//!                             crate::ops::node_field::flux — not stored here).
+//!                             crate::models::flux — not stored here).
 //! ```
 //!
 //! Only the first is here, and that is the whole difference from

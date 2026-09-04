@@ -95,13 +95,16 @@ def main() -> None:
     modele = modele | clamp([bas[idx(i, 0)] for i in range(N + 1)], "u_y", "f_y")
     modele = modele | contact
 
-    materiaux = pc.element_field.material_field(modele, [("E", E), ("nu", 0.0)])
     # ANCHOR_END: modele_contact
 
     # ANCHOR: chargement_contact
     bord_haut = bord_horizontal(mesh_haut, 2.0 + G0)
     bord_haut_fes = pc.FiniteElementSpace(bord_haut)
-    traction = pc.node_field.flux(bord_haut_fes, -S, "f_y")
+    modele = modele | pc.model.flux(bord_haut_fes, "f_y", "mechanical")
+    materiaux = pc.element_field.material_field(
+        modele, [("E", E), ("nu", 0.0), ("phi_f_y", -S)]
+    )
+    traction = pc.node_field.external_forces(modele, materiaux)
 
     # `contact_gaps()` fournit le second membre du contact — l'équivalent
     # Cast3M de la préparation du problème unilatéral avant RESO.

@@ -168,7 +168,6 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `merge(a: &NodeField, b: &NodeField) -> NodeField` | `merge(a, b) -> NodeField` |
 | `consolidate(field: &NodeField) -> NodeField` | `consolidate(field) -> NodeField` |
 | `mask(field: &NodeField, band: &Band, …) -> NodeField` | `mask(field, ge=None, gt=None, le=None, lt=None, components=None) -> NodeField` (champ `0/1` de même structure ; sucre `field >= x`). Accepte aussi un `SubNodeField` |
-| `flux(fespace: &FiniteElementSpace, density: FluxDensity, component: &str) -> NodeField` | `flux(fespace, density, component) -> NodeField` |
 | `internal_forces(model: &Model, state: &ElementField) -> NodeField` | `internal_forces(model, state) -> NodeField` |
 | `external_forces(model: &Model, materials: &ElementField) -> NodeField` | `external_forces(model, materials) -> NodeField` |
 | `internal_forces_continuum(stresses: &ElementField, fespace: &FiniteElementSpace) -> NodeField` | `internal_forces_continuum(stresses, fespace) -> NodeField` |
@@ -241,6 +240,7 @@ un sujet qu'on transforme.
 | `fick(fes: &FiniteElementSpace, species: &str) -> Model` | `fick(fespace, species, symmetry=None) -> Model` |
 | `fick_with_symmetry(fes, symmetry: MaterialSymmetry, species: &str) -> Model` | *idem, via `symmetry=`* |
 | `radiation(fes: &FiniteElementSpace) -> Model` | `radiation(fespace) -> Model` |
+| `flux(fes: &FiniteElementSpace, dual: String, physics: Physics) -> Model` | `flux(fespace, dual, physics) -> Model` |
 | `boundary_transfer(fes, components: Vec<(String, String)>, physics: Physics) -> Model` | `boundary_transfer(fespace, components, physics) -> Model` |
 | `interface_transfer(side_a, side_b, components, physics: Physics, tol: f64) -> Model` | `interface_transfer(side_a, side_b, components, physics, tol=None) -> Model` |
 | `truss(fes: &FiniteElementSpace) -> Model` | `truss(fespace) -> Model` |

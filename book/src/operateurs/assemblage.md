@@ -2,7 +2,7 @@
 
 Le module `ops::matrix` transforme un [`Model`](../model.md) en une
 [`Matrice`](../matrix.md) (raideur, masse). Les **seconds membres** répartis
-— `flux`, `internal_forces` — sont eux aussi des assemblages, mais leur
+— `internal_forces`, `external_forces` — sont eux aussi des assemblages, mais leur
 résultat est un vecteur nodal : on se range par la sortie, ils vivent donc
 sous `ops::node_field`. Les intégrandes par physique vivent sous `src/models/` ; cette couche
 **oriente** : boucle sur les sous-modèles, mise en place des DOFs, accumulation
@@ -126,10 +126,18 @@ s'obtient sans opérateur dédié :
 {{#include ../../../tests/python/test_doc_ops_assemblage.py:somme}}
 ```
 
-## Chargement réparti : `flux(fespace, density, component)` → `NodeField`
+## Chargement réparti : `model.flux(fespace, dual, physics)` → `Model`
 
-L'analogue de `FLUX` / `PRES` de cast3m : transforme une densité de flux `φ`
-répartie sur un bord (ou un volume) en **charges nodales cohérentes**
+L'analogue de `FLUX` / `SOUR` de cast3m. Ce n'est **pas** un opérateur mais une
+**physique** : une charge répartie est un terme de la forme variationnelle comme
+un autre, simplement le premier dont le terme entier siège à droite du signe
+égal. Sa dérivée par rapport à la solution est nulle, donc elle ne contribue à
+aucune matrice ; on lui demande sa contribution par
+[`external_forces`](comportement.md).
+
+Elle transforme une densité `φ` — lue dans le matériau sous le nom
+`phi_<dual>` — répartie sur un bord (ou un volume) en **charges nodales
+cohérentes**
 
 \\[
 f_i = \int_\Gamma \varphi\\, N_i\\, d\Gamma
@@ -137,15 +145,23 @@ f_i = \int_\Gamma \varphi\\, N_i\\, d\Gamma
 \\]
 
 accumulées par nœud dans un `NodeField` — une zone par sous-espace EF — sur la
-composante **duale** `component` (par exemple `"q"` en thermique, `"f_x"` en
-mécanique). `density` est soit une **constante** (flux uniforme), soit un
-`ElementField` à une seule composante (densité par élément) portant exactement
-une zone sur chaque sous-espace de `fespace`.
+ligne **duale** `dual` (par exemple `"q"` en thermique, `"f_x"` en mécanique).
+Une charge n'a pas de primale : elle écrit dans la ligne duale d'une autre
+physique et n'introduit aucune inconnue.
+
+La densité vaut ce que le champ matériau y met : uniforme si on la passe en
+scalaire à `material_field`, variable par point de Gauss si on bâtit
+l'`ElementField` soi-même. Un ambiant oublié n'est plus possible non plus — une
+densité absente est refusée à l'assemblage, par son nom.
 
 La mesure `|J|` venant du sous-espace EF, un **bord** s'intègre directement :
 une arête `SEG2` plongée dans un `Coords` 2-D s'intègre comme une **ligne**
-(Jacobien manifold), une surface comme une aire. On compose ensuite le résultat
-avec le reste du chargement par l'union `|`.
+(Jacobien manifold), une surface comme une aire.
+
+Rien n'oblige une charge à rejoindre le modèle qu'elle charge : ne contribuant à
+aucune matrice, elle se tient très bien en modèle à elle seule, avec sa propre
+densité. C'est ce qu'on fait quand deux charges alimentent la même ligne duale
+avec des densités différentes.
 
 ```python
 {{#include ../../../tests/python/test_doc_ops_assemblage.py:flux}}

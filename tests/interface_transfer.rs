@@ -34,7 +34,6 @@ use pyrucast::handle::Handle;
 use pyrucast::models::Physics;
 use pyrucast::ops::mesh;
 use pyrucast::ops::model;
-use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
 
@@ -225,11 +224,26 @@ fn two_square_model(h: f64) -> Result<(Geometry, Model, ElementField)> {
             Default::default(),
         )?)?;
 
+    // The inlet: uniform flux density Q on the far-left edge (x = 0). A load
+    // is a term of the model, so it joins it here and its density joins the
+    // material below.
+    let inlet = edge(&left[0], &left[3])?;
+    let model = model.union(&model::flux(
+        &inlet,
+        format!("j_{SPECIES}"),
+        Physics::Diffusion,
+    )?)?;
+
     // One material field for the whole model: the squares ask for `D`, the
-    // interface for `h`, and each resolves its own zone by its components.
+    // interface for `h`, the inlet for its density, and each resolves its own
+    // zone by its components.
     let materials = pyrucast::ops::element_field::material_field(
         &model,
-        &[(&format!("D_{SPECIES}"), D), (&format!("h_c_{SPECIES}"), h)],
+        &[
+            (&format!("D_{SPECIES}"), D),
+            (&format!("h_c_{SPECIES}"), h),
+            (&format!("phi_j_{SPECIES}"), Q),
+        ],
     )?;
     Ok((Geometry { left, right }, model, materials))
 }
@@ -239,16 +253,9 @@ fn solve_two_squares(h: f64) -> Result<(Geometry, NodeField)> {
     let (geom, model, materials) = two_square_model(h)?;
     let coords = geom.left[0].coords();
 
-    // Uniform flux density Q on the far-left edge (x = 0), as consistent nodal
-    // loads.
-    let mut inlet = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
-    inlet.add_cell(&[geom.left[0].id(), geom.left[3].id()])?;
-    let inlet_fes = FiniteElementSpace::lagrange1(&inlet)?;
-    let influx = pyrucast::ops::node_field::flux(
-        &inlet_fes,
-        FluxDensity::Uniform(Q),
-        &format!("j_{SPECIES}"),
-    )?;
+    // The inlet's consistent nodal loads: the model carries the term, we ask
+    // it for its value.
+    let influx = pyrucast::ops::node_field::external_forces(&model, &materials)?;
 
     // The imposed concentration, on the Dirichlet multiplier nodes.
     let mult_mesh = model.multiplier_mesh()?;

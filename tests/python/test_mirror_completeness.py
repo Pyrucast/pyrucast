@@ -52,11 +52,6 @@ RUST_ONLY = {
     "select_sub_cells": "les vues `Sub*` passent par le dispatch de `select`",
     "select_sub_nodes": "les vues `Sub*` passent par le dispatch de `select`",
     "mask_sub": "les vues `Sub*` passent par le dispatch de `mask`",
-    # Temporaire : `model.flux` remplacera `node_field.flux`, dont il porte le
-    # nom. Les deux ne peuvent pas coexister dans le module plat `_pyrucast`,
-    # donc l'exposition arrive avec la migration des appelants qui retire
-    # l'ancien opérateur.
-    "flux": "attend la migration qui retire `node_field.flux`, son homonyme",
     # Les six écritures VTK typées sont derrière l'unique `export.export_vtk`,
     # qui choisit selon ce qu'on lui passe (maillage, champ nodal, champ par
     # éléments) et selon la présence d'un chemin.

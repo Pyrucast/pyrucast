@@ -42,7 +42,7 @@
 //! [`scatter_to_nodes`] (the shared nodal integrate-and-scatter driver behind the
 //! internal forces, the weak divergence
 //! [`crate::ops::node_field::divergence`](fn@crate::ops::node_field::divergence) and the
-//! distributed flux load [`crate::ops::node_field::flux`](fn@crate::ops::node_field::flux))
+//! distributed flux load [`crate::models::flux`])
 //! instead builds each cell's local vector and scatters it in the **same parallel
 //! pass**, by **cell colouring** (colours = node-disjoint cells): every node
 //! accumulates in a fixed colour order, so the result is reproducible for any
@@ -2735,7 +2735,7 @@ fn local_positions(ids: &[NodeId], pos: &HashMap<NodeId, u32>, side: &str) -> Re
 /// the weak divergence
 /// [`crate::ops::node_field::divergence`](fn@crate::ops::node_field::divergence)) and the
 /// distributed flux load `∫ φ N`
-/// ([`crate::ops::node_field::flux`](fn@crate::ops::node_field::flux)) alike.
+/// ([`crate::models::flux`]) alike.
 ///
 /// `element(geoms, fe)` is a pure sequential kernel: for one cell it fills `fe` —
 /// the cell's local vector, **node-major / variable-minor**

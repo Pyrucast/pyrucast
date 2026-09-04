@@ -32,9 +32,9 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
+use pyrucast::models::Physics;
 use pyrucast::ops::mesh;
 use pyrucast::ops::model;
-use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
 
@@ -49,7 +49,7 @@ fn orthotropic_square_stretches_along_its_first_material_axis() -> Result<()> {
     const E2: f64 = 50.0; // compliant transverse direction
     const NU12: f64 = 0.25;
 
-    let (grid, fes, coords) = unit_square()?;
+    let (grid, fes, _coords) = unit_square()?;
     let model = clamped_model(&grid, &fes, MaterialSymmetry::Orthotropic)?;
 
     // The material axes travel through the material field like any other
@@ -68,10 +68,11 @@ fn orthotropic_square_stretches_along_its_first_material_axis() -> Result<()> {
             ("G_23", 30.0),
             ("V1X", 1.0),
             ("V1Y", 0.0),
+            ("phi_f_x", S),
         ],
     )?;
 
-    let solution = solve_traction(&model, &materials, &grid, &coords)?;
+    let solution = solve_traction(&model, &materials)?;
 
     // σ_xx = S with σ_yy = σ_zz = 0 ⇒ the compliance row gives ε directly.
     let tol = 1e-10;
@@ -102,7 +103,7 @@ fn orthotropy_with_isotropic_constants_ignores_its_frame() -> Result<()> {
 
     for angle_deg in [0.0_f64, 30.0, 90.0, 137.0] {
         let a = angle_deg.to_radians();
-        let (grid, fes, coords) = unit_square()?;
+        let (grid, fes, _coords) = unit_square()?;
         let model = clamped_model(&grid, &fes, MaterialSymmetry::Orthotropic)?;
         let materials = pyrucast::ops::element_field::material_field(
             &model,
@@ -118,9 +119,10 @@ fn orthotropy_with_isotropic_constants_ignores_its_frame() -> Result<()> {
                 ("G_23", g),
                 ("V1X", a.cos()),
                 ("V1Y", a.sin()),
+                ("phi_f_x", S),
             ],
         )?;
-        let solution = solve_traction(&model, &materials, &grid, &coords)?;
+        let solution = solve_traction(&model, &materials)?;
 
         let tol = 1e-9;
         let h = 1.0 / N as f64;
@@ -156,7 +158,7 @@ fn anisotropy_fed_the_isotropic_tensor_is_isotropic() -> Result<()> {
     let c = E / ((1.0 + NU) * (1.0 - 2.0 * NU));
     let (d_n, d_off, g) = (c * (1.0 - NU), c * NU, c * (1.0 - 2.0 * NU) / 2.0);
 
-    let (grid, fes, coords) = unit_square()?;
+    let (grid, fes, _coords) = unit_square()?;
     let model = clamped_model(&grid, &fes, MaterialSymmetry::Anisotropic)?;
     let materials = pyrucast::ops::element_field::material_field(
         &model,
@@ -184,9 +186,10 @@ fn anisotropy_fed_the_isotropic_tensor_is_isotropic() -> Result<()> {
             ("C_66", g),
             ("V1X", 1.0),
             ("V1Y", 0.0),
+            ("phi_f_x", S),
         ],
     )?;
-    let solution = solve_traction(&model, &materials, &grid, &coords)?;
+    let solution = solve_traction(&model, &materials)?;
 
     let tol = 1e-9;
     let h = 1.0 / N as f64;
@@ -222,6 +225,7 @@ fn a_degenerate_material_frame_is_rejected() -> Result<()> {
             ("G_23", 30.0),
             ("V1X", 0.0),
             ("V1Y", 0.0),
+            ("phi_f_x", S),
         ],
     )?;
     let err = pyrucast::ops::matrix::stiffness(&model, &materials).unwrap_err();
@@ -290,23 +294,33 @@ fn clamped_model(
     let mut model = model::elasticity_with_symmetry(fes, Kinematics::PlaneStress, symmetry)?;
     model = model.union(&roller(&left, "u_x", "f_x")?)?;
     model = model.union(&roller(&bottom, "u_y", "f_y")?)?;
+    // La traction du bord droit est un terme du modèle, pas un vecteur bâti à
+    // côté : elle le rejoint ici, sa densité rejoindra le matériau.
+    model = model.union(&model::flux(
+        &right_edge_fes(grid, fes)?,
+        "f_x".into(),
+        Physics::Mechanical,
+    )?)?;
     Ok(model)
+}
+
+/// L'espace EF du bord droit, où s'applique la traction.
+fn right_edge_fes(grid: &[Node], fes: &FiniteElementSpace) -> Result<FiniteElementSpace> {
+    let idx = |i: usize, j: usize| j * (N + 1) + i;
+    let coords = fes.get(0)?.read().submesh().read().coords();
+    let mut right_edge = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    for j in 0..N {
+        right_edge.add_cell(&[grid[idx(N, j)].id(), grid[idx(N, j + 1)].id()])?;
+    }
+    FiniteElementSpace::lagrange1(&right_edge)
 }
 
 /// Assemble, apply the uniform traction `S` on the right edge, and solve.
 fn solve_traction(
     model: &Model,
     materials: &pyrucast::containers::element_field::ElementField,
-    grid: &[Node],
-    coords: &pyrucast::handle::Handle<Coords>,
 ) -> Result<NodeField> {
-    let idx = |i: usize, j: usize| j * (N + 1) + i;
-    let mut right_edge = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
-    for j in 0..N {
-        right_edge.add_cell(&[grid[idx(N, j)].id(), grid[idx(N, j + 1)].id()])?;
-    }
-    let right_fes = FiniteElementSpace::lagrange1(&right_edge)?;
-    let rhs = pyrucast::ops::node_field::flux(&right_fes, FluxDensity::Uniform(S), "f_x")?;
+    let rhs = pyrucast::ops::node_field::external_forces(model, materials)?;
     let stiffness = pyrucast::ops::matrix::stiffness(model, materials)?;
     solve(&stiffness, &rhs)
 }

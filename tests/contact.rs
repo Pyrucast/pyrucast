@@ -17,9 +17,9 @@ use pyrucast::containers::model::Model;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::tensor::Kinematics;
+use pyrucast::models::Physics;
 use pyrucast::ops::mesh;
 use pyrucast::ops::model;
-use pyrucast::ops::node_field::FluxDensity;
 use pyrucast::ops::solver::unilateral;
 use pyrucast::Result;
 
@@ -79,7 +79,6 @@ struct TwoBlocks {
     top: Vec<Node>,
     model: Model,
     contact: Model,
-    materials: pyrucast::containers::element_field::ElementField,
     slave_nodes: Vec<NodeId>,
 }
 
@@ -120,7 +119,6 @@ fn two_blocks() -> Result<TwoBlocks> {
     model = model.union(&clamp(&bottom_edge, "u_y", "f_y")?)?;
     model = model.union(&contact)?;
 
-    let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("nu", 0.0)])?;
     let slave_nodes = slave_nodes_v.iter().map(|n| n.id()).collect();
 
     Ok(TwoBlocks {
@@ -128,7 +126,6 @@ fn two_blocks() -> Result<TwoBlocks> {
         top,
         model,
         contact,
-        materials,
         slave_nodes,
     })
 }
@@ -148,11 +145,20 @@ fn patch_test_uniform_pressure_through_contact() -> Result<()> {
         top_edge.add_cell(&[tb.top[idx(i, N)].id(), tb.top[idx(i + 1, N)].id()])?;
     }
     let top_fes = FiniteElementSpace::lagrange1(&top_edge)?;
-    let traction = pyrucast::ops::node_field::flux(&top_fes, FluxDensity::Uniform(-S), "f_y")?;
-    let rhs = traction.union(&tb.model.contact_gaps()?)?;
+    // La pression est un terme du modèle : elle le rejoint, sa densité rejoint
+    // le matériau, et on lui demande sa contribution.
+    let model = tb
+        .model
+        .union(&model::flux(&top_fes, "f_y".into(), Physics::Mechanical)?)?;
+    let materials = pyrucast::ops::element_field::material_field(
+        &model,
+        &[("E", E), ("nu", 0.0), ("phi_f_y", -S)],
+    )?;
+    let traction = pyrucast::ops::node_field::external_forces(&model, &materials)?;
+    let rhs = traction.union(&model.contact_gaps()?)?;
 
-    let k = pyrucast::ops::matrix::stiffness(&tb.model, &tb.materials)?;
-    let solution = unilateral::solve(&k, &tb.model, &rhs)?;
+    let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
+    let solution = unilateral::solve(&k, &model, &rhs)?;
 
     // Bottom block: u_y = −(S/E)·y; top block: −(S/E)·y shifted by the closed
     // gap (its own coordinates start at 1 + g₀ but its base lands at the
@@ -316,13 +322,17 @@ fn contact_3d_two_cubes() -> Result<()> {
     model = model.union(&clamp(&all_nodes, "u_y", "f_y")?)?;
     model = model.union(&clamp(&bottom[0..4], "u_z", "f_z")?)?;
     model = model.union(&contact)?;
-    let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("nu", 0.0)])?;
-
     // Pressure S downward on the top face of the top cube.
     let mut face = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
     face.add_cell(&[top[4].id(), top[5].id(), top[6].id(), top[7].id()])?;
     let face_fes = FiniteElementSpace::lagrange1(&face)?;
-    let traction = pyrucast::ops::node_field::flux(&face_fes, FluxDensity::Uniform(-S), "f_z")?;
+    let model = model.union(&model::flux(&face_fes, "f_z".into(), Physics::Mechanical)?)?;
+
+    let materials = pyrucast::ops::element_field::material_field(
+        &model,
+        &[("E", E), ("nu", 0.0), ("phi_f_z", -S)],
+    )?;
+    let traction = pyrucast::ops::node_field::external_forces(&model, &materials)?;
     let rhs = traction.union(&model.contact_gaps()?)?;
 
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;
