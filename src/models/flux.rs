@@ -26,6 +26,7 @@ use crate::containers::model::SubModel;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
+use crate::models::kernel::MAX_CELL_DOFS;
 use crate::models::transfer::physics_slice;
 use crate::models::{
     CellGeom, Contribution, Domain, ElementLayout, MatrixKind, MatrixLayout, Physics,
@@ -102,11 +103,18 @@ impl Flux {
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
     /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
-    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let maillage = Mesh::from_submesh(sm);
+    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// assert!(Flux::new(zone.clone(), "q".into(), Physics::Thermal).is_ok());
     /// // Une ligne duale vide ne désigne rien : refusé à la construction.
     /// assert!(Flux::new(zone, String::new(), Physics::Thermal).is_err());
+    /// // Une formulation qui possède sa propre interpolation (poutre) ne peut
+    /// // pas recevoir de charge cohérente d'ici : elle seule connaît ses
+    /// // fonctions de forme. Tranché à la construction, pas au point de Gauss.
+    /// # use pyrucast::atoms::Interpolation;
+    /// let poutre = FiniteElementSpace::new(&maillage, Interpolation::ModelEmbedded).unwrap();
+    /// assert!(Flux::new(poutre.get(0).unwrap(), "f_z".into(), Physics::Mechanical).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(
@@ -121,6 +129,12 @@ impl Flux {
                     .into(),
             ));
         }
+        // Une charge répartie pondère par les fonctions de forme **du champ** :
+        // il lui en faut une, et c'est un fait de la zone, tranché ici une fois
+        // pour toutes plutôt qu'à chaque point de Gauss. Une formulation qui
+        // possède sa propre interpolation (poutre `ModelEmbedded`) doit fournir
+        // sa charge cohérente elle-même.
+        crate::models::kernel::require_field_basis(&fespace, "shape values")?;
         let submesh = fespace.read().submesh();
         let support = submesh.read().to_poi1()?;
         Ok(Self {
@@ -191,8 +205,12 @@ impl SubModelKind for Flux {
     ) -> Result<()> {
         let geom = &geoms[0];
         let phi = lay.material[0] as usize;
+        // Sur une base C¹ (poutre de Bernoulli) la base du champ n'est pas la
+        // base géométrique : c'est elle qui porte les moments nodaux d'une
+        // charge répartie. Le tampon est sur la pile, hors de la boucle.
+        let mut n_buf = [0.0_f64; MAX_CELL_DOFS];
         for g in 0..geom.n_gauss {
-            let shape = geom.n_at_g(g);
+            let shape = geom.field_n_at_g(g, &mut n_buf);
             let w = geom.det_j_w(g) * material.row(geom.cell, g)[phi];
             if w == 0.0 {
                 continue;

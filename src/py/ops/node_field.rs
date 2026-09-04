@@ -9,7 +9,6 @@ use crate::py::model::PyModel;
 use crate::py::node_field::PyNodeField;
 use crate::py::node_field::PySubNodeField;
 use pyo3::exceptions::PyTypeError;
-use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 /// Build a `NodeField` carrying the position of every node of `mesh`
