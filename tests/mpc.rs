@@ -124,6 +124,101 @@ fn mpc_difference_relation_recovers_linear_solution() -> Result<()> {
     Ok(())
 }
 
+/// The reaction of a multi-term relation is **spread by its coefficients**, and
+/// the multiplier alone does not give it.
+///
+/// λ is a single scalar for the whole relation. The nodal reaction of term `k`
+/// is `aₖ·λ`, in the dual row of *its* variable — so for a relation
+/// `2·T(a) − 3·T(b) = g` the two nodes carry `2λ` and `−3λ`, neither of which is
+/// λ. For a Dirichlet of one term with coefficient 1 the two coincide, which is
+/// why nothing ever seemed to be missing.
+#[test]
+fn a_multi_term_reaction_is_spread_by_its_coefficients() -> Result<()> {
+    let (nodes, coords, mut model, materials) = heat_bar()?;
+
+    // T(node0) = 0, so the bar is held.
+    let imposed0 = poi1(&nodes[0])?;
+    let mult0 = barycenter(&imposed0)?;
+    let dir = SubModel::dirichlet(
+        "T".into(),
+        "q".into(),
+        &imposed0,
+        &mult0,
+        None,
+        None,
+        Default::default(),
+    )?;
+    let dir_mult = dir.multiplier_nodes()[0];
+    model.add_sub(Handle::new(dir))?;
+
+    // 2·T(node4) − 3·T(node2) = 1 — coefficients deliberately unequal.
+    let (a, b) = (2.0_f64, -3.0_f64);
+    let mesh_last = poi1(&nodes[N_ELEMS])?;
+    let mesh_mid = poi1(&nodes[N_ELEMS / 2])?;
+    let mult_mpc_mesh = barycenter(&mesh_last)?;
+    let terms = vec![
+        MpcTerm::new(&mesh_last, "T".into(), "q".into(), a)?,
+        MpcTerm::new(&mesh_mid, "T".into(), "q".into(), b)?,
+    ];
+    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, None, None, Default::default())?;
+    let mpc_mult = mpc.multiplier_nodes()[0];
+    let mpc_h = Handle::new(mpc);
+    let mpc_h_names = mpc_h.clone();
+    model.add_sub(mpc_h.clone())?;
+
+    let mut rhs_sm = SubMesh::new(coords, ElementType::POI1);
+    rhs_sm.add_cell(&[dir_mult])?;
+    rhs_sm.add_cell(&[mpc_mult])?;
+    let rhs_sm = Handle::new(rhs_sm);
+    let mpc_dual = mpc_h_names.read().as_kind().dual_vars()[0].clone();
+    let mut rhs = SubNodeField::from_poi1(&rhs_sm, vec!["imposed_T".into(), mpc_dual.clone()])?;
+    rhs.set_value(dir_mult, "imposed_T", 0.0)?;
+    rhs.set_value(mpc_mult, &mpc_dual, 1.0)?;
+    let rhs = NodeField::from_sub(rhs);
+
+    let k = stiffness(&model, &materials)?;
+    let solution = solve(&k, &rhs)?;
+
+    // Le sélecteur, c'est le sous-modèle : on pointe la relation, on obtient sa
+    // réaction — sans traverser la conduction, qui n'a rien à dire ici.
+    let mut relation_seule = Model::empty();
+    relation_seule.add_sub(mpc_h)?;
+    let state = ElementField::empty();
+    let f_int =
+        pyrucast::ops::node_field::internal_forces(&relation_seule, &state, &solution, &materials)?;
+
+    // Les noms se demandent au sous-modèle plutôt que de se deviner.
+    let (mult_name, imposed_name) = {
+        let k = mpc_h_names.read();
+        let k = k.as_kind();
+        (k.primal_vars()[0].clone(), k.dual_vars()[0].clone())
+    };
+    let lambda = solution.value(mpc_mult, &mult_name)?;
+    let at_last = f_int.value(nodes[N_ELEMS].id(), "q")?;
+    let at_mid = f_int.value(nodes[N_ELEMS / 2].id(), "q")?;
+
+    // Each node carries its own coefficient times the one multiplier.
+    assert!(
+        (at_last - a * lambda).abs() < TOL,
+        "{at_last} vs {}",
+        a * lambda
+    );
+    assert!(
+        (at_mid - b * lambda).abs() < TOL,
+        "{at_mid} vs {}",
+        b * lambda
+    );
+    // And λ alone is neither of them — the point of the whole exercise.
+    assert!(lambda.abs() > TOL);
+    assert!((at_last - lambda).abs() > TOL);
+    assert!((at_mid - lambda).abs() > TOL);
+
+    // The constraint's own row holds its equation: C·u, whose imposed half is g.
+    let cu = f_int.value(mpc_mult, &imposed_name)?;
+    assert!((cu - 1.0).abs() < TOL, "C·u = {cu}, attendu g = 1");
+    Ok(())
+}
+
 /// A single-term MPC `1·T = u_d` (coefficient 1, `g = u_d`) must produce exactly
 /// the same solution as an equivalent Dirichlet — the MPC generalises Dirichlet.
 #[test]

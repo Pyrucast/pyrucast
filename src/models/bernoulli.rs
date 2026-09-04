@@ -267,6 +267,8 @@ impl SubModelKind for Bernoulli {
         geoms: &[CellGeom],
         stress: &SubElementField,
         lay: &[u32],
+        _material: &SubElementField,
+        _mat: &[u32],
         fe: &mut [f64],
     ) -> Result<()> {
         crate::models::beam::internal_force_into(self.model, &geoms[0], stress, lay, &[], fe);

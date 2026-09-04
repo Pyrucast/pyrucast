@@ -138,7 +138,7 @@ def main() -> None:
     )
     eps_th = pc.element_field.thermal_strain(t_gauss, materiaux, fes, T_REF)
     sig_th = pc.element_field.integrate_behavior(modele, eps_th, materiaux)
-    f_th = pc.node_field.internal_forces(modele, sig_th)
+    f_th = pc.node_field.internal_forces_continuum(sig_th, fes)
 
     second_membre = f_th + pc.node_field.restrict_like(effort, f_th)
     u2 = pc.solver.solve(K, second_membre)

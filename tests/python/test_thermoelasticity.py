@@ -56,10 +56,15 @@ def _uniform_temperature(c, grid, fes, value):
     return pyrucast.element_field.interp_to_gauss(t_nodal, fes)
 
 
-def _thermal_load(model, materials, eps_th):
-    """Equivalent nodal thermal load f_th = ∫ Bᵀ D ε_th (BSIG of σ_th = D:ε_th)."""
+def _thermal_load(model, materials, eps_th, fes):
+    """Equivalent nodal thermal load f_th = ∫ Bᵀ D ε_th (BSIG of σ_th = D:ε_th).
+
+    A **load**, not a residual: it applies the continuum `Bᵀ` to a prescribed
+    stress, so it goes through the model-free operator rather than the one that
+    forms `Σ f_int` from a solution.
+    """
     sig_th = pyrucast.element_field.integrate_behavior(model, eps_th, materials)
-    return pyrucast.node_field.internal_forces(model, sig_th)
+    return pyrucast.node_field.internal_forces_continuum(sig_th, fes)
 
 
 def _displacement(solution, c, grid):
@@ -95,7 +100,7 @@ def test_fully_constrained_bar_thermal_stress():
         _uniform_temperature(c, grid, fes, T_REF + DT), materials, fes, T_REF
     )
 
-    f_th = _thermal_load(model, materials, eps_th)
+    f_th = _thermal_load(model, materials, eps_th, fes)
     solution = pyrucast.solver.solve(pyrucast.matrix.stiffness(model, materials), f_th)
     u = _displacement(solution, c, grid)
 
@@ -131,7 +136,7 @@ def test_free_bar_expands_without_stress():
         _uniform_temperature(c, grid, fes, T_REF + DT), materials, fes, T_REF
     )
 
-    f_th = _thermal_load(model, materials, eps_th)
+    f_th = _thermal_load(model, materials, eps_th, fes)
     solution = pyrucast.solver.solve(pyrucast.matrix.stiffness(model, materials), f_th)
     u = _displacement(solution, c, grid)
 

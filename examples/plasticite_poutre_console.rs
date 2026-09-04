@@ -258,7 +258,7 @@ fn main() -> Result<()> {
             let strain = deformation(&u, &fes)?;
             let out = integrate(&model, &strain, state.as_ref(), &materials, None)?;
             // Forces internes F_int = ∫ Bᵀ σ dΩ (BSIG).
-            let f_int = internal_forces(&model, &out)?;
+            let f_int = internal_forces(&model, &out, &u, &materials)?;
 
             // Résidu r = F_ext − F_int et sa norme sur les DDL **libres**, sans
             // aucune boucle nodale — tout par les opérateurs et primitives :

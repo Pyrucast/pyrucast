@@ -257,7 +257,7 @@ fn main() -> Result<()> {
             // ε(u)=ε(B), état de A dans `prev` → σ, VAR1 (COMP) → F_int (BSIG).
             let strain = deformation(u, &fes)?;
             let out = integrate(&model, &strain, state.as_ref(), &materials, None)?;
-            let f_int = internal_forces(&model, &out)?;
+            let f_int = internal_forces(&model, &out, &u, &materials)?;
             // Résidu r = F_ext − F_int et sa norme sur les DDL libres (opérateurs
             // de champ uniquement : `restrict_like`, `-`, `restrict`, `xtx`).
             let f_ext = restrict_like(&load_scaled, &f_int)?;

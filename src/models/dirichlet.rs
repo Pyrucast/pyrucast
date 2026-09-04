@@ -302,6 +302,12 @@ impl SubModelKind for Dirichlet {
         vec![self.imposed_value.clone()]
     }
 
+    /// Its relations, applied to the solution: the reaction `Cᵀ λ` on the
+    /// constrained nodes, and `C·u` on its own row.
+    fn internal_force_contribution(&self) -> Vec<crate::models::ResidualContribution> {
+        vec![crate::models::ResidualContribution::Relations]
+    }
+
     fn as_constraint(&self) -> Option<&dyn Constraint> {
         Some(self)
     }

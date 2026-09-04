@@ -126,15 +126,27 @@ pub fn divergence(field: PyRef<PyElementField>) -> PyResult<PyNodeField> {
 ///
 /// For a linear law the result equals the assembled stiffness applied to the
 /// solution (`K·u`); a non-linear law gives the exact internal forces. Its
-/// counterpart is `external_forces(model)`, and the gap between the two sums is
-/// the residual.
+/// counterpart is `external_forces(model, materials)`, and the gap between the
+/// two sums is the residual.
+///
+/// `solution` is the current one, multipliers included: a term that is linear in
+/// `u` reads it directly — a boundary transfer's `∫ h·a·N` has no law to go
+/// through — and a constraint draws its reaction `Cᵀ λ` from it, spread over the
+/// constrained nodes by the relation's coefficients.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn internal_forces(
     model: PyRef<PyModel>,
     state: PyRef<PyElementField>,
+    solution: PyRef<PyNodeField>,
+    materials: PyRef<PyElementField>,
 ) -> PyResult<PyNodeField> {
-    let nf = crate::ops::node_field::internal_forces(&model.inner, &state.inner)?;
+    let nf = crate::ops::node_field::internal_forces(
+        &model.inner,
+        &state.inner,
+        &solution.inner,
+        &materials.inner,
+    )?;
     Ok(PyNodeField { inner: nf })
 }
 
@@ -266,8 +278,10 @@ impl PyModel {
     fn internal_forces(
         slf: PyRef<'_, Self>,
         state: PyRef<PyElementField>,
+        solution: PyRef<PyNodeField>,
+        materials: PyRef<PyElementField>,
     ) -> PyResult<PyNodeField> {
-        super::node_field::internal_forces(slf, state)
+        super::node_field::internal_forces(slf, state, solution, materials)
     }
 
     /// Voir `pyrucast.node_field.external_forces`.

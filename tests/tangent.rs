@@ -48,7 +48,7 @@ fn internal_force_vec(
     let u = build_u(nodes, dim, disp)?;
     let strain = deformation(&u, fes)?;
     let state = integrate(model, &strain, None, materials, None)?;
-    let f = internal_forces(model, &state)?;
+    let f = internal_forces(model, &state, &u, materials)?;
     let mut out = vec![0.0; nodes.len() * dim];
     for (i, n) in nodes.iter().enumerate() {
         for a in 0..dim {

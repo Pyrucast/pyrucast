@@ -49,12 +49,10 @@ use crate::dump::DumpOptions;
 use crate::error::Result;
 use crate::handle::Handle;
 use crate::models::transfer::{
-    ambient_name, coefficient_name, exchange_matrix, flux_name, internal_force, material_contract,
-    physics_slice,
+    ambient_name, coefficient_name, exchange_matrix, material_contract, physics_slice,
 };
 use crate::models::ElementLayout;
-use crate::models::ZoneLayout;
-use crate::models::{Behavior, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
 use serde::{Deserialize, Serialize};
 
 /// Surface exchange with an imposed ambient, on a boundary FE subspace.
@@ -176,10 +174,6 @@ impl SubModelKind for BoundaryTransfer {
         Some(self)
     }
 
-    fn as_behavior(&self) -> Option<&dyn Behavior> {
-        Some(self)
-    }
-
     /// The ambient, integrated on the same boundary as the film it belongs to.
     /// This is the term that used to be written by hand through the free `flux`
     /// operator, where forgetting it read as an ambient of zero.
@@ -211,24 +205,48 @@ impl SubModelKind for BoundaryTransfer {
         })
     }
 
-    /// Internal nodal fluxes `q_i = ∫ N_i · flux dΓ` — the **`N`-weighted**
-    /// boundary counterpart of the `Bᵀ` continuum default. For this linear law it
-    /// equals `(K·a)_i`, so it fits the « internal forces == K·u » invariant.
+    /// The **primal itself**, read at the Gauss points — not a stress, and not
+    /// the output of a law.
+    ///
+    /// A boundary transfer has no constitutive law: its `h·a` is the
+    /// coefficient of its own operator applied at a point, and `h` is the very
+    /// coefficient that built `∫ h NᵀN`. It used to declare a behaviour whose
+    /// kernel was `out[v] = h * deformation[v]` — recomputing, point by point,
+    /// what the matrix already knew — because `Domain` demanded one. It no
+    /// longer does.
     fn internal_force_reads(&self) -> Vec<String> {
-        self.components
-            .iter()
-            .map(|(p, _)| crate::models::transfer::flux_name(p))
-            .collect()
+        self.components.iter().map(|(p, _)| p.clone()).collect()
     }
 
+    /// `q_i = ∫ h·a·N_i dΓ` — the internal half of the film law, the exact
+    /// mirror of its ambient half, and equal to `(K·a)_i` as it must be.
     fn internal_force_element(
         &self,
         geoms: &[CellGeom],
-        stress: &SubElementField,
+        primal: &SubElementField,
         lay: &[u32],
+        material: &SubElementField,
+        mat: &[u32],
         fe: &mut [f64],
     ) -> Result<()> {
-        internal_force(&geoms[0], stress, lay, fe)
+        let geom = &geoms[0];
+        let n = lay.len();
+        for g in 0..geom.n_gauss {
+            let shape = geom.n_at_g(g);
+            let w = geom.det_j_w(g);
+            let a = primal.row(geom.cell, g);
+            let h = material.row(geom.cell, g);
+            for v in 0..n {
+                let hw = h[mat[v] as usize] * a[lay[v] as usize] * w;
+                if hw == 0.0 {
+                    continue;
+                }
+                for i in 0..geom.n_nodes {
+                    fe[i * n + v] += hw * shape[i];
+                }
+            }
+        }
+        Ok(())
     }
 
     fn physics(&self) -> &'static [Physics] {
@@ -287,43 +305,6 @@ impl Domain for BoundaryTransfer {
             1.0,
             ke,
         )
-    }
-}
-
-impl Behavior for BoundaryTransfer {
-    fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
-        self.fespace.clone()
-    }
-
-    fn behavior_output_components(&self) -> Vec<String> {
-        self.components.iter().map(|(p, _)| flux_name(p)).collect()
-    }
-
-    /// The linear film law, one quantity at a time: the weak-form flux density
-    /// `flux_<primal> = h_<primal> · <primal>` at one Gauss point, from the
-    /// interpolated field. This is what the assembled film matrix integrates
-    /// (`∫ N_i·flux = (K·a)_i`); the ambient part `h·a_ext` lives in the load,
-    /// not here. No internal state.
-    fn deformation_reads(&self) -> Vec<String> {
-        self.components.iter().map(|(p, _)| p.clone()).collect()
-    }
-
-    fn integrate_point(
-        &self,
-        _geom: &CellGeom,
-        _g: usize,
-        lay: &ZoneLayout,
-        deformation: &[f64],
-        _prev: &[f64],
-        material: &[f64],
-        _dt: f64,
-        out: &mut [f64],
-    ) -> Result<()> {
-        for v in 0..self.components.len() {
-            let h = material[lay.material[v] as usize];
-            out[v] = h * deformation[lay.deformation[v] as usize];
-        }
-        Ok(())
     }
 }
 

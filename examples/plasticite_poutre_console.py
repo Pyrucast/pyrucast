@@ -164,7 +164,7 @@ def main():
                 model, strain, materials, prev=state
             )
             # Forces internes F_int = ∫ Bᵀ σ dΩ (BSIG).
-            f_int = pyrucast.node_field.internal_forces(model, out)
+            f_int = pyrucast.node_field.internal_forces(model, out, u, materials)
 
             # Résidu r = F_ext − F_int et sa norme sur les DDL **libres**, sans
             # aucune boucle nodale — tout par les opérateurs et primitives :

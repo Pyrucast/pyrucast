@@ -393,7 +393,12 @@ impl Cube {
     fn internal_force_vec(&self, disp: &[f64]) -> Result<Vec<f64>> {
         let strain = deformation(&self.displacement(disp)?, &self.fes)?;
         let state = integrate(&self.model, &strain, None, &self.materials, None)?;
-        let f = internal_forces(&self.model, &state)?;
+        let f = internal_forces(
+            &self.model,
+            &state,
+            &self.displacement(disp)?,
+            &self.materials,
+        )?;
         let mut out = vec![0.0; self.nodes.len() * 3];
         for (i, n) in self.nodes.iter().enumerate() {
             for a in 0..3 {

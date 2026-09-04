@@ -258,6 +258,8 @@ impl SubModelKind for Timoshenko {
         geoms: &[CellGeom],
         stress: &SubElementField,
         lay: &[u32],
+        _material: &SubElementField,
+        _mat: &[u32],
         fe: &mut [f64],
     ) -> Result<()> {
         let forces = behavior_of(self.model).len();

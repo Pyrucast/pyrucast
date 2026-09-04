@@ -377,6 +377,8 @@ impl SubModelKind for Fick {
         geoms: &[CellGeom],
         stress: &SubElementField,
         lay: &[u32],
+        _material: &SubElementField,
+        _mat: &[u32],
         fe: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];

@@ -1508,7 +1508,7 @@ class Model:
         r"""
         Voir `pyrucast.matrix.tangent`.
         """
-    def internal_forces(self, state: ElementField) -> NodeField:
+    def internal_forces(self, state: ElementField, solution: NodeField, materials: ElementField) -> NodeField:
         r"""
         Voir `pyrucast.node_field.internal_forces`.
         """
@@ -3472,7 +3472,7 @@ def interface_transfer(side_a: FiniteElementSpace, side_b: FiniteElementSpace, c
     node it could not. The jump is `q/h` for a flux density `q`.
     """
 
-def internal_forces(model: Model, state: ElementField) -> NodeField:
+def internal_forces(model: Model, state: ElementField, solution: NodeField, materials: ElementField) -> NodeField:
     r"""
     Internal nodal forces of `model` — the left side of `Σ f_int = Σ f_ext`
     (Cast3m `BSIG` for a continuum).
@@ -3487,8 +3487,13 @@ def internal_forces(model: Model, state: ElementField) -> NodeField:
     
     For a linear law the result equals the assembled stiffness applied to the
     solution (`K·u`); a non-linear law gives the exact internal forces. Its
-    counterpart is `external_forces(model)`, and the gap between the two sums is
-    the residual.
+    counterpart is `external_forces(model, materials)`, and the gap between the
+    two sums is the residual.
+    
+    `solution` is the current one, multipliers included: a term that is linear in
+    `u` reads it directly — a boundary transfer's `∫ h·a·N` has no law to go
+    through — and a constraint draws its reaction `Cᵀ λ` from it, spread over the
+    constrained nodes by the relation's coefficients.
     """
 
 def internal_forces_continuum(stresses: ElementField, fespace: FiniteElementSpace) -> NodeField:

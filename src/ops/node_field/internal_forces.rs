@@ -25,9 +25,12 @@
 //! for its term — a physics with none on this side simply declares none.
 
 use crate::aggregate::Aggregate;
-use crate::containers::element_field::ElementField;
+use crate::atoms::{ElementType, NodeId};
+use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::field::SubField;
 use crate::containers::finite_element_space::FiniteElementSpace;
+use crate::containers::finite_element_space::SubFiniteElementSpace;
+use crate::containers::mesh::SubMesh;
 use crate::containers::model::Model;
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
@@ -82,12 +85,19 @@ const AXES: [&str; 3] = ["x", "y", "z"];
 /// # let mut s = ElementField::new(&fes,
 /// #     vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_xy".into()])?;
 /// # s.get(0)?.write().set_uniform("sigma_xx", 100.0)?;
-/// let f = node_field::internal_forces(&modele, &s)?;
+/// # let mat = element_field::material_field(&modele, &[("E", 1.0), ("nu", 0.3)])?;
+/// # let u = NodeField::empty();
+/// let f = node_field::internal_forces(&modele, &s, &u, &mat)?;
 /// assert_eq!(f.get(0)?.read().components(),
 ///            &["f_x".to_string(), "f_y".to_string()]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn internal_forces(model: &Model, state: &ElementField) -> Result<NodeField> {
+pub fn internal_forces(
+    model: &Model,
+    state: &ElementField,
+    solution: &NodeField,
+    materials: &ElementField,
+) -> Result<NodeField> {
     let mut out = NodeField::empty();
     for sub_h in model {
         // Build the zone(s) under a read guard, then drop it before `add_sub`,
@@ -99,32 +109,57 @@ pub fn internal_forces(model: &Model, state: &ElementField) -> Result<NodeField>
             for c in kind.internal_force_contribution() {
                 match c {
                     ResidualContribution::Literal(field) => {
-                        zones.extend(field.iter().cloned());
+                        zones.push(field);
+                    }
+                    ResidualContribution::Relations => {
+                        zones.push(reaction(kind, solution)?);
                     }
                     ResidualContribution::Computed(layout) => {
-                        // The operator resolves what the term reads — its own
-                        // state zone — exactly as `assemble_kind` resolves the
-                        // material before asking for a block. The sub-model
-                        // resolved nothing, which is why it could not fail.
-                        let beh = sub.behavior_fespace().ok_or_else(|| {
+                        // The operator resolves what the term reads, exactly as
+                        // `assemble_kind` resolves the material before asking
+                        // for a block. The sub-model resolved nothing, which is
+                        // why its declaration could not fail.
+                        let domain = kind.as_domain().ok_or_else(|| {
                             PyrucastError::Message(format!(
-                                "{}: declares a computed internal force but integrates no \
-                                 behaviour, so there is no state to apply Bᵀ to",
+                                "{}: declares a computed internal force but no material \
+                                 subspace to integrate it on",
                                 kind.label()
                             ))
                         })?;
-                        let stress = state.sub_for_fespace(&beh)?;
-                        let guard = stress.read();
+                        let material = materials.sub_for_fespace_with(
+                            &domain.material_fespace(),
+                            &domain.material_components(),
+                        )?;
+                        // What the term applies `Bᵀ` to: the law's output when
+                        // there is a law, the primal itself at the Gauss points
+                        // when there is none. A boundary transfer is of the
+                        // second kind — its `∫ h·a·N` reads `a`, not a stress.
+                        let per_point = match kind.as_behavior() {
+                            Some(b) => state.sub_for_fespace(&b.behavior_fespace())?,
+                            None => primal_at_points(solution, &layout.fespaces[0])?,
+                        };
+                        let guard = per_point.read();
+                        let mat_guard = material.read();
                         // Resolved once for the zone, before the parallel region.
                         let names = kind.internal_force_reads();
                         let refs: Vec<&str> = names.iter().map(String::as_str).collect();
-                        let lay = guard.resolve_components(&refs, "stress")?;
-                        zones.push(Handle::new(kernel::scatter_to_nodes(
+                        let lay = guard.resolve_components(&refs, "state")?;
+                        let mat_names = domain.material_components();
+                        let mat_refs: Vec<&str> = mat_names.iter().map(String::as_str).collect();
+                        let mat = mat_guard.resolve_components(&mat_refs, "material")?;
+                        let zone = kernel::scatter_to_nodes(
                             &layout.fespaces,
                             &layout.support,
                             layout.dual_vars,
-                            |geoms, fe| kind.internal_force_element(geoms, &guard, &lay, fe),
-                        )?));
+                            |geoms, fe| {
+                                kind.internal_force_element(
+                                    geoms, &guard, &lay, &mat_guard, &mat, fe,
+                                )
+                            },
+                        )?;
+                        let mut one = NodeField::empty();
+                        one.add_sub(Handle::new(zone))?;
+                        zones.push(one);
                     }
                 }
             }
@@ -132,12 +167,104 @@ pub fn internal_forces(model: &Model, state: &ElementField) -> Result<NodeField>
         };
         for zone in built {
             // `r = Σ rᵢ` est une **somme**, pas un empilement : deux termes
-            // peuvent charger le même nœud dans la même composante, et une
-            // vue d'agrégat en choisirait un au lieu de les ajouter. `+` fait
-            // l'union des supports et somme ce qui se recouvre.
-            let mut one = NodeField::empty();
-            one.add_sub(zone)?;
-            out = (&out + &one)?;
+            // peuvent charger le même nœud dans la même composante, et une vue
+            // d'agrégat en choisirait un au lieu de les ajouter.
+            out = (&out + &zone)?;
+        }
+    }
+    Ok(out)
+}
+
+/// The primal interpolated to the Gauss points of one FE subspace — what a term
+/// without a constitutive law reads where a law-bearing one reads its state.
+fn primal_at_points(
+    solution: &NodeField,
+    fespace: &Handle<SubFiniteElementSpace>,
+) -> Result<Handle<SubElementField>> {
+    let mut one = FiniteElementSpace::empty();
+    one.add_sub(fespace.clone())?;
+    let interp = crate::ops::element_field::interp_to_gauss(solution, &one)?;
+    interp.get(0)
+}
+
+/// A constraint's reaction, `Cᵀ λ`, spread over the constrained nodes: term `k`
+/// of a relation carries `aₖ · λ` into the dual row of its own variable.
+///
+/// This is the thing the multiplier alone does not give. For a Dirichlet with a
+/// single term of coefficient 1, λ *is* the nodal reaction — which is why
+/// nothing ever seemed to be missing. For a relation with several terms, λ is
+/// **one scalar** and the reaction is `aₖ·λ`, node by node.
+fn reaction(kind: &dyn crate::models::SubModelKind, solution: &NodeField) -> Result<NodeField> {
+    let constraint = kind.as_constraint().ok_or_else(|| {
+        PyrucastError::Message(format!(
+            "{}: declares a reaction but imposes no relation",
+            kind.label()
+        ))
+    })?;
+    let view = solution.view()?;
+    let relations = constraint.relations()?;
+    let primals = kind.primal_vars();
+    let duals = kind.dual_vars();
+    let mut values: std::collections::HashMap<(NodeId, String), f64> =
+        std::collections::HashMap::new();
+    let mut nodes: Vec<NodeId> = Vec::new();
+    for rel in &relations {
+        // The multiplier is an unknown of the augmented system, so it is read
+        // where every other unknown is: in the solution.
+        // The multiplier's own name: a constraint's primal, at the index of
+        // the dual this relation writes into.
+        let slot = duals
+            .iter()
+            .position(|d| *d == rel.imposed_value)
+            .ok_or_else(|| {
+                PyrucastError::Message(format!(
+                    "{}: relation writes `{}`, which is not one of its duals",
+                    kind.label(),
+                    rel.imposed_value
+                ))
+            })?;
+        let lambda = view
+            .value_opt(rel.multiplier_node, &primals[slot])
+            .unwrap_or(0.0);
+        // `C·u` on the constraint's own row: its half of `C·u = g`, whose
+        // other half is the imposed value, on the external side.
+        let mut cu = 0.0;
+        for term in &rel.terms {
+            let slot = (term.node, term.target_dual.clone());
+            if !values.contains_key(&slot) {
+                nodes.push(term.node);
+            }
+            *values.entry(slot).or_insert(0.0) += term.coefficient * lambda;
+            cu += term.coefficient * view.value_opt(term.node, &term.variable).unwrap_or(0.0);
+        }
+        let row = (rel.multiplier_node, rel.imposed_value.clone());
+        if !values.contains_key(&row) {
+            nodes.push(rel.multiplier_node);
+        }
+        *values.entry(row).or_insert(0.0) += cu;
+    }
+    nodes.sort_unstable();
+    nodes.dedup();
+    // The coords come from the constraint's own mesh, not from the solution: a
+    // residual asked before anything is solved has an empty solution, and the
+    // reaction is then legitimately zero rather than an error.
+    let coords = constraint.multiplier_mesh().coords()?;
+    let mut support = SubMesh::new(coords, ElementType::POI1);
+    for id in &nodes {
+        support.add_cell(&[*id])?;
+    }
+    let support = Handle::new(support);
+    let components: Vec<String> = {
+        let mut c: Vec<String> = values.keys().map(|(_, d)| d.clone()).collect();
+        c.sort_unstable();
+        c.dedup();
+        c
+    };
+    let out = NodeField::from_submesh(&support, components)?;
+    {
+        let mut zone = out.get(0)?.write();
+        for ((node, dual), v) in &values {
+            zone.set_value(*node, dual, *v)?;
         }
     }
     Ok(out)
@@ -273,7 +400,7 @@ mod tests {
         // f_int = ∫ Bᵀ σ  vs  K·u.
         let strain = deformation(&u, &fes).unwrap();
         let stress = integrate(&model, &strain, None, &materials, None).unwrap();
-        let f_int = internal_forces(&model, &stress).unwrap();
+        let f_int = internal_forces(&model, &stress, &u, &materials).unwrap();
 
         let k = crate::ops::matrix::stiffness(&model, &materials).unwrap();
         let ku = (&k * &u).unwrap();
@@ -322,7 +449,7 @@ mod tests {
         let strain = deformation(&u, &fes).unwrap();
         let stress = integrate(&model, &strain, None, &materials, None).unwrap();
 
-        let via_model = internal_forces(&model, &stress).unwrap();
+        let via_model = internal_forces(&model, &stress, &u, &materials).unwrap();
         let via_fespace = internal_forces_continuum(&stress, &fes).unwrap();
 
         let m = via_model.view().unwrap();
@@ -367,7 +494,7 @@ mod tests {
 
         let strain = deformation(&u, &fes).unwrap();
         let stress = integrate(&model, &strain, None, &materials, None).unwrap();
-        let f_int = internal_forces(&model, &stress).unwrap();
+        let f_int = internal_forces(&model, &stress, &u, &materials).unwrap();
 
         let n = e * area * eps; // axial force
         let fv = f_int.view().unwrap();

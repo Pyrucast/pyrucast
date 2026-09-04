@@ -75,6 +75,13 @@ pub fn external_forces(model: &Model, materials: &ElementField) -> Result<NodeFi
                     ResidualContribution::Literal(field) => {
                         zones.extend(field.iter().cloned());
                     }
+                    ResidualContribution::Relations => {
+                        return Err(PyrucastError::Message(format!(
+                            "{}: a constraint's imposed value `g` is not an external term yet \
+                             — it still travels through the load field",
+                            kind.label()
+                        )));
+                    }
                     ResidualContribution::Computed(layout) => {
                         // The operator resolves what the term reads, as
                         // `assemble_kind` resolves the material before asking

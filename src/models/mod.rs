@@ -389,10 +389,18 @@ pub enum ResidualContribution {
     /// own (its stiffness layout for `∫ Bᵀ σ`), and the per-cell kernel is
     /// [`SubModelKind::internal_force_element`].
     Computed(MatrixLayout),
-    /// A field the sub-model has already filled in — a constraint's reaction
-    /// `Cᵀ λ`, a hand-made load. The twin of
-    /// [`Contribution::Literal`].
+    /// A field the sub-model has already filled in — a hand-made load. The twin
+    /// of [`Contribution::Literal`].
     Literal(NodeField),
+    /// The terms of a **constraint**: apply its [`Constraint::relations`] to the
+    /// current solution. On the internal side that is the reaction `Cᵀ λ`,
+    /// spread over the constrained nodes — term `k` carrying `aₖ·λ` into the
+    /// dual row of its own variable — plus `C·u` on the constraint's own row.
+    ///
+    /// It is a variant rather than a `Literal` because the declaration is total:
+    /// a sub-model that has not seen the solution cannot have filled a field
+    /// with it.
+    Relations,
 }
 
 /// Structural declaration of an **inter-mesh** block: rows integrated on one
@@ -902,6 +910,8 @@ pub trait SubModelKind: Sync {
         geoms: &[CellGeom],
         stress: &SubElementField,
         lay: &[u32],
+        _material: &SubElementField,
+        _mat: &[u32],
         fe: &mut [f64],
     ) -> Result<()> {
         continuum::internal_force::continuum_internal_force_element(geoms, stress, lay, fe)
@@ -938,7 +948,7 @@ pub trait SubModelKind: Sync {
     /// # use pyrucast::containers::model::SubModel;
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::{RelationSense, SubModelKind};
+    /// # use pyrucast::models::{RelationSense, ResidualContribution, SubModelKind};
     /// # use pyrucast::ops::mesh;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -952,10 +962,12 @@ pub trait SubModelKind: Sync {
     /// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
     /// #     None, None, RelationSense::Equality).unwrap();
     /// # let volume = SubModel::heat_conduction(zone).unwrap();
-    /// // Une physique de volume déclare son intégrale ; un appui n'a pas de
-    /// // terme ici (il déclarera sa réaction en redéfinissant la méthode).
-    /// assert_eq!(volume.as_kind().internal_force_contribution().len(), 1);
-    /// assert!(appui.as_kind().internal_force_contribution().is_empty());
+    /// // Une physique de volume déclare son intégrale ; un appui déclare ses
+    /// // relations, dont l'opérateur tire la réaction.
+    /// assert!(matches!(volume.as_kind().internal_force_contribution()[..],
+    ///                  [ResidualContribution::Computed(_)]));
+    /// assert!(matches!(appui.as_kind().internal_force_contribution()[..],
+    ///                  [ResidualContribution::Relations]));
     /// ```
     fn internal_force_contribution(&self) -> Vec<ResidualContribution> {
         match (self.as_domain(), self.stiffness_layout()) {

@@ -280,6 +280,8 @@ impl SubModelKind for InterfaceTransfer {
         geoms: &[CellGeom],
         stress: &SubElementField,
         lay: &[u32],
+        _material: &SubElementField,
+        _mat: &[u32],
         fe: &mut [f64],
     ) -> Result<()> {
         internal_force(&geoms[0], stress, lay, fe)
