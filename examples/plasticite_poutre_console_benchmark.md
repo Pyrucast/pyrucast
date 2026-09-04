@@ -173,6 +173,40 @@ compte Cast3M ↔ pyrucast vient des critères de convergence, pas de l'opérate
   pèse d'autant moins que le maillage grandit. Python est donc une façade sans
   pénalité notable ici.
 
+## Non-régression : `residual-first` contre `master`
+
+Les tables ci-dessus comparent pyrucast à Cast3M, à ressources égales, sur **une
+machine donnée** : leurs chiffres ne se mettent pas à jour un par un, ils se
+remesurent ensemble ou pas du tout. Pour surveiller une évolution du code, ce
+qu'il faut est autre chose — la **même mesure des deux côtés d'un changement**,
+sur la même machine, dans la même minute.
+
+Refonte du résidu (`Σ f_int = Σ f_ext` demandé au modèle, `Domain` scindé de
+`Behavior`, la charge répartie devenue une physique, la divergence par préfixe),
+mesurée 4 cœurs, `cargo clean` puis compilation `--release` des deux côtés,
+binaires **alternés** run par run pour annuler toute dérive :
+
+| Exemple | Maillage | `master` | `residual-first` | écart |
+|---|---|---:|---:|---:|
+| référence | 200×40 | 2,612 s | 2,591 s | **−0,8 %** |
+| Anderson | 200×40 | 1,684 s | 1,655 s | **−1,7 %** |
+| référence | 400×80 | 17,830 s | 17,611 s | **−1,2 %** |
+| Anderson | 400×80 | 10,076 s | 9,888 s | **−1,9 %** |
+
+Médiane de 5 répétitions en 200×40, 3 en 400×80. Une première campagne, non
+alternée, avait donné les mêmes écarts (−0,9 % / −1,3 % / −0,9 % / −0,5 %) :
+**huit comparaisons sur huit dans le même sens**. Chaque écart pris isolément
+tient dans la dispersion interne d'une série (~1–2 %) ; c'est la constance du
+signe, sur deux campagnes d'ordres différents, qui fait le signal. Pas de
+régression, et un gain léger dont on ne prétend pas nommer la cause.
+
+Le contrôle qui compte davantage que les temps : la sortie complète des deux
+exemples — flèches, comptes d'itérations, plasticité cumulée, à tous les pas —
+est **identique au caractère près** entre les deux branches. La refonte n'a
+donc rien déplacé numériquement, ce qui est exactement ce qu'on lui demandait.
+
+---
+
 _Reproduction. **Rust** : `PYO3_PYTHON=/usr/bin/python3.13 cargo build --release
 --example …`, puis les binaires lisent `PYRUCAST_NX/NY/NSTEPS/PMAX`. **Python** :
 `maturin develop --release` (Python 3.13), puis
