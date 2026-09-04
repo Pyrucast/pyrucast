@@ -71,15 +71,7 @@ fn immersed_node_follows_host_interpolation() -> Result<()> {
     }
     let corner_mesh = Mesh::from_submesh(corner_sm);
     let corner_mult = barycenter(&corner_mesh)?;
-    let dir = SubModel::dirichlet(
-        "T".into(),
-        "q".into(),
-        &corner_mesh,
-        &corner_mult,
-        None,
-        None,
-        Default::default(),
-    )?;
+    let dir = SubModel::dirichlet(&model, "T", &corner_mesh, &corner_mult, Default::default())?;
     let dir_mult_nodes = dir.multiplier_nodes(); // paired corner-for-corner
     model.add_sub(Handle::new(dir))?;
 
@@ -166,24 +158,16 @@ fn immersed_node_follows_host_displacement_field() -> Result<()> {
     let fes = FiniteElementSpace::lagrange1(&host)?;
 
     // Symmetry rollers on the three faces through the origin.
-    let clamp = |ids: &[usize], var: &str, dual: &str| -> Result<Model> {
+    let clamp = |target: &Model, ids: &[usize], var: &str| -> Result<Model> {
         let picked: Vec<Node> = ids.iter().map(|&i| nodes[i].clone()).collect();
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(&picked)?);
         let mult = barycenter(&imposed)?;
-        model::dirichlet(
-            var.into(),
-            dual.into(),
-            &imposed,
-            &mult,
-            None,
-            None,
-            Default::default(),
-        )
+        model::dirichlet(target, var, &imposed, &mult, Default::default())
     };
     let mut model = model::elasticity(&fes, Kinematics::Full3D)?;
-    model = model.union(&clamp(&[0, 3, 4, 7], "u_x", "f_x")?)?;
-    model = model.union(&clamp(&[0, 1, 4, 5], "u_y", "f_y")?)?;
-    model = model.union(&clamp(&[0, 1, 2, 3], "u_z", "f_z")?)?;
+    model = model.union(&clamp(&model, &[0, 3, 4, 7], "u_x")?)?;
+    model = model.union(&clamp(&model, &[0, 1, 4, 5], "u_y")?)?;
+    model = model.union(&clamp(&model, &[0, 1, 2, 3], "u_z")?)?;
 
     // Immersed node tied in all three components (g = 0, rigid tie ⇒ no RHS slot).
     let pc = [0.4, 0.7, 0.2];
@@ -259,24 +243,16 @@ fn embedded_per_component_offset() -> Result<()> {
     host.add_cell(&nodes.iter().map(|n| n.id()).collect::<Vec<_>>())?;
     let fes = FiniteElementSpace::lagrange1(&host)?;
 
-    let clamp = |ids: &[usize], var: &str, dual: &str| -> Result<Model> {
+    let clamp = |target: &Model, ids: &[usize], var: &str| -> Result<Model> {
         let picked: Vec<Node> = ids.iter().map(|&i| nodes[i].clone()).collect();
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(&picked)?);
         let mult = barycenter(&imposed)?;
-        model::dirichlet(
-            var.into(),
-            dual.into(),
-            &imposed,
-            &mult,
-            None,
-            None,
-            Default::default(),
-        )
+        model::dirichlet(target, var, &imposed, &mult, Default::default())
     };
     let mut model = model::elasticity(&fes, Kinematics::Full3D)?;
-    model = model.union(&clamp(&[0, 3, 4, 7], "u_x", "f_x")?)?;
-    model = model.union(&clamp(&[0, 1, 4, 5], "u_y", "f_y")?)?;
-    model = model.union(&clamp(&[0, 1, 2, 3], "u_z", "f_z")?)?;
+    model = model.union(&clamp(&model, &[0, 3, 4, 7], "u_x")?)?;
+    model = model.union(&clamp(&model, &[0, 1, 4, 5], "u_y")?)?;
+    model = model.union(&clamp(&model, &[0, 1, 2, 3], "u_z")?)?;
 
     let pc = [0.4, 0.7, 0.2];
     let p = Node::create_in(coords.clone(), &pc)?;

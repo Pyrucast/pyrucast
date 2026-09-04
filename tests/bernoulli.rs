@@ -51,16 +51,14 @@ fn a_cantilever_under_a_tip_load_matches_its_closed_form() -> Result<()> {
 
     // Clamped at A: both the deflection and the rotation are held.
     let mut model = model::bernoulli(&fes)?;
-    for (var, dual) in [("w", "f_w"), ("theta", "m_theta")] {
+    for var in ["w", "theta"] {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a))?);
         let multiplier = mesh::barycenter(&imposed)?;
         model = model.union(&model::dirichlet(
-            var.into(),
-            dual.into(),
+            &model,
+            var,
             &imposed,
             &multiplier,
-            None,
-            None,
             Default::default(),
         )?)?;
     }
@@ -130,16 +128,14 @@ fn a_plane_frame_carries_axial_and_bending_independently() -> Result<()> {
     let fes = FiniteElementSpace::new(&mesh, Interpolation::Hermite3)?;
 
     let mut model = model::bernoulli(&fes)?;
-    for (var, dual) in [("u_x", "f_x"), ("u_y", "f_y"), ("r_z", "m_z")] {
+    for var in ["u_x", "u_y", "r_z"] {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a))?);
         let multiplier = mesh::barycenter(&imposed)?;
         model = model.union(&model::dirichlet(
-            var.into(),
-            dual.into(),
+            &model,
+            var,
             &imposed,
             &multiplier,
-            None,
-            None,
             Default::default(),
         )?)?;
     }
@@ -177,23 +173,14 @@ fn a_space_frame_twists_by_its_closed_form() -> Result<()> {
     let fes = FiniteElementSpace::new(&mesh, Interpolation::Hermite3)?;
 
     let mut model = model::bernoulli(&fes)?;
-    for (var, dual) in [
-        ("u_x", "f_x"),
-        ("u_y", "f_y"),
-        ("u_z", "f_z"),
-        ("r_x", "m_x"),
-        ("r_y", "m_y"),
-        ("r_z", "m_z"),
-    ] {
+    for var in ["u_x", "u_y", "u_z", "r_x", "r_y", "r_z"] {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a))?);
         let multiplier = mesh::barycenter(&imposed)?;
         model = model.union(&model::dirichlet(
-            var.into(),
-            dual.into(),
+            &model,
+            var,
             &imposed,
             &multiplier,
-            None,
-            None,
             Default::default(),
         )?)?;
     }
@@ -254,19 +241,12 @@ fn bernoulli_and_timoshenko_differ_only_for_a_stocky_beam() -> Result<()> {
 
         let clamp = |model: Model| -> Result<Model> {
             let mut m = model;
-            for (var, dual) in [("w", "f_w"), ("theta", "m_theta")] {
+            for var in ["w", "theta"] {
                 let imposed =
                     Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a))?);
                 let multiplier = mesh::barycenter(&imposed)?;
-                m = m.union(&model::dirichlet(
-                    var.into(),
-                    dual.into(),
-                    &imposed,
-                    &multiplier,
-                    None,
-                    None,
-                    Default::default(),
-                )?)?;
+                let bc = model::dirichlet(&m, var, &imposed, &multiplier, Default::default())?;
+                m = m.union(&bc)?;
             }
             Ok(m)
         };
@@ -325,16 +305,14 @@ fn beam_1d() -> Result<(
 
 fn clamped_1d(a: &Node, fes: &FiniteElementSpace) -> Result<Model> {
     let mut model = model::bernoulli(fes)?;
-    for (var, dual) in [("w", "f_w"), ("theta", "m_theta")] {
+    for var in ["w", "theta"] {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(a))?);
         let multiplier = mesh::barycenter(&imposed)?;
         model = model.union(&model::dirichlet(
-            var.into(),
-            dual.into(),
+            &model,
+            var,
             &imposed,
             &multiplier,
-            None,
-            None,
             Default::default(),
         )?)?;
     }

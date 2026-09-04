@@ -61,9 +61,9 @@ def profil_stationnaire() -> None:
     multiplier = pyrucast.mesh.barycenter(imposed)
     mult = multiplier.node(0, 0, 0)
 
-    model = pyrucast.model.fick(fes, SPECIES) | pyrucast.model.dirichlet(
-        f"c_{SPECIES}", f"j_{SPECIES}", imposed, multiplier
-    )
+    cible = pyrucast.model.fick(fes, SPECIES)
+
+    model = cible | pyrucast.model.dirichlet(cible, f"c_{SPECIES}", imposed, multiplier)
     materials = pyrucast.element_field.material_field(model, [(f"D_{SPECIES}", D)])
 
     # ── Chargement : flux J en x = 0, valeur imposée au multiplicateur ───────

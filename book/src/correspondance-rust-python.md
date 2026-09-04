@@ -253,7 +253,7 @@ un sujet qu'on transforme.
 | `bernoulli(fes: &FiniteElementSpace) -> Model` | `bernoulli(fespace) -> Model` |
 | `timoshenko(fes: &FiniteElementSpace) -> Model` | `timoshenko(fespace) -> Model` |
 | `shell(fes, model: ShellModel) -> Model` | `shell(fespace, model) -> Model` |
-| `dirichlet(imposed_variable, target_dual, imposed_mesh, multiplier_mesh, multiplier, imposed_value, sense: RelationSense) -> Model` | `dirichlet(imposed_variable, target_dual, imposed_mesh, multiplier_mesh, multiplier=None, imposed_value=None, sense=None) -> Model` |
+| `dirichlet(target: &Model, variable: &str, imposed_mesh, multiplier_mesh, sense: RelationSense) -> Model` | `dirichlet(target, variable, imposed_mesh, multiplier_mesh, sense=None) -> Model` |
 | `mpc(terms: Vec<MpcTerm>, multiplier_mesh, multiplier, imposed_value, sense) -> Model` | `mpc(terms, multiplier_mesh, multiplier=None, imposed_value=None, sense=None) -> Model` |
 | `embedded(immersed, host, components, multipliers, imposed_values, tol) -> Model` | `embedded(immersed, host, components, multipliers=None, imposed_values=None, tol=None) -> Model` |
 | `contact(slave, master, components, multiplier, imposed_value) -> Model` | `contact(slave, master, components, multiplier=None, imposed_value=None) -> Model` |

@@ -58,29 +58,14 @@ fn frame3d_cantilever_bending_and_torsion() -> Result<()> {
     let fes = FiniteElementSpace::new(&mesh, Interpolation::ModelEmbedded)?;
 
     // ── Modèle : cadre 3-D + encastrement complet (6 DOFs) à la base ───────
-    let clamp = |node: &Node, var: &str, dual: &str| -> Result<Model> {
+    let clamp = |target: &Model, node: &Node, var: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);
         let multiplier = mesh::barycenter(&imposed)?;
-        model::dirichlet(
-            var.into(),
-            dual.into(),
-            &imposed,
-            &multiplier,
-            None,
-            None,
-            Default::default(),
-        )
+        model::dirichlet(target, var, &imposed, &multiplier, Default::default())
     };
     let mut model = model::timoshenko(&fes)?;
-    for (var, dual) in [
-        ("u_x", "f_x"),
-        ("u_y", "f_y"),
-        ("u_z", "f_z"),
-        ("r_x", "m_x"),
-        ("r_y", "m_y"),
-        ("r_z", "m_z"),
-    ] {
-        model = model.union(&clamp(&nodes[0], var, dual)?)?;
+    for var in ["u_x", "u_y", "u_z", "r_x", "r_y", "r_z"] {
+        model = model.union(&clamp(&model, &nodes[0], var)?)?;
     }
 
     let materials = pyrucast::ops::element_field::material_field(

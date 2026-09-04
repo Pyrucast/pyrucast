@@ -137,16 +137,18 @@ def test_the_field_jumps_by_q_over_h():
     imposed.unit().add_cell([right[2]])
     multiplier = pyrucast.mesh.barycenter(imposed)
 
+    modele_fick = pyrucast.model.fick(square(left), "H2") | pyrucast.model.fick(
+        square(right), "H2"
+    )
     model = (
-        pyrucast.model.fick(square(left), "H2")
-        | pyrucast.model.fick(square(right), "H2")
+        modele_fick
         | pyrucast.model.interface_transfer(
             edge(left[1], left[2]),
             edge(right[0], right[3]),
             [("c_H2", "j_H2")],
             "diffusion",
         )
-        | pyrucast.model.dirichlet("c_H2", "j_H2", imposed, multiplier)
+        | pyrucast.model.dirichlet(modele_fick, "c_H2", imposed, multiplier)
     )
     # Uniform flux density on the far-left edge, as consistent nodal loads.
     inlet = pyrucast.Mesh(c, "SEG2")

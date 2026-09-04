@@ -144,7 +144,7 @@ def main() -> None:
     # FR — Dirichlet : le support bloqué, et un jumeau pour les multiplicateurs.
     # EN — Dirichlet: the constrained support, and a twin for the multipliers.
     multiplicateur_T = pc.mesh.translate(alesage, [0.0, 0.0, 0.0])
-    modele = modele | pc.model.dirichlet("T", "q", alesage, multiplicateur_T)
+    modele = modele | pc.model.dirichlet(modele, "T", alesage, multiplicateur_T)
 
     # FR — Le flux imposé sur la face gauche est un terme du modèle.
     # EN — The imposed flux on the left face is a term of the model.
@@ -218,7 +218,7 @@ def main() -> None:
     modele = pc.model.heat_conduction(fes) | pc.model.boundary_transfer(
         basse_fes, [("T", "q")], "thermal"
     )
-    modele = modele | pc.model.dirichlet("T", "q", alesage, multiplicateur_T)
+    modele = modele | pc.model.dirichlet(modele, "T", alesage, multiplicateur_T)
 
     # FR — Un seul champ matériau : « k » pour la conduction, « h » et son
     #      ambiant pour le film.

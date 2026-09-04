@@ -42,7 +42,7 @@ def test_immersed_node_follows_host_interpolation():
     # Dirichlet pinning all eight corners to the linear field.
     corner_mesh = pyrucast.mesh.poi1_from_nodes(corners)
     corner_mult = pyrucast.mesh.barycenter(corner_mesh)
-    dirichlet = pyrucast.model.dirichlet("T", "q", corner_mesh, corner_mult)
+    dirichlet = pyrucast.model.dirichlet(base, "T", corner_mesh, corner_mult)
 
     # Immersed node inside the cube, tied to the host.
     p = c.add_node([0.3, 0.6, 0.2])

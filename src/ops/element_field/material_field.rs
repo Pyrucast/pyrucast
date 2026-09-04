@@ -47,9 +47,10 @@ use crate::handle::Handle;
 /// // Une composante requise manquante est une erreur.
 /// assert!(element_field::sub_material_field(
 ///     &meca.get(0)?.read(), &[("E", 210e3)]).is_err());
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
 /// // Une contrainte n'a pas de matière à recevoir.
-/// let appui = model::dirichlet("T".into(), "q".into(), &impose, &mult,
-///                              None, None, RelationSense::Equality)?;
+/// let appui = model::dirichlet(&cible, "T", &impose, &mult,
+///                              RelationSense::Equality)?;
 /// assert!(element_field::sub_material_field(
 ///     &appui.get(0)?.read(), &[]).is_err());
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -124,11 +125,12 @@ pub fn sub_material_field(
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
 /// // Les mêmes valeurs pour **tous** les sous-modèles qui demandent de la
 /// // matière ; ceux qui n'en veulent pas sont sautés sans erreur.
 /// let modele = model::heat_conduction(&fes)?.union(
-///     &model::dirichlet("T".into(), "q".into(), &impose, &mult,
-///                       None, None, RelationSense::Equality)?)?;
+///     &model::dirichlet(&cible, "T", &impose, &mult,
+///                       RelationSense::Equality)?)?;
 /// assert_eq!(modele.len(), 2);
 /// let mat = element_field::material_field(&modele, &[("k", 1.0)])?;
 /// assert_eq!(mat.len(), 1); // la conduction seule
@@ -256,16 +258,8 @@ mod tests {
             let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
             model
                 .add_sub(Handle::new(
-                    SubModel::dirichlet(
-                        "T".into(),
-                        "q".into(),
-                        &imposed,
-                        &multiplier,
-                        None,
-                        None,
-                        Default::default(),
-                    )
-                    .unwrap(),
+                    SubModel::dirichlet(&model, "T", &imposed, &multiplier, Default::default())
+                        .unwrap(),
                 ))
                 .unwrap();
         }
@@ -303,16 +297,18 @@ mod tests {
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
         let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
-        let dir = SubModel::dirichlet(
-            "T".into(),
-            "q".into(),
-            &imposed,
-            &multiplier,
-            None,
-            None,
-            Default::default(),
+        // La cible que l'appui contraint : il y lit son dual et y vérifie sa
+        // variable.
+        let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let mut sm = SubMesh::new(coords.clone(), crate::atoms::ElementType::SEG2);
+        sm.add_cell(&[a.id(), b.id()]).unwrap();
+        let fes = crate::containers::finite_element_space::FiniteElementSpace::lagrange1(
+            &Mesh::from_submesh(sm),
         )
         .unwrap();
+        let cible = crate::ops::model::heat_conduction(&fes).unwrap();
+        let dir =
+            SubModel::dirichlet(&cible, "T", &imposed, &multiplier, Default::default()).unwrap();
         assert!(sub_material_field(&dir, &[("k", 1.0)]).is_err());
     }
 
@@ -451,16 +447,8 @@ mod tests {
         let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
         model
             .add_sub(Handle::new(
-                SubModel::dirichlet(
-                    "T".into(),
-                    "q".into(),
-                    &imposed,
-                    &multiplier,
-                    None,
-                    None,
-                    Default::default(),
-                )
-                .unwrap(),
+                SubModel::dirichlet(&model, "T", &imposed, &multiplier, Default::default())
+                    .unwrap(),
             ))
             .unwrap();
         model

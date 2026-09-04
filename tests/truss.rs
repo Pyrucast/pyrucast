@@ -42,23 +42,15 @@ fn truss_bar_recovers_axial_elongation() -> Result<()> {
     // Homogeneous (u = 0) BCs: the imposed value defaults to 0, so we only need
     // to introduce the constraint. A bar has no transverse stiffness, hence
     // `u_y` is clamped at both nodes to make the system well-posed.
-    let clamp = |node: &Node, var: &str, dual: &str| -> Result<Model> {
+    let clamp = |target: &Model, node: &Node, var: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);
         let multiplier = mesh::barycenter(&imposed)?;
-        model::dirichlet(
-            var.into(),
-            dual.into(),
-            &imposed,
-            &multiplier,
-            None,
-            None,
-            Default::default(),
-        )
+        model::dirichlet(target, var, &imposed, &multiplier, Default::default())
     };
     let mut model = model::truss(&fes)?;
-    model = model.union(&clamp(&n0, "u_x", "f_x")?)?;
-    model = model.union(&clamp(&n0, "u_y", "f_y")?)?;
-    model = model.union(&clamp(&n1, "u_y", "f_y")?)?;
+    model = model.union(&clamp(&model, &n0, "u_x")?)?;
+    model = model.union(&clamp(&model, &n0, "u_y")?)?;
+    model = model.union(&clamp(&model, &n1, "u_y")?)?;
 
     // ── Matériau E, A (Dirichlet ignoré automatiquement) ───────────────────
     let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("A", A)])?;

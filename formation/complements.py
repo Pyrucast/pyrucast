@@ -20,10 +20,10 @@ import pyrucast as pc
 E, A, L, F = 210.0e9, 1.0e-4, 2.0, 1000.0
 
 
-def encastrement(node, var, dual):
+def encastrement(target, node, var):
     imposed = pc.mesh.poi1_from_nodes([node])
     multiplier = pc.mesh.barycenter(imposed)
-    return pc.model.dirichlet(var, dual, imposed, multiplier)
+    return pc.model.dirichlet(target, var, imposed, multiplier)
 
 
 def main() -> None:
@@ -35,9 +35,9 @@ def main() -> None:
     fes = pc.FiniteElementSpace(mesh)
 
     modele = pc.model.truss(fes)
-    modele = modele | encastrement(n0, "u_x", "f_x")
-    modele = modele | encastrement(n0, "u_y", "f_y")
-    modele = modele | encastrement(n1, "u_y", "f_y")  # pas de raideur transversale
+    modele = modele | encastrement(modele, n0, "u_x")
+    modele = modele | encastrement(modele, n0, "u_y")
+    modele = modele | encastrement(modele, n1, "u_y")  # pas de raideur transversale
 
     materiaux = pc.element_field.material_field(modele, [("E", E), ("A", A)])
 

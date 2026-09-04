@@ -5,10 +5,10 @@ import math
 import pyrucast
 
 
-def _clamp(node, var, dual):
+def _clamp(target, node, var):
     imposed = pyrucast.mesh.poi1_from_nodes([node])
     multiplier = pyrucast.mesh.barycenter(imposed)
-    return pyrucast.model.dirichlet(var, dual, imposed, multiplier)
+    return pyrucast.model.dirichlet(target, var, imposed, multiplier)
 
 
 def test_inclined_cantilever_perpendicular_load():
@@ -27,8 +27,8 @@ def test_inclined_cantilever_perpendicular_load():
     fes = pyrucast.FiniteElementSpace(mesh, interpolation="MODEL_EMBEDDED")
 
     model = pyrucast.model.timoshenko(fes)
-    for var, dual in (("u_x", "f_x"), ("u_y", "f_y"), ("r_z", "m_z")):
-        model = model | _clamp(nodes[0], var, dual)
+    for var in ("u_x", "u_y", "r_z"):
+        model = model | _clamp(model, nodes[0], var)
     materials = pyrucast.element_field.material_field(
         model, [("E", E), ("A", A), ("I", I), ("G", G), ("A_s", A_S)]
     )

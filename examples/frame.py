@@ -28,10 +28,10 @@ import pyrucast
 E, A, I, G, A_S, L, P, N = 1.0, 1.0, 1.0, 30.0, 1.0, 1.0, 1.0, 40
 
 
-def _clamp(node, var, dual):
+def _clamp(target, node, var):
     imposed = pyrucast.mesh.poi1_from_nodes([node])
     multiplier = pyrucast.mesh.barycenter(imposed)
-    return pyrucast.model.dirichlet(var, dual, imposed, multiplier)
+    return pyrucast.model.dirichlet(target, var, imposed, multiplier)
 
 
 def main() -> None:
@@ -45,8 +45,8 @@ def main() -> None:
     fes = pyrucast.FiniteElementSpace(mesh, interpolation="MODEL_EMBEDDED")
 
     model = pyrucast.model.timoshenko(fes)
-    for var, dual in (("u_x", "f_x"), ("u_y", "f_y"), ("r_z", "m_z")):
-        model = model | _clamp(base, var, dual)
+    for var in ("u_x", "u_y", "r_z"):
+        model = model | _clamp(model, base, var)
     materials = pyrucast.element_field.material_field(
         model, [("E", E), ("A", A), ("I", I), ("G", G), ("A_s", A_S)]
     )

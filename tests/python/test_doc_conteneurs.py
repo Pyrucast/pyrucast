@@ -307,9 +307,9 @@ fes = pyrucast.FiniteElementSpace(mesh)
 # Le maillage des multiplicateurs est fabriqué depuis les nœuds imposés.
 imposed = pyrucast.mesh.poi1_from_nodes([a])
 multiplier = pyrucast.mesh.barycenter(imposed)
-model = pyrucast.model.heat_conduction(fes) | pyrucast.model.dirichlet(
-    "T", "q", imposed, multiplier
-)
+cible = pyrucast.model.heat_conduction(fes)
+
+model = cible | pyrucast.model.dirichlet(cible, "T", imposed, multiplier)
 
 # Matériau k = 1 (les sous-modèles Dirichlet sont ignorés automatiquement).
 materials = pyrucast.element_field.material_field(model, [("k", 1.0)])

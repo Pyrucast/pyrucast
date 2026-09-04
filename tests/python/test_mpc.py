@@ -42,7 +42,8 @@ def test_mpc_difference_relation_recovers_linear_solution():
 
     imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mult0 = pyrucast.mesh.barycenter(imposed0)
-    dirichlet = pyrucast.model.dirichlet("T", "q", imposed0, mult0)
+    cible = pyrucast.model.heat_conduction(fes)
+    dirichlet = pyrucast.model.dirichlet(cible, "T", imposed0, mult0)
     dir_mult = mult0.node(0, 0, 0)
 
     base = pyrucast.model.heat_conduction(fes)
@@ -82,10 +83,11 @@ def test_single_term_mpc_matches_dirichlet():
         left = pyrucast.mesh.poi1_from_nodes([nodes[0]])
         right = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
         ml, mr = pyrucast.mesh.barycenter(left), pyrucast.mesh.barycenter(right)
+        cible = pyrucast.model.heat_conduction(fes)
         model = (
-            pyrucast.model.heat_conduction(fes)
-            | pyrucast.model.dirichlet("T", "q", left, ml)
-            | pyrucast.model.dirichlet("T", "q", right, mr)
+            cible
+            | pyrucast.model.dirichlet(cible, "T", left, ml)
+            | pyrucast.model.dirichlet(cible, "T", right, mr)
         )
         rhs_mesh = pyrucast.Mesh(c, "POI1")
         rhs_mesh.unit().add_cell([ml.node(0, 0, 0)])
@@ -103,9 +105,10 @@ def test_single_term_mpc_matches_dirichlet():
         ml = pyrucast.mesh.barycenter(left)
         right = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
         mm = pyrucast.mesh.barycenter(right)
+        cible = pyrucast.model.heat_conduction(fes)
         model = (
-            pyrucast.model.heat_conduction(fes)
-            | pyrucast.model.dirichlet("T", "q", left, ml)
+            cible
+            | pyrucast.model.dirichlet(cible, "T", left, ml)
             | pyrucast.model.mpc([(right, "T", "q", 1.0)], mm)
         )
         rhs_mesh = pyrucast.Mesh(c, "POI1")
@@ -132,7 +135,8 @@ def test_constraint_rhs_helper_builds_second_member():
 
     imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mult0 = pyrucast.mesh.barycenter(imposed0)
-    dirichlet = pyrucast.model.dirichlet("T", "q", imposed0, mult0)
+    cible = pyrucast.model.heat_conduction(fes)
+    dirichlet = pyrucast.model.dirichlet(cible, "T", imposed0, mult0)
 
     base = pyrucast.model.heat_conduction(fes)
     dual = base.dual_of("T")
@@ -192,7 +196,7 @@ def test_constraint_rhs_rejects_bad_input():
 
     imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mult0 = pyrucast.mesh.barycenter(imposed0)
-    dirichlet = pyrucast.model.dirichlet("T", "q", imposed0, mult0)
+    dirichlet = pyrucast.model.dirichlet(base, "T", imposed0, mult0)
     with pytest.raises(Exception):
         dirichlet.constraint_rhs([(nodes[-1], 0.0)])
 
@@ -205,7 +209,8 @@ def test_mpc_elimination_matches_lagrange():
 
     imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mult0 = pyrucast.mesh.barycenter(imposed0)
-    dirichlet = pyrucast.model.dirichlet("T", "q", imposed0, mult0)
+    cible = pyrucast.model.heat_conduction(fes)
+    dirichlet = pyrucast.model.dirichlet(cible, "T", imposed0, mult0)
     dir_mult = mult0.node(0, 0, 0)
 
     mesh4 = pyrucast.mesh.poi1_from_nodes([nodes[4]])

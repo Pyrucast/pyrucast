@@ -21,7 +21,6 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
-use pyrucast::models::RelationSense;
 use pyrucast::ops::model;
 use pyrucast::ops::{element_field, matrix, mesh};
 use pyrucast::{archive, Result};
@@ -236,14 +235,13 @@ fn ajouter_un_bloc_invalide_l_assemblage() -> Result<()> {
     let fes = FiniteElementSpace::lagrange1(&m)?;
     let imposed = mesh::poi1_from_nodes(std::slice::from_ref(&a))?;
     let mult = mesh::barycenter(&imposed)?;
-    let model = model::heat_conduction(&fes)?.union(&model::dirichlet(
-        "T".into(),
-        "q".into(),
+    let conduction = model::heat_conduction(&fes)?;
+    let model = conduction.union(&model::dirichlet(
+        &conduction,
+        "T",
         &imposed,
         &mult,
-        None,
-        None,
-        RelationSense::Equality,
+        Default::default(),
     )?)?;
     let materials = element_field::material_field(&model, &[("k", 1.0)])?;
     let support = mesh::to_poi1(&m)?.get(0)?;

@@ -206,12 +206,10 @@ fn patch_model(
             let multiplier = mesh::barycenter(&imposed)?;
             multipliers.push((multiplier.node(0, 0, 0)?.id(), i as f64 * h));
             model = model.union(&model::dirichlet(
-                "T".into(),
-                "q".into(),
+                &model,
+                "T",
                 &imposed,
                 &multiplier,
-                None,
-                None,
                 Default::default(),
             )?)?;
         }

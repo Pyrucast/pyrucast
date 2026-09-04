@@ -80,15 +80,7 @@ fn un_modele_se_declare_et_s_assemble() -> Result<()> {
     // colocalise des nœuds neufs). Le modèle ne crée aucun nœud lui-même.
     let imposed = mesh::poi1_from_nodes(std::slice::from_ref(&a))?;
     let multiplier = mesh::barycenter(&imposed)?;
-    let dir = model::dirichlet(
-        "T".into(),
-        "q".into(),
-        &imposed,
-        &multiplier,
-        None,
-        None,
-        RelationSense::Equality,
-    )?;
+    let dir = model::dirichlet(&hc, "T", &imposed, &multiplier, RelationSense::Equality)?;
     let model = hc.union(&dir)?;
 
     // Matériau k = 1, appliqué aux sous-modèles qui en ont besoin (Dirichlet

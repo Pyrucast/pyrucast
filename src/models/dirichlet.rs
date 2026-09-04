@@ -143,9 +143,10 @@ pub fn default_imposed_value(imposed_variable: &str) -> String {
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # use pyrucast::models::dirichlet::{self, Dirichlet};
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
 /// // Un appui : `u = u_d` aux nœuds imposés, par multiplicateur de Lagrange.
-/// let d = Dirichlet::new("T".into(), "q".into(), &impose, &mult,
-///                        None, None, RelationSense::Equality)?;
+/// let d = Dirichlet::new(&cible, "T", &impose, &mult,
+///                        RelationSense::Equality)?;
 /// // Sans noms donnés, les défauts se dérivent de la variable imposée.
 /// assert_eq!(d.relations()?.len(), 1);
 /// assert_eq!(d.relations()?[0].imposed_value, dirichlet::default_imposed_value("T"));
@@ -209,23 +210,36 @@ impl Dirichlet {
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # use pyrucast::models::dirichlet::{self, Dirichlet};
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// // Un appui : `u = u_d` aux nœuds imposés, par multiplicateur de Lagrange.
-    /// let d = Dirichlet::new("T".into(), "q".into(), &impose, &mult,
-    ///                        None, None, RelationSense::Equality)?;
+    /// let d = Dirichlet::new(&cible, "T", &impose, &mult,
+    ///                        RelationSense::Equality)?;
     /// // Sans noms donnés, les défauts se dérivent de la variable imposée.
     /// assert_eq!(d.relations()?.len(), 1);
     /// assert_eq!(d.relations()?[0].imposed_value, dirichlet::default_imposed_value("T"));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(
-        imposed_variable: String,
-        target_dual: String,
+        target: &crate::containers::model::Model,
+        variable: &str,
         imposed_mesh: &Mesh,
         multiplier_mesh: &Mesh,
-        multiplier: Option<String>,
-        imposed_value: Option<String>,
         sense: RelationSense,
     ) -> Result<Self> {
+        // The target's own names, read from the target rather than retyped: the
+        // `T → q` map is its business, and a mistyped one used to build a
+        // constraint on a variable nobody assembles — a singular matrix, with
+        // nothing to point at.
+        let imposed_variable = variable.to_string();
+        let target_dual = target.dual_of(variable).ok_or_else(|| {
+            PyrucastError::Message(format!(
+                "Dirichlet: `{variable}` is not a primal of the model it constrains — it \
+                 declares {:?}",
+                target.primal_vars()
+            ))
+        })?;
+        let multiplier = Some(default_multiplier(variable));
+        let imposed_value = Some(default_imposed_value(variable));
         if imposed_mesh.cell_count() == 0 {
             return Err(PyrucastError::Message(
                 "Dirichlet: imposed_mesh must constrain at least one node".into(),

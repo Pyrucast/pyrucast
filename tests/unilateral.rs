@@ -82,22 +82,14 @@ fn bounded_bar(q: f64, bound: f64, sense: RelationSense) -> Result<Setup> {
     // Equality Dirichlet T(0) = 0.
     let imposed0 = poi1(&nodes[0])?;
     let mult0 = barycenter(&imposed0)?;
-    let dir = SubModel::dirichlet(
-        "T".into(),
-        "q".into(),
-        &imposed0,
-        &mult0,
-        None,
-        None,
-        Default::default(),
-    )?;
+    let dir = SubModel::dirichlet(&model, "T", &imposed0, &mult0, Default::default())?;
     let dir_mult = dir.multiplier_nodes()[0];
     model.add_sub(Handle::new(dir))?;
 
     // Unilateral bound T(1) ⋈ bound.
     let imposed1 = poi1(&nodes[N_ELEMS])?;
     let mult1 = barycenter(&imposed1)?;
-    let uni = SubModel::dirichlet("T".into(), "q".into(), &imposed1, &mult1, None, None, sense)?;
+    let uni = SubModel::dirichlet(&model, "T", &imposed1, &mult1, sense)?;
     let uni_mult = uni.multiplier_nodes()[0];
     model.add_sub(Handle::new(uni))?;
 
@@ -210,15 +202,7 @@ fn unilateral_mpc_difference_relation() -> Result<()> {
 
         let imposed0 = poi1(&nodes[0])?;
         let mult0 = barycenter(&imposed0)?;
-        let dir = SubModel::dirichlet(
-            "T".into(),
-            "q".into(),
-            &imposed0,
-            &mult0,
-            None,
-            None,
-            Default::default(),
-        )?;
+        let dir = SubModel::dirichlet(&model, "T", &imposed0, &mult0, Default::default())?;
         let dir_mult = dir.multiplier_nodes()[0];
         model.add_sub(Handle::new(dir))?;
 
@@ -330,15 +314,7 @@ fn schur_falls_back_when_base_is_singular() -> Result<()> {
     // A single `T(1) ≤ 2` bound, no other constraint.
     let imp = poi1(&nodes[N_ELEMS])?;
     let mult = barycenter(&imp)?;
-    let uni = SubModel::dirichlet(
-        "T".into(),
-        "q".into(),
-        &imp,
-        &mult,
-        None,
-        None,
-        RelationSense::LessEqual,
-    )?;
+    let uni = SubModel::dirichlet(&model, "T", &imp, &mult, RelationSense::LessEqual)?;
     let uni_mult = uni.multiplier_nodes()[0];
     model.add_sub(Handle::new(uni))?;
 

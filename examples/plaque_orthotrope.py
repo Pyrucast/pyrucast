@@ -61,13 +61,13 @@ def maillage():
     return c, grid, pyrucast.FiniteElementSpace(mesh)
 
 
-def rouleau(c, noeuds, variable, dual):
+def rouleau(target, c, noeuds, variable):
     """Appui glissant ``variable = 0`` sur les nœuds donnés."""
     imposed = pyrucast.Mesh(c, "POI1")
     for n in noeuds:
         imposed.unit().add_cell([n])
     multiplier = pyrucast.mesh.barycenter(imposed)
-    return pyrucast.model.dirichlet(variable, dual, imposed, multiplier)
+    return pyrucast.model.dirichlet(target, variable, imposed, multiplier)
 
 
 def resoudre(angle_deg):
@@ -76,8 +76,8 @@ def resoudre(angle_deg):
 
     # Élasticité orthotrope + les deux appuis.
     model = pyrucast.model.elasticity(fes, "plane_stress", symmetry="orthotropic")
-    model = model | rouleau(c, [grid[j][0] for j in range(N + 1)], "u_x", "f_x")
-    model = model | rouleau(c, [grid[0][i] for i in range(N + 1)], "u_y", "f_y")
+    model = model | rouleau(model, c, [grid[j][0] for j in range(N + 1)], "u_x")
+    model = model | rouleau(model, c, [grid[0][i] for i in range(N + 1)], "u_y")
 
     # Le repère matériau est une donnée matériau comme une autre.
     a = math.radians(angle_deg)

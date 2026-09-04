@@ -31,10 +31,10 @@ E, A, IY, IZ, J, G, ASY, ASZ = 1.0, 1.0, 1.0, 2.0, 1.0, 0.5, 10.0, 10.0
 L, PY, PZ, MX, N = 1.0, 1.0, 1.0, 1.0, 2
 
 
-def _clamp(node, var, dual):
+def _clamp(target, node, var):
     imposed = pyrucast.mesh.poi1_from_nodes([node])
     multiplier = pyrucast.mesh.barycenter(imposed)
-    return pyrucast.model.dirichlet(var, dual, imposed, multiplier)
+    return pyrucast.model.dirichlet(target, var, imposed, multiplier)
 
 
 def main() -> None:
@@ -53,7 +53,7 @@ def main() -> None:
         ("r_y", "m_y"),
         ("r_z", "m_z"),
     ):
-        model = model | _clamp(base, var, dual)
+        model = model | _clamp(model, base, var)
     materials = pyrucast.element_field.material_field(
         model,
         [

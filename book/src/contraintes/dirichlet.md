@@ -27,17 +27,30 @@ Deux sont requis, deux sont déduits et **surchargeables** :
 
 | rôle | nom | fourniture |
 |---|---|---|
-| variable imposée (primale de la **cible**) | `imposed_variable` (ex `"T"`) | requis |
-| duale de la **cible** (ligne où atterrit la réaction `Cᵀ`) | `target_dual` (ex `"q"`) | requis |
-| primale propre = multiplicateur (inconnue du système) | `multiplier`, défaut `lambda_<imposed_variable>` | déduit |
-| duale propre = ligne de contrainte + **slot** où l'utilisateur écrit `u_d` | `imposed_value`, défaut `imposed_<imposed_variable>` | déduit |
+| le modèle **contraint** | `target` | requis |
+| variable imposée (une primale de `target`) | `variable` (ex `"T"`) | requis |
+| duale de la cible (ligne où atterrit la réaction `Cᵀ`) | lue dans `target` | déduit |
+| primale propre = multiplicateur (inconnue du système) | `lambda_<variable>` | déduit |
+| duale propre = ligne de contrainte + **slot** où l'utilisateur écrit `u_d` | `imposed_<variable>` | déduit |
 
 Signature complète :
 
 ```text
-model.dirichlet(imposed_variable, target_dual, imposed_mesh, multiplier_mesh,
-                multiplier=None, imposed_value=None, sense="=")
+model.dirichlet(target, variable, imposed_mesh, multiplier_mesh, sense="=")
 ```
+
+Cinq arguments, et chacun porte une décision. La **cible** est le modèle qu'on
+contraint : `variable` doit être une de ses primales, et sa ligne duale s'y lit
+— le passage `T → q` est l'affaire de la physique visée, pas quelque chose à
+retaper. Le donner permet aussi de refuser à la construction une variable que
+la cible ne déclare pas, au lieu de découvrir une matrice singulière.
+
+**Une variable, et une seule.** Pour encastrer, on compose :
+`dirichlet(m, "u_x", …) | dirichlet(m, "u_y", …)`, les deux partageant leur
+maillage multiplicateur — `lambda_u_x` et `lambda_u_y` sur un même nœud sont des
+DDL distincts. Une contrainte est une famille de relations scalaires avec un
+multiplicateur par relation ; on n'empaquette plusieurs composantes que
+lorsqu'elles partagent quelque chose de coûteux, ce qu'un Dirichlet ne fait pas.
 
 `sense` (`"="`, `">="`, `"<="`) rend la contrainte **unilatérale** (`u ≥ u_d` :
 une butée) — voir la section « Relations unilatérales » de la page

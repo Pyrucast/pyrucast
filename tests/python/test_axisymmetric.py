@@ -36,10 +36,10 @@ def _annulus(r0, r1, h, nr, nz):
     return c, grid, mesh, pyrucast.FiniteElementSpace(mesh), idx
 
 
-def _clamp(nodes, var, dual):
+def _clamp(target, nodes, var):
     imposed = pyrucast.mesh.poi1_from_nodes(nodes)
     multiplier = pyrucast.mesh.barycenter(imposed)
-    return pyrucast.model.dirichlet(var, dual, imposed, multiplier)
+    return pyrucast.model.dirichlet(target, var, imposed, multiplier)
 
 
 def test_coords_declare_the_revolution_frame():
@@ -76,7 +76,7 @@ def test_lame_thick_cylinder_under_internal_pressure():
     # Plane strain: u_z = 0 on both z faces.
     ends = [grid[idx(i, j)] for i in range(NR + 1) for j in (0, NZ)]
     model = pyrucast.model.elasticity(fes, "axisymmetric")
-    model = model | _clamp(ends, "u_y", "f_y")
+    model = model | _clamp(model, ends, "u_y")
     # Internal pressure on r = a. The geometry being axisymmetric, the load
     # integrates ∫ 2πr N p — the true ring force, with no manual factor.
     inner = pyrucast.Mesh(c, "SEG2")

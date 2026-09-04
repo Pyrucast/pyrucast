@@ -40,7 +40,7 @@ def main():
     # Coins fixés au champ linéaire (Dirichlet).
     corner_mesh = pyrucast.mesh.poi1_from_nodes(corner_nodes)
     corner_mult = pyrucast.mesh.barycenter(corner_mesh)
-    dirichlet = pyrucast.model.dirichlet("T", "q", corner_mesh, corner_mult)
+    dirichlet = pyrucast.model.dirichlet(base, "T", corner_mesh, corner_mult)
 
     # Nœud immergé au cœur du cube, lié à l'hôte.
     p = c.add_node([0.3, 0.6, 0.2])

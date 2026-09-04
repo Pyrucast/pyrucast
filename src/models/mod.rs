@@ -95,8 +95,8 @@ pub use kernel::CellGeom;
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-/// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
-/// #     None, None, RelationSense::Equality).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
 /// // Quatre natures de matrice, et **une seule** machinerie : un noyau par
 /// // élément diffère, le reste est partagé. Une physique sans terme pour
 /// // une nature n'y contribue rien.
@@ -144,8 +144,8 @@ impl MatrixKind {
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-    /// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
-    /// #     None, None, RelationSense::Equality).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+    /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
     /// // Quatre natures de matrice, et **une seule** machinerie : un noyau par
     /// // élément diffère, le reste est partagé. Une physique sans terme pour
     /// // une nature n'y contribue rien.
@@ -181,8 +181,8 @@ impl MatrixKind {
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-    /// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
-    /// #     None, None, RelationSense::Equality).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+    /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
     /// // L'index sert de rang dans le cache de motifs, un par nature.
     /// assert!(MatrixKind::Stiffness.index() < MatrixKind::COUNT);
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -250,8 +250,8 @@ pub enum TangentSource {
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-/// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
-/// #     None, None, RelationSense::Equality).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
 /// // La déclaration **structurelle** d'une physique de volume : de quoi
 /// // bâtir un bloc *calculé* et le verser droit dans le CSR global. Chaque
 /// // champ reflète un argument d'`assemble_block`.
@@ -312,8 +312,8 @@ pub struct MatrixLayout {
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-/// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
-/// #     None, None, RelationSense::Equality).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
 /// # use pyrucast::models::Contribution;
 /// // Le discriminant qui met sur une seule voie une contrainte, une
 /// // physique de volume et un couplage : c'est la variante qui décide, non
@@ -432,8 +432,8 @@ pub enum ResidualContribution {
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-/// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
-/// #     None, None, RelationSense::Equality).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
 /// # use pyrucast::containers::matrix::DofOrdering;
 /// # use pyrucast::models::CouplingLayout;
 /// // Ce qu'une loi d'**interface** décrit : des sous-espaces de ligne *et*
@@ -610,8 +610,8 @@ impl std::fmt::Display for Physics {
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-/// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
-/// #     None, None, RelationSense::Equality).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
 /// // Le contrat de base, avec des défauts partout où c'est possible : une
 /// // physique n'écrit que ce qui lui est propre. C'est par lui que passe
 /// // **toute** la couche modèle, `as_kind` étant l'unique `match`.
@@ -959,8 +959,8 @@ pub trait SubModelKind: Sync {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
-    /// #     None, None, RelationSense::Equality).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+    /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
     /// # let volume = SubModel::heat_conduction(zone).unwrap();
     /// // Une physique de volume déclare son intégrale ; un appui déclare ses
     /// // relations, dont l'opérateur tire la réaction.
@@ -1072,8 +1072,8 @@ pub trait SubModelKind: Sync {
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-/// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
-/// #     None, None, RelationSense::Equality).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
 /// // La capacité **contrainte** : des relations, chacune avec son nœud
 /// // multiplicateur et la composante où son second membre s'écrit.
 /// let c = appui.as_kind().as_constraint().unwrap();
@@ -1122,8 +1122,8 @@ pub trait Constraint {
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-/// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
-/// #     None, None, RelationSense::Equality).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
 /// // Un terme de relation : un nœud, sa variable, et le dual de la
 /// // physique visée — c'est ce dernier qui accroche la contrainte à la
 /// // physique qu'elle contraint.
@@ -1175,8 +1175,8 @@ pub struct ConstraintTerm {
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-/// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
-/// #     None, None, RelationSense::Equality).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
 /// // Égalité, ou inégalité — ce qui fait passer la contrainte du solveur
 /// // direct à l'ensemble actif.
 /// assert_eq!(RelationSense::parse(None)?, RelationSense::Equality);
@@ -1219,8 +1219,8 @@ impl RelationSense {
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-    /// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
-    /// #     None, None, RelationSense::Equality).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+    /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
     /// // L'**unique** endroit où la forme en chaîne est interprétée : les
     /// // constructeurs Rust de confort et les liaisons Python y passent tous.
     /// assert_eq!(RelationSense::parse(None)?, RelationSense::Equality);
@@ -1276,8 +1276,8 @@ impl std::fmt::Display for RelationSense {
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-/// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
-/// #     None, None, RelationSense::Equality).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
 /// // Une relation : son multiplicateur, la composante où son `g` s'écrit,
 /// // et ses termes. C'est la couture partagée par toutes les contraintes.
 /// let r = appui.as_kind().as_constraint().unwrap().relations()?;
@@ -1374,8 +1374,8 @@ pub(crate) fn constraint_block_pair(
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-/// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
-/// #     None, None, RelationSense::Equality).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
 /// # use pyrucast::models::owned_components;
 /// // Le raccourci que toute physique emploie pour rendre son contrat
 /// // matériau sans le retaper.
@@ -1541,8 +1541,8 @@ pub enum KernelState<'a> {
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-/// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
-/// #     None, None, RelationSense::Equality).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
 /// // Matière et comportement sont **une seule** capacité : le matériau
 /// // paramètre la loi de comportement, il n'a pas de sens sans elle.
 /// let d = volume.as_kind().as_domain().unwrap();
@@ -1763,8 +1763,8 @@ pub trait Domain: Sync {
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let appui = SubModel::dirichlet("T".into(), "q".into(), &impose, &mult,
-/// #     None, None, RelationSense::Equality).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
 /// # let volume = SubModel::heat_conduction(zone).unwrap();
 /// // La conduction intègre **et** a une loi ; un appui ne fait ni l'un ni
 /// // l'autre. C'est un fait de compilation, non une erreur d'exécution.

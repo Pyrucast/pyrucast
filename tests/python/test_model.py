@@ -23,11 +23,19 @@ def _seg2_heat_model(length=1.0, k=1.0, dirichlet_left=False):
     if dirichlet_left:
         imposed = pyrucast.mesh.poi1_from_nodes([a])
         multiplier = pyrucast.mesh.barycenter(imposed)
-        model = model | pyrucast.model.dirichlet("T", "q", imposed, multiplier)
+        model = model | pyrucast.model.dirichlet(model, "T", imposed, multiplier)
     return c, mesh, fes, sub, materials, model, a, b
 
 
 # ─── Variable name introspection ────────────────────────────────────────────
+
+
+def _cible_1d(c, a):
+    """Une conduction sur un segment, pour servir de cible à une contrainte."""
+    b = c.add_node([1.0])
+    m = pyrucast.Mesh(c, "SEG2")
+    m.unit().add_cell([a, b])
+    return pyrucast.model.heat_conduction(pyrucast.FiniteElementSpace(m))
 
 
 def test_heat_conduction_alone_primal_dual():
@@ -122,7 +130,7 @@ def test_dirichlet_empty_constraint_mesh_rejected():
     c = pyrucast.Coords(1)
     empty = pyrucast.Mesh(c, "POI1")  # one POI1 submesh, zero cells
     try:
-        pyrucast.model.dirichlet("T", "q", empty, empty)
+        pyrucast.model.dirichlet(_cible_1d(c, c.add_node([0.0])), "T", empty, empty)
     except (RuntimeError, ValueError):
         pass
     else:
@@ -229,7 +237,7 @@ def test_fespace_errors_without_domain_submodel():
     a = c.add_node([0.0])
     imposed = pyrucast.mesh.poi1_from_nodes([a])
     only_constraint = pyrucast.model.dirichlet(
-        "T", "q", imposed, pyrucast.mesh.barycenter(imposed)
+        _cible_1d(c, a), "T", imposed, pyrucast.mesh.barycenter(imposed)
     )
     try:
         only_constraint.fespace()

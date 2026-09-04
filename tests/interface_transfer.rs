@@ -205,8 +205,10 @@ fn two_square_model(h: f64) -> Result<(Geometry, Model, ElementField)> {
     ])?);
     let multiplier = mesh::barycenter(&imposed)?;
 
-    let model = model::fick(&square(&left)?, SPECIES)?
-        .union(&model::fick(&square(&right)?, SPECIES)?)?
+    // La diffusion des deux carrés : c'est elle que l'appui contraint.
+    let fick_pair =
+        model::fick(&square(&left)?, SPECIES)?.union(&model::fick(&square(&right)?, SPECIES)?)?;
+    let model = fick_pair
         .union(&model::interface_transfer(
             &face_left,
             &face_right,
@@ -215,12 +217,10 @@ fn two_square_model(h: f64) -> Result<(Geometry, Model, ElementField)> {
             1e-9,
         )?)?
         .union(&model::dirichlet(
-            format!("c_{SPECIES}"),
-            format!("j_{SPECIES}"),
+            &fick_pair,
+            &format!("c_{SPECIES}"),
             &imposed,
             &multiplier,
-            None,
-            None,
             Default::default(),
         )?)?;
 

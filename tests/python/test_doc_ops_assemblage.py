@@ -27,9 +27,9 @@ def _modele_thermique():
 
     imposed = pyrucast.mesh.poi1_from_nodes([noeuds[0]])
     multiplier = pyrucast.mesh.barycenter(imposed)
-    model = pyrucast.model.heat_conduction(fes) | pyrucast.model.dirichlet(
-        "T", "q", imposed, multiplier
-    )
+    cible = pyrucast.model.heat_conduction(fes)
+
+    model = cible | pyrucast.model.dirichlet(cible, "T", imposed, multiplier)
     return model, fes, multiplier, noeuds
 
 

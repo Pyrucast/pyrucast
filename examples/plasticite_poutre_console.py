@@ -97,8 +97,8 @@ def main():
 
     # ── Modèle : plasticité (contraintes planes) + encastrement (Dirichlet) ──
     model = pyrucast.model.plasticity_perfect(fes, "plane_stress")
-    model = model | pyrucast.model.dirichlet("u_x", "f_x", imposed_mesh, multiplier)
-    model = model | pyrucast.model.dirichlet("u_y", "f_y", imposed_mesh, multiplier)
+    model = model | pyrucast.model.dirichlet(model, "u_x", imposed_mesh, multiplier)
+    model = model | pyrucast.model.dirichlet(model, "u_y", imposed_mesh, multiplier)
 
     # ── Charge de référence : cisaillement unitaire (densité −1) sur la face
     #    droite, en efforts nodaux cohérents. C'est un terme du modèle : il le

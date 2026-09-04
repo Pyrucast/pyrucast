@@ -54,9 +54,9 @@ def main() -> None:
     imposed = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
     multiplier = pyrucast.mesh.barycenter(imposed)
     mult = multiplier.node(0, 0, 0)
-    model = pyrucast.model.heat_conduction(fes) | pyrucast.model.dirichlet(
-        "T", "q", imposed, multiplier
-    )
+    cible = pyrucast.model.heat_conduction(fes)
+
+    model = cible | pyrucast.model.dirichlet(cible, "T", imposed, multiplier)
 
     # ── Matériau : k uniforme (Dirichlet ignoré automatiquement) ─────────────
     materials = pyrucast.element_field.material_field(model, [("k", K)])

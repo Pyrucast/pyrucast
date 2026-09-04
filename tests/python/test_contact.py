@@ -37,10 +37,10 @@ def _block(c, mesh, y0):
     return grid
 
 
-def _clamp(nodes, var, dual):
+def _clamp(target, nodes, var):
     imposed = pyrucast.mesh.poi1_from_nodes(nodes)
     mult = pyrucast.mesh.barycenter(imposed)
-    return pyrucast.model.dirichlet(var, dual, imposed, mult)
+    return pyrucast.model.dirichlet(target, var, imposed, mult)
 
 
 def _two_blocks():
@@ -61,8 +61,8 @@ def _two_blocks():
     contact = pyrucast.model.contact(slave, master, [("u_x", "f_x"), ("u_y", "f_y")])
 
     model = pyrucast.model.elasticity(fes, "plane_stress")
-    model = model | _clamp(bottom + top, "u_x", "f_x")
-    model = model | _clamp([bottom[idx(i, 0)] for i in range(N + 1)], "u_y", "f_y")
+    model = model | _clamp(model, bottom + top, "u_x")
+    model = model | _clamp(model, [bottom[idx(i, 0)] for i in range(N + 1)], "u_y")
     model = model | contact
 
     materials = pyrucast.element_field.material_field(model, [("E", E), ("nu", 0.0)])
@@ -112,7 +112,7 @@ def test_separation_releases_every_pair():
     lift = 0.1
 
     top_edge_nodes = [top[idx(i, N)] for i in range(N + 1)]
-    lift_model = _clamp(top_edge_nodes, "u_y", "f_y")
+    lift_model = _clamp(model, top_edge_nodes, "u_y")
     model = model | lift_model
     rhs = lift_model.constraint_rhs([(n, lift) for n in top_edge_nodes])
     rhs = rhs | model.contact_gaps()

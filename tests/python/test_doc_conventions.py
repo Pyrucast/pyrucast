@@ -31,9 +31,9 @@ a = pyrucast.NodeField(_support, ["v"])
 b = pyrucast.NodeField(pyrucast.mesh.poi1_from_nodes(_n[:2]), ["w"])
 _imposed = pyrucast.mesh.poi1_from_nodes([_n[0]])
 _mult = pyrucast.mesh.barycenter(_imposed)
-model = pyrucast.model.heat_conduction(fes) | pyrucast.model.dirichlet(
-    "T", "q", _imposed, _mult
-)
+cible = pyrucast.model.heat_conduction(fes)
+
+model = cible | pyrucast.model.dirichlet(cible, "T", _imposed, _mult)
 materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
 rhs = pyrucast.NodeField(_mult, ["imposed_T"])
 rhs[0].set_value(_mult.node(0, 0, 0), "imposed_T", 1.0)
@@ -144,18 +144,20 @@ def _modele_thermomecanique():
     droite = [grid[idx(nx, j)] for j in range(ny + 1)]
     bas = [grid[idx(i, 0)] for i in range(nx + 1)]
 
-    def bloquer(noeuds, var, dual):
+    def bloquer(target, noeuds, var):
         imposed = pc.mesh.poi1_from_nodes(noeuds)
-        return pc.model.dirichlet(var, dual, imposed, pc.mesh.barycenter(imposed))
+        return pc.model.dirichlet(target, var, imposed, pc.mesh.barycenter(imposed))
 
     th_imposed = pc.mesh.poi1_from_nodes(gauche + droite)
     th_mult = pc.mesh.translate(th_imposed, [0.0, 0.0])
+    thermal = pc.model.heat_conduction(fes)
+    mecanique = pc.model.elasticity(fes, "plane_stress")
     model = (
-        pc.model.heat_conduction(fes)
-        | pc.model.elasticity(fes, "plane_stress")
-        | pc.model.dirichlet("T", "q", th_imposed, th_mult)
-        | bloquer(gauche, "u_x", "f_x")
-        | bloquer(bas, "u_y", "f_y")
+        thermal
+        | mecanique
+        | pc.model.dirichlet(thermal, "T", th_imposed, th_mult)
+        | bloquer(mecanique, gauche, "u_x")
+        | bloquer(mecanique, bas, "u_y")
     )
     materials = pc.element_field.material_field(
         model, [("k", 1.0), ("E", 210_000.0), ("nu", 0.3), ("alpha", 1.2e-5)]

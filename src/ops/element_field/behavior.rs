@@ -194,16 +194,8 @@ mod tests {
             let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
             model
                 .add_sub(Handle::new(
-                    SubModel::dirichlet(
-                        "T".into(),
-                        "q".into(),
-                        &imposed,
-                        &multiplier,
-                        None,
-                        None,
-                        Default::default(),
-                    )
-                    .unwrap(),
+                    SubModel::dirichlet(&model, "T", &imposed, &multiplier, Default::default())
+                        .unwrap(),
                 ))
                 .unwrap();
         }

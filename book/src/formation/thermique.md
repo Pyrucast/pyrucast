@@ -52,7 +52,7 @@ Chaque terme correspond à un objet du script :
 |---|---|
 | \\( \int_V [B]^T \lambda [B] \\, dV \\) | `model.heat_conduction(fes)`, assemblé par `pc.matrix.stiffness` |
 | \\( \int_{\partial V\_\phi} h [N]^T [N] \\, dS \\) | `model.boundary_transfer(fes, [("T", "q")], "thermal")`, **dans la même matrice** |
-| \\( T = T\_{\text{imp}} \\) | `model.dirichlet("T", "q", ...)` (multiplicateurs de Lagrange) |
+| \\( T = T\_{\text{imp}} \\) | `model.dirichlet(conduction, "T", ...)` (multiplicateurs de Lagrange) |
 | \\( \int_{\partial V\_\phi} [N]^T \phi\_{\text{imp}} \\, dS \\) | `pc.model.flux(fes, "q", "thermal")` sur des `QUA4`, densité `phi_q` |
 | \\( \int_{\partial V\_\phi} [N]^T h\\,T\_f \\, dS \\) | `pc.model.boundary_transfer`, ambiant `a_ext_T` |
 | \\( \int_V [N]^T q \\, dV \\) | `pc.model.flux(fes, "q", "thermal")` sur des `HEX8` |

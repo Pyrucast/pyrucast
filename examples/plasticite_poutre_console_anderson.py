@@ -199,8 +199,8 @@ def main():
     model = pyrucast.model.plasticity_perfect(fes, "plane_stress")
     imposed_mesh = pyrucast.mesh.to_poi1(left_edge)
     multiplier = pyrucast.mesh.translate(imposed_mesh, [0.0, 0.0])
-    model = model | pyrucast.model.dirichlet("u_x", "f_x", imposed_mesh, multiplier)
-    model = model | pyrucast.model.dirichlet("u_y", "f_y", imposed_mesh, multiplier)
+    model = model | pyrucast.model.dirichlet(model, "u_x", imposed_mesh, multiplier)
+    model = model | pyrucast.model.dirichlet(model, "u_y", imposed_mesh, multiplier)
     # ── Charge de référence : cisaillement unitaire (densité −1) sur la face
     #    droite, en efforts nodaux cohérents. Terme du modèle. ────────────────
     right_fes = pyrucast.FiniteElementSpace(right_edge)

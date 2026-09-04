@@ -25,11 +25,11 @@ import pyrucast
 E, A, L, F = 210.0e9, 1.0e-4, 2.0, 1000.0
 
 
-def _clamp(node, var, dual):
+def _clamp(target, node, var):
     """Dirichlet homogène (u = 0) sur `var` au nœud `node`."""
     imposed = pyrucast.mesh.poi1_from_nodes([node])
     multiplier = pyrucast.mesh.barycenter(imposed)
-    return pyrucast.model.dirichlet(var, dual, imposed, multiplier)
+    return pyrucast.model.dirichlet(target, var, imposed, multiplier)
 
 
 def main() -> None:
@@ -40,9 +40,9 @@ def main() -> None:
     fes = pyrucast.FiniteElementSpace(mesh)
 
     model = pyrucast.model.truss(fes)
-    model = model | _clamp(n0, "u_x", "f_x")
-    model = model | _clamp(n0, "u_y", "f_y")
-    model = model | _clamp(n1, "u_y", "f_y")  # pas de raideur transversale
+    model = model | _clamp(model, n0, "u_x")
+    model = model | _clamp(model, n0, "u_y")
+    model = model | _clamp(model, n1, "u_y")  # pas de raideur transversale
 
     materials = pyrucast.element_field.material_field(model, [("E", E), ("A", A)])
 

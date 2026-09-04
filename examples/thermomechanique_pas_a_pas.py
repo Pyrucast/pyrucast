@@ -66,9 +66,9 @@ def main():
     right = [grid[idx(NX, j)] for j in range(NY + 1)]
     bottom = [grid[idx(i, 0)] for i in range(NX + 1)]
 
-    def clamp(nodes, var, dual):
+    def clamp(target, nodes, var):
         imposed = pc.mesh.poi1_from_nodes(nodes)
-        return pc.model.dirichlet(var, dual, imposed, pc.mesh.barycenter(imposed))
+        return pc.model.dirichlet(target, var, imposed, pc.mesh.barycenter(imposed))
 
     # ── Modèle : conduction + élasticité (contraintes planes) + Dirichlet ────
     # Thermique : température imposée sur les bords gauche/droit (un
@@ -76,12 +76,14 @@ def main():
     # (u_x=0 à gauche, u_y=0 en bas) ⇒ dilatation libre, sans contrainte.
     th_imposed = pc.mesh.poi1_from_nodes(left + right)
     th_mult = pc.mesh.translate(th_imposed, [0.0, 0.0])
+    thermal = pc.model.heat_conduction(fes)
+    mecanique = pc.model.elasticity(fes, "plane_stress")
     model = (
-        pc.model.heat_conduction(fes)
-        | pc.model.elasticity(fes, "plane_stress")
-        | pc.model.dirichlet("T", "q", th_imposed, th_mult)
-        | clamp(left, "u_x", "f_x")
-        | clamp(bottom, "u_y", "f_y")
+        thermal
+        | mecanique
+        | pc.model.dirichlet(thermal, "T", th_imposed, th_mult)
+        | clamp(mecanique, left, "u_x")
+        | clamp(mecanique, bottom, "u_y")
     )
     materials = pc.element_field.material_field(
         model, [("k", K_COND), ("E", E), ("nu", NU), ("alpha", ALPHA)]

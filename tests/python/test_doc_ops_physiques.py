@@ -32,9 +32,9 @@ def _modele_dirichlet(fes, noeud):
     """Conduction + une température imposée, et le nœud-multiplicateur."""
     imposed = pyrucast.mesh.poi1_from_nodes([noeud])
     mult = pyrucast.mesh.barycenter(imposed)
-    model = pyrucast.model.heat_conduction(fes) | pyrucast.model.dirichlet(
-        "T", "q", imposed, mult
-    )
+    cible = pyrucast.model.heat_conduction(fes)
+
+    model = cible | pyrucast.model.dirichlet(cible, "T", imposed, mult)
     return model, mult, mult.node(0, 0, 0)
 
 
@@ -96,9 +96,9 @@ _, _, fes, noeuds = _barre_thermique()
 imposed = pyrucast.mesh.poi1_from_nodes([noeuds[0]])
 mult = pyrucast.mesh.barycenter(imposed)
 mult_node = mult.node(0, 0, 0)
-model = pyrucast.model.heat_conduction(fes) | pyrucast.model.dirichlet(
-    "T", "q", imposed, mult, sense=">="
-)
+cible = pyrucast.model.heat_conduction(fes)
+
+model = cible | pyrucast.model.dirichlet(cible, "T", imposed, mult, sense=">=")
 materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
 rhs = _chargement(mult, mult_node, 1.0)
 # ANCHOR: unilateral

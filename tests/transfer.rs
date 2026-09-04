@@ -97,8 +97,8 @@ fn each_direction_carries_its_own_stiffness() -> Result<()> {
             Physics::Mechanical,
         )?)?;
     let left: Vec<Node> = (0..=n).map(|j| grid[idx(0, j)].clone()).collect();
-    for (var, dual) in [("u_x", "f_x"), ("u_y", "f_y")] {
-        model = model.union(&clamp(&left, var, dual)?)?;
+    for var in ["u_x", "u_y"] {
+        model = model.union(&clamp(&model, &left, var)?)?;
     }
 
     // A traction along x, and one along y, applied together.
@@ -197,18 +197,10 @@ fn edge_fespace(
 }
 
 /// Homogeneous Dirichlet `var = 0` on every node of `nodes`.
-fn clamp(nodes: &[Node], var: &str, dual: &str) -> Result<Model> {
+fn clamp(target: &Model, nodes: &[Node], var: &str) -> Result<Model> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
     let multiplier = mesh::barycenter(&imposed)?;
-    model::dirichlet(
-        var.into(),
-        dual.into(),
-        &imposed,
-        &multiplier,
-        None,
-        None,
-        Default::default(),
-    )
+    model::dirichlet(target, var, &imposed, &multiplier, Default::default())
 }
 
 /// The displacement of the free face of a bar held at `x = 0`, pushed by a
@@ -228,9 +220,9 @@ fn free_face_displacement(n: usize, h: f64) -> Result<f64> {
     // Held in x on the left face; one node held in y, which is all a uniaxial
     // state needs to be regular (`nu = 0`, so nothing contracts across).
     let left: Vec<Node> = (0..=n).map(|j| grid[idx(0, j)].clone()).collect();
-    model = model.union(&clamp(&left, "u_x", "f_x")?)?;
+    model = model.union(&clamp(&model, &left, "u_x")?)?;
     let bottom: Vec<Node> = (0..=n).map(|i| grid[idx(i, 0)].clone()).collect();
-    model = model.union(&clamp(&bottom, "u_y", "f_y")?)?;
+    model = model.union(&clamp(&model, &bottom, "u_y")?)?;
 
     model = model.union(&model::flux(&right, "f_x".into(), Physics::Mechanical)?)?;
 

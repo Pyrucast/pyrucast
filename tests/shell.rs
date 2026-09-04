@@ -211,17 +211,12 @@ fn membrane_stretch(formulation: ShellModel) -> Result<()> {
     // Roller on the x = 0 edge (u_x), one point pinned in y and z, and every
     // rotation held: a pure membrane state.
     let left: Vec<Node> = (0..=n).map(|j| grid[idx(0, j)].clone()).collect();
-    model = model.union(&clamp(&left, "u_x", "f_x")?)?;
+    model = model.union(&clamp(&model, &left, "u_x")?)?;
     let bottom: Vec<Node> = (0..=n).map(|i| grid[idx(i, 0)].clone()).collect();
-    model = model.union(&clamp(&bottom, "u_y", "f_y")?)?;
+    model = model.union(&clamp(&model, &bottom, "u_y")?)?;
     let all: Vec<Node> = grid.clone();
-    for (var, dual) in [
-        ("u_z", "f_z"),
-        ("r_x", "m_x"),
-        ("r_y", "m_y"),
-        ("r_z", "m_z"),
-    ] {
-        model = model.union(&clamp(&all, var, dual)?)?;
+    for var in ["u_z", "r_x", "r_y", "r_z"] {
+        model = model.union(&clamp(&model, &all, var)?)?;
     }
     // A uniform traction on the x = 1 edge.
     let mut edge = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
@@ -438,18 +433,10 @@ fn plate(
 }
 
 /// Homogeneous Dirichlet `var = 0` on every node of `nodes`.
-fn clamp(nodes: &[Node], var: &str, dual: &str) -> Result<Model> {
+fn clamp(target: &Model, nodes: &[Node], var: &str) -> Result<Model> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
     let multiplier = mesh::barycenter(&imposed)?;
-    model::dirichlet(
-        var.into(),
-        dual.into(),
-        &imposed,
-        &multiplier,
-        None,
-        None,
-        Default::default(),
-    )
+    model::dirichlet(target, var, &imposed, &multiplier, Default::default())
 }
 
 /// The central deflection of a clamped square plate under a uniform pressure,
@@ -473,15 +460,8 @@ fn central_deflection(
             }
         }
     }
-    for (var, dual) in [
-        ("u_x", "f_x"),
-        ("u_y", "f_y"),
-        ("u_z", "f_z"),
-        ("r_x", "m_x"),
-        ("r_y", "m_y"),
-        ("r_z", "m_z"),
-    ] {
-        model = model.union(&clamp(&boundary, var, dual)?)?;
+    for var in ["u_x", "u_y", "u_z", "r_x", "r_y", "r_z"] {
+        model = model.union(&clamp(&model, &boundary, var)?)?;
     }
     // The in-plane DOFs and the drilling one play no part in pure bending, and a
     // flat plate leaves them unrestrained; hold them on the **interior** nodes so
@@ -494,8 +474,8 @@ fn central_deflection(
         .map(|(i, j)| grid[idx(i, j)].clone())
         .collect();
     if !interior.is_empty() {
-        for (var, dual) in [("u_x", "f_x"), ("u_y", "f_y"), ("r_z", "m_z")] {
-            model = model.union(&clamp(&interior, var, dual)?)?;
+        for var in ["u_x", "u_y", "r_z"] {
+            model = model.union(&clamp(&model, &interior, var)?)?;
         }
     }
     // The uniform pressure, as consistent nodal loads on the surface itself.

@@ -175,12 +175,10 @@ fn a_slab_settles_at_the_imposed_temperature() -> Result<()> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(&fixture.edge)?);
     let multiplier = pyrucast::ops::mesh::barycenter(&imposed)?;
     let model = fixture.radiation.union(&model::dirichlet(
-        "T".into(),
-        "q".into(),
+        &fixture.radiation,
+        "T",
         &imposed,
         &multiplier,
-        None,
-        None,
         Default::default(),
     )?)?;
     let materials = element_field::material_field(&model, &[("emis", EMIS), ("T_inf", T_INF)])?;

@@ -365,13 +365,12 @@ fn a_whole_study_makes_the_round_trip() -> Result<()> {
     ))?);
     let multiplier = pyrucast::ops::mesh::barycenter(&imposed)?;
     let mult = multiplier.node(0, 0, 0)?.id();
-    let model = model::heat_conduction(&fes)?.union(&model::dirichlet(
-        "T".into(),
-        "q".into(),
+    let conduction = model::heat_conduction(&fes)?;
+    let model = conduction.union(&model::dirichlet(
+        &conduction,
+        "T",
         &imposed,
         &multiplier,
-        None,
-        None,
         Default::default(),
     )?)?;
     let materials = pyrucast::ops::element_field::material_field(&model, &[("k", K)])?;

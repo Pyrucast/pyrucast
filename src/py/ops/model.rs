@@ -137,37 +137,39 @@ pub fn elasticity(
 ///
 /// `imposed_variable` is the constrained primary variable (e.g. `"T"`);
 /// `target_dual` is the dual variable of the target physics it couples
-/// into (e.g. `"q"` for heat conduction). `imposed_mesh` is the POI1 mesh
-/// of constrained nodes; `multiplier_mesh` is the POI1 support of the
-/// multipliers (same per-submesh cell count) — usually built from
-/// `imposed_mesh` with the `barycenter` mesher. `multiplier` /
-/// `imposed_value` override the derived names `lambda_<imposed_variable>` /
-/// `imposed_<imposed_variable>`. The imposed value `u_d` is written by the
-/// user in the load field at the multiplier node's `imposed_value`
-/// component. `sense` (`"="`, `">="` or `"<="`, default `"="`) turns the
-/// constraint unilateral (`u ≥ u_d` / `u ≤ u_d`) — such a model is solved
-/// with `solve_unilateral`. See the model chapter of the book for the full
-/// semantics.
+/// `target` is the model being constrained: `variable` must be one of its
+/// primals, and its dual row is read from it — the `T → q` map is the target's
+/// business, not something to retype. `imposed_mesh` is the POI1 mesh of
+/// constrained nodes; `multiplier_mesh` is the POI1 support of the multipliers
+/// (same per-submesh cell count) — usually built from `imposed_mesh` with the
+/// `barycenter` mesher. The multiplier and imposed-value names are derived,
+/// `lambda_<variable>` / `imposed_<variable>`; the imposed value `u_d` is
+/// written by the user in the load field at the multiplier node's
+/// `imposed_<variable>` component.
+///
+/// **One variable, and one only** — compose for a clamp:
+/// `dirichlet(m, "u_x", …) | dirichlet(m, "u_y", …)`, the two sharing their
+/// multiplier mesh, since `lambda_u_x` and `lambda_u_y` on one node are distinct
+/// DOFs.
+///
+/// `sense` (`"="`, `">="` or `"<="`, default `"="`) turns the constraint
+/// unilateral (`u ≥ u_d` / `u ≤ u_d`) — such a model is solved with
+/// `solve_unilateral`. See the model chapter of the book for the full semantics.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (imposed_variable, target_dual, imposed_mesh, multiplier_mesh, multiplier=None, imposed_value=None, sense=None))]
-#[allow(clippy::too_many_arguments)]
+#[pyo3(signature = (target, variable, imposed_mesh, multiplier_mesh, sense=None))]
 pub fn dirichlet(
-    imposed_variable: String,
-    target_dual: String,
+    target: PyRef<'_, PyModel>,
+    variable: &str,
     imposed_mesh: PyRef<'_, PyMesh>,
     multiplier_mesh: PyRef<'_, PyMesh>,
-    multiplier: Option<String>,
-    imposed_value: Option<String>,
     sense: Option<String>,
 ) -> PyResult<PyModel> {
     let inner = model::dirichlet(
-        imposed_variable,
-        target_dual,
+        &target.inner,
+        variable,
         &imposed_mesh.inner,
         &multiplier_mesh.inner,
-        multiplier,
-        imposed_value,
         RelationSense::parse(sense.as_deref())?,
     )?;
     Ok(PyModel { inner })

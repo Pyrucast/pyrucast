@@ -57,18 +57,10 @@ fn block(coords: &Handle<Coords>, y0: f64) -> Result<(Vec<Node>, SubMesh)> {
 }
 
 /// Homogeneous Dirichlet `var = 0` on every node of `nodes`.
-fn clamp(nodes: &[Node], var: &str, dual: &str) -> Result<Model> {
+fn clamp(target: &Model, nodes: &[Node], var: &str) -> Result<Model> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
     let multiplier = mesh::barycenter(&imposed)?;
-    model::dirichlet(
-        var.into(),
-        dual.into(),
-        &imposed,
-        &multiplier,
-        None,
-        None,
-        Default::default(),
-    )
+    model::dirichlet(target, var, &imposed, &multiplier, Default::default())
 }
 
 /// The full two-block setup. Returns the two node grids, the assembled model
@@ -115,8 +107,8 @@ fn two_blocks() -> Result<TwoBlocks> {
     let bottom_edge: Vec<Node> = (0..=N).map(|i| bottom[idx(i, 0)].clone()).collect();
 
     let mut model = model::elasticity(&fes, Kinematics::PlaneStress)?;
-    model = model.union(&clamp(&all_nodes, "u_x", "f_x")?)?;
-    model = model.union(&clamp(&bottom_edge, "u_y", "f_y")?)?;
+    model = model.union(&clamp(&model, &all_nodes, "u_x")?)?;
+    model = model.union(&clamp(&model, &bottom_edge, "u_y")?)?;
     model = model.union(&contact)?;
 
     let slave_nodes = slave_nodes_v.iter().map(|n| n.id()).collect();
@@ -216,7 +208,7 @@ fn separation_releases_every_pair() -> Result<()> {
     // Impose u_y = +0.1 on the top edge of the top block (lift it).
     let lift = 0.1;
     let top_edge_nodes: Vec<Node> = (0..=N).map(|i| tb.top[idx(i, N)].clone()).collect();
-    let lift_model = clamp(&top_edge_nodes, "u_y", "f_y")?;
+    let lift_model = clamp(&tb.model, &top_edge_nodes, "u_y")?;
     let model = tb.model.union(&lift_model)?;
     let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("nu", 0.0)])?;
 
@@ -318,9 +310,9 @@ fn contact_3d_two_cubes() -> Result<()> {
     // Uniaxial column: u_x = u_y = 0 everywhere, u_z = 0 at the base.
     let all_nodes: Vec<Node> = bottom.iter().chain(top.iter()).cloned().collect();
     let mut model = model::elasticity(&fes, Kinematics::Full3D)?;
-    model = model.union(&clamp(&all_nodes, "u_x", "f_x")?)?;
-    model = model.union(&clamp(&all_nodes, "u_y", "f_y")?)?;
-    model = model.union(&clamp(&bottom[0..4], "u_z", "f_z")?)?;
+    model = model.union(&clamp(&model, &all_nodes, "u_x")?)?;
+    model = model.union(&clamp(&model, &all_nodes, "u_y")?)?;
+    model = model.union(&clamp(&model, &bottom[0..4], "u_z")?)?;
     model = model.union(&contact)?;
     // Pressure S downward on the top face of the top cube.
     let mut face = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));

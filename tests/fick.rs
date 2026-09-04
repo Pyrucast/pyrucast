@@ -67,12 +67,10 @@ fn fick_line_recovers_the_linear_profile() -> Result<()> {
 
     let diffusion = model::fick(&fes, SPECIES)?;
     let dirichlet = model::dirichlet(
-        primal_var(SPECIES),
-        dual_var(SPECIES),
+        &diffusion,
+        &primal_var(SPECIES),
         &imposed,
         &multiplier,
-        None,
-        None,
         Default::default(),
     )?;
     let model = diffusion.union(&dirichlet)?;

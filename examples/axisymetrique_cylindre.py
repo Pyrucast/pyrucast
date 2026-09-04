@@ -54,7 +54,7 @@ def main():
     imposed = pyrucast.mesh.poi1_from_nodes(ends)
     model = pyrucast.model.elasticity(fes, "axisymmetric")
     model = model | pyrucast.model.dirichlet(
-        "u_y", "f_y", imposed, pyrucast.mesh.barycenter(imposed)
+        model, "u_y", imposed, pyrucast.mesh.barycenter(imposed)
     )
 
     # ── Chargement : pression interne sur r = a ────────────────────────────

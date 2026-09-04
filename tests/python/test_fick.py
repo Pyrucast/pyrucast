@@ -33,9 +33,9 @@ def test_fick_recovers_the_linear_profile():
     multiplier = pyrucast.mesh.barycenter(imposed)
     mult = multiplier.node(0, 0, 0)
 
-    model = pyrucast.model.fick(fes, "H2") | pyrucast.model.dirichlet(
-        "c_H2", "j_H2", imposed, multiplier
-    )
+    cible = pyrucast.model.fick(fes, "H2")
+
+    model = cible | pyrucast.model.dirichlet(cible, "c_H2", imposed, multiplier)
     materials = pyrucast.element_field.material_field(model, [("D_H2", d)])
 
     load = pyrucast.Mesh(c, "POI1")

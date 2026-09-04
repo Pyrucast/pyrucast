@@ -75,15 +75,7 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
         .collect::<Result<_>>()?;
 
     let conduction = model::heat_conduction(&fes)?;
-    let dirichlet = model::dirichlet(
-        "T".into(),
-        "q".into(),
-        &imposed,
-        &multiplier,
-        None,
-        None,
-        Default::default(),
-    )?;
+    let dirichlet = model::dirichlet(&conduction, "T", &imposed, &multiplier, Default::default())?;
     let model = conduction.union(&dirichlet)?;
     // ── Chargement ─────────────────────────────────────────────────────────
     // Source : flux uniforme (densité Q) sur le bord gauche, transformé en

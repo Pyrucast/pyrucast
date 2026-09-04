@@ -144,21 +144,17 @@ fn main() -> Result<()> {
     let imposed_mesh = to_poi1(&left_edge)?;
     let multiplier = translate(&imposed_mesh, &[0., 0.])?;
     model = model.union(&model::dirichlet(
-        "u_x".into(),
-        "f_x".into(),
+        &model,
+        "u_x",
         &imposed_mesh,
         &multiplier,
-        None,
-        None,
         Default::default(),
     )?)?;
     model = model.union(&model::dirichlet(
-        "u_y".into(),
-        "f_y".into(),
+        &model,
+        "u_y",
         &imposed_mesh,
         &multiplier,
-        None,
-        None,
         Default::default(),
     )?)?;
 

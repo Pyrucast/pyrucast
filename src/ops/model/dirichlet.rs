@@ -35,30 +35,27 @@ use crate::models::RelationSense;
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
 /// // Le modèle complet d'un problème thermique : la physique, puis l'appui.
 /// let m = model::heat_conduction(&fes)?.union(
-///     &model::dirichlet("T".into(), "q".into(), &impose, &mult,
-///                       None, None, RelationSense::Equality)?)?;
+///     &model::dirichlet(&cible, "T", &impose, &mult,
+///                       RelationSense::Equality)?)?;
 /// assert_eq!(m.len(), 2);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[allow(clippy::too_many_arguments)]
 pub fn dirichlet(
-    imposed_variable: String,
-    target_dual: String,
+    target: &Model,
+    variable: &str,
     imposed_mesh: &Mesh,
     multiplier_mesh: &Mesh,
-    multiplier: Option<String>,
-    imposed_value: Option<String>,
     sense: RelationSense,
 ) -> Result<Model> {
     single(SubModel::dirichlet(
-        imposed_variable,
-        target_dual,
+        target,
+        variable,
         imposed_mesh,
         multiplier_mesh,
-        multiplier,
-        imposed_value,
         sense,
     )?)
 }

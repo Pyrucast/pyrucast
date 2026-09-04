@@ -48,7 +48,7 @@ multiplicateur = pyrucast.mesh.barycenter(impose)
 modele = pc.model.heat_conduction(fes) | pc.model.boundary_transfer(
     bord_fes, [("T", "q")], "thermal"
 )
-modele = modele | pc.model.dirichlet("T", "q", impose, multiplicateur)
+modele = modele | pc.model.dirichlet(modele, "T", impose, multiplicateur)
 # ANCHOR_END: composer
 
 assert len(modele) == 3
@@ -57,8 +57,9 @@ assert len(modele) == 3
 # ── Les conditions limites, deux physiques ──────────────────────────────────
 
 # ANCHOR: bloquer
-pc.model.dirichlet("T", "q", impose, multiplicateur)  # Cast3M : BLOQ 'T' ...
-pc.model.dirichlet("u_x", "f_x", impose, multiplicateur)  # Cast3M : BLOQ 'UX' ...
+pc.model.dirichlet(modele, "T", impose, multiplicateur)  # Cast3M : BLOQ 'T' ...
+mecanique = pc.model.elasticity(fes, "plane_stress")
+pc.model.dirichlet(mecanique, "u_x", impose, multiplicateur)  # Cast3M : BLOQ 'UX' ...
 # ANCHOR_END: bloquer
 
 

@@ -3,11 +3,11 @@
 import pyrucast
 
 
-def _clamp(nodes, var, dual):
+def _clamp(target, nodes, var):
     """Homogeneous Dirichlet (u = 0) on `var` over `nodes`."""
     imposed = pyrucast.mesh.poi1_from_nodes(nodes)
     multiplier = pyrucast.mesh.barycenter(imposed)
-    return pyrucast.model.dirichlet(var, dual, imposed, multiplier)
+    return pyrucast.model.dirichlet(target, var, imposed, multiplier)
 
 
 def test_plane_stress_uniaxial_tension():
@@ -36,8 +36,8 @@ def test_plane_stress_uniaxial_tension():
     left = [grid[idx(0, j)] for j in range(N + 1)]
     bottom = [grid[idx(i, 0)] for i in range(N + 1)]
     model = pyrucast.model.elasticity(fes, "plane_stress")
-    model = model | _clamp(left, "u_x", "f_x")
-    model = model | _clamp(bottom, "u_y", "f_y")
+    model = model | _clamp(model, left, "u_x")
+    model = model | _clamp(model, bottom, "u_y")
 
     # Traction S on the right edge → consistent nodal forces. The load is a
     # term of the model: it joins it, its density joins the material.

@@ -276,24 +276,16 @@ fn clamped_model(
     symmetry: MaterialSymmetry,
 ) -> Result<Model> {
     let idx = |i: usize, j: usize| j * (N + 1) + i;
-    let roller = |nodes: &[Node], var: &str, dual: &str| -> Result<Model> {
+    let roller = |target: &Model, nodes: &[Node], var: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
         let multiplier = mesh::barycenter(&imposed)?;
-        model::dirichlet(
-            var.into(),
-            dual.into(),
-            &imposed,
-            &multiplier,
-            None,
-            None,
-            Default::default(),
-        )
+        model::dirichlet(target, var, &imposed, &multiplier, Default::default())
     };
     let left: Vec<Node> = (0..=N).map(|j| grid[idx(0, j)].clone()).collect();
     let bottom: Vec<Node> = (0..=N).map(|i| grid[idx(i, 0)].clone()).collect();
     let mut model = model::elasticity_with_symmetry(fes, Kinematics::PlaneStress, symmetry)?;
-    model = model.union(&roller(&left, "u_x", "f_x")?)?;
-    model = model.union(&roller(&bottom, "u_y", "f_y")?)?;
+    model = model.union(&roller(&model, &left, "u_x")?)?;
+    model = model.union(&roller(&model, &bottom, "u_y")?)?;
     // La traction du bord droit est un terme du modèle, pas un vecteur bâti à
     // côté : elle le rejoint ici, sa densité rejoindra le matériau.
     model = model.union(&model::flux(

@@ -24,8 +24,9 @@ def test_poisson_1d_dirichlet_at_both_ends_recovers_linear_solution():
     imposed_right = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
     mult_mesh_left = pyrucast.mesh.barycenter(imposed_left)
     mult_mesh_right = pyrucast.mesh.barycenter(imposed_right)
-    left = pyrucast.model.dirichlet("T", "q", imposed_left, mult_mesh_left)
-    right = pyrucast.model.dirichlet("T", "q", imposed_right, mult_mesh_right)
+    conduction = pyrucast.model.heat_conduction(fes)
+    left = pyrucast.model.dirichlet(conduction, "T", imposed_left, mult_mesh_left)
+    right = pyrucast.model.dirichlet(conduction, "T", imposed_right, mult_mesh_right)
     mult_left = mult_mesh_left.node(0, 0, 0)
     mult_right = mult_mesh_right.node(0, 0, 0)
     model = pyrucast.model.heat_conduction(fes) | left | right
@@ -96,7 +97,8 @@ def test_solver_with_nonzero_neumann():
 
     imposed_left = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mult_mesh_left = pyrucast.mesh.barycenter(imposed_left)
-    left = pyrucast.model.dirichlet("T", "q", imposed_left, mult_mesh_left)
+    conduction = pyrucast.model.heat_conduction(fes)
+    left = pyrucast.model.dirichlet(conduction, "T", imposed_left, mult_mesh_left)
     mult_left = mult_mesh_left.node(0, 0, 0)
     model = pyrucast.model.heat_conduction(fes) | left
 

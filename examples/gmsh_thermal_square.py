@@ -135,9 +135,9 @@ def main() -> None:
     multiplier = pyrucast.mesh.barycenter(imposed)
     mults = [multiplier.node(0, j, 0) for j in range(len(right_nodes))]
 
-    model = pyrucast.model.heat_conduction(fes) | pyrucast.model.dirichlet(
-        "T", "q", imposed, multiplier
-    )
+    cible = pyrucast.model.heat_conduction(fes)
+
+    model = cible | pyrucast.model.dirichlet(cible, "T", imposed, multiplier)
 
     # ── 3. Chargement : flux réparti sur le bord gauche + T imposée ──────────
     left_fes = pyrucast.FiniteElementSpace(left)

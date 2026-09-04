@@ -71,18 +71,10 @@ fn annulus(
 }
 
 /// Homogeneous Dirichlet `var = 0` on every node of `nodes`.
-fn clamp(nodes: &[Node], var: &str, dual: &str) -> Result<Model> {
+fn clamp(target: &Model, nodes: &[Node], var: &str) -> Result<Model> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
     let multiplier = mesh::barycenter(&imposed)?;
-    model::dirichlet(
-        var.into(),
-        dual.into(),
-        &imposed,
-        &multiplier,
-        None,
-        None,
-        Default::default(),
-    )
+    model::dirichlet(target, var, &imposed, &multiplier, Default::default())
 }
 
 // ─── The measure: 2πr, with no mechanics involved ────────────────────────────
@@ -319,7 +311,7 @@ fn lame_case(nr: usize, quadratic: bool) -> Result<(f64, f64)> {
         .cloned()
         .collect();
     let mut model = model::elasticity(&fes, Kinematics::Axisymmetric)?;
-    model = model.union(&clamp(&ends, "u_y", "f_y")?)?;
+    model = model.union(&clamp(&model, &ends, "u_y")?)?;
     let model = model.union(&model::flux(&edge_fes, "f_x".into(), Physics::Mechanical)?)?;
     let materials = pyrucast::ops::element_field::material_field(
         &model,
@@ -511,12 +503,10 @@ fn heat_conduction_through_a_hollow_cylinder_is_logarithmic() -> Result<()> {
             mult_nodes.push((multiplier.node(0, k, 0)?, value));
         }
         model = model.union(&model::dirichlet(
-            "T".into(),
-            "q".into(),
+            &model,
+            "T",
             &m,
             &multiplier,
-            None,
-            None,
             Default::default(),
         )?)?;
     }

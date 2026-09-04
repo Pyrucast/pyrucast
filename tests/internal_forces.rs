@@ -60,18 +60,11 @@ fn chain(
 /// `model` with every primal DOF of `node` held at zero — a clamped end.
 fn clamp(model: &Model, node: &Node) -> Result<Model> {
     let mut out = model.subset(0..model.len())?;
-    for (var, dual) in model.primal_vars().iter().zip(model.dual_vars()) {
+    for var in model.primal_vars() {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);
         let multiplier = mesh::barycenter(&imposed)?;
-        out = out.union(&model::dirichlet(
-            var.clone(),
-            dual,
-            &imposed,
-            &multiplier,
-            None,
-            None,
-            Default::default(),
-        )?)?;
+        let bc = model::dirichlet(model, &var, &imposed, &multiplier, Default::default())?;
+        out = out.union(&bc)?;
     }
     Ok(out)
 }

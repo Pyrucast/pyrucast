@@ -39,15 +39,15 @@ def main():
     model = pyrucast.model.elasticity(fes, "full_3d")
 
     # Appuis de symétrie sur les trois faces passant par l'origine.
-    def clamp(ids, var, dual):
+    def clamp(target, ids, var):
         picked = [nodes[i] for i in ids]
         imposed = pyrucast.mesh.poi1_from_nodes(picked)
         mult = pyrucast.mesh.barycenter(imposed)
-        return pyrucast.model.dirichlet(var, dual, imposed, mult)
+        return pyrucast.model.dirichlet(target, var, imposed, mult)
 
-    model = model | clamp([0, 3, 4, 7], "u_x", "f_x")  # face x = 0
-    model = model | clamp([0, 1, 4, 5], "u_y", "f_y")  # face y = 0
-    model = model | clamp([0, 1, 2, 3], "u_z", "f_z")  # face z = 0
+    model = model | clamp(model, [0, 3, 4, 7], "u_x")  # face x = 0
+    model = model | clamp(model, [0, 1, 4, 5], "u_y")  # face y = 0
+    model = model | clamp(model, [0, 1, 2, 3], "u_z")  # face z = 0
 
     # Nœud immergé au cœur du cube, lié en u_x/u_y/u_z (liaison rigide, g = 0).
     pc = [0.4, 0.7, 0.2]

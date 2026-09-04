@@ -38,12 +38,13 @@ def _bounded_bar(q, bound, sense):
 
     imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mult0 = pyrucast.mesh.barycenter(imposed0)
-    dirichlet = pyrucast.model.dirichlet("T", "q", imposed0, mult0)
+    conduction = pyrucast.model.heat_conduction(fes)
+    dirichlet = pyrucast.model.dirichlet(conduction, "T", imposed0, mult0)
     dir_mult = mult0.node(0, 0, 0)
 
     imposed1 = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
     mult1 = pyrucast.mesh.barycenter(imposed1)
-    unilateral = pyrucast.model.dirichlet("T", "q", imposed1, mult1, sense=sense)
+    unilateral = pyrucast.model.dirichlet(conduction, "T", imposed1, mult1, sense=sense)
     uni_mult = mult1.node(0, 0, 0)
 
     model = pyrucast.model.heat_conduction(fes) | dirichlet | unilateral
@@ -106,7 +107,8 @@ def test_unilateral_mpc_difference_relation():
 
         imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
         mult0 = pyrucast.mesh.barycenter(imposed0)
-        dirichlet = pyrucast.model.dirichlet("T", "q", imposed0, mult0)
+        conduction = pyrucast.model.heat_conduction(fes)
+        dirichlet = pyrucast.model.dirichlet(conduction, "T", imposed0, mult0)
         dir_mult = mult0.node(0, 0, 0)
 
         base = pyrucast.model.heat_conduction(fes)
@@ -161,8 +163,9 @@ def test_eliminate_rejects_unilateral_relations():
 
 def test_unknown_sense_rejected():
     """An unknown `sense` string raises a clear error at model build."""
-    _, nodes, _, _ = _heat_bar()
+    _, nodes, fes, _ = _heat_bar()
     imposed = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mult = pyrucast.mesh.barycenter(imposed)
+    conduction = pyrucast.model.heat_conduction(fes)
     with pytest.raises(Exception, match="sense"):
-        pyrucast.model.dirichlet("T", "q", imposed, mult, sense="~")
+        pyrucast.model.dirichlet(conduction, "T", imposed, mult, sense="~")

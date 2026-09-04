@@ -106,7 +106,7 @@
 //! let multiplier = mesh::barycenter(&imposed).unwrap();
 //! model
 //!     .add_sub(Handle::new(
-//!         SubModel::dirichlet("T".into(), "q".into(), &imposed, &multiplier, None, None, Default::default())
+//!         SubModel::dirichlet(&model, "T", &imposed, &multiplier, Default::default())
 //!             .unwrap(),
 //!     ))
 //!     .unwrap();
@@ -1063,31 +1063,28 @@ impl SubModel {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// // `u_d` n'est pas ici : il est écrit plus tard, au nœud multiplicateur,
     /// // dans la composante `imposed_T`.
     /// let m = SubModel::dirichlet(
-    ///     "T".into(), "q".into(), &impose, &mult, None, None, RelationSense::Equality)?;
+    ///     &cible, "T", &impose, &mult, RelationSense::Equality)?;
     /// assert_eq!(m.multiplier_nodes().len(), 1);
     /// assert_eq!(m.physics(), &[Physics::Constraint]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     #[allow(clippy::too_many_arguments)]
     pub fn dirichlet(
-        imposed_variable: String,
-        target_dual: String,
+        target: &Model,
+        variable: &str,
         imposed_mesh: &Mesh,
         multiplier_mesh: &Mesh,
-        multiplier: Option<String>,
-        imposed_value: Option<String>,
         sense: RelationSense,
     ) -> Result<Self> {
         Ok(SubModel::Dirichlet(dirichlet::Dirichlet::new(
-            imposed_variable,
-            target_dual,
+            target,
+            variable,
             imposed_mesh,
             multiplier_mesh,
-            multiplier,
-            imposed_value,
             sense,
         )?))
     }
@@ -1354,8 +1351,9 @@ impl SubModel {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// let d = SubModel::dirichlet(
-    ///     "T".into(), "q".into(), &impose, &mult, None, None, RelationSense::Equality)?;
+    ///     &cible, "T", &impose, &mult, RelationSense::Equality)?;
     /// assert_eq!(d.multiplier_nodes().len(), 1);
     /// // Vide pour une physique volumique : elle n'introduit pas de multiplicateur.
     /// assert!(SubModel::heat_conduction(zone.clone())?.multiplier_nodes().is_empty());
@@ -1400,8 +1398,9 @@ impl SubModel {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// let d = SubModel::dirichlet(
-    ///     "T".into(), "q".into(), &impose, &mult, None, None, RelationSense::Equality)?;
+    ///     &cible, "T", &impose, &mult, RelationSense::Equality)?;
     /// // Le maillage POI1 **partagé** — pas une copie : c'est la poignée sur
     /// // laquelle bâtir le champ de chargement.
     /// assert!(d.multiplier_mesh()?.node(0, 0, 0).is_ok());
@@ -1465,8 +1464,9 @@ impl SubModel {
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # use pyrucast::containers::field::SubField;
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// let d = SubModel::dirichlet(
-    ///     "T".into(), "q".into(), &impose, &mult, None, None, RelationSense::Equality)?;
+    ///     &cible, "T", &impose, &mult, RelationSense::Equality)?;
     /// // On cite le nœud **contraint** ; la méthode retrouve son multiplicateur
     /// // et y écrit la valeur, sous le bon nom de composante.
     /// let rhs = d.constraint_rhs(&[(n[0].id(), 100.0)])?;
@@ -1561,8 +1561,9 @@ impl SubModel {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// let d = SubModel::dirichlet(
-    ///     "T".into(), "q".into(), &impose, &mult, None, None, RelationSense::Equality)?;
+    ///     &cible, "T", &impose, &mult, RelationSense::Equality)?;
     /// // Par **indice de relation** : la voie quand un nœud en clé plusieurs.
     /// let rhs = d.constraint_rhs_by_index(&[(0, 100.0)])?;
     /// assert_eq!(rhs.node_count()?, 1);
@@ -1669,9 +1670,10 @@ impl SubModel {
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// assert!(SubModel::heat_conduction(zone.clone())?.material_fespace().is_some());
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// // Une contrainte n'a pas de matière.
     /// let d = SubModel::dirichlet(
-    ///     "T".into(), "q".into(), &impose, &mult, None, None, RelationSense::Equality)?;
+    ///     &cible, "T", &impose, &mult, RelationSense::Equality)?;
     /// assert!(d.material_fespace().is_none());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -1879,8 +1881,9 @@ impl SubModel {
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// assert!(SubModel::heat_conduction(zone.clone())?.has_behavior());
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// let d = SubModel::dirichlet(
-    ///     "T".into(), "q".into(), &impose, &mult, None, None, RelationSense::Equality)?;
+    ///     &cible, "T", &impose, &mult, RelationSense::Equality)?;
     /// assert!(!d.has_behavior()); // une contrainte n'a pas de loi de comportement
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -2030,11 +2033,12 @@ impl crate::dump::Dump for SubModel {
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
 /// // Un modèle se **compose** : la physique, puis les appuis. Chaque
 /// // sous-modèle garde sa nature, ce qui permet de les retrouver ensuite.
 /// let m = model::heat_conduction(&fes)?.union(
-///     &model::dirichlet("T".into(), "q".into(), &impose, &mult,
-///                       None, None, RelationSense::Equality)?)?;
+///     &model::dirichlet(&cible, "T", &impose, &mult,
+///                       RelationSense::Equality)?)?;
 /// assert_eq!(m.len(), 2);
 /// assert_eq!(m.filter(Physics::Thermal)?.len(), 1);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -2188,9 +2192,10 @@ impl Model {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// let m = model::heat_conduction(&fes)?.union(
-    ///     &model::dirichlet("T".into(), "q".into(), &impose, &mult,
-    ///                       None, None, RelationSense::Equality)?)?;
+    ///     &model::dirichlet(&cible, "T", &impose, &mult,
+    ///                       RelationSense::Equality)?)?;
     /// // Les multiplicateurs de **toutes** les contraintes du modèle, partagés.
     /// assert!(m.multiplier_mesh()?.node(0, 0, 0).is_ok());
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -2281,9 +2286,10 @@ impl Model {
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # use pyrucast::containers::field::SubField;
     /// # use pyrucast::ops::model;
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// let m = model::heat_conduction(&fes)?.union(
-    ///     &model::dirichlet("T".into(), "q".into(), &impose, &mult,
-    ///                       None, None, RelationSense::Equality)?)?;
+    ///     &model::dirichlet(&cible, "T", &impose, &mult,
+    ///                       RelationSense::Equality)?)?;
     /// // Le chargement de contrainte du modèle entier, à unioner au chargement.
     /// let rhs = m.constraint_rhs(&[(n[0].id(), 100.0)])?;
     /// assert_eq!(rhs.get(0)?.read().components(), &["imposed_T".to_string()]);
@@ -2321,8 +2327,9 @@ impl Model {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// let m = model::dirichlet("T".into(), "q".into(), &impose, &mult,
-    ///                          None, None, RelationSense::Equality)?;
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+    /// let m = model::dirichlet(&cible, "T", &impose, &mult,
+    ///                          RelationSense::Equality)?;
     /// // Les indices courent sur les relations, contrainte par contrainte.
     /// assert!(m.constraint_rhs_by_index(&[(0, 100.0)]).is_ok());
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -2570,6 +2577,20 @@ impl crate::archive::Archivable for Model {
 
 #[cfg(test)]
 mod tests {
+
+    /// A one-cell conduction model on `coords`, to be the target a constraint
+    /// names. A Dirichlet reads its dual and checks its variable there.
+    #[cfg(test)]
+    fn target_conduction(coords: &Handle<Coords>, a: &Node) -> Model {
+        let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+        let mut sm = SubMesh::new(coords.clone(), crate::atoms::ElementType::SEG2);
+        sm.add_cell(&[a.id(), b.id()]).unwrap();
+        let fes = crate::containers::finite_element_space::FiniteElementSpace::lagrange1(
+            &Mesh::from_submesh(sm),
+        )
+        .unwrap();
+        crate::ops::model::heat_conduction(&fes).unwrap()
+    }
     use super::*;
     use crate::aggregate::Aggregate;
     use crate::atoms::ElementType;
@@ -2613,16 +2634,8 @@ mod tests {
             let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
             model
                 .add_sub(Handle::new(
-                    SubModel::dirichlet(
-                        "T".into(),
-                        "q".into(),
-                        &imposed,
-                        &multiplier,
-                        None,
-                        None,
-                        Default::default(),
-                    )
-                    .unwrap(),
+                    SubModel::dirichlet(&model, "T", &imposed, &multiplier, Default::default())
+                        .unwrap(),
                 ))
                 .unwrap();
         }
@@ -2822,21 +2835,13 @@ mod tests {
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
         let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
+        let cible = target_conduction(&coords, &a);
         // The multiplier node is owned by the multiplier submesh (refcount 1;
         // the transient Node below is dropped at the end of the statement).
         let mult_id = multiplier.node(0, 0, 0).unwrap().id();
         assert_eq!(coords.read().refcount(mult_id), 1);
-
-        let sub = SubModel::dirichlet(
-            "T".into(),
-            "q".into(),
-            &imposed,
-            &multiplier,
-            None,
-            None,
-            Default::default(),
-        )
-        .unwrap();
+        let sub =
+            SubModel::dirichlet(&cible, "T", &imposed, &multiplier, Default::default()).unwrap();
         // Sharing the submesh handles does not touch node refcounts.
         assert_eq!(coords.read().refcount(mult_id), 1);
         assert_eq!(sub.multiplier_nodes(), vec![mult_id]);
@@ -2855,17 +2860,11 @@ mod tests {
 
     #[test]
     fn dirichlet_empty_imposed_mesh_rejected() {
+        let coords = Handle::new(Coords::new(1).unwrap());
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+        let cible = target_conduction(&coords, &a);
         let empty = Mesh::empty();
-        assert!(SubModel::dirichlet(
-            "T".into(),
-            "q".into(),
-            &empty,
-            &empty,
-            None,
-            None,
-            Default::default()
-        )
-        .is_err());
+        assert!(SubModel::dirichlet(&cible, "T", &empty, &empty, Default::default()).is_err());
     }
 
     #[test]
@@ -2933,16 +2932,7 @@ mod tests {
         // Compose with a Dirichlet model via `union` (Python `|`).
         let imp = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&n0)).unwrap());
         let mlt = crate::ops::mesh::barycenter(&imp).unwrap();
-        let dir = model::dirichlet(
-            "T".into(),
-            "q".into(),
-            &imp,
-            &mlt,
-            None,
-            None,
-            Default::default(),
-        )
-        .unwrap();
+        let dir = model::dirichlet(&hc, "T", &imp, &mlt, Default::default()).unwrap();
         assert_eq!(dir.len(), 1);
         let full = hc.union(&dir).unwrap();
         assert_eq!(full.len(), 3);
@@ -3057,16 +3047,9 @@ mod tests {
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
         let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
-        let dir = SubModel::dirichlet(
-            "T".into(),
-            "q".into(),
-            &imposed,
-            &multiplier,
-            None,
-            None,
-            Default::default(),
-        )
-        .unwrap();
+        let cible = target_conduction(&coords, &a);
+        let dir =
+            SubModel::dirichlet(&cible, "T", &imposed, &multiplier, Default::default()).unwrap();
         assert!(dir.material_components().is_none());
     }
 
@@ -3100,20 +3083,13 @@ mod tests {
     #[test]
     fn constraint_rhs_dirichlet_writes_g_at_multiplier() {
         let coords = Handle::new(Coords::new(1).unwrap());
-        let a = Node::create_in(coords, &[0.0]).unwrap();
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
         let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
-        let dirichlet = model::dirichlet(
-            "T".into(),
-            "q".into(),
-            &imposed,
-            &multiplier,
-            None,
-            None,
-            Default::default(),
-        )
-        .unwrap();
+        let cible = target_conduction(&coords, &a);
+        let dirichlet =
+            model::dirichlet(&cible, "T", &imposed, &multiplier, Default::default()).unwrap();
 
         let rhs = dirichlet.constraint_rhs(&[(a.id(), 3.0)]).unwrap();
         let mult_id = multiplier.node(0, 0, 0).unwrap().id();
@@ -3204,20 +3180,13 @@ mod tests {
     #[test]
     fn constraint_rhs_by_index_writes_and_bounds_checks() {
         let coords = Handle::new(Coords::new(1).unwrap());
-        let a = Node::create_in(coords, &[0.0]).unwrap();
+        let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
         let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
-        let dirichlet = model::dirichlet(
-            "T".into(),
-            "q".into(),
-            &imposed,
-            &multiplier,
-            None,
-            None,
-            Default::default(),
-        )
-        .unwrap();
+        let cible = target_conduction(&coords, &a);
+        let dirichlet =
+            model::dirichlet(&cible, "T", &imposed, &multiplier, Default::default()).unwrap();
 
         let mult_id = multiplier.node(0, 0, 0).unwrap().id();
         let rhs = dirichlet.constraint_rhs_by_index(&[(0, 2.0)]).unwrap();

@@ -91,7 +91,9 @@ def resoudre_thermique(plaque, trou):
 
     trou_poi1 = pc.mesh.to_poi1(trou)
     multiplicateur = pc.mesh.translate(trou_poi1, [0.0, 0.0])
-    modele_th = modele_th | pc.model.dirichlet("T", "q", trou_poi1, multiplicateur)
+    modele_th = modele_th | pc.model.dirichlet(
+        modele_th, "T", trou_poi1, multiplicateur
+    )
 
     materiaux_th = pc.element_field.material_field(modele_th, [("k", K_COND)])
     temperature_imposee = pc.NodeField(multiplicateur, ["imposed_T"])
@@ -111,8 +113,8 @@ def main() -> None:
     multiplicateur = pc.mesh.translate(encastrement, [0.0, 0.0])
 
     modele = pc.model.elasticity(fes, "plane_stress")
-    modele = modele | pc.model.dirichlet("u_x", "f_x", encastrement, multiplicateur)
-    modele = modele | pc.model.dirichlet("u_y", "f_y", encastrement, multiplicateur)
+    modele = modele | pc.model.dirichlet(modele, "u_x", encastrement, multiplicateur)
+    modele = modele | pc.model.dirichlet(modele, "u_y", encastrement, multiplicateur)
 
     # Effort de la masse suspendue, réparti sur la moitié basse du trou —
     # analogue de FSUR 'MASS' / PRES 'MASS' (Cast3M section 6).

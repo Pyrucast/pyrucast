@@ -60,24 +60,18 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
 
     // ── Modèle : élasticité plane stress + appuis (rollers) ────────────────
-    let roller = |nodes: &[Node], var: &str, dual: &str| -> Result<Model> {
+    // L'appui reçoit le modèle qu'il contraint : le dual s'y lit, et les nœuds
+    // contraints s'y vérifient.
+    let roller = |target: &Model, nodes: &[Node], var: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
         let multiplier = mesh::barycenter(&imposed)?;
-        model::dirichlet(
-            var.into(),
-            dual.into(),
-            &imposed,
-            &multiplier,
-            None,
-            None,
-            Default::default(),
-        )
+        model::dirichlet(target, var, &imposed, &multiplier, Default::default())
     };
     let left: Vec<Node> = (0..=N).map(|j| grid[idx(0, j)].clone()).collect();
     let bottom: Vec<Node> = (0..=N).map(|i| grid[idx(i, 0)].clone()).collect();
     let mut model = model::elasticity(&fes, Kinematics::PlaneStress)?;
-    model = model.union(&roller(&left, "u_x", "f_x")?)?;
-    model = model.union(&roller(&bottom, "u_y", "f_y")?)?;
+    model = model.union(&roller(&model, &left, "u_x")?)?;
+    model = model.union(&roller(&model, &bottom, "u_y")?)?;
 
     // ── Chargement : traction S sur le bord droit (charges nodales cohérentes,
     //    sur la composante f_x). La charge est un sous-modèle : elle rejoint le
@@ -115,18 +109,10 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
 // ANCHOR_END: example
 
 /// Homogeneous Dirichlet `var = 0` on every node of `nodes`.
-fn clamp(nodes: &[Node], var: &str, dual: &str) -> Result<Model> {
+fn clamp(target: &Model, nodes: &[Node], var: &str) -> Result<Model> {
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
     let multiplier = mesh::barycenter(&imposed)?;
-    model::dirichlet(
-        var.into(),
-        dual.into(),
-        &imposed,
-        &multiplier,
-        None,
-        None,
-        Default::default(),
-    )
+    model::dirichlet(target, var, &imposed, &multiplier, Default::default())
 }
 
 /// 3-D solid: uniaxial tension of a unit HEX8 cube. Symmetry rollers on the
@@ -159,9 +145,9 @@ fn elasticity_unit_cube_uniaxial_tension() -> Result<()> {
 
     let pick = |ids: &[usize]| ids.iter().map(|&i| nodes[i].clone()).collect::<Vec<_>>();
     let mut model = model::elasticity(&fes, Kinematics::Full3D)?;
-    model = model.union(&clamp(&pick(&[0, 3, 4, 7]), "u_x", "f_x")?)?; // x = 0 face
-    model = model.union(&clamp(&pick(&[0, 1, 4, 5]), "u_y", "f_y")?)?; // y = 0 face
-    model = model.union(&clamp(&pick(&[0, 1, 2, 3]), "u_z", "f_z")?)?; // z = 0 face
+    model = model.union(&clamp(&model, &pick(&[0, 3, 4, 7]), "u_x")?)?; // x = 0 face
+    model = model.union(&clamp(&model, &pick(&[0, 1, 4, 5]), "u_y")?)?; // y = 0 face
+    model = model.union(&clamp(&model, &pick(&[0, 1, 2, 3]), "u_z")?)?; // z = 0 face
 
     // Traction S on the x = 1 face (QUA4 [1, 2, 6, 5]).
     let mut face = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));

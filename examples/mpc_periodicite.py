@@ -46,7 +46,7 @@ def main():
     # Dirichlet T(0) = 0.
     imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mult0 = pyrucast.mesh.barycenter(imposed0)
-    dirichlet = pyrucast.model.dirichlet("T", dual, imposed0, mult0)
+    dirichlet = pyrucast.model.dirichlet(base, "T", imposed0, mult0)
 
     # MPC 1·T(node_last) − 1·T(node_0) = 1.
     mesh_last = pyrucast.mesh.poi1_from_nodes([nodes[-1]])

@@ -25,13 +25,21 @@ def _two_zone_model():
 
     imposed = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     multiplier = pyrucast.mesh.barycenter(imposed)
-    model = pyrucast.model.heat_conduction(fes) | pyrucast.model.dirichlet(
-        "T", "q", imposed, multiplier
-    )
+    cible = pyrucast.model.heat_conduction(fes)
+
+    model = cible | pyrucast.model.dirichlet(cible, "T", imposed, multiplier)
     return c, nodes, fes, model
 
 
 # ─── sub_material_field (one sub-model) ─────────────────────────────────────
+
+
+def _cible_1d(c, a):
+    """Une conduction sur un segment, pour servir de cible à une contrainte."""
+    b = c.add_node([1.0])
+    m = pyrucast.Mesh(c, "SEG2")
+    m.unit().add_cell([a, b])
+    return pyrucast.model.heat_conduction(pyrucast.FiniteElementSpace(m))
 
 
 def test_sub_model_build_material_field_uniform_value():
@@ -54,7 +62,8 @@ def test_sub_model_build_material_field_errors_on_dirichlet():
     a = c.add_node([0.0])
     imposed = pyrucast.mesh.poi1_from_nodes([a])
     multiplier = pyrucast.mesh.barycenter(imposed)
-    dir_sub = pyrucast.model.dirichlet("T", "q", imposed, multiplier)[0]
+    conduction = _cible_1d(c, a)
+    dir_sub = pyrucast.model.dirichlet(conduction, "T", imposed, multiplier)[0]
     with pytest.raises(RuntimeError):
         pyrucast.element_field.sub_material_field(dir_sub, [("k", 1.0)])
 
@@ -140,7 +149,9 @@ def test_sub_model_material_components_lists_required_components():
 
     imposed = pyrucast.mesh.poi1_from_nodes([a])
     multiplier = pyrucast.mesh.barycenter(imposed)
-    dir_sub = pyrucast.model.dirichlet("T", "q", imposed, multiplier)[0]
+    dir_sub = pyrucast.model.dirichlet(
+        pyrucast.model.heat_conduction(fes), "T", imposed, multiplier
+    )[0]
     assert dir_sub.material_components() is None
 
 

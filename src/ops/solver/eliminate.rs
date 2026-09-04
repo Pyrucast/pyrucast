@@ -94,9 +94,10 @@ struct SlaveInfo {
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
+/// # let cible = model::heat_conduction(&fes).unwrap();
 /// # let modele = model::heat_conduction(&fes).unwrap()
-/// #     .union(&model::dirichlet("T".into(), "q".into(), &impose, &mult,
-/// #                              None, None, RelationSense::Equality).unwrap()).unwrap();
+/// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
+/// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
 /// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
@@ -160,9 +161,10 @@ pub struct Condensation {
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
+/// # let cible = model::heat_conduction(&fes).unwrap();
 /// # let modele = model::heat_conduction(&fes).unwrap()
-/// #     .union(&model::dirichlet("T".into(), "q".into(), &impose, &mult,
-/// #                              None, None, RelationSense::Equality).unwrap()).unwrap();
+/// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
+/// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
 /// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
@@ -204,9 +206,10 @@ pub fn solve(matrix: &Matrix, model: &Model, rhs: &NodeField) -> Result<NodeFiel
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
+/// # let cible = model::heat_conduction(&fes).unwrap();
 /// # let modele = model::heat_conduction(&fes).unwrap()
-/// #     .union(&model::dirichlet("T".into(), "q".into(), &impose, &mult,
-/// #                              None, None, RelationSense::Equality).unwrap()).unwrap();
+/// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
+/// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
 /// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
@@ -256,9 +259,10 @@ pub fn solve_with_options(
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
+/// # let cible = model::heat_conduction(&fes).unwrap();
 /// # let modele = model::heat_conduction(&fes).unwrap()
-/// #     .union(&model::dirichlet("T".into(), "q".into(), &impose, &mult,
-/// #                              None, None, RelationSense::Equality).unwrap()).unwrap();
+/// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
+/// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
 /// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
@@ -305,9 +309,10 @@ pub fn solve_cancellable(
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
+/// # let cible = model::heat_conduction(&fes).unwrap();
 /// # let modele = model::heat_conduction(&fes).unwrap()
-/// #     .union(&model::dirichlet("T".into(), "q".into(), &impose, &mult,
-/// #                              None, None, RelationSense::Equality).unwrap()).unwrap();
+/// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
+/// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&modele, &materiaux).unwrap();
 /// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),

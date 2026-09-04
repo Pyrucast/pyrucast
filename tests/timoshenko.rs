@@ -47,22 +47,14 @@ fn timoshenko_cantilever_converges_without_locking() -> Result<()> {
     let fes = FiniteElementSpace::new(&mesh, Interpolation::ModelEmbedded)?;
 
     // ── Modèle : poutre + encastrement à gauche (w = θ = 0) ────────────────
-    let clamp = |node: &Node, var: &str, dual: &str| -> Result<Model> {
+    let clamp = |target: &Model, node: &Node, var: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);
         let multiplier = mesh::barycenter(&imposed)?;
-        model::dirichlet(
-            var.into(),
-            dual.into(),
-            &imposed,
-            &multiplier,
-            None,
-            None,
-            Default::default(),
-        )
+        model::dirichlet(target, var, &imposed, &multiplier, Default::default())
     };
     let mut model = model::timoshenko(&fes)?;
-    model = model.union(&clamp(&nodes[0], "w", "f_w")?)?;
-    model = model.union(&clamp(&nodes[0], "theta", "m_theta")?)?;
+    model = model.union(&clamp(&model, &nodes[0], "w")?)?;
+    model = model.union(&clamp(&model, &nodes[0], "theta")?)?;
 
     // ── Matériau E, I, G, A_s ──────────────────────────────────────────────
     let materials = pyrucast::ops::element_field::material_field(
@@ -120,22 +112,14 @@ fn timoshenko_section_forces_cantilever() -> Result<()> {
     }
     let fes = FiniteElementSpace::new(&mesh, Interpolation::ModelEmbedded)?;
 
-    let clamp = |node: &Node, var: &str, dual: &str| -> Result<Model> {
+    let clamp = |target: &Model, node: &Node, var: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);
         let multiplier = mesh::barycenter(&imposed)?;
-        model::dirichlet(
-            var.into(),
-            dual.into(),
-            &imposed,
-            &multiplier,
-            None,
-            None,
-            Default::default(),
-        )
+        model::dirichlet(target, var, &imposed, &multiplier, Default::default())
     };
     let mut model = model::timoshenko(&fes)?;
-    model = model.union(&clamp(&nodes[0], "w", "f_w")?)?;
-    model = model.union(&clamp(&nodes[0], "theta", "m_theta")?)?;
+    model = model.union(&clamp(&model, &nodes[0], "w")?)?;
+    model = model.union(&clamp(&model, &nodes[0], "theta")?)?;
     let materials = pyrucast::ops::element_field::material_field(
         &model,
         &[("E", E), ("I", I), ("G", G), ("A_s", A_S)],

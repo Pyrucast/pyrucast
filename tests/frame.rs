@@ -56,23 +56,15 @@ fn frame_inclined_cantilever_perpendicular_load() -> Result<()> {
     let fes = FiniteElementSpace::new(&mesh, Interpolation::ModelEmbedded)?;
 
     // ── Modèle : portique + encastrement complet à la base ─────────────────
-    let clamp = |node: &Node, var: &str, dual: &str| -> Result<Model> {
+    let clamp = |target: &Model, node: &Node, var: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);
         let multiplier = mesh::barycenter(&imposed)?;
-        model::dirichlet(
-            var.into(),
-            dual.into(),
-            &imposed,
-            &multiplier,
-            None,
-            None,
-            Default::default(),
-        )
+        model::dirichlet(target, var, &imposed, &multiplier, Default::default())
     };
     let mut model = model::timoshenko(&fes)?;
-    model = model.union(&clamp(&nodes[0], "u_x", "f_x")?)?;
-    model = model.union(&clamp(&nodes[0], "u_y", "f_y")?)?;
-    model = model.union(&clamp(&nodes[0], "r_z", "m_z")?)?;
+    model = model.union(&clamp(&model, &nodes[0], "u_x")?)?;
+    model = model.union(&clamp(&model, &nodes[0], "u_y")?)?;
+    model = model.union(&clamp(&model, &nodes[0], "r_z")?)?;
 
     let materials = pyrucast::ops::element_field::material_field(
         &model,

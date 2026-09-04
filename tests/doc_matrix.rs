@@ -41,13 +41,12 @@ fn barre() -> Result<(
     let imposed = mesh::poi1_from_nodes(std::slice::from_ref(&n[0]))?;
     let mult = mesh::barycenter(&imposed)?;
     let mult_node = mult.node(0, 0, 0)?;
-    let model = model::heat_conduction(&fes)?.union(&model::dirichlet(
-        "T".into(),
-        "q".into(),
+    let conduction = model::heat_conduction(&fes)?;
+    let model = conduction.union(&model::dirichlet(
+        &conduction,
+        "T",
         &imposed,
         &mult,
-        None,
-        None,
         RelationSense::Equality,
     )?)?;
     let materials = element_field::material_field(&model, &[("k", 1.0)])?;

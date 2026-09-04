@@ -21,10 +21,10 @@ T_REF, T_HOT = 20.0, 120.0  # ΔT = 100
 NX, NY, L, H = 4, 2, 4.0, 1.0
 
 
-def _clamp(nodes, var, dual):
+def _clamp(target, nodes, var):
     imposed = pc.mesh.poi1_from_nodes(nodes)
     multiplier = pc.mesh.barycenter(imposed)
-    return pc.model.dirichlet(var, dual, imposed, multiplier)
+    return pc.model.dirichlet(target, var, imposed, multiplier)
 
 
 def _bar():
@@ -61,17 +61,19 @@ def test_step_by_step_free_thermal_expansion():
     th_nodes = left + right
     th_imposed = pc.mesh.poi1_from_nodes(th_nodes)
     th_mult = pc.mesh.translate(th_imposed, [0.0, 0.0])
-    thermal_dir = pc.model.dirichlet("T", "q", th_imposed, th_mult)
+    thermal = pc.model.heat_conduction(fes)
+    thermal_dir = pc.model.dirichlet(thermal, "T", th_imposed, th_mult)
 
     # Modèle complet : conduction + élasticité (contraintes planes) + Dirichlet.
     # Mécanique : appuis simples (u_x=0 à gauche, u_y=0 en bas, valeur 0 ⇒ pas de
     # charge) ⇒ dilatation libre.
+    mecanique = pc.model.elasticity(fes, "plane_stress")
     model = (
-        pc.model.heat_conduction(fes)
-        | pc.model.elasticity(fes, "plane_stress")
+        thermal
+        | mecanique
         | thermal_dir
-        | _clamp(left, "u_x", "f_x")
-        | _clamp(bottom, "u_y", "f_y")
+        | _clamp(mecanique, left, "u_x")
+        | _clamp(mecanique, bottom, "u_y")
     )
 
     materials = pc.element_field.material_field(
@@ -152,12 +154,14 @@ def test_step_by_step_returns_history_per_time():
         left + [grid[idx(NX, j)] for j in range(NY + 1)]
     )
     th_mult = pc.mesh.translate(th_imposed, [0.0, 0.0])
+    thermal = pc.model.heat_conduction(fes)
+    mecanique = pc.model.elasticity(fes, "plane_stress")
     model = (
-        pc.model.heat_conduction(fes)
-        | pc.model.elasticity(fes, "plane_stress")
-        | pc.model.dirichlet("T", "q", th_imposed, th_mult)
-        | _clamp(left, "u_x", "f_x")
-        | _clamp(bottom, "u_y", "f_y")
+        thermal
+        | mecanique
+        | pc.model.dirichlet(thermal, "T", th_imposed, th_mult)
+        | _clamp(mecanique, left, "u_x")
+        | _clamp(mecanique, bottom, "u_y")
     )
     materials = pc.element_field.material_field(
         model, [("k", K_COND), ("E", E), ("nu", NU), ("alpha", ALPHA)]

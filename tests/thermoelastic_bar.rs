@@ -71,26 +71,18 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
 
     // ── Modèle : élasticité + deux bords en x encastrés + appui u_y en bas ──
-    let clamp = |nodes: &[Node], var: &str, dual: &str| -> Result<Model> {
+    let clamp = |target: &Model, nodes: &[Node], var: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
         let multiplier = mesh::barycenter(&imposed)?;
-        model::dirichlet(
-            var.into(),
-            dual.into(),
-            &imposed,
-            &multiplier,
-            None,
-            None,
-            Default::default(),
-        )
+        model::dirichlet(target, var, &imposed, &multiplier, Default::default())
     };
     let left: Vec<Node> = (0..=NY).map(|j| grid[idx(0, j)].clone()).collect();
     let right: Vec<Node> = (0..=NY).map(|j| grid[idx(NX, j)].clone()).collect();
     let bottom: Vec<Node> = (0..=NX).map(|i| grid[idx(i, 0)].clone()).collect();
     let mut model = model::elasticity(&fes, Kinematics::PlaneStress)?;
-    model = model.union(&clamp(&left, "u_x", "f_x")?)?;
-    model = model.union(&clamp(&right, "u_x", "f_x")?)?;
-    model = model.union(&clamp(&bottom, "u_y", "f_y")?)?;
+    model = model.union(&clamp(&model, &left, "u_x")?)?;
+    model = model.union(&clamp(&model, &right, "u_x")?)?;
+    model = model.union(&clamp(&model, &bottom, "u_y")?)?;
 
     // `alpha` supplied through the material field — an optional elastic component.
     let materials = pyrucast::ops::element_field::material_field(
