@@ -2135,6 +2135,49 @@ macro_rules! physics_operator {
             }
         } }
     };
+    // ── Physique portant sur un modèle cible ────────────────────────────────
+    //
+    // Une charge n'introduit aucune inconnue : elle écrit dans la ligne duale
+    // d'une **autre** physique. Elle a donc besoin du modèle qu'elle charge —
+    // pour y vérifier que la ligne existe et pour en hériter la nature, que le
+    // nom de la ligne ne suffit pas à trancher. Le fespace reste en tête : il
+    // est ce qu'on balaie, et la cible n'est qu'un argument de plus.
+    (
+        $(#[$rust_doc:meta])*
+        pub fn $name:ident(fes, target $(, $arg:ident : $ty:ty)* $(,)?) via $sub:path;
+        python: $py_doc:literal
+    ) => {
+        $(#[$rust_doc])*
+        pub fn $name(
+            fes: &$crate::containers::finite_element_space::FiniteElementSpace,
+            target: &$crate::containers::model::Model,
+            $($arg: $ty,)*
+        ) -> $crate::error::Result<$crate::containers::model::Model> {
+            #[allow(clippy::clone_on_copy)]
+            $crate::ops::model::spanning(fes, |zone| $sub(zone, target $(, $arg.clone())*))
+        }
+
+        #[cfg(feature = "python-api")]
+        ::paste::paste! {
+        /// The Python face of this physics — generated, never hand-written.
+        pub mod [<$name _py>] {
+            #[allow(unused_imports)]
+            use super::*;
+
+            #[doc = $py_doc]
+            #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pyfunction)]
+            #[::pyo3::pyfunction]
+            pub fn $name(
+                fespace: ::pyo3::PyRef<$crate::py::finite_element_space::PyFiniteElementSpace>,
+                target: ::pyo3::PyRef<$crate::py::model::PyModel>,
+                $($arg: $ty,)*
+            ) -> ::pyo3::PyResult<$crate::py::model::PyModel> {
+                Ok($crate::py::model::PyModel {
+                    inner: super::$name(&fespace.inner, &target.inner $(, $arg)*)?,
+                })
+            }
+        } }
+    };
     (
         $(#[$rust_doc:meta])*
         pub fn $name:ident(fes $(, $arg:ident : $ty:ty)* $(,)?) via $sub:path;

@@ -204,7 +204,7 @@ def main():
     # ── Charge de référence : cisaillement unitaire (densité −1) sur la face
     #    droite, en efforts nodaux cohérents. Terme du modèle. ────────────────
     right_fes = pyrucast.FiniteElementSpace(right_edge)
-    model = model | pyrucast.model.flux(right_fes, "f_y", "mechanical")
+    model = model | pyrucast.model.flux(right_fes, model, "f_y")
 
     materials = pyrucast.element_field.material_field(
         model,

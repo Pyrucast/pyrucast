@@ -149,7 +149,7 @@ def main() -> None:
     # FR — Le flux imposé sur la face gauche est un terme du modèle.
     # EN — The imposed flux on the left face is a term of the model.
     gauche_fes = pc.FiniteElementSpace(face_gauche)
-    modele = modele | pc.model.flux(gauche_fes, "q", "thermal")
+    modele = modele | pc.model.flux(gauche_fes, modele, "q")
 
     # FR — La conduction réclame « k », la charge sa densité.
     # EN — Conduction asks for "k", the load for its density.
@@ -242,7 +242,7 @@ def main() -> None:
     #      it stands perfectly well as a model of its own — with its own
     #      density, distinct from the boundary flux's though both feed "q".
     source_fes = pc.FiniteElementSpace(zone_source)
-    source = pc.model.flux(source_fes, "q", "thermal")
+    source = pc.model.flux(source_fes, modele, "q")
     densite_source = pc.element_field.material_field(
         source, [("phi_q", SOURCE_VOLUMIQUE)]
     )

@@ -83,7 +83,7 @@ def test_lame_thick_cylinder_under_internal_pressure():
     for j in range(NZ):
         inner.unit().add_cell([grid[idx(0, j)], grid[idx(0, j + 1)]])
     inner_fes = pyrucast.FiniteElementSpace(inner)
-    model = model | pyrucast.model.flux(inner_fes, "f_x", "mechanical")
+    model = model | pyrucast.model.flux(inner_fes, model, "f_x")
     materials = pyrucast.element_field.material_field(
         model, [("E", E), ("nu", NU), ("phi_f_x", P)]
     )

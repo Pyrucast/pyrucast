@@ -84,7 +84,7 @@ def main() -> None:
     for j in range(N):
         left_edge.unit().add_cell([grid[idx(0, j)], grid[idx(0, j + 1)]])
     left_fes = pyrucast.FiniteElementSpace(left_edge)
-    model = model | pyrucast.model.flux(left_fes, "q", "thermal")
+    model = model | pyrucast.model.flux(left_fes, model, "q")
 
     # Matériau : k pour la conduction, h et l'ambiant pour la convection, la
     # densité pour la source (chaque sous-modèle prélève ce qu'il requiert).

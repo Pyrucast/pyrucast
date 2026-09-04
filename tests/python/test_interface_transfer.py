@@ -154,7 +154,7 @@ def test_the_field_jumps_by_q_over_h():
     inlet = pyrucast.Mesh(c, "SEG2")
     inlet.unit().add_cell([left[0], left[3]])
     model = model | pyrucast.model.flux(
-        pyrucast.FiniteElementSpace(inlet), "j_H2", "diffusion"
+        pyrucast.FiniteElementSpace(inlet), model, "j_H2"
     )
     materials = pyrucast.element_field.material_field(
         model, [("D_H2", d), ("h_c_H2", h), ("phi_j_H2", q)]

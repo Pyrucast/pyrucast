@@ -171,9 +171,11 @@ ailleurs = c.add_node([2.0])
 other_loads = pyrucast.NodeField(pyrucast.mesh.poi1_from_nodes([ailleurs]), ["q"])
 # ANCHOR: flux
 # Flux uniforme Q sur le bord gauche (maillage SEG2), versé dans la ligne duale
-# « q ». La charge est un sous-modèle : sa densité vit dans le matériau, sous le
-# nom « phi_q », et son terme se demande au modèle.
-charge = pyrucast.model.flux(edge_fes, "q", "thermal")
+# « q » du modèle chargé — c'est lui qui possède cette ligne et qui donne sa
+# nature à la charge. Celle-ci est un sous-modèle : sa densité vit dans le
+# matériau, sous le nom « phi_q », et son terme se demande au modèle.
+conduction = pyrucast.model.heat_conduction(edge_fes)
+charge = pyrucast.model.flux(edge_fes, conduction, "q")
 densite = pyrucast.element_field.material_field(charge, [("phi_q", Q)])
 load = pyrucast.node_field.external_forces(charge, densite)
 rhs = load | other_loads

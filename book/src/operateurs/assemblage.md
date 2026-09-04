@@ -126,7 +126,7 @@ s'obtient sans opérateur dédié :
 {{#include ../../../tests/python/test_doc_ops_assemblage.py:somme}}
 ```
 
-## Chargement réparti : `model.flux(fespace, dual, physics)` → `Model`
+## Chargement réparti : `model.flux(fespace, target, dual)` → `Model`
 
 L'analogue de `FLUX` / `SOUR` de cast3m. Ce n'est **pas** un opérateur mais une
 **physique** : une charge répartie est un terme de la forme variationnelle comme
@@ -148,6 +148,14 @@ accumulées par nœud dans un `NodeField` — une zone par sous-espace EF — su
 ligne **duale** `dual` (par exemple `"q"` en thermique, `"f_x"` en mécanique).
 Une charge n'a pas de primale : elle écrit dans la ligne duale d'une autre
 physique et n'introduit aucune inconnue.
+
+C'est aussi pourquoi elle reçoit `target`, le **modèle qu'elle charge**. Le nom
+de la ligne duale ne dit pas à quelle nature elle appartient — l'utilisateur le
+choisit librement —, mais le modèle chargé, si : on y cherche le sous-modèle qui
+déclare cette duale, ce qui donne du même coup la nature de la charge et la
+preuve que la ligne est bien assemblée par quelqu'un. Une duale mal tapée bâtit
+alors une erreur de construction, là où elle produisait une charge muette.
+
 
 La densité vaut ce que le champ matériau y met : uniforme si on la passe en
 scalaire à `material_field`, variable par point de Gauss si on bâtit

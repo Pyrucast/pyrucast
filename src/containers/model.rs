@@ -325,7 +325,8 @@ impl SubModel {
     /// # use pyrucast::containers::model::SubModel;
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::{Physics, SubModelKind};
+    /// # use pyrucast::models::SubModelKind;
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -333,16 +334,17 @@ impl SubModel {
     /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// let charge = SubModel::flux(zone, "q".into(), Physics::Thermal)?;
+    /// # let cible = model::heat_conduction(&fes)?;
+    /// let charge = SubModel::flux(zone, &cible, "q".into())?;
     /// assert_eq!(charge.as_kind().label(), "Flux");
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn flux(
         fespace: Handle<SubFiniteElementSpace>,
+        target: &Model,
         dual: String,
-        physics: Physics,
     ) -> Result<Self> {
-        Ok(SubModel::Flux(flux::Flux::new(fespace, dual, physics)?))
+        Ok(SubModel::Flux(flux::Flux::new(fespace, target, dual)?))
     }
 
     /// Heat-conduction sub-model on an FE subspace.

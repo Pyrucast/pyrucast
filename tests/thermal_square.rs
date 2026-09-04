@@ -26,7 +26,6 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
-use pyrucast::models::Physics;
 use pyrucast::ops::mesh;
 use pyrucast::ops::model;
 use pyrucast::ops::solver::lu::solve;
@@ -87,7 +86,7 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
         left_edge.add_cell(&[grid[idx(0, j)].id(), grid[idx(0, j + 1)].id()])?;
     }
     let left_fes = FiniteElementSpace::lagrange1(&left_edge)?;
-    let model = model.union(&model::flux(&left_fes, "q".into(), Physics::Thermal)?)?;
+    let model = model.union(&model::flux(&left_fes, &model, "q".into())?)?;
 
     let materials =
         pyrucast::ops::element_field::material_field(&model, &[("k", K), ("phi_q", Q)])?;

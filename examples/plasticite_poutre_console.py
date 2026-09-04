@@ -104,7 +104,7 @@ def main():
     #    droite, en efforts nodaux cohérents. C'est un terme du modèle : il le
     #    rejoint, sa densité rejoint le matériau. ─────────────────────────────
     right_fes = pyrucast.FiniteElementSpace(right_edge)
-    model = model | pyrucast.model.flux(right_fes, "f_y", "mechanical")
+    model = model | pyrucast.model.flux(right_fes, model, "f_y")
     materials = pyrucast.element_field.material_field(
         model, [("E", young), ("nu", nu), ("sigma_y", sigma_y), ("phi_f_y", -1.0)]
     )

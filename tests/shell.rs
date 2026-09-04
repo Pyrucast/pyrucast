@@ -36,7 +36,6 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::shell::ShellModel;
-use pyrucast::models::Physics;
 use pyrucast::ops::mesh;
 use pyrucast::ops::model;
 use pyrucast::ops::solver::lu::solve;
@@ -224,7 +223,7 @@ fn membrane_stretch(formulation: ShellModel) -> Result<()> {
         edge.add_cell(&[grid[idx(n, j)].id(), grid[idx(n, j + 1)].id()])?;
     }
     let edge_fes = FiniteElementSpace::lagrange1(&edge)?;
-    model = model.union(&model::flux(&edge_fes, "f_x".into(), Physics::Mechanical)?)?;
+    model = model.union(&model::flux(&edge_fes, &model, "f_x".into())?)?;
 
     let materials = pyrucast::ops::element_field::material_field(
         &model,
@@ -479,7 +478,7 @@ fn central_deflection(
         }
     }
     // The uniform pressure, as consistent nodal loads on the surface itself.
-    model = model.union(&model::flux(&fes, "f_z".into(), Physics::Mechanical)?)?;
+    model = model.union(&model::flux(&fes, &model, "f_z".into())?)?;
 
     let materials = pyrucast::ops::element_field::material_field(
         &model,

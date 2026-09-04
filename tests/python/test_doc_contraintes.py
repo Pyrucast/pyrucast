@@ -178,7 +178,7 @@ slave = pyrucast.mesh.poi1_from_nodes([top[idx(i, 0)] for i in range(N + 1)])
 
 contact = pyrucast.model.contact(elasticite, slave, master, ["u_x", "u_y"])
 # La pression du bord supérieur est un terme du modèle, comme le contact.
-charge = pyrucast.model.flux(edge_fes, "f_y", "mechanical")
+charge = pyrucast.model.flux(edge_fes, elasticite, "f_y")
 model = elasticite | appuis | contact | charge
 materials = pyrucast.element_field.material_field(
     model, [("E", 210.0), ("nu", 0.0), ("phi_f_y", -S)]

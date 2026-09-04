@@ -19,7 +19,6 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::embedded::DEFAULT_TOL;
 use pyrucast::models::tensor::Kinematics;
-use pyrucast::models::Physics;
 use pyrucast::ops::matrix::stiffness;
 use pyrucast::ops::mesh::barycenter;
 use pyrucast::ops::model;
@@ -179,7 +178,7 @@ fn immersed_node_follows_host_displacement_field() -> Result<()> {
     let mut face = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
     face.add_cell(&[nodes[1].id(), nodes[2].id(), nodes[6].id(), nodes[5].id()])?;
     let face_fes = FiniteElementSpace::lagrange1(&face)?;
-    let model = model.union(&model::flux(&face_fes, "f_x".into(), Physics::Mechanical)?)?;
+    let model = model.union(&model::flux(&face_fes, &model, "f_x".into())?)?;
 
     let materials = pyrucast::ops::element_field::material_field(
         &model,
@@ -262,7 +261,7 @@ fn embedded_per_component_offset() -> Result<()> {
     let mut face = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
     face.add_cell(&[nodes[1].id(), nodes[2].id(), nodes[6].id(), nodes[5].id()])?;
     let face_fes = FiniteElementSpace::lagrange1(&face)?;
-    let model = model.union(&model::flux(&face_fes, "f_x".into(), Physics::Mechanical)?)?;
+    let model = model.union(&model::flux(&face_fes, &model, "f_x".into())?)?;
 
     let materials = pyrucast::ops::element_field::material_field(
         &model,

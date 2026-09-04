@@ -32,7 +32,6 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
-use pyrucast::models::Physics;
 use pyrucast::ops::mesh;
 use pyrucast::ops::model;
 use pyrucast::ops::solver::lu::solve;
@@ -290,8 +289,8 @@ fn clamped_model(
     // côté : elle le rejoint ici, sa densité rejoindra le matériau.
     model = model.union(&model::flux(
         &right_edge_fes(grid, fes)?,
+        &model,
         "f_x".into(),
-        Physics::Mechanical,
     )?)?;
     Ok(model)
 }

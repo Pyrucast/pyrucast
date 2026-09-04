@@ -101,7 +101,7 @@ def main() -> None:
     # ANCHOR: chargement_contact
     bord_haut = bord_horizontal(mesh_haut, 2.0 + G0)
     bord_haut_fes = pc.FiniteElementSpace(bord_haut)
-    modele = modele | pc.model.flux(bord_haut_fes, "f_y", "mechanical")
+    modele = modele | pc.model.flux(bord_haut_fes, modele, "f_y")
     materiaux = pc.element_field.material_field(
         modele, [("E", E), ("nu", 0.0), ("phi_f_y", -S)]
     )

@@ -20,7 +20,6 @@ use pyrucast::containers::model::Model;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::tensor::Kinematics;
-use pyrucast::models::Physics;
 use pyrucast::ops::mesh;
 use pyrucast::ops::model;
 use pyrucast::ops::solver::lu::solve;
@@ -81,7 +80,7 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
         right_edge.add_cell(&[grid[idx(N, j)].id(), grid[idx(N, j + 1)].id()])?;
     }
     let right_fes = FiniteElementSpace::lagrange1(&right_edge)?;
-    model = model.union(&model::flux(&right_fes, "f_x".into(), Physics::Mechanical)?)?;
+    model = model.union(&model::flux(&right_fes, &model, "f_x".into())?)?;
 
     let materials = pyrucast::ops::element_field::material_field(
         &model,
@@ -153,7 +152,7 @@ fn elasticity_unit_cube_uniaxial_tension() -> Result<()> {
     let mut face = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
     face.add_cell(&[nodes[1].id(), nodes[2].id(), nodes[6].id(), nodes[5].id()])?;
     let face_fes = FiniteElementSpace::lagrange1(&face)?;
-    model = model.union(&model::flux(&face_fes, "f_x".into(), Physics::Mechanical)?)?;
+    model = model.union(&model::flux(&face_fes, &model, "f_x".into())?)?;
 
     let materials = pyrucast::ops::element_field::material_field(
         &model,

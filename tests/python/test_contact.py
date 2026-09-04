@@ -78,7 +78,7 @@ def test_patch_test_uniform_pressure_through_contact():
     for i in range(N):
         top_edge.unit().add_cell([top[idx(i, N)], top[idx(i + 1, N)]])
     edge_fes = pyrucast.FiniteElementSpace(top_edge)
-    model = model | pyrucast.model.flux(edge_fes, "f_y", "mechanical")
+    model = model | pyrucast.model.flux(edge_fes, model, "f_y")
     materials = pyrucast.element_field.material_field(
         model, [("E", E), ("nu", 0.0), ("phi_f_y", -S)]
     )

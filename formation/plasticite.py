@@ -90,7 +90,7 @@ def main() -> None:
 
     # ANCHOR: chargement_evolution
     pression = -FACTEUR_CHARGE * MASSE * G / (2.0 * 3.14159265 * RAYON_TROU)
-    modele = modele | pc.model.flux(arc_fes, "f_y", "mechanical")
+    modele = modele | pc.model.flux(arc_fes, modele, "f_y")
     materiaux = pc.element_field.material_field(
         modele, [("E", E), ("nu", NU), ("sigma_y", SIGMA_Y), ("phi_f_y", pression)]
     )

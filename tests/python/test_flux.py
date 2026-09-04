@@ -24,7 +24,7 @@ def test_uniform_flux_consistent_loads_on_seg2_line():
     (a, b, d), fes = _line(2)
 
     phi, h = 3.0, 0.5
-    model = pyrucast.model.flux(fes, "q", "thermal")
+    model = pyrucast.model.flux(fes, pyrucast.model.heat_conduction(fes), "q")
     materials = pyrucast.element_field.material_field(model, [("phi_q", phi)])
     load = pyrucast.node_field.external_forces(model, materials)
 
@@ -40,7 +40,7 @@ def test_density_from_element_field_matches_the_uniform_one():
     `material_field` would have spread for us."""
     (a, _), fes = _line(1)
     phi = 7.5
-    model = pyrucast.model.flux(fes, "q", "thermal")
+    model = pyrucast.model.flux(fes, pyrucast.model.heat_conduction(fes), "q")
 
     by_hand = pyrucast.ElementField(fes, ["phi_q"])
     by_hand[0].set_uniform("phi_q", phi)
@@ -55,7 +55,7 @@ def test_a_load_contributes_to_no_matrix():
     """`∂r/∂u = 0` : a given density does not move when the solution does, so a
     load assembles to nothing."""
     _, fes = _line(1)
-    model = pyrucast.model.flux(fes, "q", "thermal")
+    model = pyrucast.model.flux(fes, pyrucast.model.heat_conduction(fes), "q")
     materials = pyrucast.element_field.material_field(model, [("phi_q", 1.0)])
 
     k = pyrucast.matrix.stiffness(model, materials)
@@ -66,7 +66,7 @@ def test_a_missing_density_is_named():
     """Forgetting the density is refused at assembly, by name — not read as a
     load of zero."""
     _, fes = _line(1)
-    model = pyrucast.model.flux(fes, "q", "thermal")
+    model = pyrucast.model.flux(fes, pyrucast.model.heat_conduction(fes), "q")
     try:
         pyrucast.element_field.material_field(model, [("k", 1.0)])
     except (ValueError, RuntimeError) as e:

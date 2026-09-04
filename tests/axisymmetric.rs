@@ -25,7 +25,6 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
 use pyrucast::models::tensor::Kinematics;
-use pyrucast::models::Physics;
 use pyrucast::ops::model;
 
 use pyrucast::handle::Handle;
@@ -312,7 +311,7 @@ fn lame_case(nr: usize, quadratic: bool) -> Result<(f64, f64)> {
         .collect();
     let mut model = model::elasticity(&fes, Kinematics::Axisymmetric)?;
     model = model.union(&clamp(&model, &ends, "u_y")?)?;
-    let model = model.union(&model::flux(&edge_fes, "f_x".into(), Physics::Mechanical)?)?;
+    let model = model.union(&model::flux(&edge_fes, &model, "f_x".into())?)?;
     let materials = pyrucast::ops::element_field::material_field(
         &model,
         &[("E", E), ("nu", NU), ("phi_f_x", P)],

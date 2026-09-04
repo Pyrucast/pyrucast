@@ -103,7 +103,7 @@ fn each_direction_carries_its_own_stiffness() -> Result<()> {
 
     // A traction along x, and one along y, applied together.
     for dual in ["f_x", "f_y"] {
-        model = model.union(&model::flux(&right, dual.into(), Physics::Mechanical)?)?;
+        model = model.union(&model::flux(&right, &model, dual.into())?)?;
     }
 
     let materials = pyrucast::ops::element_field::material_field(
@@ -224,7 +224,7 @@ fn free_face_displacement(n: usize, h: f64) -> Result<f64> {
     let bottom: Vec<Node> = (0..=n).map(|i| grid[idx(i, 0)].clone()).collect();
     model = model.union(&clamp(&model, &bottom, "u_y")?)?;
 
-    model = model.union(&model::flux(&right, "f_x".into(), Physics::Mechanical)?)?;
+    model = model.union(&model::flux(&right, &model, "f_x".into())?)?;
 
     let materials = pyrucast::ops::element_field::material_field(
         &model,

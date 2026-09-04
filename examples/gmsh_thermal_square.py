@@ -141,7 +141,7 @@ def main() -> None:
 
     # ── 3. Chargement : flux réparti sur le bord gauche + T imposée ──────────
     left_fes = pyrucast.FiniteElementSpace(left)
-    model = model | pyrucast.model.flux(left_fes, "q", "thermal")
+    model = model | pyrucast.model.flux(left_fes, model, "q")
     materials = pyrucast.element_field.material_field(model, [("k", K), ("phi_q", Q)])
     source = pyrucast.node_field.external_forces(model, materials)
 

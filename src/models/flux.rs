@@ -22,7 +22,7 @@ use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
-use crate::containers::model::SubModel;
+use crate::containers::model::{Model, SubModel};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
@@ -57,6 +57,7 @@ pub fn density_name(dual: &str) -> String {
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::models::flux::Flux;
 /// # use pyrucast::models::{Domain, MatrixKind, Physics, SubModelKind};
+/// # use pyrucast::ops::model;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -64,7 +65,9 @@ pub fn density_name(dual: &str) -> String {
 /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// let charge = Flux::new(zone, "q".into(), Physics::Thermal)?;
+/// // La cible : le modèle qu'on charge. C'est lui qui possède la ligne « q ».
+/// let cible = model::heat_conduction(&fes)?;
+/// let charge = Flux::new(zone, &cible, "q".into())?;
 /// // Une charge n'a pas de primale : elle écrit dans la ligne duale d'une
 /// // autre physique, et n'introduit aucune inconnue.
 /// assert!(charge.primal_vars().is_empty());
@@ -85,9 +88,10 @@ pub struct Flux {
 impl Flux {
     /// Build a distributed load on `fespace`, feeding the `dual` row.
     ///
-    /// `physics` is the nature the load belongs to — it cannot be deduced from
-    /// the row name, which the caller chooses freely, so it is declared, exactly
-    /// as a transfer law declares its own.
+    /// `target` is the model this load feeds. The nature of the load cannot be
+    /// deduced from the row name — the caller chooses it freely — but the model
+    /// being loaded knows it: the sub-model that declares `dual` gives both the
+    /// physics and the proof that the row is assembled by someone.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -98,6 +102,7 @@ impl Flux {
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::models::flux::Flux;
     /// # use pyrucast::models::{Physics, SubModelKind};
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -106,21 +111,25 @@ impl Flux {
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// assert!(Flux::new(zone.clone(), "q".into(), Physics::Thermal).is_ok());
+    /// # let cible = model::heat_conduction(&fes)?;
+    /// assert!(Flux::new(zone.clone(), &cible, "q".into()).is_ok());
     /// // Une ligne duale vide ne désigne rien : refusé à la construction.
-    /// assert!(Flux::new(zone, String::new(), Physics::Thermal).is_err());
+    /// assert!(Flux::new(zone.clone(), &cible, String::new()).is_err());
+    /// // Une ligne que la cible n'assemble pas non plus : c'est tout l'intérêt
+    /// // de recevoir le modèle chargé.
+    /// assert!(Flux::new(zone, &cible, "f_x".into()).is_err());
     /// // Une formulation qui possède sa propre interpolation (poutre) ne peut
     /// // pas recevoir de charge cohérente d'ici : elle seule connaît ses
     /// // fonctions de forme. Tranché à la construction, pas au point de Gauss.
     /// # use pyrucast::atoms::Interpolation;
     /// let poutre = FiniteElementSpace::new(&maillage, Interpolation::ModelEmbedded).unwrap();
-    /// assert!(Flux::new(poutre.get(0).unwrap(), "f_z".into(), Physics::Mechanical).is_err());
+    /// assert!(Flux::new(poutre.get(0).unwrap(), &cible, "q".into()).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(
         fespace: Handle<SubFiniteElementSpace>,
+        target: &Model,
         dual: String,
-        physics: Physics,
     ) -> Result<Self> {
         if dual.is_empty() {
             return Err(PyrucastError::Message(
@@ -129,6 +138,28 @@ impl Flux {
                     .into(),
             ));
         }
+        // La nature de la charge est celle du terme qu'elle charge. Le nom de la
+        // ligne ne la donne pas — l'utilisateur le choisit librement —, mais le
+        // modèle chargé, si : on cherche le sous-modèle qui possède cette duale.
+        // Une ligne que personne n'assemble bâtissait auparavant une charge
+        // muette ; c'est désormais une erreur de construction.
+        let mut physics = None;
+        for h in target {
+            let sub = h.read();
+            let kind = sub.as_kind();
+            if kind.dual_vars().iter().any(|d| *d == dual) {
+                // Une nature de tête suffit : un rayonnement déclare
+                // `[Thermal, Radiation]`, et sa charge est thermique.
+                physics = Some(kind.physics()[0]);
+                break;
+            }
+        }
+        let physics = physics.ok_or_else(|| {
+            PyrucastError::Message(format!(
+                "Flux: `{dual}` is not a dual row of the model it loads — it declares {:?}",
+                target.dual_vars()
+            ))
+        })?;
         // Une charge répartie pondère par les fonctions de forme **du champ** :
         // il lui en faut une, et c'est un fait de la zone, tranché ici une fois
         // pour toutes plutôt qu'à chaque point de Gauss. Une formulation qui
@@ -251,8 +282,13 @@ impl Domain for Flux {
 
 crate::physics_operator! {
     /// Distributed-load `Model` spanning **every** subspace of `fes`, feeding
-    /// the `dual` row; the density is supplied at assembly time, in the
-    /// material, as `phi_<dual>`.
+    /// the `dual` row of `target`; the density is supplied at assembly time, in
+    /// the material, as `phi_<dual>`.
+    ///
+    /// The subspace comes first — it is what the operator sweeps — and the
+    /// loaded model follows: a load owns no unknown of its own, so it is the
+    /// target that says which physics the row belongs to, and that the row is
+    /// assembled by someone at all.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -262,7 +298,6 @@ crate::physics_operator! {
     /// # use pyrucast::containers::model::Model;
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::Physics;
     /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
@@ -270,12 +305,14 @@ crate::physics_operator! {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
     /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// // Une charge répartie thermique, qui alimente la ligne duale « q ».
-    /// let charge = model::flux(&fes, "q".into(), Physics::Thermal)?;
+    /// // Une charge répartie sur le modèle thermique qu'elle alimente : c'est
+    /// // lui qui possède la ligne « q », et qui en donne la nature.
+    /// let conduction = model::heat_conduction(&fes)?;
+    /// let charge = model::flux(&fes, &conduction, "q".into())?;
     /// assert_eq!(charge.dual_vars(), vec!["q".to_string()]);
     /// assert!(charge.primal_vars().is_empty());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn flux(fes, dual: String, physics: Physics) via SubModel::flux;
-    python: "`model.flux(fespace, dual, physics)` — une **charge répartie** :\nles forces nodales cohérentes `∫ φ N dΓ` d'une densité donnée, versées dans\nla ligne duale `dual` (`\"q\"` pour une source de chaleur, `\"f_x\"` pour une\ntraction).\n\nMatériau : `phi_<dual>` — la densité, uniforme ou variable par point de\nGauss selon le champ fourni.\n\nSa dérivée par rapport à la solution est **nulle** : elle ne contribue à\naucune matrice, seulement au second membre, qu'on récupère par\n`node_field.external_forces(model, materials)`. C'est ce qui la distingue\nd'une physique : elle n'introduit aucune inconnue et écrit dans la ligne\nduale d'une autre."
+    pub fn flux(fes, target, dual: String) via SubModel::flux;
+    python: "`model.flux(fespace, target, dual)` — une **charge répartie** :\nles forces nodales cohérentes `∫ φ N dΓ` d'une densité donnée, versées dans\nla ligne duale `dual` (`\"q\"` pour une source de chaleur, `\"f_x\"` pour une\ntraction) du modèle `target`, qui lui donne sa nature et atteste que la\nligne est bien assemblée par quelqu'un.\n\nMatériau : `phi_<dual>` — la densité, uniforme ou variable par point de\nGauss selon le champ fourni.\n\nSa dérivée par rapport à la solution est **nulle** : elle ne contribue à\naucune matrice, seulement au second membre, qu'on récupère par\n`node_field.external_forces(model, materials)`. C'est ce qui la distingue\nd'une physique : elle n'introduit aucune inconnue et écrit dans la ligne\nduale d'une autre."
 }

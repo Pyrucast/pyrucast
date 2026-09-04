@@ -318,11 +318,7 @@ fn two_square_model(h: f64) -> Result<(Geometry, Model, ElementField)> {
     // is a term of the model, so it joins it here and its density joins the
     // material below.
     let inlet = edge(&left[0], &left[3])?;
-    let model = model.union(&model::flux(
-        &inlet,
-        format!("j_{SPECIES}"),
-        Physics::Diffusion,
-    )?)?;
+    let model = model.union(&model::flux(&inlet, &model, format!("j_{SPECIES}"))?)?;
 
     // One material field for the whole model: the squares ask for `D`, the
     // interface for `h`, the inlet for its density, and each resolves its own

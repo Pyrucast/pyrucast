@@ -87,7 +87,7 @@ def main() -> None:
     for j in range(N):
         left_edge.unit().add_cell([grid[idx(0, j)], grid[idx(0, j + 1)]])
     left_fes = pyrucast.FiniteElementSpace(left_edge)
-    model = model | pyrucast.model.flux(left_fes, "q", "thermal")
+    model = model | pyrucast.model.flux(left_fes, model, "q")
     materials = pyrucast.element_field.material_field(model, [("k", K), ("phi_q", Q)])
     source = pyrucast.node_field.external_forces(model, materials)
 

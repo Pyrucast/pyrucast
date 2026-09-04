@@ -60,7 +60,7 @@ def main():
     face = pyrucast.Mesh(c, "QUA4")
     face.unit().add_cell([nodes[1], nodes[2], nodes[6], nodes[5]])
     face_fes = pyrucast.FiniteElementSpace(face)
-    model = model | pyrucast.model.flux(face_fes, "f_x", "mechanical")
+    model = model | pyrucast.model.flux(face_fes, model, "f_x")
     materials = pyrucast.element_field.material_field(
         model, [("E", E), ("nu", NU), ("phi_f_x", S)]
     )

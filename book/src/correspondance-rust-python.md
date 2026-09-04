@@ -240,7 +240,7 @@ un sujet qu'on transforme.
 | `fick(fes: &FiniteElementSpace, species: &str) -> Model` | `fick(fespace, species, symmetry=None) -> Model` |
 | `fick_with_symmetry(fes, symmetry: MaterialSymmetry, species: &str) -> Model` | *idem, via `symmetry=`* |
 | `radiation(fes: &FiniteElementSpace) -> Model` | `radiation(fespace) -> Model` |
-| `flux(fes: &FiniteElementSpace, dual: String, physics: Physics) -> Model` | `flux(fespace, dual, physics) -> Model` |
+| `flux(fes: &FiniteElementSpace, target: &Model, dual: String) -> Model` | `flux(fespace, target, dual) -> Model` |
 | `boundary_transfer(fes, components: Vec<(String, String)>, physics: Physics) -> Model` | `boundary_transfer(fespace, components, physics) -> Model` |
 | `interface_transfer(side_a, side_b, components, physics: Physics, tol: f64) -> Model` | `interface_transfer(side_a, side_b, components, physics, tol=None) -> Model` |
 | `truss(fes: &FiniteElementSpace) -> Model` | `truss(fespace) -> Model` |

@@ -70,7 +70,7 @@ Contact;JEU;Jeu initial entre surfaces en contact;Model.contact_gaps
 Conditions limites / chargement;FORC;Force nodale appliquée;NodeField (second membre)
 Conditions limites / chargement;PRES;Chargement de pression sur une surface;—
 Conditions limites / chargement;FLUX;Flux surfacique/volumique imposé (thermique);model.flux
-Conditions limites / chargement;SOUR;Source volumique (thermique);model.flux (densité phi_q sur un volume)
+Conditions limites / chargement;SOUR;Source volumique (thermique);model.flux (cible + densité phi_q sur un volume)
 Conditions limites / chargement;CONV;Échange par convection (Robin / film);model.boundary_transfer (matrice de film h∫NiNj, coefficient h_T, ambiant a_ext_T — le terme h·T_ext sort de node_field.external_forces)
 Conditions limites / chargement;CHAR;Définit un chargement (évolution temporelle);NodeField
 Résolution;RESO;Résout un système linéaire K.u = f;solve

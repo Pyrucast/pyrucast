@@ -17,7 +17,6 @@ use pyrucast::containers::model::Model;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::tensor::Kinematics;
-use pyrucast::models::Physics;
 use pyrucast::ops::mesh;
 use pyrucast::ops::model;
 use pyrucast::ops::solver::unilateral;
@@ -141,7 +140,7 @@ fn patch_test_uniform_pressure_through_contact() -> Result<()> {
     // le matériau, et on lui demande sa contribution.
     let model = tb
         .model
-        .union(&model::flux(&top_fes, "f_y".into(), Physics::Mechanical)?)?;
+        .union(&model::flux(&top_fes, &tb.model, "f_y".into())?)?;
     let materials = pyrucast::ops::element_field::material_field(
         &model,
         &[("E", E), ("nu", 0.0), ("phi_f_y", -S)],
@@ -314,7 +313,7 @@ fn contact_3d_two_cubes() -> Result<()> {
     let mut face = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
     face.add_cell(&[top[4].id(), top[5].id(), top[6].id(), top[7].id()])?;
     let face_fes = FiniteElementSpace::lagrange1(&face)?;
-    let model = model.union(&model::flux(&face_fes, "f_z".into(), Physics::Mechanical)?)?;
+    let model = model.union(&model::flux(&face_fes, &model, "f_z".into())?)?;
 
     let materials = pyrucast::ops::element_field::material_field(
         &model,

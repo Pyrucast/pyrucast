@@ -66,7 +66,7 @@ def main() -> None:
     for j in range(N):
         right.unit().add_cell([grid[idx(N, j)], grid[idx(N, j + 1)]])
     right_fes = pyrucast.FiniteElementSpace(right)
-    model = model | pyrucast.model.flux(right_fes, "f_x", "mechanical")
+    model = model | pyrucast.model.flux(right_fes, model, "f_x")
     materials = pyrucast.element_field.material_field(
         model, [("E", E), ("nu", NU), ("phi_f_x", S)]
     )

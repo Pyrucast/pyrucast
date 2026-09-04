@@ -185,7 +185,7 @@ THERMIQUE;RAYONNEMENT FAC_A_FAC;Rayonnement face à face entre deux surfaces;—
 THERMIQUE;RAYONNEMENT CAVITE;Rayonnement d'une surface sur elle-même (options CONVEXE, FERME, SYMETRIQUE, FAC_FORME, ABSO);—;—;—
 THERMIQUE;PHASE;Changement de phase avec chaleur latente (extension non linéaire de la conduction);—;—;—
 THERMIQUE;ADVECTION;Transport de chaleur par un champ de vitesse;—;—;—
-THERMIQUE;SOURCE;Densité volumique de chaleur appliquée sur le maillage;—;—;model.flux (densité uniforme ou par champ)
+THERMIQUE;SOURCE;Densité volumique de chaleur appliquée sur le maillage;—;—;model.flux (cible + densité uniforme ou par champ)
 THERMIQUE;SOURCE GAUSSIENNE SPHERIQUE;Source gaussienne à distribution sphérique (massifs 2D/3D);—;—;—
 THERMIQUE;SOURCE GAUSSIENNE ELLIPTIQUE;Source gaussienne à distribution elliptique (massifs 2D/3D);—;—;—
 THERMIQUE;SOURCE GAUSSIENNE ELARGIE;Source gaussienne élargie (3D uniquement);—;—;—

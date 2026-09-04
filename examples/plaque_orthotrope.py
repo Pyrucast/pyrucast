@@ -87,7 +87,7 @@ def resoudre(angle_deg):
     for j in range(N):
         bord.unit().add_cell([grid[j][N], grid[j + 1][N]])
     bord_fes = pyrucast.FiniteElementSpace(bord)
-    model = model | pyrucast.model.flux(bord_fes, "f_x", "mechanical")
+    model = model | pyrucast.model.flux(bord_fes, model, "f_x")
 
     materials = pyrucast.element_field.material_field(
         model,

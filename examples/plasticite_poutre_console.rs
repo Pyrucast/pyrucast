@@ -67,7 +67,6 @@ use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::tensor::Kinematics;
-use pyrucast::models::Physics;
 use pyrucast::ops::element_field::behavior::integrate;
 use pyrucast::ops::element_field::deformation;
 use pyrucast::ops::element_field::mask;
@@ -165,8 +164,8 @@ fn main() -> Result<()> {
     let right_fes = FiniteElementSpace::lagrange1(&right_edge)?;
     let model = model.union(&pyrucast::ops::model::flux(
         &right_fes,
+        &model,
         "f_y".into(),
-        Physics::Mechanical,
     )?)?;
     let materials = material_field(
         &model,
