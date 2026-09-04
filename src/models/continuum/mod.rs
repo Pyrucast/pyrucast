@@ -379,7 +379,7 @@ impl Continuum {
             // The current Cauchy stress, Voigt-named, closed by the hoop `σ_θθ`
             // on a body of revolution — the same list `Bᵀσ` reads.
             MatrixKind::Geometric => {
-                let mut names = internal_force::stress_matrix_reads(self.space_dim);
+                let mut names = internal_force::voigt_matrix_reads("sigma", self.space_dim);
                 if self.kinematics.is_axisymmetric() {
                     names.push("sigma_zz".to_string());
                 }
@@ -677,7 +677,7 @@ impl Continuum {
         let n_nodes = geom.n_nodes;
         let d = geom.space_dim;
         let dofs = d * n_nodes;
-        // `lay.state` is the Voigt stress in `stress_matrix_reads` order, closed
+        // `lay.state` is the Voigt stress in `voigt_matrix_reads` order, closed
         // by the hoop `σ_θθ` on a body of revolution — resolved once for the zone.
         let lay = &lay.state;
         let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];

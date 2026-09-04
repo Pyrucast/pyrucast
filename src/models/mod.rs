@@ -899,7 +899,7 @@ pub trait SubModelKind: Sync {
             return Vec::new();
         };
         let space_dim = layout.fespaces[0].read().space_dim();
-        let mut names = continuum::internal_force::stress_matrix_reads(space_dim);
+        let mut names = continuum::internal_force::voigt_matrix_reads("sigma", space_dim);
         if layout.fespaces[0].read().is_axisymmetric() {
             names.push("sigma_zz".to_string());
         }

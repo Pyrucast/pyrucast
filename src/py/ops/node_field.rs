@@ -3,7 +3,6 @@
 
 use crate::handle::Handle;
 use crate::py::element_field::PyElementField;
-use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::py::mesh::PyMesh;
 use crate::py::model::PyModel;
 use crate::py::node_field::PyNodeField;
@@ -101,14 +100,20 @@ pub fn consolidate(field: PyRef<PyNodeField>) -> PyResult<PyNodeField> {
     })
 }
 
-/// Weak divergence `div F` of a per-element **vector** field — the adjoint of
-/// `gradient`: `d_i = ∫ ∇N_i · F dΩ`, accumulated per node. The field must
-/// carry exactly `space_dim` components (the vector components in order).
-/// Returns a `NodeField` with a single `"div"` component (one zone per subspace).
+/// Weak divergence of a per-element quantity named `prefix` — the adjoint of
+/// `gradient`: `d_i = ∫ ∇N_i · A dΩ`, accumulated per node.
+///
+/// The **rank is read off the names**, so one operator serves both: `A_x, A_y`
+/// is a vector and yields a single `div_A` component; `A_xx, A_xy, A_yy` is a
+/// symmetric tensor and yields one component per axis, `div_A_x, div_A_y`. The
+/// tensor case is the internal forces of a continuum when the quantity is a
+/// Cauchy stress — `divergence(stress, "sigma")` is Cast3m `BSIG` — but the
+/// operator knows nothing of mechanics: it needs only the geometry and the
+/// names. One zone per subspace.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn divergence(field: PyRef<PyElementField>) -> PyResult<PyNodeField> {
-    let nf = crate::ops::node_field::divergence(&field.inner)?;
+pub fn divergence(field: PyRef<PyElementField>, prefix: &str) -> PyResult<PyNodeField> {
+    let nf = crate::ops::node_field::divergence(&field.inner, prefix)?;
     Ok(PyNodeField { inner: nf })
 }
 
@@ -168,24 +173,6 @@ pub fn external_forces(
     materials: PyRef<PyElementField>,
 ) -> PyResult<PyNodeField> {
     let nf = crate::ops::node_field::external_forces(&model.inner, &materials.inner)?;
-    Ok(PyNodeField { inner: nf })
-}
-
-/// Internal nodal forces of a **continuum-mechanics** stress field, without a
-/// model (Cast3m `BSIG` for a plain solid).
-///
-/// Convenience for the volumetric case (elasticity, Mazars, plasticity), where
-/// `B` is the universal symmetric gradient: it needs only the geometry
-/// (`fespace`) and the Voigt stress (`sigma_xx`, `sigma_xy`, …). Returns a
-/// `NodeField` with `space_dim` components `f_x, f_y, f_z` per node. **Bars and
-/// beams are not covered** — use `internal_forces(model, state)` for those.
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-#[pyfunction]
-pub fn internal_forces_continuum(
-    stresses: PyRef<PyElementField>,
-    fespace: PyRef<PyFiniteElementSpace>,
-) -> PyResult<PyNodeField> {
-    let nf = crate::ops::node_field::internal_forces_continuum(&stresses.inner, &fespace.inner)?;
     Ok(PyNodeField { inner: nf })
 }
 
@@ -296,7 +283,7 @@ impl PyModel {
 #[pymethods]
 impl PyElementField {
     /// Voir `pyrucast.node_field.divergence`.
-    fn divergence(slf: PyRef<'_, Self>) -> PyResult<PyNodeField> {
-        super::node_field::divergence(slf)
+    fn divergence(slf: PyRef<'_, Self>, prefix: &str) -> PyResult<PyNodeField> {
+        super::node_field::divergence(slf, prefix)
     }
 }

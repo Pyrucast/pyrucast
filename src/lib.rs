@@ -295,10 +295,6 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::node_field::internal_forces, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::node_field::external_forces, m)?)?;
     m.add_function(wrap_pyfunction!(
-        py::ops::node_field::internal_forces_continuum,
-        m
-    )?)?;
-    m.add_function(wrap_pyfunction!(
         py::ops::element_field::integrate_behavior,
         m
     )?)?;

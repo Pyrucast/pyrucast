@@ -100,16 +100,16 @@ champs par éléments alors qu'elle exige une température. Ces opérations rest
 des fonctions libres seules.
 
 La ligne de partage : une **précondition structurelle** est admise
-(`triangulate_surface` veut un contour fermé, `divergence` veut autant de
-composantes que d'axes — vérifié par comptage, jamais par nom), une exigence de
-**sens porté par les noms de composantes** ne l'est pas.
+(`triangulate_surface` veut un contour fermé), une exigence de **sens porté par
+les noms de composantes** ne l'est pas — à moins que le nom cherché ne soit un
+**argument**, ce qui la rend structurelle à son tour : `divergence(field,
+"sigma")` ne promet rien sur `field`, il dit quoi y chercher.
 
 Pour tester la condition sans se tromper, lire la méthode avec un receveur
-**quelconque**, pas avec l'exemple bien nommé :
-`stresses.internal_forces_continuum(fespace)` sonne juste, mais c'est le nom de
-la variable qui fait le travail — `field.internal_forces_continuum(fespace)`
-révèle que le type ne promet rien. Son homonyme `internal_forces`, lui, a bien
-une méthode : son sujet est le **modèle**, qui promet ses physiques.
+**quelconque**, pas avec l'exemple bien nommé : `stresses.internal_forces()`
+sonnerait juste, mais c'est le nom de la variable qui ferait le travail —
+`field.internal_forces()` révèle que le type ne promet rien. Son sujet est le
+**modèle**, qui promet ses physiques, et c'est là que la méthode vit.
 
 ```python
 {{#include ../../tests/python/test_doc_conventions.py:chainage}}

@@ -73,7 +73,6 @@ __all__ = [
     "integrate_behavior",
     "interface_transfer",
     "internal_forces",
-    "internal_forces_continuum",
     "interp_to_gauss",
     "invert",
     "line",
@@ -615,7 +614,7 @@ class ElementField:
         r"""
         Voir `pyrucast.field.rename_component`.
         """
-    def divergence(self) -> NodeField:
+    def divergence(self, prefix: builtins.str) -> NodeField:
         r"""
         Voir `pyrucast.node_field.divergence`.
         """
@@ -3121,12 +3120,18 @@ def displace(field: NodeField, components: typing.Optional[typing.Sequence[built
     `["ux", "uy", "uz"][:dim]`. Mutates the field's `Coords` in place.
     """
 
-def divergence(field: ElementField) -> NodeField:
+def divergence(field: ElementField, prefix: builtins.str) -> NodeField:
     r"""
-    Weak divergence `div F` of a per-element **vector** field — the adjoint of
-    `gradient`: `d_i = ∫ ∇N_i · F dΩ`, accumulated per node. The field must
-    carry exactly `space_dim` components (the vector components in order).
-    Returns a `NodeField` with a single `"div"` component (one zone per subspace).
+    Weak divergence of a per-element quantity named `prefix` — the adjoint of
+    `gradient`: `d_i = ∫ ∇N_i · A dΩ`, accumulated per node.
+    
+    The **rank is read off the names**, so one operator serves both: `A_x, A_y`
+    is a vector and yields a single `div_A` component; `A_xx, A_xy, A_yy` is a
+    symmetric tensor and yields one component per axis, `div_A_x, div_A_y`. The
+    tensor case is the internal forces of a continuum when the quantity is a
+    Cauchy stress — `divergence(stress, "sigma")` is Cast3m `BSIG` — but the
+    operator knows nothing of mechanics: it needs only the geometry and the
+    names. One zone per subspace.
     """
 
 def drucker_prager(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
@@ -3254,12 +3259,13 @@ def fick(fespace: FiniteElementSpace, species: builtins.str, symmetry: typing.Op
     medium, not to what diffuses through it.
     """
 
-def flux(fespace: FiniteElementSpace, dual: builtins.str, physics: builtins.str) -> Model:
+def flux(fespace: FiniteElementSpace, target: Model, dual: builtins.str) -> Model:
     r"""
-    `model.flux(fespace, dual, physics)` — une **charge répartie** :
+    `model.flux(fespace, target, dual)` — une **charge répartie** :
     les forces nodales cohérentes `∫ φ N dΓ` d'une densité donnée, versées dans
     la ligne duale `dual` (`"q"` pour une source de chaleur, `"f_x"` pour une
-    traction).
+    traction) du modèle `target`, qui lui donne sa nature et atteste que la
+    ligne est bien assemblée par quelqu'un.
     
     Matériau : `phi_<dual>` — la densité, uniforme ou variable par point de
     Gauss selon le champ fourni.
@@ -3501,18 +3507,6 @@ def internal_forces(model: Model, state: ElementField, solution: NodeField, mate
     `u` reads it directly — a boundary transfer's `∫ h·a·N` has no law to go
     through — and a constraint draws its reaction `Cᵀ λ` from it, spread over the
     constrained nodes by the relation's coefficients.
-    """
-
-def internal_forces_continuum(stresses: ElementField, fespace: FiniteElementSpace) -> NodeField:
-    r"""
-    Internal nodal forces of a **continuum-mechanics** stress field, without a
-    model (Cast3m `BSIG` for a plain solid).
-    
-    Convenience for the volumetric case (elasticity, Mazars, plasticity), where
-    `B` is the universal symmetric gradient: it needs only the geometry
-    (`fespace`) and the Voigt stress (`sigma_xx`, `sigma_xy`, …). Returns a
-    `NodeField` with `space_dim` components `f_x, f_y, f_z` per node. **Bars and
-    beams are not covered** — use `internal_forces(model, state)` for those.
     """
 
 def interp_to_gauss(field: NodeField, fespace: FiniteElementSpace) -> ElementField:

@@ -92,9 +92,14 @@ def _solve_thermal(model, materials, fes, c, grid):
         _uniform_temperature(c, grid, fes, T_REF + DT), materials, fes, T_REF
     )
     sig_th = pyrucast.element_field.integrate_behavior(model, eps_th, materials)
-    # Une **charge**, pas un résidu : le Bᵀ continu appliqué à une contrainte
-    # prescrite, donc l'opérateur sans modèle.
-    f_th = pyrucast.node_field.internal_forces_continuum(sig_th, fes)
+    # Une **charge**, pas un résidu : la divergence du tenseur prescrit, donc
+    # l'opérateur géométrique. On renomme ensuite en lignes duales — c'est là,
+    # et seulement là, que ces nombres deviennent des forces.
+    f_th = (
+        pyrucast.node_field.divergence(sig_th, "sigma")
+        .rename_component("div_sigma_x", "f_x")
+        .rename_component("div_sigma_y", "f_y")
+    )
     solution = pyrucast.solver.solve(pyrucast.matrix.stiffness(model, materials), f_th)
     u = _displacement(solution, c, grid)
     sigma = pyrucast.element_field.integrate_behavior(

@@ -64,7 +64,13 @@ def _thermal_load(model, materials, eps_th, fes):
     forms `Σ f_int` from a solution.
     """
     sig_th = pyrucast.element_field.integrate_behavior(model, eps_th, materials)
-    return pyrucast.node_field.internal_forces_continuum(sig_th, fes)
+    # La divergence du tenseur, renommée en lignes duales : l'opérateur est
+    # géométrique, c'est ici qu'on dit que ce sont des forces.
+    return (
+        pyrucast.node_field.divergence(sig_th, "sigma")
+        .rename_component("div_sigma_x", "f_x")
+        .rename_component("div_sigma_y", "f_y")
+    )
 
 
 def _displacement(solution, c, grid):

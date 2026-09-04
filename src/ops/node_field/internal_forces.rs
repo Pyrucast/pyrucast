@@ -28,19 +28,16 @@ use crate::aggregate::Aggregate;
 use crate::atoms::{ElementType, NodeId};
 use crate::containers::element_field::ElementField;
 use crate::containers::field::SubField;
-use crate::containers::finite_element_space::FiniteElementSpace;
 use crate::containers::mesh::SubMesh;
 use crate::containers::model::Model;
 use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
-use crate::models::continuum::internal_force::continuum_internal_force_element;
 use crate::models::kernel;
 use crate::models::ResidualContribution;
 
 /// Axis suffixes for the displacement/force components of the model-free
 /// continuum operator (`f_x`, `f_y`, `f_z`).
-const AXES: [&str; 3] = ["x", "y", "z"];
 
 /// Internal nodal forces of `model` — the left side of `Σ f_int = Σ f_ext`
 /// (Cast3m `BSIG` for a continuum).
@@ -257,87 +254,6 @@ fn reaction(kind: &dyn crate::models::SubModelKind, solution: &NodeField) -> Res
     Ok(out)
 }
 
-/// Internal nodal forces `f = ∫ Bᵀ σ dΩ` of a **continuum-mechanics** stress
-/// field, **without a model** (Cast3m `BSIG` for a plain solid).
-///
-/// A convenience for the volumetric case (elasticity, Mazars, plasticity), where
-/// `B` is the universal symmetric gradient and the DOFs are always a
-/// displacement: it applies the same continuum kernel as
-/// [`crate::models::SubModelKind::internal_force_element`]'s default, so it needs only
-/// the geometry (`fespace`) and the Voigt stress (`sigma_xx`, `sigma_xy`, …).
-/// Each subspace of `fespace` is paired with its stress sub-field; the result
-/// carries `space_dim` components `f_x, f_y, f_z` per node.
-///
-/// Bars and beams are **not** covered — their `B` is not the symmetric gradient
-/// and their DOFs are not a displacement vector, so use
-/// [`internal_forces`] (which dispatches per physics) for those.
-///
-/// ```
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::element_field::ElementField;
-/// # use pyrucast::containers::field::SubField;
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::containers::model::Model;
-/// # use pyrucast::containers::node_field::NodeField;
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::tensor::Kinematics;
-/// # use pyrucast::ops::{element_field, geom, mesh, node_field};
-/// # let coords = Handle::new(Coords::new(2).unwrap());
-/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
-/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-/// # let maillage = Mesh::from_submesh(sm);
-/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-/// # let zone = fes.get(0).unwrap();
-/// # let support = mesh::poi1_from_nodes(&n).unwrap();
-/// // ∫ Bᵀσ dΩ : le résidu mécanique. Un état de contrainte uniforme donne
-/// // des forces nodales de **somme nulle** — l'équilibre global.
-/// # let mut s = ElementField::new(&fes,
-/// #     vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_xy".into()])?;
-/// # s.get(0)?.write().set_uniform("sigma_xx", 100.0)?;
-/// let f = node_field::internal_forces_continuum(&s, &fes)?;
-/// let total: f64 = (0..3)
-///     .map(|i| f.get(0).unwrap().read().value(n[i].id(), "f_x").unwrap())
-///     .sum();
-/// assert!(total.abs() < 1e-9);
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn internal_forces_continuum(
-    stresses: &ElementField,
-    fespace: &FiniteElementSpace,
-) -> Result<NodeField> {
-    let mut out = NodeField::empty();
-    for sub in fespace {
-        let (submesh, space_dim) = {
-            let s = sub.read();
-            (s.submesh(), s.space_dim())
-        };
-        let support = submesh.read().to_poi1()?;
-        let dual_vars: Vec<String> = (0..space_dim).map(|a| format!("f_{}", AXES[a])).collect();
-        let stress = stresses.sub_for_fespace(sub)?;
-        let stress_guard = stress.read();
-        // Resolved once for the zone, before the parallel region.
-        let mut names = crate::models::continuum::internal_force::stress_matrix_reads(space_dim);
-        if sub.read().is_axisymmetric() {
-            names.push("sigma_zz".to_string());
-        }
-        let refs: Vec<&str> = names.iter().map(String::as_str).collect();
-        let lay = stress_guard.resolve_components(&refs, "stress")?;
-        let sub_nf = kernel::scatter_to_nodes(
-            std::slice::from_ref(sub),
-            &support,
-            dual_vars,
-            |geoms, fe| continuum_internal_force_element(geoms, &stress_guard, &lay, fe),
-        )?;
-        out.add_sub(Handle::new(sub_nf))?;
-    }
-    Ok(out)
-}
-
 // ─── Unit tests ────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -404,10 +320,12 @@ mod tests {
         }
     }
 
-    /// The model-free continuum variant reproduces the model-based operator on a
-    /// solid (elasticity), node for node.
+    /// Les forces internes d'un solide **sont** la divergence de son tenseur des
+    /// contraintes : l'opérateur de modèle et l'opérateur purement géométrique
+    /// donnent les mêmes nombres, nœud par nœud. C'est ce qui justifie qu'il
+    /// n'y en ait qu'un des deux à connaître la mécanique.
     #[test]
-    fn continuum_variant_matches_model_based() {
+    fn internal_forces_are_the_divergence_of_the_stress() {
         let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
@@ -437,14 +355,14 @@ mod tests {
         let stress = integrate(&model, &strain, None, &materials, None).unwrap();
 
         let via_model = internal_forces(&model, &stress, &u, &materials).unwrap();
-        let via_fespace = internal_forces_continuum(&stress, &fes).unwrap();
+        let via_divergence = crate::ops::node_field::divergence(&stress, "sigma").unwrap();
 
         let m = via_model.view().unwrap();
-        let f = via_fespace.view().unwrap();
+        let d = via_divergence.view().unwrap();
         let tol = 1e-12;
         for nid in [a.id(), b.id(), c.id()] {
-            for comp in ["f_x", "f_y"] {
-                assert!((m.value(nid, comp).unwrap() - f.value(nid, comp).unwrap()).abs() < tol);
+            for (force, div) in [("f_x", "div_sigma_x"), ("f_y", "div_sigma_y")] {
+                assert!((m.value(nid, force).unwrap() - d.value(nid, div).unwrap()).abs() < tol);
             }
         }
     }

@@ -162,7 +162,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | Rust (`ops::node_field::…`) | Python (`pyrucast.node_field.…`) |
 |---|---|
 | `positions(mesh: &Mesh, components: Option<Vec<String>>) -> NodeField` | `positions(mesh, components=None) -> NodeField` |
-| `divergence(field: &ElementField) -> NodeField` | `divergence(field) -> NodeField` |
+| `divergence(field: &ElementField, prefix: &str) -> NodeField` | `divergence(field, prefix) -> NodeField` |
 | `restrict(field: &NodeField, mesh: &Mesh) -> NodeField` | `restrict(field, mesh) -> NodeField` |
 | `restrict_like(field: &NodeField, target: &NodeField) -> NodeField` | `restrict_like(field, target) -> NodeField` |
 | `merge(a: &NodeField, b: &NodeField) -> NodeField` | `merge(a, b) -> NodeField` |
@@ -170,7 +170,6 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `mask(field: &NodeField, band: &Band, …) -> NodeField` | `mask(field, ge=None, gt=None, le=None, lt=None, components=None) -> NodeField` (champ `0/1` de même structure ; sucre `field >= x`). Accepte aussi un `SubNodeField` |
 | `internal_forces(model: &Model, state: &ElementField) -> NodeField` | `internal_forces(model, state) -> NodeField` |
 | `external_forces(model: &Model, materials: &ElementField) -> NodeField` | `external_forces(model, materials) -> NodeField` |
-| `internal_forces_continuum(stresses: &ElementField, fespace: &FiniteElementSpace) -> NodeField` | `internal_forces_continuum(stresses, fespace) -> NodeField` |
 
 `flux` et `internal_forces` (`BSIG`, `∫ Bᵀ σ`) sont des **assemblages**,
 mais leur résultat est un vecteur nodal et non un opérateur : on se range

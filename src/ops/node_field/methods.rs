@@ -8,10 +8,8 @@
 //! définition.
 //!
 //! Ne sont **pas** exposés ici, faute de sens pour toute instance du type :
-//! `internal_forces` et `internal_forces_continuum` (elles lisent la contrainte
-//! de Voigt par nom : `sigma_xx`, `sigma_zz`, …), `external_forces` (son sujet
-//! est le modèle, pas un champ), et `merge`, qui est symétrique — `a | b` est
-//! déjà sa forme.
+//! `internal_forces` et `external_forces` (leur sujet est le modèle, pas un
+//! champ), et `merge`, qui est symétrique — `a | b` est déjà sa forme.
 
 use crate::containers::element_field::ElementField;
 use crate::containers::mesh::Mesh;
@@ -37,8 +35,8 @@ impl NodeField {
 
 impl ElementField {
     /// Voir [`node_field::divergence`](fn@crate::ops::node_field::divergence).
-    pub fn divergence(&self) -> Result<NodeField> {
-        crate::ops::node_field::divergence(self)
+    pub fn divergence(&self, prefix: &str) -> Result<NodeField> {
+        crate::ops::node_field::divergence(self, prefix)
     }
 }
 

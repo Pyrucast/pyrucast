@@ -64,7 +64,6 @@ pyrucast.model.plasticity_isotropic
 pyrucast.model.viscoplasticity_chaboche
 pyrucast.model.viscoplasticity_lemaitre_chaboche
 pyrucast.node_field.divergence
-pyrucast.node_field.internal_forces_continuum
 pyrucast.node_field.restrict
 pyrucast.node_field.restrict_like
 pyrucast.thermomechanics.mechanical_step

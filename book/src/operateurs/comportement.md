@@ -119,12 +119,19 @@ l'unique soustraction vit chez l'appelant. De quel côté un terme se range est
 une question de physique — le côté du signe égal où il se trouve — et non de
 comptabilité.
 
-### `internal_forces_continuum(stresses, fespace)` → `NodeField`
+### Sans modèle, ce sont des divergences
 
-Variante **sans modèle** pour le cas **continu** (élasticité, Mazars,
-plasticité), où `B` est le gradient symétrique universel et les DDL sont toujours
-un déplacement : elle ne demande que la géométrie (`fespace`) et la contrainte en
-notation de Voigt (`sigma_xx`, `sigma_xy`…), et renvoie `space_dim` composantes
-`f_x, f_y, f_z` par nœud. **Barres et poutres ne sont pas couvertes** — leur `B`
-n'est pas le gradient symétrique — : utiliser `internal_forces(model, state)`
-pour celles-ci.
+Il n'y a **pas** de variante sans modèle des forces internes, et c'est voulu :
+privée de son modèle, l'opération ne connaît plus aucune mécanique. Il lui reste
+la géométrie et des noms, et sous ce jour `∫ Bᵀ σ` est exactement la
+**divergence du tenseur des contraintes** — une divergence faible par ligne de
+`σ`. C'est donc [`divergence(field, "sigma")`](champs.md) qui la rend, avec des
+composantes `div_sigma_x, div_sigma_y…` que l'appelant renomme en lignes duales
+s'il veut en faire des forces.
+
+Ce renommage n'est pas une formalité administrative : c'est l'endroit, et le
+seul, où ces nombres deviennent de la mécanique.
+
+**Barres et poutres ne sont pas couvertes** par cette voie — leur `B` n'est pas
+le gradient symétrique et leurs DDL ne sont pas un déplacement : pour elles,
+`internal_forces(model, …)`, qui répartit par physique.

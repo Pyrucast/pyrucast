@@ -32,7 +32,7 @@ pub mod restrict;
 pub use consolidate::consolidate;
 pub use divergence::divergence;
 pub use external_forces::external_forces;
-pub use internal_forces::{internal_forces, internal_forces_continuum};
+pub use internal_forces::internal_forces;
 pub use mask::{mask, mask_sub};
 pub use merge::merge;
 pub use positions::positions;

@@ -60,7 +60,7 @@ Assemblage matrices;COND;Matrice de conductivité (thermique);stiffness (heat_co
 Assemblage matrices;CAPA;Matrice de capacité thermique;mass (heat_conduction)
 Assemblage matrices;AMOR;Matrice d'amortissement;—
 Assemblage matrices;KSIG;Matrice de rigidité géométrique (précontrainte);geometric
-Assemblage matrices;BSIG;Forces internes nodales (B^T . sigma);internal_forces / internal_forces_continuum
+Assemblage matrices;BSIG;Forces internes nodales (B^T . sigma);internal_forces (avec modèle) / divergence(champ, "sigma") (sans)
 Conditions limites / chargement;BLOQ;Blocage de degrés de liberté (Dirichlet);model.dirichlet
 Conditions limites / chargement;DEPI;Impose une valeur (déplacement) à un blocage;flux / second membre Dirichlet
 Conditions limites / chargement;RELA;Relation linéaire entre DDL;model.mpc

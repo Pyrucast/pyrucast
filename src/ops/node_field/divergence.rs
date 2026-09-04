@@ -23,8 +23,12 @@ use crate::containers::field::SubField;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
+use crate::models::continuum::internal_force::{
+    continuum_internal_force_element, voigt_matrix_reads,
+};
 use crate::models::kernel::MAX_CELL_DOFS;
 use crate::models::kernel::{self, CellGeom};
+use crate::ops::element_field::gradient::AXES;
 
 /// Weak divergence `div F` of a per-element vector `field` (see the module
 /// docs), as a [`NodeField`] — one zone per input subspace, component `"div"`.
@@ -61,53 +65,103 @@ use crate::models::kernel::{self, CellGeom};
 /// // ne sort par un nœud entre y par un autre.
 /// # let mut q = ElementField::new(&fes, vec!["q_x".into(), "q_y".into()])?;
 /// # q.get(0)?.write().set_uniform("q_x", 1.0)?;
-/// let d = node_field::divergence(&q)?;
-/// assert_eq!(d.get(0)?.read().components(), &["div".to_string()]);
+/// let d = node_field::divergence(&q, "q")?;
+/// assert_eq!(d.get(0)?.read().components(), &["div_q".to_string()]);
 /// let total: f64 = (0..3)
-///     .map(|i| d.get(0).unwrap().read().value(n[i].id(), "div").unwrap())
+///     .map(|i| d.get(0).unwrap().read().value(n[i].id(), "div_q").unwrap())
 ///     .sum();
 /// assert!(total.abs() < 1e-12);
+///
+/// // Le **même** opérateur sur une grandeur tensorielle : le préfixe suffit à
+/// // trancher le rang, `sigma_xx` n'étant pas `sigma_x`. La divergence d'un
+/// // tenseur est un vecteur, donc une composante par axe.
+/// # let mut sig = ElementField::new(&fes,
+/// #     vec!["sigma_xx".into(), "sigma_xy".into(), "sigma_yy".into()])?;
+/// # sig.get(0)?.write().set_uniform("sigma_xx", 100.0)?;
+/// let ds = node_field::divergence(&sig, "sigma")?;
+/// assert_eq!(
+///     ds.get(0)?.read().components(),
+///     &["div_sigma_x".to_string(), "div_sigma_y".to_string()]
+/// );
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn divergence(field: &ElementField) -> Result<NodeField> {
+pub fn divergence(field: &ElementField, prefix: &str) -> Result<NodeField> {
     let mut out = NodeField::empty();
     for sub in field {
-        out.add_sub(Handle::new(subspace_divergence(sub)?))?;
+        out.add_sub(Handle::new(subspace_divergence(sub, prefix)?))?;
     }
     Ok(out)
 }
 
 /// Weak divergence on a single subspace, via the `Bᵀ` driver.
-fn subspace_divergence(field: &Handle<SubElementField>) -> Result<SubNodeField> {
+///
+/// The rank is read off the **names**: `A_x, A_y` is a vector, `A_xx, A_xy,
+/// A_yy` a symmetric tensor. Nothing is counted and nothing is positional, so
+/// the two never collide — not even in 1-D, where both carry one component.
+fn subspace_divergence(field: &Handle<SubElementField>, prefix: &str) -> Result<SubNodeField> {
     let f = field.read();
     let fespace = f.support();
-    let (submesh, space_dim) = {
+    let (submesh, space_dim, axisymmetric) = {
         let s = fespace.read();
-        (s.submesh(), s.space_dim())
+        (s.submesh(), s.space_dim(), s.is_axisymmetric())
     };
-    let n_comps = f.components().len();
-    if n_comps != space_dim {
-        return Err(PyrucastError::Message(format!(
-            "divergence: the field carries {} component(s) but the FE space is {}-D — \
-             expected one vector component per axis",
-            n_comps, space_dim
-        )));
-    }
 
-    // The field guard is captured by the element closure (borrowed in place) and
-    // held across the parallel scatter.
-    // Les composantes du champ, résolues **une fois pour la zone** : le noyau
-    // ci-dessous tranche des lignes et indexe, il ne compare plus un seul nom.
-    let comps = f.components().to_vec();
-    let refs: Vec<&str> = comps.iter().map(String::as_str).collect();
-    let lay = f.resolve_components(&refs, "flux")?;
+    // Les deux jeux de noms cherchés. Sur une géométrie de révolution le tenseur
+    // porte en plus son orthoradial, en queue de liste : c'est la place que le
+    // noyau du continuum lui réserve.
+    let vector: Vec<String> = (0..space_dim)
+        .map(|a| format!("{prefix}_{}", AXES[a]))
+        .collect();
+    let mut tensor = voigt_matrix_reads(prefix, space_dim);
+    if axisymmetric {
+        tensor.push(format!("{prefix}_zz"));
+    }
+    let carries = |names: &[String]| names.iter().all(|n| f.components().contains(n));
+    let (is_vector, is_tensor) = (carries(&vector), carries(&tensor));
+
+    // Le rang se tranche **ici**, une fois pour la zone, et se transmet au noyau
+    // sous forme d'un tableau d'index — jamais un nom relu au point de Gauss.
+    let (names, duals) = match (is_vector, is_tensor) {
+        (true, false) => (vector, vec![format!("div_{prefix}")]),
+        (false, true) => (
+            tensor,
+            (0..space_dim)
+                .map(|a| format!("div_{prefix}_{}", AXES[a]))
+                .collect(),
+        ),
+        (true, true) => {
+            return Err(PyrucastError::Message(format!(
+                "divergence: the field carries both `{prefix}_{0}…` and `{prefix}_{0}{0}…`, so \
+                 the rank of `{prefix}` is ambiguous — split them into two fields",
+                AXES[0]
+            )))
+        }
+        (false, false) => {
+            return Err(PyrucastError::Message(format!(
+                "divergence: no `{prefix}` of either rank in this {space_dim}-D field — expected \
+                 the vector {vector:?} or the symmetric tensor {tensor:?}, and it carries {:?}",
+                f.components()
+            )))
+        }
+    };
+
+    let refs: Vec<&str> = names.iter().map(String::as_str).collect();
+    let lay = f.resolve_components(&refs, prefix)?;
 
     let support = submesh.read().to_poi1()?;
+    // The field guard is captured by the element closure (borrowed in place) and
+    // held across the parallel scatter.
     kernel::scatter_to_nodes(
         std::slice::from_ref(&fespace),
         &support,
-        vec!["div".to_string()],
-        |geoms, fe| divergence_element(geoms, &f, &lay, fe),
+        duals,
+        |geoms, fe| {
+            if is_vector {
+                divergence_element(geoms, &f, &lay, fe)
+            } else {
+                continuum_internal_force_element(geoms, &f, &lay, fe)
+            }
+        },
     )
 }
 
@@ -168,17 +222,17 @@ mod tests {
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 
         let a = 3.0;
-        let mut field = SubElementField::new(fes.get(0).unwrap(), vec!["Fx".into()]).unwrap();
-        field.set_uniform("Fx", a).unwrap();
+        let mut field = SubElementField::new(fes.get(0).unwrap(), vec!["F_x".into()]).unwrap();
+        field.set_uniform("F_x", a).unwrap();
         let mut ef = ElementField::empty();
         ef.add_sub(Handle::new(field)).unwrap();
 
-        let div = divergence(&ef).unwrap();
+        let div = divergence(&ef, "F").unwrap();
         let view = div.view().unwrap();
         let tol = 1e-12;
-        assert!((view.value(n0.id(), "div").unwrap() + a).abs() < tol); // −a
-        assert!(view.value(n1.id(), "div").unwrap().abs() < tol); //  0
-        assert!((view.value(n2.id(), "div").unwrap() - a).abs() < tol); // +a
+        assert!((view.value(n0.id(), "div_F").unwrap() + a).abs() < tol); // −a
+        assert!(view.value(n1.id(), "div_F").unwrap().abs() < tol); //  0
+        assert!((view.value(n2.id(), "div_F").unwrap() - a).abs() < tol); // +a
     }
 
     /// Adjoint property `⟨∇f, F⟩ = ⟨f, div F⟩` on a 2-D TRI3.
@@ -203,9 +257,9 @@ mod tests {
         let f = NodeField::from_sub(f);
 
         let mut ff =
-            SubElementField::new(fes.get(0).unwrap(), vec!["Fx".into(), "Fy".into()]).unwrap();
-        ff.set_uniform("Fx", 1.3).unwrap();
-        ff.set_uniform("Fy", -0.7).unwrap();
+            SubElementField::new(fes.get(0).unwrap(), vec!["F_x".into(), "F_y".into()]).unwrap();
+        ff.set_uniform("F_x", 1.3).unwrap();
+        ff.set_uniform("F_y", -0.7).unwrap();
         let mut ef = ElementField::empty();
         ef.add_sub(Handle::new(ff)).unwrap();
 
@@ -224,18 +278,20 @@ mod tests {
         }
 
         // ⟨f, div F⟩ over the nodes.
-        let div = divergence(&ef).unwrap();
+        let div = divergence(&ef, "F").unwrap();
         let dview = div.view().unwrap();
         let fview = f.view().unwrap();
         let mut rhs = 0.0;
         for nid in [a.id(), b.id(), c.id()] {
-            rhs += fview.value(nid, "f").unwrap() * dview.value(nid, "div").unwrap();
+            rhs += fview.value(nid, "f").unwrap() * dview.value(nid, "div_F").unwrap();
         }
         assert!((lhs - rhs).abs() < 1e-12, "adjoint: {lhs} ≠ {rhs}");
     }
 
+    /// Ni vecteur ni tenseur : `F_x` seul sur un espace 2-D ne complète aucun
+    /// des deux jeux de noms, et l'opérateur le dit plutôt que de deviner.
     #[test]
-    fn wrong_component_count_is_rejected() {
+    fn a_name_of_neither_rank_is_rejected() {
         let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
@@ -243,10 +299,10 @@ mod tests {
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
         mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        // 1 component on a 2-D space (needs 2).
-        let field = SubElementField::new(fes.get(0).unwrap(), vec!["Fx".into()]).unwrap();
+        // Une seule composante, et pas au bon rang : `F_x` seul en 2-D.
+        let field = SubElementField::new(fes.get(0).unwrap(), vec!["F_x".into()]).unwrap();
         let mut ef = ElementField::empty();
         ef.add_sub(Handle::new(field)).unwrap();
-        assert!(divergence(&ef).is_err());
+        assert!(divergence(&ef, "F").is_err());
     }
 }
