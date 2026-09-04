@@ -53,7 +53,8 @@ def main():
     mesh_first = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mult_mpc = pyrucast.mesh.barycenter(mesh_last)
     mpc = pyrucast.model.mpc(
-        [(mesh_last, "T", dual, 1.0), (mesh_first, "T", dual, -1.0)],
+        base,
+        [(mesh_last, "T", 1.0), (mesh_first, "T", -1.0)],
         mult_mpc,
     )
 

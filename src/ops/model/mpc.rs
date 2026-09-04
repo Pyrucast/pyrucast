@@ -33,6 +33,7 @@ use crate::models::RelationSense;
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -40,24 +41,12 @@ use crate::models::RelationSense;
 /// # let a = mesh::poi1_from_nodes(&n[..1])?;
 /// # let b = mesh::poi1_from_nodes(&n[1..2])?;
 /// let m = model::mpc(
-///     vec![MpcTerm::new(&a, "T".into(), "q".into(), 1.0)?,
-///          MpcTerm::new(&b, "T".into(), "q".into(), -1.0)?],
-///     &mult, None, None, RelationSense::Equality)?;
+///     vec![MpcTerm::new(&cible, &a, "T", 1.0)?,
+///          MpcTerm::new(&cible, &b, "T", -1.0)?],
+///     &mult, RelationSense::Equality)?;
 /// assert_eq!(m.len(), 1);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-pub fn mpc(
-    terms: Vec<MpcTerm>,
-    multiplier_mesh: &Mesh,
-    multiplier: Option<String>,
-    imposed_value: Option<String>,
-    sense: RelationSense,
-) -> Result<Model> {
-    single(SubModel::mpc(
-        terms,
-        multiplier_mesh,
-        multiplier,
-        imposed_value,
-        sense,
-    )?)
+pub fn mpc(terms: Vec<MpcTerm>, multiplier_mesh: &Mesh, sense: RelationSense) -> Result<Model> {
+    single(SubModel::mpc(terms, multiplier_mesh, sense)?)
 }

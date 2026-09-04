@@ -39,25 +39,19 @@ use crate::error::Result;
 /// # maitre.add_cell(&[n[0].id(), n[1].id()])?;
 /// # let master = Mesh::from_submesh(maitre);
 /// # let slave = mesh::poi1_from_nodes(&n[2..3])?;
-/// let m = model::contact(
-///     &slave, &master,
-///     vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
-///     None, None)?;
+/// # let cible = pyrucast::ops::model::elasticity(
+/// #     &FiniteElementSpace::lagrange1(&maillage)?,
+/// #     pyrucast::models::tensor::Kinematics::PlaneStress)?;
+/// let m = model::contact(&cible, &slave, &master,
+///     vec!["u_x".into(), "u_y".into()])?;
 /// assert_eq!(m.len(), 1);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn contact(
+    target: &Model,
     slave: &Mesh,
     master: &Mesh,
-    components: Vec<(String, String)>,
-    multiplier: Option<String>,
-    imposed_value: Option<String>,
+    variables: Vec<String>,
 ) -> Result<Model> {
-    single(SubModel::contact(
-        slave,
-        master,
-        components,
-        multiplier,
-        imposed_value,
-    )?)
+    single(SubModel::contact(target, slave, master, variables)?)
 }

@@ -53,7 +53,7 @@ Toutes les relations partagent la paire de variables du sous-modèle
 Signature complète :
 
 ```text
-model.contact(slave, master, components, multiplier=None, imposed_value=None)
+model.contact(target, slave, master, variables)
 # components : une paire (variable, target_dual) PAR dimension d'espace,
 #              dans l'ordre ambiant, p.ex. [("u_x","f_x"), ("u_y","f_y")]
 ```

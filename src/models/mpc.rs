@@ -68,6 +68,7 @@ use serde::{Deserialize, Serialize};
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -102,6 +103,7 @@ pub fn default_multiplier() -> String {
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -137,18 +139,20 @@ pub fn default_imposed_value() -> String {
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # use pyrucast::models::mpc::{self, Mpc, MpcTerm};
 /// # let a = mesh::poi1_from_nodes(&n[..1])?;
 /// # let b = mesh::poi1_from_nodes(&n[1..2])?;
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes)?;
 /// // « Les deux nœuds ont la même température » : Σ aₖ·uₖ = g, avec un λ
 /// // par relation.
 /// let m = Mpc::new(
-///     vec![MpcTerm::new(&a, "T".into(), "q".into(), 1.0)?,
-///          MpcTerm::new(&b, "T".into(), "q".into(), -1.0)?],
-///     &mult, None, None, RelationSense::Equality)?;
+///     vec![MpcTerm::new(&cible, &a, "T", 1.0)?,
+///          MpcTerm::new(&cible, &b, "T", -1.0)?],
+///     &mult, RelationSense::Equality)?;
 /// assert_eq!(m.relations()?.len(), 1);
 /// assert_eq!(m.relations()?[0].terms.len(), 2);
 /// assert_eq!(m.relations()?[0].imposed_value, mpc::default_imposed_value());
@@ -188,32 +192,43 @@ impl MpcTerm {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # use pyrucast::models::mpc::{self, Mpc, MpcTerm};
     /// # let a = mesh::poi1_from_nodes(&n[..1])?;
     /// # let b = mesh::poi1_from_nodes(&n[1..2])?;
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes)?;
     /// // « Les deux nœuds ont la même température » : Σ aₖ·uₖ = g, avec un λ
     /// // par relation.
     /// let m = Mpc::new(
-    ///     vec![MpcTerm::new(&a, "T".into(), "q".into(), 1.0)?,
-    ///          MpcTerm::new(&b, "T".into(), "q".into(), -1.0)?],
-    ///     &mult, None, None, RelationSense::Equality)?;
+    ///     vec![MpcTerm::new(&cible, &a, "T", 1.0)?,
+    ///          MpcTerm::new(&cible, &b, "T", -1.0)?],
+    ///     &mult, RelationSense::Equality)?;
     /// assert_eq!(m.relations()?.len(), 1);
     /// assert_eq!(m.relations()?[0].terms.len(), 2);
     /// assert_eq!(m.relations()?[0].imposed_value, mpc::default_imposed_value());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(
+        target: &crate::containers::model::Model,
         mesh: &Mesh,
-        variable: String,
-        target_dual: String,
+        variable: &str,
         coefficient: f64,
     ) -> Result<Self> {
+        // The dual row this term's reaction lands in is the target's business,
+        // read from it rather than retyped.
+        let target_dual = target.dual_of(variable).ok_or_else(|| {
+            PyrucastError::Message(format!(
+                "MpcTerm: `{variable}` is not a primal of the model it constrains — it \
+                 declares {:?}",
+                target.primal_vars()
+            ))
+        })?;
         Ok(Self {
             mesh: share(mesh)?,
-            variable,
+            variable: variable.to_string(),
             target_dual,
             coefficient,
         })
@@ -244,18 +259,20 @@ impl MpcTerm {
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # use pyrucast::models::mpc::{self, Mpc, MpcTerm};
 /// # let a = mesh::poi1_from_nodes(&n[..1])?;
 /// # let b = mesh::poi1_from_nodes(&n[1..2])?;
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes)?;
 /// // « Les deux nœuds ont la même température » : Σ aₖ·uₖ = g, avec un λ
 /// // par relation.
 /// let m = Mpc::new(
-///     vec![MpcTerm::new(&a, "T".into(), "q".into(), 1.0)?,
-///          MpcTerm::new(&b, "T".into(), "q".into(), -1.0)?],
-///     &mult, None, None, RelationSense::Equality)?;
+///     vec![MpcTerm::new(&cible, &a, "T", 1.0)?,
+///          MpcTerm::new(&cible, &b, "T", -1.0)?],
+///     &mult, RelationSense::Equality)?;
 /// assert_eq!(m.relations()?.len(), 1);
 /// assert_eq!(m.relations()?[0].terms.len(), 2);
 /// assert_eq!(m.relations()?[0].imposed_value, mpc::default_imposed_value());
@@ -307,30 +324,32 @@ impl Mpc {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # use pyrucast::models::mpc::{self, Mpc, MpcTerm};
     /// # let a = mesh::poi1_from_nodes(&n[..1])?;
     /// # let b = mesh::poi1_from_nodes(&n[1..2])?;
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes)?;
     /// // « Les deux nœuds ont la même température » : Σ aₖ·uₖ = g, avec un λ
     /// // par relation.
     /// let m = Mpc::new(
-    ///     vec![MpcTerm::new(&a, "T".into(), "q".into(), 1.0)?,
-    ///          MpcTerm::new(&b, "T".into(), "q".into(), -1.0)?],
-    ///     &mult, None, None, RelationSense::Equality)?;
+    ///     vec![MpcTerm::new(&cible, &a, "T", 1.0)?,
+    ///          MpcTerm::new(&cible, &b, "T", -1.0)?],
+    ///     &mult, RelationSense::Equality)?;
     /// assert_eq!(m.relations()?.len(), 1);
     /// assert_eq!(m.relations()?[0].terms.len(), 2);
     /// assert_eq!(m.relations()?[0].imposed_value, mpc::default_imposed_value());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn new(
-        terms: Vec<MpcTerm>,
-        multiplier_mesh: &Mesh,
-        multiplier: Option<String>,
-        imposed_value: Option<String>,
-        sense: RelationSense,
-    ) -> Result<Self> {
+    pub fn new(terms: Vec<MpcTerm>, multiplier_mesh: &Mesh, sense: RelationSense) -> Result<Self> {
+        // Derived, never overridden: `None` chose no behaviour, it chose a
+        // default, and `default_multiplier` is public for whoever needs the
+        // name. Two relations do not collide either — their DOFs differ by
+        // multiplier *node*, not by name.
+        let multiplier: Option<String> = Some(default_multiplier());
+        let imposed_value: Option<String> = Some(default_imposed_value());
         if terms.is_empty() {
             return Err(PyrucastError::Message(
                 "Mpc: at least one term is required".into(),
@@ -553,6 +572,18 @@ fn share(mesh: &Mesh) -> Result<Mesh> {
 
 #[cfg(test)]
 mod tests {
+
+    /// Une conduction sur un segment : la cible qu'une relation contraint.
+    fn cible_conduction(coords: &Handle<Coords>, a: &Node) -> crate::containers::model::Model {
+        let b = Node::create_in(coords.clone(), &[2.0]).unwrap();
+        let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+        sm.add_cell(&[a.id(), b.id()]).unwrap();
+        let fes = crate::containers::finite_element_space::FiniteElementSpace::lagrange1(
+            &Mesh::from_submesh(sm),
+        )
+        .unwrap();
+        crate::ops::model::heat_conduction(&fes).unwrap()
+    }
     use super::*;
     use crate::atoms::Node;
     use crate::containers::mesh::SubMesh;
@@ -569,7 +600,7 @@ mod tests {
         let coords = Handle::new(Coords::new(1).unwrap());
         let n = Node::create_in(coords, &[0.0]).unwrap();
         let mult = barycenter(&poi1(&n)).unwrap();
-        assert!(Mpc::new(vec![], &mult, None, None, Default::default()).is_err());
+        assert!(Mpc::new(vec![], &mult, Default::default()).is_err());
     }
 
     #[test]
@@ -583,8 +614,9 @@ mod tests {
         term_sm.add_cell(&[b.id()]).unwrap();
         let term_mesh = Mesh::from_submesh(term_sm);
         let mult = barycenter(&poi1(&a)).unwrap();
-        let term = MpcTerm::new(&term_mesh, "T".into(), "q".into(), 1.0).unwrap();
-        assert!(Mpc::new(vec![term], &mult, None, None, Default::default()).is_err());
+        let cible = cible_conduction(&a.coords(), &a);
+        let term = MpcTerm::new(&cible, &term_mesh, "T", 1.0).unwrap();
+        assert!(Mpc::new(vec![term], &mult, Default::default()).is_err());
     }
 
     #[test]
@@ -595,11 +627,12 @@ mod tests {
         let mesh_a = poi1(&a);
         let mesh_b = poi1(&b);
         let mult = barycenter(&mesh_a).unwrap();
+        let cible = cible_conduction(&a.coords(), &a);
         let terms = vec![
-            MpcTerm::new(&mesh_a, "T".into(), "q".into(), 2.0).unwrap(),
-            MpcTerm::new(&mesh_b, "T".into(), "q".into(), -3.0).unwrap(),
+            MpcTerm::new(&cible, &mesh_a, "T", 2.0).unwrap(),
+            MpcTerm::new(&cible, &mesh_b, "T", -3.0).unwrap(),
         ];
-        let mpc = Mpc::new(terms, &mult, None, None, Default::default()).unwrap();
+        let mpc = Mpc::new(terms, &mult, Default::default()).unwrap();
 
         // Default variable names.
         assert_eq!(mpc.primal_vars(), vec!["lambda_mpc".to_string()]);

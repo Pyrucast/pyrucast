@@ -75,16 +75,15 @@ fn mpc_difference_relation_recovers_linear_solution() -> Result<()> {
     model.add_sub(Handle::new(dir))?;
 
     // MPC: T(node4) − T(node0) = 1. `dual_of` finds "q" for us.
-    let dual = model.dual_of("T").expect("heat conduction declares T");
-    assert_eq!(dual, "q");
+    assert_eq!(model.dual_of("T").as_deref(), Some("q"));
     let mesh_last = poi1(&nodes[N_ELEMS])?;
     let mesh_first = poi1(&nodes[0])?;
     let mult_mpc_mesh = barycenter(&mesh_last)?;
     let terms = vec![
-        MpcTerm::new(&mesh_last, "T".into(), dual.clone(), 1.0)?,
-        MpcTerm::new(&mesh_first, "T".into(), dual, -1.0)?,
+        MpcTerm::new(&model, &mesh_last, "T", 1.0)?,
+        MpcTerm::new(&model, &mesh_first, "T", -1.0)?,
     ];
-    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, None, None, Default::default())?;
+    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, Default::default())?;
     let mpc_mult = mpc.multiplier_nodes()[0];
     model.add_sub(Handle::new(mpc))?;
 
@@ -141,10 +140,10 @@ fn a_multi_term_reaction_is_spread_by_its_coefficients() -> Result<()> {
     let mesh_mid = poi1(&nodes[N_ELEMS / 2])?;
     let mult_mpc_mesh = barycenter(&mesh_last)?;
     let terms = vec![
-        MpcTerm::new(&mesh_last, "T".into(), "q".into(), a)?,
-        MpcTerm::new(&mesh_mid, "T".into(), "q".into(), b)?,
+        MpcTerm::new(&model, &mesh_last, "T", a)?,
+        MpcTerm::new(&model, &mesh_mid, "T", b)?,
     ];
-    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, None, None, Default::default())?;
+    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, Default::default())?;
     let mpc_mult = mpc.multiplier_nodes()[0];
     let mpc_h = Handle::new(mpc);
     let mpc_h_names = mpc_h.clone();
@@ -241,8 +240,8 @@ fn single_term_mpc_matches_dirichlet() -> Result<()> {
 
         let right = poi1(&nodes[N_ELEMS])?;
         let mult_mpc = barycenter(&right)?;
-        let terms = vec![MpcTerm::new(&right, "T".into(), "q".into(), 1.0)?];
-        let mpc = SubModel::mpc(terms, &mult_mpc, None, None, Default::default())?;
+        let terms = vec![MpcTerm::new(&model, &right, "T", 1.0)?];
+        let mpc = SubModel::mpc(terms, &mult_mpc, Default::default())?;
         let nm = mpc.multiplier_nodes()[0];
         model.add_sub(Handle::new(mpc))?;
 
@@ -291,15 +290,14 @@ fn mpc_elimination_matches_lagrange() -> Result<()> {
     model.add_sub(Handle::new(dir))?;
 
     // MPC: 2·T(node4) − 1·T(node2) = 1.5 (slave = node4, master = node2).
-    let dual = model.dual_of("T").expect("heat conduction declares T");
     let mesh4 = poi1(&nodes[N_ELEMS])?;
     let mesh2 = poi1(&nodes[N_ELEMS / 2])?;
     let mult_mpc_mesh = barycenter(&mesh4)?;
     let terms = vec![
-        MpcTerm::new(&mesh4, "T".into(), dual.clone(), 2.0)?,
-        MpcTerm::new(&mesh2, "T".into(), dual, -1.0)?,
+        MpcTerm::new(&model, &mesh4, "T", 2.0)?,
+        MpcTerm::new(&model, &mesh2, "T", -1.0)?,
     ];
-    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, None, None, Default::default())?;
+    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, Default::default())?;
     let mpc_mult = mpc.multiplier_nodes()[0];
     model.add_sub(Handle::new(mpc))?;
 
@@ -377,8 +375,8 @@ fn single_term_mpc_elimination_equals_dirichlet() -> Result<()> {
 
         let right = poi1(&nodes[N_ELEMS])?;
         let mult_mpc = barycenter(&right)?;
-        let terms = vec![MpcTerm::new(&right, "T".into(), "q".into(), 1.0)?];
-        let mpc = SubModel::mpc(terms, &mult_mpc, None, None, Default::default())?;
+        let terms = vec![MpcTerm::new(&model, &right, "T", 1.0)?];
+        let mpc = SubModel::mpc(terms, &mult_mpc, Default::default())?;
         let nm = mpc.multiplier_nodes()[0];
         model.add_sub(Handle::new(mpc))?;
 
@@ -474,15 +472,14 @@ fn elimination_periodicity_constant_field() -> Result<()> {
     model.add_sub(Handle::new(dir))?;
 
     // Periodicity T(node4) − T(node0) = 0.
-    let dual = model.dual_of("T").expect("heat conduction declares T");
     let mesh4 = poi1(&nodes[N_ELEMS])?;
     let mesh0 = poi1(&nodes[0])?;
     let mult_mpc_mesh = barycenter(&mesh4)?;
     let terms = vec![
-        MpcTerm::new(&mesh4, "T".into(), dual.clone(), 1.0)?,
-        MpcTerm::new(&mesh0, "T".into(), dual, -1.0)?,
+        MpcTerm::new(&model, &mesh4, "T", 1.0)?,
+        MpcTerm::new(&model, &mesh0, "T", -1.0)?,
     ];
-    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, None, None, Default::default())?;
+    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, Default::default())?;
     let mpc_mult = mpc.multiplier_nodes()[0];
     model.add_sub(Handle::new(mpc))?;
 
@@ -525,8 +522,8 @@ fn elimination_rejects_chaining() -> Result<()> {
     // A single-term MPC on the *same* node0 — its only DOF is already a slave.
     let mesh0 = poi1(&nodes[0])?;
     let mult_mpc_mesh = barycenter(&mesh0)?;
-    let terms = vec![MpcTerm::new(&mesh0, "T".into(), "q".into(), 1.0)?];
-    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, None, None, Default::default())?;
+    let terms = vec![MpcTerm::new(&model, &mesh0, "T", 1.0)?];
+    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, Default::default())?;
     let mpc_mult = mpc.multiplier_nodes()[0];
     model.add_sub(Handle::new(mpc))?;
 
@@ -552,8 +549,8 @@ fn elimination_rejects_zero_coefficient() -> Result<()> {
 
     let mesh4 = poi1(&nodes[N_ELEMS])?;
     let mult_mpc_mesh = barycenter(&mesh4)?;
-    let terms = vec![MpcTerm::new(&mesh4, "T".into(), "q".into(), 0.0)?];
-    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, None, None, Default::default())?;
+    let terms = vec![MpcTerm::new(&model, &mesh4, "T", 0.0)?];
+    let mpc = SubModel::mpc(terms, &mult_mpc_mesh, Default::default())?;
     let mpc_mult = mpc.multiplier_nodes()[0];
     model.add_sub(Handle::new(mpc))?;
 
@@ -582,8 +579,8 @@ fn elimination_condensation_cached_then_invalidated() -> Result<()> {
 
     let right = poi1(&nodes[N_ELEMS])?;
     let mult_mpc = barycenter(&right)?;
-    let terms = vec![MpcTerm::new(&right, "T".into(), "q".into(), 1.0)?];
-    let mpc = SubModel::mpc(terms, &mult_mpc, None, None, Default::default())?;
+    let terms = vec![MpcTerm::new(&model, &right, "T", 1.0)?];
+    let mpc = SubModel::mpc(terms, &mult_mpc, Default::default())?;
     let nm = mpc.multiplier_nodes()[0];
     model.add_sub(Handle::new(mpc))?;
 

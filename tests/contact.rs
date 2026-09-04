@@ -94,12 +94,12 @@ fn two_blocks() -> Result<TwoBlocks> {
     let slave_nodes_v: Vec<Node> = (0..=N).map(|i| top[idx(i, 0)].clone()).collect();
     let slave = Mesh::from_submesh(SubMesh::poi1_from_nodes(&slave_nodes_v)?);
 
+    let elasticite = model::elasticity(&fes, Kinematics::PlaneStress)?;
     let contact = model::contact(
+        &elasticite,
         &slave,
         &master,
-        vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
-        None,
-        None,
+        vec!["u_x".into(), "u_y".into()],
     )?;
 
     // Uniaxial column: u_x = 0 everywhere, u_y = 0 on the bottom edge.
@@ -295,16 +295,12 @@ fn contact_3d_two_cubes() -> Result<()> {
     let slave_nodes: Vec<Node> = top[0..4].to_vec();
     let slave = Mesh::from_submesh(SubMesh::poi1_from_nodes(&slave_nodes)?);
 
+    let elasticite = model::elasticity(&fes, Kinematics::Full3D)?;
     let contact = model::contact(
+        &elasticite,
         &slave,
         &master,
-        vec![
-            ("u_x".into(), "f_x".into()),
-            ("u_y".into(), "f_y".into()),
-            ("u_z".into(), "f_z".into()),
-        ],
-        None,
-        None,
+        vec!["u_x".into(), "u_y".into(), "u_z".into()],
     )?;
 
     // Uniaxial column: u_x = u_y = 0 everywhere, u_z = 0 at the base.

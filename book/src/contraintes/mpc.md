@@ -49,7 +49,8 @@ L'MPC partage **une** paire de variables entre toutes ses relations, toutes deux
 Signature complète :
 
 ```text
-model.mpc(terms, multiplier_mesh, multiplier=None, imposed_value=None, sense="=")
+model.mpc(target, terms, multiplier_mesh, sense="=")
+# terms : [(maillage, variable, coefficient), …]
 # terms : liste de (mesh, variable, dual, coefficient)
 ```
 

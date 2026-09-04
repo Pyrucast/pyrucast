@@ -2947,7 +2947,7 @@ def consolidate_node(field: NodeField) -> NodeField:
     pair. `field` itself is left untouched.
     """
 
-def contact(slave: Mesh, master: Mesh, components: typing.Sequence[tuple[builtins.str, builtins.str]], multiplier: typing.Optional[builtins.str] = None, imposed_value: typing.Optional[builtins.str] = None) -> Model:
+def contact(target: Model, slave: Mesh, master: Mesh, variables: typing.Sequence[builtins.str]) -> Model:
     r"""
     `model.contact(slave, master, components, multiplier=None,
     imposed_value=None)` — node-to-surface contact (a single sub-model):
@@ -3084,7 +3084,7 @@ def deformation(u: NodeField, fespace: FiniteElementSpace) -> ElementField:
     measure for now; non-linear ones will share this shape.
     """
 
-def dirichlet(imposed_variable: builtins.str, target_dual: builtins.str, imposed_mesh: Mesh, multiplier_mesh: Mesh, multiplier: typing.Optional[builtins.str] = None, imposed_value: typing.Optional[builtins.str] = None, sense: typing.Optional[builtins.str] = None) -> Model:
+def dirichlet(target: Model, variable: builtins.str, imposed_mesh: Mesh, multiplier_mesh: Mesh, sense: typing.Optional[builtins.str] = None) -> Model:
     r"""
     `model.dirichlet(imposed_variable, target_dual, imposed_mesh,
     multiplier_mesh, multiplier=None, imposed_value=None, sense="=")` —
@@ -3093,17 +3093,24 @@ def dirichlet(imposed_variable: builtins.str, target_dual: builtins.str, imposed
     
     `imposed_variable` is the constrained primary variable (e.g. `"T"`);
     `target_dual` is the dual variable of the target physics it couples
-    into (e.g. `"q"` for heat conduction). `imposed_mesh` is the POI1 mesh
-    of constrained nodes; `multiplier_mesh` is the POI1 support of the
-    multipliers (same per-submesh cell count) — usually built from
-    `imposed_mesh` with the `barycenter` mesher. `multiplier` /
-    `imposed_value` override the derived names `lambda_<imposed_variable>` /
-    `imposed_<imposed_variable>`. The imposed value `u_d` is written by the
-    user in the load field at the multiplier node's `imposed_value`
-    component. `sense` (`"="`, `">="` or `"<="`, default `"="`) turns the
-    constraint unilateral (`u ≥ u_d` / `u ≤ u_d`) — such a model is solved
-    with `solve_unilateral`. See the model chapter of the book for the full
-    semantics.
+    `target` is the model being constrained: `variable` must be one of its
+    primals, and its dual row is read from it — the `T → q` map is the target's
+    business, not something to retype. `imposed_mesh` is the POI1 mesh of
+    constrained nodes; `multiplier_mesh` is the POI1 support of the multipliers
+    (same per-submesh cell count) — usually built from `imposed_mesh` with the
+    `barycenter` mesher. The multiplier and imposed-value names are derived,
+    `lambda_<variable>` / `imposed_<variable>`; the imposed value `u_d` is
+    written by the user in the load field at the multiplier node's
+    `imposed_<variable>` component.
+    
+    **One variable, and one only** — compose for a clamp:
+    `dirichlet(m, "u_x", …) | dirichlet(m, "u_y", …)`, the two sharing their
+    multiplier mesh, since `lambda_u_x` and `lambda_u_y` on one node are distinct
+    DOFs.
+    
+    `sense` (`"="`, `">="` or `"<="`, default `"="`) turns the constraint
+    unilateral (`u ≥ u_d` / `u ≤ u_d`) — such a model is solved with
+    `solve_unilateral`. See the model chapter of the book for the full semantics.
     """
 
 def displace(field: NodeField, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> None:
@@ -3168,7 +3175,7 @@ def elements_on(mesh: Mesh, points: Mesh, strict: builtins.bool = True) -> Mesh:
     `Coords`.
     """
 
-def embedded(immersed: Mesh, host: Mesh, components: typing.Sequence[tuple[builtins.str, builtins.str]], multipliers: typing.Optional[typing.Sequence[builtins.str]] = None, imposed_values: typing.Optional[typing.Sequence[builtins.str]] = None, tol: typing.Optional[builtins.float] = None) -> Model:
+def embedded(target: Model, immersed: Mesh, host: Mesh, variables: typing.Sequence[builtins.str], tol: typing.Optional[builtins.float] = None) -> Model:
     r"""
     `model.embedded(immersed, host, components, multipliers=None,
     imposed_values=None, tol=None)` — embedded (immersed) constraint (a
@@ -3674,7 +3681,7 @@ def merge_triangles(mesh: Mesh) -> Mesh:
     Remove the triangles from a quadrangle-dominant mesh, in pairs.
     """
 
-def mpc(terms: typing.Sequence[tuple[Mesh, builtins.str, builtins.str, builtins.float]], multiplier_mesh: Mesh, multiplier: typing.Optional[builtins.str] = None, imposed_value: typing.Optional[builtins.str] = None, sense: typing.Optional[builtins.str] = None) -> Model:
+def mpc(target: Model, terms: typing.Sequence[tuple[Mesh, builtins.str, builtins.float]], multiplier_mesh: Mesh, sense: typing.Optional[builtins.str] = None) -> Model:
     r"""
     `model.mpc(terms, multiplier_mesh, multiplier=None, imposed_value=None,
     sense="=")` — multi-point constraint (a single sub-model) imposing, per

@@ -4,7 +4,7 @@ Le cas qui motive le baignage : un nœud immergé suit les **déplacements** de
 l'interpolation volumique, en x, y **et** z. Un cube HEX8 en traction uniaxiale
 (élasticité 3-D) a le champ linéaire `u_x = (S/E)x`, `u_y = −(νS/E)y`,
 `u_z = −(νS/E)z` ; un nœud immergé au cœur, lié à l'hôte par
-`model.embedded(..., [("u_x","f_x"), ("u_y","f_y"), ("u_z","f_z")])`, retrouve ce
+`model.embedded(volume, ..., ["u_x", "u_y", "u_z"])`, retrouve ce
 champ à sa position — sans que la barre et le volume partagent de nœud.
 
 Lancer : `python examples/barre_baignee_elastique.py` (après `maturin develop`).
@@ -53,11 +53,7 @@ def main():
     pc = [0.4, 0.7, 0.2]
     p = c.add_node(pc)
     bar = pyrucast.mesh.poi1_from_nodes([p])
-    embedded = pyrucast.model.embedded(
-        bar,
-        host,
-        [("u_x", "f_x"), ("u_y", "f_y"), ("u_z", "f_z")],
-    )
+    embedded = pyrucast.model.embedded(model, bar, host, ["u_x", "u_y", "u_z"])
     model = model | embedded
 
     # Traction S sur la face x = 1 (QUA4 [1, 2, 6, 5]) → charges nodales cohérentes.

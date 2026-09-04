@@ -83,7 +83,8 @@ dual = conduction.dual_of("T")
 dirichlet = pyrucast.model.dirichlet(conduction, "T", imposed, mult)
 autre = pyrucast.mesh.poi1_from_nodes([noeuds[-1]])
 mpc = pyrucast.model.mpc(
-    [(autre, "T", dual, 1.0), (imposed, "T", dual, -1.0)],
+    conduction,
+    [(autre, "T", 1.0), (imposed, "T", -1.0)],
     pyrucast.mesh.barycenter(autre),
 )
 noeud_contraint, u_d = noeuds[0], 1.0
@@ -101,7 +102,8 @@ imposed, _ = _support_et_multiplicateur(noeuds[0])
 autre = pyrucast.mesh.poi1_from_nodes([noeuds[-1]])
 dual = pyrucast.model.heat_conduction(fes).dual_of("T")
 mpc = pyrucast.model.mpc(
-    [(autre, "T", dual, 1.0), (imposed, "T", dual, -1.0)],
+    conduction,
+    [(autre, "T", 1.0), (imposed, "T", -1.0)],
     pyrucast.mesh.barycenter(autre),
 )
 index_relation, g = 0, 1.0
@@ -174,7 +176,7 @@ for i in reversed(range(N)):
 # Esclave : nœuds du bord inférieur du bloc haut.
 slave = pyrucast.mesh.poi1_from_nodes([top[idx(i, 0)] for i in range(N + 1)])
 
-contact = pyrucast.model.contact(slave, master, [("u_x", "f_x"), ("u_y", "f_y")])
+contact = pyrucast.model.contact(elasticite, slave, master, ["u_x", "u_y"])
 # La pression du bord supérieur est un terme du modèle, comme le contact.
 charge = pyrucast.model.flux(edge_fes, "f_y", "mechanical")
 model = elasticite | appuis | contact | charge
@@ -267,7 +269,8 @@ mesh_last = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
 mesh_first = pyrucast.mesh.poi1_from_nodes([nodes[0]])
 mult_mpc = pyrucast.mesh.barycenter(mesh_last)
 mpc = pyrucast.model.mpc(
-    [(mesh_last, "T", dual, 1.0), (mesh_first, "T", dual, -1.0)],
+    conduction,
+    [(mesh_last, "T", 1.0), (mesh_first, "T", -1.0)],
     mult_mpc,
 )
 
@@ -320,7 +323,7 @@ dirichlet = pyrucast.model.dirichlet(base, "T", corner_mesh, corner_mult)
 # Nœud immergé, lié à l'hôte.
 p = c.add_node([0.3, 0.6, 0.2])
 bar = pyrucast.mesh.poi1_from_nodes([p])
-embedded = pyrucast.model.embedded(bar, host, [("T", "q")])
+embedded = pyrucast.model.embedded(base, bar, host, ["T"])
 emb_mult = embedded.multiplier_mesh().node(0, 0, 0)
 
 model = base | dirichlet | embedded

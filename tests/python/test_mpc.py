@@ -52,7 +52,8 @@ def test_mpc_difference_relation_recovers_linear_solution():
     mesh_first = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mult_mpc = pyrucast.mesh.barycenter(mesh_last)
     mpc = pyrucast.model.mpc(
-        [(mesh_last, "T", dual, 1.0), (mesh_first, "T", dual, -1.0)],
+        base,
+        [(mesh_last, "T", 1.0), (mesh_first, "T", -1.0)],
         mult_mpc,
     )
     mpc_mult = mult_mpc.node(0, 0, 0)
@@ -109,7 +110,7 @@ def test_single_term_mpc_matches_dirichlet():
         model = (
             cible
             | pyrucast.model.dirichlet(cible, "T", left, ml)
-            | pyrucast.model.mpc([(right, "T", "q", 1.0)], mm)
+            | pyrucast.model.mpc(cible, [(right, "T", 1.0)], mm)
         )
         rhs_mesh = pyrucast.Mesh(c, "POI1")
         rhs_mesh.unit().add_cell([ml.node(0, 0, 0)])
@@ -144,7 +145,8 @@ def test_constraint_rhs_helper_builds_second_member():
     mesh_first = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mult_mpc = pyrucast.mesh.barycenter(mesh_last)
     mpc = pyrucast.model.mpc(
-        [(mesh_last, "T", dual, 1.0), (mesh_first, "T", dual, -1.0)],
+        base,
+        [(mesh_last, "T", 1.0), (mesh_first, "T", -1.0)],
         mult_mpc,
     )
 
@@ -173,7 +175,8 @@ def test_constraint_rhs_by_index_matches_node_keying():
     mesh_first = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mult_mpc = pyrucast.mesh.barycenter(mesh_last)
     mpc = pyrucast.model.mpc(
-        [(mesh_last, "T", dual, 1.0), (mesh_first, "T", dual, -1.0)],
+        base,
+        [(mesh_last, "T", 1.0), (mesh_first, "T", -1.0)],
         mult_mpc,
     )
     mult = mult_mpc.node(0, 0, 0)
@@ -217,7 +220,8 @@ def test_mpc_elimination_matches_lagrange():
     mesh2 = pyrucast.mesh.poi1_from_nodes([nodes[2]])
     mult_mpc = pyrucast.mesh.barycenter(mesh4)
     mpc = pyrucast.model.mpc(
-        [(mesh4, "T", "q", 2.0), (mesh2, "T", "q", -1.0)],
+        cible,
+        [(mesh4, "T", 2.0), (mesh2, "T", -1.0)],
         mult_mpc,
     )
     mpc_mult = mult_mpc.node(0, 0, 0)

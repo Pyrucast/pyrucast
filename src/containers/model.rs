@@ -191,6 +191,7 @@ fn insert_relation_value(
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -281,6 +282,7 @@ impl SubModel {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -369,6 +371,7 @@ impl SubModel {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -404,6 +407,7 @@ impl SubModel {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -456,6 +460,7 @@ impl SubModel {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -502,6 +507,7 @@ impl SubModel {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -539,6 +545,7 @@ impl SubModel {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -577,6 +584,7 @@ impl SubModel {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -620,6 +628,7 @@ impl SubModel {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -657,6 +666,7 @@ impl SubModel {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -700,6 +710,7 @@ impl SubModel {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -735,6 +746,7 @@ impl SubModel {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -804,6 +816,7 @@ impl SubModel {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -853,6 +866,7 @@ impl SubModel {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -891,6 +905,7 @@ impl SubModel {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -934,6 +949,7 @@ impl SubModel {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -968,6 +984,7 @@ impl SubModel {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -1010,6 +1027,7 @@ impl SubModel {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -1120,6 +1138,7 @@ impl SubModel {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -1129,26 +1148,18 @@ impl SubModel {
     /// // Une relation « les deux nœuds ont la même température » : la somme
     /// // pondérée des termes vaut `g`, écrit plus tard au multiplicateur.
     /// let m = SubModel::mpc(
-    ///     vec![MpcTerm::new(&a, "T".into(), "q".into(), 1.0)?,
-    ///          MpcTerm::new(&b, "T".into(), "q".into(), -1.0)?],
-    ///     &mult, None, None, RelationSense::Equality)?;
+    ///     vec![MpcTerm::new(&cible, &a, "T", 1.0)?,
+    ///          MpcTerm::new(&cible, &b, "T", -1.0)?],
+    ///     &mult, RelationSense::Equality)?;
     /// assert_eq!(m.multiplier_nodes().len(), 1); // un λ par relation
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn mpc(
         terms: Vec<mpc::MpcTerm>,
         multiplier_mesh: &Mesh,
-        multiplier: Option<String>,
-        imposed_value: Option<String>,
         sense: RelationSense,
     ) -> Result<Self> {
-        Ok(SubModel::Mpc(mpc::Mpc::new(
-            terms,
-            multiplier_mesh,
-            multiplier,
-            imposed_value,
-            sense,
-        )?))
+        Ok(SubModel::Mpc(mpc::Mpc::new(terms, multiplier_mesh, sense)?))
     }
 
     /// Embedded (immersed) constraint sub-model: tie each node of `immersed` to
@@ -1181,6 +1192,8 @@ impl SubModel {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::elasticity(&fes, pyrucast::models::tensor::Kinematics::PlaneStress)
+    ///     .unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -1193,28 +1206,21 @@ impl SubModel {
     /// // l'interpolation de l'hôte en ce point — les poids sont les N_i, donc
     /// // des coefficients qui **varient d'un nœud à l'autre**.
     /// let m = SubModel::embedded(
-    ///     &immergee, &maillage,
-    ///     vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
-    ///     None, None, pyrucast::models::embedded::DEFAULT_TOL)?;
+    ///     &cible, &immergee, &maillage,
+    ///     vec!["u_x".into(), "u_y".into()], pyrucast::models::embedded::DEFAULT_TOL)?;
     /// assert_eq!(m.physics(), &[Physics::Constraint]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     #[allow(clippy::too_many_arguments)]
     pub fn embedded(
+        target: &Model,
         immersed: &Mesh,
         host: &Mesh,
-        components: Vec<(String, String)>,
-        multipliers: Option<Vec<String>>,
-        imposed_values: Option<Vec<String>>,
+        variables: Vec<String>,
         tol: f64,
     ) -> Result<Self> {
         Ok(SubModel::Embedded(embedded::Embedded::new(
-            immersed,
-            host,
-            components,
-            multipliers,
-            imposed_values,
-            tol,
+            target, immersed, host, variables, tol,
         )?))
     }
 
@@ -1250,6 +1256,8 @@ impl SubModel {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::elasticity(&fes, pyrucast::models::tensor::Kinematics::PlaneStress)
+    ///     .unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -1260,25 +1268,19 @@ impl SubModel {
     /// // Une relation **unilatérale** par nœud esclave, appariée à sa facette
     /// // maître la plus proche dès la construction.
     /// let m = SubModel::contact(
-    ///     &slave, &master,
-    ///     vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
-    ///     None, None)?;
+    ///     &cible, &slave, &master,
+    ///     vec!["u_x".into(), "u_y".into()])?;
     /// assert_eq!(m.multiplier_nodes().len(), 1);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn contact(
+        target: &Model,
         slave: &Mesh,
         master: &Mesh,
-        components: Vec<(String, String)>,
-        multiplier: Option<String>,
-        imposed_value: Option<String>,
+        variables: Vec<String>,
     ) -> Result<Self> {
         Ok(SubModel::Contact(contact::Contact::new(
-            slave,
-            master,
-            components,
-            multiplier,
-            imposed_value,
+            target, slave, master, variables,
         )?))
     }
 
@@ -1306,6 +1308,7 @@ impl SubModel {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -1704,6 +1707,7 @@ impl SubModel {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -1738,6 +1742,7 @@ impl SubModel {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -1775,6 +1780,7 @@ impl SubModel {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -1807,6 +1813,7 @@ impl SubModel {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -1843,6 +1850,7 @@ impl SubModel {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -1915,6 +1923,7 @@ impl SubModel {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -2116,6 +2125,8 @@ impl Model {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::elasticity(&fes, pyrucast::models::tensor::Kinematics::PlaneStress)
+    ///     .unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -2123,10 +2134,8 @@ impl Model {
     /// # maitre.add_cell(&[n[0].id(), n[1].id()])?;
     /// # let master = Mesh::from_submesh(maitre);
     /// # let slave = mesh::poi1_from_nodes(&n[2..3])?;
-    /// let contact = model::contact(
-    ///     &slave, &master,
-    ///     vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
-    ///     None, None)?;
+    /// let contact = model::contact(&cible, &slave, &master,
+    ///     vec!["u_x".into(), "u_y".into()])?;
     /// // Le second membre −g₀ du contact, prêt à unioner au chargement.
     /// assert_eq!(contact.contact_gaps()?.node_count()?, 1);
     /// // Sur un modèle sans contact, la question n'a pas de réponse.
@@ -2237,6 +2246,7 @@ impl Model {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -2385,6 +2395,7 @@ impl Model {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -2427,6 +2438,7 @@ impl Model {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -2476,6 +2488,7 @@ impl Model {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -2529,6 +2542,7 @@ impl Model {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -3110,11 +3124,12 @@ mod tests {
         let mesh_b =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&b)).unwrap());
         let mult = crate::ops::mesh::barycenter(&mesh_b).unwrap();
+        let cible = target_conduction(&a.coords(), &a);
         let terms = vec![
-            crate::models::mpc::MpcTerm::new(&mesh_b, "T".into(), "q".into(), 1.0).unwrap(),
-            crate::models::mpc::MpcTerm::new(&mesh_a, "T".into(), "q".into(), -1.0).unwrap(),
+            crate::models::mpc::MpcTerm::new(&cible, &mesh_b, "T", 1.0).unwrap(),
+            crate::models::mpc::MpcTerm::new(&cible, &mesh_a, "T", -1.0).unwrap(),
         ];
-        let model = model::mpc(terms, &mult, None, None, Default::default()).unwrap();
+        let model = model::mpc(terms, &mult, Default::default()).unwrap();
         let mult_id = mult.node(0, 0, 0).unwrap().id();
 
         let rhs = model.constraint_rhs(&[(b.id(), 2.5)]).unwrap();
@@ -3156,11 +3171,12 @@ mod tests {
         mm.add_cell(&[m1.id()]).unwrap();
         let mult = Mesh::from_submesh(mm);
 
+        let cible = target_conduction(&a.coords(), &a);
         let terms = vec![
-            crate::models::mpc::MpcTerm::new(&t1_mesh, "T".into(), "q".into(), 1.0).unwrap(),
-            crate::models::mpc::MpcTerm::new(&t2_mesh, "T".into(), "q".into(), -1.0).unwrap(),
+            crate::models::mpc::MpcTerm::new(&cible, &t1_mesh, "T", 1.0).unwrap(),
+            crate::models::mpc::MpcTerm::new(&cible, &t2_mesh, "T", -1.0).unwrap(),
         ];
-        let model = model::mpc(terms, &mult, None, None, Default::default()).unwrap();
+        let model = model::mpc(terms, &mult, Default::default()).unwrap();
 
         // `a` keys both relations → ambiguous.
         assert!(model.constraint_rhs(&[(a.id(), 1.0)]).is_err());

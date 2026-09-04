@@ -45,7 +45,7 @@ def main():
     # Nœud immergé au cœur du cube, lié à l'hôte.
     p = c.add_node([0.3, 0.6, 0.2])
     bar = pyrucast.mesh.poi1_from_nodes([p])
-    embedded = pyrucast.model.embedded(bar, host, [("T", "q")])
+    embedded = pyrucast.model.embedded(base, bar, host, ["T"])
 
     model = base | dirichlet | embedded
     materials = pyrucast.element_field.material_field(model, [("k", 1.0)])

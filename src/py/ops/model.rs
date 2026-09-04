@@ -191,30 +191,27 @@ pub fn dirichlet(
 /// solved with `solve_unilateral`. See the constraints chapter of the book.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (terms, multiplier_mesh, multiplier=None, imposed_value=None, sense=None))]
+#[pyo3(signature = (target, terms, multiplier_mesh, sense=None))]
 pub fn mpc(
     py: Python<'_>,
-    terms: Vec<(Py<PyMesh>, String, String, f64)>,
+    target: PyRef<'_, PyModel>,
+    terms: Vec<(Py<PyMesh>, String, f64)>,
     multiplier_mesh: PyRef<'_, PyMesh>,
-    multiplier: Option<String>,
-    imposed_value: Option<String>,
     sense: Option<String>,
 ) -> PyResult<PyModel> {
     let mut rust_terms = Vec::with_capacity(terms.len());
-    for (mesh, variable, target_dual, coefficient) in &terms {
+    for (mesh, variable, coefficient) in &terms {
         let mesh = mesh.borrow(py);
         rust_terms.push(MpcTerm::new(
+            &target.inner,
             &mesh.inner,
-            variable.clone(),
-            target_dual.clone(),
+            variable,
             *coefficient,
         )?);
     }
     let inner = model::mpc(
         rust_terms,
         &multiplier_mesh.inner,
-        multiplier,
-        imposed_value,
         RelationSense::parse(sense.as_deref())?,
     )?;
     Ok(PyModel { inner })
@@ -238,21 +235,19 @@ pub fn mpc(
 /// rigid tie). See the constraints chapter of the book.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (immersed, host, components, multipliers=None, imposed_values=None, tol=None))]
+#[pyo3(signature = (target, immersed, host, variables, tol=None))]
 pub fn embedded(
+    target: PyRef<'_, PyModel>,
     immersed: PyRef<'_, PyMesh>,
     host: PyRef<'_, PyMesh>,
-    components: Vec<(String, String)>,
-    multipliers: Option<Vec<String>>,
-    imposed_values: Option<Vec<String>>,
+    variables: Vec<String>,
     tol: Option<f64>,
 ) -> PyResult<PyModel> {
     let inner = model::embedded(
+        &target.inner,
         &immersed.inner,
         &host.inner,
-        components,
-        multipliers,
-        imposed_values,
+        variables,
         // Aplati à la frontière : le sous-modèle reçoit une tolérance, pas une
         // absence à tester.
         tol.unwrap_or(crate::models::embedded::DEFAULT_TOL),
@@ -279,20 +274,13 @@ pub fn embedded(
 /// with `contact_gaps()`. See the contact chapter of the book.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (slave, master, components, multiplier=None, imposed_value=None))]
+#[pyo3(signature = (target, slave, master, variables))]
 pub fn contact(
+    target: PyRef<'_, PyModel>,
     slave: PyRef<'_, PyMesh>,
     master: PyRef<'_, PyMesh>,
-    components: Vec<(String, String)>,
-    multiplier: Option<String>,
-    imposed_value: Option<String>,
+    variables: Vec<String>,
 ) -> PyResult<PyModel> {
-    let inner = model::contact(
-        &slave.inner,
-        &master.inner,
-        components,
-        multiplier,
-        imposed_value,
-    )?;
+    let inner = model::contact(&target.inner, &slave.inner, &master.inner, variables)?;
     Ok(PyModel { inner })
 }

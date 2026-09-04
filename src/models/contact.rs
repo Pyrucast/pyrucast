@@ -178,9 +178,10 @@ struct Component {
 /// # let slave = mesh::poi1_from_nodes(&n[2..3])?;
 /// // Une relation **unilatérale** par nœud esclave, appariée dès la
 /// // construction à sa facette maître la plus proche.
-/// let c = Contact::new(&slave, &master,
-///     vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
-///     None, None)?;
+/// # let cible = pyrucast::ops::model::truss(
+/// #     &FiniteElementSpace::lagrange1(&maillage)?)?;
+/// let c = Contact::new(&cible, &slave, &master,
+///     vec!["u_x".into(), "u_y".into()])?;
 /// assert_eq!(c.relations()?.len(), 1);
 /// assert_eq!(c.gaps().len(), 1);
 /// assert_eq!(c.relations()?[0].imposed_value, contact::default_imposed_value());
@@ -249,21 +250,37 @@ impl Contact {
     /// # let slave = mesh::poi1_from_nodes(&n[2..3])?;
     /// // Une relation **unilatérale** par nœud esclave, appariée dès la
     /// // construction à sa facette maître la plus proche.
-    /// let c = Contact::new(&slave, &master,
-    ///     vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
-    ///     None, None)?;
+    /// # let cible = pyrucast::ops::model::truss(
+    /// #     &FiniteElementSpace::lagrange1(&maillage)?)?;
+    /// let c = Contact::new(&cible, &slave, &master,
+    ///     vec!["u_x".into(), "u_y".into()])?;
     /// assert_eq!(c.relations()?.len(), 1);
     /// assert_eq!(c.gaps().len(), 1);
     /// assert_eq!(c.relations()?[0].imposed_value, contact::default_imposed_value());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(
+        target: &crate::containers::model::Model,
         slave: &Mesh,
         master: &Mesh,
-        components: Vec<(String, String)>,
-        multiplier: Option<String>,
-        imposed_value: Option<String>,
+        variables: Vec<String>,
     ) -> Result<Self> {
+        // The target's own names: each variable must be one of its primals,
+        // and the dual row its reaction lands in is read from it.
+        let mut components: Vec<(String, String)> = Vec::with_capacity(variables.len());
+        for v in &variables {
+            let dual = target.dual_of(v).ok_or_else(|| {
+                PyrucastError::Message(format!(
+                    "Contact: `{v}` is not a primal of the model it constrains — it declares \
+                     {:?}",
+                    target.primal_vars()
+                ))
+            })?;
+            components.push((v.clone(), dual));
+        }
+        let multiplier: Option<String> = None;
+        let imposed_value: Option<String> = None;
+
         // Slave and master must live in the same Coords (node ids are relative).
         let coords = slave.coords()?;
         let master_coords = master.coords()?;
@@ -376,9 +393,10 @@ impl Contact {
     /// # let slave = mesh::poi1_from_nodes(&n[2..3])?;
     /// // Une relation **unilatérale** par nœud esclave, appariée dès la
     /// // construction à sa facette maître la plus proche.
-    /// let c = Contact::new(&slave, &master,
-    ///     vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
-    ///     None, None)?;
+    /// # let cible = pyrucast::ops::model::truss(
+    /// #     &FiniteElementSpace::lagrange1(&maillage)?)?;
+    /// let c = Contact::new(&cible, &slave, &master,
+    ///     vec!["u_x".into(), "u_y".into()])?;
     /// assert_eq!(c.relations()?.len(), 1);
     /// assert_eq!(c.gaps().len(), 1);
     /// assert_eq!(c.relations()?[0].imposed_value, contact::default_imposed_value());
@@ -575,6 +593,15 @@ fn unique_nodes(mesh: &Mesh) -> Result<Vec<NodeId>> {
 
 #[cfg(test)]
 mod tests {
+
+    /// Une barre sur le maillage maître : la cible que le contact contraint,
+    /// dont il lit les duales. Une SEG2 dans un plan est une variété, pas un
+    /// solide — c'est une physique structurale qui y vit.
+    fn cible_mecanique(master: &Mesh) -> crate::containers::model::Model {
+        let fes =
+            crate::containers::finite_element_space::FiniteElementSpace::lagrange1(master).unwrap();
+        crate::ops::model::truss(&fes).unwrap()
+    }
     use super::*;
     use crate::atoms::{ElementType, Node};
     use crate::coords::Coords;
@@ -602,11 +629,10 @@ mod tests {
     fn relations_couple_all_components_through_the_normal() {
         let (slave, master) = seg_and_node(0.25);
         let contact = Contact::new(
+            &cible_mecanique(&master),
             &slave,
             &master,
-            vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
-            None,
-            None,
+            vec!["u_x".into(), "u_y".into()],
         )
         .unwrap();
 
@@ -645,11 +671,10 @@ mod tests {
     fn component_count_must_match_dimension() {
         let (slave, master) = seg_and_node(0.25);
         assert!(Contact::new(
+            &cible_mecanique(&master),
             &slave,
             &master,
-            vec![("u_y".into(), "f_y".into())], // 1 component in 2-D
-            None,
-            None,
+            vec!["u_y".into()], // 1 component in 2-D
         )
         .is_err());
     }

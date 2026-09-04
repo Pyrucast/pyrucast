@@ -47,7 +47,7 @@ def test_immersed_node_follows_host_interpolation():
     # Immersed node inside the cube, tied to the host.
     p = c.add_node([0.3, 0.6, 0.2])
     bar = pyrucast.mesh.poi1_from_nodes([p])
-    embedded = pyrucast.model.embedded(bar, host, [("T", "q")])
+    embedded = pyrucast.model.embedded(base, bar, host, ["T"])
     emb_mult = embedded.multiplier_mesh().node(0, 0, 0)
 
     model = base | dirichlet | embedded
@@ -80,7 +80,7 @@ def test_node_outside_host_is_rejected():
     outside = c.add_node([5.0, 5.0, 5.0])
     bar = pyrucast.mesh.poi1_from_nodes([outside])
     try:
-        pyrucast.model.embedded(bar, host, [("T", "q")])
+        pyrucast.model.embedded(model, bar, host, ["T"])
         assert False, "expected an error for a node outside the host"
     except Exception:
         pass

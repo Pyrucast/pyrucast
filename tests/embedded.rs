@@ -80,14 +80,8 @@ fn immersed_node_follows_host_interpolation() -> Result<()> {
     let mut bar_sm = SubMesh::new(coords.clone(), ElementType::POI1);
     bar_sm.add_cell(&[p.id()])?;
     let bar = Mesh::from_submesh(bar_sm);
-    let emb = SubModel::embedded(
-        &bar,
-        &host,
-        vec![("T".into(), "q".into())],
-        None,
-        None,
-        DEFAULT_TOL,
-    )?;
+    let hote = model::heat_conduction(&FiniteElementSpace::lagrange1(&host)?)?;
+    let emb = SubModel::embedded(&hote, &bar, &host, vec!["T".into()], DEFAULT_TOL)?;
     let emb_mult = emb.multiplier_nodes()[0];
     model.add_sub(Handle::new(emb))?;
 
@@ -174,15 +168,10 @@ fn immersed_node_follows_host_displacement_field() -> Result<()> {
     let p = Node::create_in(coords.clone(), &pc)?;
     let bar = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&p))?);
     model = model.union(&model::embedded(
+        &model,
         &bar,
         &host,
-        vec![
-            ("u_x".into(), "f_x".into()),
-            ("u_y".into(), "f_y".into()),
-            ("u_z".into(), "f_z".into()),
-        ],
-        None,
-        None,
+        vec!["u_x".into(), "u_y".into(), "u_z".into()],
         DEFAULT_TOL,
     )?)?;
 
@@ -258,15 +247,10 @@ fn embedded_per_component_offset() -> Result<()> {
     let p = Node::create_in(coords.clone(), &pc)?;
     let bar = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&p))?);
     let embedded = SubModel::embedded(
+        &model,
         &bar,
         &host,
-        vec![
-            ("u_x".into(), "f_x".into()),
-            ("u_y".into(), "f_y".into()),
-            ("u_z".into(), "f_z".into()),
-        ],
-        None,
-        None,
+        vec!["u_x".into(), "u_y".into(), "u_z".into()],
         DEFAULT_TOL,
     )?;
     // Per-component g via relation index (1 immersed node ⇒ index = component).

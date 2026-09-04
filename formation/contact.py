@@ -86,7 +86,8 @@ def main() -> None:
     maitre = bord_horizontal(mesh_bas, 1.0)
     esclave = pc.mesh.poi1_from_nodes([haut[idx(i, 0)] for i in range(N + 1)])
 
-    contact = pc.model.contact(esclave, maitre, [("u_x", "f_x"), ("u_y", "f_y")])
+    elasticite = pc.model.elasticity(fes, "plane_stress")
+    contact = pc.model.contact(elasticite, esclave, maitre, ["u_x", "u_y"])
     # ANCHOR_END: geometrie_contact
 
     # ANCHOR: modele_contact

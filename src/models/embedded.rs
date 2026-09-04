@@ -194,9 +194,11 @@ struct Component {
 /// // Une barre baignée dans un volume : chaque nœud immergé est lié à
 /// // l'interpolation de l'hôte, avec des poids Nᵢ **variant d'un nœud à
 /// // l'autre** — une relation par nœud et par composante.
-/// let e = Embedded::new(&immergee, &maillage,
-///     vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
-///     None, None, pyrucast::models::embedded::DEFAULT_TOL)?;
+/// # let cible = pyrucast::ops::model::elasticity(
+/// #     &FiniteElementSpace::lagrange1(&maillage)?,
+/// #     pyrucast::models::tensor::Kinematics::PlaneStress)?;
+/// let e = Embedded::new(&cible, &immergee, &maillage,
+///     vec!["u_x".into(), "u_y".into()], pyrucast::models::embedded::DEFAULT_TOL)?;
 /// assert_eq!(e.relations()?.len(), 4); // deux nœuds × deux composantes
 /// assert_eq!(e.relations()?[0].imposed_value, embedded::default_imposed_value("u_x"));
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -263,21 +265,37 @@ impl Embedded {
     /// // Une barre baignée dans un volume : chaque nœud immergé est lié à
     /// // l'interpolation de l'hôte, avec des poids Nᵢ **variant d'un nœud à
     /// // l'autre** — une relation par nœud et par composante.
-    /// let e = Embedded::new(&immergee, &maillage,
-    ///     vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
-    ///     None, None, pyrucast::models::embedded::DEFAULT_TOL)?;
+    /// # let cible = pyrucast::ops::model::elasticity(
+    /// #     &FiniteElementSpace::lagrange1(&maillage)?,
+    /// #     pyrucast::models::tensor::Kinematics::PlaneStress)?;
+    /// let e = Embedded::new(&cible, &immergee, &maillage,
+    ///     vec!["u_x".into(), "u_y".into()], pyrucast::models::embedded::DEFAULT_TOL)?;
     /// assert_eq!(e.relations()?.len(), 4); // deux nœuds × deux composantes
     /// assert_eq!(e.relations()?[0].imposed_value, embedded::default_imposed_value("u_x"));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(
+        target: &crate::containers::model::Model,
         immersed: &Mesh,
         host: &Mesh,
-        components: Vec<(String, String)>,
-        multipliers: Option<Vec<String>>,
-        imposed_values: Option<Vec<String>>,
+        variables: Vec<String>,
         tol: f64,
     ) -> Result<Self> {
+        // The target's own names: each variable must be one of its primals,
+        // and the dual row its reaction lands in is read from it.
+        let mut components: Vec<(String, String)> = Vec::with_capacity(variables.len());
+        for v in &variables {
+            let dual = target.dual_of(v).ok_or_else(|| {
+                PyrucastError::Message(format!(
+                    "Embedded: `{v}` is not a primal of the model it constrains — it declares \
+                     {:?}",
+                    target.primal_vars()
+                ))
+            })?;
+            components.push((v.clone(), dual));
+        }
+        let multipliers: Option<Vec<String>> = None;
+        let imposed_values: Option<Vec<String>> = None;
         if components.is_empty() {
             return Err(PyrucastError::Message(
                 "Embedded: at least one component is required".into(),
@@ -594,6 +612,22 @@ fn unique_nodes(mesh: &Mesh) -> Result<Vec<NodeId>> {
 
 #[cfg(test)]
 mod tests {
+
+    /// Une élasticité 3-D sur le maillage hôte : la cible que la contrainte
+    /// baignée contraint, et dont elle lit les duales.
+    fn cible_mecanique(host: &Mesh) -> crate::containers::model::Model {
+        let fes =
+            crate::containers::finite_element_space::FiniteElementSpace::lagrange1(host).unwrap();
+        crate::ops::model::elasticity(&fes, crate::models::tensor::Kinematics::Full3D).unwrap()
+    }
+
+    /// La cible d'un test dont l'hôte est une SEG2 : une barre déclare les
+    /// mêmes primales de déplacement, et c'est tout ce que la contrainte y lit.
+    fn cible_barre(host: &Mesh) -> crate::containers::model::Model {
+        let fes =
+            crate::containers::finite_element_space::FiniteElementSpace::lagrange1(host).unwrap();
+        crate::ops::model::truss(&fes).unwrap()
+    }
     use super::*;
     use crate::atoms::{ElementType, Node};
     use crate::coords::Coords;
@@ -633,7 +667,7 @@ mod tests {
     #[test]
     fn empty_components_rejected() {
         let (bar, host, _c) = hex_and_bar();
-        assert!(Embedded::new(&bar, &host, vec![], None, None, DEFAULT_TOL).is_err());
+        assert!(Embedded::new(&cible_mecanique(&host), &bar, &host, vec![], DEFAULT_TOL).is_err());
     }
 
     #[test]
@@ -650,11 +684,10 @@ mod tests {
         bsm.add_cell(&[p.id()]).unwrap();
         let bar = Mesh::from_submesh(bsm);
         assert!(Embedded::new(
+            &cible_barre(&host),
             &bar,
             &host,
-            vec![("u_x".into(), "f_x".into())],
-            None,
-            None,
+            vec!["u_x".into()],
             DEFAULT_TOL
         )
         .is_err());
@@ -664,11 +697,10 @@ mod tests {
     fn relations_have_immersed_plus_host_terms() {
         let (bar, host, _c) = hex_and_bar();
         let emb = Embedded::new(
+            &cible_mecanique(&host),
             &bar,
             &host,
-            vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
-            None,
-            None,
+            vec!["u_x".into(), "u_y".into()],
             DEFAULT_TOL,
         )
         .unwrap();

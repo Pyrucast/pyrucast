@@ -58,9 +58,9 @@ def _two_blocks():
         master.unit().add_cell([bottom[idx(i + 1, N)], bottom[idx(i, N)]])
     # Slave: bottom edge nodes of the top block.
     slave = pyrucast.mesh.poi1_from_nodes([top[idx(i, 0)] for i in range(N + 1)])
-    contact = pyrucast.model.contact(slave, master, [("u_x", "f_x"), ("u_y", "f_y")])
 
     model = pyrucast.model.elasticity(fes, "plane_stress")
+    contact = pyrucast.model.contact(model, slave, master, ["u_x", "u_y"])
     model = model | _clamp(model, bottom + top, "u_x")
     model = model | _clamp(model, [bottom[idx(i, 0)] for i in range(N + 1)], "u_y")
     model = model | contact
@@ -150,5 +150,6 @@ def test_components_must_match_dimension():
     master = pyrucast.Mesh(c, "SEG2")
     master.unit().add_cell([a, b])
     slave = pyrucast.mesh.poi1_from_nodes([s])
+    barre = pyrucast.model.truss(pyrucast.FiniteElementSpace(master))
     with pytest.raises(Exception, match="component"):
-        pyrucast.model.contact(slave, master, [("u_y", "f_y")])
+        pyrucast.model.contact(barre, slave, master, ["u_y"])

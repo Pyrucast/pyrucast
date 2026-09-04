@@ -51,13 +51,14 @@ chacune portant sa propre paire de variables (toutes **surchargeables**) :
 Signature complète :
 
 ```text
-model.embedded(immersed, host, components,
-               multipliers=None, imposed_values=None, tol=None)
-# components : liste de (variable, target_dual), p.ex. [("u_x","f_x"), ("u_y","f_y")]
+model.embedded(target, immersed, host, variables, tol=None)
+# variables : les primales à lier, p.ex. ["u_x", "u_y", "u_z"]
 ```
 
-Chaque `target_dual` se trouve avec **`Model.dual_of(variable)`**
-(`"T" → "q"`, `"u_x" → "f_x"`, …).
+La **cible** est le modèle contraint : chaque variable doit être une de ses
+primales — refusé sinon, en nommant ce qu'elle déclare — et la ligne duale où
+atterrit la réaction s'y lit. On ne redonne donc que les noms de variables,
+jamais les couples `(primale, duale)`.
 
 ## Les blocs `C` / `Cᵀ`
 

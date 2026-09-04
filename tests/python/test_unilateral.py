@@ -112,12 +112,12 @@ def test_unilateral_mpc_difference_relation():
         dir_mult = mult0.node(0, 0, 0)
 
         base = pyrucast.model.heat_conduction(fes)
-        dual = base.dual_of("T")
         mesh_last = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
         mesh_first = pyrucast.mesh.poi1_from_nodes([nodes[0]])
         mult_mpc = pyrucast.mesh.barycenter(mesh_last)
         mpc = pyrucast.model.mpc(
-            [(mesh_last, "T", dual, 1.0), (mesh_first, "T", dual, -1.0)],
+            base,
+            [(mesh_last, "T", 1.0), (mesh_first, "T", -1.0)],
             mult_mpc,
             sense=">=",
         )

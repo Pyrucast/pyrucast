@@ -206,21 +206,14 @@ fn unilateral_mpc_difference_relation() -> Result<()> {
         let dir_mult = dir.multiplier_nodes()[0];
         model.add_sub(Handle::new(dir))?;
 
-        let dual = model.dual_of("T").expect("heat conduction declares T");
         let mesh_last = poi1(&nodes[N_ELEMS])?;
         let mesh_first = poi1(&nodes[0])?;
         let mult_mpc_mesh = barycenter(&mesh_last)?;
         let terms = vec![
-            MpcTerm::new(&mesh_last, "T".into(), dual.clone(), 1.0)?,
-            MpcTerm::new(&mesh_first, "T".into(), dual, -1.0)?,
+            MpcTerm::new(&model, &mesh_last, "T", 1.0)?,
+            MpcTerm::new(&model, &mesh_first, "T", -1.0)?,
         ];
-        let mpc = SubModel::mpc(
-            terms,
-            &mult_mpc_mesh,
-            None,
-            None,
-            RelationSense::GreaterEqual,
-        )?;
+        let mpc = SubModel::mpc(terms, &mult_mpc_mesh, RelationSense::GreaterEqual)?;
         let mpc_mult = mpc.multiplier_nodes()[0];
         model.add_sub(Handle::new(mpc))?;
 
