@@ -61,7 +61,9 @@
 //! interface is a meshing problem; papering over it with a projection would be a
 //! silent source of wrong fluxes.
 
+use crate::aggregate::Aggregate;
 use crate::containers::element_field::SubElementField;
+use crate::containers::field::SubField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
@@ -70,14 +72,11 @@ use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::transfer::{
-    coefficient_name, exchange_matrix, flux_name, internal_force, jump_name, material_contract,
-    physics_slice,
+    coefficient_name, exchange_matrix, jump_name, material_contract, physics_slice,
 };
 use crate::models::ElementLayout;
-use crate::models::ZoneLayout;
 use crate::models::{
-    Behavior, CellGeom, Contribution, CouplingLayout, Domain, MatrixKind, MatrixLayout, Physics,
-    SubModelKind,
+    CellGeom, Contribution, CouplingLayout, Domain, MatrixKind, MatrixLayout, Physics, SubModelKind,
 };
 use serde::{Deserialize, Serialize};
 
@@ -197,6 +196,16 @@ impl InterfaceTransfer {
     }
 
     /// The layout of an off-diagonal block, rows on one side, columns on the other.
+    /// Une interpolation de la primale aux points d'un côté.
+    fn interp_side(
+        fes: &Handle<SubFiniteElementSpace>,
+        solution: &crate::containers::node_field::NodeField,
+    ) -> Result<Handle<SubElementField>> {
+        let mut one = crate::containers::finite_element_space::FiniteElementSpace::empty();
+        one.add_sub(fes.clone())?;
+        crate::ops::element_field::interp_to_gauss(solution, &one)?.get(0)
+    }
+
     fn coupling_layout(
         &self,
         row_fespace: &Handle<SubFiniteElementSpace>,
@@ -233,10 +242,6 @@ impl SubModelKind for InterfaceTransfer {
         Some(self)
     }
 
-    fn as_behavior(&self) -> Option<&dyn Behavior> {
-        Some(self)
-    }
-
     /// The four blocks of the exchange law — two diagonal, two coupling. Nothing
     /// but the stiffness: an interface law adds no mass, no geometric stiffness.
     fn contributions(
@@ -268,23 +273,93 @@ impl SubModelKind for InterfaceTransfer {
     /// Internal fluxes `q_i = ∫ N_i · flux dΓ` — weighted by `N`, not by `Bᵀ`,
     /// exactly as for convection: the interface integrand is a flux **density**,
     /// not a gradient-conjugate quantity.
-    fn internal_force_reads(&self) -> Vec<String> {
-        self.components
-            .iter()
-            .map(|(p, _)| crate::models::transfer::flux_name(p))
-            .collect()
+    /// Deux termes, un par côté : `∫ h·(a₁−a₂)·N` sur A et son opposé sur B.
+    ///
+    /// L'intégrale d'une différence est la différence des intégrales, et
+    /// chacune se disperse sur **un** espace, le sien. Ce qui est couplé, c'est
+    /// la matrice — lignes sur A, colonnes sur B — pas le vecteur : un résidu
+    /// ne produit qu'un nombre par nœud.
+    fn internal_force_contribution(&self) -> Vec<crate::models::ResidualContribution> {
+        [
+            (&self.side_a, &self.support_a),
+            (&self.side_b, &self.support_b),
+        ]
+        .into_iter()
+        .map(|(fes, support)| {
+            crate::models::ResidualContribution::Computed(MatrixLayout {
+                fespaces: vec![fes.clone()],
+                support: support.clone(),
+                dual_vars: self.dual_vars(),
+                primal_vars: self.primal_vars(),
+                ordering: DofOrdering::NodesThenVars,
+                symmetric: true,
+            })
+        })
+        .collect()
     }
 
+    /// Le saut `a₁ − a₂` aux points, vu du côté `fespace` : positif sur A,
+    /// négatif sur B. Les deux côtés étant **conformes** — même type d'élément,
+    /// même nombre de mailles, la maille `i` de l'un face à la maille `i` de
+    /// l'autre —, les deux interpolations s'alignent indice pour indice et le
+    /// saut est une soustraction, pas une projection.
+    fn residual_input(
+        &self,
+        fespace: &Handle<SubFiniteElementSpace>,
+        solution: &crate::containers::node_field::NodeField,
+    ) -> Result<Handle<SubElementField>> {
+        let sur_a = Handle::same_object(fespace, &self.side_a);
+        let a = Self::interp_side(&self.side_a, solution)?;
+        let b = Self::interp_side(&self.side_b, solution)?;
+        let (plus, moins) = if sur_a { (&a, &b) } else { (&b, &a) };
+        let noms: Vec<String> = self.components.iter().map(|(p, _)| jump_name(p)).collect();
+        let mut out = SubElementField::new(fespace.clone(), noms)?;
+        {
+            let (p, m) = (plus.read(), moins.read());
+            let (vp, vm) = (p.values(), m.values());
+            let dst = out.values_mut();
+            for (k, d) in dst.iter_mut().enumerate() {
+                *d = vp[k] - vm[k];
+            }
+        }
+        Ok(Handle::new(out))
+    }
+
+    /// Le **saut**, pas un flux : ce que le terme lit au point est
+    /// `a₁ − a₂`, et c'est lui qu'il multiplie par le coefficient.
+    fn internal_force_reads(&self) -> Vec<String> {
+        self.components.iter().map(|(p, _)| jump_name(p)).collect()
+    }
+
+    /// `q_i = ∫ h·(a₁−a₂)·N_i dΓ` du côté considéré — le coefficient qui a
+    /// bâti `∫h NᵀN` appliqué au saut, sans passer par une loi.
     fn internal_force_element(
         &self,
         geoms: &[CellGeom],
-        stress: &SubElementField,
+        jump: &SubElementField,
         lay: &[u32],
-        _material: &SubElementField,
-        _mat: &[u32],
+        material: &SubElementField,
+        mat: &[u32],
         fe: &mut [f64],
     ) -> Result<()> {
-        internal_force(&geoms[0], stress, lay, fe)
+        let geom = &geoms[0];
+        let n = lay.len();
+        for g in 0..geom.n_gauss {
+            let shape = geom.n_at_g(g);
+            let w = geom.det_j_w(g);
+            let saut = jump.row(geom.cell, g);
+            let h = material.row(geom.cell, g);
+            for v in 0..n {
+                let hw = h[mat[v] as usize] * saut[lay[v] as usize] * w;
+                if hw == 0.0 {
+                    continue;
+                }
+                for i in 0..geom.n_nodes {
+                    fe[i * n + v] += hw * shape[i];
+                }
+            }
+        }
+        Ok(())
     }
 
     fn label(&self) -> &'static str {
@@ -342,40 +417,6 @@ impl Domain for InterfaceTransfer {
     ) -> Result<()> {
         let mat = material;
         exchange_matrix(&row_geoms[0], &col_geoms[0], mat, &lay.material, -1.0, ke)
-    }
-}
-
-impl Behavior for InterfaceTransfer {
-    fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
-        self.side_a.clone()
-    }
-
-    fn behavior_output_components(&self) -> Vec<String> {
-        self.components.iter().map(|(p, _)| flux_name(p)).collect()
-    }
-
-    /// The exchanged flux density `h·(a₁ − a₂)` at one Gauss point, from the jump
-    /// supplied as input (`jump_<primal>`), one transferred quantity at a time.
-    fn deformation_reads(&self) -> Vec<String> {
-        self.components.iter().map(|(p, _)| jump_name(p)).collect()
-    }
-
-    fn integrate_point(
-        &self,
-        _geom: &CellGeom,
-        _g: usize,
-        lay: &ZoneLayout,
-        deformation: &[f64],
-        _prev: &[f64],
-        material: &[f64],
-        _dt: f64,
-        out: &mut [f64],
-    ) -> Result<()> {
-        for v in 0..self.components.len() {
-            let h = material[lay.material[v] as usize];
-            out[v] = h * deformation[lay.deformation[v] as usize];
-        }
-        Ok(())
     }
 }
 

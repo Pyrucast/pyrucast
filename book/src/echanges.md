@@ -77,6 +77,22 @@ une pression ou à un flux signé.
 
 ### Échange entre deux maillages
 
+**Ni l'une ni l'autre n'a de loi de comportement.** Le `h·a` d'un bord et le
+`h·(a₁−a₂)` d'une interface sont le coefficient de leur propre opérateur
+appliqué en un point, pas un comportement : le même `h` a déjà bâti `∫h NᵀN`.
+Elles ont longtemps dû s'en inventer une, parce que `Domain` en exigeait une ;
+depuis que la loi est une capacité à part, elles n'en déclarent plus.
+
+Côté résidu, l'intégrale d'une différence est la différence des intégrales :
+l'interface rend `∫h(a₁−a₂)N` sur A et son opposé sur B, chacune dispersée sur
+son **propre** espace. Ce qui est couplé, c'est la matrice — lignes sur A,
+colonnes sur B — pas le vecteur, qui ne produit qu'un nombre par nœud. La
+**conformité** exigée des deux côtés sert à savoir *où* lire `a₂` : maille pour
+maille, les deux interpolations s'alignent indice pour indice et le saut est une
+soustraction. Sans elle il faudrait localiser les points de Gauss de l'un dans
+l'autre — ce qui n'est plus la même méthode, mais un mortar.
+
+
 Quand l'autre côté est une inconnue, la forme faible devient
 
 \\[

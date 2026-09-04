@@ -79,6 +79,52 @@ fn an_interface_law_makes_the_field_jump() -> Result<()> {
 
 /// A stiff interface (`h → ∞`) must recover the single continuous body: the jump
 /// vanishes as `q/h`, so the two facing values converge to each other.
+/// L'interface rend son terme de résidu **des deux côtés**, égaux et opposés.
+///
+/// `∫h(a₁−a₂)N` sur A et son opposé sur B : l'intégrale d'une différence est la
+/// différence des intégrales, et chacune se disperse sur son propre espace. Ce
+/// qui est couplé, c'est la matrice — lignes sur A, colonnes sur B — pas le
+/// vecteur, qui ne produit qu'un nombre par nœud. L'interface n'a donc plus de
+/// loi : son `h·(a₁−a₂)` est le coefficient de son propre opérateur appliqué au
+/// saut, pas un comportement.
+#[test]
+fn the_interface_renders_equal_and_opposite_fluxes() -> Result<()> {
+    const H: f64 = 5.0;
+    let (geom, model, materials) = two_square_model(H)?;
+    let (_, solution) = solve_two_squares(H)?;
+
+    // Le résidu de l'interface seule : on pointe le sous-modèle qu'on veut.
+    let interface = {
+        let mut m = Model::empty();
+        for h in &model {
+            if h.read().as_kind().label() == "InterfaceTransfer" {
+                m.add_sub(h.clone())?;
+            }
+        }
+        m
+    };
+    let state = pyrucast::containers::element_field::ElementField::empty();
+    let f = pyrucast::ops::node_field::internal_forces(&interface, &state, &solution, &materials)?;
+
+    let dual = format!("j_{SPECIES}");
+    // Somme sur chaque côté de l'interface : les deux faces qui se regardent.
+    let cote_a: f64 = [&geom.left[1], &geom.left[2]]
+        .iter()
+        .map(|n| f.value(n.id(), &dual).unwrap_or(0.0))
+        .sum();
+    let cote_b: f64 = [&geom.right[0], &geom.right[3]]
+        .iter()
+        .map(|n| f.value(n.id(), &dual).unwrap_or(0.0))
+        .sum();
+
+    assert!(cote_a.abs() > 1e-9, "l'interface doit transporter un flux");
+    assert!(
+        (cote_a + cote_b).abs() < 1e-9 * cote_a.abs().max(1.0),
+        "les deux côtés doivent s'annuler : {cote_a} et {cote_b}"
+    );
+    Ok(())
+}
+
 #[test]
 fn a_stiff_interface_recovers_a_continuous_body() -> Result<()> {
     let mut previous = f64::INFINITY;

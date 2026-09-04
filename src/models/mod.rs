@@ -28,6 +28,7 @@
 //! Everything else is generic. See the book chapter *« Ajouter une
 //! physique »* for the full walkthrough.
 
+use crate::aggregate::Aggregate;
 use crate::atoms::NodeId;
 use crate::containers::element_field::SubElementField;
 use crate::containers::field::SubField;
@@ -915,6 +916,58 @@ pub trait SubModelKind: Sync {
         fe: &mut [f64],
     ) -> Result<()> {
         continuum::internal_force::continuum_internal_force_element(geoms, stress, lay, fe)
+    }
+
+    /// What this term applies its `Bᵀ` to, at the points of `fespace` — read
+    /// when the sub-model has no constitutive law to produce a state.
+    ///
+    /// **Default**: the primal itself, interpolated there. That is what a
+    /// boundary transfer reads — its `∫ h·a·N` needs `a`, not a stress. An
+    /// interface reads a **jump** across two conforming sides, which is neither
+    /// a state nor a single interpolation, and overrides this.
+    ///
+    /// The seam exists because the operator cannot guess: it knows how to
+    /// resolve a state from a behaviour, and how to interpolate a primal, but
+    /// what a term reads is the term's own business.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::field::SubField;
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::containers::model::SubModel;
+    /// # use pyrucast::containers::node_field::NodeField;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::{Physics, SubModelKind};
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+    /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
+    /// # let zone = fes.get(0)?;
+    /// # let support = mesh::poi1_from_nodes(&n)?;
+    /// # let mut u = NodeField::from_submesh(&support.get(0)?, vec!["T".into()])?;
+    /// # u.get(0)?.write().set_uniform("T", 3.0)?;
+    /// # let bord = SubModel::boundary_transfer(
+    /// #     zone.clone(), vec![("T".into(), "q".into())], Physics::Thermal)?;
+    /// // Un transfert de bord lit la primale aux points, pas un état : sa
+    /// // valeur y est celle du champ, interpolée.
+    /// let lu = bord.as_kind().residual_input(&zone, &u)?;
+    /// assert_eq!(lu.read().components(), &["T".to_string()]);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    fn residual_input(
+        &self,
+        fespace: &Handle<SubFiniteElementSpace>,
+        solution: &NodeField,
+    ) -> Result<Handle<SubElementField>> {
+        let mut one = crate::containers::finite_element_space::FiniteElementSpace::empty();
+        one.add_sub(fespace.clone())?;
+        crate::ops::element_field::interp_to_gauss(solution, &one)?.get(0)
     }
 
     /// This sub-model's contributions to the **internal** side of the balance

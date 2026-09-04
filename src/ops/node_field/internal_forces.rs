@@ -26,10 +26,9 @@
 
 use crate::aggregate::Aggregate;
 use crate::atoms::{ElementType, NodeId};
-use crate::containers::element_field::{ElementField, SubElementField};
+use crate::containers::element_field::ElementField;
 use crate::containers::field::SubField;
 use crate::containers::finite_element_space::FiniteElementSpace;
-use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::mesh::SubMesh;
 use crate::containers::model::Model;
 use crate::containers::node_field::NodeField;
@@ -136,7 +135,7 @@ pub fn internal_forces(
                         // second kind — its `∫ h·a·N` reads `a`, not a stress.
                         let per_point = match kind.as_behavior() {
                             Some(b) => state.sub_for_fespace(&b.behavior_fespace())?,
-                            None => primal_at_points(solution, &layout.fespaces[0])?,
+                            None => kind.residual_input(&layout.fespaces[0], solution)?,
                         };
                         let guard = per_point.read();
                         let mat_guard = material.read();
@@ -173,18 +172,6 @@ pub fn internal_forces(
         }
     }
     Ok(out)
-}
-
-/// The primal interpolated to the Gauss points of one FE subspace — what a term
-/// without a constitutive law reads where a law-bearing one reads its state.
-fn primal_at_points(
-    solution: &NodeField,
-    fespace: &Handle<SubFiniteElementSpace>,
-) -> Result<Handle<SubElementField>> {
-    let mut one = FiniteElementSpace::empty();
-    one.add_sub(fespace.clone())?;
-    let interp = crate::ops::element_field::interp_to_gauss(solution, &one)?;
-    interp.get(0)
 }
 
 /// A constraint's reaction, `Cᵀ λ`, spread over the constrained nodes: term `k`
