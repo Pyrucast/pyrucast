@@ -87,6 +87,50 @@ fn an_interface_law_makes_the_field_jump() -> Result<()> {
 /// vecteur, qui ne produit qu'un nombre par nœud. L'interface n'a donc plus de
 /// loi : son `h·(a₁−a₂)` est le coefficient de son propre opérateur appliqué au
 /// saut, pas un comportement.
+/// Le résidu de l'interface **est** sa matrice appliquée à la solution.
+///
+/// L'opérateur est linéaire : `r = K·u` n'est pas une approximation mais une
+/// identité, et c'est le seul test qui fixe les *valeurs*. L'antisymétrie, elle,
+/// survit à une erreur partagée par les deux côtés — les deux contributions
+/// naissent du même saut, au signe près. C'est ce qu'il a fallu pour voir que le
+/// saut se lisait par position dans un champ interpolé qui porte **toutes** les
+/// composantes de la solution, multiplicateur de Dirichlet compris.
+#[test]
+fn the_interface_residual_is_its_matrix_applied_to_the_solution() -> Result<()> {
+    const H: f64 = 5.0;
+    let (geom, model, materials) = two_square_model(H)?;
+    let (_, solution) = solve_two_squares(H)?;
+
+    let interface = {
+        let mut m = Model::empty();
+        for h in &model {
+            if h.read().as_kind().label() == "InterfaceTransfer" {
+                m.add_sub(h.clone())?;
+            }
+        }
+        m
+    };
+    let state = ElementField::empty();
+    let r = pyrucast::ops::node_field::internal_forces(&interface, &state, &solution, &materials)?;
+    let k = pyrucast::ops::matrix::stiffness(&interface, &materials)?;
+    let ku = (&k * &solution)?;
+
+    let dual = format!("j_{SPECIES}");
+    let mut vus = 0;
+    for n in [&geom.left[1], &geom.left[2], &geom.right[0], &geom.right[3]] {
+        let got = r.value(n.id(), &dual)?;
+        let want = ku.value(n.id(), &dual)?;
+        assert!(
+            (got - want).abs() < 1e-9 * want.abs().max(1.0),
+            "r ≠ K·u en {:?} : {got} vs {want}",
+            n.id()
+        );
+        vus += 1;
+    }
+    assert_eq!(vus, 4);
+    Ok(())
+}
+
 #[test]
 fn the_interface_renders_equal_and_opposite_fluxes() -> Result<()> {
     const H: f64 = 5.0;

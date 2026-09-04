@@ -313,13 +313,38 @@ impl SubModelKind for InterfaceTransfer {
         let b = Self::interp_side(&self.side_b, solution)?;
         let (plus, moins) = if sur_a { (&a, &b) } else { (&b, &a) };
         let noms: Vec<String> = self.components.iter().map(|(p, _)| jump_name(p)).collect();
+        let nj = noms.len();
         let mut out = SubElementField::new(fespace.clone(), noms)?;
         {
             let (p, m) = (plus.read(), moins.read());
+            // Les deux champs interpolés portent **toutes** les composantes de
+            // la solution, dans son ordre ; le saut n'en porte qu'une par
+            // primale. Les indices se résolvent donc par nom, une fois pour la
+            // zone, jamais par position — sitôt que la solution transporte un
+            // multiplicateur ou une seconde physique, les deux dispositions
+            // divergent.
+            let primales: Vec<&str> = self.components.iter().map(|(v, _)| v.as_str()).collect();
+            let ip = p.resolve_components(&primales, "solution")?;
+            let im = m.resolve_components(&primales, "solution")?;
+            let np = p.component_count();
+            let nm = m.component_count();
+            // Les deux côtés sont conformes par construction ; on le prouve
+            // une fois ici plutôt que de laisser l'indexation le découvrir.
+            let lignes = p.cell_count() * p.gauss_count();
+            if m.cell_count() * m.gauss_count() != lignes {
+                return Err(PyrucastError::Message(format!(
+                    "InterfaceTransfer: the two sides carry {lignes} and {} integration \
+                     point(s) — a jump needs them point for point",
+                    m.cell_count() * m.gauss_count()
+                )));
+            }
             let (vp, vm) = (p.values(), m.values());
             let dst = out.values_mut();
-            for (k, d) in dst.iter_mut().enumerate() {
-                *d = vp[k] - vm[k];
+            for row in 0..lignes {
+                for v in 0..nj {
+                    dst[row * nj + v] =
+                        vp[row * np + ip[v] as usize] - vm[row * nm + im[v] as usize];
+                }
             }
         }
         Ok(Handle::new(out))
