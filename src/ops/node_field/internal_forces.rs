@@ -36,9 +36,6 @@ use crate::handle::Handle;
 use crate::models::kernel;
 use crate::models::ResidualContribution;
 
-/// Axis suffixes for the displacement/force components of the model-free
-/// continuum operator (`f_x`, `f_y`, `f_z`).
-
 /// Internal nodal forces of `model` — the left side of `Σ f_int = Σ f_ext`
 /// (Cast3m `BSIG` for a continuum).
 ///

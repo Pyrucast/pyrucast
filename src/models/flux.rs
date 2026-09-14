@@ -147,7 +147,7 @@ impl Flux {
         for h in target {
             let sub = h.read();
             let kind = sub.as_kind();
-            if kind.dual_vars().iter().any(|d| *d == dual) {
+            if kind.dual_vars().contains(&dual) {
                 // Une nature de tête suffit : un rayonnement déclare
                 // `[Thermal, Radiation]`, et sa charge est thermique.
                 physics = Some(kind.physics()[0]);
