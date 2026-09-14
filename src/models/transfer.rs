@@ -42,6 +42,7 @@
 
 use crate::containers::element_field::SubElementField;
 use crate::containers::field::SubField;
+use crate::containers::model::{Model, SubModel};
 use crate::error::{PyrucastError, Result};
 use crate::models::{CellGeom, Physics};
 
@@ -141,15 +142,16 @@ pub fn material_contract(label: &str, components: &[(String, String)]) -> Result
 /// having to hand out owned data.
 ///
 /// A transfer law's nature cannot be deduced from its variable names, which the
-/// caller chooses freely, so it is declared and kept; but there are finitely
-/// many natures, and each has exactly one slice.
+/// caller chooses freely; it is read once from the model it couples into (see
+/// `target_physics`) and kept. There are finitely many natures, and each has
+/// exactly one slice.
 ///
 /// ```
 /// # use pyrucast::models::transfer;
 /// # use pyrucast::models::Physics;
 /// // La nature d'une loi de transfert ne se déduit pas des noms de
-/// // variables, que l'appelant choisit : elle est déclarée, puis rendue
-/// // ici sous la forme d'une tranche `'static`.
+/// // variables, que l'appelant choisit : elle vient de la cible, est
+/// // gardée, puis rendue ici sous la forme d'une tranche `'static`.
 /// assert_eq!(transfer::physics_slice(Physics::Thermal), &[Physics::Thermal]);
 /// ```
 pub fn physics_slice(physics: Physics) -> &'static [Physics] {
@@ -161,6 +163,97 @@ pub fn physics_slice(physics: Physics) -> &'static [Physics] {
         Physics::Diffusion => &[Physics::Diffusion],
         Physics::Radiation => &[Physics::Radiation],
     }
+}
+
+/// The nature of the first sub-model of `target` that `owns` a row — what a
+/// term writing into another physics' rows inherits instead of declaring.
+///
+/// Only the head of [`physics()`](crate::models::SubModelKind::physics) is
+/// taken: a radiation declares `[Thermal, Radiation]`, and what couples into it
+/// is thermal. Read once, at construction — never at assembly.
+pub(crate) fn owner_physics(target: &Model, owns: impl Fn(&SubModel) -> bool) -> Option<Physics> {
+    target.into_iter().find_map(|h| {
+        let sub = h.read();
+        owns(&sub).then(|| sub.as_kind().physics()[0])
+    })
+}
+
+/// The nature of a term acting on `(primal, dual)` pairs, read from the model
+/// it couples into, which must assemble every one of them.
+///
+/// A pair is assembled when a sub-model of `target` counts `primal` among its
+/// unknowns **and** pairs it with `dual`, the positional pairing of
+/// [`SubModel::dual_of`]. Every pair must belong to one nature: a term carries
+/// a single one, and `model.filter(…)` selects it by it.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::boundary_transfer::BoundaryTransfer;
+/// # use pyrucast::models::tensor::Kinematics;
+/// # use pyrucast::models::{Physics, SubModelKind};
+/// # use pyrucast::ops::model;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// // Le constructeur d'un échange s'en sert : la nature sort de la cible.
+/// let deux = model::heat_conduction(&fes)?
+///     .union(&model::elasticity(&fes, Kinematics::PlaneStress)?)?;
+/// let film = BoundaryTransfer::new(zone.clone(), &deux, vec![("T".into(), "q".into())])?;
+/// assert_eq!(film.physics(), &[Physics::Thermal]);
+/// let appui = BoundaryTransfer::new(zone.clone(), &deux, vec![("u_x".into(), "f_x".into())])?;
+/// assert_eq!(appui.physics(), &[Physics::Mechanical]);
+/// // Présentes mais pas appariées chez la cible : refusé.
+/// assert!(BoundaryTransfer::new(zone.clone(), &deux, vec![("u_x".into(), "f_y".into())]).is_err());
+/// // Deux natures dans un seul terme : refusé.
+/// assert!(BoundaryTransfer::new(
+///     zone, &deux, vec![("T".into(), "q".into()), ("u_x".into(), "f_x".into())]).is_err());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
+pub(crate) fn target_physics(
+    label: &str,
+    target: &Model,
+    components: &[(String, String)],
+) -> Result<Physics> {
+    let mut nature: Option<Physics> = None;
+    for (primal, dual) in components {
+        let found = owner_physics(target, |sub| {
+            sub.dual_of(primal).as_deref() == Some(dual.as_str())
+        })
+        .ok_or_else(|| {
+            PyrucastError::Message(format!(
+                "{label}: the model it couples into assembles no `{primal}` paired with \
+                 `{dual}` — its unknowns are {:?}, paired with the rows {:?}",
+                target.primal_vars(),
+                target.dual_vars()
+            ))
+        })?;
+        match nature {
+            Some(first) if first != found => {
+                return Err(PyrucastError::Message(format!(
+                    "{label}: `({primal}, {dual})` belongs to a {} physics and the pairs \
+                     before it to a {} one — a term carries a single nature, build one per \
+                     physics",
+                    found.name(),
+                    first.name()
+                )))
+            }
+            _ => nature = Some(found),
+        }
+    }
+    nature.ok_or_else(|| {
+        PyrucastError::Message(format!(
+            "{label}: nothing to transfer — give at least one (primal, dual) pair"
+        ))
+    })
 }
 
 /// `sign · h ∫_Γ N_i^row N_j^col dΓ`, one uncoupled sub-block per transferred

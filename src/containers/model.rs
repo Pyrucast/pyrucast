@@ -437,7 +437,8 @@ impl SubModel {
     /// Naming the bulk physics' own DOFs is what makes the boundary term couple
     /// straight into it — `[("T", "q")]` beside a conduction, `[("c_H2",
     /// "j_H2")]` beside a diffusion, the three displacement pairs for an elastic
-    /// foundation. The coefficients `h_<primal>` **and** the ambients
+    /// foundation. `target` is the model assembling those pairs; it gives the
+    /// exchange its nature. The coefficients `h_<primal>` **and** the ambients
     /// `a_ext_<primal>` are supplied at assembly time, in the material: the
     /// exchange goes into the matrix, the ambient term `h·a_ext ∫N_i dΓ` comes
     /// out of [`crate::ops::node_field::external_forces()`].
@@ -472,18 +473,18 @@ impl SubModel {
     /// // Nommer les DDL de la physique de volume, c'est ce qui fait que le
     /// // terme de bord se couple droit dedans.
     /// let m = SubModel::boundary_transfer(
-    ///     fes_bord.get(0)?, vec![("T".into(), "q".into())], Physics::Thermal)?;
+    ///     fes_bord.get(0)?, &cible, vec![("T".into(), "q".into())])?;
     /// assert_eq!(m.primal_vars(), vec!["T".to_string()]);
     /// assert!(m.material_components().unwrap().contains(&"h_T".to_string()));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn boundary_transfer(
         fespace: Handle<SubFiniteElementSpace>,
+        target: &Model,
         components: Vec<(String, String)>,
-        physics: Physics,
     ) -> Result<Self> {
         Ok(SubModel::BoundaryTransfer(
-            boundary_transfer::BoundaryTransfer::new(fespace, components, physics)?,
+            boundary_transfer::BoundaryTransfer::new(fespace, target, components)?,
         ))
     }
 
@@ -690,8 +691,9 @@ impl SubModel {
     /// Radiation-to-infinity sub-model on a **boundary** FE subspace —
     /// `q·n = σε(T⁴ − T_∞⁴)`. Same DOFs (`"T"`/`"q"`) as
     /// [`Self::heat_conduction`], so it couples straight into the conduction
-    /// stiffness. Material (`emis`, `T_inf`, optionally `sigma`) is supplied at
-    /// assembly time. See [`radiation::Radiation::new`].
+    /// stiffness — `target`, which must assemble them. Material (`emis`,
+    /// `T_inf`, optionally `sigma`) is supplied at assembly time. See
+    /// [`radiation::Radiation::new`].
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -717,13 +719,15 @@ impl SubModel {
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// // Mêmes DDL que la conduction : le rayonnement se couple droit dedans.
-    /// let m = SubModel::radiation(zone.clone())?;
+    /// let m = SubModel::radiation(zone.clone(), &cible)?;
     /// assert_eq!(m.primal_vars(), vec!["T".to_string()]);
     /// assert_eq!(m.dual_vars(), vec!["q".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn radiation(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
-        Ok(SubModel::Radiation(radiation::Radiation::new(fespace)?))
+    pub fn radiation(fespace: Handle<SubFiniteElementSpace>, target: &Model) -> Result<Self> {
+        Ok(SubModel::Radiation(radiation::Radiation::new(
+            fespace, target,
+        )?))
     }
 
     /// Euler-Bernoulli beam sub-model on a `SEG2` FE subspace, in the given
@@ -828,20 +832,20 @@ impl SubModel {
     /// // Deux bords **conformes** : ici le même, ce qui suffit à montrer le
     /// // contrat ; en pratique deux faces en vis-à-vis.
     /// let m = SubModel::interface_transfer(
-    ///     fes_bord.get(0)?, fes_bord.get(0)?,
-    ///     vec![("T".into(), "q".into())], Physics::Thermal, 1e-6)?;
+    ///     fes_bord.get(0)?, fes_bord.get(0)?, &cible,
+    ///     vec![("T".into(), "q".into())], 1e-6)?;
     /// assert_eq!(m.primal_vars(), vec!["T".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn interface_transfer(
         side_a: Handle<SubFiniteElementSpace>,
         side_b: Handle<SubFiniteElementSpace>,
+        target: &Model,
         components: Vec<(String, String)>,
-        physics: Physics,
         tol: f64,
     ) -> Result<Self> {
         Ok(SubModel::InterfaceTransfer(
-            interface_transfer::InterfaceTransfer::new(side_a, side_b, components, physics, tol)?,
+            interface_transfer::InterfaceTransfer::new(side_a, side_b, target, components, tol)?,
         ))
     }
 

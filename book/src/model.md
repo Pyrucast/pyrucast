@@ -104,11 +104,11 @@ opérateurs qui les déclarent et leurs variables, vus du `Model` :
 |---|---|---|---|---|
 | `heat_conduction(fes)` | `T` | `q` | `k` | [Thermique](thermique.md) |
 | `heat_conduction_with_symmetry(fes, sym)` | `T` | `q` | `k_1…` / `k_11…` + repère | [Conduction orientée](thermique.md#conduction-orthotrope-et-anisotrope) |
-| `boundary_transfer(fes, comps, physics)` | libres | libres | `h_<primale>` | [Échanges](echanges.md) |
-| `radiation(fes)` | `T` | `q` | `emis, T_inf` (+ `sigma` facultatif) | [Rayonnement](thermique.md#rayonnement-à-linfini-stefan-boltzmann) |
+| `boundary_transfer(fes, cible, comps)` | libres | libres | `h_<primale>`, `a_ext_<primale>` | [Échanges](echanges.md) |
+| `radiation(fes, cible)` | `T` | `q` | `emis, T_inf` (+ `sigma` facultatif) | [Rayonnement](thermique.md#rayonnement-à-linfini-stefan-boltzmann) |
 | `fick(fes, espèce)` | `c_<espèce>` | `j_<espèce>` | `D_<espèce>` ; `poro` facultatif | [Diffusion](diffusion.md) |
 | `fick_with_symmetry(fes, sym, espèce)` | `c_<espèce>` | `j_<espèce>` | `D_1_<espèce>…` + repère ; `poro` facultatif | [Diffusion](diffusion.md) |
-| `interface_transfer(a, b, comps, physics, tol)` | libres | libres | `h_<primale>` | [Échanges](echanges.md) |
+| `interface_transfer(a, b, cible, comps, tol)` | libres | libres | `h_<primale>` | [Échanges](echanges.md) |
 | `truss(fes)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, A` | [Barre](mecanique/truss.md) |
 | `elasticity(fes, model)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, nu` | [Élasticité](mecanique/elasticite.md) |
 | `elasticity_with_symmetry(fes, model, sym)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E_1…G_23` / `C_11…C_66` + repère | [Orthotropie](mecanique/orthotropie.md) |
@@ -150,10 +150,10 @@ de physique » là où les capacités répondent à « domaine ou contrainte » 
 | Nature (`Physics`) | Physiques |
 |---|---|
 | `Mechanical` | `truss`, `elasticity`, `plasticity`, `mazars`, `bernoulli`, `timoshenko`, `shell` |
-| `Thermal`    | `heat_conduction`, `convection`, `radiation`, `interface_transfer` (variante `thermal`) |
+| `Thermal`    | `heat_conduction`, `radiation` ; `boundary_transfer` et `interface_transfer` quand leur cible est thermique |
 | `Constraint` | `dirichlet`, `mpc`, `embedded`, `contact` |
 | `Other`      | nature « autre / rien » explicite (aucune physique de base ne la déclare) |
-| `Diffusion`  | `fick`, `interface_transfer` (variante `mass`) |
+| `Diffusion`  | `fick` ; `boundary_transfer` et `interface_transfer` quand leur cible est une diffusion |
 | `Radiation`  | `radiation` — portée **en plus** de `Thermal`, donc `filter("thermal")` le rend aussi |
 
 Côté Python, les mêmes natures sont des chaînes : `"mechanical"`, `"thermal"`,

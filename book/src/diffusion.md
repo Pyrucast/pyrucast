@@ -142,9 +142,10 @@ j\cdot n = h\\,\big(c_1 - c_2\big)
 `h_c_H2` est le coefficient de transfert (son inverse est la résistance de
 contact) : un par grandeur transférée, nommé d'après elle.
 
-> Ce modèle n'a rien de diffusif non plus : on lui passe `[("T", "q")]` et la
-> nature `"thermal"` pour une résistance de contact, les couples de déplacement
-> pour un joint collé de raideur finie. La loi commune, sa structure en **quatre
+> Ce modèle n'a rien de diffusif non plus : on lui passe `[("T", "q")]` et une
+> conduction pour cible pour une résistance de contact, les couples de
+> déplacement et une élasticité pour un joint collé de raideur finie — la nature
+> vient de la cible. La loi commune, sa structure en **quatre
 > blocs** dont deux hors-diagonale, l'exigence de **conformité** des deux côtés
 > et le critère qui départage un échange d'une contrainte MPC sont dans
 > **[Échanges](echanges.md)**.

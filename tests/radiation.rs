@@ -142,6 +142,27 @@ fn radiation_answers_to_both_of_its_natures() -> Result<()> {
     Ok(())
 }
 
+/// A radiating boundary writes into the `q` row of the conduction it cools. With
+/// no conduction beneath it that row is assembled by nobody, and the boundary is
+/// refused at construction instead of radiating into nothing.
+#[test]
+fn radiation_without_a_conduction_is_rejected() -> Result<()> {
+    let (fixture, _) = radiating_square()?;
+    // Une diffusion assemble `c_H2`/`j_H2`, pas `T`/`q`.
+    let diffusion = model::fick(&fixture.boundary_fes, "H2")?;
+    let err = model::radiation(&fixture.boundary_fes, &diffusion)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        err.contains("assembles no `T` paired with `q`"),
+        "unexpected: {err}"
+    );
+    // La cible peut être le modèle déjà réuni : il assemble toujours `T`/`q`.
+    let coupled = fixture.bulk.union(&diffusion)?;
+    assert!(model::radiation(&fixture.boundary_fes, &coupled).is_ok());
+    Ok(())
+}
+
 /// At thermal equilibrium (`T = T_∞`) the law radiates nothing — the trivial
 /// case a fourth-power law must still get exactly right.
 #[test]
@@ -240,7 +261,7 @@ fn radiating_square() -> Result<(Fixture, ElementField)> {
     let mut boundary = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
     boundary.add_cell(&[edge[0].id(), edge[1].id()])?;
     let boundary_fes = FiniteElementSpace::lagrange1(&boundary)?;
-    let radiation = model::radiation(&boundary_fes)?;
+    let radiation = model::radiation(&boundary_fes, &bulk)?;
 
     let materials = element_field::material_field(&radiation, &[("emis", EMIS), ("T_inf", T_INF)])?;
     Ok((

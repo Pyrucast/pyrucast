@@ -90,12 +90,12 @@ fn each_direction_carries_its_own_stiffness() -> Result<()> {
     // The right edge rests on a foundation in **both** directions, with two
     // different stiffnesses; the left edge is held.
     let right = edge_fespace(&grid, &coords, n, idx)?;
-    let mut model =
-        model::elasticity(&fes, Kinematics::PlaneStress)?.union(&model::boundary_transfer(
-            &right,
-            vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
-            Physics::Mechanical,
-        )?)?;
+    let elastic = model::elasticity(&fes, Kinematics::PlaneStress)?;
+    let mut model = elastic.union(&model::boundary_transfer(
+        &right,
+        &elastic,
+        vec![("u_x".into(), "f_x".into()), ("u_y".into(), "f_y".into())],
+    )?)?;
     let left: Vec<Node> = (0..=n).map(|j| grid[idx(0, j)].clone()).collect();
     for var in ["u_x", "u_y"] {
         model = model.union(&clamp(&model, &left, var)?)?;
@@ -139,6 +139,45 @@ fn each_direction_carries_its_own_stiffness() -> Result<()> {
         u_y < u_x,
         "the stiffer direction must move less: u_y = {u_y}, u_x = {u_x}"
     );
+    Ok(())
+}
+
+/// The foundation is built against the elasticity it supports, and is
+/// mechanical because that elasticity is — nothing in `("u_x", "f_x")` says so.
+/// A target that does not assemble the pair, or pairs of two natures, are
+/// refused at construction.
+#[test]
+fn the_foundation_takes_its_nature_from_the_elasticity() -> Result<()> {
+    let n = 2;
+    let (grid, fes, coords, _) = square(n)?;
+    let idx = |i: usize, j: usize| j * (n + 1) + i;
+    let right = edge_fespace(&grid, &coords, n, idx)?;
+
+    let elastic = model::elasticity(&fes, Kinematics::PlaneStress)?;
+    let appui = model::boundary_transfer(&right, &elastic, vec![("u_x".into(), "f_x".into())])?;
+    assert_eq!(appui.filter(Physics::Mechanical)?.len(), 1);
+    assert!(appui.filter(Physics::Thermal)?.is_empty());
+
+    // Une conduction sur le même carré n'assemble aucun déplacement.
+    let conduction = model::heat_conduction(&fes)?;
+    let err = model::boundary_transfer(&right, &conduction, vec![("u_x".into(), "f_x".into())])
+        .unwrap_err()
+        .to_string();
+    assert!(
+        err.contains("assembles no `u_x` paired with `f_x`"),
+        "unexpected: {err}"
+    );
+
+    // Réunies, chacune assemble sa paire ; un seul échange ne porte pas deux natures.
+    let both = elastic.union(&conduction)?;
+    let err = model::boundary_transfer(
+        &right,
+        &both,
+        vec![("u_x".into(), "f_x".into()), ("T".into(), "q".into())],
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("single nature"), "unexpected: {err}");
     Ok(())
 }
 
@@ -211,12 +250,12 @@ fn free_face_displacement(n: usize, h: f64) -> Result<f64> {
     let idx = |i: usize, j: usize| j * (n + 1) + i;
     let right = edge_fespace(&grid, &coords, n, idx)?;
 
-    let mut model =
-        model::elasticity(&fes, Kinematics::PlaneStress)?.union(&model::boundary_transfer(
-            &right,
-            vec![("u_x".into(), "f_x".into())],
-            Physics::Mechanical,
-        )?)?;
+    let elastic = model::elasticity(&fes, Kinematics::PlaneStress)?;
+    let mut model = elastic.union(&model::boundary_transfer(
+        &right,
+        &elastic,
+        vec![("u_x".into(), "f_x".into())],
+    )?)?;
     // Held in x on the left face; one node held in y, which is all a uniaxial
     // state needs to be regular (`nu = 0`, so nothing contracts across).
     let left: Vec<Node> = (0..=n).map(|j| grid[idx(0, j)].clone()).collect();

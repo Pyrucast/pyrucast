@@ -31,6 +31,7 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
+use pyrucast::models::interface_transfer::DEFAULT_TOL;
 use pyrucast::models::Physics;
 use pyrucast::ops::mesh;
 use pyrucast::ops::model;
@@ -230,16 +231,94 @@ fn a_non_conforming_interface_is_rejected() -> Result<()> {
     let (a0, a1) = (node(1.0, 0.0)?, node(1.0, 1.0)?);
     // The facing edge sits at x = 1.5: the two sides do not describe one surface.
     let (b0, b1) = (node(1.5, 0.0)?, node(1.5, 1.0)?);
+    let (side_a, side_b) = (edge(&a0, &a1)?, edge(&b0, &b1)?);
+    // Une cible valide, pour que ce soit bien la géométrie qui soit refusée.
+    let target = model::fick(&side_a, SPECIES)?;
     let err = model::interface_transfer(
-        &edge(&a0, &a1)?,
-        &edge(&b0, &b1)?,
+        &side_a,
+        &side_b,
+        &target,
         vec![(format!("c_{SPECIES}"), format!("j_{SPECIES}"))],
-        Physics::Diffusion,
-        1e-9,
+        DEFAULT_TOL,
     )
     .unwrap_err();
     let msg = err.to_string();
     assert!(msg.contains("not node-conforming"), "unexpected: {msg}");
+    Ok(())
+}
+
+/// The interface is built **against** the model it ties, and takes its nature
+/// from it: nothing in `("c_H2", "j_H2")` says « diffusion », the Fick models
+/// assembling those rows do.
+#[test]
+fn the_interface_takes_its_nature_from_its_target() -> Result<()> {
+    let (_, model, _) = two_square_model(5.0)?;
+    // Les deux carrés de Fick, et l'interface qui les lie ; l'appui et l'entrée
+    // sont des contraintes et une charge, comptés à part.
+    let diffusion = model.filter(Physics::Diffusion)?;
+    assert!(diffusion
+        .iter()
+        .any(|sub| sub.read().as_kind().label() == "InterfaceTransfer"));
+    assert!(model.filter(Physics::Thermal)?.is_empty());
+    Ok(())
+}
+
+/// A pair the target does not assemble would couple into nothing: refused at
+/// construction, with the rows the target does assemble in the message.
+#[test]
+fn a_pair_its_target_does_not_assemble_is_rejected() -> Result<()> {
+    let coords = Handle::new(Coords::new(2)?);
+    let (a, b) = (
+        Node::create_in(coords.clone(), &[1.0, 0.0])?,
+        Node::create_in(coords.clone(), &[1.0, 1.0])?,
+    );
+    let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
+    m.add_cell(&[a.id(), b.id()])?;
+    let face = FiniteElementSpace::lagrange1(&m)?;
+    let diffusion = model::fick(&face, SPECIES)?;
+
+    // Une résistance de contact thermique sur un modèle qui ne connaît pas `T`.
+    let err = model::interface_transfer(
+        &face,
+        &face,
+        &diffusion,
+        vec![("T".into(), "q".into())],
+        DEFAULT_TOL,
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(
+        err.contains("assembles no `T` paired with `q`"),
+        "unexpected: {err}"
+    );
+
+    // Primale et duale présentes, mais pas appariées entre elles : refusé aussi.
+    let both = diffusion.union(&model::heat_conduction(&face)?)?;
+    let err = model::interface_transfer(
+        &face,
+        &face,
+        &both,
+        vec![(format!("c_{SPECIES}"), "q".into())],
+        DEFAULT_TOL,
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("paired with `q`"), "unexpected: {err}");
+
+    // Deux natures dans une seule interface : on en construit une par physique.
+    let err = model::interface_transfer(
+        &face,
+        &face,
+        &both,
+        vec![
+            (format!("c_{SPECIES}"), format!("j_{SPECIES}")),
+            ("T".into(), "q".into()),
+        ],
+        DEFAULT_TOL,
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(err.contains("single nature"), "unexpected: {err}");
     Ok(())
 }
 
@@ -302,9 +381,9 @@ fn two_square_model(h: f64) -> Result<(Geometry, Model, ElementField)> {
         .union(&model::interface_transfer(
             &face_left,
             &face_right,
+            &fick_pair,
             vec![(format!("c_{SPECIES}"), format!("j_{SPECIES}"))],
-            Physics::Diffusion,
-            1e-9,
+            DEFAULT_TOL,
         )?)?
         .union(&model::dirichlet(
             &fick_pair,

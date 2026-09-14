@@ -28,7 +28,6 @@ nearest_node
 node_values
 ordinate_type
 out_of_range
-physics
 point_values
 pyrucast.coords.displace
 pyrucast.element_field.interp_to_gauss

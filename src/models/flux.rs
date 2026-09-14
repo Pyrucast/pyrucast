@@ -27,7 +27,7 @@ use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::kernel::MAX_CELL_DOFS;
-use crate::models::transfer::physics_slice;
+use crate::models::transfer::{owner_physics, physics_slice};
 use crate::models::{
     CellGeom, Contribution, Domain, ElementLayout, MatrixKind, MatrixLayout, Physics,
     ResidualContribution, SubModelKind,
@@ -143,23 +143,13 @@ impl Flux {
         // modèle chargé, si : on cherche le sous-modèle qui possède cette duale.
         // Une ligne que personne n'assemble bâtissait auparavant une charge
         // muette ; c'est désormais une erreur de construction.
-        let mut physics = None;
-        for h in target {
-            let sub = h.read();
-            let kind = sub.as_kind();
-            if kind.dual_vars().contains(&dual) {
-                // Une nature de tête suffit : un rayonnement déclare
-                // `[Thermal, Radiation]`, et sa charge est thermique.
-                physics = Some(kind.physics()[0]);
-                break;
-            }
-        }
-        let physics = physics.ok_or_else(|| {
-            PyrucastError::Message(format!(
-                "Flux: `{dual}` is not a dual row of the model it loads — it declares {:?}",
-                target.dual_vars()
-            ))
-        })?;
+        let physics = owner_physics(target, |sub| sub.as_kind().dual_vars().contains(&dual))
+            .ok_or_else(|| {
+                PyrucastError::Message(format!(
+                    "Flux: `{dual}` is not a dual row of the model it loads — it declares {:?}",
+                    target.dual_vars()
+                ))
+            })?;
         // Une charge répartie pondère par les fonctions de forme **du champ** :
         // il lui en faut une, et c'est un fait de la zone, tranché ici une fois
         // pour toutes plutôt qu'à chaque point de Gauss. Une formulation qui

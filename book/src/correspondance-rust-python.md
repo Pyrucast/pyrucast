@@ -238,10 +238,10 @@ un sujet qu'on transforme.
 | `heat_conduction_with_symmetry(fes, symmetry: MaterialSymmetry) -> Model` | *idem, via `symmetry=`* |
 | `fick(fes: &FiniteElementSpace, species: &str) -> Model` | `fick(fespace, species, symmetry=None) -> Model` |
 | `fick_with_symmetry(fes, symmetry: MaterialSymmetry, species: &str) -> Model` | *idem, via `symmetry=`* |
-| `radiation(fes: &FiniteElementSpace) -> Model` | `radiation(fespace) -> Model` |
+| `radiation(fes: &FiniteElementSpace, target: &Model) -> Model` | `radiation(fespace, target) -> Model` |
 | `flux(fes: &FiniteElementSpace, target: &Model, dual: String) -> Model` | `flux(fespace, target, dual) -> Model` |
-| `boundary_transfer(fes, components: Vec<(String, String)>, physics: Physics) -> Model` | `boundary_transfer(fespace, components, physics) -> Model` |
-| `interface_transfer(side_a, side_b, components, physics: Physics, tol: f64) -> Model` | `interface_transfer(side_a, side_b, components, physics, tol=None) -> Model` |
+| `boundary_transfer(fes, target: &Model, components: Vec<(String, String)>) -> Model` | `boundary_transfer(fespace, target, components) -> Model` |
+| `interface_transfer(side_a, side_b, target: &Model, components, tol: f64) -> Model` | `interface_transfer(side_a, side_b, target, components, tol=1e-9) -> Model` — défaut `interface_transfer::DEFAULT_TOL` |
 | `truss(fes: &FiniteElementSpace) -> Model` | `truss(fespace) -> Model` |
 | `elasticity(fes, model: ElasticityModel) -> Model` | `elasticity(fespace, model, symmetry=None) -> Model` |
 | `elasticity_with_symmetry(fes, model, symmetry: MaterialSymmetry) -> Model` | *idem, via `symmetry=`* |

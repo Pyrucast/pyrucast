@@ -33,23 +33,27 @@ def _two_squares():
 
 
 def test_interface_declares_its_variables_and_material():
-    _c, left, right, _square, edge = _two_squares()
+    _c, left, right, square, edge = _two_squares()
+    bodies = pyrucast.model.fick(square(left), "H2") | pyrucast.model.fick(
+        square(right), "H2"
+    )
     model = pyrucast.model.interface_transfer(
-        edge(left[1], left[2]),
-        edge(right[0], right[3]),
-        [("c_H2", "j_H2")],
-        "diffusion",
+        edge(left[1], left[2]), edge(right[0], right[3]), bodies, [("c_H2", "j_H2")]
     )
     assert model[0].primal_vars() == ["c_H2"]
     assert model[0].dual_vars() == ["j_H2"]
     assert model[0].material_components() == ["h_c_H2"]
+    # The nature is the Fick models', not an argument.
     assert model[0].physics() == ["diffusion"]
 
 
 def test_thermal_variant_is_a_contact_resistance():
-    _c, left, right, _square, edge = _two_squares()
+    _c, left, right, square, edge = _two_squares()
+    bodies = pyrucast.model.heat_conduction(
+        square(left)
+    ) | pyrucast.model.heat_conduction(square(right))
     model = pyrucast.model.interface_transfer(
-        edge(left[1], left[2]), edge(right[0], right[3]), [("T", "q")], "thermal"
+        edge(left[1], left[2]), edge(right[0], right[3]), bodies, [("T", "q")]
     )
     assert model[0].primal_vars() == ["T"]
     assert model[0].dual_vars() == ["q"]
@@ -64,12 +68,15 @@ def test_a_mechanical_joint_transfers_several_quantities_at_once():
     Given the displacement pairs, the very same interface becomes a bonded joint
     of finite stiffness — one coefficient per direction, and no new physics.
     """
-    _c, left, right, _square, edge = _two_squares()
+    _c, left, right, square, edge = _two_squares()
+    bodies = pyrucast.model.elasticity(
+        square(left), "plane_stress"
+    ) | pyrucast.model.elasticity(square(right), "plane_stress")
     model = pyrucast.model.interface_transfer(
         edge(left[1], left[2]),
         edge(right[0], right[3]),
+        bodies,
         [("u_x", "f_x"), ("u_y", "f_y")],
-        "mechanical",
     )
     assert model[0].primal_vars() == ["u_x", "u_y"]
     assert model[0].dual_vars() == ["f_x", "f_y"]
@@ -87,39 +94,57 @@ def test_a_non_conforming_interface_is_rejected():
         m.unit().add_cell(nodes)
         return pyrucast.FiniteElementSpace(m)
 
-    # A construction-time modelling error surfaces as `RuntimeError`; only the
-    # tag parsing (a bad argument) is a `ValueError`.
+    # A construction-time modelling error surfaces as `RuntimeError`. The
+    # target is valid, so that it is the geometry being refused.
+    target = pyrucast.model.fick(edge(a), "H2")
     try:
-        pyrucast.model.interface_transfer(
-            edge(a), edge(b), [("c_H2", "j_H2")], "diffusion"
-        )
+        pyrucast.model.interface_transfer(edge(a), edge(b), target, [("c_H2", "j_H2")])
     except RuntimeError as exc:
         assert "not node-conforming" in str(exc)
     else:  # pragma: no cover - the constructor must refuse
         raise AssertionError("a non-conforming interface must raise")
 
 
-def test_an_unknown_physics_is_rejected():
-    _c, left, right, _square, edge = _two_squares()
+def test_a_pair_the_target_does_not_assemble_is_rejected():
+    """Coupled into a model that has no such rows, the law would tie nothing."""
+    _c, left, right, square, edge = _two_squares()
+    diffusion = pyrucast.model.fick(square(left), "H2")
+    try:
+        pyrucast.model.interface_transfer(
+            edge(left[1], left[2]), edge(right[0], right[3]), diffusion, [("T", "q")]
+        )
+    except RuntimeError as exc:
+        assert "assembles no `T` paired with `q`" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("a pair the target does not assemble must raise")
+
+
+def test_pairs_of_two_natures_are_rejected():
+    """One interface carries one nature: build one per physics."""
+    _c, left, right, square, edge = _two_squares()
+    both = pyrucast.model.fick(square(left), "H2") | pyrucast.model.heat_conduction(
+        square(left)
+    )
     try:
         pyrucast.model.interface_transfer(
             edge(left[1], left[2]),
             edge(right[0], right[3]),
-            [("c_H2", "j_H2")],
-            "magnetic",
+            both,
+            [("c_H2", "j_H2"), ("T", "q")],
         )
-    except ValueError as exc:
-        assert "magnetic" in str(exc)
+    except RuntimeError as exc:
+        assert "single nature" in str(exc)
     else:  # pragma: no cover
-        raise AssertionError("an unknown physics must raise")
+        raise AssertionError("pairs of two natures must raise")
 
 
 def test_transferring_nothing_is_rejected():
     """A law that transfers nothing has no matrix and no coefficient."""
-    _c, left, right, _square, edge = _two_squares()
+    _c, left, right, square, edge = _two_squares()
+    target = pyrucast.model.fick(square(left), "H2")
     try:
         pyrucast.model.interface_transfer(
-            edge(left[1], left[2]), edge(right[0], right[3]), [], "diffusion"
+            edge(left[1], left[2]), edge(right[0], right[3]), target, []
         )
     except RuntimeError as exc:
         assert "nothing to transfer" in str(exc)
@@ -145,8 +170,8 @@ def test_the_field_jumps_by_q_over_h():
         | pyrucast.model.interface_transfer(
             edge(left[1], left[2]),
             edge(right[0], right[3]),
+            modele_fick,
             [("c_H2", "j_H2")],
-            "diffusion",
         )
         | pyrucast.model.dirichlet(modele_fick, "c_H2", imposed, multiplier)
     )

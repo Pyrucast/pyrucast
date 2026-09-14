@@ -51,7 +51,7 @@ Chaque terme correspond à un objet du script :
 | Terme | pyrucast |
 |---|---|
 | \\( \int_V [B]^T \lambda [B] \\, dV \\) | `model.heat_conduction(fes)`, assemblé par `pc.matrix.stiffness` |
-| \\( \int_{\partial V\_\phi} h [N]^T [N] \\, dS \\) | `model.boundary_transfer(fes, [("T", "q")], "thermal")`, **dans la même matrice** |
+| \\( \int_{\partial V\_\phi} h [N]^T [N] \\, dS \\) | `model.boundary_transfer(fes, conduction, [("T", "q")])`, **dans la même matrice** |
 | \\( T = T\_{\text{imp}} \\) | `model.dirichlet(conduction, "T", ...)` (multiplicateurs de Lagrange) |
 | \\( \int_{\partial V\_\phi} [N]^T \phi\_{\text{imp}} \\, dS \\) | `pc.model.flux(fes, modele, "q")` sur des `QUA4`, densité `phi_q` |
 | \\( \int_{\partial V\_\phi} [N]^T h\\,T\_f \\, dS \\) | `pc.model.boundary_transfer`, ambiant `a_ext_T` |
@@ -277,8 +277,8 @@ La convection est la seule des quatre sollicitations à toucher **les deux**
 membres du système, parce que \\( \phi \cdot n = h\\,(T - T\_f) \\) dépend de
 l'inconnue. Sa part en \\( T \\) donne \\( \int h\\,[N]^T[N] \\, dS \\), qui
 s'ajoute **dans** la matrice : ce n'est pas un système séparé, d'où le
-`model.boundary_transfer(basse_fes, [("T", "q")], "thermal")` réuni au modèle de
-conduction par `|`, sur les
+`model.boundary_transfer(basse_fes, conduction, [("T", "q")])`, construit contre
+la conduction puis réuni à elle par `|`, sur les
 mêmes degrés de liberté « T » et « q ». Le blocage de l'étape 1 est repris tel
 quel, avec les mêmes deux maillages `POI1`.
 

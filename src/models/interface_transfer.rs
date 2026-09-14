@@ -17,6 +17,12 @@
 //! (`("c_H2", "j_H2")`) and a bonded joint of finite stiffness (the three
 //! displacement pairs): the mathematics is identical, only the names change.
 //!
+//! The pairs must be ones the model the interface couples into — its `target`,
+//! typically the union of the two bodies — assembles, and that model gives the
+//! nature: `("T", "q")` does not say it is thermal, the conduction assembling
+//! it does. A pair assembled by no one is refused at construction rather than
+//! coupled to nothing.
+//!
 //! ## When *not* to use it on displacements
 //!
 //! Tying two surfaces by making `h` large is a **penalty** method, and a
@@ -67,18 +73,31 @@ use crate::containers::field::SubField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
 use crate::containers::mesh::SubMesh;
+use crate::containers::model::Model;
 use crate::coords::Coords;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::transfer::{
-    coefficient_name, exchange_matrix, jump_name, material_contract, physics_slice,
+    coefficient_name, exchange_matrix, jump_name, material_contract, physics_slice, target_physics,
 };
 use crate::models::ElementLayout;
 use crate::models::{
     CellGeom, Contribution, CouplingLayout, Domain, MatrixKind, MatrixLayout, Physics, SubModelKind,
 };
 use serde::{Deserialize, Serialize};
+
+/// The geometric tolerance within which the two sides' paired nodes must be
+/// co-located — what the Python face passes when `tol` is not given. In the
+/// length unit of the mesh.
+///
+/// ```
+/// # use pyrucast::models::interface_transfer;
+/// // Une interface conforme a ses nœuds confondus : la tolérance ne rattrape
+/// // que l'arrondi, pas un décalage de maillage.
+/// assert_eq!(interface_transfer::DEFAULT_TOL, 1e-9);
+/// ```
+pub const DEFAULT_TOL: f64 = 1e-9;
 
 /// Exchange law between two conforming boundary FE subspaces.
 ///
@@ -89,24 +108,21 @@ use serde::{Deserialize, Serialize};
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
-/// # use pyrucast::ops::mesh;
+/// # use pyrucast::models::interface_transfer::{InterfaceTransfer, DEFAULT_TOL};
+/// # use pyrucast::models::SubModelKind;
+/// # use pyrucast::ops::model;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-/// # let maillage = Mesh::from_submesh(sm);
-/// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-/// # let mult = mesh::barycenter(&impose).unwrap();
-/// # use pyrucast::models::interface_transfer::InterfaceTransfer;
-/// # use pyrucast::models::Domain;
 /// // Deux bords **conformes** — ici le même, ce qui suffit à montrer le
 /// // contrat ; en pratique deux faces en vis-à-vis.
-/// let i = InterfaceTransfer::new(zone.clone(), zone.clone(),
-///     vec![("T".into(), "q".into())], Physics::Thermal, 1e-6)?;
+/// let conduction = model::heat_conduction(&fes)?;
+/// let i = InterfaceTransfer::new(
+///     zone.clone(), zone, &conduction, vec![("T".into(), "q".into())], DEFAULT_TOL)?;
 /// assert_eq!(i.primal_vars(), vec!["T".to_string()]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -120,14 +136,21 @@ pub struct InterfaceTransfer {
     /// The transferred quantities, as `(primal, dual)` pairs.
     pub(crate) components: Vec<(String, String)>,
     /// The physics nature this exchange belongs to — what `model.filter(…)`
-    /// selects it by. Free variable names cannot imply it, so it is declared.
+    /// selects it by. Free variable names cannot imply it, so it is read from
+    /// the target at construction and kept.
     pub(crate) physics: Physics,
 }
 
 impl InterfaceTransfer {
     /// Exchange law across the interface between two **conforming** boundary FE
-    /// subspaces. Errors unless the two sides match cell for cell and node for
-    /// node, within `tol` of each other geometrically.
+    /// subspaces, coupling into `target`.
+    ///
+    /// `target` is the model whose unknowns the interface ties — usually the
+    /// union of the two bodies. Every `(primal, dual)` pair must be one it
+    /// assembles, and all must belong to one nature, which the interface then
+    /// carries. Errors on an empty `components`, on a pair `target` does not
+    /// assemble, on pairs of two natures, and unless the two sides match cell
+    /// for cell and node for node, within `tol` of each other geometrically.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -136,35 +159,37 @@ impl InterfaceTransfer {
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::{Constraint, Physics, RelationSense, SubModelKind};
-    /// # use pyrucast::ops::mesh;
+    /// # use pyrucast::models::interface_transfer::{InterfaceTransfer, DEFAULT_TOL};
+    /// # use pyrucast::models::{Physics, SubModelKind};
+    /// # use pyrucast::ops::model;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let maillage = Mesh::from_submesh(sm);
-    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// # use pyrucast::models::interface_transfer::InterfaceTransfer;
-    /// # use pyrucast::models::Domain;
-    /// // Deux bords **conformes** — ici le même, ce qui suffit à montrer le
-    /// // contrat ; en pratique deux faces en vis-à-vis.
-    /// let i = InterfaceTransfer::new(zone.clone(), zone.clone(),
-    ///     vec![("T".into(), "q".into())], Physics::Thermal, 1e-6)?;
-    /// assert_eq!(i.primal_vars(), vec!["T".to_string()]);
+    /// let diffusion = model::fick(&fes, "H2")?;
+    /// // Un revêtement sur la diffusion : la nature vient du modèle de Fick.
+    /// let i = InterfaceTransfer::new(
+    ///     zone.clone(), zone.clone(), &diffusion,
+    ///     vec![("c_H2".into(), "j_H2".into())], DEFAULT_TOL)?;
+    /// assert_eq!(i.physics(), &[Physics::Diffusion]);
+    /// // La cible n'assemble pas la température : refusé plutôt que couplé à rien.
+    /// assert!(InterfaceTransfer::new(
+    ///     zone.clone(), zone, &diffusion, vec![("T".into(), "q".into())], DEFAULT_TOL)
+    ///     .is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(
         side_a: Handle<SubFiniteElementSpace>,
         side_b: Handle<SubFiniteElementSpace>,
+        target: &Model,
         components: Vec<(String, String)>,
-        physics: Physics,
         tol: f64,
     ) -> Result<Self> {
         material_contract("InterfaceTransfer", &components)?;
+        let physics = target_physics("InterfaceTransfer", target, &components)?;
         let (mesh_a, mesh_b) = (side_a.read().submesh(), side_b.read().submesh());
         check_conforming_geometry(&mesh_a, &mesh_b, tol)?;
         let support_a = mesh_a.read().to_poi1()?;

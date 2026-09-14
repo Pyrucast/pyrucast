@@ -2819,26 +2819,33 @@ def border(mesh: Mesh, angle_deg: typing.Optional[builtins.float] = None) -> Mes
     `angle_deg=None` (the default) keeps every boundary as one closed loop.
     """
 
-def boundary_transfer(fespace: FiniteElementSpace, components: typing.Sequence[tuple[builtins.str, builtins.str]], physics: builtins.str) -> Model:
+def boundary_transfer(fespace: FiniteElementSpace, target: Model, components: typing.Sequence[tuple[builtins.str, builtins.str]]) -> Model:
     r"""
-    `model.boundary_transfer(fespace, components, physics)` — surface
+    `model.boundary_transfer(fespace, target, components)` — surface
     exchange with an **imposed ambient** (Robin / film) spanning every
     subspace of a *boundary* `fespace` (edge mesh in 2-D, surface mesh in
-    3-D).
+    3-D), coupling into the model `target`.
     
-    `components` is a list of `(primal, dual)` pairs — naming the bulk
-    physics' own DOFs is what makes the boundary term couple into it:
+    `components` is a list of `(primal, dual)` pairs, each one that `target`
+    assembles — naming the bulk physics' own DOFs is what makes the boundary
+    term couple into it:
     
-    | you write | you get |
-    |---|---|
-    | `[("T", "q")], "thermal"` | Newton's law of cooling |
-    | `[("c_H2", "j_H2")], "diffusion"` | a surface mass-transfer law |
-    | `[("u_x", "f_x"), ("u_y", "f_y")], "mechanical"` | a Winkler elastic foundation |
+    | `target` | `components` | you get |
+    |---|---|---|
+    | `heat_conduction` | `[("T", "q")]` | Newton's law of cooling |
+    | `fick(..., "H2")` | `[("c_H2", "j_H2")]` | a surface mass-transfer law |
+    | `elasticity` | `[("u_x", "f_x"), ("u_y", "f_y")]` | a Winkler elastic foundation |
     
-    The coefficients `h_<primal>` (one per pair) are supplied at assembly
-    time; the ambient value enters as a load `h·a_ext·∫N_i dΓ`, built with
-    `flux(...)`. Compose with `|`:
-    `model.heat_conduction(bulk) | model.boundary_transfer(skin, [("T", "q")], "thermal")`.
+    The nature (`"thermal"`, `"diffusion"`, `"mechanical"`) is not an
+    argument: it is the one of the sub-model of `target` assembling the pairs.
+    A pair `target` does not assemble, or pairs of two natures, raise.
+    
+    Material, per pair: the coefficient `h_<primal>` and the ambient
+    `a_ext_<primal>`. The film `h∫NᵢNⱼ` goes into the stiffness, the ambient
+    term `h·a_ext·∫Nᵢ dΓ` comes out of `node_field.external_forces(...)`.
+    Compose with `|`:
+    `conduction = model.heat_conduction(bulk)`
+    `model = conduction | model.boundary_transfer(skin, conduction, [("T", "q")])`.
     """
 
 def chain(mesh: Mesh) -> Mesh:
@@ -3466,20 +3473,24 @@ def integrate_behavior(model: Model, deformation: ElementField, materials: Eleme
     (`∫ Bᵀ·flux = K·u`); a non-linear law is the exact response.
     """
 
-def interface_transfer(side_a: FiniteElementSpace, side_b: FiniteElementSpace, components: typing.Sequence[tuple[builtins.str, builtins.str]], physics: builtins.str, tol: typing.Optional[builtins.float] = None) -> Model:
+def interface_transfer(side_a: FiniteElementSpace, side_b: FiniteElementSpace, target: Model, components: typing.Sequence[tuple[builtins.str, builtins.str]], tol: builtins.float = 1e-09) -> Model:
     r"""
-    `model.interface_transfer(side_a, side_b, kind=None, tol=None)` — the
-    exchange law `j·n = h(c₁ − c₂)` across an interface between two bodies
-    that do **not** share their nodes. `kind` is `"mass"` (the default:
-    concentration `c`, flux `j`, nature `"diffusion"`) or `"thermal"` (a
-    contact resistance: `T`, `q`, nature `"thermal"`); `h` is supplied at
-    assembly time.
+    `model.interface_transfer(side_a, side_b, target, components, tol=1e-9)` —
+    the exchange law `j·n = h(c₁ − c₂)` across an interface between two bodies
+    that do **not** share their nodes, coupling into the model `target`.
+    
+    `components` is a list of `(primal, dual)` pairs, each one that `target`
+    assembles: `[("c_H2", "j_H2")]` on a `fick` model for a coating,
+    `[("T", "q")]` on a `heat_conduction` for a contact resistance, the
+    displacement pairs on an `elasticity` for a bonded joint of finite
+    stiffness. The nature is not an argument: it is the one of the sub-model
+    of `target` assembling the pairs, and a pair `target` does not assemble —
+    or pairs of two natures — raise. `h_<primal>` is supplied at assembly time.
     
     `side_a` and `side_b` are the two facing **boundary** FE spaces, which
     must be conforming — same element type, same cell count, and local node
-    `k` of a cell facing local node `k` of its counterpart, within `tol`
-    (default `1e-9`). A non-matching interface raises rather than being
-    projected.
+    `k` of a cell facing local node `k` of its counterpart, within `tol`. A
+    non-matching interface raises rather than being projected.
     
     This is what lets the field **jump** across the interface: with a shared
     node it could not. The jump is `q/h` for a flux density `q`.
@@ -3947,12 +3958,15 @@ def psca(x: typing.Any, y: typing.Any) -> typing.Any:
     see `pyrucast.measure.xty`.
     """
 
-def radiation(fespace: FiniteElementSpace) -> Model:
+def radiation(fespace: FiniteElementSpace, target: Model) -> Model:
     r"""
-    `model.radiation(fespace)` — radiation to infinity on a *boundary*
-    `fespace`: `q·n = σε(T⁴ − T_∞⁴)`. Same DOFs (`"T"`/`"q"`) as
-    `heat_conduction`, so it composes with `|`:
-    `model.heat_conduction(bulk) | model.radiation(boundary)`.
+    `model.radiation(fespace, target)` — radiation to infinity on a
+    *boundary* `fespace`: `q·n = σε(T⁴ − T_∞⁴)`, cooling the model `target`.
+    Same DOFs (`"T"`/`"q"`) as `heat_conduction`, which `target` must
+    assemble — a radiating boundary with no conduction beneath it raises —, so
+    it composes with `|`:
+    `conduction = model.heat_conduction(bulk)`
+    `model = conduction | model.radiation(boundary, conduction)`.
     
     Material: `emis` (emissivity) and `T_inf` (far-field temperature), plus an
     optional `sigma` overriding the SI Stefan-Boltzmann constant. With the

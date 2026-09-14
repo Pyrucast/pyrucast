@@ -952,8 +952,9 @@ pub trait SubModelKind: Sync {
     /// # let support = mesh::poi1_from_nodes(&n)?;
     /// # let mut u = NodeField::from_submesh(&support.get(0)?, vec!["T".into()])?;
     /// # u.get(0)?.write().set_uniform("T", 3.0)?;
+    /// # let conduction = pyrucast::ops::model::heat_conduction(&fes)?;
     /// # let bord = SubModel::boundary_transfer(
-    /// #     zone.clone(), vec![("T".into(), "q".into())], Physics::Thermal)?;
+    /// #     zone.clone(), &conduction, vec![("T".into(), "q".into())])?;
     /// // Un transfert de bord lit la primale aux points, pas un état : sa
     /// // valeur y est celle du champ, interpolée.
     /// let lu = bord.as_kind().residual_input(&zone, &u)?;

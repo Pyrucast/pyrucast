@@ -178,9 +178,9 @@ MECANIQUE - option globale;CONS / PHAS;Nom de constituant / de phase (multicouch
 THERMIQUE;CONDUCTION ISOTROPE;Conduction de Fourier isotrope (conductivité k) — comportement par défaut;thermal;isotropic;model.heat_conduction (k, plus rho et cp facultatifs pour la capacité)
 THERMIQUE;CONDUCTION ORTHOTROPE;Conduction orthotrope (conductivité par direction);thermal;orthotropic;model.heat_conduction_with_symmetry (symmetry=orthotropic) — k_1, k_2, k_3 + repère V1/V2
 THERMIQUE;CONDUCTION ANISOTROPE;Conduction anisotrope (tenseur de conductivité complet);thermal;anisotropic;model.heat_conduction_with_symmetry (symmetry=anisotropic) — k_11..k_33 + repère V1/V2
-THERMIQUE;CONVECTION;Convection de surface (Robin / film, q·n = h(T − T_ext));thermal;[("T","q")] + "thermal";model.boundary_transfer (coefficient h_T) — échange entre DEUX surfaces en vis-à-vis (résistance de contact) : model.interface_transfer, mêmes composantes
+THERMIQUE;CONVECTION;Convection de surface (Robin / film, q·n = h(T − T_ext));thermal;cible heat_conduction + [("T","q")];model.boundary_transfer (coefficient h_T, ambiant a_ext_T ; nature prise de la cible) — échange entre DEUX surfaces en vis-à-vis (résistance de contact) : model.interface_transfer, même cible et mêmes composantes
 THERMIQUE;CONVECTION SUPERIEURE / INFERIEURE;Face d'échange d'une coque (supérieure ou inférieure);—;—;—
-THERMIQUE;RAYONNEMENT INFINI;Rayonnement vers l'infini;thermal · radiation;—;model.radiation (emis, T_inf — sigma facultatif) — rigidité linéarisée + tangente cohérente
+THERMIQUE;RAYONNEMENT INFINI;Rayonnement vers l'infini;thermal · radiation;cible heat_conduction;model.radiation (emis, T_inf — sigma facultatif) — rigidité linéarisée + tangente cohérente — la cible doit assembler T/q
 THERMIQUE;RAYONNEMENT FAC_A_FAC;Rayonnement face à face entre deux surfaces;—;—;—
 THERMIQUE;RAYONNEMENT CAVITE;Rayonnement d'une surface sur elle-même (options CONVEXE, FERME, SYMETRIQUE, FAC_FORME, ABSO);—;—;—
 THERMIQUE;PHASE;Changement de phase avec chaleur latente (extension non linéaire de la conduction);—;—;—
@@ -212,7 +212,7 @@ EULER;EULER;Écoulement compressible non visqueux (volumes finis);—;—;—
 DARCY;ISOTROPE;Écoulement en milieu poreux, perméabilité isotrope;—;—;—
 DARCY;ORTHOTROPE;Perméabilité orthotrope;—;—;—
 DARCY;ANISOTROPE;Perméabilité anisotrope (tenseur complet);—;—;—
-DIFFUSION;FICK ISOTROPE;Loi de Fick J = −D·grad(C), diffusivité isotrope (modèle par défaut);diffusion;isotropic;model.fick (symmetry=isotropic) — espèce nommée à la construction : primale c_<espèce>, duale j_<espèce>, diffusivité D_<espèce> — stockage poro facultatif — échange d'interface j·n = h(c1 − c2) : model.interface_transfer
+DIFFUSION;FICK ISOTROPE;Loi de Fick J = −D·grad(C), diffusivité isotrope (modèle par défaut);diffusion;isotropic;model.fick (symmetry=isotropic) — espèce nommée à la construction : primale c_<espèce>, duale j_<espèce>, diffusivité D_<espèce> — stockage poro facultatif — échange d'interface j·n = h(c1 − c2) : model.interface_transfer (cible : les modèles de Fick)
 DIFFUSION;FICK ORTHOTROPE;Loi de Fick à diffusivité orthotrope;diffusion;orthotropic;model.fick (symmetry=orthotropic) — D_1_<espèce>, D_2_<espèce>, D_3_<espèce> + repère V1/V2 (les axes du milieu ne portent pas l'espèce)
 DIFFUSION;FICK ANISOTROPE;Loi de Fick à diffusivité anisotrope;diffusion;anisotropic;model.fick (symmetry=anisotropic) — D_11_<espèce>..D_33_<espèce> + repère V1/V2
 DIFFUSION;ADVECTION (CONSERVATIVE);Transport de matière par un champ de vitesse;—;—;—

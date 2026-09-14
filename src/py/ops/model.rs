@@ -7,7 +7,7 @@
 use crate::models::mpc::MpcTerm;
 use crate::models::symmetry::MaterialSymmetry;
 use crate::models::tensor::Kinematics;
-use crate::models::{Physics, RelationSense};
+use crate::models::RelationSense;
 use crate::ops::model;
 use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::py::mesh::PyMesh;
@@ -66,38 +66,37 @@ pub fn fick(
     Ok(PyModel { inner })
 }
 
-/// `model.interface_transfer(side_a, side_b, kind=None, tol=None)` — the
-/// exchange law `j·n = h(c₁ − c₂)` across an interface between two bodies
-/// that do **not** share their nodes. `kind` is `"mass"` (the default:
-/// concentration `c`, flux `j`, nature `"diffusion"`) or `"thermal"` (a
-/// contact resistance: `T`, `q`, nature `"thermal"`); `h` is supplied at
-/// assembly time.
+/// `model.interface_transfer(side_a, side_b, target, components, tol=1e-9)` —
+/// the exchange law `j·n = h(c₁ − c₂)` across an interface between two bodies
+/// that do **not** share their nodes, coupling into the model `target`.
+///
+/// `components` is a list of `(primal, dual)` pairs, each one that `target`
+/// assembles: `[("c_H2", "j_H2")]` on a `fick` model for a coating,
+/// `[("T", "q")]` on a `heat_conduction` for a contact resistance, the
+/// displacement pairs on an `elasticity` for a bonded joint of finite
+/// stiffness. The nature is not an argument: it is the one of the sub-model
+/// of `target` assembling the pairs, and a pair `target` does not assemble —
+/// or pairs of two natures — raise. `h_<primal>` is supplied at assembly time.
 ///
 /// `side_a` and `side_b` are the two facing **boundary** FE spaces, which
 /// must be conforming — same element type, same cell count, and local node
-/// `k` of a cell facing local node `k` of its counterpart, within `tol`
-/// (default `1e-9`). A non-matching interface raises rather than being
-/// projected.
+/// `k` of a cell facing local node `k` of its counterpart, within `tol`. A
+/// non-matching interface raises rather than being projected.
 ///
 /// This is what lets the field **jump** across the interface: with a shared
 /// node it could not. The jump is `q/h` for a flux density `q`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (side_a, side_b, components, physics, tol=None))]
+#[pyo3(signature = (side_a, side_b, target, components, tol = crate::models::interface_transfer::DEFAULT_TOL))]
 pub fn interface_transfer(
     side_a: PyRef<PyFiniteElementSpace>,
     side_b: PyRef<PyFiniteElementSpace>,
+    target: PyRef<PyModel>,
     components: Vec<(String, String)>,
-    physics: Physics,
-    tol: Option<f64>,
+    tol: f64,
 ) -> PyResult<PyModel> {
-    let inner = model::interface_transfer(
-        &side_a.inner,
-        &side_b.inner,
-        components,
-        physics,
-        tol.unwrap_or(1e-9),
-    )?;
+    let inner =
+        model::interface_transfer(&side_a.inner, &side_b.inner, &target.inner, components, tol)?;
     Ok(PyModel { inner })
 }
 

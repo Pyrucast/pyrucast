@@ -299,9 +299,10 @@ bord de la forme faible de la conduction, elle se scinde en deux ingrédients :
 \underbrace{f_i = h\\,T_\text{ext} \int_\Gamma N_i\\,d\Gamma}_{\text{charge (second membre)}}
 \\]
 
-On le construit en lui passant les couples de variables à échanger — ici ceux de
-la conduction, ce qui fait que le terme **se couple directement** dans la raideur
-d'un `HeatConduction` :
+On le construit **contre** la conduction qu'il refroidit, en lui passant les
+couples de variables à échanger — ceux de la conduction, ce qui fait que le terme
+**se couple directement** dans sa raideur. La conduction, elle, lui donne sa
+nature thermique, et refuse un couple qu'elle n'assemble pas :
 
 ```python
 {{#include ../../tests/python/test_doc_ops_physiques.py:boundary_transfer}}

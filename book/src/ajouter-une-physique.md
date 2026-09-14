@@ -75,6 +75,16 @@ attribut de stub, le déballage des enveloppes Python : `physics_operator!` les
 {{#include ../../src/models/truss.rs:operator}}
 ```
 
+**Un terme qui écrit dans les lignes d'une autre physique** — une charge
+répartie (`flux`), un échange de bord (`boundary_transfer`), un rayonnement
+(`radiation`) — déclare la forme `(fes, target, …)`. Il a besoin du modèle qu'il
+charge ou refroidit : pour y vérifier que ses lignes sont assemblées, et, quand
+ses noms de variables sont libres, pour en hériter la nature. La macro fait
+suivre la cible au constructeur de chaque zone et l'ajoute à la face Python ;
+l'auteur appelle `transfer::target_physics` (couples primale/duale) ou
+`transfer::owner_physics` (une ligne seule) dans son `new`, une fois, à la
+construction.
+
 **Deux blocs de documentation, et c'est voulu** : le Rust porte son `///` et son
 doctest, le Python un littéral qui atterrit dans le `.pyi`. Les partager
 mettrait un doctest Rust dans une docstring Python.

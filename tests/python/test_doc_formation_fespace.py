@@ -45,9 +45,8 @@ impose = pyrucast.mesh.poi1_from_nodes([_n[2]])
 multiplicateur = pyrucast.mesh.barycenter(impose)
 
 # ANCHOR: composer
-modele = pc.model.heat_conduction(fes) | pc.model.boundary_transfer(
-    bord_fes, [("T", "q")], "thermal"
-)
+conduction = pc.model.heat_conduction(fes)
+modele = conduction | pc.model.boundary_transfer(bord_fes, conduction, [("T", "q")])
 modele = modele | pc.model.dirichlet(modele, "T", impose, multiplicateur)
 # ANCHOR_END: composer
 

@@ -43,9 +43,36 @@ Nommer les DDL de la physique de volume est aussi ce qui fait que le terme s'y
 raideur d'un [`heat_conduction`](thermique.md) sans adaptateur, parce que la
 matrice est indexée par le couple *(nœud, nom de champ)*.
 
-La **nature physique** (`"thermal"`, `"diffusion"`, `"mechanical"`) est le seul
-argument qui ne se déduit pas : des noms de variables libres ne peuvent pas
-l'impliquer, et c'est elle que `model.filter(...)` sélectionne. On la déclare.
+## La cible donne la nature
+
+Des noms de variables libres ne disent pas quelle **nature physique** porte
+l'échange (`"thermal"`, `"diffusion"`, `"mechanical"`) — c'est pourtant elle que
+`model.filter(...)` sélectionne. Le modèle dont l'échange nomme les DDL, lui, la
+connaît. Les deux lois se construisent donc **contre** ce modèle, passé en
+argument `target` après le support, exactement comme une
+[charge répartie](operateurs/assemblage.md) ou une [contrainte](contraintes/dirichlet.md) :
+
+```text
+conduction = model.heat_conduction(volume)
+film       = model.boundary_transfer(peau, conduction, [("T", "q")])      # thermique
+corps      = model.fick(gauche, "H2") | model.fick(droite, "H2")
+joint      = model.interface_transfer(face_g, face_d, corps, [("c_H2", "j_H2")])  # diffusion
+```
+
+Chaque couple doit être **assemblé** par la cible : un de ses sous-modèles compte
+la primale parmi ses inconnues et l'apparie à la duale. La vérification se fait
+une fois, à la construction, et refuse trois erreurs qui passaient jusqu'ici :
+
+| erreur | ce qu'elle bâtissait |
+|---|---|
+| un nom mal tapé, ou une cible qui n'assemble pas ce couple | un échange couplé à rien : une matrice sur des lignes qu'aucune physique ne résout |
+| une primale appariée à la duale d'une autre (`("u_x", "f_y")`) | un film qui écrit dans la mauvaise équation |
+| des couples de deux natures dans un seul échange | un terme que `filter` rangerait d'un seul côté |
+
+Pour deux natures, on construit deux échanges. Le [rayonnement](thermique.md#rayonnement-à-linfini-stefan-boltzmann)
+reçoit lui aussi sa cible — il écrit dans la ligne `q` d'une conduction —, mais
+ses natures restent les siennes, `[Thermal, Radiation]` : la cible n'y sert qu'à
+prouver que la ligne est assemblée.
 
 ## Forme discrétisée
 

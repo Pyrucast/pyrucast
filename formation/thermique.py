@@ -215,8 +215,9 @@ def main() -> None:
     # FR — La convection s'ajoute dans la matrice : `|` sur les mêmes ddl.
     # EN — Convection adds into the matrix: `|` on the very same dofs.
     basse_fes = pc.FiniteElementSpace(face_basse)
-    modele = pc.model.heat_conduction(fes) | pc.model.boundary_transfer(
-        basse_fes, [("T", "q")], "thermal"
+    conduction = pc.model.heat_conduction(fes)
+    modele = conduction | pc.model.boundary_transfer(
+        basse_fes, conduction, [("T", "q")]
     )
     modele = modele | pc.model.dirichlet(modele, "T", alesage, multiplicateur_T)
 

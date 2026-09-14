@@ -73,8 +73,11 @@ def main() -> None:
         right_edge.unit().add_cell([grid[idx(N, j)], grid[idx(N, j + 1)]])
     right_fes = pyrucast.FiniteElementSpace(right_edge)
 
-    model = pyrucast.model.heat_conduction(fes) | pyrucast.model.boundary_transfer(
-        right_fes, [("T", "q")], "thermal"
+    # Le film se construit contre la conduction qu'il refroidit : elle assemble
+    # « T » et « q », et lui donne sa nature thermique.
+    conduction = pyrucast.model.heat_conduction(fes)
+    model = conduction | pyrucast.model.boundary_transfer(
+        right_fes, conduction, [("T", "q")]
     )
 
     # ── Chargement ───────────────────────────────────────────────────────────
