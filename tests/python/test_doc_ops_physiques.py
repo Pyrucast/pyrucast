@@ -350,6 +350,10 @@ plaque = pyrucast.model.elasticity(fes, "plane_stress")
 appui = pyrucast.model.boundary_transfer(
     semelle, plaque, [("u_x", "f_x"), ("u_y", "f_y")]
 )
+
+# Aucune nature en argument : chacun a pris celle de sa cible.
+joint[0].physics()  # ["thermal"]
+appui[0].physics()  # ["mechanical"]
 # ANCHOR_END: echanges
 assert len(model) == 2 and len(joint) == 1 and len(appui) == 1
 assert joint[0].physics() == ["thermal"] and appui[0].physics() == ["mechanical"]
