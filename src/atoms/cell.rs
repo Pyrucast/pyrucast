@@ -208,16 +208,32 @@ impl Cell {
     }
 }
 
+/// Structure, **sans verrou** : le sous-maillage porteur et l'indice.
+///
+/// Le type d'élément et les nœuds demanderaient de lire le sous-maillage, donc
+/// de prendre un guard — ce qu'un affichage de diagnostic ne doit pas faire :
+/// `{:?}` s'écrit dans un message d'erreur ou une trace, parfois en tenant
+/// précisément le verrou en cause. Ces informations vivent dans `dump`, appelé
+/// en connaissance de cause.
 impl fmt::Debug for Cell {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Cell").field("idx", &self.idx).finish()
+        f.debug_struct("Cell")
+            .field("submesh", &self.sm)
+            .field("idx", &self.idx)
+            .finish()
     }
 }
 
+/// Résumé, **sans verrou** : `Cell #0 @ <SubMesh #ea6020>`.
+///
+/// La connectivité et le type d'élément exigeaient d'aller les lire dans le
+/// sous-maillage. Une `Cell` n'est qu'une vue — un handle et un indice — et son
+/// affichage court ne doit pas pouvoir bloquer : le handle s'imprime sans
+/// toucher à l'objet, par choix délibéré (voir `Handle`), et cette prudence
+/// vaut aussi pour ses vues.
 impl fmt::Display for Cell {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let raw: Vec<u32> = self.node_ids().into_iter().map(|n| n.0).collect();
-        write!(f, "Cell<{}> #{}: {:?}", self.element_type(), self.idx, raw)
+        write!(f, "Cell #{} @ {}", self.idx, self.sm)
     }
 }
 

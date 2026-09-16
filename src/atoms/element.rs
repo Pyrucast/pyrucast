@@ -489,21 +489,31 @@ impl Element {
     }
 }
 
+/// Structure, **sans verrou** : l'espace EF porteur et l'indice.
+///
+/// Le type d'élément demanderait de lire le sous-espace, donc de prendre un
+/// guard — ce qu'un affichage de diagnostic ne doit pas faire : `{:?}` s'écrit
+/// dans un message d'erreur ou une trace, parfois en tenant précisément le
+/// verrou en cause. Ces informations vivent dans `dump`, appelé en connaissance
+/// de cause.
 impl fmt::Debug for Element {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Element").field("idx", &self.idx).finish()
+        f.debug_struct("Element")
+            .field("fespace", &self.fespace)
+            .field("idx", &self.idx)
+            .finish()
     }
 }
 
+/// Résumé, **sans verrou** : `Element #0 @ <SubFiniteElementSpace #ea6020>`.
+///
+/// Le type d'élément exigeait d'aller le lire dans le sous-espace. Un `Element`
+/// n'est qu'une vue — un handle et un indice — et son affichage court ne doit
+/// pas pouvoir bloquer : le handle s'imprime sans toucher à l'objet, par choix
+/// délibéré (voir `Handle`), et cette prudence vaut aussi pour ses vues.
 impl fmt::Display for Element {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.cell() {
-            Ok(cell) => {
-                let et = cell.element_type().name();
-                write!(f, "Element<{}> #{}", et, self.idx)
-            }
-            Err(_) => write!(f, "Element #{}", self.idx),
-        }
+        write!(f, "Element #{} @ {}", self.idx, self.fespace)
     }
 }
 

@@ -64,7 +64,17 @@ def test_element_cell_view_matches_underlying_mesh():
 
 
 def test_element_repr_and_str():
+    """Résumé et structure d'un `Element` : sans verrou, donc sans type.
+
+    Une vue ne porte qu'un handle et un indice. Aller chercher le type
+    d'élément demanderait de lire le sous-espace, ce qu'un affichage de
+    diagnostic ne doit pas faire — `repr` s'écrit dans les messages d'erreur,
+    parfois en tenant le verrou en cause. Le type vit dans `dump`, appelé en
+    connaissance de cause.
+    """
     _, _, _, fes = _seg2_fes()
     el = fes.element(0, 0)
     assert "Element" in repr(el)
-    assert "SEG2" in str(el)
+    assert "SubFiniteElementSpace #" in repr(el)  # le pointeur identifie la vue
+    assert str(el).startswith("Element #0 @ ")
+    assert "SEG2" not in str(el) and "SEG2" not in repr(el)

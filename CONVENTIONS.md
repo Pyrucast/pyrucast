@@ -442,6 +442,25 @@ Chaque niveau a un rôle distinct et **ne déborde jamais** sur le suivant :
 
 Règles :
 
+- **Gradation** : chaque niveau dit **au moins** ce que dit le précédent. Un
+  `repr` plus pauvre que son `str`, ou un `dump` qui tait une métadonnée du
+  `repr`, inverse la hiérarchie et se corrige. Elle est tenue **à la main**,
+  champ par champ — aucun test ne la garde, c'est le prix de `Debug`
+  idiomatiques (`debug_struct`, `debug_map`) plutôt que construits en couches.
+- **L'identité est celle du handle, et c'est l'agrégat qui la montre.** Un
+  sous-objet ne connaît pas le handle qui le porte ; seul son détenteur le
+  peut. Un agrégat nomme donc ses zones aux trois niveaux — `[#7f3a2c, …]`
+  dans le résumé (élidé au-delà de trois, pour rester borné), `{<SubMesh
+  #7f3a2c>: …}` dans la structure, `── [0] <SubMesh #7f3a2c> ──` dans le
+  contenu. Un sous-objet affiché seul n'a pas d'identifiant, en Rust comme en
+  Python.
+- **Résumé et structure ne verrouillent pas.** Le `Display` d'un `Handle` s'en
+  interdit délibérément — il peut être formaté alors qu'un write guard est tenu,
+  et lire provoquerait un interblocage — et la même prudence vaut pour les vues
+  (`Cell`, `Element`) : leurs `Display` et `Debug` ne montrent que le handle
+  porteur et l'indice. Le type d'élément, la connectivité et les positions
+  demandent un guard, donc vivent dans `dump`, appelé en connaissance de cause.
+  `{:?}` s'écrit dans les messages d'erreur, parfois en tenant le verrou en cause.
 - `Display`/`Debug` ne déversent **jamais** le contenu en masse (valeurs,
   connectivité, grille). Un `repr` reste borné quelle que soit la taille de
   l'objet.
