@@ -17,6 +17,7 @@ use pyo3::exceptions::PyTypeError;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
+use pyrucast_macros::py_op;
 
 /// Build a points (POI1) mesh holding every live node of `coords`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
@@ -422,6 +423,7 @@ pub fn border(mesh: PyRef<PyMesh>, angle_deg: Option<f64>) -> PyResult<PyMesh> {
 /// and per facet type — e.g. 6 submeshes for a cube, 5 for a prism (2 caps +
 /// 3 sides), 5 for a pyramid (base + 4 triangles). Facets keep their outward
 /// orientation; the original nodes are reused.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (mesh, angle_deg=None))]
@@ -1501,12 +1503,6 @@ impl PyMesh {
     #[pyo3(signature = (angle_deg=None))]
     fn border(slf: PyRef<'_, Self>, angle_deg: Option<f64>) -> PyResult<PyMesh> {
         super::mesh::border(slf, angle_deg)
-    }
-
-    /// Voir `pyrucast.mesh.skin`.
-    #[pyo3(signature = (angle_deg=None))]
-    fn skin(slf: PyRef<'_, Self>, angle_deg: Option<f64>) -> PyResult<PyMesh> {
-        super::mesh::skin(slf, angle_deg)
     }
 
     /// Voir `pyrucast.mesh.orient`.

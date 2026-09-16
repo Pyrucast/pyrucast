@@ -1156,6 +1156,28 @@ class Mesh:
         structure. Returns nothing.
         """
     def __len__(self) -> builtins.int: ...
+    def skin(self, angle_deg: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Extract the boundary surface (skin) of a volume mesh, split by flat face.
+        
+        Works on every volume type — TET4, PYRA5, PENTA6, HEX8 and their quadratic
+        counterparts TET10, PENTA15, HEX20, HEX27.
+        
+        A volume-element facet (TET4 → 4 triangles, HEX8 → 6 quads, PENTA6 → 2
+        triangles + 3 quads, PYRA5 → 1 quad + 4 triangles) used by exactly one cell
+        lies on the boundary; sharing is decided on the facet's corners, so cells of
+        different degrees still cancel. The boundary facets (pooled across all
+        volume submeshes) are grouped into flat faces by flooding across shared
+        edges as long as neighbouring facets stay coplanar (their normals differ by
+        at most `angle_deg`, default 1°).
+        
+        **A facet is emitted in its own type**: a HEX8 yields QUA4, a TET10 yields
+        TRI6, a HEX27 yields QUA9 — so the skin of a quadratic mesh is quadratic
+        and keeps its mid-side nodes. Returns a Mesh with one submesh per flat face
+        and per facet type — e.g. 6 submeshes for a cube, 5 for a prism (2 caps +
+        3 sides), 5 for a pyramid (base + 4 triangles). Facets keep their outward
+        orientation; the original nodes are reused.
+        """
     def to_poi1(self) -> Mesh:
         r"""
         Voir `pyrucast.mesh.to_poi1`.
@@ -1223,10 +1245,6 @@ class Mesh:
     def border(self, angle_deg: typing.Optional[builtins.float] = None) -> Mesh:
         r"""
         Voir `pyrucast.mesh.border`.
-        """
-    def skin(self, angle_deg: typing.Optional[builtins.float] = None) -> Mesh:
-        r"""
-        Voir `pyrucast.mesh.skin`.
         """
     def orient(self) -> Mesh:
         r"""
