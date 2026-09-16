@@ -78,14 +78,27 @@ pub fn py_op(attr: TokenStream, item: TokenStream) -> TokenStream {
     // Le sujet est le premier paramètre ; les suivants sont recopiés tels
     // quels, noms compris — c'est précisément ce qu'une `macro_rules!` ne
     // saurait pas faire d'une signature déjà écrite.
+    //
+    // Sauf qu'un jeton `Python` peut le précéder : pyo3 le fournit à la
+    // fonction sans qu'il figure dans la signature Python. Le sujet est alors
+    // le second paramètre, et l'appel devra remettre le `py` en tête.
     let mut inputs = func.sig.inputs.iter();
-    let Some(subject) = inputs.next() else {
+    let Some(first) = inputs.next() else {
         return error("`py_op` sur une fonction sans argument : il n'y a pas de sujet");
     };
-    if type_mentions(subject, "Python") {
+    let (py_param, subject) = if type_mentions(first, "Python") {
+        match inputs.next() {
+            Some(subject) => (Some(first), subject),
+            None => return error("`py_op` : après le `py: Python`, il manque le sujet"),
+        }
+    } else {
+        (None, first)
+    };
+    if type_mentions(subject, "Bound") {
         return error(
-            "`py_op` ne gère pas encore un `py: Python` en tête : le sujet doit être \
-             le premier paramètre",
+            "`py_op` ne convient pas à un opérateur polymorphe : sa méthode ne renvoie \
+             pas à la fonction libre, elle court-circuite le dispatch pour rendre un \
+             type précis. À écrire à la main, une fois par saveur",
         );
     }
     let rest: Vec<&FnArg> = inputs.collect();
@@ -96,6 +109,25 @@ pub fn py_op(attr: TokenStream, item: TokenStream) -> TokenStream {
             FnArg::Receiver(_) => None,
         })
         .collect();
+
+    // Ordre des paramètres de la méthode : le receveur, puis le `py` s'il y en
+    // a un, puis le reste — c'est la forme qu'imposent les méthodes déjà
+    // écrites à la main. L'appel, lui, rétablit l'ordre de la fonction libre.
+    let py_pat = py_param.and_then(|arg| match arg {
+        FnArg::Typed(pat) => Some(&pat.pat),
+        FnArg::Receiver(_) => None,
+    });
+    let mut method_args: Vec<TokenStream2> = Vec::new();
+    if let Some(py) = py_param {
+        method_args.push(quote! { #py });
+    }
+    method_args.extend(rest.iter().map(|arg| quote! { #arg }));
+    let mut call_args: Vec<TokenStream2> = Vec::new();
+    if let Some(py) = py_pat {
+        call_args.push(quote! { #py });
+    }
+    call_args.push(quote! { slf });
+    call_args.extend(forwarded.iter().map(|pat| quote! { #pat }));
 
     let docs: Vec<_> = func
         .attrs
@@ -118,8 +150,8 @@ pub fn py_op(attr: TokenStream, item: TokenStream) -> TokenStream {
         impl #method_on {
             #(#docs)*
             #signature
-            fn #method(slf: ::pyo3::PyRef<'_, Self>, #(#rest),*) #output {
-                self::#free(slf, #(#forwarded),*)
+            fn #method(slf: ::pyo3::PyRef<'_, Self>, #(#method_args),*) #output {
+                self::#free(#(#call_args),*)
             }
         }
     }

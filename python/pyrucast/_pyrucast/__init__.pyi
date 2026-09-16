@@ -1156,6 +1156,156 @@ class Mesh:
         structure. Returns nothing.
         """
     def __len__(self) -> builtins.int: ...
+    def to_poi1(self) -> Mesh:
+        r"""
+        Convert a mesh to POI1, submesh by submesh.
+        
+        Returns a new mesh with the same number of submeshes; each output
+        submesh is a POI1 submesh holding the de-duplicated nodes of the
+        corresponding input submesh, in order of first appearance.
+        """
+    def barycenter(self) -> Mesh:
+        r"""
+        Build a POI1 mesh of per-element centroids (centres of gravity), submesh
+        by submesh.
+        
+        Returns a new mesh with the same number of submeshes; each output submesh
+        is a POI1 submesh with one **fresh** node per element of the corresponding
+        input submesh, placed at the element's centroid. A POI1 input is therefore
+        copied to colocated fresh nodes — handy to mint Lagrange-multiplier support
+        nodes from a set of constrained points.
+        """
+    def elements_on(self, points: Mesh, strict: builtins.bool = True) -> Mesh:
+        r"""
+        Keep the elements of `mesh` resting on the nodes of `points`
+        (Cast3m `ELEM … APPUYE`).
+        
+        Only the node set referenced by `points` matters (typically a POI1
+        points mesh). With `strict=True` a cell is kept when **all** its nodes
+        are in the set (`APPUYE STRICTEMENT`); with `strict=False` when **at
+        least one** is (`APPUYE`). The result mirrors `mesh` submesh by submesh
+        (same types, possibly-empty zones). Both meshes must share the same
+        `Coords`.
+        """
+    def points_in_sphere(self, center: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Nodes **inside** the sphere of centre `center` and radius `radius`.
+        
+        Keeps the nodes at a distance `≤ radius + tol` from `center`. In 2-D the
+        sphere is a disc — `center` just has to match the mesh dimension.
+        """
+    def points_on_sphere(self, center: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Nodes **on** the sphere of centre `center` and radius `radius`
+        (Cast3m `POIN … SPHE`).
+        
+        Keeps the nodes whose distance to `center` is within `tol` of `radius`, on
+        either side. In 2-D this selects a circle.
+        """
+    def points_on_plane(self, origin: typing.Sequence[builtins.float], normal: typing.Sequence[builtins.float], tol: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Nodes **on** the plane through `origin` with normal `normal`
+        (Cast3m `POIN … PLAN`).
+        
+        Keeps the nodes within `tol` of the plane — the usual way to grab a
+        boundary face of a box mesh. `normal` need not be normalized; in 2-D the
+        plane is a line.
+        """
+    def points_below_plane(self, origin: typing.Sequence[builtins.float], normal: typing.Sequence[builtins.float], tol: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Nodes **below** the plane through `origin` with normal `normal` — the
+        half-space the normal points away from, plane included.
+        
+        There is no `points_above_plane`: flip the normal and this is the other
+        half-space.
+        """
+    def points_on_line(self, a: typing.Sequence[builtins.float], b: typing.Sequence[builtins.float], tol: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Nodes **on** the infinite line through `a` and `b`
+        (Cast3m `POIN … DROIT`).
+        
+        Keeps the nodes at a distance `≤ tol` from the line, with no bound along
+        it — use `points_in_cylinder` with a small radius for a selection clipped
+        to the `a → b` segment.
+        """
+    def points_in_cylinder(self, base: typing.Sequence[builtins.float], top: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Nodes **inside** the finite cylinder of axis `base → top` and radius
+        `radius`.
+        
+        The cylinder is capped: a node is kept when it is within `radius + tol` of
+        the axis **and** its axial coordinate falls between the two end sections.
+        """
+    def points_on_cylinder(self, base: typing.Sequence[builtins.float], top: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Nodes **on** the lateral surface of the finite cylinder of axis
+        `base → top` and radius `radius` (Cast3m `POIN … CYLI`).
+        
+        The end discs are **not** part of the selection — they are flat faces, and
+        `points_on_plane` cuts those. This is how you grab the bore of a tube.
+        """
+    def points_in_cone(self, base: typing.Sequence[builtins.float], top: typing.Sequence[builtins.float], base_radius: builtins.float, top_radius: builtins.float = 0.0, tol: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Nodes **inside** the cone of axis `base → top`, radius `base_radius` at
+        `base` and `top_radius` at `top`.
+        
+        The shape is a truncated cone: `top_radius=0` (the default) gives a true
+        cone whose apex is `top`, `top_radius=base_radius` a cylinder. Capped like
+        `points_in_cylinder`.
+        """
+    def points_on_cone(self, base: typing.Sequence[builtins.float], top: typing.Sequence[builtins.float], base_radius: builtins.float, top_radius: builtins.float = 0.0, tol: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Nodes **on** the lateral surface of the cone of axis `base → top`, radius
+        `base_radius` at `base` and `top_radius` at `top` (Cast3m `POIN … CONE`).
+        
+        The distance to the slanted surface is the perpendicular one, so the band
+        stays `tol` wide however steep the cone is. As for `points_on_cylinder`,
+        the end discs are not part of the selection.
+        """
+    def points_in_torus(self, center: typing.Sequence[builtins.float], axis: typing.Sequence[builtins.float], major_radius: builtins.float, minor_radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Nodes **inside** the torus of centre `center`, axis `axis`, major radius
+        `major_radius` and minor radius `minor_radius`.
+        
+        The section is circular: the torus is the set of points at a distance
+        `≤ minor_radius` from the circle of radius `major_radius` drawn around
+        `center` in the plane normal to `axis`. **3-D only.**
+        """
+    def points_on_torus(self, center: typing.Sequence[builtins.float], axis: typing.Sequence[builtins.float], major_radius: builtins.float, minor_radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Nodes **on** the torus of centre `center`, axis `axis`, major radius
+        `major_radius` and minor radius `minor_radius`.
+        
+        Keeps the nodes within `tol` of the tube's surface. The torus being
+        closed, there is no cap to worry about here. **3-D only.**
+        """
+    def consolidate(self) -> Mesh:
+        r"""
+        Fuse submeshes of the same element type into one, dropping duplicate cells
+        (identical node sequences).
+        
+        Types appear in their first-seen order; the face colour of the first
+        submesh of each type is kept. `mesh` itself is left untouched.
+        
+        Errors if `mesh` has no submesh (no `Coords` to attach to).
+        """
+    def border(self, angle_deg: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Extract the boundary of a surface mesh (TRI3/QUA4) as SEG2 loops.
+        
+        An element edge used by exactly one cell is a boundary edge; the boundary
+        edges (pooled across all surface submeshes) are chained into closed loops.
+        Returns a Mesh with one SEG2 submesh per loop — a single loop for a
+        simply-connected domain, several when the domain has holes or disjoint
+        pieces. Loops keep the CCW boundary orientation (outer loop CCW, holes
+        CW), so the result can feed straight back into `triangulate_surface`.
+        
+        With `angle_deg` given, each loop is further split into open **arêtes** at
+        its corner nodes — where the boundary turns by more than `angle_deg`
+        degrees — one SEG2 submesh per arête (as `skin` splits a volume's skin into
+        flat faces). A loop with no such corner stays a single closed loop.
+        `angle_deg=None` (the default) keeps every boundary as one closed loop.
+        """
     def skin(self, angle_deg: typing.Optional[builtins.float] = None) -> Mesh:
         r"""
         Extract the boundary surface (skin) of a volume mesh, split by flat face.
@@ -1178,173 +1328,420 @@ class Mesh:
         3 sides), 5 for a pyramid (base + 4 triangles). Facets keep their outward
         orientation; the original nodes are reused.
         """
-    def to_poi1(self) -> Mesh:
+    def orient(self) -> Mesh:
         r"""
-        Voir `pyrucast.mesh.to_poi1`.
+        Harmonise the orientation of a mesh's cells (cast3m `ORIE`).
+        
+        Cells sharing a facet are made consistently oriented — all normals of a
+        surface point the same way, all segments of a curve run head-to-tail, all
+        volume cells share one handedness — in any dimension (SEG/TRI/QUA/TET/
+        PENTA/HEX, linear or quadratic). Each connected component is seeded by its
+        lowest-indexed cell, which keeps its orientation; the absolute sense is not
+        chosen (use `invert` to flip a whole mesh, e.g. a hole's boundary). Returns
+        a fresh mesh sharing the input's nodes.
         """
-    def barycenter(self) -> Mesh:
+    def chain(self) -> Mesh:
         r"""
-        Voir `pyrucast.mesh.barycenter`.
+        Re-order the cells of a line mesh into a continuous chain.
+        
+        The complement of `orient`: where `orient` fixes the *direction* of the
+        cells, `chain` fixes their *order* — each SEG2/SEG3 submesh is sorted so
+        that consecutive cells share a node (and flipped where needed), so reading
+        the connectivity walks the curve from one end to the other. Each submesh is
+        chained on its own and must be one continuous chain, open or closed: a node
+        carrying three segments (branching) or disjoint pieces raise an error.
+        Returns a fresh mesh sharing the input's nodes.
         """
-    def elements_on(self, points: Mesh, strict: builtins.bool = True) -> Mesh:
+    def invert(self) -> Mesh:
         r"""
-        Voir `pyrucast.mesh.elements_on`.
+        Reverse the orientation of every cell of a mesh (cast3m `INVE`).
+        
+        Flips each cell's winding/traversal/handedness (POI1 cells are unchanged),
+        in any dimension. Combined with `orient`, this selects the inside/outside
+        sense of a closed contour or surface. Returns a fresh mesh sharing the
+        input's nodes.
         """
-    def points_in_sphere(self, center: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
+    def sweep(self, mesh_b: Mesh, n_layers: builtins.int, element_type: typing.Optional[builtins.str] = None) -> Mesh:
         r"""
-        Voir `pyrucast.mesh.points_in_sphere`.
+        Sweep two SEG2 line meshes into a mesh of `element_type`, building
+        `n_layers` layers between `mesh_a` and `mesh_b`.
+        
+        `element_type` is `"QUA4"` (default), `"TRI3"`, `"QUA8"`, `"QUA9"` or
+        `"TRI6"` — a `QUA4` mesh is always built first, then converted (diagonal
+        split for the triangles, promoted to quadratic for `QUA8`/`QUA9`/`TRI6`).
         """
-    def points_on_sphere(self, center: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
+    def transfinite(self, side2: Mesh, side3: Mesh, side4: Mesh, element_type: typing.Optional[builtins.str] = None) -> Mesh:
         r"""
-        Voir `pyrucast.mesh.points_on_sphere`.
+        Build a structured surface bounded by four `SEG2` sides, by transfinite
+        interpolation (the Coons-patch generalization of `sweep` from two lines
+        to four). `side1`/`side3` and `side2`/`side4` are the two pairs of
+        **opposite** sides and must each have the same element count; the four
+        sides must form a closed contour, `side1 → side2 → side3 → side4 →
+        side1`, each sharing its end node with the next side's start node.
+        
+        `element_type` is `"QUA4"` (default), `"TRI3"`, `"QUA8"`, `"QUA9"` or
+        `"TRI6"` — same conversion path as `sweep`.
         """
-    def points_on_plane(self, origin: typing.Sequence[builtins.float], normal: typing.Sequence[builtins.float], tol: typing.Optional[builtins.float] = None) -> Mesh:
+    def extrude(self, direction: typing.Sequence[builtins.float], n_layers: builtins.int) -> Mesh:
         r"""
-        Voir `pyrucast.mesh.points_on_plane`.
+        Extrude `mesh` by `n_layers` layers along `direction` (the total
+        displacement vector). SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8.
         """
-    def points_below_plane(self, origin: typing.Sequence[builtins.float], normal: typing.Sequence[builtins.float], tol: typing.Optional[builtins.float] = None) -> Mesh:
+    def revolve(self, angle: builtins.float, n_layers: builtins.int, center: typing.Sequence[builtins.float], axis: typing.Optional[typing.Sequence[builtins.float]] = None) -> Mesh:
         r"""
-        Voir `pyrucast.mesh.points_below_plane`.
+        Revolve `mesh` by `n_layers` layers over a total `angle` (radians) — the
+        rotational companion of `extrude`. SEG2 → QUA4, TRI3 → PENTA6,
+        QUA4 → HEX8.
+        
+        In 2-D the revolution is about the point `center` (counterclockwise for a
+        positive `angle`) and `axis` is ignored; in 3-D it is about the line
+        through `center` directed by `axis` (right-handed), which is then
+        required. `|angle|` may not exceed a full turn, and a full turn closes the
+        ring: the last node layer is the first one again, so there is no seam. No
+        node may lie on the axis — it would collapse the cells touching it.
         """
-    def points_on_line(self, a: typing.Sequence[builtins.float], b: typing.Sequence[builtins.float], tol: typing.Optional[builtins.float] = None) -> Mesh:
+    def sweep_solid(self, mesh_b: Mesh, n_layers: builtins.int) -> Mesh:
         r"""
-        Voir `pyrucast.mesh.points_on_line`.
+        Sweep two matching surface meshes into a solid mesh, building `n_layers`
+        layers between `mesh_a` and `mesh_b`. The 3-D companion of `sweep`:
+        TRI3 faces → PENTA6 prisms, QUA4 faces → HEX8 hexahedra.
         """
-    def points_in_cylinder(self, base: typing.Sequence[builtins.float], top: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
+    def to_quadratic(self) -> Mesh:
         r"""
-        Voir `pyrucast.mesh.points_in_cylinder`.
+        Build the **quadratic** (Lagrange-2) copy of a linear mesh: each element
+        type is bumped to its quadratic sibling (TRI3→TRI6, HEX8→HEX20, …). Corner
+        nodes are re-used; one mid-edge node is created per edge (at the midpoint)
+        and shared between the cells that use it. The original mesh is untouched.
         """
-    def points_on_cylinder(self, base: typing.Sequence[builtins.float], top: typing.Sequence[builtins.float], radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
+    def convert(self, element_type: builtins.str) -> Mesh:
         r"""
-        Voir `pyrucast.mesh.points_on_cylinder`.
+        Convert every submesh of `mesh` to `element_type`, splitting each cell into
+        cells of the target type **without moving or adding any node** on the
+        existing corners. Supported: identity (already the target type — copied
+        verbatim), `"QUA4"` → `"TRI3"` (two triangles per quad, `(0,2)` diagonal),
+        and `"HEX8"` → `"TET4"` (six tetrahedra per hex, a conforming space-filling
+        split). Corner nodes are re-used; face colours are preserved. To promote to
+        a quadratic type (`TRI3`→`TRI6`, …), which creates mid-edge nodes, use
+        `to_quadratic`. The original mesh is untouched.
         """
-    def points_in_cone(self, base: typing.Sequence[builtins.float], top: typing.Sequence[builtins.float], base_radius: builtins.float, top_radius: builtins.float = 0.0, tol: typing.Optional[builtins.float] = None) -> Mesh:
+    def copy(self, new_nodes: builtins.bool = True) -> Mesh:
         r"""
-        Voir `pyrucast.mesh.points_in_cone`.
+        Copy `mesh`, either onto **fresh nodes** placed at the same spots
+        (`new_nodes=True`, the default) or onto the very same nodes
+        (`new_nodes=False`, only the connectivity is copied).
+        
+        Both modes keep the submesh order, element types, cell order and face
+        colours, and hand back a mesh that is **never sealed** — editable even
+        when the source has been frozen by a finite-element space, a field or a
+        matrix. The original is left untouched.
+        
+        With `new_nodes=True` each distinct node of `mesh` yields one fresh node at
+        the same position (nodes shared between cells stay shared), so the two
+        meshes no longer move together. With `new_nodes=False` they share their
+        nodes: moving one moves it in both.
         """
-    def points_on_cone(self, base: typing.Sequence[builtins.float], top: typing.Sequence[builtins.float], base_radius: builtins.float, top_radius: builtins.float = 0.0, tol: typing.Optional[builtins.float] = None) -> Mesh:
+    def translate(self, vector: typing.Sequence[builtins.float]) -> Mesh:
         r"""
-        Voir `pyrucast.mesh.points_on_cone`.
+        Translate `mesh` by `vector`, returning a fresh copy with its own nodes
+        (the original is left untouched). `vector` matches the mesh dimension.
         """
-    def points_in_torus(self, center: typing.Sequence[builtins.float], axis: typing.Sequence[builtins.float], major_radius: builtins.float, minor_radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
+    def rotate(self, angle: builtins.float, center: typing.Sequence[builtins.float], axis: typing.Optional[typing.Sequence[builtins.float]] = None) -> Mesh:
         r"""
-        Voir `pyrucast.mesh.points_in_torus`.
+        Rotate `mesh` by `angle` (radians) about `center`, returning a fresh copy
+        with its own nodes (the original is left untouched).
+        
+        In 2-D, `center` is a point and `axis` is ignored. In 3-D, the rotation is
+        about the line through `center` directed by `axis` (right-handed); `axis`
+        is required.
         """
-    def points_on_torus(self, center: typing.Sequence[builtins.float], axis: typing.Sequence[builtins.float], major_radius: builtins.float, minor_radius: builtins.float, tol: typing.Optional[builtins.float] = None) -> Mesh:
+    def symmetry_point(self, center: typing.Sequence[builtins.float]) -> Mesh:
         r"""
-        Voir `pyrucast.mesh.points_on_torus`.
+        Mirror `mesh` through the point `center` (Cast3m `SYME … POINT`),
+        returning a fresh copy with its own nodes (the original is left
+        untouched). Every node goes to `2·center − x`.
+        
+        In 3-D the map reverses orientation, so the cells are re-ordered (as
+        `invert` does) to keep the copy's Jacobians positive; in 2-D it is a plain
+        half-turn and nothing is re-ordered.
         """
-    def consolidate(self) -> Mesh:
+    def symmetry_line(self, a: typing.Sequence[builtins.float], b: typing.Sequence[builtins.float]) -> Mesh:
         r"""
-        Voir `pyrucast.mesh.consolidate`.
+        Mirror `mesh` through the infinite line running through `a` and `b`
+        (Cast3m `SYME … DROIT`), returning a fresh copy with its own nodes (the
+        original is left untouched).
+        
+        In 2-D this is the mirror image about the line; in 3-D it is the half-turn
+        about it (for the mirror image through a plane, use `symmetry_plane`).
+        Orientation-reversing in 2-D only, where the cells are re-ordered (as
+        `invert` does) to keep the copy's Jacobians positive.
+        """
+    def symmetry_plane(self, a: typing.Sequence[builtins.float], b: typing.Sequence[builtins.float], c: typing.Sequence[builtins.float]) -> Mesh:
+        r"""
+        Mirror `mesh` through the plane running through the three points `a`, `b`
+        and `c` (Cast3m `SYME … PLAN`), returning a fresh copy with its own nodes
+        (the original is left untouched). Only the plane the three points span
+        matters, not their order; they must not be aligned.
+        
+        3-D only — in 2-D the mirror about a line is `symmetry_line`. Always
+        orientation-reversing, so the cells are re-ordered (as `invert` does) to
+        keep the copy's Jacobians positive.
+        """
+    def triangulate_surface(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Mesh the interior of a closed SEG2 `contour` with `element_type` cells
+        using a constrained-Delaunay + Ruppert-refinement mesher.
+        
+        `contour` holds **one or more** closed SEG2 loops, each oriented by the
+        caller: a **counter-clockwise** loop is a domain's outer boundary, a
+        **clockwise** loop is a hole (contained in an outer loop). Several
+        disjoint CCW loops mesh several independent domains at once. `size` sets
+        the target element edge length; `None` uses the mean boundary edge length
+        per domain. `element_type` is "TRI3" or "QUA4" (QUA4 is quad-dominant:
+        the result may also carry a few boundary triangles). The contour may be
+        2-D or a planar loop in 3-D (meshed in its best-fit plane, lifted back).
+        """
+    def pave_surface(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None, all_quad: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
+        r"""
+        Pave the inside of a closed contour with quadrangles, in rows walking
+        inward from the boundary.
+        
+        The quadrangle-oriented companion of `triangulate_surface`, and the one to
+        reach for when the mesh is going to be computed on: paving lays QUA4 cells
+        down directly, in rows that follow the contour, instead of triangulating
+        and pairing triangles up afterwards.
+        
+        `contour` holds **one or more** closed SEG2 loops, oriented by the caller
+        exactly as for `triangulate_surface`: a **counter-clockwise** loop is a
+        domain's outer boundary, a **clockwise** loop is a hole. Several disjoint
+        CCW loops pave several independent domains at once. `size` sets the target
+        element edge length; `None` uses the mean boundary edge length per domain.
+        `element_type` is "QUA4", "QUA8" or "QUA9". The contour may be 2-D or a
+        planar loop in 3-D (paved in its best-fit plane, then lifted back).
+        
+        The contour is untouchable: its nodes come back at their own positions and
+        no node is ever added on a boundary edge. A contour the paver cannot work
+        with is therefore reported rather than worked around — `all_quad=True` on a
+        loop with an odd number of segments raises, since a polygon with an odd
+        number of sides has no filling by quadrangles alone and evening the count
+        out would mean adding a boundary node; so does a contour so coarse for the
+        requested size that the front folds onto itself.
+        
+        With `all_quad=False` (the default) an odd loop simply costs one triangle,
+        returned in a separate TRI3 submesh, along with the few cells a distorted
+        leftover polygon could not make square.
+        
+        `relax` chooses what the front is allowed to do to itself between two rows.
+        After each row the fresh chain is smoothed, which keeps the front from
+        kinking — and, being a Laplacian, rounds its corners off. That costs more
+        than it looks: a front sheds nodes only at its **corners**, so once they are
+        rounded away it keeps every node it has while its perimeter shrinks, and the
+        middle of the domain comes out finer than asked. A plain 20 × 20 square at
+        size 1 gives 600 cells instead of 400.
+        
+        - `"free"` (the default) — the historical behaviour: a node moves wherever
+          the smoothing points. The only mode that never lets the front kink.
+        - `"along"` — the same step, kept only **along** the front: the spacing is
+          evened out, the shape is not. The square then comes out as the 400 exact
+          squares anyone would draw.
+        - `"none"` — the front stays exactly where the row put it.
+        
+        There is no best answer, which is why it is a choice: `"along"` and
+        `"none"` win on anything with corners to keep and can kink on a curve, where
+        there is nothing to preserve and everything to straighten. A run that fails
+        to converge raises rather than grinding on.
+        """
+    def regularize(self, sweeps: builtins.int = 20, angular: builtins.bool = True, in_place: builtins.bool = False) -> Mesh:
+        r"""
+        Move the interior nodes of a surface mesh to improve its cells, leaving the
+        connectivity and the boundary exactly as they are.
+        
+        `sweeps` is how many passes to run. `angular=True` (the default) uses
+        angle-based smoothing, which aims at the right angles a quadrangle wants;
+        `False` uses the plain Laplacian, which aims at the one-ring's barycentre
+        and knows nothing about angles. `in_place=True` writes the new positions
+        onto your own nodes and hands the same mesh back; otherwise the moved nodes
+        are duplicated and a fresh mesh comes out, the boundary's nodes being
+        shared since they never moved.
+        
+        Two guarantees hold whatever the rule: **no node on the boundary ever
+        moves**, and a position is taken only when every incident cell stays valid
+        and the worst incident quality does not get worse.
+        
+        Smoothing cannot change who is next to whom, so it cannot fix a node with
+        the wrong number of cells around it — the angles around a node sum to 2π
+        whatever the positions. That is `cleanup`'s job, and running it first is
+        usually what unlocks the smoothing.
+        
+        TRI3 and QUA4 only, in 2-D. POI1 and SEG2 submeshes are ignored.
+        """
+    def cleanup(self) -> Mesh:
+        r"""
+        Fix the connectivity of a surface mesh: remove its doublets, give up the
+        nodes that have only three cells around them, and switch the diagonals that
+        lower the valence error.
+        
+        **No node of the contour ever moves**, and none is ever given up: the mesh
+        keeps exactly the boundary it came with.
+        
+        A **doublet** is an interior node with only two quadrangles around it,
+        which therefore share two edges; the node sits in a wedge no smoothing can
+        open. A node of the **wrong valence** wants four cells and has three or
+        five, giving corners of 120° or 72° on average — and the angles around a
+        node sum to 2π whatever the positions, so smoothing will never square them.
+        
+        Two moves answer that:
+        
+        - the **diagonal switch**, for a node of valence five or more: two
+          quadrangles sharing an edge form a hexagon, which splits across any of
+          its three diagonals. It changes no node and no boundary, and is applied
+          only when it strictly lowers the valence error and leaves both cells
+          convex.
+        - the **collapse**, for an interior node with only three cells: round a
+          node carrying `q` quadrangles and `t` triangles the star is bounded by a
+          polygon of `n = 2q + t` sides, and an `n`-gon decomposes with no interior
+          node into `q'` quadrangles and `t'` triangles such that `2q' + t' = n - 2`
+          — always a cell fewer than the star. So the node is given up along with
+          that cell: 3 quadrangles become 2, and 1 quadrangle with 2 triangles
+          becomes a single quadrangle. It is the only move that removes a node,
+          changes how many cells there are, or moves anything: removing a node
+          leaves the ring round it stretched, so the move is judged after relaxing
+          that ring, and the relaxation is kept along with it. A move that does not
+          improve the neighbourhood's worst cell is undone whole.
+        
+        - the **pair collapse**, for two interior nodes sharing an edge with at
+          least one short of a cell: neither can be given up alone without trading
+          one irregular node for two, but together they carry `val(a) + val(b) - 2`
+          cells — a hexagon's worth at 3-3, a heptagon's at 3-4 — and both re-cut
+          with two cells fewer. Two nodes and two cells go at once, and a triangle
+          in the star is carried across rather than created.
+        
+        Triangles are read for incidence and reshaped, and they only ever leave two
+        at a time — their number has the parity of the boundary's edge count, which
+        nothing here may change. Turning a lone triangle into a quadrangle is
+        `merge_triangles`'s job.
+        
+        Your own nodes come back untouched apart from those on a ring a collapse
+        relaxed, which are duplicated — the mesh you hand in is never modified. The
+        result comes back wound the way it went in, clockwise or not.
+        """
+    def merge_triangles(self) -> Mesh:
+        r"""
+        Remove the triangles from a quadrangle-dominant mesh, in pairs.
+        """
+    def grid_surface(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, all_quad: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
+        r"""
+        Mesh the inside of a closed contour with a structured grid core and a
+        frontal band — the regular-mesh companion of `pave_surface`.
+        
+        Same input, same output, same promise that the contour is untouchable: only
+        the interior is obtained differently. `pave_surface` walks a front inward
+        until two of its rows meet, and that meeting line carries the valence
+        defects, the leftover triangles and the flattest cells — even on a plain
+        rectangle, which comes out as an onion with four diagonal seams.
+        `grid_surface` lays a tensor grid instead, and leaves the front only what
+        the grid could not reach.
+        
+        The grid's lines are taken from the contour: every axis-aligned edge long
+        enough to be a feature pins a line, and the gaps are subdivided at about
+        `size`. A grid node landing on a contour node **is** that node, so the core
+        reaches the boundary rather than stopping short of it. On a rectilinear
+        domain laid out for the grid there is no band at all and the mesh is the
+        grid: every cell a rectangle, every Jacobian 1, no triangle.
+        
+        That last part is the one thing asked of the caller. A grid can only meet a
+        contour whose nodes fall on grid lines, so **break every side at the
+        shape's own corners and let each piece take a whole number of cells**. A
+        contour that does not is not an error — it just gets more band and less
+        grid, down to the quality of `pave_surface` in the worst case.
+        
+        `band` is extra clearance in cells between the core and the contour. Zero
+        is the useful value; raise it only for a contour the grid cannot meet, such
+        as a curve, where giving the front a couple of cells to work in beats
+        letting it fight for a sliver.
+        
+        `relax` chooses what the front may do to itself between two rows: `"free"`
+        (the default, and the historical behaviour), `"along"` — the smoothing kept
+        only along the front, which keeps its corners and with them the front's
+        ability to shed nodes as it contracts — or `"none"`. See `pave_surface`,
+        which shares the band with this operator and where the choice is spelled
+        out.
+        """
+    def grid_surface2(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, all_quad: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
+        r"""
+        Mesh the inside of a closed contour with a structured grid core and a
+        frontal band, taking the grid's lines **one per contour node**.
+        
+        The second of the two grid meshers, and the sibling of `grid_surface`, which
+        it does not replace: same input, same output, same untouchable contour, and
+        neither wins everywhere.
+        
+        `grid_surface` pins a line on the coordinate each aligned side lies on, and
+        subdivides between two lines by whichever side spans them end to end. Every
+        line is straight. `grid_surface2` gives every node of the contour the line
+        that crosses it, collapses the bands too thin to be cells — welding each of
+        their edges onto the contour node at one end, or onto its midpoint — and
+        lets a grid node within a quarter cell of a contour node move onto it.
+        
+        A row is therefore a polyline rather than a line, and that is the point: one
+        row can meet two facing walls at two different heights, so a wall cut into
+        ten can face a wall cut into eleven. `grid_surface` has to pick one of them
+        and sends the other to the band.
+        
+        **Reach for `grid_surface2` on a rectilinear shape**, all the more so when
+        its sides were not cut at the corners facing them; **reach for
+        `grid_surface` on anything curved**, where the contour's nodes only tell you
+        where its vertices happened to fall. Measured worst cell, `grid_surface`
+        then `grid_surface2`: plate with a step off the grid 0.405 / 0.963, L with
+        arbitrary dimensions 0.437 / 0.979, crenellated profile with its base in one
+        run 0.323 / 0.651, house with a pitched roof 0.420 / 0.548. On a **circle**
+        the order reverses hard — 0.288 against 0.005 — and `grid_surface2` should
+        not be used: nothing dictates a grid line over most of a curve. The book's
+        *Mailler une géométrie* page puts all four surface meshers side by side.
+        
+        `size`, `band` and `relax` mean what they mean for `grid_surface`.
+        """
+    def pave_volume(self, layers: builtins.int = 1, thickness: typing.Optional[builtins.float] = None, size: typing.Optional[builtins.float] = None) -> Mesh:
+        r"""
+        Mesh the inside of a closed envelope with a hexahedral boundary layer over
+        a tetrahedral core — the 3-D companion of `pave_surface`.
+        
+        Puts hexahedra where they matter, in the layer against the boundary where
+        gradients are steepest and an element's shape decides the accuracy, and
+        leaves the smooth interior to tetrahedra.
+        
+        `layers` boundary layers are grown inward, each `thickness` deep;
+        `thickness=None` takes the envelope's mean edge length, which gives roughly
+        cube-shaped cells. `size` is the target element size for the tetrahedral
+        core. The envelope is a closed surface of QUA4 and/or TRI3 facets whose
+        normals point **out of the material**, exactly as for `triangulate_volume`;
+        its nodes are reused as they are.
+        
+        The result carries a QUA4-born HEX8 submesh, a TRI3-born PENTA6 one, a
+        PYRA5 one and a TET4 one, each present only if non-empty. The pyramids are
+        the junction: the layer's inner faces are squares and a tetrahedron has
+        none, so without them the mesh could not be conforming.
+        """
+    def triangulate_volume(self, size: typing.Optional[builtins.float] = None, allow_surface_nodes: builtins.bool = False) -> Mesh:
+        r"""
+        Fill the inside of a closed `TRI3` `envelope` with `TET4` cells — the 3-D
+        companion of `triangulate_surface`.
+        
+        The envelope's normals must point **out of the material**; a concave
+        shape is fine, and an internal cavity is simply another closed surface
+        whose normals point into the hole. Its nodes are reused as they are, and
+        nodes are added inside the solid so the cells come out well shaped.
+        
+        `size` is the target edge length; `None` takes the mean edge length of
+        the envelope. `allow_surface_nodes` lets the mesher cut the envelope
+        finer where it cannot otherwise fit it or make it usable: the shape is
+        kept — every added node lies on the edge or facet it divides — but the
+        skin of the result no longer matches the surface handed in, and a warning
+        on stderr says how many were added. Without it, such a surface is
+        refused rather than meshed badly.
         """
     def merge_nodes(self, tol: builtins.float, in_place: builtins.bool = False) -> Mesh:
         r"""
         Voir `pyrucast.mesh.merge_nodes`.
-        """
-    def border(self, angle_deg: typing.Optional[builtins.float] = None) -> Mesh:
-        r"""
-        Voir `pyrucast.mesh.border`.
-        """
-    def orient(self) -> Mesh:
-        r"""
-        Voir `pyrucast.mesh.orient`.
-        """
-    def invert(self) -> Mesh:
-        r"""
-        Voir `pyrucast.mesh.invert`.
-        """
-    def chain(self) -> Mesh:
-        r"""
-        Voir `pyrucast.mesh.chain`.
-        """
-    def sweep(self, mesh_b: Mesh, n_layers: builtins.int, element_type: typing.Optional[builtins.str] = None) -> Mesh:
-        r"""
-        Voir `pyrucast.mesh.sweep`.
-        """
-    def transfinite(self, side2: Mesh, side3: Mesh, side4: Mesh, element_type: typing.Optional[builtins.str] = None) -> Mesh:
-        r"""
-        Voir `pyrucast.mesh.transfinite`.
-        """
-    def extrude(self, direction: typing.Sequence[builtins.float], n_layers: builtins.int) -> Mesh:
-        r"""
-        Voir `pyrucast.mesh.extrude`.
-        """
-    def revolve(self, angle: builtins.float, n_layers: builtins.int, center: typing.Sequence[builtins.float], axis: typing.Optional[typing.Sequence[builtins.float]] = None) -> Mesh:
-        r"""
-        Voir `pyrucast.mesh.revolve`.
-        """
-    def sweep_solid(self, mesh_b: Mesh, n_layers: builtins.int) -> Mesh:
-        r"""
-        Voir `pyrucast.mesh.sweep_solid`.
-        """
-    def to_quadratic(self) -> Mesh:
-        r"""
-        Voir `pyrucast.mesh.to_quadratic`.
-        """
-    def convert(self, element_type: builtins.str) -> Mesh:
-        r"""
-        Voir `pyrucast.mesh.convert`.
-        """
-    def copy(self, new_nodes: builtins.bool = True) -> Mesh:
-        r"""
-        Voir `pyrucast.mesh.copy`.
-        """
-    def translate(self, vector: typing.Sequence[builtins.float]) -> Mesh:
-        r"""
-        Voir `pyrucast.mesh.translate`.
-        """
-    def rotate(self, angle: builtins.float, center: typing.Sequence[builtins.float], axis: typing.Optional[typing.Sequence[builtins.float]] = None) -> Mesh:
-        r"""
-        Voir `pyrucast.mesh.rotate`.
-        """
-    def symmetry_point(self, center: typing.Sequence[builtins.float]) -> Mesh:
-        r"""
-        Voir `pyrucast.mesh.symmetry_point`.
-        """
-    def symmetry_line(self, a: typing.Sequence[builtins.float], b: typing.Sequence[builtins.float]) -> Mesh:
-        r"""
-        Voir `pyrucast.mesh.symmetry_line`.
-        """
-    def symmetry_plane(self, a: typing.Sequence[builtins.float], b: typing.Sequence[builtins.float], c: typing.Sequence[builtins.float]) -> Mesh:
-        r"""
-        Voir `pyrucast.mesh.symmetry_plane`.
-        """
-    def triangulate_surface(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None) -> Mesh:
-        r"""
-        Voir `pyrucast.mesh.triangulate_surface`.
-        """
-    def pave_surface(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None, all_quad: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
-        r"""
-        Voir `pyrucast.mesh.pave_surface`.
-        """
-    def regularize(self, sweeps: builtins.int = 20, angular: builtins.bool = True, in_place: builtins.bool = False) -> Mesh:
-        r"""
-        Voir `pyrucast.mesh.regularize`.
-        """
-    def cleanup(self) -> Mesh:
-        r"""
-        Voir `pyrucast.mesh.cleanup`.
-        """
-    def merge_triangles(self) -> Mesh:
-        r"""
-        Voir `pyrucast.mesh.merge_triangles`.
-        """
-    def grid_surface(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, all_quad: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
-        r"""
-        Voir `pyrucast.mesh.grid_surface`.
-        """
-    def grid_surface2(self, element_type: builtins.str, size: typing.Optional[builtins.float] = None, band: builtins.int = 0, all_quad: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
-        r"""
-        Voir `pyrucast.mesh.grid_surface2`.
-        """
-    def pave_volume(self, layers: builtins.int = 1, thickness: typing.Optional[builtins.float] = None, size: typing.Optional[builtins.float] = None) -> Mesh:
-        r"""
-        Voir `pyrucast.mesh.pave_volume`.
-        """
-    def triangulate_volume(self, size: typing.Optional[builtins.float] = None, allow_surface_nodes: builtins.bool = False) -> Mesh:
-        r"""
-        Voir `pyrucast.mesh.triangulate_volume`.
         """
     def positions(self, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> NodeField:
         r"""

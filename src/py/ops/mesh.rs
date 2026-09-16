@@ -44,6 +44,7 @@ pub fn poi1_from_nodes(nodes: Vec<PyRef<PyNode>>) -> PyResult<PyMesh> {
 /// Returns a new mesh with the same number of submeshes; each output
 /// submesh is a POI1 submesh holding the de-duplicated nodes of the
 /// corresponding input submesh, in order of first appearance.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn to_poi1(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
@@ -59,6 +60,7 @@ pub fn to_poi1(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
 /// input submesh, placed at the element's centroid. A POI1 input is therefore
 /// copied to colocated fresh nodes — handy to mint Lagrange-multiplier support
 /// nodes from a set of constrained points.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn barycenter(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
@@ -75,6 +77,7 @@ pub fn barycenter(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
 /// least one** is (`APPUYE`). The result mirrors `mesh` submesh by submesh
 /// (same types, possibly-empty zones). Both meshes must share the same
 /// `Coords`.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (mesh, points, strict=true))]
@@ -96,6 +99,7 @@ pub fn elements_on(mesh: PyRef<PyMesh>, points: PyRef<PyMesh>, strict: bool) -> 
 ///
 /// Keeps the nodes at a distance `≤ radius + tol` from `center`. In 2-D the
 /// sphere is a disc — `center` just has to match the mesh dimension.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (mesh, center, radius, tol=None))]
@@ -114,6 +118,7 @@ pub fn points_in_sphere(
 ///
 /// Keeps the nodes whose distance to `center` is within `tol` of `radius`, on
 /// either side. In 2-D this selects a circle.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (mesh, center, radius, tol=None))]
@@ -133,6 +138,7 @@ pub fn points_on_sphere(
 /// Keeps the nodes within `tol` of the plane — the usual way to grab a
 /// boundary face of a box mesh. `normal` need not be normalized; in 2-D the
 /// plane is a line.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (mesh, origin, normal, tol=None))]
@@ -151,6 +157,7 @@ pub fn points_on_plane(
 ///
 /// There is no `points_above_plane`: flip the normal and this is the other
 /// half-space.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (mesh, origin, normal, tol=None))]
@@ -170,6 +177,7 @@ pub fn points_below_plane(
 /// Keeps the nodes at a distance `≤ tol` from the line, with no bound along
 /// it — use `points_in_cylinder` with a small radius for a selection clipped
 /// to the `a → b` segment.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (mesh, a, b, tol=None))]
@@ -188,6 +196,7 @@ pub fn points_on_line(
 ///
 /// The cylinder is capped: a node is kept when it is within `radius + tol` of
 /// the axis **and** its axial coordinate falls between the two end sections.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (mesh, base, top, radius, tol=None))]
@@ -207,6 +216,7 @@ pub fn points_in_cylinder(
 ///
 /// The end discs are **not** part of the selection — they are flat faces, and
 /// `points_on_plane` cuts those. This is how you grab the bore of a tube.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (mesh, base, top, radius, tol=None))]
@@ -227,6 +237,7 @@ pub fn points_on_cylinder(
 /// The shape is a truncated cone: `top_radius=0` (the default) gives a true
 /// cone whose apex is `top`, `top_radius=base_radius` a cylinder. Capped like
 /// `points_in_cylinder`.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (mesh, base, top, base_radius, top_radius=0.0, tol=None))]
@@ -249,6 +260,7 @@ pub fn points_in_cone(
 /// The distance to the slanted surface is the perpendicular one, so the band
 /// stays `tol` wide however steep the cone is. As for `points_on_cylinder`,
 /// the end discs are not part of the selection.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (mesh, base, top, base_radius, top_radius=0.0, tol=None))]
@@ -271,6 +283,7 @@ pub fn points_on_cone(
 /// The section is circular: the torus is the set of points at a distance
 /// `≤ minor_radius` from the circle of radius `major_radius` drawn around
 /// `center` in the plane normal to `axis`. **3-D only.**
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (mesh, center, axis, major_radius, minor_radius, tol=None))]
@@ -298,6 +311,7 @@ pub fn points_in_torus(
 ///
 /// Keeps the nodes within `tol` of the tube's surface. The torus being
 /// closed, there is no cap to worry about here. **3-D only.**
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (mesh, center, axis, major_radius, minor_radius, tol=None))]
@@ -327,6 +341,7 @@ pub fn points_on_torus(
 /// submesh of each type is kept. `mesh` itself is left untouched.
 ///
 /// Errors if `mesh` has no submesh (no `Coords` to attach to).
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(name = "consolidate_mesh")]
@@ -396,6 +411,7 @@ pub fn merge_nodes(
 /// degrees — one SEG2 submesh per arête (as `skin` splits a volume's skin into
 /// flat faces). A loop with no such corner stays a single closed loop.
 /// `angle_deg=None` (the default) keeps every boundary as one closed loop.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (mesh, angle_deg=None))]
@@ -444,6 +460,7 @@ pub fn skin(mesh: PyRef<PyMesh>, angle_deg: Option<f64>) -> PyResult<PyMesh> {
 /// lowest-indexed cell, which keeps its orientation; the absolute sense is not
 /// chosen (use `invert` to flip a whole mesh, e.g. a hole's boundary). Returns
 /// a fresh mesh sharing the input's nodes.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn orient(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
@@ -460,6 +477,7 @@ pub fn orient(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
 /// chained on its own and must be one continuous chain, open or closed: a node
 /// carrying three segments (branching) or disjoint pieces raise an error.
 /// Returns a fresh mesh sharing the input's nodes.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn chain(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
@@ -473,6 +491,7 @@ pub fn chain(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
 /// in any dimension. Combined with `orient`, this selects the inside/outside
 /// sense of a closed contour or surface. Returns a fresh mesh sharing the
 /// input's nodes.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn invert(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
@@ -549,6 +568,7 @@ pub fn arc(
 /// `element_type` is `"QUA4"` (default), `"TRI3"`, `"QUA8"`, `"QUA9"` or
 /// `"TRI6"` — a `QUA4` mesh is always built first, then converted (diagonal
 /// split for the triangles, promoted to quadratic for `QUA8`/`QUA9`/`TRI6`).
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (mesh_a, mesh_b, n_layers, element_type=None))]
@@ -572,6 +592,7 @@ pub fn sweep(
 ///
 /// `element_type` is `"QUA4"` (default), `"TRI3"`, `"QUA8"`, `"QUA9"` or
 /// `"TRI6"` — same conversion path as `sweep`.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (side1, side2, side3, side4, element_type=None))]
@@ -595,6 +616,7 @@ pub fn transfinite(
 
 /// Extrude `mesh` by `n_layers` layers along `direction` (the total
 /// displacement vector). SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn extrude(mesh: PyRef<PyMesh>, direction: Vec<f64>, n_layers: usize) -> PyResult<PyMesh> {
@@ -612,6 +634,7 @@ pub fn extrude(mesh: PyRef<PyMesh>, direction: Vec<f64>, n_layers: usize) -> PyR
 /// required. `|angle|` may not exceed a full turn, and a full turn closes the
 /// ring: the last node layer is the first one again, so there is no seam. No
 /// node may lie on the axis — it would collapse the cells touching it.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (mesh, angle, n_layers, center, axis=None))]
@@ -629,6 +652,7 @@ pub fn revolve(
 /// Sweep two matching surface meshes into a solid mesh, building `n_layers`
 /// layers between `mesh_a` and `mesh_b`. The 3-D companion of `sweep`:
 /// TRI3 faces → PENTA6 prisms, QUA4 faces → HEX8 hexahedra.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn sweep_solid(
@@ -644,6 +668,7 @@ pub fn sweep_solid(
 /// type is bumped to its quadratic sibling (TRI3→TRI6, HEX8→HEX20, …). Corner
 /// nodes are re-used; one mid-edge node is created per edge (at the midpoint)
 /// and shared between the cells that use it. The original mesh is untouched.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn to_quadratic(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
@@ -659,6 +684,7 @@ pub fn to_quadratic(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
 /// split). Corner nodes are re-used; face colours are preserved. To promote to
 /// a quadratic type (`TRI3`→`TRI6`, …), which creates mid-edge nodes, use
 /// `to_quadratic`. The original mesh is untouched.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn convert(mesh: PyRef<PyMesh>, element_type: ElementType) -> PyResult<PyMesh> {
@@ -679,6 +705,7 @@ pub fn convert(mesh: PyRef<PyMesh>, element_type: ElementType) -> PyResult<PyMes
 /// the same position (nodes shared between cells stay shared), so the two
 /// meshes no longer move together. With `new_nodes=False` they share their
 /// nodes: moving one moves it in both.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (mesh, new_nodes=true))]
@@ -689,6 +716,7 @@ pub fn copy(mesh: PyRef<PyMesh>, new_nodes: bool) -> PyResult<PyMesh> {
 
 /// Translate `mesh` by `vector`, returning a fresh copy with its own nodes
 /// (the original is left untouched). `vector` matches the mesh dimension.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn translate(mesh: PyRef<PyMesh>, vector: Vec<f64>) -> PyResult<PyMesh> {
@@ -702,6 +730,7 @@ pub fn translate(mesh: PyRef<PyMesh>, vector: Vec<f64>) -> PyResult<PyMesh> {
 /// In 2-D, `center` is a point and `axis` is ignored. In 3-D, the rotation is
 /// about the line through `center` directed by `axis` (right-handed); `axis`
 /// is required.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (mesh, angle, center, axis=None))]
@@ -722,6 +751,7 @@ pub fn rotate(
 /// In 3-D the map reverses orientation, so the cells are re-ordered (as
 /// `invert` does) to keep the copy's Jacobians positive; in 2-D it is a plain
 /// half-turn and nothing is re-ordered.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn symmetry_point(mesh: PyRef<PyMesh>, center: Vec<f64>) -> PyResult<PyMesh> {
@@ -737,6 +767,7 @@ pub fn symmetry_point(mesh: PyRef<PyMesh>, center: Vec<f64>) -> PyResult<PyMesh>
 /// about it (for the mirror image through a plane, use `symmetry_plane`).
 /// Orientation-reversing in 2-D only, where the cells are re-ordered (as
 /// `invert` does) to keep the copy's Jacobians positive.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn symmetry_line(mesh: PyRef<PyMesh>, a: Vec<f64>, b: Vec<f64>) -> PyResult<PyMesh> {
@@ -752,6 +783,7 @@ pub fn symmetry_line(mesh: PyRef<PyMesh>, a: Vec<f64>, b: Vec<f64>) -> PyResult<
 /// 3-D only — in 2-D the mirror about a line is `symmetry_line`. Always
 /// orientation-reversing, so the cells are re-ordered (as `invert` does) to
 /// keep the copy's Jacobians positive.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn symmetry_plane(
@@ -775,6 +807,7 @@ pub fn symmetry_plane(
 /// per domain. `element_type` is "TRI3" or "QUA4" (QUA4 is quad-dominant:
 /// the result may also carry a few boundary triangles). The contour may be
 /// 2-D or a planar loop in 3-D (meshed in its best-fit plane, lifted back).
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (contour, element_type, size=None))]
@@ -841,6 +874,7 @@ pub fn triangulate_surface(
 /// `"none"` win on anything with corners to keep and can kink on a curve, where
 /// there is nothing to preserve and everything to straighten. A run that fails
 /// to converge raises rather than grinding on.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (contour, element_type, size=None, all_quad=false, relax=None))]
@@ -885,6 +919,7 @@ pub fn pave_surface(
 /// usually what unlocks the smoothing.
 ///
 /// TRI3 and QUA4 only, in 2-D. POI1 and SEG2 submeshes are ignored.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (mesh, sweeps=20, angular=true, in_place=false))]
@@ -945,6 +980,7 @@ pub fn regularize(
 /// Your own nodes come back untouched apart from those on a ring a collapse
 /// relaxed, which are duplicated — the mesh you hand in is never modified. The
 /// result comes back wound the way it went in, clockwise or not.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn cleanup(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
@@ -953,6 +989,7 @@ pub fn cleanup(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
 }
 
 /// Remove the triangles from a quadrangle-dominant mesh, in pairs.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn merge_triangles(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
@@ -995,6 +1032,7 @@ pub fn merge_triangles(mesh: PyRef<PyMesh>) -> PyResult<PyMesh> {
 /// ability to shed nodes as it contracts — or `"none"`. See `pave_surface`,
 /// which shares the band with this operator and where the choice is spelled
 /// out.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (contour, element_type, size=None, band=0, all_quad=false, relax=None))]
@@ -1050,6 +1088,7 @@ pub fn grid_surface(
 /// *Mailler une géométrie* page puts all four surface meshers side by side.
 ///
 /// `size`, `band` and `relax` mean what they mean for `grid_surface`.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (contour, element_type, size=None, band=0, all_quad=false, relax=None))]
@@ -1092,6 +1131,7 @@ pub fn grid_surface2(
 /// PYRA5 one and a TET4 one, each present only if non-empty. The pyramids are
 /// the junction: the layer's inner faces are squares and a tetrahedron has
 /// none, so without them the mesh could not be conforming.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (envelope, layers=1, thickness=None, size=None))]
@@ -1128,6 +1168,7 @@ pub fn pave_volume(
 /// skin of the result no longer matches the surface handed in, and a warning
 /// on stderr says how many were added. Without it, such a surface is
 /// refused rather than meshed badly.
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (envelope, size=None, allow_surface_nodes=false))]
@@ -1331,163 +1372,18 @@ pub fn select(
 // ─── Méthodes de délégation ────────────────────────────────────────────────
 //
 // La face « sujet » des opérateurs ci-dessus (`CONVENTIONS.md` § « Le verbe
-// exposé aussi en méthode »). Aucune logique : chaque méthode rappelle la
-// fonction libre, receveur compris.
+// exposé aussi en méthode »). Elles naissent désormais de `#[py_op]`, posé sur
+// la fonction libre : la méthode est dérivée de sa signature, et sa
+// documentation **recopiée** plutôt que pointée — c'est ce qui la fait
+// apparaître en entier dans `help()` comme dans le stub que lisent les IDE.
+//
+// Ce bloc ne garde donc que ce qui sort du moule. `merge_nodes` en est : son
+// receveur est un `Py<Self>` et son retour un `Py<PyMesh>` — l'objet lui-même,
+// pas une vue empruntée. `#[py_op]` n'émet qu'un receveur `PyRef`, et se
+// compliquer pour un cas unique coûterait plus que cette méthode-ci.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyMesh {
-    /// Voir `pyrucast.mesh.to_poi1`.
-    fn to_poi1(slf: PyRef<'_, Self>) -> PyResult<PyMesh> {
-        super::mesh::to_poi1(slf)
-    }
-
-    /// Voir `pyrucast.mesh.barycenter`.
-    fn barycenter(slf: PyRef<'_, Self>) -> PyResult<PyMesh> {
-        super::mesh::barycenter(slf)
-    }
-
-    /// Voir `pyrucast.mesh.elements_on`.
-    #[pyo3(signature = (points, strict=true))]
-    fn elements_on(slf: PyRef<'_, Self>, points: PyRef<PyMesh>, strict: bool) -> PyResult<PyMesh> {
-        super::mesh::elements_on(slf, points, strict)
-    }
-
-    /// Voir `pyrucast.mesh.points_in_sphere`.
-    #[pyo3(signature = (center, radius, tol=None))]
-    fn points_in_sphere(
-        slf: PyRef<'_, Self>,
-        center: Vec<f64>,
-        radius: f64,
-        tol: Option<f64>,
-    ) -> PyResult<PyMesh> {
-        super::mesh::points_in_sphere(slf, center, radius, tol)
-    }
-
-    /// Voir `pyrucast.mesh.points_on_sphere`.
-    #[pyo3(signature = (center, radius, tol=None))]
-    fn points_on_sphere(
-        slf: PyRef<'_, Self>,
-        center: Vec<f64>,
-        radius: f64,
-        tol: Option<f64>,
-    ) -> PyResult<PyMesh> {
-        super::mesh::points_on_sphere(slf, center, radius, tol)
-    }
-
-    /// Voir `pyrucast.mesh.points_on_plane`.
-    #[pyo3(signature = (origin, normal, tol=None))]
-    fn points_on_plane(
-        slf: PyRef<'_, Self>,
-        origin: Vec<f64>,
-        normal: Vec<f64>,
-        tol: Option<f64>,
-    ) -> PyResult<PyMesh> {
-        super::mesh::points_on_plane(slf, origin, normal, tol)
-    }
-
-    /// Voir `pyrucast.mesh.points_below_plane`.
-    #[pyo3(signature = (origin, normal, tol=None))]
-    fn points_below_plane(
-        slf: PyRef<'_, Self>,
-        origin: Vec<f64>,
-        normal: Vec<f64>,
-        tol: Option<f64>,
-    ) -> PyResult<PyMesh> {
-        super::mesh::points_below_plane(slf, origin, normal, tol)
-    }
-
-    /// Voir `pyrucast.mesh.points_on_line`.
-    #[pyo3(signature = (a, b, tol=None))]
-    fn points_on_line(
-        slf: PyRef<'_, Self>,
-        a: Vec<f64>,
-        b: Vec<f64>,
-        tol: Option<f64>,
-    ) -> PyResult<PyMesh> {
-        super::mesh::points_on_line(slf, a, b, tol)
-    }
-
-    /// Voir `pyrucast.mesh.points_in_cylinder`.
-    #[pyo3(signature = (base, top, radius, tol=None))]
-    fn points_in_cylinder(
-        slf: PyRef<'_, Self>,
-        base: Vec<f64>,
-        top: Vec<f64>,
-        radius: f64,
-        tol: Option<f64>,
-    ) -> PyResult<PyMesh> {
-        super::mesh::points_in_cylinder(slf, base, top, radius, tol)
-    }
-
-    /// Voir `pyrucast.mesh.points_on_cylinder`.
-    #[pyo3(signature = (base, top, radius, tol=None))]
-    fn points_on_cylinder(
-        slf: PyRef<'_, Self>,
-        base: Vec<f64>,
-        top: Vec<f64>,
-        radius: f64,
-        tol: Option<f64>,
-    ) -> PyResult<PyMesh> {
-        super::mesh::points_on_cylinder(slf, base, top, radius, tol)
-    }
-
-    /// Voir `pyrucast.mesh.points_in_cone`.
-    #[pyo3(signature = (base, top, base_radius, top_radius=0.0, tol=None))]
-    fn points_in_cone(
-        slf: PyRef<'_, Self>,
-        base: Vec<f64>,
-        top: Vec<f64>,
-        base_radius: f64,
-        top_radius: f64,
-        tol: Option<f64>,
-    ) -> PyResult<PyMesh> {
-        super::mesh::points_in_cone(slf, base, top, base_radius, top_radius, tol)
-    }
-
-    /// Voir `pyrucast.mesh.points_on_cone`.
-    #[pyo3(signature = (base, top, base_radius, top_radius=0.0, tol=None))]
-    fn points_on_cone(
-        slf: PyRef<'_, Self>,
-        base: Vec<f64>,
-        top: Vec<f64>,
-        base_radius: f64,
-        top_radius: f64,
-        tol: Option<f64>,
-    ) -> PyResult<PyMesh> {
-        super::mesh::points_on_cone(slf, base, top, base_radius, top_radius, tol)
-    }
-
-    /// Voir `pyrucast.mesh.points_in_torus`.
-    #[pyo3(signature = (center, axis, major_radius, minor_radius, tol=None))]
-    fn points_in_torus(
-        slf: PyRef<'_, Self>,
-        center: Vec<f64>,
-        axis: Vec<f64>,
-        major_radius: f64,
-        minor_radius: f64,
-        tol: Option<f64>,
-    ) -> PyResult<PyMesh> {
-        super::mesh::points_in_torus(slf, center, axis, major_radius, minor_radius, tol)
-    }
-
-    /// Voir `pyrucast.mesh.points_on_torus`.
-    #[pyo3(signature = (center, axis, major_radius, minor_radius, tol=None))]
-    fn points_on_torus(
-        slf: PyRef<'_, Self>,
-        center: Vec<f64>,
-        axis: Vec<f64>,
-        major_radius: f64,
-        minor_radius: f64,
-        tol: Option<f64>,
-    ) -> PyResult<PyMesh> {
-        super::mesh::points_on_torus(slf, center, axis, major_radius, minor_radius, tol)
-    }
-
-    /// Voir `pyrucast.mesh.consolidate`.
-    fn consolidate(slf: PyRef<'_, Self>) -> PyResult<PyMesh> {
-        super::mesh::consolidate(slf)
-    }
-
     /// Voir `pyrucast.mesh.merge_nodes`.
     #[pyo3(signature = (tol, in_place=false))]
     fn merge_nodes(
@@ -1497,223 +1393,5 @@ impl PyMesh {
         in_place: bool,
     ) -> PyResult<Py<PyMesh>> {
         super::mesh::merge_nodes(py, slf, tol, in_place)
-    }
-
-    /// Voir `pyrucast.mesh.border`.
-    #[pyo3(signature = (angle_deg=None))]
-    fn border(slf: PyRef<'_, Self>, angle_deg: Option<f64>) -> PyResult<PyMesh> {
-        super::mesh::border(slf, angle_deg)
-    }
-
-    /// Voir `pyrucast.mesh.orient`.
-    fn orient(slf: PyRef<'_, Self>) -> PyResult<PyMesh> {
-        super::mesh::orient(slf)
-    }
-
-    /// Voir `pyrucast.mesh.invert`.
-    fn invert(slf: PyRef<'_, Self>) -> PyResult<PyMesh> {
-        super::mesh::invert(slf)
-    }
-
-    /// Voir `pyrucast.mesh.chain`.
-    fn chain(slf: PyRef<'_, Self>) -> PyResult<PyMesh> {
-        super::mesh::chain(slf)
-    }
-
-    /// Voir `pyrucast.mesh.sweep`.
-    #[pyo3(signature = (mesh_b, n_layers, element_type=None))]
-    fn sweep(
-        slf: PyRef<'_, Self>,
-        mesh_b: PyRef<PyMesh>,
-        n_layers: usize,
-        element_type: Option<ElementType>,
-    ) -> PyResult<PyMesh> {
-        super::mesh::sweep(slf, mesh_b, n_layers, element_type)
-    }
-
-    /// Voir `pyrucast.mesh.transfinite`.
-    #[pyo3(signature = (side2, side3, side4, element_type=None))]
-    fn transfinite(
-        slf: PyRef<'_, Self>,
-        side2: PyRef<PyMesh>,
-        side3: PyRef<PyMesh>,
-        side4: PyRef<PyMesh>,
-        element_type: Option<ElementType>,
-    ) -> PyResult<PyMesh> {
-        super::mesh::transfinite(slf, side2, side3, side4, element_type)
-    }
-
-    /// Voir `pyrucast.mesh.extrude`.
-    fn extrude(slf: PyRef<'_, Self>, direction: Vec<f64>, n_layers: usize) -> PyResult<PyMesh> {
-        super::mesh::extrude(slf, direction, n_layers)
-    }
-
-    /// Voir `pyrucast.mesh.revolve`.
-    #[pyo3(signature = (angle, n_layers, center, axis=None))]
-    fn revolve(
-        slf: PyRef<'_, Self>,
-        angle: f64,
-        n_layers: usize,
-        center: Vec<f64>,
-        axis: Option<Vec<f64>>,
-    ) -> PyResult<PyMesh> {
-        super::mesh::revolve(slf, angle, n_layers, center, axis)
-    }
-
-    /// Voir `pyrucast.mesh.sweep_solid`.
-    fn sweep_solid(
-        slf: PyRef<'_, Self>,
-        mesh_b: PyRef<PyMesh>,
-        n_layers: usize,
-    ) -> PyResult<PyMesh> {
-        super::mesh::sweep_solid(slf, mesh_b, n_layers)
-    }
-
-    /// Voir `pyrucast.mesh.to_quadratic`.
-    fn to_quadratic(slf: PyRef<'_, Self>) -> PyResult<PyMesh> {
-        super::mesh::to_quadratic(slf)
-    }
-
-    /// Voir `pyrucast.mesh.convert`.
-    fn convert(slf: PyRef<'_, Self>, element_type: ElementType) -> PyResult<PyMesh> {
-        super::mesh::convert(slf, element_type)
-    }
-
-    /// Voir `pyrucast.mesh.copy`.
-    #[pyo3(signature = (new_nodes=true))]
-    fn copy(slf: PyRef<'_, Self>, new_nodes: bool) -> PyResult<PyMesh> {
-        super::mesh::copy(slf, new_nodes)
-    }
-
-    /// Voir `pyrucast.mesh.translate`.
-    fn translate(slf: PyRef<'_, Self>, vector: Vec<f64>) -> PyResult<PyMesh> {
-        super::mesh::translate(slf, vector)
-    }
-
-    /// Voir `pyrucast.mesh.rotate`.
-    #[pyo3(signature = (angle, center, axis=None))]
-    fn rotate(
-        slf: PyRef<'_, Self>,
-        angle: f64,
-        center: Vec<f64>,
-        axis: Option<Vec<f64>>,
-    ) -> PyResult<PyMesh> {
-        super::mesh::rotate(slf, angle, center, axis)
-    }
-
-    /// Voir `pyrucast.mesh.symmetry_point`.
-    fn symmetry_point(slf: PyRef<'_, Self>, center: Vec<f64>) -> PyResult<PyMesh> {
-        super::mesh::symmetry_point(slf, center)
-    }
-
-    /// Voir `pyrucast.mesh.symmetry_line`.
-    fn symmetry_line(slf: PyRef<'_, Self>, a: Vec<f64>, b: Vec<f64>) -> PyResult<PyMesh> {
-        super::mesh::symmetry_line(slf, a, b)
-    }
-
-    /// Voir `pyrucast.mesh.symmetry_plane`.
-    fn symmetry_plane(
-        slf: PyRef<'_, Self>,
-        a: Vec<f64>,
-        b: Vec<f64>,
-        c: Vec<f64>,
-    ) -> PyResult<PyMesh> {
-        super::mesh::symmetry_plane(slf, a, b, c)
-    }
-
-    /// Voir `pyrucast.mesh.triangulate_surface`.
-    #[pyo3(signature = (element_type, size=None))]
-    fn triangulate_surface(
-        slf: PyRef<'_, Self>,
-        py: Python<'_>,
-        element_type: ElementType,
-        size: Option<f64>,
-    ) -> PyResult<PyMesh> {
-        super::mesh::triangulate_surface(py, slf, element_type, size)
-    }
-
-    /// Voir `pyrucast.mesh.pave_surface`.
-    #[pyo3(signature = (element_type, size=None, all_quad=false, relax=None))]
-    fn pave_surface(
-        slf: PyRef<'_, Self>,
-        py: Python<'_>,
-        element_type: ElementType,
-        size: Option<f64>,
-        all_quad: bool,
-        relax: Option<FrontRelax>,
-    ) -> PyResult<PyMesh> {
-        super::mesh::pave_surface(py, slf, element_type, size, all_quad, relax)
-    }
-
-    /// Voir `pyrucast.mesh.regularize`.
-    #[pyo3(signature = (sweeps=20, angular=true, in_place=false))]
-    fn regularize(
-        slf: PyRef<'_, Self>,
-        sweeps: usize,
-        angular: bool,
-        in_place: bool,
-    ) -> PyResult<PyMesh> {
-        super::mesh::regularize(slf, sweeps, angular, in_place)
-    }
-
-    /// Voir `pyrucast.mesh.cleanup`.
-    fn cleanup(slf: PyRef<'_, Self>) -> PyResult<PyMesh> {
-        super::mesh::cleanup(slf)
-    }
-
-    /// Voir `pyrucast.mesh.merge_triangles`.
-    fn merge_triangles(slf: PyRef<'_, Self>) -> PyResult<PyMesh> {
-        super::mesh::merge_triangles(slf)
-    }
-
-    /// Voir `pyrucast.mesh.grid_surface`.
-    #[pyo3(signature = (element_type, size=None, band=0, all_quad=false, relax=None))]
-    fn grid_surface(
-        slf: PyRef<'_, Self>,
-        py: Python<'_>,
-        element_type: ElementType,
-        size: Option<f64>,
-        band: usize,
-        all_quad: bool,
-        relax: Option<FrontRelax>,
-    ) -> PyResult<PyMesh> {
-        super::mesh::grid_surface(py, slf, element_type, size, band, all_quad, relax)
-    }
-
-    /// Voir `pyrucast.mesh.grid_surface2`.
-    #[pyo3(signature = (element_type, size=None, band=0, all_quad=false, relax=None))]
-    fn grid_surface2(
-        slf: PyRef<'_, Self>,
-        py: Python<'_>,
-        element_type: ElementType,
-        size: Option<f64>,
-        band: usize,
-        all_quad: bool,
-        relax: Option<FrontRelax>,
-    ) -> PyResult<PyMesh> {
-        super::mesh::grid_surface2(py, slf, element_type, size, band, all_quad, relax)
-    }
-
-    /// Voir `pyrucast.mesh.pave_volume`.
-    #[pyo3(signature = (layers=1, thickness=None, size=None))]
-    fn pave_volume(
-        slf: PyRef<'_, Self>,
-        py: Python<'_>,
-        layers: usize,
-        thickness: Option<f64>,
-        size: Option<f64>,
-    ) -> PyResult<PyMesh> {
-        super::mesh::pave_volume(py, slf, layers, thickness, size)
-    }
-
-    /// Voir `pyrucast.mesh.triangulate_volume`.
-    #[pyo3(signature = (size=None, allow_surface_nodes=false))]
-    fn triangulate_volume(
-        slf: PyRef<'_, Self>,
-        py: Python<'_>,
-        size: Option<f64>,
-        allow_surface_nodes: bool,
-    ) -> PyResult<PyMesh> {
-        super::mesh::triangulate_volume(py, slf, size, allow_surface_nodes)
     }
 }
