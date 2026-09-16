@@ -1,5 +1,14 @@
-[package]
-name = "pyrucast"
+# Deux paquets : la bibliothèque, à la racine, et `macros/`, ses macros
+# procédurales. Une crate `proc-macro = true` ne peut **rien** exporter d'autre
+# que des macros, et une crate ordinaire ne peut pas en contenir : la seconde
+# crate n'est pas un choix de rangement, elle est imposée.
+[workspace]
+members = ["macros"]
+
+# Champs communs aux deux paquets, hérités par `x.workspace = true`. La version
+# n'est ainsi déclarée qu'**une fois** dans tout le dépôt — c'est l'invariant
+# que `check-version` vérifie au tag (.github/workflows/release.yml).
+[workspace.package]
 version = "0.7.1"
 edition = "2024"
 # Plancher de compilateur, à déclarer parce que rien ne le devine. Deux
@@ -11,11 +20,20 @@ edition = "2024"
 # Sans cette ligne, un utilisateur recevrait une erreur de syntaxe brute ou un
 # échec de résolution, au lieu d'un message qui nomme la version attendue.
 rust-version = "1.89"
-description = "Finite-element library in Rust, inspired by cast3m, exposed to Python"
 authors = ["Gauthier F"]
 license = "MPL-2.0"
-readme = "README.md"
 repository = "https://github.com/Pyrucast/pyrucast"
+
+[package]
+name = "pyrucast"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Finite-element library in Rust, inspired by cast3m, exposed to Python"
+authors.workspace = true
+license.workspace = true
+readme = "README.md"
+repository.workspace = true
 # Only the Rust crate matters to crates.io consumers; the mdbook source,
 # the Python companion package and teaching material are irrelevant there.
 # Les motifs de répertoire sont **ancrés** par une barre oblique initiale :
@@ -33,6 +51,9 @@ exclude = [
     # `lib.rs` déclare — le paquet ne compilait plus une fois déballé (E0583),
     # alors que le dépôt, lui, compilait très bien.
     "/archive/",
+    # `macros/` est publiée comme crate à part entière : l'embarquer ici en
+    # doublon n'apporterait rien à un consommateur de `pyrucast`.
+    "/macros/",
 ]
 
 [lib]
@@ -47,6 +68,12 @@ paste = "1"
 # neither pyo3 nor libpython. All `#[pyclass]`/`#[pyfunction]` code lives
 # behind `#[cfg(feature = "python-api")]`.
 pyo3 = { version = "0.29", features = ["multiple-pymethods"], optional = true }
+# Macros procédurales maison (`#[py_op]`), qui dérivent d'un opérateur libre la
+# méthode de son sujet. Optionnelle comme pyo3 : un build Rust pur ne tire ni
+# `syn` ni `quote`. La `version` accompagne le `path` parce que crates.io refuse
+# une dépendance de chemin sans elle ; elle suit la lignée propre de la crate de
+# macros, qui n'est pas celle de `pyrucast`.
+pyrucast-macros = { path = "macros", version = "0.1.0", optional = true }
 serde = { version = "1", features = ["derive"] }
 # Format binaire des archives (`save` / `load`). La 2.x demande la feature
 # `serde` : le cœur de bincode 2 a ses propres traits `Encode`/`Decode`, et
@@ -112,7 +139,7 @@ harness = false
 # in the optional `pyo3` dependency. On its own, pyo3 links to libpython
 # normally — fine for building utility binaries like `stub_gen`. Without
 # this feature the crate is pure Rust (no pyo3, no libpython).
-python-api = ["dep:pyo3"]
+python-api = ["dep:pyo3", "dep:pyrucast-macros"]
 # Build as a Python extension module loaded by an interpreter. Tells
 # pyo3 NOT to link to libpython, since the host interpreter provides
 # it at runtime. Enabled by maturin when packaging the .so.

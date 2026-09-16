@@ -13,12 +13,12 @@
 # quotidienne. Il est appelé aux deux moments où l'on pose une version —
 # `set_new_version.sh` en local, et le job `verify` de `release.yml` en CI.
 step "cargo clippy (défaut) -D warnings" \
-    cargo clippy --all-targets -- -D warnings
+    cargo clippy --workspace --all-targets -- -D warnings
 step "cargo clippy --features viz -D warnings" \
-    cargo clippy --all-targets --features viz -- -D warnings
+    cargo clippy --workspace --all-targets --features viz -- -D warnings
 step "cargo clippy --features extension-module,viz -D warnings" \
-    cargo clippy --all-targets --features extension-module,viz -- -D warnings
+    cargo clippy --workspace --all-targets --features extension-module,viz -- -D warnings
 step "cargo clippy --features extension-module,viz,viz-interactive,abi3 -D warnings" \
-    cargo clippy --all-targets --features extension-module,viz,viz-interactive,abi3 -- -D warnings
+    cargo clippy --workspace --all-targets --features extension-module,viz,viz-interactive,abi3 -- -D warnings
 
 echo "OK : clippy."

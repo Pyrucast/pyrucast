@@ -22,8 +22,13 @@
 #
 # Le `check` par défaut, enfin : la bibliothèque se veut du **Rust pur** sans
 # feature, et sans lui plus rien ne compilerait cette configuration-là.
-step "cargo check (features par défaut)"       cargo check --all-targets
-step "cargo test --features viz"               cargo test --features viz
+#
+# `--workspace` : le dépôt tient deux paquets depuis que `macros/` existe, et
+# cargo, dans un workspace à paquet racine, ne construit que la racine par
+# défaut. Sans ce drapeau la crate de macros ne serait ni compilée ni testée
+# ici — elle passerait sous tous les garde-fous.
+step "cargo check (features par défaut)"       cargo check --workspace --all-targets
+step "cargo test --features viz"               cargo test --workspace --features viz
 step "cargo build --features viz-interactive"  cargo build --features viz-interactive
 
 echo "OK : Rust."

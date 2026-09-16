@@ -6,7 +6,8 @@
 
 . "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 
-step "cargo fmt --check"            cargo fmt --check
+# `--all` : le formatage couvre tous les membres du workspace, `macros/` compris.
+step "cargo fmt --all --check"      cargo fmt --all --check
 step "ruff format --check (Python)" ruff format --check .
 
 echo "OK : formatage."

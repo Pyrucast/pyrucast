@@ -7,7 +7,8 @@
 
 . "$PSScriptRoot\_common.ps1"
 
-Step "cargo fmt --check"            { cargo fmt --check }
+# `--all` : le formatage couvre tous les membres du workspace, `macros/` compris.
+Step "cargo fmt --all --check"      { cargo fmt --all --check }
 Step "ruff format --check (Python)" { ruff format --check . }
 
 Write-Host "OK : formatage."

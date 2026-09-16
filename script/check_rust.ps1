@@ -20,8 +20,12 @@
 #
 # Le `check` par defaut, enfin : la bibliotheque se veut du Rust pur sans
 # feature, et sans lui plus rien ne compilerait cette configuration-la.
-Step "cargo check (features par defaut)"       { cargo check --all-targets }
-Step "cargo test --features viz"               { cargo test --features viz }
+#
+# `--workspace` : depuis que `macros/` existe, le depot tient deux paquets, et
+# cargo ne construit que la racine par defaut. Sans ce drapeau la crate de
+# macros passerait sous tous les garde-fous.
+Step "cargo check (features par defaut)"       { cargo check --workspace --all-targets }
+Step "cargo test --features viz"               { cargo test --workspace --features viz }
 Step "cargo build --features viz-interactive"  { cargo build --features viz-interactive }
 
 Write-Host "OK : Rust."

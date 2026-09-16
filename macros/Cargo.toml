@@ -1,0 +1,28 @@
+[package]
+name = "pyrucast-macros"
+# Version **propre**, délibérément décorrélée de celle de `pyrucast` : cet
+# outillage bouge bien plus lentement que la bibliothèque, et rien ne gagnerait
+# à le republier à chaque tag. `release.yml` ne publie la crate que si crates.io
+# ne connaît pas déjà ce numéro.
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+description = "Procedural macros for pyrucast — derives the method form of a free operator"
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+# Une crate `proc-macro` ne peut **rien** exporter d'autre que des macros, et
+# une crate ordinaire ne peut pas en contenir : c'est ce qui impose une seconde
+# crate, et donc le workspace.
+proc-macro = true
+
+[dependencies]
+# Déjà tous dans `Cargo.lock` via `pyo3-macros` : cette crate n'ajoute aucune
+# dépendance tierce à l'arbre, seulement des arêtes vers ce qui s'y trouve.
+proc-macro2 = "1"
+quote = "1"
+# `full` : il faut analyser des items complets (`fn` avec corps), pas seulement
+# des types ou des expressions.
+syn = { version = "2", features = ["full"] }
