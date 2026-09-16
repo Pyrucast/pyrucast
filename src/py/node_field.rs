@@ -224,14 +224,6 @@ impl PySubNodeField {
         self.handle.write().set_value(nid, &comp, value)?;
         Ok(())
     }
-
-    fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", *self.handle.read()))
-    }
-
-    fn __str__(&self) -> PyResult<String> {
-        Ok(format!("{}", *self.handle.read()))
-    }
 }
 
 impl PySubNodeField {

@@ -185,8 +185,16 @@ class Cell:
         `cell[j]` — j-th node of the cell. Supports negative indices
         and raises `IndexError` out of range so `for node in cell:` works.
         """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str:
+        r"""
+        One-line summary (first display level): identity and key
+        dimensions, never any content.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Structure (second display level): counters, names and metadata,
+        bounded whatever the object's size — never content in bulk.
+        """
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
         Print the full content (third display level) to stdout: values /
@@ -296,8 +304,16 @@ class Coords:
         r"""
         Drop any node permutation.
         """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str:
+        r"""
+        One-line summary (first display level): identity and key
+        dimensions, never any content.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Structure (second display level): counters, names and metadata,
+        bounded whatever the object's size — never content in bulk.
+        """
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
         Print the full content (third display level) to stdout: values /
@@ -377,8 +393,16 @@ class Element:
         r"""
         Physical derivatives `∂N_i/∂x_a` at the `g`-th Gauss point.
         """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str:
+        r"""
+        One-line summary (first display level): identity and key
+        dimensions, never any content.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Structure (second display level): counters, names and metadata,
+        bounded whatever the object's size — never content in bulk.
+        """
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
         Print the full content (third display level) to stdout: values /
@@ -2100,8 +2124,6 @@ class Node:
         `Mesh.coords()`, to get the handle back when it has been dropped
         on the Python side.
         """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
     def __or__(self, other: Node) -> Mesh:
         r"""
         `node | node` → a unitary POI1 `Mesh` over both nodes — the usual way
@@ -2111,6 +2133,16 @@ class Node:
         r"""
         `mesh | node` → a fresh POI1 `Mesh` with this node appended. The
         left-hand `Mesh` must be unitary POI1.
+        """
+    def __str__(self) -> builtins.str:
+        r"""
+        One-line summary (first display level): identity and key
+        dimensions, never any content.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Structure (second display level): counters, names and metadata,
+        bounded whatever the object's size — never content in bulk.
         """
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
@@ -2543,8 +2575,6 @@ class SubElementField:
         r"""
         `field[cell, gauss, "name"] = value`.
         """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
     @typing.overload
     def __getitem__(self, key: tuple[int, int, str]) -> float:
         r"""
@@ -2585,6 +2615,16 @@ class SubElementField:
         r"""
         `subfield | subfield` → a fresh `ElementField` holding both zones,
         left side by side (never fused).
+        """
+    def __str__(self) -> builtins.str:
+        r"""
+        One-line summary (first display level): identity and key
+        dimensions, never any content.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Structure (second display level): counters, names and metadata,
+        bounded whatever the object's size — never content in bulk.
         """
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
@@ -2718,8 +2758,16 @@ class SubEvolution:
         `revolve` / `revolve_angle` sweep an axisymmetric plot into its body
         of revolution — see `SubMesh.plot`.
         """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str:
+        r"""
+        One-line summary (first display level): identity and key
+        dimensions, never any content.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Structure (second display level): counters, names and metadata,
+        bounded whatever the object's size — never content in bulk.
+        """
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
         Print the full content (third display level) to stdout: values /
@@ -2838,11 +2886,19 @@ class SubFiniteElementSpace:
         indices and raises `IndexError` out of range so
         `for el in subspace:` works.
         """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
     def __or__(self, other: SubFiniteElementSpace) -> FiniteElementSpace:
         r"""
         `subspace | subspace` → a fresh `FiniteElementSpace` spanning both.
+        """
+    def __str__(self) -> builtins.str:
+        r"""
+        One-line summary (first display level): identity and key
+        dimensions, never any content.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Structure (second display level): counters, names and metadata,
+        bounded whatever the object's size — never content in bulk.
         """
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
@@ -2922,11 +2978,19 @@ class SubMatrix:
         tuples, in insertion order.
         """
     def __len__(self) -> builtins.int: ...
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
     def __or__(self, other: SubMatrix) -> Matrix:
         r"""
         `sub_matrix | sub_matrix` → a fresh `Matrix` holding both blocks.
+        """
+    def __str__(self) -> builtins.str:
+        r"""
+        One-line summary (first display level): identity and key
+        dimensions, never any content.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Structure (second display level): counters, names and metadata,
+        bounded whatever the object's size — never content in bulk.
         """
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
@@ -3032,12 +3096,20 @@ class SubMesh:
         indices and raises `IndexError` out of range so
         `for cell in submesh:` works.
         """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
     def __or__(self, other: SubMesh) -> Mesh:
         r"""
         `submesh | submesh` → a fresh `Mesh` holding both zones. The usual
         way to build a multi-element-type mesh from single-type ones.
+        """
+    def __str__(self) -> builtins.str:
+        r"""
+        One-line summary (first display level): identity and key
+        dimensions, never any content.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Structure (second display level): counters, names and metadata,
+        bounded whatever the object's size — never content in bulk.
         """
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
@@ -3091,11 +3163,19 @@ class SubModel:
         integrated with `deformation` / `integrate_behavior` (`True` for
         volumetric physics, `False` for constraints like Dirichlet).
         """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
     def __or__(self, other: SubModel) -> Model:
         r"""
         `sub_model | sub_model` → a fresh `Model` holding both terms.
+        """
+    def __str__(self) -> builtins.str:
+        r"""
+        One-line summary (first display level): identity and key
+        dimensions, never any content.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Structure (second display level): counters, names and metadata,
+        bounded whatever the object's size — never content in bulk.
         """
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
@@ -3222,8 +3302,16 @@ class SubNodeField:
         r"""
         `subfield[node, "UX"] = v` — raises if the node or component is absent.
         """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str:
+        r"""
+        One-line summary (first display level): identity and key
+        dimensions, never any content.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Structure (second display level): counters, names and metadata,
+        bounded whatever the object's size — never content in bulk.
+        """
     def dump(self, precision: builtins.int = 3, max_rows: builtins.int = 20, max_cols: builtins.int = 12) -> None:
         r"""
         Print the full content (third display level) to stdout: values /

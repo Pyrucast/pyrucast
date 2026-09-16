@@ -758,16 +758,27 @@ macro_rules! impl_aggregate_pymethods {
     };
 }
 
-// ─── Python dump method (non-aggregate wrappers) ────────────────────────────
+// ─── Python display methods (non-aggregate wrappers) ────────────────────────
 
-/// Define the `dump(precision, max_rows, max_cols) -> str` pymethod on a
-/// `pyclass` wrapper whose payload implements [`crate::dump::Dump`].
+/// Define the **three display levels** as pymethods on a `pyclass` wrapper
+/// whose payload implements [`Display`](std::fmt::Display),
+/// [`Debug`](std::fmt::Debug) and [`crate::dump::Dump`] — see `CONVENTIONS.md`
+/// § « Trois niveaux d'affichage » :
+///
+/// * `__str__` → the payload's `Display`: one line, identity and key dimensions;
+/// * `__repr__` → its `Debug`: counters, names, metadata, always bounded;
+/// * `dump(precision, max_rows, max_cols)` → its `Dump`, printed to stdout.
+///
+/// The three were written out by hand on eleven wrappers, twenty-two methods
+/// differing only in how the payload is reached. They live here instead, so a
+/// wrapper joins the convention by calling this macro — and cannot join it
+/// halfway.
 ///
 /// Two forms depending on how the wrapper holds its payload:
 /// * `handle $PyT, $field` — `$field: Handle<Sub>`, read through its guard;
 /// * `value  $PyT, $field` — `$field` is an owned value (e.g. a view).
 ///
-/// Aggregate wrappers get `dump` from [`impl_aggregate_pymethods`] instead.
+/// Aggregate wrappers get all three from [`impl_aggregate_pymethods`] instead.
 #[cfg(feature = "python-api")]
 #[macro_export]
 macro_rules! impl_dump_pymethod {
@@ -775,6 +786,18 @@ macro_rules! impl_dump_pymethod {
         #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
         #[pyo3::pymethods]
         impl $PyT {
+            /// One-line summary (first display level): identity and key
+            /// dimensions, never any content.
+            fn __str__(&self) -> pyo3::PyResult<String> {
+                Ok(format!("{}", *self.$field.read()))
+            }
+
+            /// Structure (second display level): counters, names and metadata,
+            /// bounded whatever the object's size — never content in bulk.
+            fn __repr__(&self) -> pyo3::PyResult<String> {
+                Ok(format!("{:?}", *self.$field.read()))
+            }
+
             /// Print the full content (third display level) to stdout: values /
             /// topology, beyond `repr`'s bounded structure. Returns nothing.
             #[pyo3(signature = (precision=3, max_rows=20, max_cols=12))]
@@ -799,6 +822,18 @@ macro_rules! impl_dump_pymethod {
         #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
         #[pyo3::pymethods]
         impl $PyT {
+            /// One-line summary (first display level): identity and key
+            /// dimensions, never any content.
+            fn __str__(&self) -> pyo3::PyResult<String> {
+                Ok(format!("{}", self.$field))
+            }
+
+            /// Structure (second display level): counters, names and metadata,
+            /// bounded whatever the object's size — never content in bulk.
+            fn __repr__(&self) -> pyo3::PyResult<String> {
+                Ok(format!("{:?}", self.$field))
+            }
+
             /// Print the full content (third display level) to stdout: values /
             /// topology, beyond `repr`'s bounded structure. Returns nothing.
             #[pyo3(signature = (precision=3, max_rows=20, max_cols=12))]

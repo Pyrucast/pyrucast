@@ -65,14 +65,6 @@ impl PyCell {
         let node = Node::acquire(coords, id)?;
         Ok(PyNode::from_node(node))
     }
-
-    fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", self.inner))
-    }
-
-    fn __str__(&self) -> PyResult<String> {
-        Ok(format!("{}", self.inner))
-    }
 }
 
 crate::impl_dump_pymethod!(value PyCell, inner);

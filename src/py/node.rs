@@ -66,14 +66,6 @@ impl PyNode {
             handle: self.node.coords(),
         }
     }
-
-    fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", self.node))
-    }
-
-    fn __str__(&self) -> PyResult<String> {
-        Ok(format!("{}", self.node))
-    }
 }
 
 // Polymorphic union — **closed block**, undecorated on purpose (see

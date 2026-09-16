@@ -243,14 +243,6 @@ impl PySubMesh {
         let cell = crate::atoms::Cell::new(self.handle.clone(), normalized as usize)?;
         Ok(crate::py::cell::PyCell::from_cell(cell))
     }
-
-    fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", *self.handle.read()))
-    }
-
-    fn __str__(&self) -> PyResult<String> {
-        Ok(format!("{}", *self.handle.read()))
-    }
 }
 
 /// A geometric mesh: a collection of submeshes, each holding the cells of a

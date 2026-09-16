@@ -151,14 +151,6 @@ impl PySubMatrix {
     fn __len__(&self) -> PyResult<usize> {
         Ok(self.handle.read().entry_count())
     }
-
-    fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", *self.handle.read()))
-    }
-
-    fn __str__(&self) -> PyResult<String> {
-        Ok(format!("{}", *self.handle.read()))
-    }
 }
 
 // ─── PyMatrix (aggregate) ──────────────────────────────────────────────────

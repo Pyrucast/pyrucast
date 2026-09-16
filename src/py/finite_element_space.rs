@@ -159,14 +159,6 @@ impl PySubFiniteElementSpace {
         let el = Element::new(self.handle.clone(), normalized as usize)?;
         Ok(PyElement { inner: el })
     }
-
-    fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", *self.handle.read()))
-    }
-
-    fn __str__(&self) -> PyResult<String> {
-        Ok(format!("{}", *self.handle.read()))
-    }
 }
 
 /// The finite-element discretization of a mesh: one subspace per submesh,

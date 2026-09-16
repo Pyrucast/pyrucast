@@ -226,14 +226,6 @@ impl PySubEvolution {
         )?;
         Ok(())
     }
-
-    fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", *self.handle.read()))
-    }
-
-    fn __str__(&self) -> PyResult<String> {
-        Ok(format!("{}", *self.handle.read()))
-    }
 }
 
 crate::impl_dump_pymethod!(handle PySubEvolution, handle);

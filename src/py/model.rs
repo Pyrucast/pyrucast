@@ -83,14 +83,6 @@ impl PySubModel {
     fn has_behavior(&self) -> PyResult<bool> {
         Ok(self.handle.read().has_behavior())
     }
-
-    fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", *self.handle.read()))
-    }
-
-    fn __str__(&self) -> PyResult<String> {
-        Ok(format!("{}", *self.handle.read()))
-    }
 }
 
 /// A physics problem: a collection of sub-models (heat conduction,

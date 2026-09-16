@@ -98,14 +98,6 @@ impl PyElement {
     fn dn_dx(&self, g: usize) -> PyResult<Vec<f64>> {
         Ok(self.inner.dn_dx(g)?)
     }
-
-    fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", self.inner))
-    }
-
-    fn __str__(&self) -> PyResult<String> {
-        Ok(format!("{}", self.inner))
-    }
 }
 
 crate::impl_dump_pymethod!(value PyElement, inner);
