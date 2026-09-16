@@ -429,10 +429,6 @@ class ElementField:
         r"""
         Explicit `components` list per subspace.
         """
-    def components(self) -> builtins.list[builtins.str]:
-        r"""
-        Union of the sub-fields' component names, first-seen order.
-        """
     def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None, smooth: builtins.int = 4, revolve: builtins.bool = False, revolve_angle: builtins.float = 360.0, title: typing.Optional[builtins.str] = None) -> None:
         r"""
         Visualize this field on its own support: each zone knows its
@@ -445,23 +441,6 @@ class ElementField:
         `vmax` / `cmap` / `smooth` / `title` semantics as `Mesh.plot`.
         `revolve` / `revolve_angle` sweep an axisymmetric plot into its body
         of revolution — see `SubMesh.plot`.
-        """
-    def min(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
-        r"""
-        Smallest value of `component` across the zones defining it — or, called
-        without a component, the smallest value of the **whole** field, every
-        component of every zone pooled (see `SubElementField.min`).
-        """
-    def max(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
-        r"""
-        Largest value of `component` across the zones defining it — or, called
-        without a component, the largest value of the **whole** field (see
-        `min`).
-        """
-    def sum(self, component: builtins.str) -> builtins.float:
-        r"""
-        Sum of `component` across the sub-fields defining it (Σ over the whole
-        field). Errors if no zone defines it.
         """
     def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
         r"""
@@ -574,6 +553,29 @@ class ElementField:
         structure. Returns nothing.
         """
     def __len__(self) -> builtins.int: ...
+    def min(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
+        r"""
+        Smallest value of `component` across the zones defining it — or, called
+        without a component, the smallest value of the **whole** field, every
+        component of every zone pooled (see the sub-field's `min` for what
+        pooling means).
+        """
+    def max(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
+        r"""
+        Largest value of `component` across the zones defining it — or, called
+        without a component, the largest value of the **whole** field (see `min`).
+        """
+    def sum(self, component: builtins.str) -> builtins.float:
+        r"""
+        Sum of `component` across the zones defining it (Σ over the whole field)
+        — the resultant of a nodal force field, one component at a time. A node
+        carried by several zones counts once per zone that stores it. Errors if
+        no zone defines the component.
+        """
+    def components(self) -> builtins.list[builtins.str]:
+        r"""
+        Union of the zones' component names, first-seen order.
+        """
     def consolidate(self) -> ElementField:
         r"""
         Fuse the zones of an element `field` sharing the same `FiniteElementSpace`
@@ -633,13 +635,19 @@ class ElementField:
         r"""
         Keep only the named components, in the order given.
         
-        `components` is a single name or a list of names (e.g. the result of `model.primal_vars()`). Returns a **new** field of the caller's own kind, sharing its support; the original is untouched. Errors if a requested name is absent — filtering never invents a component.
+        `components` is a single name or a list of names (e.g. the result of
+        `model.primal_vars()`). Returns a **new** field of the caller's own kind,
+        sharing its support; the original is untouched. Errors if a requested name
+        is absent — filtering never invents a component.
         """
     def rename_component(self, old: builtins.str, new: builtins.str) -> ElementField:
         r"""
         Rename one component, `old` to `new`, leaving every other untouched.
         
-        Returns a **new** field of the caller's own kind, on the same support. The component order is kept — renaming is not reordering. Errors if `old` is absent, or if `new` is already taken: a name is how a component is addressed, so two of them cannot share one.
+        Returns a **new** field of the caller's own kind, on the same support. The
+        component order is kept — renaming is not reordering. Errors if `old` is
+        absent, or if `new` is already taken: a name is how a component is
+        addressed, so two of them cannot share one.
         """
     def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> ElementField:
         r"""
@@ -2162,6 +2170,29 @@ class NodeField:
     (`field.value(node, "T")`) take the first zone defining the pair;
     `field.check()` verifies that zones agree on shared interface nodes.
     """
+    def min(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
+        r"""
+        Smallest value of `component` across the zones defining it — or, called
+        without a component, the smallest value of the **whole** field, every
+        component of every zone pooled (see the sub-field's `min` for what
+        pooling means).
+        """
+    def max(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
+        r"""
+        Largest value of `component` across the zones defining it — or, called
+        without a component, the largest value of the **whole** field (see `min`).
+        """
+    def sum(self, component: builtins.str) -> builtins.float:
+        r"""
+        Sum of `component` across the zones defining it (Σ over the whole field)
+        — the resultant of a nodal force field, one component at a time. A node
+        carried by several zones counts once per zone that stores it. Errors if
+        no zone defines the component.
+        """
+    def components(self) -> builtins.list[builtins.str]:
+        r"""
+        Union of the zones' component names, first-seen order.
+        """
     def __new__(cls, support: typing.Any, components: typing.Sequence[builtins.str]) -> NodeField:
         r"""
         `NodeField(support, components)` — zero-initialized field. With a
@@ -2176,10 +2207,6 @@ class NodeField:
     def node_count(self) -> builtins.int:
         r"""
         Number of distinct nodes across the zones.
-        """
-    def components(self) -> builtins.list[builtins.str]:
-        r"""
-        Union of the zones' component names, first-seen order.
         """
     def value(self, node: Node, component: builtins.str) -> builtins.float:
         r"""
@@ -2200,23 +2227,6 @@ class NodeField:
         Verify zone coherence: every `(node, component)` stored by several
         zones must hold the same value everywhere. Raises on the first
         conflict.
-        """
-    def min(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
-        r"""
-        Smallest value of `component` across the zones defining it — or, called
-        without a component, the smallest value of the **whole** field, every
-        component of every zone pooled (see `SubNodeField.min`).
-        """
-    def max(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
-        r"""
-        Largest value of `component` across the zones defining it — or, called
-        without a component, the largest value of the **whole** field (see
-        `min`).
-        """
-    def sum(self, component: builtins.str) -> builtins.float:
-        r"""
-        Sum of `component` across the zones defining it (Σ over the whole field)
-        — the resultant of a nodal force field, one component at a time.
         """
     def plot(self, view: typing.Optional[tuple[builtins.float, builtins.float, builtins.float]] = None, save: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, show_axes: builtins.bool = True, component: typing.Optional[builtins.str] = None, vmin: typing.Optional[builtins.float] = None, vmax: typing.Optional[builtins.float] = None, cmap: typing.Optional[builtins.str] = None, revolve: builtins.bool = False, revolve_angle: builtins.float = 360.0, title: typing.Optional[builtins.str] = None) -> None:
         r"""
@@ -2410,13 +2420,19 @@ class NodeField:
         r"""
         Keep only the named components, in the order given.
         
-        `components` is a single name or a list of names (e.g. the result of `model.primal_vars()`). Returns a **new** field of the caller's own kind, sharing its support; the original is untouched. Errors if a requested name is absent — filtering never invents a component.
+        `components` is a single name or a list of names (e.g. the result of
+        `model.primal_vars()`). Returns a **new** field of the caller's own kind,
+        sharing its support; the original is untouched. Errors if a requested name
+        is absent — filtering never invents a component.
         """
     def rename_component(self, old: builtins.str, new: builtins.str) -> NodeField:
         r"""
         Rename one component, `old` to `new`, leaving every other untouched.
         
-        Returns a **new** field of the caller's own kind, on the same support. The component order is kept — renaming is not reordering. Errors if `old` is absent, or if `new` is already taken: a name is how a component is addressed, so two of them cannot share one.
+        Returns a **new** field of the caller's own kind, on the same support. The
+        component order is kept — renaming is not reordering. Errors if `old` is
+        absent, or if `new` is already taken: a name is how a component is
+        addressed, so two of them cannot share one.
         """
     def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> NodeField:
         r"""
@@ -2489,10 +2505,6 @@ class SubElementField:
         r"""
         Number of components stored per point.
         """
-    def components(self) -> builtins.list[builtins.str]:
-        r"""
-        Component names, in order.
-        """
     def component_index(self, name: builtins.str) -> typing.Optional[builtins.int]:
         r"""
         Index of component `name`, or `None` if unknown.
@@ -2524,25 +2536,6 @@ class SubElementField:
     def set_cell_uniform(self, cell: builtins.int, component: builtins.str, value: builtins.float) -> None:
         r"""
         Set `component` to `value` at every point of `cell`.
-        """
-    def min(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
-        r"""
-        Smallest value of the named `component` — or, called without one, the
-        smallest value of the **whole** field, every component pooled. Pooling
-        reads the field as the flat list of its values: on components carrying
-        different units it answers "the smallest number in there", not a
-        physical quantity.
-        """
-    def max(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
-        r"""
-        Largest value of the named `component` — or, called without one, the
-        largest value of the **whole** field, every component pooled (see
-        `min`).
-        """
-    def sum(self, component: builtins.str) -> builtins.float:
-        r"""
-        Sum of the named `component` over the support (Σ over the Gauss points).
-        Empty sums to `0.0`.
         """
     def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
         r"""
@@ -2631,6 +2624,29 @@ class SubElementField:
         Print the full content (third display level) to stdout: values /
         topology, beyond `repr`'s bounded structure. Returns nothing.
         """
+    def min(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
+        r"""
+        Smallest value of the named `component` — or, called without one, the
+        smallest value of the **whole** field, every component pooled. Pooling
+        reads the field as the flat list of its values: on components carrying
+        different units it answers "the smallest number in there", not a
+        physical quantity.
+        """
+    def max(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
+        r"""
+        Largest value of the named `component` — or, called without one, the
+        largest value of the **whole** field, every component pooled (see `min`).
+        """
+    def sum(self, component: builtins.str) -> builtins.float:
+        r"""
+        Sum of the named `component` over the support — Σ over the nodes, or over
+        the Gauss points for a field by elements. The resultant of a nodal force
+        field, one component at a time. An empty support sums to `0.0`.
+        """
+    def components(self) -> builtins.list[builtins.str]:
+        r"""
+        Component names, in order.
+        """
     def abs(self) -> SubElementField:
         r"""
         Element-wise absolute value of a field.
@@ -2679,13 +2695,19 @@ class SubElementField:
         r"""
         Keep only the named components, in the order given.
         
-        `components` is a single name or a list of names (e.g. the result of `model.primal_vars()`). Returns a **new** field of the caller's own kind, sharing its support; the original is untouched. Errors if a requested name is absent — filtering never invents a component.
+        `components` is a single name or a list of names (e.g. the result of
+        `model.primal_vars()`). Returns a **new** field of the caller's own kind,
+        sharing its support; the original is untouched. Errors if a requested name
+        is absent — filtering never invents a component.
         """
     def rename_component(self, old: builtins.str, new: builtins.str) -> SubElementField:
         r"""
         Rename one component, `old` to `new`, leaving every other untouched.
         
-        Returns a **new** field of the caller's own kind, on the same support. The component order is kept — renaming is not reordering. Errors if `old` is absent, or if `new` is already taken: a name is how a component is addressed, so two of them cannot share one.
+        Returns a **new** field of the caller's own kind, on the same support. The
+        component order is kept — renaming is not reordering. Errors if `old` is
+        absent, or if `new` is already taken: a name is how a component is
+        addressed, so two of them cannot share one.
         """
     def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> SubElementField:
         r"""
@@ -3199,6 +3221,29 @@ class SubNodeField:
     (`node_field[i]`) — never constructed directly. Build at the parent
     level instead: `NodeField(support, components)`, composed with `|`.
     """
+    def min(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
+        r"""
+        Smallest value of the named `component` — or, called without one, the
+        smallest value of the **whole** field, every component pooled. Pooling
+        reads the field as the flat list of its values: on components carrying
+        different units it answers "the smallest number in there", not a
+        physical quantity.
+        """
+    def max(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
+        r"""
+        Largest value of the named `component` — or, called without one, the
+        largest value of the **whole** field, every component pooled (see `min`).
+        """
+    def sum(self, component: builtins.str) -> builtins.float:
+        r"""
+        Sum of the named `component` over the support — Σ over the nodes, or over
+        the Gauss points for a field by elements. The resultant of a nodal force
+        field, one component at a time. An empty support sums to `0.0`.
+        """
+    def components(self) -> builtins.list[builtins.str]:
+        r"""
+        Component names, in order.
+        """
     def node_count(self) -> builtins.int:
         r"""
         Number of nodes in the support.
@@ -3206,10 +3251,6 @@ class SubNodeField:
     def component_count(self) -> builtins.int:
         r"""
         Number of components stored per node.
-        """
-    def components(self) -> builtins.list[builtins.str]:
-        r"""
-        Component names, in order.
         """
     def get(self, node_idx: builtins.int, comp_idx: builtins.int) -> builtins.float:
         r"""
@@ -3250,26 +3291,6 @@ class SubNodeField:
     def set_value(self, node: Node, component: builtins.str, value: builtins.float) -> None:
         r"""
         Set the value at `node` for the named `component`.
-        """
-    def min(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
-        r"""
-        Smallest value of the named `component` — or, called without one, the
-        smallest value of the **whole** field, every component pooled. Pooling
-        reads the field as the flat list of its values: on components carrying
-        different units it answers "the smallest number in there", not a
-        physical quantity.
-        """
-    def max(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
-        r"""
-        Largest value of the named `component` — or, called without one, the
-        largest value of the **whole** field, every component pooled (see
-        `min`).
-        """
-    def sum(self, component: builtins.str) -> builtins.float:
-        r"""
-        Sum of the named `component` over the support (Σ over nodes) — the
-        resultant of a nodal force field, one component at a time. Empty sums
-        to `0.0`.
         """
     def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
         r"""
@@ -3406,13 +3427,19 @@ class SubNodeField:
         r"""
         Keep only the named components, in the order given.
         
-        `components` is a single name or a list of names (e.g. the result of `model.primal_vars()`). Returns a **new** field of the caller's own kind, sharing its support; the original is untouched. Errors if a requested name is absent — filtering never invents a component.
+        `components` is a single name or a list of names (e.g. the result of
+        `model.primal_vars()`). Returns a **new** field of the caller's own kind,
+        sharing its support; the original is untouched. Errors if a requested name
+        is absent — filtering never invents a component.
         """
     def rename_component(self, old: builtins.str, new: builtins.str) -> SubNodeField:
         r"""
         Rename one component, `old` to `new`, leaving every other untouched.
         
-        Returns a **new** field of the caller's own kind, on the same support. The component order is kept — renaming is not reordering. Errors if `old` is absent, or if `new` is already taken: a name is how a component is addressed, so two of them cannot share one.
+        Returns a **new** field of the caller's own kind, on the same support. The
+        component order is kept — renaming is not reordering. Errors if `old` is
+        absent, or if `new` is already taken: a name is how a component is
+        addressed, so two of them cannot share one.
         """
     def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> SubNodeField:
         r"""

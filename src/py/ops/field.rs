@@ -290,15 +290,15 @@ macro_rules! py_field_components {
 py_field_components!(
     "Keep only the named components, in the order given.\n\
      \n\
-     `components` is a single name or a list of names (e.g. the result of \
-     `model.primal_vars()`). Returns a **new** field of the caller's own kind, \
-     sharing its support; the original is untouched. Errors if a requested name \
+     `components` is a single name or a list of names (e.g. the result of\n\
+     `model.primal_vars()`). Returns a **new** field of the caller's own kind,\n\
+     sharing its support; the original is untouched. Errors if a requested name\n\
      is absent — filtering never invents a component.",
     "Rename one component, `old` to `new`, leaving every other untouched.\n\
      \n\
-     Returns a **new** field of the caller's own kind, on the same support. The \
-     component order is kept — renaming is not reordering. Errors if `old` is \
-     absent, or if `new` is already taken: a name is how a component is \
+     Returns a **new** field of the caller's own kind, on the same support. The\n\
+     component order is kept — renaming is not reordering. Errors if `old` is\n\
+     absent, or if `new` is already taken: a name is how a component is\n\
      addressed, so two of them cannot share one."
 );
 

@@ -38,11 +38,6 @@ impl PySubElementField {
         Ok(self.handle.read().component_count())
     }
 
-    /// Component names, in order.
-    fn components(&self) -> PyResult<Vec<String>> {
-        Ok(self.handle.read().components().to_vec())
-    }
-
     /// Index of component `name`, or `None` if unknown.
     fn component_index(&self, name: &str) -> PyResult<Option<usize>> {
         Ok(self.handle.read().component_index(name))
@@ -89,33 +84,6 @@ impl PySubElementField {
             .write()
             .set_cell_uniform(cell, component, value)?;
         Ok(())
-    }
-
-    /// Smallest value of the named `component` — or, called without one, the
-    /// smallest value of the **whole** field, every component pooled. Pooling
-    /// reads the field as the flat list of its values: on components carrying
-    /// different units it answers "the smallest number in there", not a
-    /// physical quantity.
-    #[pyo3(signature = (component=None))]
-    fn min(&self, component: Option<&str>) -> PyResult<f64> {
-        use crate::containers::field::SubField;
-        Ok(SubField::min(&*self.handle.read(), component)?)
-    }
-
-    /// Largest value of the named `component` — or, called without one, the
-    /// largest value of the **whole** field, every component pooled (see
-    /// `min`).
-    #[pyo3(signature = (component=None))]
-    fn max(&self, component: Option<&str>) -> PyResult<f64> {
-        use crate::containers::field::SubField;
-        Ok(SubField::max(&*self.handle.read(), component)?)
-    }
-
-    /// Sum of the named `component` over the support (Σ over the Gauss points).
-    /// Empty sums to `0.0`.
-    fn sum(&self, component: &str) -> PyResult<f64> {
-        use crate::containers::field::SubField;
-        Ok(SubField::sum(&*self.handle.read(), component)?)
     }
 
     /// Add `scalar` to every value of `component` (in place).
@@ -250,12 +218,6 @@ impl PyElementField {
         Ok(Self { inner: ef })
     }
 
-    /// Union of the sub-fields' component names, first-seen order.
-    fn components(&self) -> PyResult<Vec<String>> {
-        use crate::containers::field::Field;
-        Ok(Field::components(&self.inner))
-    }
-
     /// Visualize this field on its own support: each zone knows its
     /// submesh through its FE subspace, so the mesh is reconstructed
     /// (shared, not copied) and coloured by `component` — per-element
@@ -298,31 +260,6 @@ impl PyElementField {
             title.as_deref(),
         )?;
         Ok(())
-    }
-
-    /// Smallest value of `component` across the zones defining it — or, called
-    /// without a component, the smallest value of the **whole** field, every
-    /// component of every zone pooled (see `SubElementField.min`).
-    #[pyo3(signature = (component=None))]
-    fn min(&self, component: Option<&str>) -> PyResult<f64> {
-        use crate::containers::field::Field;
-        Ok(Field::min(&self.inner, component)?)
-    }
-
-    /// Largest value of `component` across the zones defining it — or, called
-    /// without a component, the largest value of the **whole** field (see
-    /// `min`).
-    #[pyo3(signature = (component=None))]
-    fn max(&self, component: Option<&str>) -> PyResult<f64> {
-        use crate::containers::field::Field;
-        Ok(Field::max(&self.inner, component)?)
-    }
-
-    /// Sum of `component` across the sub-fields defining it (Σ over the whole
-    /// field). Errors if no zone defines it.
-    fn sum(&self, component: &str) -> PyResult<f64> {
-        use crate::containers::field::Field;
-        Ok(Field::sum(&self.inner, component)?)
     }
 
     // ── Per-component scalar ops (in place, on every zone defining it) ──

@@ -60,11 +60,6 @@ impl PySubNodeField {
         Ok(self.handle.read().component_count())
     }
 
-    /// Component names, in order.
-    fn components(&self) -> PyResult<Vec<String>> {
-        Ok(self.handle.read().components().to_vec())
-    }
-
     /// Value at node index `node_idx`, component index `comp_idx`.
     fn get(&self, node_idx: usize, comp_idx: usize) -> PyResult<f64> {
         Ok(self.handle.read().get(node_idx, comp_idx)?)
@@ -124,34 +119,6 @@ impl PySubNodeField {
         let nid = node.as_node().id();
         self.handle.write().set_value(nid, component, value)?;
         Ok(())
-    }
-
-    /// Smallest value of the named `component` — or, called without one, the
-    /// smallest value of the **whole** field, every component pooled. Pooling
-    /// reads the field as the flat list of its values: on components carrying
-    /// different units it answers "the smallest number in there", not a
-    /// physical quantity.
-    #[pyo3(signature = (component=None))]
-    fn min(&self, component: Option<&str>) -> PyResult<f64> {
-        use crate::containers::field::SubField;
-        Ok(SubField::min(&*self.handle.read(), component)?)
-    }
-
-    /// Largest value of the named `component` — or, called without one, the
-    /// largest value of the **whole** field, every component pooled (see
-    /// `min`).
-    #[pyo3(signature = (component=None))]
-    fn max(&self, component: Option<&str>) -> PyResult<f64> {
-        use crate::containers::field::SubField;
-        Ok(SubField::max(&*self.handle.read(), component)?)
-    }
-
-    /// Sum of the named `component` over the support (Σ over nodes) — the
-    /// resultant of a nodal force field, one component at a time. Empty sums
-    /// to `0.0`.
-    fn sum(&self, component: &str) -> PyResult<f64> {
-        use crate::containers::field::SubField;
-        Ok(SubField::sum(&*self.handle.read(), component)?)
     }
 
     /// Add `scalar` to every value of `component` (in place).
@@ -305,12 +272,6 @@ impl PyNodeField {
         Ok(self.inner.node_count()?)
     }
 
-    /// Union of the zones' component names, first-seen order.
-    fn components(&self) -> PyResult<Vec<String>> {
-        use crate::containers::field::Field;
-        Ok(Field::components(&self.inner))
-    }
-
     /// Value at `node` for the named `component` — the first zone
     /// defining both wins. Raises if none does.
     fn value(&self, node: PyRef<'_, PyNode>, component: &str) -> PyResult<f64> {
@@ -334,31 +295,6 @@ impl PyNodeField {
     /// conflict.
     fn check(&self) -> PyResult<()> {
         Ok(self.inner.check()?)
-    }
-
-    /// Smallest value of `component` across the zones defining it — or, called
-    /// without a component, the smallest value of the **whole** field, every
-    /// component of every zone pooled (see `SubNodeField.min`).
-    #[pyo3(signature = (component=None))]
-    fn min(&self, component: Option<&str>) -> PyResult<f64> {
-        use crate::containers::field::Field;
-        Ok(Field::min(&self.inner, component)?)
-    }
-
-    /// Largest value of `component` across the zones defining it — or, called
-    /// without a component, the largest value of the **whole** field (see
-    /// `min`).
-    #[pyo3(signature = (component=None))]
-    fn max(&self, component: Option<&str>) -> PyResult<f64> {
-        use crate::containers::field::Field;
-        Ok(Field::max(&self.inner, component)?)
-    }
-
-    /// Sum of `component` across the zones defining it (Σ over the whole field)
-    /// — the resultant of a nodal force field, one component at a time.
-    fn sum(&self, component: &str) -> PyResult<f64> {
-        use crate::containers::field::Field;
-        Ok(Field::sum(&self.inner, component)?)
     }
 
     /// Visualize this field alone, as a **coloured point cloud** over
