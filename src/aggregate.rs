@@ -390,9 +390,11 @@ pub trait Aggregate: Default {
 /// # temp.get(0).unwrap().write().add_to_component("T", 4.0).unwrap();
 /// # use pyrucast::aggregate::DebugItems;
 /// // Une vue `Debug` qui **déréférence** les handles : sans elle, un
-/// // agrégat s'afficherait comme une liste de pointeurs.
+/// // agrégat s'afficherait comme une liste de pointeurs. La sortie est une
+/// // **map** `#tag: objet`, le tag identifiant la zone.
 /// let rendu = format!("{:?}", DebugItems(Aggregate::items(&maillage)));
-/// assert!(rendu.starts_with('['));
+/// assert!(rendu.starts_with('{'));
+/// assert!(rendu.contains('#'));
 /// assert!(rendu.contains("TRI3"));
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -400,11 +402,27 @@ pub struct DebugItems<'a, S: Any + Send + Sync>(pub &'a [Handle<S>]);
 
 impl<S: Any + Send + Sync + std::fmt::Debug> std::fmt::Debug for DebugItems<'_, S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut list = f.debug_list();
+        // A **map** rather than a list: an aggregate *is* a collection of
+        // handles, and the tag is what tells two runs apart — whether zone `[0]`
+        // is still the same object. A sub-object cannot show it itself: it does
+        // not know the handle that carries it, only its holder does.
+        let mut map = f.debug_map();
         for h in self.0 {
-            list.entry(&DebugItem(h));
+            map.entry(&HandleTag(h.id()), &DebugItem(h));
         }
-        list.finish()
+        map.finish()
+    }
+}
+
+/// The short tag of a handle, as a map key: `#21a340`, unquoted.
+///
+/// Same value as the one [`Handle`]'s own `Debug` prints, so the identifier a
+/// sub-object wears inside its aggregate is the one seen anywhere else.
+struct HandleTag(usize);
+
+impl std::fmt::Debug for HandleTag {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "#{:x}", self.0 & 0xff_ffff)
     }
 }
 
@@ -1067,7 +1085,10 @@ macro_rules! impl_aggregate_dump {
                 let mut out = format!("{self}\n");
                 for (i, h) in $crate::aggregate::Aggregate::items(self).iter().enumerate() {
                     let body = $crate::dump::Dump::render(&*h.read(), opts);
-                    out.push_str(&format!("── [{i}] ──\n"));
+                    // Le tag de la zone sur le séparateur : deux `dump`
+                    // successifs disent alors si `[0]` est le même objet.
+                    let tag = h.id() & 0xff_ffff;
+                    out.push_str(&format!("── [{i}] #{tag:x} ──\n"));
                     for line in body.lines() {
                         out.push_str("  ");
                         out.push_str(line);
