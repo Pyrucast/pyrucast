@@ -408,21 +408,9 @@ impl<S: Any + Send + Sync + std::fmt::Debug> std::fmt::Debug for DebugItems<'_, 
         // not know the handle that carries it, only its holder does.
         let mut map = f.debug_map();
         for h in self.0 {
-            map.entry(&HandleTag(h.id()), &DebugItem(h));
+            map.entry(h, &DebugItem(h));
         }
         map.finish()
-    }
-}
-
-/// The short tag of a handle, as a map key: `#21a340`, unquoted.
-///
-/// Same value as the one [`Handle`]'s own `Debug` prints, so the identifier a
-/// sub-object wears inside its aggregate is the one seen anywhere else.
-struct HandleTag(usize);
-
-impl std::fmt::Debug for HandleTag {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "#{:x}", self.0 & 0xff_ffff)
     }
 }
 
@@ -1038,7 +1026,7 @@ macro_rules! impl_aggregate_std_traits {
                         if i > 0 {
                             f.write_str(", ")?;
                         }
-                        write!(f, "#{:x}", h.id() & 0xff_ffff)?;
+                        write!(f, "#{:x}", h.tag())?;
                     }
                     if items.len() > 3 {
                         write!(f, ", … +{}", items.len() - 3)?;
@@ -1126,10 +1114,9 @@ macro_rules! impl_aggregate_dump {
                 let mut out = format!("{self}\n");
                 for (i, h) in $crate::aggregate::Aggregate::items(self).iter().enumerate() {
                     let body = $crate::dump::Dump::render(&*h.read(), opts);
-                    // Le tag de la zone sur le séparateur : deux `dump`
+                    // Le handle de la zone sur le séparateur : deux `dump`
                     // successifs disent alors si `[0]` est le même objet.
-                    let tag = h.id() & 0xff_ffff;
-                    out.push_str(&format!("── [{i}] #{tag:x} ──\n"));
+                    out.push_str(&format!("── [{i}] {h} ──\n"));
                     for line in body.lines() {
                         out.push_str("  ");
                         out.push_str(line);

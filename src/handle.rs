@@ -224,7 +224,11 @@ impl<T> Handle<T> {
     /// identity: an address is reused once the object is gone, so two entries
     /// bearing the same tag in a log written over time may be two different
     /// objects.
-    fn tag(&self) -> usize {
+    ///
+    /// Public so a holder can name its sub-objects without recomputing the tag:
+    /// an aggregate's `Display` lists `[#7f3a2c, …]`, where repeating the type
+    /// of every zone would say nothing that `submesh(es)` has not already said.
+    pub fn tag(&self) -> usize {
         self.id() & 0xff_ffff
     }
 }
@@ -255,14 +259,15 @@ impl<T> fmt::Display for Handle<T> {
     }
 }
 
+/// Same short view as [`fmt::Display`] — `<SubMesh #7f3a2c>`.
+///
+/// The two agree on purpose. `Handle<pyrucast::containers::mesh::SubMesh> { #7f3a2c }`
+/// spelled the module path out at every occurrence, which a `Debug` of a
+/// container repeats once per field and once per zone, while the type is
+/// already given by the field's own name.
 impl<T> fmt::Debug for Handle<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "Handle<{}> {{ #{:x} }}",
-            std::any::type_name::<T>(),
-            self.tag()
-        )
+        fmt::Display::fmt(self, f)
     }
 }
 
