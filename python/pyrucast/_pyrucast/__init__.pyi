@@ -556,47 +556,47 @@ class ElementField:
         """
     def abs(self) -> ElementField:
         r"""
-        Voir `pyrucast.field.abs`.
+        Element-wise absolute value of a field.
         """
     def sqrt(self) -> ElementField:
         r"""
-        Voir `pyrucast.field.sqrt`.
+        Element-wise square root of a field (`nan` for negatives).
         """
     def exp(self) -> ElementField:
         r"""
-        Voir `pyrucast.field.exp`.
+        Element-wise exponential `eˣ` of a field.
         """
     def log(self) -> ElementField:
         r"""
-        Voir `pyrucast.field.log`.
+        Element-wise natural logarithm of a field (`-inf`/`nan` for ≤ 0).
         """
     def log10(self) -> ElementField:
         r"""
-        Voir `pyrucast.field.log10`.
+        Element-wise base-10 logarithm of a field.
         """
     def cos(self) -> ElementField:
         r"""
-        Voir `pyrucast.field.cos`.
+        Element-wise cosine of a field (radians).
         """
     def sin(self) -> ElementField:
         r"""
-        Voir `pyrucast.field.sin`.
+        Element-wise sine of a field (radians).
         """
     def tan(self) -> ElementField:
         r"""
-        Voir `pyrucast.field.tan`.
+        Element-wise tangent of a field (radians).
         """
     def sinh(self) -> ElementField:
         r"""
-        Voir `pyrucast.field.sinh`.
+        Element-wise hyperbolic sine of a field.
         """
     def cosh(self) -> ElementField:
         r"""
-        Voir `pyrucast.field.cosh`.
+        Element-wise hyperbolic cosine of a field.
         """
     def tanh(self) -> ElementField:
         r"""
-        Voir `pyrucast.field.tanh`.
+        Element-wise hyperbolic tangent of a field.
         """
     def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> ElementField:
         r"""
@@ -1768,47 +1768,47 @@ class NodeField:
         """
     def abs(self) -> NodeField:
         r"""
-        Voir `pyrucast.field.abs`.
+        Element-wise absolute value of a field.
         """
     def sqrt(self) -> NodeField:
         r"""
-        Voir `pyrucast.field.sqrt`.
+        Element-wise square root of a field (`nan` for negatives).
         """
     def exp(self) -> NodeField:
         r"""
-        Voir `pyrucast.field.exp`.
+        Element-wise exponential `eˣ` of a field.
         """
     def log(self) -> NodeField:
         r"""
-        Voir `pyrucast.field.log`.
+        Element-wise natural logarithm of a field (`-inf`/`nan` for ≤ 0).
         """
     def log10(self) -> NodeField:
         r"""
-        Voir `pyrucast.field.log10`.
+        Element-wise base-10 logarithm of a field.
         """
     def cos(self) -> NodeField:
         r"""
-        Voir `pyrucast.field.cos`.
+        Element-wise cosine of a field (radians).
         """
     def sin(self) -> NodeField:
         r"""
-        Voir `pyrucast.field.sin`.
+        Element-wise sine of a field (radians).
         """
     def tan(self) -> NodeField:
         r"""
-        Voir `pyrucast.field.tan`.
+        Element-wise tangent of a field (radians).
         """
     def sinh(self) -> NodeField:
         r"""
-        Voir `pyrucast.field.sinh`.
+        Element-wise hyperbolic sine of a field.
         """
     def cosh(self) -> NodeField:
         r"""
-        Voir `pyrucast.field.cosh`.
+        Element-wise hyperbolic cosine of a field.
         """
     def tanh(self) -> NodeField:
         r"""
-        Voir `pyrucast.field.tanh`.
+        Element-wise hyperbolic tangent of a field.
         """
     def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> NodeField:
         r"""
@@ -1995,47 +1995,47 @@ class SubElementField:
         """
     def abs(self) -> SubElementField:
         r"""
-        Voir `pyrucast.field.abs`.
+        Element-wise absolute value of a field.
         """
     def sqrt(self) -> SubElementField:
         r"""
-        Voir `pyrucast.field.sqrt`.
+        Element-wise square root of a field (`nan` for negatives).
         """
     def exp(self) -> SubElementField:
         r"""
-        Voir `pyrucast.field.exp`.
+        Element-wise exponential `eˣ` of a field.
         """
     def log(self) -> SubElementField:
         r"""
-        Voir `pyrucast.field.log`.
+        Element-wise natural logarithm of a field (`-inf`/`nan` for ≤ 0).
         """
     def log10(self) -> SubElementField:
         r"""
-        Voir `pyrucast.field.log10`.
+        Element-wise base-10 logarithm of a field.
         """
     def cos(self) -> SubElementField:
         r"""
-        Voir `pyrucast.field.cos`.
+        Element-wise cosine of a field (radians).
         """
     def sin(self) -> SubElementField:
         r"""
-        Voir `pyrucast.field.sin`.
+        Element-wise sine of a field (radians).
         """
     def tan(self) -> SubElementField:
         r"""
-        Voir `pyrucast.field.tan`.
+        Element-wise tangent of a field (radians).
         """
     def sinh(self) -> SubElementField:
         r"""
-        Voir `pyrucast.field.sinh`.
+        Element-wise hyperbolic sine of a field.
         """
     def cosh(self) -> SubElementField:
         r"""
-        Voir `pyrucast.field.cosh`.
+        Element-wise hyperbolic cosine of a field.
         """
     def tanh(self) -> SubElementField:
         r"""
-        Voir `pyrucast.field.tanh`.
+        Element-wise hyperbolic tangent of a field.
         """
     def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> SubElementField:
         r"""
@@ -2665,47 +2665,47 @@ class SubNodeField:
         """
     def abs(self) -> SubNodeField:
         r"""
-        Voir `pyrucast.field.abs`.
+        Element-wise absolute value of a field.
         """
     def sqrt(self) -> SubNodeField:
         r"""
-        Voir `pyrucast.field.sqrt`.
+        Element-wise square root of a field (`nan` for negatives).
         """
     def exp(self) -> SubNodeField:
         r"""
-        Voir `pyrucast.field.exp`.
+        Element-wise exponential `eˣ` of a field.
         """
     def log(self) -> SubNodeField:
         r"""
-        Voir `pyrucast.field.log`.
+        Element-wise natural logarithm of a field (`-inf`/`nan` for ≤ 0).
         """
     def log10(self) -> SubNodeField:
         r"""
-        Voir `pyrucast.field.log10`.
+        Element-wise base-10 logarithm of a field.
         """
     def cos(self) -> SubNodeField:
         r"""
-        Voir `pyrucast.field.cos`.
+        Element-wise cosine of a field (radians).
         """
     def sin(self) -> SubNodeField:
         r"""
-        Voir `pyrucast.field.sin`.
+        Element-wise sine of a field (radians).
         """
     def tan(self) -> SubNodeField:
         r"""
-        Voir `pyrucast.field.tan`.
+        Element-wise tangent of a field (radians).
         """
     def sinh(self) -> SubNodeField:
         r"""
-        Voir `pyrucast.field.sinh`.
+        Element-wise hyperbolic sine of a field.
         """
     def cosh(self) -> SubNodeField:
         r"""
-        Voir `pyrucast.field.cosh`.
+        Element-wise hyperbolic cosine of a field.
         """
     def tanh(self) -> SubNodeField:
         r"""
-        Voir `pyrucast.field.tanh`.
+        Element-wise hyperbolic tangent of a field.
         """
     def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> SubNodeField:
         r"""

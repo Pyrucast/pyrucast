@@ -90,8 +90,49 @@ pub fn psca(py: Python<'_>, x: &Bound<'_, PyAny>, y: &Bound<'_, PyAny>) -> PyRes
 // `ElementField` / `SubElementField`) and mirror `crate::ops::field::*`.
 // Results are unguarded (numpy-like): `log` of ≤ 0 → `-inf`/`nan`, etc.
 
+/// Emit the method form of an element-wise unary op for an **aggregate**
+/// flavour. The receiver's type being known, the method short-circuits the
+/// four-branch dispatch of the free function and returns a **precise** type
+/// instead of `Any`. It carries the free function's own doc — `$doc` is
+/// substituted before the attribute macros read the item, so pyo3 (hence
+/// `__doc__`) and pyo3-stub-gen (hence the `.pyi`) both see a real literal.
+macro_rules! py_field_unary_aggregate {
+    ($T:ident, $name:ident, $doc:literal) => {
+        #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+        #[pymethods]
+        impl $T {
+            #[doc = $doc]
+            fn $name(&self) -> PyResult<$T> {
+                Ok($T {
+                    inner: crate::ops::field::$name(&self.inner)?,
+                })
+            }
+        }
+    };
+}
+
+/// Same, for a **sub-container** flavour: the value is read through the handle,
+/// and the result gets a handle of its own.
+macro_rules! py_field_unary_sub {
+    ($T:ident, $name:ident, $doc:literal) => {
+        #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+        #[pymethods]
+        impl $T {
+            #[doc = $doc]
+            fn $name(&self) -> PyResult<$T> {
+                let out = crate::ops::field::$name(&*self.handle.read())?;
+                Ok($T {
+                    handle: Handle::new(out),
+                })
+            }
+        }
+    };
+}
+
 /// Generate a `#[pyfunction] $name(field)` that dispatches over the four field
-/// wrapper types and applies the matching `ops::field::$name`.
+/// wrapper types and applies the matching `ops::field::$name`, **and** the four
+/// methods that are its « sujet » face. The documentation is written once, at
+/// the call site, and reaches the free function and the four methods alike.
 macro_rules! py_field_unary {
     ($name:ident, $doc:literal) => {
         #[doc = $doc]
@@ -141,6 +182,11 @@ macro_rules! py_field_unary {
                 "expected a NodeField, SubNodeField, ElementField or SubElementField",
             ))
         }
+
+        py_field_unary_aggregate!(PyNodeField, $name, $doc);
+        py_field_unary_aggregate!(PyElementField, $name, $doc);
+        py_field_unary_sub!(PySubNodeField, $name, $doc);
+        py_field_unary_sub!(PySubElementField, $name, $doc);
     };
 }
 
@@ -168,86 +214,13 @@ py_field_unary!(tanh, "Element-wise hyperbolic tangent of a field.");
 // exposé aussi en méthode »). Le type du receveur étant connu, la méthode
 // court-circuite le dispatch à quatre branches de la fonction libre et rend un
 // type **précis** au lieu de `Any`. `psca` n'y figure pas : symétrique.
+//
+// Les onze maths élémentaires ne sont pas ici : elles naissent de
+// `py_field_unary!`, avec la doc de leur fonction libre. Ne restent ci-dessous
+// que les verbes dont la méthode a un corps propre.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyNodeField {
-    /// Voir `pyrucast.field.abs`.
-    fn abs(&self) -> PyResult<PyNodeField> {
-        Ok(PyNodeField {
-            inner: crate::ops::field::abs(&self.inner)?,
-        })
-    }
-
-    /// Voir `pyrucast.field.sqrt`.
-    fn sqrt(&self) -> PyResult<PyNodeField> {
-        Ok(PyNodeField {
-            inner: crate::ops::field::sqrt(&self.inner)?,
-        })
-    }
-
-    /// Voir `pyrucast.field.exp`.
-    fn exp(&self) -> PyResult<PyNodeField> {
-        Ok(PyNodeField {
-            inner: crate::ops::field::exp(&self.inner)?,
-        })
-    }
-
-    /// Voir `pyrucast.field.log`.
-    fn log(&self) -> PyResult<PyNodeField> {
-        Ok(PyNodeField {
-            inner: crate::ops::field::log(&self.inner)?,
-        })
-    }
-
-    /// Voir `pyrucast.field.log10`.
-    fn log10(&self) -> PyResult<PyNodeField> {
-        Ok(PyNodeField {
-            inner: crate::ops::field::log10(&self.inner)?,
-        })
-    }
-
-    /// Voir `pyrucast.field.cos`.
-    fn cos(&self) -> PyResult<PyNodeField> {
-        Ok(PyNodeField {
-            inner: crate::ops::field::cos(&self.inner)?,
-        })
-    }
-
-    /// Voir `pyrucast.field.sin`.
-    fn sin(&self) -> PyResult<PyNodeField> {
-        Ok(PyNodeField {
-            inner: crate::ops::field::sin(&self.inner)?,
-        })
-    }
-
-    /// Voir `pyrucast.field.tan`.
-    fn tan(&self) -> PyResult<PyNodeField> {
-        Ok(PyNodeField {
-            inner: crate::ops::field::tan(&self.inner)?,
-        })
-    }
-
-    /// Voir `pyrucast.field.sinh`.
-    fn sinh(&self) -> PyResult<PyNodeField> {
-        Ok(PyNodeField {
-            inner: crate::ops::field::sinh(&self.inner)?,
-        })
-    }
-
-    /// Voir `pyrucast.field.cosh`.
-    fn cosh(&self) -> PyResult<PyNodeField> {
-        Ok(PyNodeField {
-            inner: crate::ops::field::cosh(&self.inner)?,
-        })
-    }
-
-    /// Voir `pyrucast.field.tanh`.
-    fn tanh(&self) -> PyResult<PyNodeField> {
-        Ok(PyNodeField {
-            inner: crate::ops::field::tanh(&self.inner)?,
-        })
-    }
-
     /// Voir `pyrucast.field.mask`.
     #[pyo3(signature = (ge=None, gt=None, le=None, lt=None, components=None))]
     fn mask(
@@ -301,83 +274,6 @@ impl PyNodeField {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyElementField {
-    /// Voir `pyrucast.field.abs`.
-    fn abs(&self) -> PyResult<PyElementField> {
-        Ok(PyElementField {
-            inner: crate::ops::field::abs(&self.inner)?,
-        })
-    }
-
-    /// Voir `pyrucast.field.sqrt`.
-    fn sqrt(&self) -> PyResult<PyElementField> {
-        Ok(PyElementField {
-            inner: crate::ops::field::sqrt(&self.inner)?,
-        })
-    }
-
-    /// Voir `pyrucast.field.exp`.
-    fn exp(&self) -> PyResult<PyElementField> {
-        Ok(PyElementField {
-            inner: crate::ops::field::exp(&self.inner)?,
-        })
-    }
-
-    /// Voir `pyrucast.field.log`.
-    fn log(&self) -> PyResult<PyElementField> {
-        Ok(PyElementField {
-            inner: crate::ops::field::log(&self.inner)?,
-        })
-    }
-
-    /// Voir `pyrucast.field.log10`.
-    fn log10(&self) -> PyResult<PyElementField> {
-        Ok(PyElementField {
-            inner: crate::ops::field::log10(&self.inner)?,
-        })
-    }
-
-    /// Voir `pyrucast.field.cos`.
-    fn cos(&self) -> PyResult<PyElementField> {
-        Ok(PyElementField {
-            inner: crate::ops::field::cos(&self.inner)?,
-        })
-    }
-
-    /// Voir `pyrucast.field.sin`.
-    fn sin(&self) -> PyResult<PyElementField> {
-        Ok(PyElementField {
-            inner: crate::ops::field::sin(&self.inner)?,
-        })
-    }
-
-    /// Voir `pyrucast.field.tan`.
-    fn tan(&self) -> PyResult<PyElementField> {
-        Ok(PyElementField {
-            inner: crate::ops::field::tan(&self.inner)?,
-        })
-    }
-
-    /// Voir `pyrucast.field.sinh`.
-    fn sinh(&self) -> PyResult<PyElementField> {
-        Ok(PyElementField {
-            inner: crate::ops::field::sinh(&self.inner)?,
-        })
-    }
-
-    /// Voir `pyrucast.field.cosh`.
-    fn cosh(&self) -> PyResult<PyElementField> {
-        Ok(PyElementField {
-            inner: crate::ops::field::cosh(&self.inner)?,
-        })
-    }
-
-    /// Voir `pyrucast.field.tanh`.
-    fn tanh(&self) -> PyResult<PyElementField> {
-        Ok(PyElementField {
-            inner: crate::ops::field::tanh(&self.inner)?,
-        })
-    }
-
     /// Voir `pyrucast.field.mask`.
     #[pyo3(signature = (ge=None, gt=None, le=None, lt=None, components=None))]
     fn mask(
@@ -431,94 +327,6 @@ impl PyElementField {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PySubNodeField {
-    /// Voir `pyrucast.field.abs`.
-    fn abs(&self) -> PyResult<PySubNodeField> {
-        let out = crate::ops::field::abs(&*self.handle.read())?;
-        Ok(PySubNodeField {
-            handle: Handle::new(out),
-        })
-    }
-
-    /// Voir `pyrucast.field.sqrt`.
-    fn sqrt(&self) -> PyResult<PySubNodeField> {
-        let out = crate::ops::field::sqrt(&*self.handle.read())?;
-        Ok(PySubNodeField {
-            handle: Handle::new(out),
-        })
-    }
-
-    /// Voir `pyrucast.field.exp`.
-    fn exp(&self) -> PyResult<PySubNodeField> {
-        let out = crate::ops::field::exp(&*self.handle.read())?;
-        Ok(PySubNodeField {
-            handle: Handle::new(out),
-        })
-    }
-
-    /// Voir `pyrucast.field.log`.
-    fn log(&self) -> PyResult<PySubNodeField> {
-        let out = crate::ops::field::log(&*self.handle.read())?;
-        Ok(PySubNodeField {
-            handle: Handle::new(out),
-        })
-    }
-
-    /// Voir `pyrucast.field.log10`.
-    fn log10(&self) -> PyResult<PySubNodeField> {
-        let out = crate::ops::field::log10(&*self.handle.read())?;
-        Ok(PySubNodeField {
-            handle: Handle::new(out),
-        })
-    }
-
-    /// Voir `pyrucast.field.cos`.
-    fn cos(&self) -> PyResult<PySubNodeField> {
-        let out = crate::ops::field::cos(&*self.handle.read())?;
-        Ok(PySubNodeField {
-            handle: Handle::new(out),
-        })
-    }
-
-    /// Voir `pyrucast.field.sin`.
-    fn sin(&self) -> PyResult<PySubNodeField> {
-        let out = crate::ops::field::sin(&*self.handle.read())?;
-        Ok(PySubNodeField {
-            handle: Handle::new(out),
-        })
-    }
-
-    /// Voir `pyrucast.field.tan`.
-    fn tan(&self) -> PyResult<PySubNodeField> {
-        let out = crate::ops::field::tan(&*self.handle.read())?;
-        Ok(PySubNodeField {
-            handle: Handle::new(out),
-        })
-    }
-
-    /// Voir `pyrucast.field.sinh`.
-    fn sinh(&self) -> PyResult<PySubNodeField> {
-        let out = crate::ops::field::sinh(&*self.handle.read())?;
-        Ok(PySubNodeField {
-            handle: Handle::new(out),
-        })
-    }
-
-    /// Voir `pyrucast.field.cosh`.
-    fn cosh(&self) -> PyResult<PySubNodeField> {
-        let out = crate::ops::field::cosh(&*self.handle.read())?;
-        Ok(PySubNodeField {
-            handle: Handle::new(out),
-        })
-    }
-
-    /// Voir `pyrucast.field.tanh`.
-    fn tanh(&self) -> PyResult<PySubNodeField> {
-        let out = crate::ops::field::tanh(&*self.handle.read())?;
-        Ok(PySubNodeField {
-            handle: Handle::new(out),
-        })
-    }
-
     /// Voir `pyrucast.field.mask`.
     #[pyo3(signature = (ge=None, gt=None, le=None, lt=None, components=None))]
     fn mask(
@@ -575,94 +383,6 @@ impl PySubNodeField {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PySubElementField {
-    /// Voir `pyrucast.field.abs`.
-    fn abs(&self) -> PyResult<PySubElementField> {
-        let out = crate::ops::field::abs(&*self.handle.read())?;
-        Ok(PySubElementField {
-            handle: Handle::new(out),
-        })
-    }
-
-    /// Voir `pyrucast.field.sqrt`.
-    fn sqrt(&self) -> PyResult<PySubElementField> {
-        let out = crate::ops::field::sqrt(&*self.handle.read())?;
-        Ok(PySubElementField {
-            handle: Handle::new(out),
-        })
-    }
-
-    /// Voir `pyrucast.field.exp`.
-    fn exp(&self) -> PyResult<PySubElementField> {
-        let out = crate::ops::field::exp(&*self.handle.read())?;
-        Ok(PySubElementField {
-            handle: Handle::new(out),
-        })
-    }
-
-    /// Voir `pyrucast.field.log`.
-    fn log(&self) -> PyResult<PySubElementField> {
-        let out = crate::ops::field::log(&*self.handle.read())?;
-        Ok(PySubElementField {
-            handle: Handle::new(out),
-        })
-    }
-
-    /// Voir `pyrucast.field.log10`.
-    fn log10(&self) -> PyResult<PySubElementField> {
-        let out = crate::ops::field::log10(&*self.handle.read())?;
-        Ok(PySubElementField {
-            handle: Handle::new(out),
-        })
-    }
-
-    /// Voir `pyrucast.field.cos`.
-    fn cos(&self) -> PyResult<PySubElementField> {
-        let out = crate::ops::field::cos(&*self.handle.read())?;
-        Ok(PySubElementField {
-            handle: Handle::new(out),
-        })
-    }
-
-    /// Voir `pyrucast.field.sin`.
-    fn sin(&self) -> PyResult<PySubElementField> {
-        let out = crate::ops::field::sin(&*self.handle.read())?;
-        Ok(PySubElementField {
-            handle: Handle::new(out),
-        })
-    }
-
-    /// Voir `pyrucast.field.tan`.
-    fn tan(&self) -> PyResult<PySubElementField> {
-        let out = crate::ops::field::tan(&*self.handle.read())?;
-        Ok(PySubElementField {
-            handle: Handle::new(out),
-        })
-    }
-
-    /// Voir `pyrucast.field.sinh`.
-    fn sinh(&self) -> PyResult<PySubElementField> {
-        let out = crate::ops::field::sinh(&*self.handle.read())?;
-        Ok(PySubElementField {
-            handle: Handle::new(out),
-        })
-    }
-
-    /// Voir `pyrucast.field.cosh`.
-    fn cosh(&self) -> PyResult<PySubElementField> {
-        let out = crate::ops::field::cosh(&*self.handle.read())?;
-        Ok(PySubElementField {
-            handle: Handle::new(out),
-        })
-    }
-
-    /// Voir `pyrucast.field.tanh`.
-    fn tanh(&self) -> PyResult<PySubElementField> {
-        let out = crate::ops::field::tanh(&*self.handle.read())?;
-        Ok(PySubElementField {
-            handle: Handle::new(out),
-        })
-    }
-
     /// Voir `pyrucast.field.mask`.
     #[pyo3(signature = (ge=None, gt=None, le=None, lt=None, components=None))]
     fn mask(

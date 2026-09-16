@@ -200,6 +200,18 @@ Deux conséquences pratiques :
   que l'ordre compte. `merge` est l'alias nommé de `a | b` — l'opérateur donne
   déjà la forme symétrique, il suffit.
 
+**La méthode ne redocumente pas — mais elle doit quand même *montrer* la
+documentation.** Côté Rust, son `/// Voir [`mesh::skin`](fn@crate::ops::mesh::skin)`
+est un lien : rustdoc met le lecteur à un clic de la doc complète. Côté Python,
+le stub `.pyi` n'a aucun mécanisme de lien, et un pointeur « Voir … » y reste du
+texte mort — c'est tout ce que l'IDE affiche au survol. Quand les deux formes
+naissent de la **même macro** (`py_field_unary!`, pour les onze maths
+élémentaires), le littéral de doc est partagé : la substitution a lieu avant que
+pyo3 et pyo3-stub-gen ne lisent l'item, donc le texte complet part à la fois dans
+`__doc__` et dans le stub, écrit une seule fois. C'est la forme à préférer
+partout où les méthodes forment une matrice régulière ; ailleurs, le pointeur
+subsiste, et c'est une dette connue de l'aide affichée.
+
 ### Le nom peut changer entre les deux formes
 
 Le nom complet est toujours « qualificatif + verbe » ; ce qui change, c'est où

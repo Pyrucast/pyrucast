@@ -36,6 +36,22 @@ CONTAINERS = {
 # Les quatre saveurs de champ, pour les opérateurs polymorphes (`typing.Any`).
 FIELDS = ["NodeField", "SubNodeField", "ElementField", "SubElementField"]
 
+# Les maths élémentaires : fonction libre et méthodes sortent de la même macro,
+# `py_field_unary!`, donc du même littéral de documentation.
+UNAIRES = [
+    "abs",
+    "sqrt",
+    "exp",
+    "log",
+    "log10",
+    "cos",
+    "sin",
+    "tan",
+    "sinh",
+    "cosh",
+    "tanh",
+]
+
 # Fonction libre -> nom de la méthode, quand le nom change parce que la méthode
 # doit porter le qualificatif que le module fournissait à la fonction.
 RENAMED = {
@@ -155,6 +171,39 @@ def test_renames_point_to_existing_functions():
     names = {name for name, _, _ in free_functions()}
     stale = [fn for fn in RENAMED if fn not in names]
     assert not stale, f"renommages périmés : {stale}"
+
+
+def test_unary_methods_carry_the_doc_of_their_function():
+    """Les maths élémentaires affichent la doc de leur fonction libre.
+
+    `py_field_unary!` (`src/py/ops/field.rs`) produit la fonction libre **et**
+    ses quatre méthodes à partir du même littéral : le texte est écrit une fois,
+    et `help()` comme le stub des IDE le montrent en entier. Un pointeur
+    « Voir … » qui reviendrait ici serait une régression de l'aide affichée.
+    """
+    for verbe in UNAIRES:
+        attendu = getattr(pyrucast.field, verbe).__doc__
+        assert attendu and not attendu.startswith("Voir "), (
+            f"pyrucast.field.{verbe} : la fonction libre a perdu sa doc"
+        )
+        for cls in FIELDS:
+            doc = getattr(getattr(pyrucast, cls), verbe).__doc__
+            assert doc == attendu, (
+                f"{cls}.{verbe} : la méthode ne porte pas la doc de sa fonction "
+                f"libre (trouvé {doc!r})"
+            )
+
+
+def test_stub_shows_the_unary_docs():
+    """Le stub aussi — c'est lui que lisent Pylance et PyCharm.
+
+    Échoue si le `.pyi` n'a pas été régénéré après un changement de la macro.
+    """
+    stub = PYI.read_text()
+    for verbe in UNAIRES:
+        assert f"Voir `pyrucast.field.{verbe}`" not in stub, (
+            f"{verbe} : le stub porte encore un pointeur au lieu de la doc"
+        )
 
 
 def test_chaining_actually_works():
