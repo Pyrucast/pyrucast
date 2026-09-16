@@ -426,6 +426,19 @@ impl std::fmt::Debug for HandleTag {
     }
 }
 
+/// Pre-formatted text shown **unquoted** inside a `debug_struct`.
+///
+/// `display_extra` produces a ready-made suffix (`", 6 cell(s) total"`), meant
+/// for `Display`. Feeding it to `debug_struct` as a plain string would print it
+/// between quotes; this wrapper keeps it readable while `Debug` stays idiomatic.
+pub(crate) struct Unquoted<'a>(pub(crate) &'a str);
+
+impl std::fmt::Debug for Unquoted<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.0)
+    }
+}
+
 /// A single dereferenced handle (see [`DebugItems`]).
 struct DebugItem<'a, S: Any + Send + Sync>(&'a Handle<S>);
 
@@ -985,13 +998,22 @@ macro_rules! impl_aggregate_std_traits {
 
         impl std::fmt::Debug for $T {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.debug_struct(<$T as $crate::aggregate::Aggregate>::type_name())
-                    .field("count", &$crate::aggregate::Aggregate::len(self))
-                    .field(
-                        "items",
-                        &$crate::aggregate::DebugItems($crate::aggregate::Aggregate::items(self)),
-                    )
-                    .finish()
+                // `summary` reprend ce que `Display` ajoute en suffixe (le total
+                // de mailles, les dimensions d'une matrice…) : sans lui, la
+                // structure en dirait **moins** que le résumé, et la gradation
+                // des trois niveaux serait inversée.
+                let extra = <$T as $crate::aggregate::Aggregate>::display_extra(self);
+                let extra = extra.as_deref().map(|e| e.trim_start_matches(", "));
+                let mut s = f.debug_struct(<$T as $crate::aggregate::Aggregate>::type_name());
+                s.field("count", &$crate::aggregate::Aggregate::len(self));
+                if let Some(extra) = extra {
+                    s.field("summary", &$crate::aggregate::Unquoted(extra));
+                }
+                s.field(
+                    "items",
+                    &$crate::aggregate::DebugItems($crate::aggregate::Aggregate::items(self)),
+                )
+                .finish()
             }
         }
 
@@ -1004,6 +1026,25 @@ macro_rules! impl_aggregate_std_traits {
                     $crate::aggregate::Aggregate::len(self),
                     <$T as $crate::aggregate::Aggregate>::sub_display_name(),
                 )?;
+                // Les identifiants des zones — ce que l'utilisateur manipule.
+                // Élidés au-delà de trois : le résumé doit rester d'une taille
+                // bornée quel que soit l'objet (`CONVENTIONS.md` § « Trois
+                // niveaux d'affichage »), sans quoi 300 zones donneraient une
+                // ligne de 2 700 caractères.
+                let items = $crate::aggregate::Aggregate::items(self);
+                if !items.is_empty() {
+                    f.write_str(" [")?;
+                    for (i, h) in items.iter().take(3).enumerate() {
+                        if i > 0 {
+                            f.write_str(", ")?;
+                        }
+                        write!(f, "#{:x}", h.id() & 0xff_ffff)?;
+                    }
+                    if items.len() > 3 {
+                        write!(f, ", … +{}", items.len() - 3)?;
+                    }
+                    f.write_str("]")?;
+                }
                 if let Some(extra) = $crate::aggregate::Aggregate::display_extra(self) {
                     f.write_str(&extra)?;
                 }
