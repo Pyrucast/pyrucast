@@ -8,6 +8,7 @@ use crate::py::model::{PyModel, PySubModel};
 use crate::py::node_field::PyNodeField;
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
+use pyrucast_macros::py_op;
 
 /// Fuse the zones of an element `field` sharing the same `FiniteElementSpace`
 /// support into a single zone carrying the union of their components.
@@ -17,6 +18,7 @@ use pyo3::prelude::*;
 /// single material field readable by every physics. Components carried by two
 /// zones must agree value by value, else it errors. `field` itself is left
 /// untouched.
+#[py_op(method_on = PyElementField)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(name = "consolidate_element")]
@@ -32,6 +34,7 @@ pub fn consolidate(field: PyRef<PyElementField>) -> PyResult<PyElementField> {
 /// differentiated w.r.t. every spatial axis, giving an `ElementField` with
 /// one component `grad_<name>_<axis>` per (input component, axis) pair
 /// (`grad_T_x`, …). Feed the result to `integrate_behavior`.
+#[py_op(method_on = PyNodeField)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn gradient(
@@ -63,6 +66,7 @@ pub fn deformation(
 /// (`f(ξ_g) = Σ_i f_i N_i(ξ_g)`), turning a per-node `NodeField` into a
 /// per-element `ElementField` with the same component names. Cast3M `CHAN`
 /// (nodes → Gauss).
+#[py_op(method_on = PyNodeField)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn interp_to_gauss(
@@ -168,6 +172,7 @@ pub fn shell_deformation(
 /// SubElementField on the sub-model's FE subspace, pre-filled with the
 /// given uniform value per declared component. Errors for physics that
 /// need no material (e.g. Dirichlet).
+#[py_op(method_on = PySubModel, name = "material_field")]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn sub_material_field(
@@ -187,6 +192,7 @@ pub fn sub_material_field(
 /// Build a material `ElementField` applying the same uniform
 /// `(component, value)` pairs to every material-hungry sub-model of
 /// `model`. Sub-models that need no material (Dirichlet, …) are skipped.
+#[py_op(method_on = PyModel)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn material_field(
@@ -205,6 +211,7 @@ pub fn material_field(
 /// `(component, value)` list. The outer list length must equal
 /// `model.len()`. An empty inner list **skips** the matching
 /// sub-model (typical for Dirichlet).
+#[py_op(method_on = PyModel)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn material_field_per_sub_model(
@@ -235,6 +242,7 @@ pub fn material_field_per_sub_model(
 ///
 /// For a linear law the result is consistent with the assembled stiffness
 /// (`∫ Bᵀ·flux = K·u`); a non-linear law is the exact response.
+#[py_op(method_on = PyModel)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (model, deformation, materials, prev=None, dt=None))]
@@ -300,83 +308,5 @@ pub fn mask(
         Err(PyTypeError::new_err(
             "expected a PyElementField or PySubElementField",
         ))
-    }
-}
-
-// ─── Méthodes de délégation ────────────────────────────────────────────────
-//
-// La face « sujet » des opérateurs ci-dessus (`CONVENTIONS.md` § « Le verbe
-// exposé aussi en méthode »). Aucune logique : chaque méthode rappelle la
-// fonction libre, receveur compris.
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[pymethods]
-impl PyElementField {
-    /// Voir `pyrucast.element_field.consolidate`.
-    fn consolidate(slf: PyRef<'_, Self>) -> PyResult<PyElementField> {
-        super::element_field::consolidate(slf)
-    }
-}
-
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[pymethods]
-impl PyNodeField {
-    /// Voir `pyrucast.element_field.gradient`.
-    fn gradient(
-        slf: PyRef<'_, Self>,
-        fespace: PyRef<PyFiniteElementSpace>,
-    ) -> PyResult<PyElementField> {
-        super::element_field::gradient(slf, fespace)
-    }
-
-    /// Voir `pyrucast.element_field.interp_to_gauss`.
-    fn interp_to_gauss(
-        slf: PyRef<'_, Self>,
-        fespace: PyRef<PyFiniteElementSpace>,
-    ) -> PyResult<PyElementField> {
-        super::element_field::interp_to_gauss(slf, fespace)
-    }
-}
-
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[pymethods]
-impl PyModel {
-    /// Voir `pyrucast.element_field.material_field`.
-    fn material_field(
-        slf: PyRef<'_, Self>,
-        components_and_values: Vec<(String, f64)>,
-    ) -> PyResult<PyElementField> {
-        super::element_field::material_field(slf, components_and_values)
-    }
-
-    /// Voir `pyrucast.element_field.material_field_per_sub_model`.
-    fn material_field_per_sub_model(
-        slf: PyRef<'_, Self>,
-        components_and_values_per_sub_model: Vec<Vec<(String, f64)>>,
-    ) -> PyResult<PyElementField> {
-        super::element_field::material_field_per_sub_model(slf, components_and_values_per_sub_model)
-    }
-
-    /// Voir `pyrucast.element_field.integrate_behavior`.
-    #[pyo3(signature = (deformation, materials, prev=None, dt=None))]
-    fn integrate_behavior(
-        slf: PyRef<'_, Self>,
-        deformation: PyRef<PyElementField>,
-        materials: PyRef<PyElementField>,
-        prev: Option<PyRef<PyElementField>>,
-        dt: Option<f64>,
-    ) -> PyResult<PyElementField> {
-        super::element_field::integrate_behavior(slf, deformation, materials, prev, dt)
-    }
-}
-
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[pymethods]
-impl PySubModel {
-    /// Voir `pyrucast.element_field.sub_material_field`.
-    fn material_field(
-        slf: PyRef<'_, Self>,
-        components_and_values: Vec<(String, f64)>,
-    ) -> PyResult<PySubElementField> {
-        super::element_field::sub_material_field(slf, components_and_values)
     }
 }

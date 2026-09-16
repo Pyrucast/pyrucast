@@ -9,6 +9,7 @@ use crate::py::node_field::PyNodeField;
 use crate::py::node_field::PySubNodeField;
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
+use pyrucast_macros::py_op;
 
 /// Build a `NodeField` carrying the position of every node of `mesh`
 /// — one `SubNodeField` per submesh, on the distinct nodes of its zone.
@@ -16,6 +17,7 @@ use pyo3::prelude::*;
 /// One component per requested axis (`"X"`, `"Y"`, `"Z"`). `components=None`
 /// requests all the axes the mesh's `Coords` has (`["X"]` in 1-D,
 /// `["X", "Y"]` in 2-D, `["X", "Y", "Z"]` in 3-D).
+#[py_op(method_on = PyMesh)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (mesh, components=None))]
@@ -42,6 +44,7 @@ pub fn positions(mesh: PyRef<PyMesh>, components: Option<Vec<String>>) -> PyResu
 /// land on the exact support of an existing field instead of a mesh.
 ///
 /// Errors if `mesh` and `field` are attached to different `Coords`s.
+#[py_op(method_on = PyNodeField)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn restrict(field: PyRef<PyNodeField>, mesh: PyRef<PyMesh>) -> PyResult<PyNodeField> {
@@ -61,6 +64,7 @@ pub fn restrict(field: PyRef<PyNodeField>, mesh: PyRef<PyMesh>) -> PyResult<PyNo
 /// `(node, component)` pair is filled from `field` when it covers it, `0.0`
 /// otherwise; nodes and components of `field` absent from `target` are dropped.
 /// Errors if `target` and `field` are attached to different `Coords`s.
+#[py_op(method_on = PyNodeField)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn restrict_like(
@@ -91,6 +95,7 @@ pub fn merge(a: PyRef<PyNodeField>, b: PyRef<PyNodeField>) -> PyResult<PyNodeFie
 ///
 /// Errors if two zones disagree on a value at a shared `(node, component)`
 /// pair. `field` itself is left untouched.
+#[py_op(method_on = PyNodeField)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(name = "consolidate_node")]
@@ -110,6 +115,7 @@ pub fn consolidate(field: PyRef<PyNodeField>) -> PyResult<PyNodeField> {
 /// Cauchy stress — `divergence(stress, "sigma")` is Cast3m `BSIG` — but the
 /// operator knows nothing of mechanics: it needs only the geometry and the
 /// names. One zone per subspace.
+#[py_op(method_on = PyElementField)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn divergence(field: PyRef<PyElementField>, prefix: &str) -> PyResult<PyNodeField> {
@@ -137,6 +143,7 @@ pub fn divergence(field: PyRef<PyElementField>, prefix: &str) -> PyResult<PyNode
 /// `u` reads it directly — a boundary transfer's `∫ h·a·N` has no law to go
 /// through — and a constraint draws its reaction `Cᵀ λ` from it, spread over the
 /// constrained nodes by the relation's coefficients.
+#[py_op(method_on = PyModel)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn internal_forces(
@@ -166,6 +173,7 @@ pub fn internal_forces(
 /// Splitting the two sides is what keeps signs out of the physics: an author
 /// writes both halves positively, as the weak form reads, and the single
 /// subtraction lives in the caller.
+#[py_op(method_on = PyModel)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn external_forces(
@@ -220,70 +228,5 @@ pub fn mask(
         Err(PyTypeError::new_err(
             "expected a PyNodeField or PySubNodeField",
         ))
-    }
-}
-
-// ─── Méthodes de délégation ────────────────────────────────────────────────
-//
-// La face « sujet » des opérateurs ci-dessus (`CONVENTIONS.md` § « Le verbe
-// exposé aussi en méthode »). Aucune logique : chaque méthode rappelle la
-// fonction libre, receveur compris.
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[pymethods]
-impl PyNodeField {
-    /// Voir `pyrucast.node_field.consolidate`.
-    fn consolidate(slf: PyRef<'_, Self>) -> PyResult<PyNodeField> {
-        super::node_field::consolidate(slf)
-    }
-
-    /// Voir `pyrucast.node_field.restrict`.
-    fn restrict(slf: PyRef<'_, Self>, mesh: PyRef<PyMesh>) -> PyResult<PyNodeField> {
-        super::node_field::restrict(slf, mesh)
-    }
-
-    /// Voir `pyrucast.node_field.restrict_like`.
-    fn restrict_like(slf: PyRef<'_, Self>, target: PyRef<PyNodeField>) -> PyResult<PyNodeField> {
-        super::node_field::restrict_like(slf, target)
-    }
-}
-
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[pymethods]
-impl PyMesh {
-    /// Voir `pyrucast.node_field.positions`.
-    #[pyo3(signature = (components=None))]
-    fn positions(slf: PyRef<'_, Self>, components: Option<Vec<String>>) -> PyResult<PyNodeField> {
-        super::node_field::positions(slf, components)
-    }
-}
-
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[pymethods]
-impl PyModel {
-    /// Voir `pyrucast.node_field.internal_forces`.
-    fn internal_forces(
-        slf: PyRef<'_, Self>,
-        state: PyRef<PyElementField>,
-        solution: PyRef<PyNodeField>,
-        materials: PyRef<PyElementField>,
-    ) -> PyResult<PyNodeField> {
-        super::node_field::internal_forces(slf, state, solution, materials)
-    }
-
-    /// Voir `pyrucast.node_field.external_forces`.
-    fn external_forces(
-        slf: PyRef<'_, Self>,
-        materials: PyRef<PyElementField>,
-    ) -> PyResult<PyNodeField> {
-        super::node_field::external_forces(slf, materials)
-    }
-}
-
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[pymethods]
-impl PyElementField {
-    /// Voir `pyrucast.node_field.divergence`.
-    fn divergence(slf: PyRef<'_, Self>, prefix: &str) -> PyResult<PyNodeField> {
-        super::node_field::divergence(slf, prefix)
     }
 }

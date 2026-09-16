@@ -129,10 +129,20 @@ pub fn py_op(attr: TokenStream, item: TokenStream) -> TokenStream {
     call_args.push(quote! { slf });
     call_args.extend(forwarded.iter().map(|pat| quote! { #pat }));
 
-    let docs: Vec<_> = func
+    // La méthode hérite de ce que porte la fonction : sa documentation, et ses
+    // dérogations de lint. `solver::solve_unilateral` en donne la preuve par
+    // l'exemple — neuf arguments, un `#[allow(clippy::too_many_arguments)]`
+    // assumé sur la fonction, et une méthode qui en compte tout autant, le
+    // receveur remplaçant le sujet. Sans cette recopie, la dérogation
+    // s'arrêtait à la fonction et le lint frappait un code que personne
+    // n'avait écrit.
+    //
+    // `allow` seulement, jamais `expect` : un `expect` dont le lint ne se
+    // déclenche pas sur la méthode deviendrait lui-même un avertissement.
+    let herites: Vec<_> = func
         .attrs
         .iter()
-        .filter(|attr| attr.path().is_ident("doc"))
+        .filter(|attr| attr.path().is_ident("doc") || attr.path().is_ident("allow"))
         .collect();
     let signature = signature_without_subject(&func);
     let output = &func.sig.output;
@@ -148,7 +158,7 @@ pub fn py_op(attr: TokenStream, item: TokenStream) -> TokenStream {
         #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pymethods)]
         #[::pyo3::pymethods]
         impl #method_on {
-            #(#docs)*
+            #(#herites)*
             #signature
             fn #method(slf: ::pyo3::PyRef<'_, Self>, #(#method_args),*) #output {
                 self::#free(#(#call_args),*)

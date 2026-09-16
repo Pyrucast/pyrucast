@@ -552,7 +552,14 @@ class ElementField:
     def __len__(self) -> builtins.int: ...
     def consolidate(self) -> ElementField:
         r"""
-        Voir `pyrucast.element_field.consolidate`.
+        Fuse the zones of an element `field` sharing the same `FiniteElementSpace`
+        support into a single zone carrying the union of their components.
+        
+        The counterpart of `|`, which leaves component-disjoint zones side by side:
+        this is how per-physics material zones built on one shared fespace become a
+        single material field readable by every physics. Components carried by two
+        zones must agree value by value, else it errors. `field` itself is left
+        untouched.
         """
     def abs(self) -> ElementField:
         r"""
@@ -616,7 +623,16 @@ class ElementField:
         """
     def divergence(self, prefix: builtins.str) -> NodeField:
         r"""
-        Voir `pyrucast.node_field.divergence`.
+        Weak divergence of a per-element quantity named `prefix` — the adjoint of
+        `gradient`: `d_i = ∫ ∇N_i · A dΩ`, accumulated per node.
+        
+        The **rank is read off the names**, so one operator serves both: `A_x, A_y`
+        is a vector and yields a single `div_A` component; `A_xx, A_xy, A_yy` is a
+        symmetric tensor and yields one component per axis, `div_A_x, div_A_y`. The
+        tensor case is the internal forces of a continuum when the quantity is a
+        Cauchy stress — `divergence(stress, "sigma")` is Cast3m `BSIG` — but the
+        operator knows nothing of mechanics: it needs only the geometry and the
+        names. One zone per subspace.
         """
 
 @typing.final
@@ -1008,19 +1024,75 @@ class Matrix:
     def __len__(self) -> builtins.int: ...
     def lump(self) -> Matrix:
         r"""
-        Voir `pyrucast.matrix.lump`.
+        Lump an assembled matrix into a diagonal one by row-sum concentration
+        (Cast3M `LUMP`). Applied to a consistent mass / capacity matrix it yields the
+        diagonal (lumped) mass, conserving the total mass.
         """
     def solve(self, rhs: NodeField, method: typing.Optional[builtins.str] = None, cache: builtins.bool = True) -> NodeField:
         r"""
-        Voir `pyrucast.solver.solve`.
+        Solve the linear system `A·x = b` for `x` (sparse LU, faer).
+        
+        `matrix` is the finalized system `A`; `rhs` is the right-hand side `b`
+        as a `NodeField` (read through the aggregate, zones resolved per DOF).
+        Returns the solution `x` as a single-zone `NodeField` over the
+        column-DOF nodes.
+        
+        `method` selects the direct solver (currently only `"lu"`, the default).
+        `cache` (default `True`) reuses a factorization stored transparently on the
+        matrix: the first solve factorizes, later solves on the same matrix reuse the
+        factors (much cheaper). The cache is cleared automatically when the matrix
+        changes.
+        
+        A `Ctrl+C` is honoured at the solver's phase boundaries. The factorization
+        itself is a single library call and is not interrupted mid-way; when it is
+        already cached, only the (cheap) substitution runs.
         """
     def solve_eliminate(self, model: Model, rhs: NodeField, method: typing.Optional[builtins.str] = None, cache: builtins.bool = True) -> NodeField:
         r"""
-        Voir `pyrucast.solver.solve_eliminate`.
+        Solve `model`'s constrained system by **master/slave elimination**
+        (condensation) — the alternative to the Lagrange-multiplier path of
+        [`solve`].
+        
+        `model` is the constrained model; `matrix` is its assembled (saddle-point)
+        stiffness; `rhs` is the load field (its right-hand sides `g` live at the
+        multiplier nodes' imposed-value slots). Each linear relation eliminates one
+        slave DOF, so the system solved is smaller and definite (no multiplier DOFs).
+        The solution carries the primal field at every physics node plus each slave's
+        reaction (the multiplier equivalent) in its dual row.
+        
+        A model with no constraint falls back to a plain [`solve`]. v1 scope:
+        non-chained, disjoint slaves (a slave DOF may not appear in another relation).
+        
+        `method` selects the direct back-end for the reduced system (currently only
+        `"lu"`). `cache` (default `True`) reuses the condensation stored transparently
+        on the matrix, cleared when the matrix changes. `Ctrl+C` is honoured at phase
+        boundaries.
         """
     def solve_unilateral(self, model: Model, rhs: NodeField, method: typing.Optional[builtins.str] = None, active_set: typing.Optional[builtins.str] = None, cache: builtins.bool = True, max_iter: builtins.int = 100, tol: builtins.float = 1e-10) -> NodeField:
         r"""
-        Voir `pyrucast.solver.solve_unilateral`.
+        Solve `model`'s system with **unilateral** (inequality) constraints by the
+        active-set (status) method — the operator for constraints built with
+        `sense=">="` / `"<="` (Dirichlet, MPC).
+        
+        `model` is the constrained model; `matrix` is its assembled (saddle-point)
+        stiffness; `rhs` is the load field (the right-hand sides `g` live at the
+        multiplier nodes' imposed-value slots). The status loop starts with every
+        inequality active (or from the previous converged status when `cache` is
+        on — a warm start), solves, releases the relations whose reaction pulls,
+        activates the relations whose gap penetrates, and repeats until the status
+        is stable. Inactive relations report `λ = 0` in the solution.
+        
+        A model with no inequality relation falls back to a plain `solve`.
+        
+        `method` selects the direct back-end of each iteration (currently only
+        `"lu"`). `active_set` selects how each status's system is factorized:
+        `"schur"` (default) factorizes the inequality-free base once and updates it
+        per status (falling back to refactorization when that base is singular),
+        `"refactorize"` refactorizes the full system at each status change. `cache`
+        (default `True`) stores the active-set state transparently on the matrix
+        (cleared when the matrix changes). `max_iter` (default `100`) bounds the
+        status loop; `tol` (default `1e-10`) is the sign tolerance on the multiplier
+        and the gap. `Ctrl+C` is honoured at each iteration boundary.
         """
 
 @typing.final
@@ -1745,7 +1817,12 @@ class Mesh:
         """
     def positions(self, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> NodeField:
         r"""
-        Voir `pyrucast.node_field.positions`.
+        Build a `NodeField` carrying the position of every node of `mesh`
+        — one `SubNodeField` per submesh, on the distinct nodes of its zone.
+        
+        One component per requested axis (`"X"`, `"Y"`, `"Z"`). `components=None`
+        requests all the axes the mesh's `Coords` has (`["X"]` in 1-D,
+        `["X", "Y"]` in 2-D, `["X", "Y", "Z"]` in 3-D).
         """
 
 @typing.final
@@ -1896,39 +1973,99 @@ class Model:
     def __len__(self) -> builtins.int: ...
     def material_field(self, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> ElementField:
         r"""
-        Voir `pyrucast.element_field.material_field`.
+        Build a material `ElementField` applying the same uniform
+        `(component, value)` pairs to every material-hungry sub-model of
+        `model`. Sub-models that need no material (Dirichlet, …) are skipped.
         """
     def material_field_per_sub_model(self, components_and_values_per_sub_model: typing.Sequence[typing.Sequence[tuple[builtins.str, builtins.float]]]) -> ElementField:
         r"""
-        Voir `pyrucast.element_field.material_field_per_sub_model`.
+        Build a material `ElementField` where each sub-model gets its own
+        `(component, value)` list. The outer list length must equal
+        `model.len()`. An empty inner list **skips** the matching
+        sub-model (typical for Dirichlet).
         """
     def integrate_behavior(self, deformation: ElementField, materials: ElementField, prev: typing.Optional[ElementField] = None, dt: typing.Optional[builtins.float] = None) -> ElementField:
         r"""
-        Voir `pyrucast.element_field.integrate_behavior`.
+        Integrate the constitutive law of `model` (Cast3m `COMP`), stepping A → B.
+        
+        `deformation` is the **end-of-step** behaviour input ε(B) (from
+        `gradient(field, fespace)` or `deformation(u, fespace)`); `prev` is the
+        **converged output of the previous step** (the state at A — stress,
+        internal variables and start-of-step strain), or `None` on the first step;
+        `materials` supplies the per-zone material data; `dt` is the time increment
+        (`None` if the law is rate-independent). Returns the material-state field at
+        B (dual flux/stress + updated internal variables) of every behaviour-bearing
+        sub-model — feed it back as `prev` at the next step.
+        
+        For a linear law the result is consistent with the assembled stiffness
+        (`∫ Bᵀ·flux = K·u`); a non-linear law is the exact response.
         """
     def stiffness_matrix(self, materials: ElementField) -> Matrix:
         r"""
-        Voir `pyrucast.matrix.stiffness`.
+        Assemble the stiffness matrix `K` of `model`.
+        
+        `materials` carries the per-zone material data: every sub-model that
+        needs it picks the `SubElementField` whose FE subspace matches its own.
         """
     def mass_matrix(self, materials: ElementField) -> Matrix:
         r"""
-        Voir `pyrucast.matrix.mass`.
+        Assemble the consistent mass matrix `M` of `model` (Cast3M `MASS`), or the
+        heat-capacity matrix `C` for a thermal model (Cast3M `CAPA`).
+        
+        Mechanics assembles `M = ∫ ρ Nᵀ N` (material `rho`); heat conduction
+        assembles `C = ∫ ρ cp Nᵀ N` (material `rho`, `cp`). `materials` carries the
+        per-zone coefficients, exactly like [`stiffness`].
         """
     def geometric_matrix(self, materials: ElementField, stress: ElementField) -> Matrix:
         r"""
-        Voir `pyrucast.matrix.geometric`.
+        Assemble the geometric (initial-stress) stiffness `K_g` of `model` (Cast3M
+        `KSIG`), from the current stress field `stress` (Voigt-named `sigma_*`).
+        `materials` resolves each mechanical zone, exactly like [`stiffness`].
         """
     def tangent_matrix(self, materials: ElementField, deformation: ElementField, prev: typing.Optional[ElementField] = None, dt: typing.Optional[builtins.float] = None) -> Matrix:
         r"""
-        Voir `pyrucast.matrix.tangent`.
+        Assemble the consistent (algorithmic) tangent `K_t = ∫ Bᵀ D_alg B` of `model`
+        (Cast3M `KTAN`). `D_alg` is evaluated **at the Gauss point**, from the same
+        inputs `integrate_behavior` takes — no field of moduli is materialised, since
+        this assembler would be its only reader. `prev=None` means the rest state.
         """
     def internal_forces(self, state: ElementField, solution: NodeField, materials: ElementField) -> NodeField:
         r"""
-        Voir `pyrucast.node_field.internal_forces`.
+        Internal nodal forces of `model` — the left side of `Σ f_int = Σ f_ext`
+        (Cast3m `BSIG` for a continuum).
+        
+        The nodal mirror of `matrix.stiffness(model, materials)`: every sub-model is
+        asked for its term of the residual on the internal side. `state` is the
+        material-state field produced by `integrate_behavior` (`COMP`); a
+        behaviour-bearing sub-model applies its own `Bᵀ` (continuum solid, bar or
+        beam), a sub-model with no term here declares none. Returns a `NodeField`
+        whose components are each sub-model's dual variables (`f_x`, … for a
+        solid/bar; `f_w`, `m_theta` for a beam).
+        
+        For a linear law the result equals the assembled stiffness applied to the
+        solution (`K·u`); a non-linear law gives the exact internal forces. Its
+        counterpart is `external_forces(model, materials)`, and the gap between the
+        two sums is the residual.
+        
+        `solution` is the current one, multipliers included: a term that is linear in
+        `u` reads it directly — a boundary transfer's `∫ h·a·N` has no law to go
+        through — and a constraint draws its reaction `Cᵀ λ` from it, spread over the
+        constrained nodes by the relation's coefficients.
         """
     def external_forces(self, materials: ElementField) -> NodeField:
         r"""
-        Voir `pyrucast.node_field.external_forces`.
+        External nodal forces of `model` — the right side of `Σ f_int = Σ f_ext`.
+        
+        The counterpart of `internal_forces(model, state)`. Every sub-model is asked
+        for its terms of the residual on the external side: the given data of its
+        weak form, on the right of the equals sign. A physics whose term is entirely
+        a response to `u` (elasticity, conduction, a bar) has none, so a model made
+        only of those yields an empty field — which is the honest answer, not a
+        failure.
+        
+        Splitting the two sides is what keeps signs out of the physics: an author
+        writes both halves positively, as the weak form reads, and the single
+        subtraction lives in the caller.
         """
 
 @typing.final
@@ -2175,11 +2312,19 @@ class NodeField:
     def __len__(self) -> builtins.int: ...
     def gradient(self, fespace: FiniteElementSpace) -> ElementField:
         r"""
-        Voir `pyrucast.element_field.gradient`.
+        Gradient `∇f` of a node `field` at the Gauss points of `fespace`.
+        
+        Geometric and physics-agnostic: each component of `field` is
+        differentiated w.r.t. every spatial axis, giving an `ElementField` with
+        one component `grad_<name>_<axis>` per (input component, axis) pair
+        (`grad_T_x`, …). Feed the result to `integrate_behavior`.
         """
     def interp_to_gauss(self, fespace: FiniteElementSpace) -> ElementField:
         r"""
-        Voir `pyrucast.element_field.interp_to_gauss`.
+        Interpolate a nodal `field` to the Gauss points of `fespace`
+        (`f(ξ_g) = Σ_i f_i N_i(ξ_g)`), turning a per-node `NodeField` into a
+        per-element `ElementField` with the same component names. Cast3M `CHAN`
+        (nodes → Gauss).
         """
     def abs(self) -> NodeField:
         r"""
@@ -2241,17 +2386,47 @@ class NodeField:
         r"""
         Voir `pyrucast.field.rename_component`.
         """
-    def consolidate(self) -> NodeField:
-        r"""
-        Voir `pyrucast.node_field.consolidate`.
-        """
     def restrict(self, mesh: Mesh) -> NodeField:
         r"""
-        Voir `pyrucast.node_field.restrict`.
+        Restrict `field` to the nodes used by `mesh`.
+        
+        Returns a new `NodeField` with one zone per submesh of `mesh`, each
+        supported on the submesh's canonical POI1 node cloud (its distinct nodes,
+        materialised once and cached). Two restrictions onto the **same** `mesh`
+        share that support, so they combine directly: `restrict(a, mesh) -
+        restrict(b, mesh)` is the node-by-node difference. That support is also the
+        one a stiffness block over `mesh` uses, so `K * restrict(f, mesh)` and
+        `solve(K, f) - restrict(g, mesh)` line up too.
+        
+        Each zone carries the union of `field`'s components; nodes of `mesh` absent
+        from `field` are assigned `0.0`. Element operations on the region
+        (`gradient`, `integral`, `deformation`, `interp_to_gauss`) take `mesh` as a
+        separate argument and read the field by node id. Use `restrict_like` to
+        land on the exact support of an existing field instead of a mesh.
+        
+        Errors if `mesh` and `field` are attached to different `Coords`s.
         """
     def restrict_like(self, target: NodeField) -> NodeField:
         r"""
-        Voir `pyrucast.node_field.restrict_like`.
+        Reproject `field` onto the exact support and components of `target`,
+        zone by zone.
+        
+        Unlike `restrict` (which lands on a fresh support materialised from a
+        mesh, carrying the union of `field`'s components), this reuses each zone
+        of `target` as-is — same support, same component list — so the result is
+        on the very same support as `target` and combines with it directly by the
+        arithmetic operators (`target + restrict_like(field, target)`). A
+        `(node, component)` pair is filled from `field` when it covers it, `0.0`
+        otherwise; nodes and components of `field` absent from `target` are dropped.
+        Errors if `target` and `field` are attached to different `Coords`s.
+        """
+    def consolidate(self) -> NodeField:
+        r"""
+        Fuse the zones of a node `field` sharing the same component set into one,
+        deduping the nodes on their interface after a coherence check.
+        
+        Errors if two zones disagree on a value at a shared `(node, component)`
+        pair. `field` itself is left untouched.
         """
 
 @typing.final
@@ -2917,7 +3092,12 @@ class SubModel:
         """
     def material_field(self, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> SubElementField:
         r"""
-        Voir `pyrucast.element_field.sub_material_field`.
+        Build the material `SubElementField` of one sub-model.
+        
+        `sub_material_field(sub_model, [("k", 1.0), ...])` — fresh
+        SubElementField on the sub-model's FE subspace, pre-filled with the
+        given uniform value per declared component. Errors for physics that
+        need no material (e.g. Dirichlet).
         """
 
 @typing.final

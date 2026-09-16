@@ -5,11 +5,13 @@ use crate::py::element_field::PyElementField;
 use crate::py::matrix::PyMatrix;
 use crate::py::model::PyModel;
 use pyo3::prelude::*;
+use pyrucast_macros::py_op;
 
 /// Assemble the stiffness matrix `K` of `model`.
 ///
 /// `materials` carries the per-zone material data: every sub-model that
 /// needs it picks the `SubElementField` whose FE subspace matches its own.
+#[py_op(method_on = PyModel, name = "stiffness_matrix")]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn stiffness(model: PyRef<PyModel>, materials: PyRef<PyElementField>) -> PyResult<PyMatrix> {
@@ -23,6 +25,7 @@ pub fn stiffness(model: PyRef<PyModel>, materials: PyRef<PyElementField>) -> PyR
 /// Mechanics assembles `M = ∫ ρ Nᵀ N` (material `rho`); heat conduction
 /// assembles `C = ∫ ρ cp Nᵀ N` (material `rho`, `cp`). `materials` carries the
 /// per-zone coefficients, exactly like [`stiffness`].
+#[py_op(method_on = PyModel, name = "mass_matrix")]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn mass(model: PyRef<PyModel>, materials: PyRef<PyElementField>) -> PyResult<PyMatrix> {
@@ -33,6 +36,7 @@ pub fn mass(model: PyRef<PyModel>, materials: PyRef<PyElementField>) -> PyResult
 /// Lump an assembled matrix into a diagonal one by row-sum concentration
 /// (Cast3M `LUMP`). Applied to a consistent mass / capacity matrix it yields the
 /// diagonal (lumped) mass, conserving the total mass.
+#[py_op(method_on = PyMatrix)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn lump(matrix: PyRef<PyMatrix>) -> PyResult<PyMatrix> {
@@ -43,6 +47,7 @@ pub fn lump(matrix: PyRef<PyMatrix>) -> PyResult<PyMatrix> {
 /// Assemble the geometric (initial-stress) stiffness `K_g` of `model` (Cast3M
 /// `KSIG`), from the current stress field `stress` (Voigt-named `sigma_*`).
 /// `materials` resolves each mechanical zone, exactly like [`stiffness`].
+#[py_op(method_on = PyModel, name = "geometric_matrix")]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn geometric(
@@ -58,6 +63,7 @@ pub fn geometric(
 /// (Cast3M `KTAN`). `D_alg` is evaluated **at the Gauss point**, from the same
 /// inputs `integrate_behavior` takes — no field of moduli is materialised, since
 /// this assembler would be its only reader. `prev=None` means the rest state.
+#[py_op(method_on = PyModel, name = "tangent_matrix")]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (model, materials, deformation, prev=None, dt=None))]
@@ -77,56 +83,4 @@ pub fn tangent(
         dt,
     )?;
     Ok(PyMatrix { inner: m })
-}
-
-// ─── Méthodes de délégation ────────────────────────────────────────────────
-//
-// La face « sujet » des opérateurs ci-dessus (`CONVENTIONS.md` § « Le verbe
-// exposé aussi en méthode »). Aucune logique : chaque méthode rappelle la
-// fonction libre, receveur compris.
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[pymethods]
-impl PyModel {
-    /// Voir `pyrucast.matrix.stiffness`.
-    fn stiffness_matrix(
-        slf: PyRef<'_, Self>,
-        materials: PyRef<PyElementField>,
-    ) -> PyResult<PyMatrix> {
-        super::matrix::stiffness(slf, materials)
-    }
-
-    /// Voir `pyrucast.matrix.mass`.
-    fn mass_matrix(slf: PyRef<'_, Self>, materials: PyRef<PyElementField>) -> PyResult<PyMatrix> {
-        super::matrix::mass(slf, materials)
-    }
-
-    /// Voir `pyrucast.matrix.geometric`.
-    fn geometric_matrix(
-        slf: PyRef<'_, Self>,
-        materials: PyRef<PyElementField>,
-        stress: PyRef<PyElementField>,
-    ) -> PyResult<PyMatrix> {
-        super::matrix::geometric(slf, materials, stress)
-    }
-
-    /// Voir `pyrucast.matrix.tangent`.
-    #[pyo3(signature = (materials, deformation, prev=None, dt=None))]
-    fn tangent_matrix(
-        slf: PyRef<'_, Self>,
-        materials: PyRef<PyElementField>,
-        deformation: PyRef<PyElementField>,
-        prev: Option<PyRef<PyElementField>>,
-        dt: Option<f64>,
-    ) -> PyResult<PyMatrix> {
-        super::matrix::tangent(slf, materials, deformation, prev, dt)
-    }
-}
-
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[pymethods]
-impl PyMatrix {
-    /// Voir `pyrucast.matrix.lump`.
-    fn lump(slf: PyRef<'_, Self>) -> PyResult<PyMatrix> {
-        super::matrix::lump(slf)
-    }
 }
