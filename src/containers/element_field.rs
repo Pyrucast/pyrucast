@@ -643,7 +643,13 @@ impl crate::dump::Dump for SubElementField {
                 rows.push(row);
             }
         }
-        format!("{self}\n{}", table(&headers, &rows, opts))
+        // Le support, que le `Display` ne nomme pas : sans lui le niveau
+        // « contenu » en dirait moins que le niveau « structure ».
+        format!(
+            "{self}\n  support: {}\n{}",
+            self.support,
+            table(&headers, &rows, opts)
+        )
     }
 }
 

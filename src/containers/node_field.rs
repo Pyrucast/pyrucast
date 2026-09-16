@@ -746,7 +746,13 @@ impl crate::dump::Dump for SubNodeField {
                 row
             })
             .collect();
-        format!("{self}\n{}", table(&headers, &rows, opts))
+        // Le support, que le `Display` ne nomme pas : sans lui le niveau
+        // « contenu » en dirait moins que le niveau « structure ».
+        format!(
+            "{self}\n  support: {}\n{}",
+            self.support,
+            table(&headers, &rows, opts)
+        )
     }
 }
 
@@ -1893,8 +1899,8 @@ mod tests {
         );
         assert_eq!(
             dumped.lines().count(),
-            4,
-            "summary + header + 2 rows:\n{dumped}"
+            5,
+            "summary + support + header + 2 rows:\n{dumped}"
         );
 
         // Debug must stay bounded: structure, never the value buffer.

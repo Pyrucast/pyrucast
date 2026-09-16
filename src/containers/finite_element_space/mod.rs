@@ -1063,7 +1063,14 @@ impl crate::dump::Dump for SubFiniteElementSpace {
                 row
             })
             .collect();
-        format!("{self}\n{}", table(&headers, &rows, opts))
+        // Le maillage porteur et la dimension d'espace, que le `Display` tait :
+        // sans eux le niveau « contenu » en dirait moins que la structure.
+        format!(
+            "{self}\n  submesh: {}, space_dim: {}\n{}",
+            self.submesh,
+            self.space_dim,
+            table(&headers, &rows, opts)
+        )
     }
 }
 

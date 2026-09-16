@@ -2011,7 +2011,14 @@ impl fmt::Display for SubModel {
 
 impl crate::dump::Dump for SubModel {
     fn render(&self, opts: &crate::dump::DumpOptions) -> String {
-        self.as_kind().render(opts)
+        // Les physiques couvertes, que seule la structure (`Debug`) donnait.
+        // Posé ici plutôt que dans chacune des physiques : un seul endroit, et
+        // aucune ne peut l'oublier.
+        format!(
+            "{}\n  physics: {:?}",
+            self.as_kind().render(opts).trim_end(),
+            self.as_kind().physics()
+        )
     }
 }
 

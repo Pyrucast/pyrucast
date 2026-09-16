@@ -1947,8 +1947,16 @@ impl crate::dump::Dump for SubMatrix {
         let row_labels: Vec<String> = self.row_dofs().iter().map(dof_label).collect();
         let col_labels: Vec<String> = self.col_dofs().iter().map(dof_label).collect();
         let data = self.dense();
+        // Ce que le `Display` ne dit pas — l'ordre des DDL décide de la lecture
+        // de la grille qui suit, et le facteur, de ses valeurs. Sans cette
+        // ligne, le niveau « contenu » en apprendrait moins que la structure.
         format!(
-            "{self}\n{}",
+            "{self}\n  symmetric: {}, ordering: {:?}, factor: {:?}\n  dual_vars: [{}], primal_vars: [{}]\n{}",
+            self.symmetric,
+            self.ordering,
+            self.factor,
+            self.dual_vars.join(", "),
+            self.primal_vars.join(", "),
             crate::dump::labeled_grid(&row_labels, &col_labels, &data, opts)
         )
     }
@@ -4469,7 +4477,11 @@ mod tests {
         assert!(s.contains(&format!("({a},q)")), "row label:\n{s}");
         assert!(s.contains(&format!("({a},T)")), "col label:\n{s}");
         assert!(s.contains("2.000") && s.contains("-1.000"), "values:\n{s}");
-        assert_eq!(s.lines().count(), 4, "summary + header + 2 rows:\n{s}");
+        assert_eq!(
+            s.lines().count(),
+            6,
+            "summary + 2 metadata lines + header + 2 rows:\n{s}"
+        );
     }
 
     #[test]

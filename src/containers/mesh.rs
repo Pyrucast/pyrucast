@@ -967,7 +967,17 @@ impl crate::dump::Dump for SubMesh {
         } else {
             Vec::new()
         };
-        format!("{self}\n{}", table(&headers, &rows, opts))
+        // Les métadonnées que le `Display` ne dit pas, avant le contenu : sans
+        // elles le niveau « contenu » en apprendrait **moins** que le niveau
+        // « structure » (`CONVENTIONS.md` § « Trois niveaux d'affichage »).
+        // `sealed` en particulier explique pourquoi un `add_cell` échouera.
+        format!(
+            "{self}\n  coords: {}, face_color: {:?}, sealed: {}\n{}",
+            self.coords,
+            self.face_color,
+            self.sealed,
+            table(&headers, &rows, opts)
+        )
     }
 }
 
