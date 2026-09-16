@@ -605,21 +605,25 @@ class ElementField:
         r"""
         Element-wise hyperbolic tangent of a field.
         """
+    def filter_components(self, components: typing.Any) -> ElementField:
+        r"""
+        Keep only the named components, in the order given.
+        
+        `components` is a single name or a list of names (e.g. the result of `model.primal_vars()`). Returns a **new** field of the caller's own kind, sharing its support; the original is untouched. Errors if a requested name is absent — filtering never invents a component.
+        """
+    def rename_component(self, old: builtins.str, new: builtins.str) -> ElementField:
+        r"""
+        Rename one component, `old` to `new`, leaving every other untouched.
+        
+        Returns a **new** field of the caller's own kind, on the same support. The component order is kept — renaming is not reordering. Errors if `old` is absent, or if `new` is already taken: a name is how a component is addressed, so two of them cannot share one.
+        """
     def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> ElementField:
         r"""
-        Voir `pyrucast.field.mask`.
+        Voir `pyrucast.element_field.mask`.
         """
     def select(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Mesh:
         r"""
         Voir `pyrucast.mesh.select`.
-        """
-    def filter_components(self, components: typing.Any) -> ElementField:
-        r"""
-        Voir `pyrucast.field.filter_components`.
-        """
-    def rename_component(self, old: builtins.str, new: builtins.str) -> ElementField:
-        r"""
-        Voir `pyrucast.field.rename_component`.
         """
     def divergence(self, prefix: builtins.str) -> NodeField:
         r"""
@@ -2370,21 +2374,25 @@ class NodeField:
         r"""
         Element-wise hyperbolic tangent of a field.
         """
+    def filter_components(self, components: typing.Any) -> NodeField:
+        r"""
+        Keep only the named components, in the order given.
+        
+        `components` is a single name or a list of names (e.g. the result of `model.primal_vars()`). Returns a **new** field of the caller's own kind, sharing its support; the original is untouched. Errors if a requested name is absent — filtering never invents a component.
+        """
+    def rename_component(self, old: builtins.str, new: builtins.str) -> NodeField:
+        r"""
+        Rename one component, `old` to `new`, leaving every other untouched.
+        
+        Returns a **new** field of the caller's own kind, on the same support. The component order is kept — renaming is not reordering. Errors if `old` is absent, or if `new` is already taken: a name is how a component is addressed, so two of them cannot share one.
+        """
     def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> NodeField:
         r"""
-        Voir `pyrucast.field.mask`.
+        Voir `pyrucast.node_field.mask`.
         """
     def select(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Mesh:
         r"""
         Voir `pyrucast.mesh.select`.
-        """
-    def filter_components(self, components: typing.Any) -> NodeField:
-        r"""
-        Voir `pyrucast.field.filter_components`.
-        """
-    def rename_component(self, old: builtins.str, new: builtins.str) -> NodeField:
-        r"""
-        Voir `pyrucast.field.rename_component`.
         """
     def restrict(self, mesh: Mesh) -> NodeField:
         r"""
@@ -2627,21 +2635,25 @@ class SubElementField:
         r"""
         Element-wise hyperbolic tangent of a field.
         """
+    def filter_components(self, components: typing.Any) -> SubElementField:
+        r"""
+        Keep only the named components, in the order given.
+        
+        `components` is a single name or a list of names (e.g. the result of `model.primal_vars()`). Returns a **new** field of the caller's own kind, sharing its support; the original is untouched. Errors if a requested name is absent — filtering never invents a component.
+        """
+    def rename_component(self, old: builtins.str, new: builtins.str) -> SubElementField:
+        r"""
+        Rename one component, `old` to `new`, leaving every other untouched.
+        
+        Returns a **new** field of the caller's own kind, on the same support. The component order is kept — renaming is not reordering. Errors if `old` is absent, or if `new` is already taken: a name is how a component is addressed, so two of them cannot share one.
+        """
     def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> SubElementField:
         r"""
-        Voir `pyrucast.field.mask`.
+        Voir `pyrucast.element_field.mask`.
         """
     def select(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Mesh:
         r"""
         Voir `pyrucast.mesh.select`.
-        """
-    def filter_components(self, components: typing.Any) -> SubElementField:
-        r"""
-        Voir `pyrucast.field.filter_components`.
-        """
-    def rename_component(self, old: builtins.str, new: builtins.str) -> SubElementField:
-        r"""
-        Voir `pyrucast.field.rename_component`.
         """
 
 @typing.final
@@ -3302,21 +3314,25 @@ class SubNodeField:
         r"""
         Element-wise hyperbolic tangent of a field.
         """
+    def filter_components(self, components: typing.Any) -> SubNodeField:
+        r"""
+        Keep only the named components, in the order given.
+        
+        `components` is a single name or a list of names (e.g. the result of `model.primal_vars()`). Returns a **new** field of the caller's own kind, sharing its support; the original is untouched. Errors if a requested name is absent — filtering never invents a component.
+        """
+    def rename_component(self, old: builtins.str, new: builtins.str) -> SubNodeField:
+        r"""
+        Rename one component, `old` to `new`, leaving every other untouched.
+        
+        Returns a **new** field of the caller's own kind, on the same support. The component order is kept — renaming is not reordering. Errors if `old` is absent, or if `new` is already taken: a name is how a component is addressed, so two of them cannot share one.
+        """
     def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> SubNodeField:
         r"""
-        Voir `pyrucast.field.mask`.
+        Voir `pyrucast.node_field.mask`.
         """
     def select(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Mesh:
         r"""
         Voir `pyrucast.mesh.select`.
-        """
-    def filter_components(self, components: typing.Any) -> SubNodeField:
-        r"""
-        Voir `pyrucast.field.filter_components`.
-        """
-    def rename_component(self, old: builtins.str, new: builtins.str) -> SubNodeField:
-        r"""
-        Voir `pyrucast.field.rename_component`.
         """
 
 def abs(field: typing.Any) -> typing.Any:

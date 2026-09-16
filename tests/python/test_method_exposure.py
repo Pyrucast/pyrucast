@@ -36,21 +36,26 @@ CONTAINERS = {
 # Les quatre saveurs de champ, pour les opérateurs polymorphes (`typing.Any`).
 FIELDS = ["NodeField", "SubNodeField", "ElementField", "SubElementField"]
 
-# Les maths élémentaires : fonction libre et méthodes sortent de la même macro,
-# `py_field_unary!`, donc du même littéral de documentation.
-UNAIRES = [
-    "abs",
-    "sqrt",
-    "exp",
-    "log",
-    "log10",
-    "cos",
-    "sin",
-    "tan",
-    "sinh",
-    "cosh",
-    "tanh",
-]
+# Méthodes écrites à la main, qui ne peuvent donc pas porter la documentation
+# d'une fonction libre — chacune avec la raison qui l'y oblige.
+DOC_PROPRE = {
+    "select": (
+        "opérateur polymorphe : la méthode ne renvoie pas à la fonction libre, "
+        "elle court-circuite le dispatch pour rendre un `Mesh` au lieu de `Any`"
+    ),
+    "mask": "idem — le produit est déterminé par la saveur du receveur",
+    "merge_nodes": (
+        "receveur `Py<Self>` et non `PyRef` : avec `in_place` elle rend l'objet "
+        "lui-même, pas une vue empruntée"
+    ),
+}
+
+# Les pointeurs « Voir … » que le stub a encore le droit de porter : ceux des
+# méthodes ci-dessus, et rien d'autre. Ce compte ne peut que décroître.
+DOC_PROPRE_DANS_LE_STUB = ["mask"] * 4 + ["select"] * 4 + ["merge_nodes"]
+
+# Les sources du binding, pour le contrôle des cibles de pointeurs.
+OPS_RS = pathlib.Path(__file__).resolve().parents[2] / "src" / "py" / "ops"
 
 # Fonction libre -> nom de la méthode, quand le nom change parce que la méthode
 # doit porter le qualificatif que le module fournissait à la fonction.
@@ -173,37 +178,70 @@ def test_renames_point_to_existing_functions():
     assert not stale, f"renommages périmés : {stale}"
 
 
-def test_unary_methods_carry_the_doc_of_their_function():
-    """Les maths élémentaires affichent la doc de leur fonction libre.
+def test_methods_carry_the_doc_of_their_function():
+    """Une méthode dérivée affiche la documentation de sa fonction libre.
 
-    `py_field_unary!` (`src/py/ops/field.rs`) produit la fonction libre **et**
-    ses quatre méthodes à partir du même littéral : le texte est écrit une fois,
-    et `help()` comme le stub des IDE le montrent en entier. Un pointeur
-    « Voir … » qui reviendrait ici serait une régression de l'aide affichée.
+    C'est l'acquis de `#[py_op]` et de `py_field_unary!` : le texte est écrit
+    une fois, sur la fonction, et **recopié** sur la méthode — donc `help()`
+    comme le stub des IDE le montrent en entier. Un pointeur « Voir … » qui
+    reviendrait ici serait une régression de l'aide affichée, invisible
+    autrement puisque le code compilerait très bien.
+
+    Le test part du stub, donc d'aucune liste tenue à la main : il confronte
+    chaque fonction libre à la méthode de même nom, ou de nom renommé.
     """
-    for verbe in UNAIRES:
-        attendu = getattr(pyrucast.field, verbe).__doc__
-        assert attendu and not attendu.startswith("Voir "), (
-            f"pyrucast.field.{verbe} : la fonction libre a perdu sa doc"
-        )
-        for cls in FIELDS:
-            doc = getattr(getattr(pyrucast, cls), verbe).__doc__
-            assert doc == attendu, (
-                f"{cls}.{verbe} : la méthode ne porte pas la doc de sa fonction "
-                f"libre (trouvé {doc!r})"
-            )
+    manquantes = []
+    for nom, first, _ret in free_functions():
+        methode = RENAMED.get(nom, nom)
+        if methode in DOC_PROPRE:
+            continue
+        attendu = getattr(pyrucast._pyrucast, nom).__doc__
+        if not attendu:
+            continue
+        for cls in subjects(first):
+            porte = getattr(getattr(pyrucast, cls), methode, None)
+            if porte is None or porte.__doc__ == attendu:
+                continue
+            manquantes.append(f"{cls}.{methode}  (← {nom}) : {porte.__doc__!r:.60}")
+    assert not manquantes, (
+        "méthodes qui n'affichent pas la doc de leur fonction :\n  "
+        + "\n  ".join(manquantes)
+    )
 
 
-def test_stub_shows_the_unary_docs():
-    """Le stub aussi — c'est lui que lisent Pylance et PyCharm.
+def test_no_pointer_survives_in_the_stub():
+    """Aucune docstring du stub ne se réduit à « Voir … ».
 
-    Échoue si le `.pyi` n'a pas été régénéré après un changement de la macro.
+    C'est ce que lisent Pylance et PyCharm : un pointeur y est du texte mort,
+    faute de mécanisme de lien. Le compte est borné par les seules méthodes
+    écrites à la main, et il ne peut que décroître.
     """
-    stub = PYI.read_text()
-    for verbe in UNAIRES:
-        assert f"Voir `pyrucast.field.{verbe}`" not in stub, (
-            f"{verbe} : le stub porte encore un pointeur au lieu de la doc"
-        )
+    restants = re.findall(r"Voir `pyrucast\.[\w.]+`", PYI.read_text())
+    assert len(restants) <= len(DOC_PROPRE_DANS_LE_STUB), (
+        f"{len(restants)} pointeurs dans le stub, {len(DOC_PROPRE_DANS_LE_STUB)} "
+        f"attendus au plus : {sorted(set(restants))}"
+    )
+
+
+def test_every_pointer_aims_at_a_living_target():
+    """Un pointeur « Voir `pyrucast.X.Y` » doit viser quelque chose qui existe.
+
+    Rien ne le vérifiait, et douze pointeurs ont pointé dans le vide pendant
+    des mois : `field.mask` après le déménagement du verbe vers `node_field` et
+    `element_field`, `field.filter_components` et `field.rename_component` qui
+    n'ont jamais eu de fonction libre. Le code compilait, les tests passaient,
+    et l'utilisateur lisait au survol le nom d'une fonction inexistante.
+    """
+    morts = []
+    for source in sorted(OPS_RS.glob("*.rs")):
+        for ligne, texte in enumerate(source.read_text().split("\n"), 1):
+            m = re.search(r"/// Voir `pyrucast\.(\w+)\.(\w+)`\.", texte)
+            if not m:
+                continue
+            module, verbe = m.groups()
+            if getattr(getattr(pyrucast, module, None), verbe, None) is None:
+                morts.append(f"{source.name}:{ligne} → pyrucast.{module}.{verbe}")
+    assert not morts, "pointeurs vers une cible inexistante :\n  " + "\n  ".join(morts)
 
 
 def test_chaining_actually_works():

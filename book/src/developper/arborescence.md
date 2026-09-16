@@ -10,6 +10,19 @@ visibles : les types indivisibles vivent dans `atoms/` (seul un conteneur
 peut être le sujet d'un opérateur), et chaque module d'`ops/` porte le nom
 du **conteneur qu'il produit**.
 
+Le dépôt tient **deux paquets**. À côté de la bibliothèque, `macros/` porte les
+macros procédurales — aujourd'hui `#[py_op]`, qui dérive d'un opérateur libre la
+méthode de son sujet. Cette séparation n'est pas un choix de rangement : une
+crate `proc-macro` ne peut rien exporter d'autre que des macros, et une crate
+ordinaire ne peut pas en contenir.
+
+```text
+macros/
+└── src/lib.rs          # `#[py_op]` : receveur déduit du sujet, signature pyo3
+                        #   amputée de son entrée de tête, `#[doc]` et
+                        #   `#[allow]` recopiés sur la méthode
+```
+
 ```text
 src/
 ├── lib.rs              # racine de la crate + #[pymodule] (enregistrement Python)

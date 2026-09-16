@@ -208,6 +208,100 @@ py_field_unary!(sinh, "Element-wise hyperbolic sine of a field.");
 py_field_unary!(cosh, "Element-wise hyperbolic cosine of a field.");
 py_field_unary!(tanh, "Element-wise hyperbolic tangent of a field.");
 
+// ── Composantes : filtrer, renommer ─────────────────────────────────────────
+//
+// Ces deux verbes n'ont **pas** de fonction libre : ils sont des méthodes et
+// rien d'autre, la forme canonique elle-même (`CONVENTIONS.md` § « Le verbe
+// exposé aussi en méthode »). Leur documentation n'a donc personne à qui
+// renvoyer — elle est écrite ici, une fois par verbe, et la macro la pose sur
+// les quatre saveurs. Le littéral traverse pyo3 et pyo3-stub-gen : l'aide
+// complète part dans `__doc__` comme dans le stub.
+
+/// Les deux verbes, pour une saveur **agrégat** : la valeur est tenue en
+/// propre, le trait `Field` opère dessus directement.
+macro_rules! py_field_components_aggregate {
+    ($T:ident, $doc_filter:literal, $doc_rename:literal) => {
+        #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+        #[pymethods]
+        impl $T {
+            #[doc = $doc_filter]
+            fn filter_components(&self, components: &Bound<'_, PyAny>) -> PyResult<$T> {
+                use crate::containers::field::Field;
+                let wanted = extract_names(components)?;
+                Ok($T {
+                    inner: self.inner.filter_components(wanted.as_slice())?,
+                })
+            }
+
+            #[doc = $doc_rename]
+            fn rename_component(&self, old: &str, new: &str) -> PyResult<$T> {
+                use crate::containers::field::Field;
+                Ok($T {
+                    inner: self.inner.rename_component(old, new)?,
+                })
+            }
+        }
+    };
+}
+
+/// Les mêmes, pour une saveur **sous-conteneur** : la valeur est lue à travers
+/// le handle, et `SubField` nomme le filtrage `select_components`.
+macro_rules! py_field_components_sub {
+    ($T:ident, $doc_filter:literal, $doc_rename:literal) => {
+        #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+        #[pymethods]
+        impl $T {
+            #[doc = $doc_filter]
+            fn filter_components(&self, components: &Bound<'_, PyAny>) -> PyResult<$T> {
+                use crate::containers::field::SubField;
+                let wanted = extract_names(components)?;
+                let out = self.handle.read().select_components(wanted.as_slice())?;
+                Ok($T {
+                    handle: Handle::new(out),
+                })
+            }
+
+            #[doc = $doc_rename]
+            fn rename_component(&self, old: &str, new: &str) -> PyResult<$T> {
+                use crate::containers::field::SubField;
+                let out = self.handle.read().rename_component(old, new)?;
+                Ok($T {
+                    handle: Handle::new(out),
+                })
+            }
+        }
+    };
+}
+
+/// Distribue les deux textes aux quatre saveurs. Le chapeau existe pour qu'ils
+/// ne soient écrits **qu'une fois** : passés en `literal`, ils sont substitués
+/// avant que pyo3 et pyo3-stub-gen ne lisent l'item, donc les deux y voient un
+/// vrai texte. Une constante `const` ne conviendrait pas — un attribut `doc`
+/// n'accepte qu'un littéral ou une expansion de macro, jamais un chemin.
+macro_rules! py_field_components {
+    ($doc_filter:literal, $doc_rename:literal) => {
+        py_field_components_aggregate!(PyNodeField, $doc_filter, $doc_rename);
+        py_field_components_aggregate!(PyElementField, $doc_filter, $doc_rename);
+        py_field_components_sub!(PySubNodeField, $doc_filter, $doc_rename);
+        py_field_components_sub!(PySubElementField, $doc_filter, $doc_rename);
+    };
+}
+
+py_field_components!(
+    "Keep only the named components, in the order given.\n\
+     \n\
+     `components` is a single name or a list of names (e.g. the result of \
+     `model.primal_vars()`). Returns a **new** field of the caller's own kind, \
+     sharing its support; the original is untouched. Errors if a requested name \
+     is absent — filtering never invents a component.",
+    "Rename one component, `old` to `new`, leaving every other untouched.\n\
+     \n\
+     Returns a **new** field of the caller's own kind, on the same support. The \
+     component order is kept — renaming is not reordering. Errors if `old` is \
+     absent, or if `new` is already taken: a name is how a component is \
+     addressed, so two of them cannot share one."
+);
+
 // ─── Méthodes de délégation ────────────────────────────────────────────────
 //
 // La face « sujet » des opérateurs polymorphes (`CONVENTIONS.md` § « Le verbe
@@ -221,7 +315,7 @@ py_field_unary!(tanh, "Element-wise hyperbolic tangent of a field.");
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyNodeField {
-    /// Voir `pyrucast.field.mask`.
+    /// Voir `pyrucast.node_field.mask`.
     #[pyo3(signature = (ge=None, gt=None, le=None, lt=None, components=None))]
     fn mask(
         &self,
@@ -252,29 +346,12 @@ impl PyNodeField {
             inner: crate::ops::mesh::select_nodes(&self.inner, &band, components)?,
         })
     }
-
-    /// Voir `pyrucast.field.filter_components`.
-    fn filter_components(&self, components: &Bound<'_, PyAny>) -> PyResult<PyNodeField> {
-        use crate::containers::field::Field;
-        let wanted = extract_names(components)?;
-        Ok(PyNodeField {
-            inner: self.inner.filter_components(wanted.as_slice())?,
-        })
-    }
-
-    /// Voir `pyrucast.field.rename_component`.
-    fn rename_component(&self, old: &str, new: &str) -> PyResult<PyNodeField> {
-        use crate::containers::field::Field;
-        Ok(PyNodeField {
-            inner: self.inner.rename_component(old, new)?,
-        })
-    }
 }
 
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyElementField {
-    /// Voir `pyrucast.field.mask`.
+    /// Voir `pyrucast.element_field.mask`.
     #[pyo3(signature = (ge=None, gt=None, le=None, lt=None, components=None))]
     fn mask(
         &self,
@@ -305,29 +382,12 @@ impl PyElementField {
             inner: crate::ops::mesh::select_cells(&self.inner, &band, components)?,
         })
     }
-
-    /// Voir `pyrucast.field.filter_components`.
-    fn filter_components(&self, components: &Bound<'_, PyAny>) -> PyResult<PyElementField> {
-        use crate::containers::field::Field;
-        let wanted = extract_names(components)?;
-        Ok(PyElementField {
-            inner: self.inner.filter_components(wanted.as_slice())?,
-        })
-    }
-
-    /// Voir `pyrucast.field.rename_component`.
-    fn rename_component(&self, old: &str, new: &str) -> PyResult<PyElementField> {
-        use crate::containers::field::Field;
-        Ok(PyElementField {
-            inner: self.inner.rename_component(old, new)?,
-        })
-    }
 }
 
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PySubNodeField {
-    /// Voir `pyrucast.field.mask`.
+    /// Voir `pyrucast.node_field.mask`.
     #[pyo3(signature = (ge=None, gt=None, le=None, lt=None, components=None))]
     fn mask(
         &self,
@@ -359,31 +419,12 @@ impl PySubNodeField {
             inner: crate::ops::mesh::select_sub_nodes(&self.handle.read(), &band, components)?,
         })
     }
-
-    /// Voir `pyrucast.field.filter_components`.
-    fn filter_components(&self, components: &Bound<'_, PyAny>) -> PyResult<PySubNodeField> {
-        use crate::containers::field::SubField;
-        let wanted = extract_names(components)?;
-        let out = self.handle.read().select_components(wanted.as_slice())?;
-        Ok(PySubNodeField {
-            handle: Handle::new(out),
-        })
-    }
-
-    /// Voir `pyrucast.field.rename_component`.
-    fn rename_component(&self, old: &str, new: &str) -> PyResult<PySubNodeField> {
-        use crate::containers::field::SubField;
-        let out = self.handle.read().rename_component(old, new)?;
-        Ok(PySubNodeField {
-            handle: Handle::new(out),
-        })
-    }
 }
 
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PySubElementField {
-    /// Voir `pyrucast.field.mask`.
+    /// Voir `pyrucast.element_field.mask`.
     #[pyo3(signature = (ge=None, gt=None, le=None, lt=None, components=None))]
     fn mask(
         &self,
@@ -413,25 +454,6 @@ impl PySubElementField {
         let band = crate::atoms::Band::new(ge, gt, le, lt)?;
         Ok(PyMesh {
             inner: crate::ops::mesh::select_sub_cells(&self.handle.read(), &band, components)?,
-        })
-    }
-
-    /// Voir `pyrucast.field.filter_components`.
-    fn filter_components(&self, components: &Bound<'_, PyAny>) -> PyResult<PySubElementField> {
-        use crate::containers::field::SubField;
-        let wanted = extract_names(components)?;
-        let out = self.handle.read().select_components(wanted.as_slice())?;
-        Ok(PySubElementField {
-            handle: Handle::new(out),
-        })
-    }
-
-    /// Voir `pyrucast.field.rename_component`.
-    fn rename_component(&self, old: &str, new: &str) -> PyResult<PySubElementField> {
-        use crate::containers::field::SubField;
-        let out = self.handle.read().rename_component(old, new)?;
-        Ok(PySubElementField {
-            handle: Handle::new(out),
         })
     }
 }

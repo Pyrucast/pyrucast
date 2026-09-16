@@ -204,13 +204,26 @@ Deux conséquences pratiques :
 documentation.** Côté Rust, son `/// Voir [`mesh::skin`](fn@crate::ops::mesh::skin)`
 est un lien : rustdoc met le lecteur à un clic de la doc complète. Côté Python,
 le stub `.pyi` n'a aucun mécanisme de lien, et un pointeur « Voir … » y reste du
-texte mort — c'est tout ce que l'IDE affiche au survol. Quand les deux formes
-naissent de la **même macro** (`py_field_unary!`, pour les onze maths
-élémentaires), le littéral de doc est partagé : la substitution a lieu avant que
-pyo3 et pyo3-stub-gen ne lisent l'item, donc le texte complet part à la fois dans
-`__doc__` et dans le stub, écrit une seule fois. C'est la forme à préférer
-partout où les méthodes forment une matrice régulière ; ailleurs, le pointeur
-subsiste, et c'est une dette connue de l'aide affichée.
+texte mort — c'est tout ce que l'IDE affiche au survol.
+
+**Côté Python, la méthode n'est donc plus écrite : elle est dérivée.**
+`#[py_op(method_on = PyMesh)]`, posé sur la fonction libre, en tire le receveur,
+recopie les arguments suivants, ampute la `#[pyo3(signature = …)]` de son entrée
+de tête, et **recopie la documentation en littéraux** — c'est cette recopie qui
+la fait paraître en entier dans `help()` comme dans le stub. L'attribut se pose
+**au-dessus** des autres, sans quoi il ne verrait plus la signature qu'il doit
+réécrire, et prend `name = "…"` quand le nom change entre les deux formes
+(section suivante). Il hérite aussi des `#[allow(…)]` de la fonction : une
+dérogation de lint qui vaut pour elle vaut pour sa méthode, qui porte les mêmes
+arguments.
+
+Trois cas seulement restent écrits à la main, et chacun pour une raison qui se
+dit en une ligne : un **receveur qui n'est pas un emprunt** (`merge_nodes` rend
+l'objet lui-même, d'où `Py<Self>`), un **opérateur polymorphe** (`select`,
+`mask` — leur méthode ne renvoie pas à la fonction libre, elle court-circuite le
+dispatch pour rendre un type précis au lieu de `Any`), et une **méthode sans
+fonction libre**, forme canonique à part entière. L'attribut refuse d'ailleurs
+le deuxième cas avec son motif, plutôt que de produire un code faux.
 
 ### Le nom peut changer entre les deux formes
 
