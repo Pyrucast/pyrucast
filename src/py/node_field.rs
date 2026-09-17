@@ -55,11 +55,6 @@ impl PySubNodeField {
         Ok(self.handle.read().node_count())
     }
 
-    /// Number of components stored per node.
-    fn component_count(&self) -> PyResult<usize> {
-        Ok(self.handle.read().component_count())
-    }
-
     /// Value at node index `node_idx`, component index `comp_idx`.
     fn get(&self, node_idx: usize, comp_idx: usize) -> PyResult<f64> {
         Ok(self.handle.read().get(node_idx, comp_idx)?)
@@ -82,11 +77,6 @@ impl PySubNodeField {
         let nid = node.as_node().id();
         self.handle.write().set_by_node(nid, comp_idx, value)?;
         Ok(())
-    }
-
-    /// Index of component `name`, or `None` if unknown.
-    fn component_index(&self, name: &str) -> PyResult<Option<usize>> {
-        Ok(self.handle.read().component_index(name))
     }
 
     /// All component values at node index `node_idx`, in order.

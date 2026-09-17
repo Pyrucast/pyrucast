@@ -33,16 +33,6 @@ impl PySubElementField {
         Ok(self.handle.read().gauss_count())
     }
 
-    /// Number of components stored per point.
-    fn component_count(&self) -> PyResult<usize> {
-        Ok(self.handle.read().component_count())
-    }
-
-    /// Index of component `name`, or `None` if unknown.
-    fn component_index(&self, name: &str) -> PyResult<Option<usize>> {
-        Ok(self.handle.read().component_index(name))
-    }
-
     /// Value at `(cell, gauss)` for component index `comp`.
     fn get(&self, cell: usize, gauss: usize, comp: usize) -> PyResult<f64> {
         Ok(self.handle.read().get(cell, gauss, comp)?)

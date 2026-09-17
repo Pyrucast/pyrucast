@@ -97,6 +97,14 @@ macro_rules! py_subfield_read {
         py_subfield_read!(@components PySubNodeField, $doc);
         py_subfield_read!(@components PySubElementField, $doc);
     };
+    (count: $nom:ident, $doc_nodal:literal, $doc_element:literal) => {
+        py_subfield_read!(@count PySubNodeField, $nom, $doc_nodal);
+        py_subfield_read!(@count PySubElementField, $nom, $doc_element);
+    };
+    (index: $nom:ident, $doc:literal) => {
+        py_subfield_read!(@index PySubNodeField, $nom, $doc);
+        py_subfield_read!(@index PySubElementField, $nom, $doc);
+    };
 
     (@one $T:ident, optional: $nom:ident, $doc:literal) => {
         #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
@@ -129,6 +137,28 @@ macro_rules! py_subfield_read {
             fn components(&self) -> PyResult<Vec<String>> {
                 use crate::containers::field::SubField;
                 Ok(self.handle.read().components().to_vec())
+            }
+        }
+    };
+    (@count $T:ident, $nom:ident, $doc:literal) => {
+        #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+        #[pymethods]
+        impl $T {
+            #[doc = $doc]
+            fn $nom(&self) -> PyResult<usize> {
+                use crate::containers::field::SubField;
+                Ok(self.handle.read().$nom())
+            }
+        }
+    };
+    (@index $T:ident, $nom:ident, $doc:literal) => {
+        #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+        #[pymethods]
+        impl $T {
+            #[doc = $doc]
+            fn $nom(&self, name: &str) -> PyResult<Option<usize>> {
+                use crate::containers::field::SubField;
+                Ok(self.handle.read().$nom(name))
             }
         }
     };
@@ -184,3 +214,20 @@ py_subfield_read!(
 
 py_field_read!(components: "Union of the zones' component names, first-seen order.");
 py_subfield_read!(components: "Component names, in order.");
+
+// ─── Les deux accesseurs propres aux sous-conteneurs ────────────────────────
+//
+// Sans contrepartie côté agrégat : un agrégat n'a pas de nombre de composantes
+// unique — ses zones peuvent en porter des jeux différents — ni d'index global.
+// C'est ce que permet une macro par famille : servir une famille seule, là où
+// une macro à quatre saveurs n'aurait pas pu les prendre.
+//
+// `get` et `value` restent écrits à la main : leur clé diffère par sorte,
+// `(node_idx, comp_idx)` contre `(cell, gauss, comp)`.
+
+py_subfield_read!(
+    count: component_count,
+    "Number of components stored per node.",
+    "Number of components stored per point."
+);
+py_subfield_read!(index: component_index, "Index of component `name`, or `None` if unknown.");

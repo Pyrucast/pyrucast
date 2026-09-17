@@ -2501,14 +2501,6 @@ class SubElementField:
         r"""
         Number of Gauss points per cell.
         """
-    def component_count(self) -> builtins.int:
-        r"""
-        Number of components stored per point.
-        """
-    def component_index(self, name: builtins.str) -> typing.Optional[builtins.int]:
-        r"""
-        Index of component `name`, or `None` if unknown.
-        """
     def get(self, cell: builtins.int, gauss: builtins.int, comp: builtins.int) -> builtins.float:
         r"""
         Value at `(cell, gauss)` for component index `comp`.
@@ -2646,6 +2638,14 @@ class SubElementField:
     def components(self) -> builtins.list[builtins.str]:
         r"""
         Component names, in order.
+        """
+    def component_count(self) -> builtins.int:
+        r"""
+        Number of components stored per point.
+        """
+    def component_index(self, name: builtins.str) -> typing.Optional[builtins.int]:
+        r"""
+        Index of component `name`, or `None` if unknown.
         """
     def abs(self) -> SubElementField:
         r"""
@@ -3244,13 +3244,17 @@ class SubNodeField:
         r"""
         Component names, in order.
         """
-    def node_count(self) -> builtins.int:
-        r"""
-        Number of nodes in the support.
-        """
     def component_count(self) -> builtins.int:
         r"""
         Number of components stored per node.
+        """
+    def component_index(self, name: builtins.str) -> typing.Optional[builtins.int]:
+        r"""
+        Index of component `name`, or `None` if unknown.
+        """
+    def node_count(self) -> builtins.int:
+        r"""
+        Number of nodes in the support.
         """
     def get(self, node_idx: builtins.int, comp_idx: builtins.int) -> builtins.float:
         r"""
@@ -3267,10 +3271,6 @@ class SubNodeField:
     def set_by_node(self, node: Node, comp_idx: builtins.int, value: builtins.float) -> None:
         r"""
         Set the value at `node`, component index `comp_idx`.
-        """
-    def component_index(self, name: builtins.str) -> typing.Optional[builtins.int]:
-        r"""
-        Index of component `name`, or `None` if unknown.
         """
     def node_values(self, node_idx: builtins.int) -> builtins.list[builtins.float]:
         r"""
