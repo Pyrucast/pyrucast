@@ -104,28 +104,28 @@ impl PySubEvolution {
     }
 
     /// The abscissa's physical type, or `None`.
-    fn abscissa_type(&self) -> PyResult<Option<String>> {
-        Ok(self.handle.read().abscissa_type().map(str::to_string))
+    fn abscissa_type(&self) -> Option<String> {
+        self.handle.read().abscissa_type().map(str::to_string)
     }
 
     /// The ordinate's physical type (scalar curves), or `None`.
-    fn ordinate_type(&self) -> PyResult<Option<String>> {
-        Ok(self.handle.read().ordinate_type().map(str::to_string))
+    fn ordinate_type(&self) -> Option<String> {
+        self.handle.read().ordinate_type().map(str::to_string)
     }
 
     /// Number of samples.
-    fn __len__(&self) -> PyResult<usize> {
-        Ok(self.handle.read().len())
+    fn __len__(&self) -> usize {
+        self.handle.read().len()
     }
 
     /// The sorted abscissas.
-    fn abscissas(&self) -> PyResult<Vec<f64>> {
-        Ok(self.handle.read().abscissas().to_vec())
+    fn abscissas(&self) -> Vec<f64> {
+        self.handle.read().abscissas().to_vec()
     }
 
     /// The stored out-of-range policy name.
-    fn out_of_range(&self) -> PyResult<String> {
-        Ok(self.handle.read().out_of_range().name().to_string())
+    fn out_of_range(&self) -> String {
+        self.handle.read().out_of_range().name().to_string()
     }
 
     /// Interpolate at `x`.
@@ -311,8 +311,8 @@ impl PyEvolution {
     }
 
     /// The stored out-of-range policy name.
-    fn out_of_range(&self) -> PyResult<String> {
-        Ok(self.inner.out_of_range().name().to_string())
+    fn out_of_range(&self) -> String {
+        self.inner.out_of_range().name().to_string()
     }
 
     /// The abscissa's physical type, or `None`.
