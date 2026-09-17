@@ -202,6 +202,8 @@ d'autre), `run_examples.sh` / `run_examples.ps1` (exemples et formation de bout
 en bout, appelés par `check_examples`), `set_new_version.sh` (passe de version :
 `check_all` puis `check_clippy`, reporter le numéro dans `Cargo.toml` — seule
 déclaration de version du projet —, commit + tag : il ne pousse rien),
+`publish_macros.sh` (vérifie et publie `pyrucast-macros` sur crates.io, le seul
+paquet que la CI ne publie pas),
 `scaling.sh` (mesure de montée en charge du parallélisme) et
 `generate-formation-figures.sh` (régénère les SVG de la formation, qui sont des
 artefacts commités).
@@ -494,6 +496,33 @@ au cache Cargo.
 `set_new_version.sh` garde malgré tout ses huit minutes : c'est l'échec
 **rapide**, avant que le tag existe. Découvrir la panne après coup obligerait à
 déplacer un tag, ou à brûler un numéro.
+
+### `pyrucast-macros` se publie à la main, et **avant**
+
+Le workspace porte deux paquets, et `release.yml` n'en publie qu'un : le paquet
+racine. `pyrucast` dépend pourtant de `pyrucast-macros` en `path` **et** en
+version, donc `cargo package` comme `cargo publish` cherchent ce numéro dans
+l'index de crates.io. Tant qu'il n'y est pas, les deux échouent sur
+`no matching package named pyrucast-macros found` — y compris
+`set_new_version.sh`, à son étape `cargo package`, avant même de poser le tag.
+
+L'outillage de macros bouge bien plus lentement que la bibliothèque, et sa
+version est délibérément décorrélée de la sienne : le publier à chaque tag
+n'aurait aucun sens. Il se publie donc à la main, à chaque fois qu'il change :
+
+```bash
+bash script/publish_macros.sh          # publie la version courante
+bash script/publish_macros.sh 0.1.1    # la passe à 0.1.1, puis publie
+```
+
+Le script vérifie la crate seule (format, clippy `-D warnings`, tests, rustdoc)
+puis son **consommateur** — une macro procédurale ne prouve rien tant qu'un
+appelant ne l'a pas expansée —, empaquette, fait un `--dry-run`, et ne publie
+qu'après confirmation. Avec un numéro, il le reporte des deux côtés : dans
+`macros/Cargo.toml` et dans la dépendance de `Cargo.toml`, qui ne peuvent pas
+diverger sans que la publication cesse de débloquer quoi que ce soit. Il attend
+enfin que l'index serve la version, faute de quoi le `cargo package` suivant
+échouerait exactement comme avant.
 
 ### On construit tout avant de publier
 
