@@ -21,8 +21,8 @@ pub struct PyElement {
 impl PyElement {
     /// Index of this element within its subspace.
     #[getter]
-    fn index(&self) -> PyResult<usize> {
-        Ok(self.inner.index())
+    fn index(&self) -> usize {
+        self.inner.index()
     }
 
     /// Number of nodes of this element.
@@ -33,8 +33,8 @@ impl PyElement {
 
     /// Spatial dimension the element lives in.
     #[getter]
-    fn space_dim(&self) -> PyResult<usize> {
-        Ok(self.inner.space_dim())
+    fn space_dim(&self) -> usize {
+        self.inner.space_dim()
     }
 
     /// Reference (parametric) dimension of the element.
@@ -45,8 +45,8 @@ impl PyElement {
 
     /// Number of Gauss (quadrature) points.
     #[getter]
-    fn gauss_count(&self) -> PyResult<usize> {
-        Ok(self.inner.gauss_count())
+    fn gauss_count(&self) -> usize {
+        self.inner.gauss_count()
     }
 
     /// Underlying mesh cell view.
