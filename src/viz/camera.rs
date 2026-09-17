@@ -122,7 +122,7 @@ impl Projector {
 /// World-space length spanned by one screen pixel, given the current view, the
 /// scene bounding box and the pixel size of the drawing area. Mirrors the
 /// viewport sizing done by
-/// [`render_primitives`](crate::viz::mesh_draw::render_primitives): the visible
+/// `render_primitives`: the visible
 /// half-height is `radius / scale`, times the `1 + 2*margin` padding, mapped
 /// onto `height` pixels. Used to translate a pixel-space pan drag into a
 /// world-space shift of the camera target.

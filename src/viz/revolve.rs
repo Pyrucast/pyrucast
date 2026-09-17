@@ -8,7 +8,7 @@
 //! the picture changes.
 //!
 //! The sweep is applied to the **rendering primitives**, just before projection
-//! (see [`render_primitives`](crate::viz::mesh_draw::render_primitives)), so
+//! (see `render_primitives`), so
 //! every plot inherits it identically: plain mesh, wireframe, field colouring
 //! (flat or interpolated) and evolution frames.
 //!
@@ -66,7 +66,7 @@ impl Revolve {
     }
 
     /// Sweep of `angle` degrees, discretized into one sector per 10° (at
-    /// least [`MIN_SECTORS`](Self::MIN_SECTORS)).
+    /// least 3).
     pub fn new(angle: f64) -> Result<Self> {
         let sectors = if angle.is_finite() && angle > 0.0 {
             ((angle / Self::DEGREES_PER_SECTOR).round() as usize).max(Self::MIN_SECTORS)
