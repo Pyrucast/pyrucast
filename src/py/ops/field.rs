@@ -94,8 +94,8 @@ pub fn psca(py: Python<'_>, x: &Bound<'_, PyAny>, y: &Bound<'_, PyAny>) -> PyRes
 /// methods that are its « sujet » face. The documentation is written once, at
 /// the call site, and reaches the free function and the four methods alike.
 macro_rules! py_field_unary {
-    ($name:ident, $doc:literal) => {
-        #[doc = $doc]
+    ($(#[doc = $doc:literal])* $name:ident) => {
+        $(#[doc = $doc])*
         #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
         #[pyfunction]
         pub fn $name(py: Python<'_>, field: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
@@ -143,28 +143,61 @@ macro_rules! py_field_unary {
             ))
         }
 
-        $crate::py_field_transform!(Field unary: [PyNodeField, PyElementField], $name, $doc);
-        $crate::py_field_transform!(SubField unary: [PySubNodeField, PySubElementField], $name, $doc);
+        $crate::py_field_transform! {
+            $(#[doc = $doc])*
+            Field unary: [PyNodeField, PyElementField], $name
+        }
+        $crate::py_field_transform! {
+            $(#[doc = $doc])*
+            SubField unary: [PySubNodeField, PySubElementField], $name
+        }
     };
 }
 
-py_field_unary!(abs, "Element-wise absolute value of a field.");
-py_field_unary!(
-    sqrt,
-    "Element-wise square root of a field (`nan` for negatives)."
-);
-py_field_unary!(exp, "Element-wise exponential `eˣ` of a field.");
-py_field_unary!(
-    log,
-    "Element-wise natural logarithm of a field (`-inf`/`nan` for ≤ 0)."
-);
-py_field_unary!(log10, "Element-wise base-10 logarithm of a field.");
-py_field_unary!(cos, "Element-wise cosine of a field (radians).");
-py_field_unary!(sin, "Element-wise sine of a field (radians).");
-py_field_unary!(tan, "Element-wise tangent of a field (radians).");
-py_field_unary!(sinh, "Element-wise hyperbolic sine of a field.");
-py_field_unary!(cosh, "Element-wise hyperbolic cosine of a field.");
-py_field_unary!(tanh, "Element-wise hyperbolic tangent of a field.");
+py_field_unary! {
+    /// Element-wise absolute value of a field.
+    abs
+}
+py_field_unary! {
+    /// Element-wise square root of a field (`nan` for negatives).
+    sqrt
+}
+py_field_unary! {
+    /// Element-wise exponential `eˣ` of a field.
+    exp
+}
+py_field_unary! {
+    /// Element-wise natural logarithm of a field (`-inf`/`nan` for ≤ 0).
+    log
+}
+py_field_unary! {
+    /// Element-wise base-10 logarithm of a field.
+    log10
+}
+py_field_unary! {
+    /// Element-wise cosine of a field (radians).
+    cos
+}
+py_field_unary! {
+    /// Element-wise sine of a field (radians).
+    sin
+}
+py_field_unary! {
+    /// Element-wise tangent of a field (radians).
+    tan
+}
+py_field_unary! {
+    /// Element-wise hyperbolic sine of a field.
+    sinh
+}
+py_field_unary! {
+    /// Element-wise hyperbolic cosine of a field.
+    cosh
+}
+py_field_unary! {
+    /// Element-wise hyperbolic tangent of a field.
+    tanh
+}
 
 // ── Composantes : filtrer, renommer ─────────────────────────────────────────
 //
@@ -176,30 +209,41 @@ py_field_unary!(tanh, "Element-wise hyperbolic tangent of a field.");
 // complète part dans `__doc__` comme dans le stub.
 
 /// Distribue les deux textes aux quatre saveurs. Le chapeau existe pour qu'ils
-/// ne soient écrits **qu'une fois** : passés en `literal`, ils sont substitués
-/// avant que pyo3 et pyo3-stub-gen ne lisent l'item, donc les deux y voient un
-/// vrai texte. Une constante `const` ne conviendrait pas — un attribut `doc`
-/// n'accepte qu'un littéral ou une expansion de macro, jamais un chemin.
+/// ne soient écrits **qu'une fois**, chacun devant le nom de la méthode qu'il
+/// décrit : capturés ligne à ligne en littéraux, ils sont substitués avant que
+/// pyo3 et pyo3-stub-gen ne lisent l'item, donc les deux y voient un vrai
+/// texte.
 macro_rules! py_field_components {
-    ($doc_filter:literal, $doc_rename:literal) => {
-        $crate::py_field_transform!(
-            Field components: [PyNodeField, PyElementField], $doc_filter, $doc_rename);
-        $crate::py_field_transform!(
-            SubField components: [PySubNodeField, PySubElementField], $doc_filter, $doc_rename);
+    (
+        $(#[doc = $doc_filter:literal])* filter_components
+        $(#[doc = $doc_rename:literal])* rename_component
+    ) => {
+        $crate::py_field_transform! {
+            Field components: [PyNodeField, PyElementField]
+            $(#[doc = $doc_filter])* filter_components
+            $(#[doc = $doc_rename])* rename_component
+        }
+        $crate::py_field_transform! {
+            SubField components: [PySubNodeField, PySubElementField]
+            $(#[doc = $doc_filter])* filter_components
+            $(#[doc = $doc_rename])* rename_component
+        }
     };
 }
 
-py_field_components!(
-    "Keep only the named components, in the order given.\n\
-     \n\
-     `components` is a single name or a list of names (e.g. the result of\n\
-     `model.primal_vars()`). Returns a **new** field of the caller's own kind,\n\
-     sharing its support; the original is untouched. Errors if a requested name\n\
-     is absent — filtering never invents a component.",
-    "Rename one component, `old` to `new`, leaving every other untouched.\n\
-     \n\
-     Returns a **new** field of the caller's own kind, on the same support. The\n\
-     component order is kept — renaming is not reordering. Errors if `old` is\n\
-     absent, or if `new` is already taken: a name is how a component is\n\
-     addressed, so two of them cannot share one."
-);
+py_field_components! {
+    /// Keep only the named components, in the order given.
+    ///
+    /// `components` is a single name or a list of names (e.g. the result of
+    /// `model.primal_vars()`). Returns a **new** field of the caller's own kind,
+    /// sharing its support; the original is untouched. Errors if a requested name
+    /// is absent — filtering never invents a component.
+    filter_components
+    /// Rename one component, `old` to `new`, leaving every other untouched.
+    ///
+    /// Returns a **new** field of the caller's own kind, on the same support. The
+    /// component order is kept — renaming is not reordering. Errors if `old` is
+    /// absent, or if `new` is already taken: a name is how a component is
+    /// addressed, so two of them cannot share one.
+    rename_component
+}

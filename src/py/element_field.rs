@@ -360,52 +360,52 @@ crate::impl_dump_pymethod!(handle PySubElementField, handle);
 // doit être expansé dans le module qui déclare son `#[pyclass]`, sans quoi pyo3
 // engendre un appel de trampoline `unsafe` que l'édition 2024 ne couvre plus.
 
-crate::py_field_transform!(
-    Field op: [PyElementField], __add__, |a, b| a + b,
-    "`field + other` — element-wise sum."
-);
-crate::py_field_transform!(
-    SubField op: [PySubElementField], __add__, |a, b| a + b,
-    "`field + other` — element-wise sum."
-);
-crate::py_field_transform!(
-    Field op: [PyElementField], __sub__, |a, b| a - b,
-    "`field - other` — element-wise difference."
-);
-crate::py_field_transform!(
-    SubField op: [PySubElementField], __sub__, |a, b| a - b,
-    "`field - other` — element-wise difference."
-);
-crate::py_field_transform!(
-    Field op: [PyElementField], __mul__, |a, b| a * b,
-    "`field * other` — element-wise product."
-);
-crate::py_field_transform!(
-    SubField op: [PySubElementField], __mul__, |a, b| a * b,
-    "`field * other` — element-wise product."
-);
-crate::py_field_transform!(
-    Field op: [PyElementField], __truediv__, |a, b| a / b,
-    "`field / other` — element-wise quotient."
-);
-crate::py_field_transform!(
-    SubField op: [PySubElementField], __truediv__, |a, b| a / b,
-    "`field / other` — element-wise quotient."
-);
-crate::py_field_transform!(
-    Field pow: [PyElementField],
-    "`field ** exponent` — element-wise power, same dispatch as the other\n\
-     operators (float → scalar, `ElementField` → strict same-decomposition,\n\
-     `SubElementField` → targeted zone). The ternary `pow(x, y, z)` modulo\n\
-     form is rejected."
-);
-crate::py_field_transform!(
-    SubField pow: [PySubElementField],
-    "`field ** exponent` — element-wise power, same dispatch as the other\n\
-     operators (float exponent → broadcast; `SubElementField` → strict\n\
-     element-by-element). The ternary `pow(x, y, z)` modulo form is\n\
-     rejected (meaningless on floats)."
-);
+crate::py_field_transform! {
+    /// `field + other` — element-wise sum.
+    Field op: [PyElementField], __add__, |a, b| a + b
+}
+crate::py_field_transform! {
+    /// `field + other` — element-wise sum.
+    SubField op: [PySubElementField], __add__, |a, b| a + b
+}
+crate::py_field_transform! {
+    /// `field - other` — element-wise difference.
+    Field op: [PyElementField], __sub__, |a, b| a - b
+}
+crate::py_field_transform! {
+    /// `field - other` — element-wise difference.
+    SubField op: [PySubElementField], __sub__, |a, b| a - b
+}
+crate::py_field_transform! {
+    /// `field * other` — element-wise product.
+    Field op: [PyElementField], __mul__, |a, b| a * b
+}
+crate::py_field_transform! {
+    /// `field * other` — element-wise product.
+    SubField op: [PySubElementField], __mul__, |a, b| a * b
+}
+crate::py_field_transform! {
+    /// `field / other` — element-wise quotient.
+    Field op: [PyElementField], __truediv__, |a, b| a / b
+}
+crate::py_field_transform! {
+    /// `field / other` — element-wise quotient.
+    SubField op: [PySubElementField], __truediv__, |a, b| a / b
+}
+crate::py_field_transform! {
+    /// `field ** exponent` — element-wise power, same dispatch as the other
+    /// operators (float → scalar, `ElementField` → strict same-decomposition,
+    /// `SubElementField` → targeted zone). The ternary `pow(x, y, z)` modulo
+    /// form is rejected.
+    Field pow: [PyElementField]
+}
+crate::py_field_transform! {
+    /// `field ** exponent` — element-wise power, same dispatch as the other
+    /// operators (float exponent → broadcast; `SubElementField` → strict
+    /// element-by-element). The ternary `pow(x, y, z)` modulo form is
+    /// rejected (meaningless on floats).
+    SubField pow: [PySubElementField]
+}
 
 // ─── Comparaisons ───────────────────────────────────────────────────────────
 //
@@ -414,17 +414,17 @@ crate::py_field_transform!(
 // sous les noms `__ge__`/`__gt__`/`__le__`/`__lt__`, déjà déclarés à la main
 // plus haut — les faire engendrer aussi par stub-gen les compterait deux fois.
 
-crate::py_field_transform!(
-    Field richcmp: [PyElementField], crate::ops::element_field::mask,
-    "Comparison sugar → a per-component 0/1 mask (see `mask`), one value per\n\
-     Gauss point. `field >= x` / `> x` / `<= x` / `< x` test every component\n\
-     against `x`; `==` / `!=` and non-scalar right-hands fall back to\n\
-     `NotImplemented`."
-);
-crate::py_field_transform!(
-    SubField richcmp: [PySubElementField], crate::ops::element_field::mask_sub,
-    "Comparison sugar → a per-component 0/1 mask (see `mask`), one value per\n\
-     Gauss point. `subfield >= x` / `> x` / `<= x` / `< x` test every\n\
-     component against `x`; `==` / `!=` and non-scalar right-hands fall back\n\
-     to `NotImplemented`."
-);
+crate::py_field_transform! {
+    /// Comparison sugar → a per-component 0/1 mask (see `mask`), one value per
+    /// Gauss point. `field >= x` / `> x` / `<= x` / `< x` test every component
+    /// against `x`; `==` / `!=` and non-scalar right-hands fall back to
+    /// `NotImplemented`.
+    Field richcmp: [PyElementField], crate::ops::element_field::mask
+}
+crate::py_field_transform! {
+    /// Comparison sugar → a per-component 0/1 mask (see `mask`), one value per
+    /// Gauss point. `subfield >= x` / `> x` / `<= x` / `< x` test every
+    /// component against `x`; `==` / `!=` and non-scalar right-hands fall back
+    /// to `NotImplemented`.
+    SubField richcmp: [PySubElementField], crate::ops::element_field::mask_sub
+}
