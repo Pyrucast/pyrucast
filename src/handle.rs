@@ -228,6 +228,16 @@ impl<T> Handle<T> {
     /// Public so a holder can name its sub-objects without recomputing the tag:
     /// an aggregate's `Display` lists `[#7f3a2c, …]`, where repeating the type
     /// of every zone would say nothing that `submesh(es)` has not already said.
+    ///
+    /// ```
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::coords::Coords;
+    /// let a = Handle::new(Coords::new(2).unwrap());
+    /// // Les 24 bits de poids faible de l'adresse : assez court pour se lire
+    /// // d'un coup d'œil, assez large pour séparer des objets vivants ensemble.
+    /// assert_eq!(a.tag(), a.id() & 0xff_ffff);
+    /// assert_eq!(a.tag(), a.clone().tag()); // stable pour un même objet
+    /// ```
     pub fn tag(&self) -> usize {
         self.id() & 0xff_ffff
     }
