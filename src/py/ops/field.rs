@@ -90,45 +90,6 @@ pub fn psca(py: Python<'_>, x: &Bound<'_, PyAny>, y: &Bound<'_, PyAny>) -> PyRes
 // `ElementField` / `SubElementField`) and mirror `crate::ops::field::*`.
 // Results are unguarded (numpy-like): `log` of ≤ 0 → `-inf`/`nan`, etc.
 
-/// Emit the method form of an element-wise unary op for an **aggregate**
-/// flavour. The receiver's type being known, the method short-circuits the
-/// four-branch dispatch of the free function and returns a **precise** type
-/// instead of `Any`. It carries the free function's own doc — `$doc` is
-/// substituted before the attribute macros read the item, so pyo3 (hence
-/// `__doc__`) and pyo3-stub-gen (hence the `.pyi`) both see a real literal.
-macro_rules! py_field_unary_aggregate {
-    ($T:ident, $name:ident, $doc:literal) => {
-        #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-        #[pymethods]
-        impl $T {
-            #[doc = $doc]
-            fn $name(&self) -> PyResult<$T> {
-                Ok($T {
-                    inner: crate::ops::field::$name(&self.inner)?,
-                })
-            }
-        }
-    };
-}
-
-/// Same, for a **sub-container** flavour: the value is read through the handle,
-/// and the result gets a handle of its own.
-macro_rules! py_field_unary_sub {
-    ($T:ident, $name:ident, $doc:literal) => {
-        #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-        #[pymethods]
-        impl $T {
-            #[doc = $doc]
-            fn $name(&self) -> PyResult<$T> {
-                let out = crate::ops::field::$name(&*self.handle.read())?;
-                Ok($T {
-                    handle: Handle::new(out),
-                })
-            }
-        }
-    };
-}
-
 /// Generate a `#[pyfunction] $name(field)` that dispatches over the four field
 /// wrapper types and applies the matching `ops::field::$name`, **and** the four
 /// methods that are its « sujet » face. The documentation is written once, at
@@ -183,10 +144,8 @@ macro_rules! py_field_unary {
             ))
         }
 
-        py_field_unary_aggregate!(PyNodeField, $name, $doc);
-        py_field_unary_aggregate!(PyElementField, $name, $doc);
-        py_field_unary_sub!(PySubNodeField, $name, $doc);
-        py_field_unary_sub!(PySubElementField, $name, $doc);
+        $crate::py_field_transform!(unary: [PyNodeField, PyElementField], $name, $doc);
+        $crate::py_subfield_transform!(unary: [PySubNodeField, PySubElementField], $name, $doc);
     };
 }
 
@@ -217,62 +176,6 @@ py_field_unary!(tanh, "Element-wise hyperbolic tangent of a field.");
 // les quatre saveurs. Le littéral traverse pyo3 et pyo3-stub-gen : l'aide
 // complète part dans `__doc__` comme dans le stub.
 
-/// Les deux verbes, pour une saveur **agrégat** : la valeur est tenue en
-/// propre, le trait `Field` opère dessus directement.
-macro_rules! py_field_components_aggregate {
-    ($T:ident, $doc_filter:literal, $doc_rename:literal) => {
-        #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-        #[pymethods]
-        impl $T {
-            #[doc = $doc_filter]
-            fn filter_components(&self, components: &Bound<'_, PyAny>) -> PyResult<$T> {
-                use crate::containers::field::Field;
-                let wanted = extract_names(components)?;
-                Ok($T {
-                    inner: self.inner.filter_components(wanted.as_slice())?,
-                })
-            }
-
-            #[doc = $doc_rename]
-            fn rename_component(&self, old: &str, new: &str) -> PyResult<$T> {
-                use crate::containers::field::Field;
-                Ok($T {
-                    inner: self.inner.rename_component(old, new)?,
-                })
-            }
-        }
-    };
-}
-
-/// Les mêmes, pour une saveur **sous-conteneur** : la valeur est lue à travers
-/// le handle, et `SubField` nomme le filtrage `select_components`.
-macro_rules! py_field_components_sub {
-    ($T:ident, $doc_filter:literal, $doc_rename:literal) => {
-        #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-        #[pymethods]
-        impl $T {
-            #[doc = $doc_filter]
-            fn filter_components(&self, components: &Bound<'_, PyAny>) -> PyResult<$T> {
-                use crate::containers::field::SubField;
-                let wanted = extract_names(components)?;
-                let out = self.handle.read().select_components(wanted.as_slice())?;
-                Ok($T {
-                    handle: Handle::new(out),
-                })
-            }
-
-            #[doc = $doc_rename]
-            fn rename_component(&self, old: &str, new: &str) -> PyResult<$T> {
-                use crate::containers::field::SubField;
-                let out = self.handle.read().rename_component(old, new)?;
-                Ok($T {
-                    handle: Handle::new(out),
-                })
-            }
-        }
-    };
-}
-
 /// Distribue les deux textes aux quatre saveurs. Le chapeau existe pour qu'ils
 /// ne soient écrits **qu'une fois** : passés en `literal`, ils sont substitués
 /// avant que pyo3 et pyo3-stub-gen ne lisent l'item, donc les deux y voient un
@@ -280,10 +183,10 @@ macro_rules! py_field_components_sub {
 /// n'accepte qu'un littéral ou une expansion de macro, jamais un chemin.
 macro_rules! py_field_components {
     ($doc_filter:literal, $doc_rename:literal) => {
-        py_field_components_aggregate!(PyNodeField, $doc_filter, $doc_rename);
-        py_field_components_aggregate!(PyElementField, $doc_filter, $doc_rename);
-        py_field_components_sub!(PySubNodeField, $doc_filter, $doc_rename);
-        py_field_components_sub!(PySubElementField, $doc_filter, $doc_rename);
+        $crate::py_field_transform!(
+            components: [PyNodeField, PyElementField], $doc_filter, $doc_rename);
+        $crate::py_subfield_transform!(
+            components: [PySubNodeField, PySubElementField], $doc_filter, $doc_rename);
     };
 }
 

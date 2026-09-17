@@ -209,11 +209,16 @@ macro_rules! py_subfield_write {
     };
 }
 
-/// Un opérateur arithmétique des agrégats : un renvoi vers `binary`, le
-/// dispatcheur que chaque saveur définit dans son bloc inhérent.
+/// La charpente « lire, puis emballer dans le même type » des agrégats, en
+/// quatre bras : `op:` et `pow:` renvoient à `binary`, le dispatcheur que chaque
+/// saveur définit dans son bloc inhérent ; `unary:` applique une math
+/// élémentaire de `ops::field` ; `components:` filtre et renomme.
 ///
-/// Appelée depuis `node_field.rs` et `element_field.rs` avec une liste d'un
-/// seul type, contrainte des slots oblige (voir l'en-tête de ce fichier).
+/// Les deux premiers sont des **slots**, appelés depuis `node_field.rs` et
+/// `element_field.rs` avec une liste d'un seul type (voir l'en-tête de ce
+/// fichier). Les deux autres sont des méthodes ordinaires, que rien n'oblige à
+/// expanser chez le `pyclass` : `py/ops/field.rs` les appelle avec les deux
+/// saveurs à la fois, depuis les chapeaux qui portent aussi la fonction libre.
 #[macro_export]
 macro_rules! py_field_transform {
     (op: [$($T:ident),+ $(,)?], $nom:ident, $f:expr, $doc:literal) => {
@@ -250,9 +255,54 @@ macro_rules! py_field_transform {
             }
         )+
     };
+    (unary: [$($T:ident),+ $(,)?], $nom:ident, $doc:literal) => {
+        $(
+            #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pymethods)]
+            #[::pyo3::pymethods]
+            impl $T {
+                #[doc = $doc]
+                fn $nom(&self) -> ::pyo3::PyResult<$T> {
+                    Ok($T {
+                        inner: $crate::ops::field::$nom(&self.inner)?,
+                    })
+                }
+            }
+        )+
+    };
+    (components: [$($T:ident),+ $(,)?], $doc_filter:literal, $doc_rename:literal) => {
+        $(
+            #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pymethods)]
+            #[::pyo3::pymethods]
+            impl $T {
+                #[doc = $doc_filter]
+                fn filter_components(
+                    &self,
+                    components: &::pyo3::Bound<'_, ::pyo3::PyAny>,
+                ) -> ::pyo3::PyResult<$T> {
+                    use $crate::containers::field::Field;
+                    let wanted = $crate::py::ops::field::extract_names(components)?;
+                    Ok($T {
+                        inner: self.inner.filter_components(wanted.as_slice())?,
+                    })
+                }
+
+                #[doc = $doc_rename]
+                fn rename_component(&self, old: &str, new: &str) -> ::pyo3::PyResult<$T> {
+                    use $crate::containers::field::Field;
+                    Ok($T {
+                        inner: self.inner.rename_component(old, new)?,
+                    })
+                }
+            }
+        )+
+    };
 }
 
-/// La même pour les **sous-conteneurs**, qui passent par `scalar_or_combine`.
+/// La même pour les **sous-conteneurs** : `op:` et `pow:` passent par
+/// `scalar_or_combine`, `unary:` et `components:` lisent à travers le handle et
+/// rendent un handle neuf. `SubField` nomme `select_components` ce que `Field`
+/// appelle `filter_components` — la seule divergence de nom entre les deux
+/// familles, absorbée ici plutôt que laissée au lecteur.
 #[macro_export]
 macro_rules! py_subfield_transform {
     (op: [$($T:ident),+ $(,)?], $nom:ident, $f:expr, $doc:literal) => {
@@ -285,6 +335,50 @@ macro_rules! py_subfield_transform {
                         ));
                     }
                     self.scalar_or_combine(exponent, |a, b| a.powf(b))
+                }
+            }
+        )+
+    };
+    (unary: [$($T:ident),+ $(,)?], $nom:ident, $doc:literal) => {
+        $(
+            #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pymethods)]
+            #[::pyo3::pymethods]
+            impl $T {
+                #[doc = $doc]
+                fn $nom(&self) -> ::pyo3::PyResult<$T> {
+                    let out = $crate::ops::field::$nom(&*self.handle.read())?;
+                    Ok($T {
+                        handle: $crate::handle::Handle::new(out),
+                    })
+                }
+            }
+        )+
+    };
+    (components: [$($T:ident),+ $(,)?], $doc_filter:literal, $doc_rename:literal) => {
+        $(
+            #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pymethods)]
+            #[::pyo3::pymethods]
+            impl $T {
+                #[doc = $doc_filter]
+                fn filter_components(
+                    &self,
+                    components: &::pyo3::Bound<'_, ::pyo3::PyAny>,
+                ) -> ::pyo3::PyResult<$T> {
+                    use $crate::containers::field::SubField;
+                    let wanted = $crate::py::ops::field::extract_names(components)?;
+                    let out = self.handle.read().select_components(wanted.as_slice())?;
+                    Ok($T {
+                        handle: $crate::handle::Handle::new(out),
+                    })
+                }
+
+                #[doc = $doc_rename]
+                fn rename_component(&self, old: &str, new: &str) -> ::pyo3::PyResult<$T> {
+                    use $crate::containers::field::SubField;
+                    let out = self.handle.read().rename_component(old, new)?;
+                    Ok($T {
+                        handle: $crate::handle::Handle::new(out),
+                    })
                 }
             }
         )+
