@@ -93,7 +93,7 @@ pub fn psca(py: Python<'_>, x: &Bound<'_, PyAny>, y: &Bound<'_, PyAny>) -> PyRes
 /// wrapper types and applies the matching `ops::field::$name`, **and** the four
 /// methods that are its « sujet » face. The documentation is written once, at
 /// the call site, and reaches the free function and the four methods alike.
-macro_rules! py_field_unary {
+macro_rules! py_field_math {
     ($(#[doc = $doc:literal])* $name:ident) => {
         $(#[doc = $doc])*
         #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
@@ -143,58 +143,58 @@ macro_rules! py_field_unary {
             ))
         }
 
-        $crate::py_field_transform! {
+        $crate::py_field_unary! {
             $(#[doc = $doc])*
-            Field unary: [PyNodeField, PyElementField], $name
+            [PyNodeField, PyElementField], $name
         }
-        $crate::py_field_transform! {
+        $crate::py_subfield_unary! {
             $(#[doc = $doc])*
-            SubField unary: [PySubNodeField, PySubElementField], $name
+            [PySubNodeField, PySubElementField], $name
         }
     };
 }
 
-py_field_unary! {
+py_field_math! {
     /// Element-wise absolute value of a field.
     abs
 }
-py_field_unary! {
+py_field_math! {
     /// Element-wise square root of a field (`nan` for negatives).
     sqrt
 }
-py_field_unary! {
+py_field_math! {
     /// Element-wise exponential `eˣ` of a field.
     exp
 }
-py_field_unary! {
+py_field_math! {
     /// Element-wise natural logarithm of a field (`-inf`/`nan` for ≤ 0).
     log
 }
-py_field_unary! {
+py_field_math! {
     /// Element-wise base-10 logarithm of a field.
     log10
 }
-py_field_unary! {
+py_field_math! {
     /// Element-wise cosine of a field (radians).
     cos
 }
-py_field_unary! {
+py_field_math! {
     /// Element-wise sine of a field (radians).
     sin
 }
-py_field_unary! {
+py_field_math! {
     /// Element-wise tangent of a field (radians).
     tan
 }
-py_field_unary! {
+py_field_math! {
     /// Element-wise hyperbolic sine of a field.
     sinh
 }
-py_field_unary! {
+py_field_math! {
     /// Element-wise hyperbolic cosine of a field.
     cosh
 }
-py_field_unary! {
+py_field_math! {
     /// Element-wise hyperbolic tangent of a field.
     tanh
 }

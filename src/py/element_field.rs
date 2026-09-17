@@ -488,37 +488,37 @@ crate::impl_dump_pymethod!(handle PySubElementField, handle);
 // doit être expansé dans le module qui déclare son `#[pyclass]`, sans quoi pyo3
 // engendre un appel de trampoline `unsafe` que l'édition 2024 ne couvre plus.
 
-crate::py_field_transform! {
+crate::py_field_binary_op! {
     /// `field + other` — element-wise sum.
-    Field op: [PyElementField], __add__, |a, b| a + b
+    [PyElementField], __add__, |a, b| a + b
 }
-crate::py_field_transform! {
+crate::py_subfield_binary_op! {
     /// `field + other` — element-wise sum.
-    SubField op: [PySubElementField], __add__, |a, b| a + b
+    [PySubElementField], __add__, |a, b| a + b
 }
-crate::py_field_transform! {
+crate::py_field_binary_op! {
     /// `field - other` — element-wise difference.
-    Field op: [PyElementField], __sub__, |a, b| a - b
+    [PyElementField], __sub__, |a, b| a - b
 }
-crate::py_field_transform! {
+crate::py_subfield_binary_op! {
     /// `field - other` — element-wise difference.
-    SubField op: [PySubElementField], __sub__, |a, b| a - b
+    [PySubElementField], __sub__, |a, b| a - b
 }
-crate::py_field_transform! {
+crate::py_field_binary_op! {
     /// `field * other` — element-wise product.
-    Field op: [PyElementField], __mul__, |a, b| a * b
+    [PyElementField], __mul__, |a, b| a * b
 }
-crate::py_field_transform! {
+crate::py_subfield_binary_op! {
     /// `field * other` — element-wise product.
-    SubField op: [PySubElementField], __mul__, |a, b| a * b
+    [PySubElementField], __mul__, |a, b| a * b
 }
-crate::py_field_transform! {
+crate::py_field_binary_op! {
     /// `field / other` — element-wise quotient.
-    Field op: [PyElementField], __truediv__, |a, b| a / b
+    [PyElementField], __truediv__, |a, b| a / b
 }
-crate::py_field_transform! {
+crate::py_subfield_binary_op! {
     /// `field / other` — element-wise quotient.
-    SubField op: [PySubElementField], __truediv__, |a, b| a / b
+    [PySubElementField], __truediv__, |a, b| a / b
 }
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]

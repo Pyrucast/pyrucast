@@ -12,6 +12,7 @@ pub mod coords;
 pub mod element;
 pub mod element_field;
 pub mod evolution;
+pub mod field_macros;
 pub mod field_methods;
 pub mod field_slots;
 pub mod finite_element_space;
