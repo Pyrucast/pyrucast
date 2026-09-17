@@ -86,6 +86,74 @@ impl PySubElementField {
         self.handle.write().set_value(cell, gauss, &comp, value)?;
         Ok(())
     }
+
+    /// Smallest value of the named `component` — or, called without one, the
+    /// smallest value of the **whole** field, every component pooled. Pooling
+    /// reads the field as the flat list of its values: on components carrying
+    /// different units it answers "the smallest number in there", not a
+    /// physical quantity.
+    #[pyo3(signature = (component=None))]
+    fn min(&self, component: Option<&str>) -> PyResult<f64> {
+        Ok(SubField::min(&*self.handle.read(), component)?)
+    }
+
+    /// Largest value of the named `component` — or, called without one, the
+    /// largest value of the **whole** field, every component pooled (see `min`).
+    #[pyo3(signature = (component=None))]
+    fn max(&self, component: Option<&str>) -> PyResult<f64> {
+        Ok(SubField::max(&*self.handle.read(), component)?)
+    }
+
+    /// Sum of the named `component` over the support — Σ over the nodes, or over
+    /// the Gauss points for a field by elements. The resultant of a nodal force
+    /// field, one component at a time. An empty support sums to `0.0`.
+    fn sum(&self, component: &str) -> PyResult<f64> {
+        Ok(SubField::sum(&*self.handle.read(), component)?)
+    }
+
+    /// Component names, in order.
+    fn components(&self) -> Vec<String> {
+        self.handle.read().components().to_vec()
+    }
+
+    /// Number of components stored per node, or per Gauss point for a field by
+    /// elements.
+    fn component_count(&self) -> usize {
+        self.handle.read().component_count()
+    }
+
+    /// Index of component `name`, or `None` if unknown — no default index would
+    /// say "absent" without being mistaken for a real one.
+    fn component_index(&self, name: &str) -> Option<usize> {
+        self.handle.read().component_index(name)
+    }
+
+    /// Keep only the named components, in the order given.
+    ///
+    /// `components` is a single name or a list of names (e.g. the result of
+    /// `model.primal_vars()`). Returns a **new** field of the caller's own kind,
+    /// sharing its support; the original is untouched. Errors if a requested name
+    /// is absent — filtering never invents a component.
+    fn filter_components(&self, components: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let wanted = crate::py::ops::field::extract_names(components)?;
+        let out = self.handle.read().select_components(wanted.as_slice())?;
+        Ok(Self {
+            handle: Handle::new(out),
+        })
+    }
+
+    /// Rename one component, `old` to `new`, leaving every other untouched.
+    ///
+    /// Returns a **new** field of the caller's own kind, on the same support. The
+    /// component order is kept — renaming is not reordering. Errors if `old` is
+    /// absent, or if `new` is already taken: a name is how a component is
+    /// addressed, so two of them cannot share one.
+    fn rename_component(&self, old: &str, new: &str) -> PyResult<Self> {
+        let out = self.handle.read().rename_component(old, new)?;
+        Ok(Self {
+            handle: Handle::new(out),
+        })
+    }
 }
 
 impl PySubElementField {
@@ -199,6 +267,66 @@ impl PyElementField {
     //
     // `rhs`: a float (scalar over every zone), an `ElementField` (same
     // decomposition, strict), or a `SubElementField` (targeted zone update).
+
+    /// Smallest value of `component` across the zones defining it — or, called
+    /// without a component, the smallest value of the **whole** field, every
+    /// component of every zone pooled (see the sub-field's `min` for what
+    /// pooling means).
+    #[pyo3(signature = (component=None))]
+    fn min(&self, component: Option<&str>) -> PyResult<f64> {
+        use crate::containers::field::Field;
+        Ok(Field::min(&self.inner, component)?)
+    }
+
+    /// Largest value of `component` across the zones defining it — or, called
+    /// without a component, the largest value of the **whole** field (see `min`).
+    #[pyo3(signature = (component=None))]
+    fn max(&self, component: Option<&str>) -> PyResult<f64> {
+        use crate::containers::field::Field;
+        Ok(Field::max(&self.inner, component)?)
+    }
+
+    /// Sum of `component` across the zones defining it (Σ over the whole field)
+    /// — the resultant of a nodal force field, one component at a time. A node
+    /// carried by several zones counts once per zone that stores it. Errors if
+    /// no zone defines the component.
+    fn sum(&self, component: &str) -> PyResult<f64> {
+        use crate::containers::field::Field;
+        Ok(Field::sum(&self.inner, component)?)
+    }
+
+    /// Union of the zones' component names, first-seen order.
+    fn components(&self) -> Vec<String> {
+        use crate::containers::field::Field;
+        Field::components(&self.inner)
+    }
+
+    /// Keep only the named components, in the order given.
+    ///
+    /// `components` is a single name or a list of names (e.g. the result of
+    /// `model.primal_vars()`). Returns a **new** field of the caller's own kind,
+    /// sharing its support; the original is untouched. Errors if a requested name
+    /// is absent — filtering never invents a component.
+    fn filter_components(&self, components: &Bound<'_, PyAny>) -> PyResult<Self> {
+        use crate::containers::field::Field;
+        let wanted = crate::py::ops::field::extract_names(components)?;
+        Ok(Self {
+            inner: self.inner.filter_components(wanted.as_slice())?,
+        })
+    }
+
+    /// Rename one component, `old` to `new`, leaving every other untouched.
+    ///
+    /// Returns a **new** field of the caller's own kind, on the same support. The
+    /// component order is kept — renaming is not reordering. Errors if `old` is
+    /// absent, or if `new` is already taken: a name is how a component is
+    /// addressed, so two of them cannot share one.
+    fn rename_component(&self, old: &str, new: &str) -> PyResult<Self> {
+        use crate::containers::field::Field;
+        Ok(Self {
+            inner: Field::rename_component(&self.inner, old, new)?,
+        })
+    }
 }
 
 impl PyElementField {

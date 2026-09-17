@@ -1,12 +1,15 @@
 //! Les méthodes Python que les quatre saveurs de champ portent à l'identique.
 //!
 //! Aucune n'a de fonction libre dont `#[py_op]` la dériverait : ce sont des
-//! méthodes de conteneur et rien d'autre. Trois `macro_rules!` les engendrent,
-//! selon ce que fait le verbe : `py_field_read!` (lire une valeur),
-//! `py_field_write!` (muter une composante), `py_field_transform!` (rendre un
-//! champ). Deux macros cachées portent leur travail commun : `py_field_impl!`
-//! pose un bloc de méthodes sur plusieurs types, `py_field_family!` traduit ce
-//! qui sépare les deux familles de champ.
+//! méthodes de conteneur et rien d'autre. Deux `macro_rules!` les engendrent,
+//! selon ce que fait le verbe : `py_field_write!` (muter une composante) et
+//! `py_field_transform!` (rendre un champ). Deux macros cachées portent leur
+//! travail commun : `py_field_impl!` pose un bloc de méthodes sur plusieurs
+//! types, `py_field_family!` traduit ce qui sépare les deux familles de champ.
+//!
+//! Les verbes de lecture, eux, sont écrits à la main dans `node_field.rs` et
+//! `element_field.rs` : une forme appelée une ou deux fois ne rembourse pas la
+//! macro qui l'engendrerait.
 //!
 //! **Les deux familles.** Les agrégats (`PyNodeField`, `PyElementField`)
 //! tiennent leur valeur en propre, dans `self.inner`, et le trait `Field`
@@ -134,83 +137,6 @@ macro_rules! py_field_impl {
     };
 }
 
-/// Engendre une méthode Python qui **lit** une valeur du champ.
-///
-/// Arguments, dans l'ordre : la documentation de la méthode en `///`, la
-/// famille, le bras suivi de `:`, la liste des types qui porteront la méthode,
-/// et son nom — qui est aussi celui de la méthode du trait appelée.
-///
-/// ```ignore
-/// py_field_read! {
-///     /// Sum of `component` across the zones defining it.
-///     Field named: [PyNodeField, PyElementField], sum
-/// }
-/// ```
-///
-/// engendre sur chacun des deux types :
-///
-/// ```ignore
-/// fn sum(&self, component: &str) -> PyResult<f64> {
-///     Ok(Field::sum(&self.inner, component)?)
-/// }
-/// ```
-///
-/// Le bras fixe la signature : la composante est optionnelle (`optional:`),
-/// exigée (`named:`) ou absente (`components:`). `count:` et `index:` ne
-/// valent que pour un sous-conteneur — un agrégat n'a ni nombre de composantes
-/// unique, ses zones pouvant en porter des jeux différents, ni index global.
-#[macro_export]
-macro_rules! py_field_read {
-    ($(#[doc = $doc:literal])* $F:ident optional: [$($T:ident),+ $(,)?], $nom:ident) => {
-        $crate::py_field_impl!(stub [$($T),+] {
-            $(#[doc = $doc])*
-            #[pyo3(signature = (component=None))]
-            fn $nom(&self, component: Option<&str>) -> ::pyo3::PyResult<f64> {
-                use $crate::containers::field::$F;
-                Ok($F::$nom($crate::py_field_family!($F, read, self), component)?)
-            }
-        });
-    };
-    ($(#[doc = $doc:literal])* $F:ident named: [$($T:ident),+ $(,)?], $nom:ident) => {
-        $crate::py_field_impl!(stub [$($T),+] {
-            $(#[doc = $doc])*
-            fn $nom(&self, component: &str) -> ::pyo3::PyResult<f64> {
-                use $crate::containers::field::$F;
-                Ok($F::$nom($crate::py_field_family!($F, read, self), component)?)
-            }
-        });
-    };
-    ($(#[doc = $doc:literal])* $F:ident components: [$($T:ident),+ $(,)?]) => {
-        $crate::py_field_impl!(stub [$($T),+] {
-            $(#[doc = $doc])*
-            fn components(&self) -> Vec<String> {
-                use $crate::containers::field::$F;
-                // `Field` rend un `Vec`, `SubField` une tranche : `into`
-                // convient aux deux.
-                $F::components($crate::py_field_family!($F, read, self)).into()
-            }
-        });
-    };
-    ($(#[doc = $doc:literal])* SubField count: [$($T:ident),+ $(,)?], $nom:ident) => {
-        $crate::py_field_impl!(stub [$($T),+] {
-            $(#[doc = $doc])*
-            fn $nom(&self) -> usize {
-                use $crate::containers::field::SubField;
-                self.handle.read().$nom()
-            }
-        });
-    };
-    ($(#[doc = $doc:literal])* SubField index: [$($T:ident),+ $(,)?], $nom:ident) => {
-        $crate::py_field_impl!(stub [$($T),+] {
-            $(#[doc = $doc])*
-            fn $nom(&self, name: &str) -> Option<usize> {
-                use $crate::containers::field::SubField;
-                self.handle.read().$nom(name)
-            }
-        });
-    };
-}
-
 /// Engendre une méthode Python qui **mute** une composante, et ne rend rien.
 ///
 /// Mêmes arguments que `py_field_read!`. Le bras unique, `scalar:`, donne à la
@@ -309,31 +235,6 @@ macro_rules! py_field_transform {
             }
         });
     };
-    (
-        $F:ident components: [$($T:ident),+ $(,)?]
-        $(#[doc = $doc_filter:literal])* filter_components
-        $(#[doc = $doc_rename:literal])* rename_component
-    ) => {
-        $crate::py_field_impl!(stub [$($T),+] {
-            $(#[doc = $doc_filter])*
-            fn filter_components(
-                &self,
-                components: &::pyo3::Bound<'_, ::pyo3::PyAny>,
-            ) -> ::pyo3::PyResult<Self> {
-                use $crate::containers::field::$F;
-                let wanted = $crate::py::ops::field::extract_names(components)?;
-                let out = $crate::py_field_family!($F, filter, self, wanted.as_slice())?;
-                Ok($crate::py_field_family!($F, wrap, Self, out))
-            }
-
-            $(#[doc = $doc_rename])*
-            fn rename_component(&self, old: &str, new: &str) -> ::pyo3::PyResult<Self> {
-                use $crate::containers::field::$F;
-                let out = $F::rename_component($crate::py_field_family!($F, read, self), old, new)?;
-                Ok($crate::py_field_family!($F, wrap, Self, out))
-            }
-        });
-    };
     ($(#[doc = $doc:literal])* $F:ident richcmp: [$($T:ident),+ $(,)?], $op:path) => {
         // Seul bras sans `gen_stub_pymethods` : `__richcmp__` est une graphie
         // propre à pyo3, là où CPython expose `__ge__`/`__gt__`/`__le__`/
@@ -364,69 +265,6 @@ macro_rules! py_field_transform {
             }
         });
     };
-}
-
-// ─── Les verbes de lecture ──────────────────────────────────────────────────
-
-py_field_read! {
-    /// Smallest value of `component` across the zones defining it — or, called
-    /// without a component, the smallest value of the **whole** field, every
-    /// component of every zone pooled (see the sub-field's `min` for what
-    /// pooling means).
-    Field optional: [PyNodeField, PyElementField], min
-}
-py_field_read! {
-    /// Smallest value of the named `component` — or, called without one, the
-    /// smallest value of the **whole** field, every component pooled. Pooling
-    /// reads the field as the flat list of its values: on components carrying
-    /// different units it answers "the smallest number in there", not a
-    /// physical quantity.
-    SubField optional: [PySubNodeField, PySubElementField], min
-}
-
-py_field_read! {
-    /// Largest value of `component` across the zones defining it — or, called
-    /// without a component, the largest value of the **whole** field (see `min`).
-    Field optional: [PyNodeField, PyElementField], max
-}
-py_field_read! {
-    /// Largest value of the named `component` — or, called without one, the
-    /// largest value of the **whole** field, every component pooled (see `min`).
-    SubField optional: [PySubNodeField, PySubElementField], max
-}
-
-py_field_read! {
-    /// Sum of `component` across the zones defining it (Σ over the whole field)
-    /// — the resultant of a nodal force field, one component at a time. A node
-    /// carried by several zones counts once per zone that stores it. Errors if
-    /// no zone defines the component.
-    Field named: [PyNodeField, PyElementField], sum
-}
-py_field_read! {
-    /// Sum of the named `component` over the support — Σ over the nodes, or over
-    /// the Gauss points for a field by elements. The resultant of a nodal force
-    /// field, one component at a time. An empty support sums to `0.0`.
-    SubField named: [PySubNodeField, PySubElementField], sum
-}
-
-py_field_read! {
-    /// Union of the zones' component names, first-seen order.
-    Field components: [PyNodeField, PyElementField]
-}
-py_field_read! {
-    /// Component names, in order.
-    SubField components: [PySubNodeField, PySubElementField]
-}
-
-py_field_read! {
-    /// Number of components stored per node, or per Gauss point for a field by
-    /// elements.
-    SubField count: [PySubNodeField, PySubElementField], component_count
-}
-py_field_read! {
-    /// Index of component `name`, or `None` if unknown — no default index would
-    /// say "absent" without being mistaken for a real one.
-    SubField index: [PySubNodeField, PySubElementField], component_index
 }
 
 // ─── Les quatre mutateurs de composante ─────────────────────────────────────
