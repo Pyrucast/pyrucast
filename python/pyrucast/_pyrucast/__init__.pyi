@@ -442,22 +442,6 @@ class ElementField:
         `revolve` / `revolve_angle` sweep an axisymmetric plot into its body
         of revolution — see `SubMesh.plot`.
         """
-    def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
-        r"""
-        Add `scalar` to `component` on every zone that defines it.
-        """
-    def sub_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
-        r"""
-        Subtract `scalar` from `component` on every zone that defines it.
-        """
-    def mul_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
-        r"""
-        Multiply `component` by `scalar` on every zone that defines it.
-        """
-    def div_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
-        r"""
-        Divide `component` by `scalar` on every zone that defines it.
-        """
     def __add__(self, rhs: typing.Any) -> ElementField: ...
     def __sub__(self, rhs: typing.Any) -> ElementField: ...
     def __mul__(self, rhs: typing.Any) -> ElementField: ...
@@ -575,6 +559,22 @@ class ElementField:
     def components(self) -> builtins.list[builtins.str]:
         r"""
         Union of the zones' component names, first-seen order.
+        """
+    def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+        r"""
+        Add `scalar` to `component` on every zone that defines it.
+        """
+    def sub_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+        r"""
+        Subtract `scalar` from `component` on every zone that defines it.
+        """
+    def mul_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+        r"""
+        Multiply `component` by `scalar` on every zone that defines it.
+        """
+    def div_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+        r"""
+        Divide `component` by `scalar` on every zone that defines it.
         """
     def consolidate(self) -> ElementField:
         r"""
@@ -2193,6 +2193,22 @@ class NodeField:
         r"""
         Union of the zones' component names, first-seen order.
         """
+    def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+        r"""
+        Add `scalar` to `component` on every zone that defines it.
+        """
+    def sub_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+        r"""
+        Subtract `scalar` from `component` on every zone that defines it.
+        """
+    def mul_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+        r"""
+        Multiply `component` by `scalar` on every zone that defines it.
+        """
+    def div_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+        r"""
+        Divide `component` by `scalar` on every zone that defines it.
+        """
     def __new__(cls, support: typing.Any, components: typing.Sequence[builtins.str]) -> NodeField:
         r"""
         `NodeField(support, components)` — zero-initialized field. With a
@@ -2244,22 +2260,6 @@ class NodeField:
         r"""
         A `Mesh` mirroring this field's supports — the zones' POI1
         support submeshes, shared (not copied).
-        """
-    def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
-        r"""
-        Add `scalar` to `component` on every zone that defines it.
-        """
-    def sub_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
-        r"""
-        Subtract `scalar` from `component` on every zone that defines it.
-        """
-    def mul_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
-        r"""
-        Multiply `component` by `scalar` on every zone that defines it.
-        """
-    def div_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
-        r"""
-        Divide `component` by `scalar` on every zone that defines it.
         """
     def __add__(self, rhs: typing.Any) -> NodeField: ...
     def __sub__(self, rhs: typing.Any) -> NodeField: ...
@@ -2529,22 +2529,6 @@ class SubElementField:
         r"""
         Set `component` to `value` at every point of `cell`.
         """
-    def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
-        r"""
-        Add `scalar` to every value of `component` (in place).
-        """
-    def sub_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
-        r"""
-        Subtract `scalar` from every value of `component` (in place).
-        """
-    def mul_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
-        r"""
-        Multiply every value of `component` by `scalar` (in place).
-        """
-    def div_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
-        r"""
-        Divide every value of `component` by `scalar` (in place).
-        """
     def __add__(self, rhs: typing.Any) -> SubElementField: ...
     def __sub__(self, rhs: typing.Any) -> SubElementField: ...
     def __mul__(self, rhs: typing.Any) -> SubElementField: ...
@@ -2646,6 +2630,22 @@ class SubElementField:
     def component_index(self, name: builtins.str) -> typing.Optional[builtins.int]:
         r"""
         Index of component `name`, or `None` if unknown.
+        """
+    def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+        r"""
+        Add `scalar` to every value of `component` (in place).
+        """
+    def sub_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+        r"""
+        Subtract `scalar` from every value of `component` (in place).
+        """
+    def mul_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+        r"""
+        Multiply every value of `component` by `scalar` (in place).
+        """
+    def div_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+        r"""
+        Divide every value of `component` by `scalar` (in place).
         """
     def abs(self) -> SubElementField:
         r"""
@@ -3252,6 +3252,22 @@ class SubNodeField:
         r"""
         Index of component `name`, or `None` if unknown.
         """
+    def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+        r"""
+        Add `scalar` to every value of `component` (in place).
+        """
+    def sub_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+        r"""
+        Subtract `scalar` from every value of `component` (in place).
+        """
+    def mul_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+        r"""
+        Multiply every value of `component` by `scalar` (in place).
+        """
+    def div_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
+        r"""
+        Divide every value of `component` by `scalar` (in place).
+        """
     def node_count(self) -> builtins.int:
         r"""
         Number of nodes in the support.
@@ -3291,22 +3307,6 @@ class SubNodeField:
     def set_value(self, node: Node, component: builtins.str, value: builtins.float) -> None:
         r"""
         Set the value at `node` for the named `component`.
-        """
-    def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
-        r"""
-        Add `scalar` to every value of `component` (in place).
-        """
-    def sub_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
-        r"""
-        Subtract `scalar` from every value of `component` (in place).
-        """
-    def mul_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
-        r"""
-        Multiply every value of `component` by `scalar` (in place).
-        """
-    def div_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
-        r"""
-        Divide every value of `component` by `scalar` (in place).
         """
     def __add__(self, rhs: typing.Any) -> SubNodeField: ...
     def __sub__(self, rhs: typing.Any) -> SubNodeField: ...

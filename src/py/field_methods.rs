@@ -164,6 +164,48 @@ macro_rules! py_subfield_read {
     };
 }
 
+/// Les verbes d'**écriture** des deux agrégats : la mutation descend aux zones
+/// qui définissent la composante, à travers le trait `Field`.
+macro_rules! py_field_write {
+    (scalar: $nom:ident, $doc:literal) => {
+        py_field_write!(@one PyNodeField, $nom, $doc);
+        py_field_write!(@one PyElementField, $nom, $doc);
+    };
+    (@one $T:ident, $nom:ident, $doc:literal) => {
+        #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+        #[pymethods]
+        impl $T {
+            #[doc = $doc]
+            fn $nom(&self, component: &str, scalar: f64) -> PyResult<()> {
+                use crate::containers::field::Field;
+                self.inner.$nom(component, scalar)?;
+                Ok(())
+            }
+        }
+    };
+}
+
+/// Les mêmes pour les deux **sous-conteneurs**. Seule charpente à prendre un
+/// **write** guard : la mutation est en place, sur la zone elle-même.
+macro_rules! py_subfield_write {
+    (scalar: $nom:ident, $doc:literal) => {
+        py_subfield_write!(@one PySubNodeField, $nom, $doc);
+        py_subfield_write!(@one PySubElementField, $nom, $doc);
+    };
+    (@one $T:ident, $nom:ident, $doc:literal) => {
+        #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+        #[pymethods]
+        impl $T {
+            #[doc = $doc]
+            fn $nom(&self, component: &str, scalar: f64) -> PyResult<()> {
+                use crate::containers::field::SubField;
+                self.handle.write().$nom(component, scalar)?;
+                Ok(())
+            }
+        }
+    };
+}
+
 // ─── Les quatre verbes de lecture ───────────────────────────────────────────
 //
 // Huit appels pour seize méthodes. Les textes sont ceux d'avant, chacun
@@ -231,3 +273,48 @@ py_subfield_read!(
     "Number of components stored per point."
 );
 py_subfield_read!(index: component_index, "Index of component `name`, or `None` if unknown.");
+
+// ─── Les quatre mutateurs de composante ─────────────────────────────────────
+//
+// Même signature partout, et une documentation qui ne varie qu'avec le mode
+// d'accès : l'agrégat descend la mutation aux zones qui définissent la
+// composante, le sous-champ l'applique en place sur la sienne.
+//
+// `set`, `set_value` et `__setitem__` restent écrits à la main : leur clé
+// diffère par sorte, comme celle de `get` et `value`.
+
+py_field_write!(
+    scalar: add_to_component,
+    "Add `scalar` to `component` on every zone that defines it."
+);
+py_subfield_write!(
+    scalar: add_to_component,
+    "Add `scalar` to every value of `component` (in place)."
+);
+
+py_field_write!(
+    scalar: sub_to_component,
+    "Subtract `scalar` from `component` on every zone that defines it."
+);
+py_subfield_write!(
+    scalar: sub_to_component,
+    "Subtract `scalar` from every value of `component` (in place)."
+);
+
+py_field_write!(
+    scalar: mul_to_component,
+    "Multiply `component` by `scalar` on every zone that defines it."
+);
+py_subfield_write!(
+    scalar: mul_to_component,
+    "Multiply every value of `component` by `scalar` (in place)."
+);
+
+py_field_write!(
+    scalar: div_to_component,
+    "Divide `component` by `scalar` on every zone that defines it."
+);
+py_subfield_write!(
+    scalar: div_to_component,
+    "Divide every value of `component` by `scalar` (in place)."
+);

@@ -76,30 +76,6 @@ impl PySubElementField {
         Ok(())
     }
 
-    /// Add `scalar` to every value of `component` (in place).
-    fn add_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
-        self.handle.write().add_to_component(component, scalar)?;
-        Ok(())
-    }
-
-    /// Subtract `scalar` from every value of `component` (in place).
-    fn sub_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
-        self.handle.write().sub_to_component(component, scalar)?;
-        Ok(())
-    }
-
-    /// Multiply every value of `component` by `scalar` (in place).
-    fn mul_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
-        self.handle.write().mul_to_component(component, scalar)?;
-        Ok(())
-    }
-
-    /// Divide every value of `component` by `scalar` (in place).
-    fn div_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
-        self.handle.write().div_to_component(component, scalar)?;
-        Ok(())
-    }
-
     // ── Arithmetic operators (return a new sub-field) ───────────────────
     //
     // `rhs` may be a float (scalar broadcast over every point × component) or
@@ -253,34 +229,6 @@ impl PyElementField {
     }
 
     // ── Per-component scalar ops (in place, on every zone defining it) ──
-
-    /// Add `scalar` to `component` on every zone that defines it.
-    fn add_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
-        use crate::containers::field::Field;
-        self.inner.add_to_component(component, scalar)?;
-        Ok(())
-    }
-
-    /// Subtract `scalar` from `component` on every zone that defines it.
-    fn sub_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
-        use crate::containers::field::Field;
-        self.inner.sub_to_component(component, scalar)?;
-        Ok(())
-    }
-
-    /// Multiply `component` by `scalar` on every zone that defines it.
-    fn mul_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
-        use crate::containers::field::Field;
-        self.inner.mul_to_component(component, scalar)?;
-        Ok(())
-    }
-
-    /// Divide `component` by `scalar` on every zone that defines it.
-    fn div_to_component(&self, component: &str, scalar: f64) -> PyResult<()> {
-        use crate::containers::field::Field;
-        self.inner.div_to_component(component, scalar)?;
-        Ok(())
-    }
 
     // ── Arithmetic operators (return a new field) ───────────────────────
     //
