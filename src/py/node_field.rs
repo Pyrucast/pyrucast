@@ -49,8 +49,8 @@ pub struct PySubNodeField {
 #[pymethods]
 impl PySubNodeField {
     /// Number of nodes in the support.
-    fn node_count(&self) -> PyResult<usize> {
-        Ok(self.handle.read().node_count())
+    fn node_count(&self) -> usize {
+        self.handle.read().node_count()
     }
 
     /// Value at node index `node_idx`, component index `comp_idx`.
