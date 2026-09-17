@@ -38,13 +38,24 @@ required_version() {
     sed -nE "s/^$CRATE = \{.*version = \"([^\"]+)\".*/\1/p" Cargo.toml | head -1
 }
 
-# 200 = déjà publiée. Un numéro déjà pris ne se reprend pas : crates.io refuse
-# de republier, même à contenu identique.
+# 200 = déjà publiée, 404 = numéro libre. Tout le reste — proxy, panne,
+# coupure — est une **réponse inconnue**, pas une autorisation : la lire comme
+# « libre » ferait publier un numéro déjà pris, ou taguer sur une publication
+# jamais partie. Un numéro déjà pris ne se reprend pas, même à contenu
+# identique.
+http_status() {
+    curl -sS -o /dev/null -w '%{http_code}' \
+        "https://crates.io/api/v1/crates/$CRATE/$1" 2>/dev/null || echo 000
+}
 published() {
     local code
-    code="$(curl -fsS -o /dev/null -w '%{http_code}' \
-        "https://crates.io/api/v1/crates/$CRATE/$1" || echo 000)"
-    [ "$code" = 200 ]
+    code="$(http_status "$1")"
+    case "$code" in
+        200) return 0 ;;
+        404) return 1 ;;
+        *) die "crates.io répond $code pour $CRATE $1 — impossible de savoir si \
+le numéro est libre" ;;
+    esac
 }
 
 # ── 0. Préconditions ─────────────────────────────────────────────────────────
@@ -96,8 +107,10 @@ cargo clippy -p "$CRATE" --all-targets -- -D warnings
 step "cargo test"
 cargo test -p "$CRATE"
 
-step "cargo doc --no-deps"
-cargo doc -p "$CRATE" --no-deps
+# `-D warnings` : `check_doc.sh` ne documente que la lib racine, donc rien
+# ailleurs ne relit la rustdoc de cette crate-ci.
+step "cargo doc --no-deps -D warnings"
+RUSTDOCFLAGS="-D warnings" cargo doc -p "$CRATE" --no-deps
 
 step "cargo check --features python-api (le consommateur expanse la macro)"
 cargo check --features python-api --all-targets
@@ -131,14 +144,16 @@ cargo publish -p "$CRATE"
 # qu'il ne la sert pas, `cargo package` de `pyrucast` échoue exactement comme
 # avant — l'attendre ici évite de croire la publication ratée.
 step "Attente de l'index crates.io"
+served=false
 for _ in $(seq 1 60); do
-    if published "$new_version"; then
+    if [ "$(http_status "$new_version")" = 200 ]; then
+        served=true
         echo "crates.io sert $CRATE $new_version."
         break
     fi
     sleep 5
 done
-published "$new_version" || die "crates.io ne sert toujours pas $new_version après 5 minutes \
+[ "$served" = true ] || die "crates.io ne sert toujours pas $new_version après 5 minutes \
 — vérifier https://crates.io/crates/$CRATE avant de taguer pyrucast"
 
 echo

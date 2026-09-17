@@ -28,7 +28,9 @@ use syn::{parse_macro_input, FnArg, ItemFn, LitStr, Meta};
 /// #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 /// #[pyfunction]
 /// #[pyo3(signature = (mesh, angle_deg=None))]
-/// pub fn skin(mesh: PyRef<PyMesh>, angle_deg: Option<f64>) -> PyResult<PyMesh> { … }
+/// pub fn skin(mesh: PyRef<PyMesh>, angle_deg: Option<f64>) -> PyResult<PyMesh> {
+///     todo!()
+/// }
 /// ```
 ///
 /// La fonction est réémise **inchangée**, suivie de :
@@ -37,7 +39,7 @@ use syn::{parse_macro_input, FnArg, ItemFn, LitStr, Meta};
 /// #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 /// #[pymethods]
 /// impl PyMesh {
-///     /// …la documentation de la fonction, recopiée en littéraux…
+///     // …la documentation de la fonction, recopiée en littéraux…
 ///     #[pyo3(signature = (angle_deg=None))]
 ///     fn skin(slf: PyRef<'_, Self>, angle_deg: Option<f64>) -> PyResult<PyMesh> {
 ///         self::skin(slf, angle_deg)
