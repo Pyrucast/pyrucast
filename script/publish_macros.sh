@@ -137,7 +137,9 @@ read -rp "Publier $CRATE $new_version sur crates.io ? [o/N] " confirm
 
 if [ "$new_version" != "$current" ]; then
     step "git commit (version $new_version)"
-    git add "$MANIFEST" Cargo.toml Cargo.lock
+    # Pas de `Cargo.lock` : le dépôt l'ignore (bibliothèque), et `git add` sur
+    # un fichier ignoré échoue — ici, après une publication déjà partie.
+    git add "$MANIFEST" Cargo.toml
     git commit -m "chore(macros): version $new_version"
 fi
 
