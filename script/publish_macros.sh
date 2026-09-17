@@ -43,8 +43,13 @@ required_version() {
 # « libre » ferait publier un numéro déjà pris, ou taguer sur une publication
 # jamais partie. Un numéro déjà pris ne se reprend pas, même à contenu
 # identique.
+#
+# Le `User-Agent` n'est pas décoratif : crates.io répond **403** à une requête
+# qui ne se nomme pas, et l'agent par défaut de curl en est une. `cargo` passe
+# parce qu'il envoie le sien.
+UA="pyrucast publish_macros.sh (https://github.com/Pyrucast/pyrucast)"
 http_status() {
-    curl -sS -o /dev/null -w '%{http_code}' \
+    curl -sS -A "$UA" -o /dev/null -w '%{http_code}' \
         "https://crates.io/api/v1/crates/$CRATE/$1" 2>/dev/null || echo 000
 }
 published() {
