@@ -442,17 +442,6 @@ class ElementField:
         `revolve` / `revolve_angle` sweep an axisymmetric plot into its body
         of revolution — see `SubMesh.plot`.
         """
-    def __add__(self, rhs: typing.Any) -> ElementField: ...
-    def __sub__(self, rhs: typing.Any) -> ElementField: ...
-    def __mul__(self, rhs: typing.Any) -> ElementField: ...
-    def __truediv__(self, rhs: typing.Any) -> ElementField: ...
-    def __pow__(self, exponent: typing.Any, modulo: typing.Any = None) -> ElementField:
-        r"""
-        `field ** exponent` — element-wise power, same dispatch as the other
-        operators (float → scalar, `ElementField` → strict same-decomposition,
-        `SubElementField` → targeted zone). The ternary `pow(x, y, z)` modulo
-        form is rejected.
-        """
     def __ge__(self, other: float) -> ElementField:
         r"""
         `field >= x` → a fresh `ElementField` of per-component 0/1 flags, one
@@ -537,6 +526,29 @@ class ElementField:
         structure. Returns nothing.
         """
     def __len__(self) -> builtins.int: ...
+    def __add__(self, rhs: typing.Any) -> ElementField:
+        r"""
+        `field + other` — element-wise sum.
+        """
+    def __sub__(self, rhs: typing.Any) -> ElementField:
+        r"""
+        `field - other` — element-wise difference.
+        """
+    def __mul__(self, rhs: typing.Any) -> ElementField:
+        r"""
+        `field * other` — element-wise product.
+        """
+    def __truediv__(self, rhs: typing.Any) -> ElementField:
+        r"""
+        `field / other` — element-wise quotient.
+        """
+    def __pow__(self, exponent: typing.Any, modulo: typing.Any = None) -> ElementField:
+        r"""
+        `field ** exponent` — element-wise power, same dispatch as the other
+        operators (float → scalar, `ElementField` → strict same-decomposition,
+        `SubElementField` → targeted zone). The ternary `pow(x, y, z)` modulo
+        form is rejected.
+        """
     def min(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
         r"""
         Smallest value of `component` across the zones defining it — or, called
@@ -2261,17 +2273,6 @@ class NodeField:
         A `Mesh` mirroring this field's supports — the zones' POI1
         support submeshes, shared (not copied).
         """
-    def __add__(self, rhs: typing.Any) -> NodeField: ...
-    def __sub__(self, rhs: typing.Any) -> NodeField: ...
-    def __mul__(self, rhs: typing.Any) -> NodeField: ...
-    def __truediv__(self, rhs: typing.Any) -> NodeField: ...
-    def __pow__(self, exponent: typing.Any, modulo: typing.Any = None) -> NodeField:
-        r"""
-        `field ** exponent` — element-wise power, same dispatch as the other
-        operators (float → scalar, `NodeField` → strict same-decomposition,
-        `SubNodeField` → targeted zone). The ternary `pow(x, y, z)` modulo
-        form is rejected.
-        """
     def __ge__(self, other: float) -> NodeField:
         r"""
         `field >= x` → a fresh `NodeField` of per-component 0/1 flags (see
@@ -2356,6 +2357,29 @@ class NodeField:
         structure. Returns nothing.
         """
     def __len__(self) -> builtins.int: ...
+    def __add__(self, rhs: typing.Any) -> NodeField:
+        r"""
+        `field + other` — element-wise sum.
+        """
+    def __sub__(self, rhs: typing.Any) -> NodeField:
+        r"""
+        `field - other` — element-wise difference.
+        """
+    def __mul__(self, rhs: typing.Any) -> NodeField:
+        r"""
+        `field * other` — element-wise product.
+        """
+    def __truediv__(self, rhs: typing.Any) -> NodeField:
+        r"""
+        `field / other` — element-wise quotient.
+        """
+    def __pow__(self, exponent: typing.Any, modulo: typing.Any = None) -> NodeField:
+        r"""
+        `field ** exponent` — element-wise power, same dispatch as the other
+        operators (float → scalar, `NodeField` → strict same-decomposition,
+        `SubNodeField` → targeted zone). The ternary `pow(x, y, z)` modulo
+        form is rejected.
+        """
     def gradient(self, fespace: FiniteElementSpace) -> ElementField:
         r"""
         Gradient `∇f` of a node `field` at the Gauss points of `fespace`.
@@ -2529,17 +2553,6 @@ class SubElementField:
         r"""
         Set `component` to `value` at every point of `cell`.
         """
-    def __add__(self, rhs: typing.Any) -> SubElementField: ...
-    def __sub__(self, rhs: typing.Any) -> SubElementField: ...
-    def __mul__(self, rhs: typing.Any) -> SubElementField: ...
-    def __truediv__(self, rhs: typing.Any) -> SubElementField: ...
-    def __pow__(self, exponent: typing.Any, modulo: typing.Any = None) -> SubElementField:
-        r"""
-        `field ** exponent` — element-wise power, same dispatch as the other
-        operators (float exponent → broadcast; `SubElementField` → strict
-        element-by-element). The ternary `pow(x, y, z)` modulo form is
-        rejected (meaningless on floats).
-        """
     def __setitem__(self, key: tuple[builtins.int, builtins.int, builtins.str], value: builtins.float) -> None:
         r"""
         `field[cell, gauss, "name"] = value`.
@@ -2599,6 +2612,29 @@ class SubElementField:
         r"""
         Print the full content (third display level) to stdout: values /
         topology, beyond `repr`'s bounded structure. Returns nothing.
+        """
+    def __add__(self, rhs: typing.Any) -> SubElementField:
+        r"""
+        `field + other` — element-wise sum.
+        """
+    def __sub__(self, rhs: typing.Any) -> SubElementField:
+        r"""
+        `field - other` — element-wise difference.
+        """
+    def __mul__(self, rhs: typing.Any) -> SubElementField:
+        r"""
+        `field * other` — element-wise product.
+        """
+    def __truediv__(self, rhs: typing.Any) -> SubElementField:
+        r"""
+        `field / other` — element-wise quotient.
+        """
+    def __pow__(self, exponent: typing.Any, modulo: typing.Any = None) -> SubElementField:
+        r"""
+        `field ** exponent` — element-wise power, same dispatch as the other
+        operators (float exponent → broadcast; `SubElementField` → strict
+        element-by-element). The ternary `pow(x, y, z)` modulo form is
+        rejected (meaningless on floats).
         """
     def min(self, component: typing.Optional[builtins.str] = None) -> builtins.float:
         r"""
@@ -3308,17 +3344,6 @@ class SubNodeField:
         r"""
         Set the value at `node` for the named `component`.
         """
-    def __add__(self, rhs: typing.Any) -> SubNodeField: ...
-    def __sub__(self, rhs: typing.Any) -> SubNodeField: ...
-    def __mul__(self, rhs: typing.Any) -> SubNodeField: ...
-    def __truediv__(self, rhs: typing.Any) -> SubNodeField: ...
-    def __pow__(self, exponent: typing.Any, modulo: typing.Any = None) -> SubNodeField:
-        r"""
-        `field ** exponent` — element-wise power, same dispatch as the other
-        operators (float exponent → broadcast; `SubNodeField` → strict
-        element-by-element). The ternary `pow(x, y, z)` modulo form is
-        rejected (meaningless on floats).
-        """
     def __setitem__(self, key: tuple[Node, builtins.str], value: builtins.float) -> None:
         r"""
         `subfield[node, "UX"] = v` — raises if the node or component is absent.
@@ -3378,6 +3403,29 @@ class SubNodeField:
         r"""
         `subfield | subfield` → a fresh `NodeField` holding both zones, fused
         if they share the same support.
+        """
+    def __add__(self, rhs: typing.Any) -> SubNodeField:
+        r"""
+        `field + other` — element-wise sum.
+        """
+    def __sub__(self, rhs: typing.Any) -> SubNodeField:
+        r"""
+        `field - other` — element-wise difference.
+        """
+    def __mul__(self, rhs: typing.Any) -> SubNodeField:
+        r"""
+        `field * other` — element-wise product.
+        """
+    def __truediv__(self, rhs: typing.Any) -> SubNodeField:
+        r"""
+        `field / other` — element-wise quotient.
+        """
+    def __pow__(self, exponent: typing.Any, modulo: typing.Any = None) -> SubNodeField:
+        r"""
+        `field ** exponent` — element-wise power, same dispatch as the other
+        operators (float exponent → broadcast; `SubNodeField` → strict
+        element-by-element). The ternary `pow(x, y, z)` modulo form is
+        rejected (meaningless on floats).
         """
     def abs(self) -> SubNodeField:
         r"""

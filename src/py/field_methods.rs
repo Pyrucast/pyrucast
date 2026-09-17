@@ -11,6 +11,16 @@
 //! écrit une fois dans la macro — le trait (`Field` contre `SubField`) et
 //! l'accès (`self.inner` contre `self.handle.read()`).
 //!
+//! **Sauf les slots** (`__add__`, `__pow__`, `__richcmp__`…). Pour eux pyo3
+//! engendre un trampoline `unsafe fn` qui en appelle un autre, et l'édition 2024
+//! ne couvre plus implicitement ce corps : l'avertissement
+//! `unsafe_op_in_unsafe_fn` tombe dès que l'`impl` vit hors du module qui
+//! déclare le `#[pyclass]`. Leurs macros sont donc **exportées et paramétrées
+//! par type**, puis appelées depuis `node_field.rs` et `element_field.rs` — le
+//! motif que suivent déjà `impl_dump_pymethod!` et `impl_aggregate_pymethods!`,
+//! qui posent eux aussi des slots. Quatre appels par verbe au lieu de deux,
+//! c'est le prix de la contrainte, et il ne se paie que là.
+//!
 //! La documentation, elle, reste **distincte par famille** : l'opération sur un
 //! agrégat porte sur les zones qui définissent la composante, celle sur un
 //! sous-champ sur son support. Les deux coïncident — un agrégat se lit comme la
@@ -159,6 +169,87 @@ macro_rules! py_subfield_read {
             fn $nom(&self, name: &str) -> PyResult<Option<usize>> {
                 use crate::containers::field::SubField;
                 Ok(self.handle.read().$nom(name))
+            }
+        }
+    };
+}
+
+/// Un opérateur arithmétique, pour **une** saveur d'agrégat : un renvoi vers
+/// `binary`, le dispatcheur que chaque saveur définit dans son bloc inhérent.
+///
+/// Exportée et prenant son type, contrairement aux macros de lecture et
+/// d'écriture : un slot doit être expansé dans le module qui déclare son
+/// `#[pyclass]` (voir l'en-tête de ce fichier). Elle s'appelle donc depuis
+/// `node_field.rs` et `element_field.rs`, une fois par saveur.
+///
+/// `op:` pour les quatre opérateurs simples, `pow:` pour `__pow__`, qui rejette
+/// d'abord la forme ternaire `pow(x, y, z)` — un modulo n'a pas de sens sur des
+/// flottants.
+#[macro_export]
+macro_rules! py_field_transform {
+    (op: $T:ident, $nom:ident, $f:expr, $doc:literal) => {
+        #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pymethods)]
+        #[::pyo3::pymethods]
+        impl $T {
+            #[doc = $doc]
+            fn $nom(&self, rhs: &::pyo3::Bound<'_, ::pyo3::PyAny>) -> ::pyo3::PyResult<$T> {
+                self.binary(rhs, $f)
+            }
+        }
+    };
+    (pow: $T:ident, $doc:literal) => {
+        #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pymethods)]
+        #[::pyo3::pymethods]
+        impl $T {
+            #[doc = $doc]
+            fn __pow__(
+                &self,
+                exponent: &::pyo3::Bound<'_, ::pyo3::PyAny>,
+                modulo: &::pyo3::Bound<'_, ::pyo3::PyAny>,
+            ) -> ::pyo3::PyResult<$T> {
+                use ::pyo3::types::PyAnyMethods;
+                if !modulo.is_none() {
+                    return Err(::pyo3::exceptions::PyTypeError::new_err(
+                        "field ** exponent does not support a modulo argument",
+                    ));
+                }
+                self.binary(exponent, |a, b| a.powf(b))
+            }
+        }
+    };
+}
+
+/// La même pour **une** saveur de sous-conteneur, qui passe par
+/// `scalar_or_combine` au lieu de `binary`.
+#[macro_export]
+macro_rules! py_subfield_transform {
+    (op: $T:ident, $nom:ident, $f:expr, $doc:literal) => {
+        #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pymethods)]
+        #[::pyo3::pymethods]
+        impl $T {
+            #[doc = $doc]
+            fn $nom(&self, rhs: &::pyo3::Bound<'_, ::pyo3::PyAny>) -> ::pyo3::PyResult<$T> {
+                self.scalar_or_combine(rhs, $f)
+            }
+        }
+    };
+    (pow: $T:ident, $doc:literal) => {
+        #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pymethods)]
+        #[::pyo3::pymethods]
+        impl $T {
+            #[doc = $doc]
+            fn __pow__(
+                &self,
+                exponent: &::pyo3::Bound<'_, ::pyo3::PyAny>,
+                modulo: &::pyo3::Bound<'_, ::pyo3::PyAny>,
+            ) -> ::pyo3::PyResult<$T> {
+                use ::pyo3::types::PyAnyMethods;
+                if !modulo.is_none() {
+                    return Err(::pyo3::exceptions::PyTypeError::new_err(
+                        "field ** exponent does not support a modulo argument",
+                    ));
+                }
+                self.scalar_or_combine(exponent, |a, b| a.powf(b))
             }
         }
     };

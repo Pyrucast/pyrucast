@@ -117,39 +117,6 @@ impl PySubNodeField {
     // another `SubNodeField` (per-component union with passthrough on a shared
     // support). Division does not guard against zero (inf/nan).
 
-    fn __add__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PySubNodeField> {
-        self.scalar_or_combine(rhs, |a, b| a + b)
-    }
-
-    fn __sub__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PySubNodeField> {
-        self.scalar_or_combine(rhs, |a, b| a - b)
-    }
-
-    fn __mul__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PySubNodeField> {
-        self.scalar_or_combine(rhs, |a, b| a * b)
-    }
-
-    fn __truediv__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PySubNodeField> {
-        self.scalar_or_combine(rhs, |a, b| a / b)
-    }
-
-    /// `field ** exponent` — element-wise power, same dispatch as the other
-    /// operators (float exponent → broadcast; `SubNodeField` → strict
-    /// element-by-element). The ternary `pow(x, y, z)` modulo form is
-    /// rejected (meaningless on floats).
-    fn __pow__(
-        &self,
-        exponent: &Bound<'_, PyAny>,
-        modulo: &Bound<'_, PyAny>,
-    ) -> PyResult<PySubNodeField> {
-        if !modulo.is_none() {
-            return Err(PyTypeError::new_err(
-                "field ** exponent does not support a modulo argument",
-            ));
-        }
-        self.scalar_or_combine(exponent, |a, b| a.powf(b))
-    }
-
     /// `subfield[node, "UX"] = v` — raises if the node or component is absent.
     fn __setitem__(&self, key: (PyRef<'_, PyNode>, String), value: f64) -> PyResult<()> {
         let (node, comp) = key;
@@ -162,7 +129,7 @@ impl PySubNodeField {
 impl PySubNodeField {
     /// Dispatch an arithmetic operator: float → scalar broadcast,
     /// `SubNodeField` → `merge_components` (union of components, passthrough).
-    fn scalar_or_combine(
+    pub(crate) fn scalar_or_combine(
         &self,
         rhs: &Bound<'_, PyAny>,
         op: fn(f64, f64) -> f64,
@@ -321,46 +288,17 @@ impl PyNodeField {
     //
     // `rhs`: a float (scalar over every zone), a `NodeField` (same
     // decomposition, strict), or a `SubNodeField` (targeted zone update).
-
-    fn __add__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyNodeField> {
-        self.binary(rhs, |a, b| a + b)
-    }
-
-    fn __sub__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyNodeField> {
-        self.binary(rhs, |a, b| a - b)
-    }
-
-    fn __mul__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyNodeField> {
-        self.binary(rhs, |a, b| a * b)
-    }
-
-    fn __truediv__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyNodeField> {
-        self.binary(rhs, |a, b| a / b)
-    }
-
-    /// `field ** exponent` — element-wise power, same dispatch as the other
-    /// operators (float → scalar, `NodeField` → strict same-decomposition,
-    /// `SubNodeField` → targeted zone). The ternary `pow(x, y, z)` modulo
-    /// form is rejected.
-    fn __pow__(
-        &self,
-        exponent: &Bound<'_, PyAny>,
-        modulo: &Bound<'_, PyAny>,
-    ) -> PyResult<PyNodeField> {
-        if !modulo.is_none() {
-            return Err(PyTypeError::new_err(
-                "field ** exponent does not support a modulo argument",
-            ));
-        }
-        self.binary(exponent, |a, b| a.powf(b))
-    }
 }
 
 impl PyNodeField {
     /// Dispatch an arithmetic operator: float → scalar, `NodeField` →
     /// `merge_field` (per `(support, component)`, union/passthrough),
     /// `SubNodeField` → `merge_subfield` (targeted zone update).
-    fn binary(&self, rhs: &Bound<'_, PyAny>, op: fn(f64, f64) -> f64) -> PyResult<PyNodeField> {
+    pub(crate) fn binary(
+        &self,
+        rhs: &Bound<'_, PyAny>,
+        op: fn(f64, f64) -> f64,
+    ) -> PyResult<PyNodeField> {
         use crate::containers::field::Field;
         if let Ok(s) = rhs.extract::<f64>() {
             Ok(PyNodeField {
@@ -556,4 +494,57 @@ class PySubNodeField:
         if they share the same support."""
     "#,
     field_components
+);
+
+// ─── Opérateurs arithmétiques ───────────────────────────────────────────────
+//
+// Posés ici, et non dans `field_methods.rs` où vivent leurs macros : un slot
+// doit être expansé dans le module qui déclare son `#[pyclass]`, sans quoi pyo3
+// engendre un appel de trampoline `unsafe` que l'édition 2024 ne couvre plus.
+
+crate::py_field_transform!(
+    op: PyNodeField, __add__, |a, b| a + b,
+    "`field + other` — element-wise sum."
+);
+crate::py_subfield_transform!(
+    op: PySubNodeField, __add__, |a, b| a + b,
+    "`field + other` — element-wise sum."
+);
+crate::py_field_transform!(
+    op: PyNodeField, __sub__, |a, b| a - b,
+    "`field - other` — element-wise difference."
+);
+crate::py_subfield_transform!(
+    op: PySubNodeField, __sub__, |a, b| a - b,
+    "`field - other` — element-wise difference."
+);
+crate::py_field_transform!(
+    op: PyNodeField, __mul__, |a, b| a * b,
+    "`field * other` — element-wise product."
+);
+crate::py_subfield_transform!(
+    op: PySubNodeField, __mul__, |a, b| a * b,
+    "`field * other` — element-wise product."
+);
+crate::py_field_transform!(
+    op: PyNodeField, __truediv__, |a, b| a / b,
+    "`field / other` — element-wise quotient."
+);
+crate::py_subfield_transform!(
+    op: PySubNodeField, __truediv__, |a, b| a / b,
+    "`field / other` — element-wise quotient."
+);
+crate::py_field_transform!(
+    pow: PyNodeField,
+    "`field ** exponent` — element-wise power, same dispatch as the other\n\
+     operators (float → scalar, `NodeField` → strict same-decomposition,\n\
+     `SubNodeField` → targeted zone). The ternary `pow(x, y, z)` modulo\n\
+     form is rejected."
+);
+crate::py_subfield_transform!(
+    pow: PySubNodeField,
+    "`field ** exponent` — element-wise power, same dispatch as the other\n\
+     operators (float exponent → broadcast; `SubNodeField` → strict\n\
+     element-by-element). The ternary `pow(x, y, z)` modulo form is\n\
+     rejected (meaningless on floats)."
 );
