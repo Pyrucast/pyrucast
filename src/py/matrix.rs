@@ -52,83 +52,80 @@ impl PySubMatrix {
         row_field: &str,
         col_node: PyRef<'_, PyNode>,
         col_field: &str,
-    ) -> PyResult<f64> {
+    ) -> f64 {
         let (rn, cn) = (row_node.as_node().id(), col_node.as_node().id());
-        Ok(self.handle.read().get(rn, row_field, cn, col_field))
+        self.handle.read().get(rn, row_field, cn, col_field)
     }
 
     /// Number of rows of this block.
-    fn n_rows(&self) -> PyResult<usize> {
-        Ok(self.handle.read().n_rows())
+    fn n_rows(&self) -> usize {
+        self.handle.read().n_rows()
     }
 
     /// Number of columns of this block.
-    fn n_cols(&self) -> PyResult<usize> {
-        Ok(self.handle.read().n_cols())
+    fn n_cols(&self) -> usize {
+        self.handle.read().n_cols()
     }
 
     /// Number of stored COO entries.
-    fn entry_count(&self) -> PyResult<usize> {
-        Ok(self.handle.read().entry_count())
+    fn entry_count(&self) -> usize {
+        self.handle.read().entry_count()
     }
 
     /// Whether this block is declared symmetric.
     #[getter]
-    fn symmetric(&self) -> PyResult<bool> {
-        Ok(self.handle.read().symmetric())
+    fn symmetric(&self) -> bool {
+        self.handle.read().symmetric()
     }
 
     /// The scalar factor applied to every value this block emits (`1.0` unless
     /// the parent `Matrix` was built via `matrix * scalar` / `matrix / scalar`).
     #[getter]
-    fn factor(&self) -> PyResult<f64> {
-        Ok(self.handle.read().factor())
+    fn factor(&self) -> f64 {
+        self.handle.read().factor()
     }
 
     /// The physics nature(s) of the sub-model that produced this block, as a list
     /// of tags (`"mechanical"`, `"thermal"`, `"constraint"`, `"other"`). **Empty**
     /// for a block built outside assembly (the "rien" case), or several tags for a
     /// coupled physics. Set by the assembler; used by `Matrix.filter`.
-    fn physics(&self) -> PyResult<Vec<String>> {
-        Ok(self
-            .handle
+    fn physics(&self) -> Vec<String> {
+        self.handle
             .read()
             .physics()
             .iter()
             .map(|p| p.name().to_string())
-            .collect())
+            .collect()
     }
 
     /// Variable (field) names this block addresses.
-    fn field_names(&self) -> PyResult<Vec<String>> {
-        Ok(self.handle.read().field_names())
+    fn field_names(&self) -> Vec<String> {
+        self.handle.read().field_names()
     }
 
     /// `(node_id, field_name)` tuples for each row, in order.
-    fn row_dofs(&self) -> PyResult<Vec<(u32, String)>> {
-        Ok(self
-            .handle
+    fn row_dofs(&self) -> Vec<(u32, String)> {
+        self.handle
             .read()
             .row_dofs()
             .into_iter()
             .map(|(nid, name)| (nid.0, name))
-            .collect())
+            .collect()
     }
 
     /// `(node_id, field_name)` tuples for each column, in order.
-    fn col_dofs(&self) -> PyResult<Vec<(u32, String)>> {
-        Ok(self
-            .handle
+    fn col_dofs(&self) -> Vec<(u32, String)> {
+        self.handle
             .read()
             .col_dofs()
             .into_iter()
             .map(|(nid, name)| (nid.0, name))
-            .collect())
+            .collect()
     }
 
     /// Dense row-major buffer, length `n_rows × n_cols`.
-    fn dense(&self) -> PyResult<Vec<f64>> {
-        Ok(self.handle.read().dense())
+    fn dense(&self) -> Vec<f64> {
+        self.handle.read().dense()
     }
 
     /// `y = A · x` (dense).
@@ -138,18 +135,17 @@ impl PySubMatrix {
 
     /// List of `(row_node, row_field, col_node, col_field, value)`
     /// tuples, in insertion order.
-    fn entries(&self) -> PyResult<PyMatrixEntries> {
-        Ok(self
-            .handle
+    fn entries(&self) -> PyMatrixEntries {
+        self.handle
             .read()
             .iter_entries()
             .into_iter()
             .map(|(rn, rf, cn, cf, v)| (rn.0, rf, cn.0, cf, v))
-            .collect())
+            .collect()
     }
 
-    fn __len__(&self) -> PyResult<usize> {
-        Ok(self.handle.read().entry_count())
+    fn __len__(&self) -> usize {
+        self.handle.read().entry_count()
     }
 }
 
@@ -172,10 +168,10 @@ impl PyMatrix {
     /// `Matrix()` — empty aggregate. Populate via `add_sub_matrix`, or
     /// build blocks with `Matrix.block(...)` and compose them with `|`.
     #[new]
-    fn py_new() -> PyResult<Self> {
-        Ok(Self {
+    fn py_new() -> Self {
+        Self {
             inner: Matrix::empty(),
-        })
+        }
     }
 
     /// `Matrix.block(row_support, col_support, dual_vars, primal_vars, ordering="nodes_then_vars", symmetric=False)`
@@ -248,13 +244,12 @@ impl PyMatrix {
     /// matrix's blocks (first-seen, deduplicated). Empty if no block is tagged;
     /// several tags when the matrix aggregates several physics (e.g. a heat model
     /// with a Dirichlet → `["thermal", "constraint"]`).
-    fn physics(&self) -> PyResult<Vec<String>> {
-        Ok(self
-            .inner
+    fn physics(&self) -> Vec<String> {
+        self.inner
             .physics()
             .iter()
             .map(|p| p.name().to_string())
-            .collect())
+            .collect()
     }
 
     /// Total number of rows of the (finalized) global matrix.
@@ -268,19 +263,19 @@ impl PyMatrix {
     }
 
     /// Total number of stored entries across all blocks.
-    fn entry_count(&self) -> PyResult<usize> {
-        Ok(self.inner.entry_count())
+    fn entry_count(&self) -> usize {
+        self.inner.entry_count()
     }
 
     /// Whether the matrix is declared symmetric.
     #[getter]
-    fn symmetric(&self) -> PyResult<bool> {
-        Ok(self.inner.symmetric())
+    fn symmetric(&self) -> bool {
+        self.inner.symmetric()
     }
 
     /// Variable (field) names across the whole matrix.
-    fn field_names(&self) -> PyResult<Vec<String>> {
-        Ok(self.inner.field_names())
+    fn field_names(&self) -> Vec<String> {
+        self.inner.field_names()
     }
 
     /// `(node_id, field_name)` of each global row, in order.
@@ -310,9 +305,9 @@ impl PyMatrix {
         row_field: &str,
         col_node: PyRef<'_, PyNode>,
         col_field: &str,
-    ) -> PyResult<f64> {
+    ) -> f64 {
         let (rn, cn) = (row_node.as_node().id(), col_node.as_node().id());
-        Ok(self.inner.get(rn, row_field, cn, col_field))
+        self.inner.get(rn, row_field, cn, col_field)
     }
 
     /// Dense row-major buffer of the finalized matrix (`n_rows × n_cols`).
@@ -335,13 +330,12 @@ impl PyMatrix {
 
     /// List of `(row_node, row_field, col_node, col_field, value)`
     /// tuples — every entry across every block, in block-insertion order.
-    fn entries(&self) -> PyResult<PyMatrixEntries> {
-        Ok(self
-            .inner
+    fn entries(&self) -> PyMatrixEntries {
+        self.inner
             .iter_entries()
             .into_iter()
             .map(|(rn, rf, cn, cf, v)| (rn.0, rf, cn.0, cf, v))
-            .collect())
+            .collect()
     }
 }
 
