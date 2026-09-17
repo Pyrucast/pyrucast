@@ -25,38 +25,36 @@ pub struct PySubModel {
 #[pymethods]
 impl PySubModel {
     /// Names of the primal (primary) variables of this sub-model.
-    fn primal_vars(&self) -> PyResult<Vec<String>> {
-        Ok(self.handle.read().primal_vars())
+    fn primal_vars(&self) -> Vec<String> {
+        self.handle.read().primal_vars()
     }
 
     /// Names of the dual variables of this sub-model.
-    fn dual_vars(&self) -> PyResult<Vec<String>> {
-        Ok(self.handle.read().dual_vars())
+    fn dual_vars(&self) -> Vec<String> {
+        self.handle.read().dual_vars()
     }
 
     /// `sub.fespace()` — the `SubFiniteElementSpace` this sub-model integrates
     /// its behaviour on, or `None` for a constraint sub-model (Dirichlet, MPC…,
     /// which integrate nothing). The per-sub-model counterpart of
     /// `Model.fespace()`.
-    fn fespace(&self) -> PyResult<Option<PySubFiniteElementSpace>> {
-        Ok(self
-            .handle
+    fn fespace(&self) -> Option<PySubFiniteElementSpace> {
+        self.handle
             .read()
             .behavior_fespace()
-            .map(|handle| PySubFiniteElementSpace { handle }))
+            .map(|handle| PySubFiniteElementSpace { handle })
     }
 
     /// The physics nature(s) of this sub-model as a list of tags (`"mechanical"`,
     /// `"thermal"`, `"constraint"`, `"other"`). Determined entirely by the physics
     /// kind — one tag for a plain physics, several for a coupled one.
-    fn physics(&self) -> PyResult<Vec<String>> {
-        Ok(self
-            .handle
+    fn physics(&self) -> Vec<String> {
+        self.handle
             .read()
             .physics()
             .iter()
             .map(|p| p.name().to_string())
-            .collect())
+            .collect()
     }
 
     /// POI1 `Mesh` of the multiplier nodes (Lagrange physics only — empty
@@ -69,19 +67,18 @@ impl PySubModel {
 
     /// Names of the material components this sub-model expects, or
     /// `None` for physics that don't need material data (Dirichlet, …).
-    fn material_components(&self) -> PyResult<Option<Vec<String>>> {
-        Ok(self
-            .handle
+    fn material_components(&self) -> Option<Vec<String>> {
+        self.handle
             .read()
             .material_components()
-            .map(|c| c.iter().map(|s| s.to_string()).collect()))
+            .map(|c| c.iter().map(|s| s.to_string()).collect())
     }
 
     /// Whether this sub-model carries a constitutive behaviour that can be
     /// integrated with `deformation` / `integrate_behavior` (`True` for
     /// volumetric physics, `False` for constraints like Dirichlet).
-    fn has_behavior(&self) -> PyResult<bool> {
-        Ok(self.handle.read().has_behavior())
+    fn has_behavior(&self) -> bool {
+        self.handle.read().has_behavior()
     }
 }
 
@@ -102,10 +99,10 @@ pub struct PyModel {
 impl PyModel {
     /// `Model()` — an empty model; add physics with `|`.
     #[new]
-    fn py_new() -> PyResult<Self> {
-        Ok(Self {
+    fn py_new() -> Self {
+        Self {
             inner: Model::empty(),
-        })
+        }
     }
 
     /// `Model.contact_gaps()` — the contact right-hand side `−g₀`: a
@@ -121,20 +118,20 @@ impl PyModel {
     }
 
     /// Names of the primal (primary) variables across the whole model.
-    fn primal_vars(&self) -> PyResult<Vec<String>> {
-        Ok(self.inner.primal_vars())
+    fn primal_vars(&self) -> Vec<String> {
+        self.inner.primal_vars()
     }
 
     /// Names of the dual variables across the whole model.
-    fn dual_vars(&self) -> PyResult<Vec<String>> {
-        Ok(self.inner.dual_vars())
+    fn dual_vars(&self) -> Vec<String> {
+        self.inner.dual_vars()
     }
 
     /// `Model.dual_of(variable)` — the dual (residual) variable conjugate to a
     /// primal `variable` (e.g. `"u_x" -> "f_x"`, `"T" -> "q"`), searched across
     /// all sub-models, or `None`. A helper to fill an MPC term's `target_dual`.
-    fn dual_of(&self, variable: &str) -> PyResult<Option<String>> {
-        Ok(self.inner.dual_of(variable))
+    fn dual_of(&self, variable: &str) -> Option<String> {
+        self.inner.dual_of(variable)
     }
 
     /// `Model.fespace()` — the `FiniteElementSpace` this model integrates on,
