@@ -1,69 +1,45 @@
-//! Les verbes que les quatre saveurs de champ portent à l'identique.
+//! Les méthodes Python que les quatre saveurs de champ portent à l'identique.
 //!
-//! Miroir de `src/ops/field/methods.rs`, qui joue ce rôle côté Rust. Ces
-//! méthodes n'ont **pas de fonction libre** — ce sont des méthodes de conteneur
-//! et rien d'autre — donc `#[py_op]` n'a rien à en dériver : elles passent par
-//! des `macro_rules!`, comme les maths élémentaires et les verbes de
-//! composantes.
+//! Aucune n'a de fonction libre dont `#[py_op]` la dériverait : ce sont des
+//! méthodes de conteneur et rien d'autre. Trois `macro_rules!` les engendrent,
+//! selon ce que fait le verbe : `py_field_read!` (lire une valeur),
+//! `py_field_write!` (muter une composante), `py_field_transform!` (rendre un
+//! champ). Deux macros cachées portent leur travail commun : `py_field_impl!`
+//! pose un bloc de méthodes sur plusieurs types, `py_field_family!` traduit ce
+//! qui sépare les deux familles de champ.
 //!
-//! **Une forme unique**, sans exception à retenir : chaque macro est exportée et
-//! reçoit la **liste** des saveurs qu'elle sert. Une liste de deux depuis ce
-//! module pour les verbes ordinaires, une liste d'un seul depuis
-//! `node_field.rs` et `element_field.rs` pour les **slots** (`__add__`,
-//! `__pow__`, `__richcmp__`…) — ceux-là engendrent chez pyo3 un trampoline
-//! `unsafe fn` qui en appelle un autre, et l'édition 2024 ne couvre plus
-//! implicitement ce corps : l'avertissement `unsafe_op_in_unsafe_fn` tombe dès
-//! que l'`impl` vit hors du module qui déclare le `#[pyclass]`.
+//! **Les deux familles.** Les agrégats (`PyNodeField`, `PyElementField`)
+//! tiennent leur valeur en propre, dans `self.inner`, et le trait `Field`
+//! opère dessus. Les sous-conteneurs (`PySubNodeField`, `PySubElementField`)
+//! la lisent à travers `self.handle`, sous le trait `SubField`. Chaque appel
+//! nomme la famille qu'il sert, et sert d'un coup les deux types de cette
+//! famille.
 //!
-//! La liste plutôt qu'un type unique : elle laisse la documentation écrite **une
-//! fois** là où un type par appel l'aurait fait recopier deux fois par verbe.
-//!
-//! **Trois macros pour les deux familles** — `py_field_read!`,
-//! `py_field_write!`, `py_field_transform!` —, dont chaque appel commence par
-//! le nom de la famille servie : `Field` pour les agrégats, `SubField` pour les
-//! sous-conteneurs. C'est aussi le trait qui opère. Ce qui sépare les deux
-//! familles (l'accès `self.inner` contre `self.handle.read()` ou `.write()`,
-//! l'emballage du résultat, le nom du dispatcheur…) est écrit une seule fois,
-//! dans la table `py_field_family!`.
-//!
-//! Les appels, eux, restent un par famille : leurs documentations diffèrent
-//! légitimement (voir plus bas). Fusionner aussi les bras entre eux
-//! (`optional:`, `named:`, `count:`, `index:` ne diffèrent que par arguments et
-//! retour) ferait de la macro un mini-langage, plus mutualisé et moins lisible
-//! au site d'appel — refusé.
-//!
-//! **Pas de `PyResult` inutile** : `components`, `component_count` et
-//! `component_index` rendent leur valeur nue, leurs homologues Rust ne pouvant
-//! pas échouer. Le stub est identique — pyo3 traduit `T` et `PyResult<T>` de la
-//! même façon — mais le lecteur cesse de se demander quand l'appel échoue.
-//! `component_index` garde en revanche son `Option` : `None` y dit « cette
-//! composante n'existe pas », qu'aucun indice sentinelle ne dirait.
-//!
-//! La documentation reste **distincte par famille** : l'opération sur un agrégat
-//! porte sur les zones qui définissent la composante, celle sur un sous-champ
-//! sur son support. Les deux coïncident — un agrégat se lit comme la
-//! concaténation de ses zones, nœuds d'interface comptés autant de fois qu'ils
-//! sont stockés — mais un texte commun ferait lire au propriétaire d'un
-//! sous-champ un avertissement sur des zones multiples qu'il n'a pas.
-//!
-//! **La documentation s'écrit en `///`**, en tête d'appel, comme sur un item :
-//! chaque macro la capture ligne à ligne (`$(#[doc = $doc:literal])*`), et
-//! chaque ligne reste un vrai littéral pour pyo3 comme pour pyo3-stub-gen.
-//! Les appels prennent donc des accolades, et rustfmt ne les reformate pas.
+//! Un verbe demande donc **deux appels**, un par famille. C'est voulu : leurs
+//! documentations diffèrent. Un agrégat parle des zones qui définissent la
+//! composante ; un sous-champ n'a qu'un support et aucune zone à évoquer, et
+//! lui servir le texte de l'agrégat le ferait se demander où sont ses zones.
 
 use crate::py::element_field::{PyElementField, PySubElementField};
 use crate::py::node_field::{PyNodeField, PySubNodeField};
 
-/// Tout ce qui sépare les deux familles, et rien d'autre : une ligne par
-/// aspect et par famille. `Field` désigne les agrégats, qui tiennent leur
-/// valeur en propre (`self.inner`) ; `SubField` les sous-conteneurs, qui la
-/// lisent à travers leur handle.
+/// Traduit un **aspect** en code, pour la famille demandée. C'est la seule
+/// place où est écrit ce qui sépare un agrégat d'un sous-conteneur.
 ///
-/// Les trois macros publiques y renvoient au lieu de dédoubler leurs bras.
-/// Elles lui passent `self` **depuis leur propre corps** : `self` est
-/// hygiénique, et seul un `self` écrit par la macro qui déclare la méthode
-/// désigne son receveur — venu du site d'appel, il ne compilerait pas
-/// (`E0424`).
+/// Arguments : la famille (`Field` ou `SubField`), le nom de l'aspect, puis ce
+/// dont cet aspect a besoin. Rend une expression, à poser telle quelle dans le
+/// corps d'une méthode :
+///
+/// ```ignore
+/// let n = Field::components(py_field_family!(Field, read, self)).len();
+/// ```
+///
+/// Chaque aspect tient en une ligne par famille, les deux l'une sous l'autre.
+///
+/// **`self` se passe en argument, et vient toujours du corps de la macro
+/// appelante.** Un `self` est hygiénique : il ne désigne le receveur que s'il
+/// a été écrit dans la même expansion que la méthode. Venu du site d'appel,
+/// il ne compilerait pas (`E0424`).
 #[doc(hidden)]
 #[macro_export]
 macro_rules! py_field_family {
@@ -116,16 +92,30 @@ macro_rules! py_field_family {
     };
 }
 
-/// Pose un même bloc de méthodes sur chaque type de la liste. `stub` le
-/// décore pour pyo3-stub-gen, `bare` non (voir le bras `richcmp:`).
+/// Pose le même bloc de méthodes sur chaque type de la liste, dans un
+/// `#[pymethods]` par type.
 ///
-/// C'est ce détour qui permet d'écrire la documentation en `///` au site
-/// d'appel. Une doc capturée ligne à ligne (`$(#[doc = $doc:literal])*`) ne
-/// peut pas se répéter à l'intérieur de la boucle sur les types — rustc
-/// refuse deux répétitions de longueurs différentes au même niveau. Le bloc
-/// entier, lui, arrive ici comme **un seul** `tt`, que la boucle recopie
-/// librement ; et son corps nomme son type `Self`, puisqu'il ne connaît pas
-/// le `$T` qui le portera.
+/// Arguments : `stub` ou `bare` selon que le bloc doit être décoré pour
+/// pyo3-stub-gen, la liste des types, puis le bloc lui-même, accolades
+/// comprises.
+///
+/// ```ignore
+/// py_field_impl!(stub [PyNodeField, PyElementField] {
+///     fn zero(&self) -> f64 { 0.0 }
+/// });
+/// ```
+///
+/// **Le bloc arrive en un seul `tt`**, et non décomposé. C'est ce qui permet
+/// d'écrire la documentation en `///` au site d'appel : capturée ligne à ligne
+/// (`$(#[doc = $doc:literal])*`), elle ne peut pas se répéter à l'intérieur
+/// d'une boucle sur les types, rustc refusant deux répétitions de longueurs
+/// différentes au même niveau. Un `tt`, lui, se recopie librement.
+///
+/// **Le bloc nomme son type `Self`**, puisqu'il ignore lequel le portera.
+///
+/// `bare` sert au seul `__richcmp__` : c'est une graphie pyo3, là où CPython
+/// expose `__ge__`/`__gt__`/`__le__`/`__lt__`. Le stub déclare ces quatre noms
+/// à la main, et décorer le bloc les compterait une seconde fois.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! py_field_impl {
@@ -144,8 +134,11 @@ macro_rules! py_field_impl {
     };
 }
 
-/// Les verbes de **lecture** des deux familles. Après la documentation, le
-/// premier jeton nomme la famille — `Field` ou `SubField`, le trait qui opère.
+/// Engendre une méthode Python qui **lit** une valeur du champ.
+///
+/// Arguments, dans l'ordre : la documentation de la méthode en `///`, la
+/// famille, le bras suivi de `:`, la liste des types qui porteront la méthode,
+/// et son nom — qui est aussi celui de la méthode du trait appelée.
 ///
 /// ```ignore
 /// py_field_read! {
@@ -154,12 +147,18 @@ macro_rules! py_field_impl {
 /// }
 /// ```
 ///
-/// Trois formes communes selon l'argument et la faillibilité : `optional:`
-/// (`min`, `max` — la composante peut être omise), `named:` (`sum` — elle est
-/// exigée), `components:` (sans argument, infaillible). Deux propres aux
-/// sous-conteneurs, `count:` et `index:` : un agrégat n'a ni nombre de
-/// composantes unique — ses zones peuvent en porter des jeux différents — ni
-/// index global.
+/// engendre sur chacun des deux types :
+///
+/// ```ignore
+/// fn sum(&self, component: &str) -> PyResult<f64> {
+///     Ok(Field::sum(&self.inner, component)?)
+/// }
+/// ```
+///
+/// Le bras fixe la signature : la composante est optionnelle (`optional:`),
+/// exigée (`named:`) ou absente (`components:`). `count:` et `index:` ne
+/// valent que pour un sous-conteneur — un agrégat n'a ni nombre de composantes
+/// unique, ses zones pouvant en porter des jeux différents, ni index global.
 #[macro_export]
 macro_rules! py_field_read {
     ($(#[doc = $doc:literal])* $F:ident optional: [$($T:ident),+ $(,)?], $nom:ident) => {
@@ -212,10 +211,21 @@ macro_rules! py_field_read {
     };
 }
 
-/// Les verbes d'**écriture** des deux familles : sur un agrégat, la mutation
-/// descend aux zones qui définissent la composante ; sur un sous-conteneur,
-/// elle a lieu en place, sous un **write** guard — la seule charpente à en
-/// prendre un.
+/// Engendre une méthode Python qui **mute** une composante, et ne rend rien.
+///
+/// Mêmes arguments que `py_field_read!`. Le bras unique, `scalar:`, donne à la
+/// méthode la composante à modifier et le scalaire à lui appliquer.
+///
+/// ```ignore
+/// py_field_write! {
+///     /// Add `scalar` to `component` on every zone that defines it.
+///     Field scalar: [PyNodeField, PyElementField], add_to_component
+/// }
+/// ```
+///
+/// La mutation d'un agrégat descend aux zones qui définissent la composante ;
+/// celle d'un sous-conteneur a lieu dans sa zone à lui, sous le seul **write**
+/// guard que prennent ces macros.
 #[macro_export]
 macro_rules! py_field_write {
     ($(#[doc = $doc:literal])* $F:ident scalar: [$($T:ident),+ $(,)?], $nom:ident) => {
@@ -230,20 +240,38 @@ macro_rules! py_field_write {
     };
 }
 
-/// La charpente « lire, puis emballer dans le même type », pour les deux
-/// familles, en cinq bras : `op:` et `pow:` renvoient au dispatcheur de la
-/// saveur ; `unary:` applique une math élémentaire de `ops::field` ;
-/// `components:` filtre et renomme ; `richcmp:` rend un masque.
+/// Engendre une méthode Python qui rend un **champ de la saveur du receveur**.
 ///
-/// `op:`, `pow:` et `richcmp:` sont des **slots**, appelés depuis
-/// `node_field.rs` et `element_field.rs` avec une liste d'un seul type (voir
-/// l'en-tête de ce fichier). Les deux autres sont des méthodes ordinaires, que
-/// rien n'oblige à expanser chez le `pyclass` : `py/ops/field.rs` les appelle
-/// avec les deux saveurs à la fois, depuis les chapeaux qui portent aussi la
-/// fonction libre.
+/// Arguments : la documentation en `///`, la famille, le bras suivi de `:`, la
+/// liste des types, puis ce que le bras réclame — un nom de méthode, une
+/// closure binaire, le chemin d'un opérateur.
 ///
-/// `components:` porte deux méthodes, donc deux documentations, chacune
-/// placée devant le nom de la méthode qu'elle décrit.
+/// ```ignore
+/// py_field_transform! {
+///     /// Element-wise square root of a field (`nan` for negatives).
+///     SubField unary: [PySubNodeField, PySubElementField], sqrt
+/// }
+/// ```
+///
+/// engendre sur chacun des deux types :
+///
+/// ```ignore
+/// fn sqrt(&self) -> PyResult<Self> {
+///     let out = ops::field::sqrt(&*self.handle.read())?;
+///     Ok(Self { handle: Handle::new(out) })
+/// }
+/// ```
+///
+/// Les bras : `op:` et `pow:` passent au dispatcheur d'opérateur de la saveur,
+/// `unary:` applique une math élémentaire de `ops::field`, `components:` filtre
+/// et renomme — deux méthodes, donc deux `///`, chacun devant le nom de la
+/// méthode qu'il décrit —, `richcmp:` compare à un scalaire et rend un masque.
+///
+/// **`op:`, `pow:` et `richcmp:` sont des slots, à appeler depuis le module qui
+/// déclare le `#[pyclass]`**, avec une liste d'un seul type. pyo3 leur engendre
+/// un trampoline `unsafe fn` qui en appelle un autre ; l'édition 2024 ne couvre
+/// plus implicitement ce corps, et `unsafe_op_in_unsafe_fn` se déclenche dès
+/// que l'`impl` vit hors de ce module.
 #[macro_export]
 macro_rules! py_field_transform {
     ($(#[doc = $doc:literal])* $F:ident op: [$($T:ident),+ $(,)?], $nom:ident, $f:expr) => {
