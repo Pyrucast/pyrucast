@@ -49,24 +49,24 @@ impl PyCoords {
 
     /// Spatial dimension of the coordinates (1, 2 or 3).
     #[getter]
-    fn dim(&self) -> PyResult<u8> {
-        Ok(self.handle.read().dim())
+    fn dim(&self) -> u8 {
+        self.handle.read().dim()
     }
 
     /// Whether these coordinates describe a body of revolution.
     #[getter]
-    fn is_axisymmetric(&self) -> PyResult<bool> {
-        Ok(self.handle.read().is_axisymmetric())
+    fn is_axisymmetric(&self) -> bool {
+        self.handle.read().is_axisymmetric()
     }
 
     /// Number of live nodes.
-    fn node_count(&self) -> PyResult<usize> {
-        Ok(self.handle.read().node_count())
+    fn node_count(&self) -> usize {
+        self.handle.read().node_count()
     }
 
     /// Number of allocated node slots (live plus not-yet-collected).
-    fn capacity(&self) -> PyResult<usize> {
-        Ok(self.handle.read().capacity())
+    fn capacity(&self) -> usize {
+        self.handle.read().capacity()
     }
 
     /// Whether node `id` is still live (not garbage-collected).
@@ -74,8 +74,8 @@ impl PyCoords {
     /// Takes a **raw id**, not a `Node`, on purpose: a `Node` holds a
     /// refcount, so it could never be observed dead. This is the API for
     /// inspecting nodes you may no longer hold (post-GC checks).
-    fn is_alive(&self, id: u32) -> PyResult<bool> {
-        Ok(self.handle.read().is_alive(NodeId(id)))
+    fn is_alive(&self, id: u32) -> bool {
+        self.handle.read().is_alive(NodeId(id))
     }
 
     /// Add a node at `coords` and return it as a `Node` (refcount = 1).
@@ -94,13 +94,13 @@ impl PyCoords {
     ///
     /// Takes a **raw id** (see [`Self::is_alive`]): observing a refcount of
     /// 0 is impossible while holding the `Node` that would carry it.
-    fn refcount(&self, id: u32) -> PyResult<u32> {
-        Ok(self.handle.read().refcount(NodeId(id)))
+    fn refcount(&self, id: u32) -> u32 {
+        self.handle.read().refcount(NodeId(id))
     }
 
     /// Run the garbage collector; return the number of collected nodes.
-    fn gc(&self) -> PyResult<usize> {
-        Ok(self.handle.write().gc())
+    fn gc(&self) -> usize {
+        self.handle.write().gc()
     }
 
     // Per-node coordinate access lives on `Node` (`node.position()` /
@@ -109,8 +109,8 @@ impl PyCoords {
 
     /// Add a named alternative configuration (same nodes, new coordinates);
     /// returns its index.
-    fn add_config(&self, name: String) -> PyResult<usize> {
-        Ok(self.handle.write().add_config(name))
+    fn add_config(&self, name: String) -> usize {
+        self.handle.write().add_config(name)
     }
 
     /// Make configuration `config` the active one.
@@ -121,18 +121,18 @@ impl PyCoords {
 
     /// Index of the active configuration.
     #[getter]
-    fn active(&self) -> PyResult<usize> {
-        Ok(self.handle.read().active())
+    fn active(&self) -> usize {
+        self.handle.read().active()
     }
 
     /// Names of the configurations, by index.
-    fn names(&self) -> PyResult<Vec<String>> {
-        Ok(self.handle.read().names().to_vec())
+    fn names(&self) -> Vec<String> {
+        self.handle.read().names().to_vec()
     }
 
     /// Current node permutation (a renumbering), or `None` if unset.
-    fn permutation(&self) -> PyResult<Option<Vec<u32>>> {
-        Ok(self.handle.read().permutation().map(|s| s.to_vec()))
+    fn permutation(&self) -> Option<Vec<u32>> {
+        self.handle.read().permutation().map(|s| s.to_vec())
     }
 
     /// Set a node permutation (a renumbering of the nodes).
@@ -142,9 +142,8 @@ impl PyCoords {
     }
 
     /// Drop any node permutation.
-    fn clear_permutation(&self) -> PyResult<()> {
+    fn clear_permutation(&self) {
         self.handle.write().clear_permutation();
-        Ok(())
     }
 }
 
