@@ -34,8 +34,8 @@ impl PyCell {
 
     /// Element type name of this cell (e.g. `"TRI3"`).
     #[getter]
-    fn element_type(&self) -> PyResult<String> {
-        Ok(self.inner.element_type().name().to_string())
+    fn element_type(&self) -> String {
+        self.inner.element_type().name().to_string()
     }
 
     /// Materialised nodes (each one refcounted on the
@@ -45,8 +45,8 @@ impl PyCell {
         Ok(nodes.into_iter().map(PyNode::from_node).collect())
     }
 
-    fn __len__(&self) -> PyResult<usize> {
-        Ok(self.inner.nodes_per_cell())
+    fn __len__(&self) -> usize {
+        self.inner.nodes_per_cell()
     }
 
     /// `cell[j]` — j-th node of the cell. Supports negative indices
