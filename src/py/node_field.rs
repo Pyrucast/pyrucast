@@ -603,19 +603,30 @@ crate::py_field_transform! {
     /// `field / other` — element-wise quotient.
     SubField op: [PySubNodeField], __truediv__, |a, b| a / b
 }
-crate::py_field_transform! {
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[pymethods]
+impl PyNodeField {
     /// `field ** exponent` — element-wise power, same dispatch as the other
     /// operators (float → scalar, `NodeField` → strict same-decomposition,
     /// `SubNodeField` → targeted zone). The ternary `pow(x, y, z)` modulo
     /// form is rejected.
-    Field pow: [PyNodeField]
+    fn __pow__(&self, exponent: &Bound<'_, PyAny>, modulo: &Bound<'_, PyAny>) -> PyResult<Self> {
+        crate::py::field_slots::reject_modulo(modulo)?;
+        self.binary(exponent, |a, b| a.powf(b))
+    }
 }
-crate::py_field_transform! {
+
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[pymethods]
+impl PySubNodeField {
     /// `field ** exponent` — element-wise power, same dispatch as the other
     /// operators (float exponent → broadcast; `SubNodeField` → strict
     /// element-by-element). The ternary `pow(x, y, z)` modulo form is
     /// rejected (meaningless on floats).
-    SubField pow: [PySubNodeField]
+    fn __pow__(&self, exponent: &Bound<'_, PyAny>, modulo: &Bound<'_, PyAny>) -> PyResult<Self> {
+        crate::py::field_slots::reject_modulo(modulo)?;
+        self.scalar_or_combine(exponent, |a, b| a.powf(b))
+    }
 }
 
 // ─── Comparaisons ───────────────────────────────────────────────────────────
@@ -625,15 +636,48 @@ crate::py_field_transform! {
 // sous les noms `__ge__`/`__gt__`/`__le__`/`__lt__`, déjà déclarés à la main
 // plus haut — les faire engendrer aussi par stub-gen les compterait deux fois.
 
-crate::py_field_transform! {
+#[pymethods]
+impl PyNodeField {
     /// Comparison sugar → a per-component 0/1 mask (see `mask`). `field >= x`
     /// / `> x` / `<= x` / `< x` test every component against the scalar `x`;
     /// `==` / `!=` and non-scalar right-hands fall back to `NotImplemented`.
-    Field richcmp: [PyNodeField], crate::ops::node_field::mask
+    fn __richcmp__(
+        &self,
+        py: Python<'_>,
+        other: &Bound<'_, PyAny>,
+        op: pyo3::pyclass::CompareOp,
+    ) -> PyResult<Py<PyAny>> {
+        let Some(band) = crate::py::field_slots::band_of(op, other)? else {
+            return Ok(py.NotImplemented());
+        };
+        let out = crate::ops::node_field::mask(&self.inner, &band, None)?;
+        Ok(Py::new(py, Self { inner: out })?.into_any())
+    }
 }
-crate::py_field_transform! {
+
+#[pymethods]
+impl PySubNodeField {
     /// Comparison sugar → a per-component 0/1 mask (see `mask`). `subfield >= x`
     /// / `> x` / `<= x` / `< x` test every component against the scalar `x`;
     /// `==` / `!=` and non-scalar right-hands fall back to `NotImplemented`.
-    SubField richcmp: [PySubNodeField], crate::ops::node_field::mask_sub
+    fn __richcmp__(
+        &self,
+        py: Python<'_>,
+        other: &Bound<'_, PyAny>,
+        op: pyo3::pyclass::CompareOp,
+    ) -> PyResult<Py<PyAny>> {
+        let Some(band) = crate::py::field_slots::band_of(op, other)? else {
+            return Ok(py.NotImplemented());
+        };
+        // `mask_sub` ne rend pas de `Result` — la zone est seule, il n'y a pas
+        // d'agrégat à reconstruire, donc rien à refuser.
+        let out = crate::ops::node_field::mask_sub(&self.handle.read(), &band, None);
+        Ok(Py::new(
+            py,
+            Self {
+                handle: Handle::new(out),
+            },
+        )?
+        .into_any())
+    }
 }

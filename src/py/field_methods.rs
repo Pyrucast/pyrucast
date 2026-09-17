@@ -208,60 +208,12 @@ macro_rules! py_field_transform {
             }
         });
     };
-    ($(#[doc = $doc:literal])* $F:ident pow: [$($T:ident),+ $(,)?]) => {
-        $crate::py_field_impl!(stub [$($T),+] {
-            $(#[doc = $doc])*
-            fn __pow__(
-                &self,
-                exponent: &::pyo3::Bound<'_, ::pyo3::PyAny>,
-                modulo: &::pyo3::Bound<'_, ::pyo3::PyAny>,
-            ) -> ::pyo3::PyResult<Self> {
-                use ::pyo3::types::PyAnyMethods;
-                if !modulo.is_none() {
-                    return Err(::pyo3::exceptions::PyTypeError::new_err(
-                        "field ** exponent does not support a modulo argument",
-                    ));
-                }
-                $crate::py_field_family!($F, combine, self, exponent, |a, b| a.powf(b))
-            }
-        });
-    };
     ($(#[doc = $doc:literal])* $F:ident unary: [$($T:ident),+ $(,)?], $nom:ident) => {
         $crate::py_field_impl!(stub [$($T),+] {
             $(#[doc = $doc])*
             fn $nom(&self) -> ::pyo3::PyResult<Self> {
                 let out = $crate::ops::field::$nom($crate::py_field_family!($F, read, self))?;
                 Ok($crate::py_field_family!($F, wrap, Self, out))
-            }
-        });
-    };
-    ($(#[doc = $doc:literal])* $F:ident richcmp: [$($T:ident),+ $(,)?], $op:path) => {
-        // Seul bras sans `gen_stub_pymethods` : `__richcmp__` est une graphie
-        // propre à pyo3, là où CPython expose `__ge__`/`__gt__`/`__le__`/
-        // `__lt__`. Ce sont ces quatre noms que le stub déclare à la main ; les
-        // engendrer ici aussi les compterait deux fois.
-        $crate::py_field_impl!(bare [$($T),+] {
-            $(#[doc = $doc])*
-            fn __richcmp__(
-                &self,
-                py: ::pyo3::Python<'_>,
-                other: &::pyo3::Bound<'_, ::pyo3::PyAny>,
-                op: ::pyo3::pyclass::CompareOp,
-            ) -> ::pyo3::PyResult<::pyo3::Py<::pyo3::PyAny>> {
-                use ::pyo3::pyclass::CompareOp;
-                use ::pyo3::types::PyAnyMethods;
-                let Ok(x) = other.extract::<f64>() else {
-                    return Ok(py.NotImplemented());
-                };
-                let band = match op {
-                    CompareOp::Ge => $crate::atoms::Band::new(Some(x), None, None, None),
-                    CompareOp::Gt => $crate::atoms::Band::new(None, Some(x), None, None),
-                    CompareOp::Le => $crate::atoms::Band::new(None, None, Some(x), None),
-                    CompareOp::Lt => $crate::atoms::Band::new(None, None, None, Some(x)),
-                    CompareOp::Eq | CompareOp::Ne => return Ok(py.NotImplemented()),
-                }?;
-                let out = $crate::py_field_family!($F, mask, $op, self, &band);
-                Ok(::pyo3::Py::new(py, $crate::py_field_family!($F, wrap, Self, out))?.into_any())
             }
         });
     };
