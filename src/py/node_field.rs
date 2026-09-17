@@ -503,46 +503,46 @@ class PySubNodeField:
 // engendre un appel de trampoline `unsafe` que l'édition 2024 ne couvre plus.
 
 crate::py_field_transform!(
-    op: PyNodeField, __add__, |a, b| a + b,
+    op: [PyNodeField], __add__, |a, b| a + b,
     "`field + other` — element-wise sum."
 );
 crate::py_subfield_transform!(
-    op: PySubNodeField, __add__, |a, b| a + b,
+    op: [PySubNodeField], __add__, |a, b| a + b,
     "`field + other` — element-wise sum."
 );
 crate::py_field_transform!(
-    op: PyNodeField, __sub__, |a, b| a - b,
+    op: [PyNodeField], __sub__, |a, b| a - b,
     "`field - other` — element-wise difference."
 );
 crate::py_subfield_transform!(
-    op: PySubNodeField, __sub__, |a, b| a - b,
+    op: [PySubNodeField], __sub__, |a, b| a - b,
     "`field - other` — element-wise difference."
 );
 crate::py_field_transform!(
-    op: PyNodeField, __mul__, |a, b| a * b,
+    op: [PyNodeField], __mul__, |a, b| a * b,
     "`field * other` — element-wise product."
 );
 crate::py_subfield_transform!(
-    op: PySubNodeField, __mul__, |a, b| a * b,
+    op: [PySubNodeField], __mul__, |a, b| a * b,
     "`field * other` — element-wise product."
 );
 crate::py_field_transform!(
-    op: PyNodeField, __truediv__, |a, b| a / b,
+    op: [PyNodeField], __truediv__, |a, b| a / b,
     "`field / other` — element-wise quotient."
 );
 crate::py_subfield_transform!(
-    op: PySubNodeField, __truediv__, |a, b| a / b,
+    op: [PySubNodeField], __truediv__, |a, b| a / b,
     "`field / other` — element-wise quotient."
 );
 crate::py_field_transform!(
-    pow: PyNodeField,
+    pow: [PyNodeField],
     "`field ** exponent` — element-wise power, same dispatch as the other\n\
      operators (float → scalar, `NodeField` → strict same-decomposition,\n\
      `SubNodeField` → targeted zone). The ternary `pow(x, y, z)` modulo\n\
      form is rejected."
 );
 crate::py_subfield_transform!(
-    pow: PySubNodeField,
+    pow: [PySubNodeField],
     "`field ** exponent` — element-wise power, same dispatch as the other\n\
      operators (float exponent → broadcast; `SubNodeField` → strict\n\
      element-by-element). The ternary `pow(x, y, z)` modulo form is\n\

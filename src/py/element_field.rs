@@ -422,46 +422,46 @@ crate::impl_dump_pymethod!(handle PySubElementField, handle);
 // engendre un appel de trampoline `unsafe` que l'édition 2024 ne couvre plus.
 
 crate::py_field_transform!(
-    op: PyElementField, __add__, |a, b| a + b,
+    op: [PyElementField], __add__, |a, b| a + b,
     "`field + other` — element-wise sum."
 );
 crate::py_subfield_transform!(
-    op: PySubElementField, __add__, |a, b| a + b,
+    op: [PySubElementField], __add__, |a, b| a + b,
     "`field + other` — element-wise sum."
 );
 crate::py_field_transform!(
-    op: PyElementField, __sub__, |a, b| a - b,
+    op: [PyElementField], __sub__, |a, b| a - b,
     "`field - other` — element-wise difference."
 );
 crate::py_subfield_transform!(
-    op: PySubElementField, __sub__, |a, b| a - b,
+    op: [PySubElementField], __sub__, |a, b| a - b,
     "`field - other` — element-wise difference."
 );
 crate::py_field_transform!(
-    op: PyElementField, __mul__, |a, b| a * b,
+    op: [PyElementField], __mul__, |a, b| a * b,
     "`field * other` — element-wise product."
 );
 crate::py_subfield_transform!(
-    op: PySubElementField, __mul__, |a, b| a * b,
+    op: [PySubElementField], __mul__, |a, b| a * b,
     "`field * other` — element-wise product."
 );
 crate::py_field_transform!(
-    op: PyElementField, __truediv__, |a, b| a / b,
+    op: [PyElementField], __truediv__, |a, b| a / b,
     "`field / other` — element-wise quotient."
 );
 crate::py_subfield_transform!(
-    op: PySubElementField, __truediv__, |a, b| a / b,
+    op: [PySubElementField], __truediv__, |a, b| a / b,
     "`field / other` — element-wise quotient."
 );
 crate::py_field_transform!(
-    pow: PyElementField,
+    pow: [PyElementField],
     "`field ** exponent` — element-wise power, same dispatch as the other\n\
      operators (float → scalar, `ElementField` → strict same-decomposition,\n\
      `SubElementField` → targeted zone). The ternary `pow(x, y, z)` modulo\n\
      form is rejected."
 );
 crate::py_subfield_transform!(
-    pow: PySubElementField,
+    pow: [PySubElementField],
     "`field ** exponent` — element-wise power, same dispatch as the other\n\
      operators (float exponent → broadcast; `SubElementField` → strict\n\
      element-by-element). The ternary `pow(x, y, z)` modulo form is\n\

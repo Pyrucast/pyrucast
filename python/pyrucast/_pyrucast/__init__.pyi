@@ -2661,11 +2661,13 @@ class SubElementField:
         """
     def component_count(self) -> builtins.int:
         r"""
-        Number of components stored per point.
+        Number of components stored per node, or per Gauss point for a field by
+        elements.
         """
     def component_index(self, name: builtins.str) -> typing.Optional[builtins.int]:
         r"""
-        Index of component `name`, or `None` if unknown.
+        Index of component `name`, or `None` if unknown — no default index would
+        say "absent" without being mistaken for a real one.
         """
     def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
         r"""
@@ -3282,11 +3284,13 @@ class SubNodeField:
         """
     def component_count(self) -> builtins.int:
         r"""
-        Number of components stored per node.
+        Number of components stored per node, or per Gauss point for a field by
+        elements.
         """
     def component_index(self, name: builtins.str) -> typing.Optional[builtins.int]:
         r"""
-        Index of component `name`, or `None` if unknown.
+        Index of component `name`, or `None` if unknown — no default index would
+        say "absent" without being mistaken for a real one.
         """
     def add_to_component(self, component: builtins.str, scalar: builtins.float) -> None:
         r"""
