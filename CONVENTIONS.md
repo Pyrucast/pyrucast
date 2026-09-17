@@ -429,6 +429,38 @@ la coercition parent→sub unitaire qui l'accompagne) — l'exception décrite
 plus haut. La règle s'applique uniformément aux quatre agrégats et a vocation
 à être portée par les macros `impl_aggregate!` / `impl_aggregate_pymethods!`.
 
+## Le sens d'une macro : nommer ses types, ou les recevoir
+
+Une macro qui sert plusieurs types peut les **nommer elle-même** et boucler
+dessus, ou les **recevoir en argument**, un appel par type. Le départage n'est
+pas affaire de goût : il suit le sens de la dépendance.
+
+**En aval** — la macro vit dans un module qui importe déjà les types servis.
+Elle les nomme, et prend la **liste** de ceux qu'elle sert :
+`py_field_read!(optional: [PyNodeField, PyElementField], min, "…")`. Deux appels
+par verbe au lieu de quatre, et surtout la documentation écrite **une seule
+fois** — un type par appel la ferait recopier autant de fois qu'il y a de
+saveurs. C'est la forme des six macros de `src/py/field_methods.rs`, qui servent
+les quatre saveurs de champ par bras nommés (`optional:`, `scalar:`, `op:`,
+`richcmp:`, …).
+
+**En amont** — la macro vit dans le module qui définit le trait ou la machinerie
+(`containers/field.rs`, `aggregate.rs`, `models/mod.rs`). Elle **reçoit** son
+type, et chaque module l'appelle pour ce qu'il implémente. Lui faire nommer
+`NodeField` ou `PySubMesh` inverserait la dépendance — un conteneur ne connaît
+pas ses implémenteurs — et retirerait à chaque module la maîtrise de ce qu'il
+implémente.
+
+**L'exception des slots.** Un slot (`__add__`, `__pow__`, `__richcmp__`,
+`__len__`, `__repr__`, …) engendre chez pyo3 un trampoline `unsafe fn` qui en
+appelle un autre. L'édition 2024 ne couvre plus implicitement ce corps :
+`unsafe_op_in_unsafe_fn` se déclenche dès que l'`impl` vit hors du module
+déclarant le `#[pyclass]`. Une macro à slots garde donc la forme liste, mais est
+**appelée depuis le module du `pyclass`**, avec une liste d'un seul type. Un
+slot dont le stub déclare les noms CPython à la main (`__ge__`/`__gt__`/`__le__`
+/`__lt__` pour `__richcmp__`) ne doit en outre **pas** être décoré de
+`gen_stub_pymethods`, sans quoi il serait compté deux fois dans le `.pyi`.
+
 ## Trois niveaux d'affichage
 
 Tout objet expose trois niveaux d'affichage, en couches, tous reliés à Python.
