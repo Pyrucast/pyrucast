@@ -79,8 +79,8 @@ pub struct PySubMesh {
 impl PySubMesh {
     /// Element type name of this submesh (e.g. `"TRI3"`).
     #[getter]
-    fn element_type(&self) -> PyResult<String> {
-        Ok(self.handle.read().element_type().name().to_string())
+    fn element_type(&self) -> String {
+        self.handle.read().element_type().name().to_string()
     }
 
     /// Append a cell from its list of nodes; returns the new cell's index.
@@ -91,15 +91,15 @@ impl PySubMesh {
     }
 
     /// Number of cells in this submesh.
-    fn cell_count(&self) -> PyResult<usize> {
-        Ok(self.handle.read().cell_count())
+    fn cell_count(&self) -> usize {
+        self.handle.read().cell_count()
     }
 
     /// Whether this submesh is sealed: `True` once it is used by a
     /// finite-element space, field or matrix, after which `add_cell` fails.
     #[getter]
-    fn is_sealed(&self) -> PyResult<bool> {
-        Ok(self.handle.read().is_sealed())
+    fn is_sealed(&self) -> bool {
+        self.handle.read().is_sealed()
     }
 
     /// Deep-copy into a fresh, **unsealed** SubMesh with the same
@@ -113,18 +113,17 @@ impl PySubMesh {
 
     /// Face colour as an `(r, g, b)` tuple of bytes.
     #[getter]
-    fn face_color(&self) -> PyResult<(u8, u8, u8)> {
+    fn face_color(&self) -> (u8, u8, u8) {
         let c = self.handle.read().face_color();
-        Ok((c.r, c.g, c.b))
+        (c.r, c.g, c.b)
     }
 
     /// Set the face colour from an `(r, g, b)` tuple of bytes.
     #[setter]
-    fn set_face_color(&self, rgb: (u8, u8, u8)) -> PyResult<()> {
+    fn set_face_color(&self, rgb: (u8, u8, u8)) {
         self.handle
             .write()
             .set_face_color(crate::atoms::RgbColor::new(rgb.0, rgb.1, rgb.2));
-        Ok(())
     }
 
     /// Visualize this submesh.
@@ -225,8 +224,8 @@ impl PySubMesh {
     }
 
     /// `len(submesh)` → number of cells.
-    fn __len__(&self) -> PyResult<usize> {
-        Ok(self.handle.read().cell_count())
+    fn __len__(&self) -> usize {
+        self.handle.read().cell_count()
     }
 
     /// `submesh[i]` → `Cell` view on cell i. Supports negative
@@ -263,13 +262,13 @@ impl PyMesh {
     /// `Mesh(coords, element_type)` — mesh with one pre-created submesh.
     #[new]
     #[pyo3(signature = (coords, element_type=None))]
-    fn py_new(coords: PyRef<PyCoords>, element_type: Option<ElementType>) -> PyResult<Self> {
+    fn py_new(coords: PyRef<PyCoords>, element_type: Option<ElementType>) -> Self {
         let coords = coords.handle.clone();
         let mesh = match element_type {
             Some(et) => Mesh::from_submesh(SubMesh::new(coords, et)),
             None => Mesh::empty(),
         };
-        Ok(Self { inner: mesh })
+        Self { inner: mesh }
     }
 
     /// Element type name of each submesh, in order.
@@ -301,11 +300,11 @@ impl PyMesh {
     /// **sealed** mesh takes it — the seal freezes the connectivity, not the
     /// way it is drawn. To give each zone its own colour, set the `face_color`
     /// property of that `SubMesh`.
-    fn set_face_color(&self, rgb: (u8, u8, u8)) -> PyResult<PyMesh> {
+    fn set_face_color(&self, rgb: (u8, u8, u8)) -> PyMesh {
         let color = crate::atoms::RgbColor::new(rgb.0, rgb.1, rgb.2);
-        Ok(Self {
+        Self {
             inner: self.inner.set_face_color(color),
-        })
+        }
     }
 
     /// The `node_idx`-th node of cell `cell_idx` in submesh `submesh_idx`.
@@ -331,8 +330,8 @@ impl PyMesh {
     }
 
     /// Total number of cells across all submeshes.
-    fn cell_count(&self) -> PyResult<usize> {
-        Ok(self.inner.cell_count())
+    fn cell_count(&self) -> usize {
+        self.inner.cell_count()
     }
 
     /// The `Coords` this mesh hangs off (all submeshes share it).
