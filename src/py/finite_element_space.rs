@@ -28,20 +28,20 @@ pub struct PySubFiniteElementSpace {
 impl PySubFiniteElementSpace {
     /// Element type name (e.g. `"TRI3"`).
     #[getter]
-    fn element_type(&self) -> PyResult<String> {
-        Ok(self.handle.read().element_type().name().to_string())
+    fn element_type(&self) -> String {
+        self.handle.read().element_type().name().to_string()
     }
 
     /// Interpolation name (e.g. `"LAGRANGE1"`).
     #[getter]
-    fn interpolation(&self) -> PyResult<String> {
-        Ok(self.handle.read().interpolation().name().to_string())
+    fn interpolation(&self) -> String {
+        self.handle.read().interpolation().name().to_string()
     }
 
     /// Quadrature-rule name (e.g. `"GAUSS"`).
     #[getter]
-    fn quadrature(&self) -> PyResult<String> {
-        Ok(self.handle.read().quadrature().name().to_string())
+    fn quadrature(&self) -> String {
+        self.handle.read().quadrature().name().to_string()
     }
 
     /// Reference (parametric) dimension of the elements.
@@ -52,15 +52,15 @@ impl PySubFiniteElementSpace {
 
     /// Spatial dimension the elements live in.
     #[getter]
-    fn space_dim(&self) -> PyResult<usize> {
-        Ok(self.handle.read().space_dim())
+    fn space_dim(&self) -> usize {
+        self.handle.read().space_dim()
     }
 
     /// Whether the underlying geometry is a body of revolution — inherited from
     /// the `Coords`, so a body and its boundary can never disagree.
     #[getter]
-    fn is_axisymmetric(&self) -> PyResult<bool> {
-        Ok(self.handle.read().is_axisymmetric())
+    fn is_axisymmetric(&self) -> bool {
+        self.handle.read().is_axisymmetric()
     }
 
     /// Number of nodes per element.
@@ -70,13 +70,13 @@ impl PySubFiniteElementSpace {
     }
 
     /// Number of elements (cells) in this subspace.
-    fn cell_count(&self) -> PyResult<usize> {
-        Ok(self.handle.read().cell_count())
+    fn cell_count(&self) -> usize {
+        self.handle.read().cell_count()
     }
 
     /// Number of Gauss (quadrature) points per element.
-    fn gauss_count(&self) -> PyResult<usize> {
-        Ok(self.handle.read().gauss_count())
+    fn gauss_count(&self) -> usize {
+        self.handle.read().gauss_count()
     }
 
     /// Reference coordinates of the `g`-th Gauss point.
@@ -141,8 +141,8 @@ impl PySubFiniteElementSpace {
     }
 
     /// `len(subspace)` → number of elements (= number of cells).
-    fn __len__(&self) -> PyResult<usize> {
-        Ok(self.handle.read().cell_count())
+    fn __len__(&self) -> usize {
+        self.handle.read().cell_count()
     }
 
     /// `subspace[i]` → `Element` view on element `i`. Supports negative
