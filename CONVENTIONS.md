@@ -446,12 +446,12 @@ pas affaire de goût : il suit le sens de la dépendance.
 
 **En aval** — la macro vit dans un module qui importe déjà les types servis.
 Elle les nomme, et prend la **liste** de ceux qu'elle sert :
-`py_field_read!(optional: [PyNodeField, PyElementField], min, "…")`. Deux appels
-par verbe au lieu de quatre, et surtout la documentation écrite **une seule
-fois** — un type par appel la ferait recopier autant de fois qu'il y a de
-saveurs. C'est la forme des six macros de `src/py/field_methods.rs`, qui servent
-les quatre saveurs de champ par bras nommés (`optional:`, `scalar:`, `op:`,
-`richcmp:`, …).
+`py_field_read!(Field optional: [PyNodeField, PyElementField], min, "…")`. Deux
+appels par verbe au lieu de quatre, et surtout la documentation écrite **une
+seule fois** — un type par appel la ferait recopier autant de fois qu'il y a de
+saveurs. C'est la forme des trois macros de `src/py/field_methods.rs`, qui
+servent les quatre saveurs de champ par bras nommés (`optional:`, `scalar:`,
+`op:`, `richcmp:`, …), la famille (`Field` ou `SubField`) en tête d'appel.
 
 **En amont** — la macro vit dans le module qui définit le trait ou la machinerie
 (`containers/field.rs`, `aggregate.rs`, `models/mod.rs`). Elle **reçoit** son

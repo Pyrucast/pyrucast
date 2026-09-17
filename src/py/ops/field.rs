@@ -143,8 +143,8 @@ macro_rules! py_field_unary {
             ))
         }
 
-        $crate::py_field_transform!(unary: [PyNodeField, PyElementField], $name, $doc);
-        $crate::py_subfield_transform!(unary: [PySubNodeField, PySubElementField], $name, $doc);
+        $crate::py_field_transform!(Field unary: [PyNodeField, PyElementField], $name, $doc);
+        $crate::py_field_transform!(SubField unary: [PySubNodeField, PySubElementField], $name, $doc);
     };
 }
 
@@ -183,9 +183,9 @@ py_field_unary!(tanh, "Element-wise hyperbolic tangent of a field.");
 macro_rules! py_field_components {
     ($doc_filter:literal, $doc_rename:literal) => {
         $crate::py_field_transform!(
-            components: [PyNodeField, PyElementField], $doc_filter, $doc_rename);
-        $crate::py_subfield_transform!(
-            components: [PySubNodeField, PySubElementField], $doc_filter, $doc_rename);
+            Field components: [PyNodeField, PyElementField], $doc_filter, $doc_rename);
+        $crate::py_field_transform!(
+            SubField components: [PySubNodeField, PySubElementField], $doc_filter, $doc_rename);
     };
 }
 

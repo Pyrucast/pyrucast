@@ -18,9 +18,19 @@
 //! La liste plutôt qu'un type unique : elle laisse la documentation écrite **une
 //! fois** là où un type par appel l'aurait fait recopier deux fois par verbe.
 //!
-//! Ce qui sépare les deux familles est écrit une fois dans chaque macro — le
-//! trait (`Field` contre `SubField`) et l'accès (`self.inner` contre
-//! `self.handle.read()`, ou `.write()` pour une mutation).
+//! **Trois macros pour les deux familles** — `py_field_read!`,
+//! `py_field_write!`, `py_field_transform!` —, dont chaque appel commence par
+//! le nom de la famille servie : `Field` pour les agrégats, `SubField` pour les
+//! sous-conteneurs. C'est aussi le trait qui opère. Ce qui sépare les deux
+//! familles (l'accès `self.inner` contre `self.handle.read()` ou `.write()`,
+//! l'emballage du résultat, le nom du dispatcheur…) est écrit une seule fois,
+//! dans la table `py_field_family!`.
+//!
+//! Les appels, eux, restent un par famille : leurs documentations diffèrent
+//! légitimement (voir plus bas). Fusionner aussi les bras entre eux
+//! (`optional:`, `named:`, `count:`, `index:` ne diffèrent que par arguments et
+//! retour) ferait de la macro un mini-langage, plus mutualisé et moins lisible
+//! au site d'appel — refusé.
 //!
 //! **Pas de `PyResult` inutile** : `components`, `component_count` et
 //! `component_index` rendent leur valeur nue, leurs homologues Rust ne pouvant
@@ -43,65 +53,80 @@
 use crate::py::element_field::{PyElementField, PySubElementField};
 use crate::py::node_field::{PyNodeField, PySubNodeField};
 
-/// Les verbes de **lecture** des agrégats : la valeur est tenue en propre, le
-/// trait `Field` opère dessus directement.
+/// Tout ce qui sépare les deux familles, et rien d'autre : une ligne par
+/// aspect et par famille. `Field` désigne les agrégats, qui tiennent leur
+/// valeur en propre (`self.inner`) ; `SubField` les sous-conteneurs, qui la
+/// lisent à travers leur handle.
 ///
-/// Quatre formes selon l'argument et la faillibilité : `optional:` (`min`,
-/// `max` — la composante peut être omise), `named:` (`sum` — elle est exigée),
-/// `components:` (sans argument, infaillible).
+/// Les trois macros publiques y renvoient au lieu de dédoubler leurs bras.
+/// Elles lui passent `self` **depuis leur propre corps** : `self` est
+/// hygiénique, et seul un `self` écrit par la macro qui déclare la méthode
+/// désigne son receveur — venu du site d'appel, il ne compilerait pas
+/// (`E0424`).
+#[doc(hidden)]
 #[macro_export]
-macro_rules! py_field_read {
-    (optional: [$($T:ident),+ $(,)?], $nom:ident, $doc:literal) => {
-        $(
-            #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pymethods)]
-            #[::pyo3::pymethods]
-            impl $T {
-                #[doc = $doc]
-                #[pyo3(signature = (component=None))]
-                fn $nom(&self, component: Option<&str>) -> ::pyo3::PyResult<f64> {
-                    use $crate::containers::field::Field;
-                    Ok(Field::$nom(&self.inner, component)?)
-                }
-            }
-        )+
+macro_rules! py_field_family {
+    // La valeur, empruntée en lecture — ou en écriture, pour une mutation en place.
+    (Field, read, $s:tt) => {
+        &$s.inner
     };
-    (named: [$($T:ident),+ $(,)?], $nom:ident, $doc:literal) => {
-        $(
-            #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pymethods)]
-            #[::pyo3::pymethods]
-            impl $T {
-                #[doc = $doc]
-                fn $nom(&self, component: &str) -> ::pyo3::PyResult<f64> {
-                    use $crate::containers::field::Field;
-                    Ok(Field::$nom(&self.inner, component)?)
-                }
-            }
-        )+
+    (SubField, read, $s:tt) => {
+        &*$s.handle.read()
     };
-    (components: [$($T:ident),+ $(,)?], $doc:literal) => {
-        $(
-            #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pymethods)]
-            #[::pyo3::pymethods]
-            impl $T {
-                #[doc = $doc]
-                fn components(&self) -> Vec<String> {
-                    use $crate::containers::field::Field;
-                    Field::components(&self.inner)
-                }
-            }
-        )+
+    (Field, write, $s:tt) => {
+        $s.inner
+    };
+    (SubField, write, $s:tt) => {
+        $s.handle.write()
+    };
+    // Un résultat emballé dans la saveur `$T` du receveur.
+    (Field, wrap, $T:ident, $e:expr) => {
+        $T { inner: $e }
+    };
+    (SubField, wrap, $T:ident, $e:expr) => {
+        $T {
+            handle: $crate::handle::Handle::new($e),
+        }
+    };
+    // Le dispatcheur des opérateurs, que chaque saveur définit dans son bloc
+    // inhérent.
+    (Field, combine, $s:tt, $rhs:expr, $f:expr) => {
+        $s.binary($rhs, $f)
+    };
+    (SubField, combine, $s:tt, $rhs:expr, $f:expr) => {
+        $s.scalar_or_combine($rhs, $f)
+    };
+    // `SubField` nomme `select_components` ce que `Field` appelle
+    // `filter_components` — la seule divergence de nom entre les deux traits,
+    // absorbée ici plutôt que laissée au lecteur.
+    (Field, filter, $s:tt, $names:expr) => {
+        $s.inner.filter_components($names)
+    };
+    (SubField, filter, $s:tt, $names:expr) => {
+        $s.handle.read().select_components($names)
+    };
+    // Le masque : `mask_sub` ne rend pas de `Result` — la zone est seule, il
+    // n'y a pas d'agrégat à reconstruire, donc rien à refuser.
+    (Field, mask, $op:path, $s:tt, $band:expr) => {
+        $op(&$s.inner, $band, None)?
+    };
+    (SubField, mask, $op:path, $s:tt, $band:expr) => {
+        $op(&$s.handle.read(), $band, None)
     };
 }
 
-/// Les mêmes pour les **sous-conteneurs** : la valeur est lue à travers le
-/// handle, et c'est `SubField` qui opère.
+/// Les verbes de **lecture** des deux familles. Le premier jeton nomme la
+/// famille — `Field` ou `SubField`, le trait qui opère.
 ///
-/// Deux formes de plus, sans contrepartie côté agrégat : `count:` et `index:`.
-/// Un agrégat n'a ni nombre de composantes unique — ses zones peuvent en porter
-/// des jeux différents — ni index global.
+/// Trois formes communes selon l'argument et la faillibilité : `optional:`
+/// (`min`, `max` — la composante peut être omise), `named:` (`sum` — elle est
+/// exigée), `components:` (sans argument, infaillible). Deux propres aux
+/// sous-conteneurs, `count:` et `index:` : un agrégat n'a ni nombre de
+/// composantes unique — ses zones peuvent en porter des jeux différents — ni
+/// index global.
 #[macro_export]
-macro_rules! py_subfield_read {
-    (optional: [$($T:ident),+ $(,)?], $nom:ident, $doc:literal) => {
+macro_rules! py_field_read {
+    ($F:ident optional: [$($T:ident),+ $(,)?], $nom:ident, $doc:literal) => {
         $(
             #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pymethods)]
             #[::pyo3::pymethods]
@@ -109,39 +134,41 @@ macro_rules! py_subfield_read {
                 #[doc = $doc]
                 #[pyo3(signature = (component=None))]
                 fn $nom(&self, component: Option<&str>) -> ::pyo3::PyResult<f64> {
-                    use $crate::containers::field::SubField;
-                    Ok(SubField::$nom(&*self.handle.read(), component)?)
+                    use $crate::containers::field::$F;
+                    Ok($F::$nom($crate::py_field_family!($F, read, self), component)?)
                 }
             }
         )+
     };
-    (named: [$($T:ident),+ $(,)?], $nom:ident, $doc:literal) => {
+    ($F:ident named: [$($T:ident),+ $(,)?], $nom:ident, $doc:literal) => {
         $(
             #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pymethods)]
             #[::pyo3::pymethods]
             impl $T {
                 #[doc = $doc]
                 fn $nom(&self, component: &str) -> ::pyo3::PyResult<f64> {
-                    use $crate::containers::field::SubField;
-                    Ok(SubField::$nom(&*self.handle.read(), component)?)
+                    use $crate::containers::field::$F;
+                    Ok($F::$nom($crate::py_field_family!($F, read, self), component)?)
                 }
             }
         )+
     };
-    (components: [$($T:ident),+ $(,)?], $doc:literal) => {
+    ($F:ident components: [$($T:ident),+ $(,)?], $doc:literal) => {
         $(
             #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pymethods)]
             #[::pyo3::pymethods]
             impl $T {
                 #[doc = $doc]
                 fn components(&self) -> Vec<String> {
-                    use $crate::containers::field::SubField;
-                    self.handle.read().components().to_vec()
+                    use $crate::containers::field::$F;
+                    // `Field` rend un `Vec`, `SubField` une tranche : `into`
+                    // convient aux deux.
+                    $F::components($crate::py_field_family!($F, read, self)).into()
                 }
             }
         )+
     };
-    (count: [$($T:ident),+ $(,)?], $nom:ident, $doc:literal) => {
+    (SubField count: [$($T:ident),+ $(,)?], $nom:ident, $doc:literal) => {
         $(
             #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pymethods)]
             #[::pyo3::pymethods]
@@ -154,7 +181,7 @@ macro_rules! py_subfield_read {
             }
         )+
     };
-    (index: [$($T:ident),+ $(,)?], $nom:ident, $doc:literal) => {
+    (SubField index: [$($T:ident),+ $(,)?], $nom:ident, $doc:literal) => {
         $(
             #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pymethods)]
             #[::pyo3::pymethods]
@@ -169,19 +196,21 @@ macro_rules! py_subfield_read {
     };
 }
 
-/// Les verbes d'**écriture** des agrégats : la mutation descend aux zones qui
-/// définissent la composante, à travers le trait `Field`.
+/// Les verbes d'**écriture** des deux familles : sur un agrégat, la mutation
+/// descend aux zones qui définissent la composante ; sur un sous-conteneur,
+/// elle a lieu en place, sous un **write** guard — la seule charpente à en
+/// prendre un.
 #[macro_export]
 macro_rules! py_field_write {
-    (scalar: [$($T:ident),+ $(,)?], $nom:ident, $doc:literal) => {
+    ($F:ident scalar: [$($T:ident),+ $(,)?], $nom:ident, $doc:literal) => {
         $(
             #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pymethods)]
             #[::pyo3::pymethods]
             impl $T {
                 #[doc = $doc]
                 fn $nom(&self, component: &str, scalar: f64) -> ::pyo3::PyResult<()> {
-                    use $crate::containers::field::Field;
-                    self.inner.$nom(component, scalar)?;
+                    use $crate::containers::field::$F;
+                    $crate::py_field_family!($F, write, self).$nom(component, scalar)?;
                     Ok(())
                 }
             }
@@ -189,51 +218,32 @@ macro_rules! py_field_write {
     };
 }
 
-/// Les mêmes pour les **sous-conteneurs**. Seule charpente à prendre un
-/// **write** guard : la mutation est en place, sur la zone elle-même.
-#[macro_export]
-macro_rules! py_subfield_write {
-    (scalar: [$($T:ident),+ $(,)?], $nom:ident, $doc:literal) => {
-        $(
-            #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pymethods)]
-            #[::pyo3::pymethods]
-            impl $T {
-                #[doc = $doc]
-                fn $nom(&self, component: &str, scalar: f64) -> ::pyo3::PyResult<()> {
-                    use $crate::containers::field::SubField;
-                    self.handle.write().$nom(component, scalar)?;
-                    Ok(())
-                }
-            }
-        )+
-    };
-}
-
-/// La charpente « lire, puis emballer dans le même type » des agrégats, en
-/// quatre bras : `op:` et `pow:` renvoient à `binary`, le dispatcheur que chaque
-/// saveur définit dans son bloc inhérent ; `unary:` applique une math
-/// élémentaire de `ops::field` ; `components:` filtre et renomme.
+/// La charpente « lire, puis emballer dans le même type », pour les deux
+/// familles, en cinq bras : `op:` et `pow:` renvoient au dispatcheur de la
+/// saveur ; `unary:` applique une math élémentaire de `ops::field` ;
+/// `components:` filtre et renomme ; `richcmp:` rend un masque.
 ///
-/// Les deux premiers sont des **slots**, appelés depuis `node_field.rs` et
-/// `element_field.rs` avec une liste d'un seul type (voir l'en-tête de ce
-/// fichier). Les deux autres sont des méthodes ordinaires, que rien n'oblige à
-/// expanser chez le `pyclass` : `py/ops/field.rs` les appelle avec les deux
-/// saveurs à la fois, depuis les chapeaux qui portent aussi la fonction libre.
+/// `op:`, `pow:` et `richcmp:` sont des **slots**, appelés depuis
+/// `node_field.rs` et `element_field.rs` avec une liste d'un seul type (voir
+/// l'en-tête de ce fichier). Les deux autres sont des méthodes ordinaires, que
+/// rien n'oblige à expanser chez le `pyclass` : `py/ops/field.rs` les appelle
+/// avec les deux saveurs à la fois, depuis les chapeaux qui portent aussi la
+/// fonction libre.
 #[macro_export]
 macro_rules! py_field_transform {
-    (op: [$($T:ident),+ $(,)?], $nom:ident, $f:expr, $doc:literal) => {
+    ($F:ident op: [$($T:ident),+ $(,)?], $nom:ident, $f:expr, $doc:literal) => {
         $(
             #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pymethods)]
             #[::pyo3::pymethods]
             impl $T {
                 #[doc = $doc]
                 fn $nom(&self, rhs: &::pyo3::Bound<'_, ::pyo3::PyAny>) -> ::pyo3::PyResult<$T> {
-                    self.binary(rhs, $f)
+                    $crate::py_field_family!($F, combine, self, rhs, $f)
                 }
             }
         )+
     };
-    (pow: [$($T:ident),+ $(,)?], $doc:literal) => {
+    ($F:ident pow: [$($T:ident),+ $(,)?], $doc:literal) => {
         $(
             #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pymethods)]
             #[::pyo3::pymethods]
@@ -250,26 +260,25 @@ macro_rules! py_field_transform {
                             "field ** exponent does not support a modulo argument",
                         ));
                     }
-                    self.binary(exponent, |a, b| a.powf(b))
+                    $crate::py_field_family!($F, combine, self, exponent, |a, b| a.powf(b))
                 }
             }
         )+
     };
-    (unary: [$($T:ident),+ $(,)?], $nom:ident, $doc:literal) => {
+    ($F:ident unary: [$($T:ident),+ $(,)?], $nom:ident, $doc:literal) => {
         $(
             #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pymethods)]
             #[::pyo3::pymethods]
             impl $T {
                 #[doc = $doc]
                 fn $nom(&self) -> ::pyo3::PyResult<$T> {
-                    Ok($T {
-                        inner: $crate::ops::field::$nom(&self.inner)?,
-                    })
+                    let out = $crate::ops::field::$nom($crate::py_field_family!($F, read, self))?;
+                    Ok($crate::py_field_family!($F, wrap, $T, out))
                 }
             }
         )+
     };
-    (components: [$($T:ident),+ $(,)?], $doc_filter:literal, $doc_rename:literal) => {
+    ($F:ident components: [$($T:ident),+ $(,)?], $doc_filter:literal, $doc_rename:literal) => {
         $(
             #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pymethods)]
             #[::pyo3::pymethods]
@@ -279,24 +288,22 @@ macro_rules! py_field_transform {
                     &self,
                     components: &::pyo3::Bound<'_, ::pyo3::PyAny>,
                 ) -> ::pyo3::PyResult<$T> {
-                    use $crate::containers::field::Field;
+                    use $crate::containers::field::$F;
                     let wanted = $crate::py::ops::field::extract_names(components)?;
-                    Ok($T {
-                        inner: self.inner.filter_components(wanted.as_slice())?,
-                    })
+                    let out = $crate::py_field_family!($F, filter, self, wanted.as_slice())?;
+                    Ok($crate::py_field_family!($F, wrap, $T, out))
                 }
 
                 #[doc = $doc_rename]
                 fn rename_component(&self, old: &str, new: &str) -> ::pyo3::PyResult<$T> {
-                    use $crate::containers::field::Field;
-                    Ok($T {
-                        inner: self.inner.rename_component(old, new)?,
-                    })
+                    use $crate::containers::field::$F;
+                    let out = $F::rename_component($crate::py_field_family!($F, read, self), old, new)?;
+                    Ok($crate::py_field_family!($F, wrap, $T, out))
                 }
             }
         )+
     };
-    (richcmp: [$($T:ident),+ $(,)?], $op:path, $doc:literal) => {
+    ($F:ident richcmp: [$($T:ident),+ $(,)?], $op:path, $doc:literal) => {
         $(
             // Seul bras sans `gen_stub_pymethods` : `__richcmp__` est une
             // graphie propre à pyo3, là où CPython expose `__ge__`/`__gt__`/
@@ -323,133 +330,8 @@ macro_rules! py_field_transform {
                         CompareOp::Lt => $crate::atoms::Band::new(None, None, None, Some(x)),
                         CompareOp::Eq | CompareOp::Ne => return Ok(py.NotImplemented()),
                     }?;
-                    let out = $op(&self.inner, &band, None)?;
-                    Ok(::pyo3::Py::new(py, $T { inner: out })?.into_any())
-                }
-            }
-        )+
-    };
-}
-
-/// La même pour les **sous-conteneurs** : `op:` et `pow:` passent par
-/// `scalar_or_combine`, `unary:` et `components:` lisent à travers le handle et
-/// rendent un handle neuf. `SubField` nomme `select_components` ce que `Field`
-/// appelle `filter_components` — la seule divergence de nom entre les deux
-/// familles, absorbée ici plutôt que laissée au lecteur.
-#[macro_export]
-macro_rules! py_subfield_transform {
-    (op: [$($T:ident),+ $(,)?], $nom:ident, $f:expr, $doc:literal) => {
-        $(
-            #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pymethods)]
-            #[::pyo3::pymethods]
-            impl $T {
-                #[doc = $doc]
-                fn $nom(&self, rhs: &::pyo3::Bound<'_, ::pyo3::PyAny>) -> ::pyo3::PyResult<$T> {
-                    self.scalar_or_combine(rhs, $f)
-                }
-            }
-        )+
-    };
-    (pow: [$($T:ident),+ $(,)?], $doc:literal) => {
-        $(
-            #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pymethods)]
-            #[::pyo3::pymethods]
-            impl $T {
-                #[doc = $doc]
-                fn __pow__(
-                    &self,
-                    exponent: &::pyo3::Bound<'_, ::pyo3::PyAny>,
-                    modulo: &::pyo3::Bound<'_, ::pyo3::PyAny>,
-                ) -> ::pyo3::PyResult<$T> {
-                    use ::pyo3::types::PyAnyMethods;
-                    if !modulo.is_none() {
-                        return Err(::pyo3::exceptions::PyTypeError::new_err(
-                            "field ** exponent does not support a modulo argument",
-                        ));
-                    }
-                    self.scalar_or_combine(exponent, |a, b| a.powf(b))
-                }
-            }
-        )+
-    };
-    (unary: [$($T:ident),+ $(,)?], $nom:ident, $doc:literal) => {
-        $(
-            #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pymethods)]
-            #[::pyo3::pymethods]
-            impl $T {
-                #[doc = $doc]
-                fn $nom(&self) -> ::pyo3::PyResult<$T> {
-                    let out = $crate::ops::field::$nom(&*self.handle.read())?;
-                    Ok($T {
-                        handle: $crate::handle::Handle::new(out),
-                    })
-                }
-            }
-        )+
-    };
-    (components: [$($T:ident),+ $(,)?], $doc_filter:literal, $doc_rename:literal) => {
-        $(
-            #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pymethods)]
-            #[::pyo3::pymethods]
-            impl $T {
-                #[doc = $doc_filter]
-                fn filter_components(
-                    &self,
-                    components: &::pyo3::Bound<'_, ::pyo3::PyAny>,
-                ) -> ::pyo3::PyResult<$T> {
-                    use $crate::containers::field::SubField;
-                    let wanted = $crate::py::ops::field::extract_names(components)?;
-                    let out = self.handle.read().select_components(wanted.as_slice())?;
-                    Ok($T {
-                        handle: $crate::handle::Handle::new(out),
-                    })
-                }
-
-                #[doc = $doc_rename]
-                fn rename_component(&self, old: &str, new: &str) -> ::pyo3::PyResult<$T> {
-                    use $crate::containers::field::SubField;
-                    let out = self.handle.read().rename_component(old, new)?;
-                    Ok($T {
-                        handle: $crate::handle::Handle::new(out),
-                    })
-                }
-            }
-        )+
-    };
-    (richcmp: [$($T:ident),+ $(,)?], $op:path, $doc:literal) => {
-        $(
-            // Non décoré, comme son pendant agrégat (voir `py_field_transform`).
-            #[::pyo3::pymethods]
-            impl $T {
-                #[doc = $doc]
-                fn __richcmp__(
-                    &self,
-                    py: ::pyo3::Python<'_>,
-                    other: &::pyo3::Bound<'_, ::pyo3::PyAny>,
-                    op: ::pyo3::pyclass::CompareOp,
-                ) -> ::pyo3::PyResult<::pyo3::Py<::pyo3::PyAny>> {
-                    use ::pyo3::pyclass::CompareOp;
-                    use ::pyo3::types::PyAnyMethods;
-                    let Ok(x) = other.extract::<f64>() else {
-                        return Ok(py.NotImplemented());
-                    };
-                    let band = match op {
-                        CompareOp::Ge => $crate::atoms::Band::new(Some(x), None, None, None),
-                        CompareOp::Gt => $crate::atoms::Band::new(None, Some(x), None, None),
-                        CompareOp::Le => $crate::atoms::Band::new(None, None, Some(x), None),
-                        CompareOp::Lt => $crate::atoms::Band::new(None, None, None, Some(x)),
-                        CompareOp::Eq | CompareOp::Ne => return Ok(py.NotImplemented()),
-                    }?;
-                    // `mask_sub` ne rend pas de `Result` — la zone est seule, il
-                    // n'y a pas d'agrégat à reconstruire, donc rien à refuser.
-                    let out = $op(&self.handle.read(), &band, None);
-                    Ok(::pyo3::Py::new(
-                        py,
-                        $T {
-                            handle: $crate::handle::Handle::new(out),
-                        },
-                    )?
-                    .into_any())
+                    let out = $crate::py_field_family!($F, mask, $op, self, &band);
+                    Ok(::pyo3::Py::new(py, $crate::py_field_family!($F, wrap, $T, out))?.into_any())
                 }
             }
         )+
@@ -459,14 +341,14 @@ macro_rules! py_subfield_transform {
 // ─── Les verbes de lecture ──────────────────────────────────────────────────
 
 py_field_read!(
-    optional: [PyNodeField, PyElementField], min,
+    Field optional: [PyNodeField, PyElementField], min,
     "Smallest value of `component` across the zones defining it — or, called\n\
      without a component, the smallest value of the **whole** field, every\n\
      component of every zone pooled (see the sub-field's `min` for what\n\
      pooling means)."
 );
-py_subfield_read!(
-    optional: [PySubNodeField, PySubElementField], min,
+py_field_read!(
+    SubField optional: [PySubNodeField, PySubElementField], min,
     "Smallest value of the named `component` — or, called without one, the\n\
      smallest value of the **whole** field, every component pooled. Pooling\n\
      reads the field as the flat list of its values: on components carrying\n\
@@ -475,46 +357,46 @@ py_subfield_read!(
 );
 
 py_field_read!(
-    optional: [PyNodeField, PyElementField], max,
+    Field optional: [PyNodeField, PyElementField], max,
     "Largest value of `component` across the zones defining it — or, called\n\
      without a component, the largest value of the **whole** field (see `min`)."
 );
-py_subfield_read!(
-    optional: [PySubNodeField, PySubElementField], max,
+py_field_read!(
+    SubField optional: [PySubNodeField, PySubElementField], max,
     "Largest value of the named `component` — or, called without one, the\n\
      largest value of the **whole** field, every component pooled (see `min`)."
 );
 
 py_field_read!(
-    named: [PyNodeField, PyElementField], sum,
+    Field named: [PyNodeField, PyElementField], sum,
     "Sum of `component` across the zones defining it (Σ over the whole field)\n\
      — the resultant of a nodal force field, one component at a time. A node\n\
      carried by several zones counts once per zone that stores it. Errors if\n\
      no zone defines the component."
 );
-py_subfield_read!(
-    named: [PySubNodeField, PySubElementField], sum,
+py_field_read!(
+    SubField named: [PySubNodeField, PySubElementField], sum,
     "Sum of the named `component` over the support — Σ over the nodes, or over\n\
      the Gauss points for a field by elements. The resultant of a nodal force\n\
      field, one component at a time. An empty support sums to `0.0`."
 );
 
 py_field_read!(
-    components: [PyNodeField, PyElementField],
+    Field components: [PyNodeField, PyElementField],
     "Union of the zones' component names, first-seen order."
 );
-py_subfield_read!(
-    components: [PySubNodeField, PySubElementField],
+py_field_read!(
+    SubField components: [PySubNodeField, PySubElementField],
     "Component names, in order."
 );
 
-py_subfield_read!(
-    count: [PySubNodeField, PySubElementField], component_count,
+py_field_read!(
+    SubField count: [PySubNodeField, PySubElementField], component_count,
     "Number of components stored per node, or per Gauss point for a field by\n\
      elements."
 );
-py_subfield_read!(
-    index: [PySubNodeField, PySubElementField], component_index,
+py_field_read!(
+    SubField index: [PySubNodeField, PySubElementField], component_index,
     "Index of component `name`, or `None` if unknown — no default index would\n\
      say \"absent\" without being mistaken for a real one."
 );
@@ -522,37 +404,37 @@ py_subfield_read!(
 // ─── Les quatre mutateurs de composante ─────────────────────────────────────
 
 py_field_write!(
-    scalar: [PyNodeField, PyElementField], add_to_component,
+    Field scalar: [PyNodeField, PyElementField], add_to_component,
     "Add `scalar` to `component` on every zone that defines it."
 );
-py_subfield_write!(
-    scalar: [PySubNodeField, PySubElementField], add_to_component,
+py_field_write!(
+    SubField scalar: [PySubNodeField, PySubElementField], add_to_component,
     "Add `scalar` to every value of `component` (in place)."
 );
 
 py_field_write!(
-    scalar: [PyNodeField, PyElementField], sub_to_component,
+    Field scalar: [PyNodeField, PyElementField], sub_to_component,
     "Subtract `scalar` from `component` on every zone that defines it."
 );
-py_subfield_write!(
-    scalar: [PySubNodeField, PySubElementField], sub_to_component,
+py_field_write!(
+    SubField scalar: [PySubNodeField, PySubElementField], sub_to_component,
     "Subtract `scalar` from every value of `component` (in place)."
 );
 
 py_field_write!(
-    scalar: [PyNodeField, PyElementField], mul_to_component,
+    Field scalar: [PyNodeField, PyElementField], mul_to_component,
     "Multiply `component` by `scalar` on every zone that defines it."
 );
-py_subfield_write!(
-    scalar: [PySubNodeField, PySubElementField], mul_to_component,
+py_field_write!(
+    SubField scalar: [PySubNodeField, PySubElementField], mul_to_component,
     "Multiply every value of `component` by `scalar` (in place)."
 );
 
 py_field_write!(
-    scalar: [PyNodeField, PyElementField], div_to_component,
+    Field scalar: [PyNodeField, PyElementField], div_to_component,
     "Divide `component` by `scalar` on every zone that defines it."
 );
-py_subfield_write!(
-    scalar: [PySubNodeField, PySubElementField], div_to_component,
+py_field_write!(
+    SubField scalar: [PySubNodeField, PySubElementField], div_to_component,
     "Divide every value of `component` by `scalar` (in place)."
 );

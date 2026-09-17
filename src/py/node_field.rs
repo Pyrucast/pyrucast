@@ -444,46 +444,46 @@ class PySubNodeField:
 // engendre un appel de trampoline `unsafe` que l'édition 2024 ne couvre plus.
 
 crate::py_field_transform!(
-    op: [PyNodeField], __add__, |a, b| a + b,
-    "`field + other` — element-wise sum."
-);
-crate::py_subfield_transform!(
-    op: [PySubNodeField], __add__, |a, b| a + b,
+    Field op: [PyNodeField], __add__, |a, b| a + b,
     "`field + other` — element-wise sum."
 );
 crate::py_field_transform!(
-    op: [PyNodeField], __sub__, |a, b| a - b,
+    SubField op: [PySubNodeField], __add__, |a, b| a + b,
+    "`field + other` — element-wise sum."
+);
+crate::py_field_transform!(
+    Field op: [PyNodeField], __sub__, |a, b| a - b,
     "`field - other` — element-wise difference."
 );
-crate::py_subfield_transform!(
-    op: [PySubNodeField], __sub__, |a, b| a - b,
+crate::py_field_transform!(
+    SubField op: [PySubNodeField], __sub__, |a, b| a - b,
     "`field - other` — element-wise difference."
 );
 crate::py_field_transform!(
-    op: [PyNodeField], __mul__, |a, b| a * b,
-    "`field * other` — element-wise product."
-);
-crate::py_subfield_transform!(
-    op: [PySubNodeField], __mul__, |a, b| a * b,
+    Field op: [PyNodeField], __mul__, |a, b| a * b,
     "`field * other` — element-wise product."
 );
 crate::py_field_transform!(
-    op: [PyNodeField], __truediv__, |a, b| a / b,
-    "`field / other` — element-wise quotient."
+    SubField op: [PySubNodeField], __mul__, |a, b| a * b,
+    "`field * other` — element-wise product."
 );
-crate::py_subfield_transform!(
-    op: [PySubNodeField], __truediv__, |a, b| a / b,
+crate::py_field_transform!(
+    Field op: [PyNodeField], __truediv__, |a, b| a / b,
     "`field / other` — element-wise quotient."
 );
 crate::py_field_transform!(
-    pow: [PyNodeField],
+    SubField op: [PySubNodeField], __truediv__, |a, b| a / b,
+    "`field / other` — element-wise quotient."
+);
+crate::py_field_transform!(
+    Field pow: [PyNodeField],
     "`field ** exponent` — element-wise power, same dispatch as the other\n\
      operators (float → scalar, `NodeField` → strict same-decomposition,\n\
      `SubNodeField` → targeted zone). The ternary `pow(x, y, z)` modulo\n\
      form is rejected."
 );
-crate::py_subfield_transform!(
-    pow: [PySubNodeField],
+crate::py_field_transform!(
+    SubField pow: [PySubNodeField],
     "`field ** exponent` — element-wise power, same dispatch as the other\n\
      operators (float exponent → broadcast; `SubNodeField` → strict\n\
      element-by-element). The ternary `pow(x, y, z)` modulo form is\n\
@@ -498,13 +498,13 @@ crate::py_subfield_transform!(
 // plus haut — les faire engendrer aussi par stub-gen les compterait deux fois.
 
 crate::py_field_transform!(
-    richcmp: [PyNodeField], crate::ops::node_field::mask,
+    Field richcmp: [PyNodeField], crate::ops::node_field::mask,
     "Comparison sugar → a per-component 0/1 mask (see `mask`). `field >= x`\n\
      / `> x` / `<= x` / `< x` test every component against the scalar `x`;\n\
      `==` / `!=` and non-scalar right-hands fall back to `NotImplemented`."
 );
-crate::py_subfield_transform!(
-    richcmp: [PySubNodeField], crate::ops::node_field::mask_sub,
+crate::py_field_transform!(
+    SubField richcmp: [PySubNodeField], crate::ops::node_field::mask_sub,
     "Comparison sugar → a per-component 0/1 mask (see `mask`). `subfield >= x`\n\
      / `> x` / `<= x` / `< x` test every component against the scalar `x`;\n\
      `==` / `!=` and non-scalar right-hands fall back to `NotImplemented`."
