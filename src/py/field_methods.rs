@@ -296,6 +296,39 @@ macro_rules! py_field_transform {
             }
         )+
     };
+    (richcmp: [$($T:ident),+ $(,)?], $op:path, $doc:literal) => {
+        $(
+            // Seul bras sans `gen_stub_pymethods` : `__richcmp__` est une
+            // graphie propre à pyo3, là où CPython expose `__ge__`/`__gt__`/
+            // `__le__`/`__lt__`. Ce sont ces quatre noms que le stub déclare à
+            // la main ; les engendrer ici aussi les compterait deux fois.
+            #[::pyo3::pymethods]
+            impl $T {
+                #[doc = $doc]
+                fn __richcmp__(
+                    &self,
+                    py: ::pyo3::Python<'_>,
+                    other: &::pyo3::Bound<'_, ::pyo3::PyAny>,
+                    op: ::pyo3::pyclass::CompareOp,
+                ) -> ::pyo3::PyResult<::pyo3::Py<::pyo3::PyAny>> {
+                    use ::pyo3::pyclass::CompareOp;
+                    use ::pyo3::types::PyAnyMethods;
+                    let Ok(x) = other.extract::<f64>() else {
+                        return Ok(py.NotImplemented());
+                    };
+                    let band = match op {
+                        CompareOp::Ge => $crate::atoms::Band::new(Some(x), None, None, None),
+                        CompareOp::Gt => $crate::atoms::Band::new(None, Some(x), None, None),
+                        CompareOp::Le => $crate::atoms::Band::new(None, None, Some(x), None),
+                        CompareOp::Lt => $crate::atoms::Band::new(None, None, None, Some(x)),
+                        CompareOp::Eq | CompareOp::Ne => return Ok(py.NotImplemented()),
+                    }?;
+                    let out = $op(&self.inner, &band, None)?;
+                    Ok(::pyo3::Py::new(py, $T { inner: out })?.into_any())
+                }
+            }
+        )+
+    };
 }
 
 /// La même pour les **sous-conteneurs** : `op:` et `pow:` passent par
@@ -379,6 +412,44 @@ macro_rules! py_subfield_transform {
                     Ok($T {
                         handle: $crate::handle::Handle::new(out),
                     })
+                }
+            }
+        )+
+    };
+    (richcmp: [$($T:ident),+ $(,)?], $op:path, $doc:literal) => {
+        $(
+            // Non décoré, comme son pendant agrégat (voir `py_field_transform`).
+            #[::pyo3::pymethods]
+            impl $T {
+                #[doc = $doc]
+                fn __richcmp__(
+                    &self,
+                    py: ::pyo3::Python<'_>,
+                    other: &::pyo3::Bound<'_, ::pyo3::PyAny>,
+                    op: ::pyo3::pyclass::CompareOp,
+                ) -> ::pyo3::PyResult<::pyo3::Py<::pyo3::PyAny>> {
+                    use ::pyo3::pyclass::CompareOp;
+                    use ::pyo3::types::PyAnyMethods;
+                    let Ok(x) = other.extract::<f64>() else {
+                        return Ok(py.NotImplemented());
+                    };
+                    let band = match op {
+                        CompareOp::Ge => $crate::atoms::Band::new(Some(x), None, None, None),
+                        CompareOp::Gt => $crate::atoms::Band::new(None, Some(x), None, None),
+                        CompareOp::Le => $crate::atoms::Band::new(None, None, Some(x), None),
+                        CompareOp::Lt => $crate::atoms::Band::new(None, None, None, Some(x)),
+                        CompareOp::Eq | CompareOp::Ne => return Ok(py.NotImplemented()),
+                    }?;
+                    // `mask_sub` ne rend pas de `Result` — la zone est seule, il
+                    // n'y a pas d'agrégat à reconstruire, donc rien à refuser.
+                    let out = $op(&self.handle.read(), &band, None);
+                    Ok(::pyo3::Py::new(
+                        py,
+                        $T {
+                            handle: $crate::handle::Handle::new(out),
+                        },
+                    )?
+                    .into_any())
                 }
             }
         )+

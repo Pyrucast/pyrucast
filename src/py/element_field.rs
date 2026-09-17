@@ -1,14 +1,12 @@
 //! Python wrappers for [`crate::containers::element_field::SubElementField`] and
 //! [`crate::containers::element_field::ElementField`].
 
-use crate::atoms::Band;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::field::SubField;
 use crate::handle::Handle;
 use crate::py::finite_element_space::PyFiniteElementSpace;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::pyclass::CompareOp;
 
 /// A **view** into one zone of an `ElementField`, obtained by indexing
 /// (`element_field[i]`) — never constructed directly. Build at the parent
@@ -266,65 +264,6 @@ impl PySubElementField {
         )?
         .into_any())
     }
-
-    /// Comparison sugar → a per-component 0/1 mask (see `mask`), one value per
-    /// Gauss point. `subfield >= x` / `> x` / `<= x` / `< x` test every
-    /// component against `x`; `==` / `!=` and non-scalar right-hands fall
-    /// back to `NotImplemented`.
-    fn __richcmp__(
-        &self,
-        py: Python<'_>,
-        other: &Bound<'_, PyAny>,
-        op: CompareOp,
-    ) -> PyResult<Py<PyAny>> {
-        let Ok(x) = other.extract::<f64>() else {
-            return Ok(py.NotImplemented());
-        };
-        let band = match op {
-            CompareOp::Ge => Band::new(Some(x), None, None, None),
-            CompareOp::Gt => Band::new(None, Some(x), None, None),
-            CompareOp::Le => Band::new(None, None, Some(x), None),
-            CompareOp::Lt => Band::new(None, None, None, Some(x)),
-            CompareOp::Eq | CompareOp::Ne => return Ok(py.NotImplemented()),
-        }?;
-        let out = crate::ops::element_field::mask_sub(&self.handle.read(), &band, None);
-        Ok(Py::new(
-            py,
-            PySubElementField {
-                handle: Handle::new(out),
-            },
-        )?
-        .into_any())
-    }
-}
-
-// `__richcmp__` is a pyo3-only spelling: CPython exposes the comparison slots
-// as `__ge__`/`__gt__`/`__le__`/`__lt__`, which is what the stub must declare.
-#[pymethods]
-impl PyElementField {
-    /// Comparison sugar → a per-component 0/1 mask (see `mask`), one value per
-    /// Gauss point. `field >= x` / `> x` / `<= x` / `< x` test every component
-    /// against `x`; `==` / `!=` and non-scalar right-hands fall back to
-    /// `NotImplemented`.
-    fn __richcmp__(
-        &self,
-        py: Python<'_>,
-        other: &Bound<'_, PyAny>,
-        op: CompareOp,
-    ) -> PyResult<Py<PyAny>> {
-        let Ok(x) = other.extract::<f64>() else {
-            return Ok(py.NotImplemented());
-        };
-        let band = match op {
-            CompareOp::Ge => Band::new(Some(x), None, None, None),
-            CompareOp::Gt => Band::new(None, Some(x), None, None),
-            CompareOp::Le => Band::new(None, None, Some(x), None),
-            CompareOp::Lt => Band::new(None, None, None, Some(x)),
-            CompareOp::Eq | CompareOp::Ne => return Ok(py.NotImplemented()),
-        }?;
-        let out = crate::ops::element_field::mask(&self.inner, &band, None)?;
-        Ok(Py::new(py, PyElementField { inner: out })?.into_any())
-    }
 }
 
 #[cfg(feature = "stub-gen")]
@@ -466,4 +405,26 @@ crate::py_subfield_transform!(
      operators (float exponent → broadcast; `SubElementField` → strict\n\
      element-by-element). The ternary `pow(x, y, z)` modulo form is\n\
      rejected (meaningless on floats)."
+);
+
+// ─── Comparaisons ───────────────────────────────────────────────────────────
+//
+// Slot lui aussi, donc posé ici. Le bras `richcmp:` est le seul à ne pas
+// décorer son bloc de `gen_stub_pymethods` : CPython expose ces comparaisons
+// sous les noms `__ge__`/`__gt__`/`__le__`/`__lt__`, déjà déclarés à la main
+// plus haut — les faire engendrer aussi par stub-gen les compterait deux fois.
+
+crate::py_field_transform!(
+    richcmp: [PyElementField], crate::ops::element_field::mask,
+    "Comparison sugar → a per-component 0/1 mask (see `mask`), one value per\n\
+     Gauss point. `field >= x` / `> x` / `<= x` / `< x` test every component\n\
+     against `x`; `==` / `!=` and non-scalar right-hands fall back to\n\
+     `NotImplemented`."
+);
+crate::py_subfield_transform!(
+    richcmp: [PySubElementField], crate::ops::element_field::mask_sub,
+    "Comparison sugar → a per-component 0/1 mask (see `mask`), one value per\n\
+     Gauss point. `subfield >= x` / `> x` / `<= x` / `< x` test every\n\
+     component against `x`; `==` / `!=` and non-scalar right-hands fall back\n\
+     to `NotImplemented`."
 );
