@@ -438,6 +438,32 @@ la coercition parent→sub unitaire qui l'accompagne) — l'exception décrite
 plus haut. La règle s'applique uniformément aux quatre agrégats et a vocation
 à être portée par les macros `impl_aggregate!` / `impl_aggregate_pymethods!`.
 
+## Une macro se justifie par son nombre d'expansions
+
+Écrire une macro coûte plus qu'écrire la méthode qu'elle engendre : elle ne se
+lit pas comme du Rust, ses erreurs pointent dans l'expansion, et voir le code
+réel demande `cargo expand`. Ce coût est fixe ; ce qu'il achète croît avec le
+nombre d'expansions. **Sous quelques expansions, on écrit les méthodes.**
+
+L'ordre de grandeur retenu est **quatre**. `py_field_unary!` est expansé onze
+fois par famille et rembourse largement ; `min`, `sum`, `components`,
+`__pow__` ou `__richcmp__`, engendrés une ou deux fois, sont écrits à la main
+dans le module de leur classe.
+
+**Ce qu'une méthode écrite partage se met dans une fonction, pas dans une
+macro.** Les quatre `__richcmp__` des champs appellent tous
+`py::field_slots::band_of` : la sémantique — quelle bande de valeurs dit une
+comparaison — vit à un seul endroit, en Rust ordinaire, et se trouve en
+cherchant son nom.
+
+**Une macro par forme engendrée, et son nom la décrit.** Regrouper plusieurs
+formes sous un même nom, chacune reconnue à son mot-clé, ne mutualise rien :
+les règles d'une `macro_rules!` ne partagent aucune ligne, et le lecteur doit
+apprendre un vocabulaire (`optional:`, `named:`, `scalar:`…) pour choisir. Deux
+familles de conteneurs se traitent de même — `py_field_unary!` et
+`py_subfield_unary!` plutôt qu'un paramètre de famille, pour que chaque corps
+nomme son trait et son accès en clair.
+
 ## Le sens d'une macro : nommer ses types, ou les recevoir
 
 Une macro qui sert plusieurs types peut les **nommer elle-même** et boucler
@@ -446,12 +472,11 @@ pas affaire de goût : il suit le sens de la dépendance.
 
 **En aval** — la macro vit dans un module qui importe déjà les types servis.
 Elle les nomme, et prend la **liste** de ceux qu'elle sert :
-`py_field_read! { /// … Field optional: [PyNodeField, PyElementField], min }`,
-la doc en `///` en tête d'appel. Deux appels par verbe au lieu de quatre, et surtout la documentation écrite **une
-seule fois** — un type par appel la ferait recopier autant de fois qu'il y a de
-saveurs. C'est la forme des trois macros de `src/py/field_methods.rs`, qui
-servent les quatre saveurs de champ par bras nommés (`optional:`, `scalar:`,
-`op:`, `richcmp:`, …), la famille (`Field` ou `SubField`) en tête d'appel.
+`py_field_component_scalar! { /// … [PyNodeField, PyElementField], add_to_component }`,
+la doc en `///` en tête d'appel. Un appel par famille au lieu de quatre appels,
+et surtout la documentation écrite **une seule fois** — un type par appel la
+ferait recopier autant de fois qu'il y a de saveurs. C'est la forme des macros
+de `src/py/field_macros.rs`.
 
 **En amont** — la macro vit dans le module qui définit le trait ou la machinerie
 (`containers/field.rs`, `aggregate.rs`, `models/mod.rs`). Elle **reçoit** son

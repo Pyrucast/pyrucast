@@ -567,7 +567,7 @@ class PySubNodeField:
 
 // ─── Opérateurs arithmétiques ───────────────────────────────────────────────
 //
-// Posés ici, et non dans `field_methods.rs` où vivent leurs macros : un slot
+// Posés ici, et non dans `field_macros.rs` où vivent leurs macros : un slot
 // doit être expansé dans le module qui déclare son `#[pyclass]`, sans quoi pyo3
 // engendre un appel de trampoline `unsafe` que l'édition 2024 ne couvre plus.
 
@@ -631,10 +631,14 @@ impl PySubNodeField {
 
 // ─── Comparaisons ───────────────────────────────────────────────────────────
 //
-// Slot lui aussi, donc posé ici. Le bras `richcmp:` est le seul à ne pas
-// décorer son bloc de `gen_stub_pymethods` : CPython expose ces comparaisons
-// sous les noms `__ge__`/`__gt__`/`__le__`/`__lt__`, déjà déclarés à la main
-// plus haut — les faire engendrer aussi par stub-gen les compterait deux fois.
+// Slot lui aussi, donc posé ici, et écrit à la main : il n'a qu'une forme, et
+// ne peut pas en avoir d'autre. Ce qu'il partage avec ses trois jumeaux est sa
+// sémantique, pas sa forme — `field_slots::band_of` dit quelle bande de valeurs
+// porte une comparaison.
+//
+// Son bloc n'est **pas** décoré de `gen_stub_pymethods` : CPython expose ces
+// comparaisons sous les noms `__ge__`/`__gt__`/`__le__`/`__lt__`, déjà déclarés
+// à la main dans le stub — les faire engendrer ici les compterait deux fois.
 
 #[pymethods]
 impl PyNodeField {
