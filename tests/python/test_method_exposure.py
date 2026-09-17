@@ -36,23 +36,23 @@ CONTAINERS = {
 # Les quatre saveurs de champ, pour les opérateurs polymorphes (`typing.Any`).
 FIELDS = ["NodeField", "SubNodeField", "ElementField", "SubElementField"]
 
-# Méthodes écrites à la main, qui ne peuvent donc pas porter la documentation
-# d'une fonction libre — chacune avec la raison qui l'y oblige.
+# Méthodes qui ne portent pas la documentation de **leur fonction libre** —
+# chacune avec la raison qui l'y oblige.
 DOC_PROPRE = {
     "select": (
-        "opérateur polymorphe : la méthode ne renvoie pas à la fonction libre, "
-        "elle court-circuite le dispatch pour rendre un `Mesh` au lieu de `Any`"
+        "opérateur polymorphe : la méthode naît d'une fonction par saveur, "
+        "documentée pour ce seul receveur, et non de la fonction libre à `Any`"
     ),
     "mask": "idem — le produit est déterminé par la saveur du receveur",
     "merge_nodes": (
         "receveur `Py<Self>` et non `PyRef` : avec `in_place` elle rend l'objet "
-        "lui-même, pas une vue empruntée"
+        "lui-même, pas une vue empruntée — écrite à la main"
     ),
 }
 
 # Les pointeurs « Voir … » que le stub a encore le droit de porter : ceux des
-# méthodes ci-dessus, et rien d'autre. Ce compte ne peut que décroître.
-DOC_PROPRE_DANS_LE_STUB = ["mask"] * 4 + ["select"] * 4 + ["merge_nodes"]
+# méthodes écrites à la main, et rien d'autre. Ce compte ne peut que décroître.
+DOC_PROPRE_DANS_LE_STUB = ["merge_nodes"]
 
 # Les sources du binding, pour le contrôle des cibles de pointeurs.
 OPS_RS = pathlib.Path(__file__).resolve().parents[2] / "src" / "py" / "ops"

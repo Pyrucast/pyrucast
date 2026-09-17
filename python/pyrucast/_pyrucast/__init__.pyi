@@ -599,6 +599,23 @@ class ElementField:
         zones must agree value by value, else it errors. `field` itself is left
         untouched.
         """
+    def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> ElementField:
+        r"""
+        Per-component 0/1 **mask** of this field against a value band — same
+        structure as the field (Cast3M `MASQUE`): same zones, same support, same
+        components, same Gauss points, only the values are rewritten (`1.0` inside
+        the band, `0.0` outside). The result is therefore multipliable term by term
+        with the field.
+        
+        Its sibling `select` extracts the passing *cells* instead, and produces a
+        `Mesh`.
+        
+        The band is set by the four comparison bounds `ge` (`≥`), `gt` (`>`),
+        `le` (`≤`), `lt` (`<`). There is **no** AND across components: each value
+        stands on its own. `components=None` tests every component; a `components`
+        list tests only those, leaving the others at `1.0` (identity for the
+        product), and a zone missing a listed component is left all-`1.0`.
+        """
     def abs(self) -> ElementField:
         r"""
         Element-wise absolute value of a field.
@@ -661,13 +678,23 @@ class ElementField:
         absent, or if `new` is already taken: a name is how a component is
         addressed, so two of them cannot share one.
         """
-    def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> ElementField:
-        r"""
-        Voir `pyrucast.element_field.mask`.
-        """
     def select(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Mesh:
         r"""
-        Voir `pyrucast.mesh.select`.
+        Select the **cells** of this field passing a value band, zone by zone —
+        a value-range filter returning a `Mesh` with one submesh per processed
+        zone, each of its zone's element type. A cell passes only when *all* its
+        Gauss points do.
+        
+        The band is set by the four comparison bounds — `ge` (`≥`), `gt` (`>`),
+        `le` (`≤`), `lt` (`<`); give at most one lower (`ge`/`gt`) and one upper
+        (`le`/`lt`), at least one overall. With several components in play they
+        are combined with **AND**: a cell is kept only when *every* tested
+        component is in band.
+        
+        `components=None` tests every component of each zone. A `components`
+        list tests **only** those components, and only on the zones carrying
+        **all** of them — a zone missing any listed component is skipped (no
+        submesh). Errors if no bound is given, or the lower one exceeds the upper.
         """
     def divergence(self, prefix: builtins.str) -> NodeField:
         r"""
@@ -2458,13 +2485,22 @@ class NodeField:
         absent, or if `new` is already taken: a name is how a component is
         addressed, so two of them cannot share one.
         """
-    def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> NodeField:
-        r"""
-        Voir `pyrucast.node_field.mask`.
-        """
     def select(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Mesh:
         r"""
-        Voir `pyrucast.mesh.select`.
+        Select the **nodes** of this field passing a value band, zone by zone —
+        a value-range filter returning a `Mesh` with one POI1 submesh per
+        processed zone.
+        
+        The band is set by the four comparison bounds — `ge` (`≥`), `gt` (`>`),
+        `le` (`≤`), `lt` (`<`); give at most one lower (`ge`/`gt`) and one upper
+        (`le`/`lt`), at least one overall. With several components in play they
+        are combined with **AND**: a node is kept only when *every* tested
+        component is in band.
+        
+        `components=None` tests every component of each zone. A `components`
+        list tests **only** those components, and only on the zones carrying
+        **all** of them — a zone missing any listed component is skipped (no
+        submesh). Errors if no bound is given, or the lower one exceeds the upper.
         """
     def restrict(self, mesh: Mesh) -> NodeField:
         r"""
@@ -2507,6 +2543,22 @@ class NodeField:
         
         Errors if two zones disagree on a value at a shared `(node, component)`
         pair. `field` itself is left untouched.
+        """
+    def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> NodeField:
+        r"""
+        Per-component 0/1 **mask** of this field against a value band — same
+        structure as the field (Cast3M `MASQUE`): same zones, same support, same
+        components, only the values are rewritten (`1.0` inside the band, `0.0`
+        outside). The result is therefore multipliable term by term with the field.
+        
+        Its sibling `select` extracts the passing *nodes* instead, and produces a
+        `Mesh`.
+        
+        The band is set by the four comparison bounds `ge` (`≥`), `gt` (`>`),
+        `le` (`≤`), `lt` (`<`). There is **no** AND across components: each value
+        stands on its own. `components=None` tests every component; a `components`
+        list tests only those, leaving the others at `1.0` (identity for the
+        product), and a zone missing a listed component is left all-`1.0`.
         """
 
 @typing.final
@@ -2685,6 +2737,24 @@ class SubElementField:
         r"""
         Divide every value of `component` by `scalar` (in place).
         """
+    def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> SubElementField:
+        r"""
+        Per-component 0/1 **mask** of this sub-field against a value band — same
+        structure as the sub-field (Cast3M `MASQUE`): same support, same
+        components, same Gauss points, only the values are rewritten (`1.0` inside
+        the band, `0.0` outside). The result is therefore multipliable term by term
+        with the sub-field.
+        
+        Its sibling `select` extracts the passing *cells* instead, and produces a
+        `Mesh`.
+        
+        The band is set by the four comparison bounds `ge` (`≥`), `gt` (`>`),
+        `le` (`≤`), `lt` (`<`). There is **no** AND across components: each value
+        stands on its own. `components=None` tests every component; a `components`
+        list tests only those, leaving the others at `1.0` (identity for the
+        product). A listed component the sub-field does not carry leaves it
+        all-`1.0`.
+        """
     def abs(self) -> SubElementField:
         r"""
         Element-wise absolute value of a field.
@@ -2747,13 +2817,23 @@ class SubElementField:
         absent, or if `new` is already taken: a name is how a component is
         addressed, so two of them cannot share one.
         """
-    def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> SubElementField:
-        r"""
-        Voir `pyrucast.element_field.mask`.
-        """
     def select(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Mesh:
         r"""
-        Voir `pyrucast.mesh.select`.
+        Select the **cells** of this sub-field passing a value band — a
+        value-range filter returning a `Mesh` with a single submesh of the
+        sub-field's element type. A cell passes only when *all* its Gauss points
+        do.
+        
+        The band is set by the four comparison bounds — `ge` (`≥`), `gt` (`>`),
+        `le` (`≤`), `lt` (`<`); give at most one lower (`ge`/`gt`) and one upper
+        (`le`/`lt`), at least one overall. With several components in play they
+        are combined with **AND**: a cell is kept only when *every* tested
+        component is in band.
+        
+        `components=None` tests every component. A `components` list tests
+        **only** those components; if the sub-field lacks any of them, nothing is
+        tested and the result is an **empty** `Mesh`. Errors if no bound is given,
+        or the lower one exceeds the upper.
         """
 
 @typing.final
@@ -3493,13 +3573,39 @@ class SubNodeField:
         absent, or if `new` is already taken: a name is how a component is
         addressed, so two of them cannot share one.
         """
-    def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> SubNodeField:
-        r"""
-        Voir `pyrucast.node_field.mask`.
-        """
     def select(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> Mesh:
         r"""
-        Voir `pyrucast.mesh.select`.
+        Select the **nodes** of this sub-field passing a value band — a
+        value-range filter returning a `Mesh` with a single POI1 submesh.
+        
+        The band is set by the four comparison bounds — `ge` (`≥`), `gt` (`>`),
+        `le` (`≤`), `lt` (`<`); give at most one lower (`ge`/`gt`) and one upper
+        (`le`/`lt`), at least one overall. With several components in play they
+        are combined with **AND**: a node is kept only when *every* tested
+        component is in band.
+        
+        `components=None` tests every component. A `components` list tests
+        **only** those components; if the sub-field lacks any of them, nothing is
+        tested and the result is an **empty** `Mesh`. Errors if no bound is given,
+        or the lower one exceeds the upper.
+        """
+    def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> SubNodeField:
+        r"""
+        Per-component 0/1 **mask** of this sub-field against a value band — same
+        structure as the sub-field (Cast3M `MASQUE`): same support, same
+        components, only the values are rewritten (`1.0` inside the band, `0.0`
+        outside). The result is therefore multipliable term by term with the
+        sub-field.
+        
+        Its sibling `select` extracts the passing *nodes* instead, and produces a
+        `Mesh`.
+        
+        The band is set by the four comparison bounds `ge` (`≥`), `gt` (`>`),
+        `le` (`≤`), `lt` (`<`). There is **no** AND across components: each value
+        stands on its own. `components=None` tests every component; a `components`
+        list tests only those, leaving the others at `1.0` (identity for the
+        product). A listed component the sub-field does not carry leaves it
+        all-`1.0`.
         """
 
 def abs(field: typing.Any) -> typing.Any:
@@ -4355,8 +4461,9 @@ def mask_element(field: typing.Any, ge: typing.Optional[builtins.float] = None, 
     only the values are rewritten (`1.0` inside the band, `0.0` outside). The
     result is therefore multipliable term by term with the input.
     
-    Its sibling `pyrucast.mesh.select` extracts the passing *support* instead,
-    and produces a `Mesh`.
+    `field` is an `ElementField` or a `SubElementField`, and the result is of
+    the same kind. Its sibling `pyrucast.mesh.select` extracts the passing
+    *support* instead, and produces a `Mesh`.
     
     The band is set by the four comparison bounds `ge` (`≥`), `gt` (`>`),
     `le` (`≤`), `lt` (`<`). There is **no** AND across components: each value
@@ -4372,8 +4479,9 @@ def mask_node(field: typing.Any, ge: typing.Optional[builtins.float] = None, gt:
     only the values are rewritten (`1.0` inside the band, `0.0` outside). The
     result is therefore multipliable term by term with the input.
     
-    Its sibling `pyrucast.mesh.select` extracts the passing *support* instead,
-    and produces a `Mesh`.
+    `field` is a `NodeField` or a `SubNodeField`, and the result is of the same
+    kind. Its sibling `pyrucast.mesh.select` extracts the passing *support*
+    instead, and produces a `Mesh`.
     
     The band is set by the four comparison bounds `ge` (`≥`), `gt` (`>`),
     `le` (`≤`), `lt` (`<`). There is **no** AND across components: each value

@@ -1352,21 +1352,150 @@ pub fn select(
     lt: Option<f64>,
     components: Option<Vec<String>>,
 ) -> PyResult<PyMesh> {
-    let band = crate::atoms::Band::new(ge, gt, le, lt)?;
-    let inner = if let Ok(f) = field.extract::<PyRef<PyNodeField>>() {
-        crate::ops::mesh::select_nodes(&f.inner, &band, components)?
+    if let Ok(f) = field.extract::<PyRef<PyNodeField>>() {
+        select_nodes(f, ge, gt, le, lt, components)
     } else if let Ok(f) = field.extract::<PyRef<PyElementField>>() {
-        crate::ops::mesh::select_cells(&f.inner, &band, components)?
+        select_cells(f, ge, gt, le, lt, components)
     } else if let Ok(f) = field.extract::<PyRef<PySubNodeField>>() {
-        crate::ops::mesh::select_sub_nodes(&f.handle.read(), &band, components)?
+        select_sub_nodes(f, ge, gt, le, lt, components)
     } else if let Ok(f) = field.extract::<PyRef<PySubElementField>>() {
-        crate::ops::mesh::select_sub_cells(&f.handle.read(), &band, components)?
+        select_sub_cells(f, ge, gt, le, lt, components)
     } else {
-        return Err(PyTypeError::new_err(
+        Err(PyTypeError::new_err(
             "expected a NodeField, SubNodeField, ElementField or SubElementField",
-        ));
-    };
-    Ok(PyMesh { inner })
+        ))
+    }
+}
+
+// Les quatre saveurs de `select`, chacune documentée pour son seul receveur.
+// Non enregistrées dans le module — la fonction libre ci-dessus reste le point
+// d'entrée polymorphe —, elles donnent à `#[py_op]` la méthode de chaque
+// saveur. `#[pyfunction]` n'y sert qu'à rendre valide la signature pyo3 que
+// `#[py_op]` recopie.
+
+/// Select the **nodes** of this field passing a value band, zone by zone —
+/// a value-range filter returning a `Mesh` with one POI1 submesh per
+/// processed zone.
+///
+/// The band is set by the four comparison bounds — `ge` (`≥`), `gt` (`>`),
+/// `le` (`≤`), `lt` (`<`); give at most one lower (`ge`/`gt`) and one upper
+/// (`le`/`lt`), at least one overall. With several components in play they
+/// are combined with **AND**: a node is kept only when *every* tested
+/// component is in band.
+///
+/// `components=None` tests every component of each zone. A `components`
+/// list tests **only** those components, and only on the zones carrying
+/// **all** of them — a zone missing any listed component is skipped (no
+/// submesh). Errors if no bound is given, or the lower one exceeds the upper.
+#[py_op(method_on = PyNodeField, name = "select")]
+#[pyfunction]
+#[pyo3(signature = (field, ge=None, gt=None, le=None, lt=None, components=None))]
+pub fn select_nodes(
+    field: PyRef<PyNodeField>,
+    ge: Option<f64>,
+    gt: Option<f64>,
+    le: Option<f64>,
+    lt: Option<f64>,
+    components: Option<Vec<String>>,
+) -> PyResult<PyMesh> {
+    let band = crate::atoms::Band::new(ge, gt, le, lt)?;
+    Ok(PyMesh {
+        inner: crate::ops::mesh::select_nodes(&field.inner, &band, components)?,
+    })
+}
+
+/// Select the **cells** of this field passing a value band, zone by zone —
+/// a value-range filter returning a `Mesh` with one submesh per processed
+/// zone, each of its zone's element type. A cell passes only when *all* its
+/// Gauss points do.
+///
+/// The band is set by the four comparison bounds — `ge` (`≥`), `gt` (`>`),
+/// `le` (`≤`), `lt` (`<`); give at most one lower (`ge`/`gt`) and one upper
+/// (`le`/`lt`), at least one overall. With several components in play they
+/// are combined with **AND**: a cell is kept only when *every* tested
+/// component is in band.
+///
+/// `components=None` tests every component of each zone. A `components`
+/// list tests **only** those components, and only on the zones carrying
+/// **all** of them — a zone missing any listed component is skipped (no
+/// submesh). Errors if no bound is given, or the lower one exceeds the upper.
+#[py_op(method_on = PyElementField, name = "select")]
+#[pyfunction]
+#[pyo3(signature = (field, ge=None, gt=None, le=None, lt=None, components=None))]
+pub fn select_cells(
+    field: PyRef<PyElementField>,
+    ge: Option<f64>,
+    gt: Option<f64>,
+    le: Option<f64>,
+    lt: Option<f64>,
+    components: Option<Vec<String>>,
+) -> PyResult<PyMesh> {
+    let band = crate::atoms::Band::new(ge, gt, le, lt)?;
+    Ok(PyMesh {
+        inner: crate::ops::mesh::select_cells(&field.inner, &band, components)?,
+    })
+}
+
+/// Select the **nodes** of this sub-field passing a value band — a
+/// value-range filter returning a `Mesh` with a single POI1 submesh.
+///
+/// The band is set by the four comparison bounds — `ge` (`≥`), `gt` (`>`),
+/// `le` (`≤`), `lt` (`<`); give at most one lower (`ge`/`gt`) and one upper
+/// (`le`/`lt`), at least one overall. With several components in play they
+/// are combined with **AND**: a node is kept only when *every* tested
+/// component is in band.
+///
+/// `components=None` tests every component. A `components` list tests
+/// **only** those components; if the sub-field lacks any of them, nothing is
+/// tested and the result is an **empty** `Mesh`. Errors if no bound is given,
+/// or the lower one exceeds the upper.
+#[py_op(method_on = PySubNodeField, name = "select")]
+#[pyfunction]
+#[pyo3(signature = (field, ge=None, gt=None, le=None, lt=None, components=None))]
+pub fn select_sub_nodes(
+    field: PyRef<PySubNodeField>,
+    ge: Option<f64>,
+    gt: Option<f64>,
+    le: Option<f64>,
+    lt: Option<f64>,
+    components: Option<Vec<String>>,
+) -> PyResult<PyMesh> {
+    let band = crate::atoms::Band::new(ge, gt, le, lt)?;
+    Ok(PyMesh {
+        inner: crate::ops::mesh::select_sub_nodes(&field.handle.read(), &band, components)?,
+    })
+}
+
+/// Select the **cells** of this sub-field passing a value band — a
+/// value-range filter returning a `Mesh` with a single submesh of the
+/// sub-field's element type. A cell passes only when *all* its Gauss points
+/// do.
+///
+/// The band is set by the four comparison bounds — `ge` (`≥`), `gt` (`>`),
+/// `le` (`≤`), `lt` (`<`); give at most one lower (`ge`/`gt`) and one upper
+/// (`le`/`lt`), at least one overall. With several components in play they
+/// are combined with **AND**: a cell is kept only when *every* tested
+/// component is in band.
+///
+/// `components=None` tests every component. A `components` list tests
+/// **only** those components; if the sub-field lacks any of them, nothing is
+/// tested and the result is an **empty** `Mesh`. Errors if no bound is given,
+/// or the lower one exceeds the upper.
+#[py_op(method_on = PySubElementField, name = "select")]
+#[pyfunction]
+#[pyo3(signature = (field, ge=None, gt=None, le=None, lt=None, components=None))]
+pub fn select_sub_cells(
+    field: PyRef<PySubElementField>,
+    ge: Option<f64>,
+    gt: Option<f64>,
+    le: Option<f64>,
+    lt: Option<f64>,
+    components: Option<Vec<String>>,
+) -> PyResult<PyMesh> {
+    let band = crate::atoms::Band::new(ge, gt, le, lt)?;
+    Ok(PyMesh {
+        inner: crate::ops::mesh::select_sub_cells(&field.handle.read(), &band, components)?,
+    })
 }
 
 // ─── Méthodes de délégation ────────────────────────────────────────────────

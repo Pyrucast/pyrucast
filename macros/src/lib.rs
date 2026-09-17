@@ -96,9 +96,10 @@ pub fn py_op(attr: TokenStream, item: TokenStream) -> TokenStream {
     };
     if type_mentions(subject, "Bound") {
         return error(
-            "`py_op` ne convient pas à un opérateur polymorphe : sa méthode ne renvoie \
-             pas à la fonction libre, elle court-circuite le dispatch pour rendre un \
-             type précis. À écrire à la main, une fois par saveur",
+            "`py_op` ne convient pas à un sujet polymorphe : la méthode rendrait `Any` \
+             là où son receveur fixe le type. Extraire une fonction par saveur, au \
+             sujet `PyRef<…>`, et poser l'attribut sur chacune (modèle : \
+             `py::ops::node_field::mask`)",
         );
     }
     let rest: Vec<&FnArg> = inputs.collect();

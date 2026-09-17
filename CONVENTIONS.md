@@ -217,13 +217,22 @@ réécrire, et prend `name = "…"` quand le nom change entre les deux formes
 dérogation de lint qui vaut pour elle vaut pour sa méthode, qui porte les mêmes
 arguments.
 
-Trois cas seulement restent écrits à la main, et chacun pour une raison qui se
+Deux cas seulement restent écrits à la main, et chacun pour une raison qui se
 dit en une ligne : un **receveur qui n'est pas un emprunt** (`merge_nodes` rend
-l'objet lui-même, d'où `Py<Self>`), un **opérateur polymorphe** (`select`,
-`mask` — leur méthode ne renvoie pas à la fonction libre, elle court-circuite le
-dispatch pour rendre un type précis au lieu de `Any`), et une **méthode sans
-fonction libre**, forme canonique à part entière. L'attribut refuse d'ailleurs
-le deuxième cas avec son motif, plutôt que de produire un code faux.
+l'objet lui-même, d'où `Py<Self>`), et une **méthode sans fonction libre**,
+forme canonique à part entière.
+
+L'**opérateur polymorphe** (`select`, `mask`) n'en est plus un. Sa méthode ne
+doit pas renvoyer à la fonction libre, qui rend `Any` : le receveur fixe la
+saveur, donc le type produit. La fonction libre dispatche alors vers **une
+fonction par saveur**, au sujet `PyRef<…>` et au retour précis, et c'est sur
+celles-ci que se pose `#[py_op]`. Chacune porte **sa** documentation, écrite
+pour ce seul receveur — un sous-champ n'a pas de zones à évoquer. Ces fonctions
+de saveur ne sont pas enregistrées dans le module : la fonction libre reste le
+seul point d'entrée, et `#[pyfunction]` n'y sert qu'à rendre valide la
+`#[pyo3(signature = …)]` que l'attribut recopie. Posé sur un sujet `Bound`,
+l'attribut refuse avec ce mode d'emploi, plutôt que de produire une méthode
+qui rendrait `Any`.
 
 ### Le nom peut changer entre les deux formes
 

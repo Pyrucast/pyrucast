@@ -189,8 +189,9 @@ pub fn external_forces(
 /// only the values are rewritten (`1.0` inside the band, `0.0` outside). The
 /// result is therefore multipliable term by term with the input.
 ///
-/// Its sibling `pyrucast.mesh.select` extracts the passing *support* instead,
-/// and produces a `Mesh`.
+/// `field` is a `NodeField` or a `SubNodeField`, and the result is of the same
+/// kind. Its sibling `pyrucast.mesh.select` extracts the passing *support*
+/// instead, and produces a `Mesh`.
 ///
 /// The band is set by the four comparison bounds `ge` (`≥`), `gt` (`>`),
 /// `le` (`≤`), `lt` (`<`). There is **no** AND across components: each value
@@ -211,22 +212,83 @@ pub fn mask(
     lt: Option<f64>,
     components: Option<Vec<String>>,
 ) -> PyResult<Py<PyAny>> {
-    let band = crate::atoms::Band::new(ge, gt, le, lt)?;
     if let Ok(f) = field.extract::<PyRef<PyNodeField>>() {
-        let out = crate::ops::node_field::mask(&f.inner, &band, components)?;
-        Ok(Py::new(py, PyNodeField { inner: out })?.into_any())
+        Ok(Py::new(py, mask_node_field(f, ge, gt, le, lt, components)?)?.into_any())
     } else if let Ok(f) = field.extract::<PyRef<PySubNodeField>>() {
-        let out = crate::ops::node_field::mask_sub(&f.handle.read(), &band, components);
-        Ok(Py::new(
-            py,
-            PySubNodeField {
-                handle: Handle::new(out),
-            },
-        )?
-        .into_any())
+        Ok(Py::new(py, mask_sub_node_field(f, ge, gt, le, lt, components)?)?.into_any())
     } else {
         Err(PyTypeError::new_err(
             "expected a PyNodeField or PySubNodeField",
         ))
     }
+}
+
+// Les deux saveurs de `mask`, chacune à son type précis. Elles ne sont pas
+// enregistrées dans le module — la fonction libre reste le seul point d'entrée
+// polymorphe — mais `#[py_op]` en tire la méthode du receveur, avec **leur**
+// documentation : celle d'une saveur, qui n'a pas à évoquer l'autre.
+// `#[pyfunction]` n'est là que pour rendre valide `#[pyo3(signature = …)]`,
+// que `#[py_op]` recopie sur la méthode.
+
+/// Per-component 0/1 **mask** of this field against a value band — same
+/// structure as the field (Cast3M `MASQUE`): same zones, same support, same
+/// components, only the values are rewritten (`1.0` inside the band, `0.0`
+/// outside). The result is therefore multipliable term by term with the field.
+///
+/// Its sibling `select` extracts the passing *nodes* instead, and produces a
+/// `Mesh`.
+///
+/// The band is set by the four comparison bounds `ge` (`≥`), `gt` (`>`),
+/// `le` (`≤`), `lt` (`<`). There is **no** AND across components: each value
+/// stands on its own. `components=None` tests every component; a `components`
+/// list tests only those, leaving the others at `1.0` (identity for the
+/// product), and a zone missing a listed component is left all-`1.0`.
+#[py_op(method_on = PyNodeField, name = "mask")]
+#[pyfunction]
+#[pyo3(signature = (field, ge=None, gt=None, le=None, lt=None, components=None))]
+pub fn mask_node_field(
+    field: PyRef<PyNodeField>,
+    ge: Option<f64>,
+    gt: Option<f64>,
+    le: Option<f64>,
+    lt: Option<f64>,
+    components: Option<Vec<String>>,
+) -> PyResult<PyNodeField> {
+    let band = crate::atoms::Band::new(ge, gt, le, lt)?;
+    Ok(PyNodeField {
+        inner: crate::ops::node_field::mask(&field.inner, &band, components)?,
+    })
+}
+
+/// Per-component 0/1 **mask** of this sub-field against a value band — same
+/// structure as the sub-field (Cast3M `MASQUE`): same support, same
+/// components, only the values are rewritten (`1.0` inside the band, `0.0`
+/// outside). The result is therefore multipliable term by term with the
+/// sub-field.
+///
+/// Its sibling `select` extracts the passing *nodes* instead, and produces a
+/// `Mesh`.
+///
+/// The band is set by the four comparison bounds `ge` (`≥`), `gt` (`>`),
+/// `le` (`≤`), `lt` (`<`). There is **no** AND across components: each value
+/// stands on its own. `components=None` tests every component; a `components`
+/// list tests only those, leaving the others at `1.0` (identity for the
+/// product). A listed component the sub-field does not carry leaves it
+/// all-`1.0`.
+#[py_op(method_on = PySubNodeField, name = "mask")]
+#[pyfunction]
+#[pyo3(signature = (field, ge=None, gt=None, le=None, lt=None, components=None))]
+pub fn mask_sub_node_field(
+    field: PyRef<PySubNodeField>,
+    ge: Option<f64>,
+    gt: Option<f64>,
+    le: Option<f64>,
+    lt: Option<f64>,
+    components: Option<Vec<String>>,
+) -> PyResult<PySubNodeField> {
+    let band = crate::atoms::Band::new(ge, gt, le, lt)?;
+    let out = crate::ops::node_field::mask_sub(&field.handle.read(), &band, components);
+    Ok(PySubNodeField {
+        handle: Handle::new(out),
+    })
 }
