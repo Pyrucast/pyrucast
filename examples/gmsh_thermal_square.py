@@ -1,20 +1,20 @@
-"""Conduction thermique 2-D sur un maillage **importé de gmsh**.
+"""2-D thermal conduction on a mesh **imported from gmsh**.
 
 Chaîne complète : *fichier gmsh → import → assemblage → résolution*.
 
-Le maillage n'est pas construit à la main : on écrit un `.msh` (format gmsh
-MSH 2.2 ASCII) d'un carré unité ``[0, 1]²`` maillé en QUA4, avec trois
+The mesh is not built by hand: a `.msh` (gmsh MSH 2.2 ASCII format) of a unit
+square ``[0, 1]²`` meshed in QUA4 is written, with three
 **groupes physiques** nommés ::
 
     "plate"  — la surface (QUA4)
     "left"   — le bord gauche x = 0 (SEG2)
     "right"  — le bord droit  x = 1 (SEG2)
 
-puis on le relit avec ``read_gmsh`` : on récupère un ``dict`` ``{groupe: Mesh}``
-dont les régions nommées servent **directement** à poser les conditions aux
-limites — tout l'intérêt des groupes physiques.
+then it is read back with ``read_gmsh``: a ``dict`` ``{group: Mesh}`` comes
+back, whose named regions serve **directly** to set the boundary conditions —
+the whole point of physical groups.
 
-Problème (identique à ``thermal_square_2d.py``, mais le maillage vient d'un
+Problem (identical to ``thermal_square_2d.py``, but the mesh comes from a
 fichier) :
 
   * bord **gauche** : source de chaleur répartie (flux de Neumann, densité Q) ;
@@ -25,9 +25,9 @@ Solution analytique, indépendante de y ::
 
     u(x) = 20 + (Q / k) * (1 - x)
 
-> ``read_gmsh`` lit aussi le **binaire** gmsh ; il suffit de pointer
-> ``read_gmsh(coords, "maillage.msh")`` sur un fichier produit avec
-> ``-bin``, rien d'autre ne change.
+> ``read_gmsh`` also reads gmsh **binary**; just point
+> ``read_gmsh(coords, "maillage.msh")`` at a file produced with
+> ``-bin``, nothing else changes.
 
 Lancement ::
 
@@ -40,21 +40,21 @@ from pathlib import Path
 
 import pyrucast
 
-# ── Données du problème ──────────────────────────────────────────────────────
+# ── Problem data ────────────────────────────────────────────────────────────
 K = 1.0  # conductivité
-Q = 10.0  # densité de flux injectée sur le bord gauche (longueur 1 ⇒ total Q)
-T_IMPOSED = 20.0  # température imposée sur le bord droit
+Q = 10.0  # flux density injected on the left edge (length 1 ⇒ total Q)
+T_IMPOSED = 20.0  # imposed temperature on the right edge
 N = 4  # N×N éléments QUA4
 
 # Codes d'éléments gmsh utilisés ici.
 GMSH_SEG2 = 1
 GMSH_QUA4 = 3
-# Nœuds par type pyrucast (pour parcourir un maillage importé).
+# Nodes by pyrucast type (to walk an imported mesh).
 NODES_PER_CELL = {"POI1": 1, "SEG2": 2, "TRI3": 3, "QUA4": 4, "TET4": 4, "HEX8": 8}
 
 
 def write_square_msh(path: Path, n: int) -> None:
-    """Écrit un `.msh` gmsh MSH 2.2 ASCII : carré unité en n×n QUA4, avec les
+    """Writes a gmsh MSH 2.2 ASCII `.msh`: unit square in n×n QUA4, with the
     groupes physiques « plate » (surface), « left » et « right » (bords)."""
     h = 1.0 / n
 
@@ -79,7 +79,7 @@ def write_square_msh(path: Path, n: int) -> None:
             lines.append(f"{tag(i, j)} {i * h} {j * h} 0")
     lines.append("$EndNodes")
 
-    # Éléments : QUA4 (plate) + SEG2 des bords gauche/droit. Format MSH 2.2 :
+    # Elements: QUA4 (plate) + SEG2 of the left/right edges. MSH 2.2 format:
     # `id type ntags phys geom noeuds...` (ntags=2 : groupe physique + entité).
     elems: list[str] = []
 
@@ -103,7 +103,7 @@ def write_square_msh(path: Path, n: int) -> None:
 
 
 def unique_nodes(mesh: "pyrucast.Mesh") -> list["pyrucast.Node"]:
-    """Nœuds distincts (dédupliqués par identifiant) d'un maillage importé."""
+    """Distinct nodes (deduplicated by identifier) of an imported mesh."""
     out: dict[int, "pyrucast.Node"] = {}
     for s, (etype, count) in enumerate(zip(mesh.element_types(), mesh.cell_counts())):
         for c in range(count):
@@ -127,7 +127,7 @@ def main() -> None:
     left = regions["left"]
     right = regions["right"]
 
-    # ── 2. Modèle thermique sur la surface + Dirichlet sur le bord droit ─────
+    # ── 2. Thermal model on the surface + Dirichlet on the right edge ────────
     fes = pyrucast.FiniteElementSpace(plate)
 
     right_nodes = unique_nodes(right)
@@ -139,7 +139,7 @@ def main() -> None:
 
     model = cible | pyrucast.model.dirichlet(cible, "T", imposed, multiplier)
 
-    # ── 3. Chargement : flux réparti sur le bord gauche + T imposée ──────────
+    # ── 3. Loading: flux distributed on the left edge + imposed T ────────────
     left_fes = pyrucast.FiniteElementSpace(left)
     model = model | pyrucast.model.flux(left_fes, model, "q")
     materials = pyrucast.element_field.material_field(model, [("k", K), ("phi_q", Q)])
@@ -158,7 +158,7 @@ def main() -> None:
     K_mat = pyrucast.matrix.stiffness(model, materials)
     solution = pyrucast.solver.solve(K_mat, rhs)
 
-    # ── 5. Comparaison à l'analytique u(x) = 20 + (Q/k)(1 - x) ───────────────
+    # ── 5. Compared with the analytical u(x) = 20 + (Q/k)(1 - x) ─────────────
     tol = 1e-9
     max_err = 0.0
     for node in unique_nodes(plate):
@@ -168,18 +168,20 @@ def main() -> None:
         max_err = max(max_err, abs(got - expected))
         assert abs(got - expected) < tol, f"x={x}: {got} != {expected}"
 
-    print(f"\nerreur max sur la plaque = {max_err:.2e}")
+    print(f"\nmax error over the plate = {max_err:.2e}")
 
     reaction = sum(solution.value(m, "lambda_T") for m in mults)
     print(f"réaction totale Σλ = {reaction:.6f}  (attendu {Q})")
     assert abs(reaction - Q) < tol
 
-    # ── 6. Export VTK pour ParaView (géométrie + champ T aux nœuds) ──────────
+    # ── 6. VTK export for ParaView (geometry + field T at the nodes) ─────────
     vtk_out = Path(tempfile.gettempdir()) / "pyrucast_plate.vtk"
     pyrucast.export.export_vtk(plate, str(vtk_out), field=solution)
-    print(f"\nVTK écrit : {vtk_out}  (à ouvrir dans ParaView)")
+    print(f"\nVTK written: {vtk_out}  (to open in ParaView)")
 
-    print("\nOK : maillage gmsh importé, résolu, exporté, conforme à l'analytique.")
+    print(
+        "\nOK: gmsh mesh imported, solved, exported, matching the analytical solution."
+    )
 
 
 if __name__ == "__main__":

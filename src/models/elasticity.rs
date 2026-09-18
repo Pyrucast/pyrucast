@@ -64,8 +64,8 @@ use serde::{Deserialize, Serialize};
 /// # use pyrucast::models::tensor::Kinematics;
 /// let e = Elasticity::new(zone.clone(), Kinematics::PlaneStress)?;
 /// assert_eq!(e.material_components(), vec!["E".to_string(), "nu".to_string()]);
-/// // La dilatation thermique est **facultative** : sans `alpha`, le modèle
-/// // s'assemble sans elle.
+/// // Thermal expansion is **optional**: without `alpha`, the model assembles
+/// // without it.
 /// assert!(e.optional_material_components().contains(&"alpha"));
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -100,8 +100,8 @@ impl Elasticity {
     /// # use pyrucast::models::tensor::Kinematics;
     /// let e = Elasticity::new(zone.clone(), Kinematics::PlaneStress)?;
     /// assert_eq!(e.material_components(), vec!["E".to_string(), "nu".to_string()]);
-    /// // La dilatation thermique est **facultative** : sans `alpha`, le modèle
-    /// // s'assemble sans elle.
+    /// // Thermal expansion is **optional**: without `alpha`, the model assembles
+    /// // without it.
     /// assert!(e.optional_material_components().contains(&"alpha"));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -131,8 +131,8 @@ impl Elasticity {
     /// # use pyrucast::models::elasticity::Elasticity;
     /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// // Le constructeur général : une symétrie orthotrope élargit le contrat
-    /// // matériau, qui porte alors les modules **et** les axes.
+    /// // The general constructor: an orthotropic symmetry widens the material
+    /// // contract, which then carries the moduli **and** the axes.
     /// let o = Elasticity::with_symmetry(
     ///     zone.clone(), Kinematics::PlaneStress, MaterialSymmetry::Orthotropic)?;
     /// assert!(o.material_components().len() > 2);
@@ -235,8 +235,8 @@ impl Domain for Elasticity {
         elastic::OPTIONAL_COMPONENTS
     }
 
-    /// La raideur géométrique lit la contrainte courante ; la tangente, elle,
-    /// ne lit plus rien — elle est évaluée au point.
+    /// The geometric stiffness reads the current stress; the tangent reads nothing
+    /// any more — it is evaluated at the point.
     fn element_state_reads(&self, kind: MatrixKind) -> Vec<String> {
         self.continuum.element_state_reads(kind)
     }
@@ -306,15 +306,15 @@ impl Behavior for Elasticity {
             self.continuum.kinematics(),
         );
         let mat = MatRead::new(material, &lay.material, &lay.optional_material);
-        // Dispatch **statique** : un `match` sur une énumération `Copy` ne coûte
+        // **Static** dispatch: a `match` on a `Copy` enumeration costs
         // rien et laisse le noyau s'inliner. Ce qu'on a mesuré, et non supposé :
-        // remplacer `as_law()` par ce `match` n'a **rien** changé (p = 0,86) —
-        // le surcoût venait de la frontière de module que le noyau doit
-        // franchir, et c'est `#[inline]` sur `Linear::stress` qui l'a rendu.
-        // Le `match` reste parce qu'il est gratuit et qu'il tient la boucle la
-        // plus chaude hors du dispatch dynamique par construction, plutôt que
-        // par la bonne volonté de l'optimiseur. `as_law()` sert les
-        // déclarations de **zone**, où son coût est nul.
+        // replacing `as_law()` with this `match` changed **nothing** (p = 0.86) —
+        // the overhead came from the module boundary the kernel must cross, and
+        // `#[inline]` on `Linear::stress` is what gave it back.
+        // The `match` stays because it is free and keeps the hottest loop out of
+        // dynamic dispatch by construction, rather than by the optimizer's good
+        // will. `as_law()` serves the **zone** declarations, where its cost is nil.
+
         match self.law {
             ElasticLaw::Linear => {
                 linear::Linear.stress(&strain, &mat, &self.continuum, self.symmetry, out)

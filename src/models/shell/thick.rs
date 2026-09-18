@@ -62,7 +62,7 @@ use crate::models::{CellGeom, ElementLayout};
 /// ```
 /// # use pyrucast::models::shell::{self, ShellModel};
 /// # use pyrucast::models::shell::thick;
-/// // Contraintes planes × épaisseur : D_m est proportionnelle à h.
+/// // Plane stress × thickness: D_m is proportional to h.
 /// let a = thick::membrane_law(210_000.0, 0.3, 0.01);
 /// let b = thick::membrane_law(210_000.0, 0.3, 0.02);
 /// assert!((b[0][0] - 2.0 * a[0][0]).abs() < 1e-6);
@@ -82,7 +82,7 @@ pub fn membrane_law(e: f64, nu: f64, h: f64) -> [[f64; 3]; 3] {
 /// ```
 /// # use pyrucast::models::shell::{self, ShellModel};
 /// # use pyrucast::models::shell::thick;
-/// // Le même matériau pondéré par z² sur l'épaisseur : D_b = D_m · h²/12.
+/// // The same material weighted by z² over the thickness: D_b = D_m · h²/12.
 /// let h = 0.01;
 /// let m = thick::membrane_law(210_000.0, 0.3, h);
 /// let b = thick::bending_law(210_000.0, 0.3, h);
@@ -99,7 +99,7 @@ pub fn bending_law(e: f64, nu: f64, h: f64) -> [[f64; 3]; 3] {
 /// ```
 /// # use pyrucast::models::shell::{self, ShellModel};
 /// # use pyrucast::models::shell::thick;
-/// // k_s·G·h, avec G = E / 2(1+ν).
+/// // k_s·G·h, with G = E / 2(1+ν).
 /// let g = 210_000.0 / 2.6;
 /// assert!((thick::shear_law(210_000.0, 0.3, 0.01, 5.0 / 6.0)
 ///          - 5.0 / 6.0 * g * 0.01).abs() < 1e-9);
@@ -140,16 +140,16 @@ pub fn shear_law(e: f64, nu: f64, h: f64, k_s: f64) -> f64 {
 /// # use pyrucast::models::shell::thick;
 /// # use pyrucast::models::ElementLayout;
 /// # use pyrucast::containers::field::ABSENT_COMPONENT;
-/// // Sans `k_s` au matériau, la valeur d'une section rectangulaire
-/// // homogène : 5/6. Le contrat facultatif d'une coque épaisse est
-/// // `["rho", "k_s"]`, et ici les deux manquent.
+/// // Without `k_s` in the material, the value of a homogeneous rectangular
+/// // section: 5/6. A thick shell's optional contract is `["rho", "k_s"]`, and
+/// // here both are missing.
 /// let sans = ElementLayout {
 ///     material: vec![0, 1, 2],
 ///     optional_material: vec![ABSENT_COMPONENT, ABSENT_COMPONENT],
 ///     state: vec![],
 /// };
 /// assert!((thick::shear_factor(mat.read().point_values(0, 0)?, &sans) - 5.0 / 6.0).abs() < 1e-12);
-/// // Avec, c'est celle du matériau qui l'emporte.
+/// // With it, the material's value wins.
 /// # let propre = SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["E".into(), "nu".into(), "h".into(), "k_s".into()],
 /// #     &[210_000.0, 0.3, 0.01, 0.85])?;
@@ -203,12 +203,12 @@ const K_S_SLOT: usize = 1;
 /// #               vec!["u_x".to_string(), "u_y".to_string(), "u_z".to_string(),
 /// #                    "r_x".to_string(), "r_y".to_string(), "r_z".to_string()]);
 /// # use pyrucast::models::shell::thick;
-/// // Deux `CellGeom` : la quadrature **complète** pour la membrane et la
-/// // flexion, la **réduite** pour le cisaillement transverse — c'est ce
-/// // qui empêche le blocage en mince.
+/// // Two `CellGeom`: the **full** quadrature for membrane and bending, the
+/// // **reduced** one for transverse shear — that is what keeps a thin shell
+/// // from locking.
 /// # use pyrucast::models::ElementLayout;
 /// # use pyrucast::containers::field::ABSENT_COMPONENT;
-/// // `E`, `nu`, `h` dans l'ordre du contrat ; ni `rho` ni `k_s` ici.
+/// // `E`, `nu`, `h` in the contract's order; neither `rho` nor `k_s` here.
 /// let lay = ElementLayout {
 ///     material: vec![0, 1, 2],
 ///     optional_material: vec![ABSENT_COMPONENT, ABSENT_COMPONENT],
@@ -220,9 +220,9 @@ const K_S_SLOT: usize = 1;
 ///     DofOrdering::NodesThenVars, true, &mat, None,
 ///     |geoms, m, _s, ke| thick::element_stiffness(&geoms[0], &geoms[1], m, &lay, ke),
 /// )?;
-/// // Le bloc porte les six DDL de chaque nœud : 18 × 18 sur un TRI3.
+/// // The block carries each node's six DOFs: 18 × 18 on a TRI3.
 /// assert_eq!((bloc.n_rows(), bloc.n_cols()), (18, 18));
-/// // Et il est symétrique, comme toute raideur.
+/// // And it is symmetric, like any stiffness.
 /// let d = bloc.dense();
 /// assert!((0..18).all(|i| (0..18).all(|j| (d[i * 18 + j] - d[j * 18 + i]).abs() < 1e-6)));
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -249,11 +249,11 @@ pub fn element_stiffness(
     let ds = shear_law(e, nu, h, shear_factor(row, lay));
 
     let frame = local_frame(full)?;
-    // La rotation de fibre est un champ à part entière : sa courbure est son
-    // gradient, et il n'y a rien à éliminer d'abord.
+    // The fibre rotation is a field in its own right: its curvature is its
+    // gradient, and there is nothing to eliminate first.
     let setup = BendingSetup::Direct;
-    // Toute la matrice tient sur la pile : `Shell::new` a déjà refusé tout
-    // élément plus large qu'un QUA4.
+    // The whole matrix fits on the stack: `Shell::new` has already refused any
+    // element wider than a QUA4.
     let mut local: ShellMatrix = [0.0; MAX_SHELL_DOFS * MAX_SHELL_DOFS];
     let mut b: ShellB = [[0.0; MAX_SHELL_DOFS]; SHELL_STRAINS];
 

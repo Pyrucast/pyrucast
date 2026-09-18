@@ -70,11 +70,11 @@ use serde::{Deserialize, Serialize};
 ///
 /// ```
 /// # use pyrucast::models::radiation;
-/// // `q·n = σε(T⁴ − T_∞⁴)`, sur les DDL de la conduction — d'où un
-/// // couplage direct dans sa raideur.
+/// // `q·n = σε(T⁴ − T_∞⁴)`, on the conduction's DOFs — hence a direct
+/// // coupling in its stiffness.
 /// assert_eq!((radiation::PRIMAL_VAR, radiation::DUAL_VAR), ("T", "q"));
 /// // La constante de Stefan-Boltzmann, en W·m⁻²·K⁻⁴ ; un matériau peut la
-/// // redonner pour travailler dans un autre système d'unités.
+/// // given again to work in another unit system.
 /// assert!((radiation::STEFAN_BOLTZMANN - 5.670_374_419e-8).abs() < 1e-20);
 /// ```
 pub const PRIMAL_VAR: &str = "T";
@@ -82,11 +82,11 @@ pub const PRIMAL_VAR: &str = "T";
 ///
 /// ```
 /// # use pyrucast::models::radiation;
-/// // `q·n = σε(T⁴ − T_∞⁴)`, sur les DDL de la conduction — d'où un
-/// // couplage direct dans sa raideur.
+/// // `q·n = σε(T⁴ − T_∞⁴)`, on the conduction's DOFs — hence a direct
+/// // coupling in its stiffness.
 /// assert_eq!((radiation::PRIMAL_VAR, radiation::DUAL_VAR), ("T", "q"));
 /// // La constante de Stefan-Boltzmann, en W·m⁻²·K⁻⁴ ; un matériau peut la
-/// // redonner pour travailler dans un autre système d'unités.
+/// // given again to work in another unit system.
 /// assert!((radiation::STEFAN_BOLTZMANN - 5.670_374_419e-8).abs() < 1e-20);
 /// ```
 pub const DUAL_VAR: &str = "q";
@@ -102,11 +102,11 @@ const OPTIONAL_COMPONENTS: &[&str] = &["sigma"];
 ///
 /// ```
 /// # use pyrucast::models::radiation;
-/// // `q·n = σε(T⁴ − T_∞⁴)`, sur les DDL de la conduction — d'où un
-/// // couplage direct dans sa raideur.
+/// // `q·n = σε(T⁴ − T_∞⁴)`, on the conduction's DOFs — hence a direct
+/// // coupling in its stiffness.
 /// assert_eq!((radiation::PRIMAL_VAR, radiation::DUAL_VAR), ("T", "q"));
 /// // La constante de Stefan-Boltzmann, en W·m⁻²·K⁻⁴ ; un matériau peut la
-/// // redonner pour travailler dans un autre système d'unités.
+/// // given again to work in another unit system.
 /// assert!((radiation::STEFAN_BOLTZMANN - 5.670_374_419e-8).abs() < 1e-20);
 /// ```
 pub const STEFAN_BOLTZMANN: f64 = 5.670_374_419e-8;
@@ -138,8 +138,8 @@ const OUTPUT_FLUX: &str = "flux";
 /// # let zone = fes.get(0).unwrap();
 /// # use pyrucast::models::radiation::Radiation;
 /// # use pyrucast::ops::model;
-/// // Rayonnement vers l'infini, sur un bord. Mêmes DDL que la conduction,
-/// // d'où un couplage direct dans sa raideur.
+/// // Radiation to infinity, on a border. Same DOFs as the conduction, hence
+/// // a direct coupling in its stiffness.
 /// let conduction = model::heat_conduction(&fes)?;
 /// let r = Radiation::new(zone, &conduction)?;
 /// assert_eq!(r.primal_vars(), vec!["T".to_string()]);
@@ -181,19 +181,19 @@ impl Radiation {
     /// # let zone = fes.get(0).unwrap();
     /// # use pyrucast::models::radiation::Radiation;
     /// # use pyrucast::ops::model;
-    /// // Rayonnement vers l'infini, sur un bord. Mêmes DDL que la conduction,
-    /// // d'où un couplage direct dans sa raideur.
+    /// // Radiation to infinity, on a border. Same DOFs as the conduction, hence
+    /// // a direct coupling in its stiffness.
     /// let conduction = model::heat_conduction(&fes)?;
     /// let r = Radiation::new(zone.clone(), &conduction)?;
     /// assert_eq!(r.primal_vars(), vec!["T".to_string()]);
     /// assert!(r.material_components().contains(&"emis".to_string()));
-    /// // Sans conduction dessous, la ligne `q` n'est assemblée par personne.
+    /// // Without conduction underneath, the `q` row is assembled by nobody.
     /// assert!(Radiation::new(zone, &model::fick(&fes, "H2")?).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(fespace: Handle<SubFiniteElementSpace>, target: &Model) -> Result<Self> {
-        // La nature est fixée (`[Thermal, Radiation]`) ; la cible ne sert qu'à
-        // prouver que la ligne `q` où le rayonnement écrit est assemblée.
+        // The kind is fixed (`[Thermal, Radiation]`); the target only serves to prove
+        // that the `q` row the radiation writes into is assembled.
         target_physics("Radiation", target, &[(PRIMAL_VAR.into(), DUAL_VAR.into())])?;
         let submesh = fespace.read().submesh();
         let support = submesh.read().to_poi1()?;
@@ -367,9 +367,9 @@ impl Behavior for Radiation {
         Ok(())
     }
 
-    /// `4σεT³` au point — la vraie non-linéarité, évaluée à la température
+    /// `4σεT³` at the point — the real nonlinearity, evaluated at the temperature
     /// courante. `element_matrix` en donne la **linéarisation** autour de `T_∞`,
-    /// qui reste un opérateur constant ; voir la doc du module.
+    /// which stays a constant operator; see the module's documentation.
     fn tangent_point(
         &self,
         _geom: &CellGeom,
@@ -387,7 +387,7 @@ impl Behavior for Radiation {
         };
         let emis = material[lay.material[0] as usize];
         let t = deformation[lay.deformation[0] as usize];
-        // Un transport scalaire : le « module » tient dans une case.
+        // A scalar transport: the "modulus" fits in a single slot.
         d[0][0] = 4.0 * sigma * emis * t.powi(3);
         Ok(())
     }
@@ -405,7 +405,7 @@ impl Behavior for Radiation {
     ) -> Result<()> {
         let geom = &geoms[0];
         let n_nodes = geom.n_nodes;
-        // Le tampon vit **hors** de la boucle des points, comme partout ailleurs.
+        // The buffer lives **outside** the point loop, as everywhere else.
         let mut d = [[0.0_f64; 6]; 6];
         for g in 0..geom.n_gauss {
             self.tangent_point(
@@ -467,8 +467,8 @@ crate::physics_operator! {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// // Le rayonnement s'unit à la conduction qu'il refroidit : mêmes DDL,
-    /// // donc mêmes blocs.
+    /// // The radiation unites with the conduction it cools: same DOFs, hence the
+    /// // same blocks.
     /// let conduction = model::heat_conduction(&fes)?;
     /// let m = conduction.union(&model::radiation(&fes, &conduction)?)?;
     /// assert_eq!(m.primal_vars(), vec!["T".to_string()]);

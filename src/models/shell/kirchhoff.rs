@@ -330,9 +330,9 @@ fn bending_b(
 ///     DofOrdering::NodesThenVars, true, &mat, None,
 ///     |geoms, m, _s, ke| kirchhoff::element_stiffness(&geoms[0], m, &lay, ke),
 /// )?;
-/// // Le bloc porte les six DDL de chaque nœud : 18 × 18 sur un TRI3.
+/// // The block carries each node's six DOFs: 18 × 18 on a TRI3.
 /// assert_eq!((bloc.n_rows(), bloc.n_cols()), (18, 18));
-/// // Et il est symétrique, comme toute raideur.
+/// // And it is symmetric, like any stiffness.
 /// let d = bloc.dense();
 /// assert!((0..18).all(|i| (0..18).all(|j| (d[i * 18 + j] - d[j * 18 + i]).abs() < 1e-6)));
 /// # Ok::<(), pyrucast::PyrucastError>(())

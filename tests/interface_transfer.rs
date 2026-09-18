@@ -80,21 +80,21 @@ fn an_interface_law_makes_the_field_jump() -> Result<()> {
 
 /// A stiff interface (`h → ∞`) must recover the single continuous body: the jump
 /// vanishes as `q/h`, so the two facing values converge to each other.
-/// L'interface rend son terme de résidu **des deux côtés**, égaux et opposés.
+/// The interface returns its residual term **on both sides**, equal and opposite.
 ///
-/// `∫h(a₁−a₂)N` sur A et son opposé sur B : l'intégrale d'une différence est la
-/// différence des intégrales, et chacune se disperse sur son propre espace. Ce
-/// qui est couplé, c'est la matrice — lignes sur A, colonnes sur B — pas le
-/// vecteur, qui ne produit qu'un nombre par nœud. L'interface n'a donc plus de
-/// loi : son `h·(a₁−a₂)` est le coefficient de son propre opérateur appliqué au
-/// saut, pas un comportement.
-/// Le résidu de l'interface **est** sa matrice appliquée à la solution.
+/// `∫h(a₁−a₂)N` on A and its opposite on B: the integral of a difference is the
+/// difference of the integrals, and each scatters onto its own space. What is
+/// coupled is the matrix — rows on A, columns on B — not the vector, which
+/// produces only one number per node. The interface therefore no longer has a
+/// law: its `h·(a₁−a₂)` is its own operator's coefficient applied to the jump,
+/// not a behaviour.
+/// The interface's residual **is** its matrix applied to the solution.
 ///
-/// L'opérateur est linéaire : `r = K·u` n'est pas une approximation mais une
-/// identité, et c'est le seul test qui fixe les *valeurs*. L'antisymétrie, elle,
-/// survit à une erreur partagée par les deux côtés — les deux contributions
-/// naissent du même saut, au signe près. C'est ce qu'il a fallu pour voir que le
-/// saut se lisait par position dans un champ interpolé qui porte **toutes** les
+/// The operator is linear: `r = K·u` is not an approximation but an identity,
+/// and it is the only test that pins the *values* down. The antisymmetry, for
+/// its part, survives an error shared by both sides — both contributions are
+/// born of the same jump, up to the sign. That is what it took to see that the
+/// jump was read by position in an interpolated field that carries **every**
 /// composantes de la solution, multiplicateur de Dirichlet compris.
 #[test]
 fn the_interface_residual_is_its_matrix_applied_to_the_solution() -> Result<()> {
@@ -152,7 +152,7 @@ fn the_interface_renders_equal_and_opposite_fluxes() -> Result<()> {
     let f = pyrucast::ops::node_field::internal_forces(&interface, &state, &solution, &materials)?;
 
     let dual = format!("j_{SPECIES}");
-    // Somme sur chaque côté de l'interface : les deux faces qui se regardent.
+    // Sum on each side of the interface: the two faces looking at each other.
     let cote_a: f64 = [&geom.left[1], &geom.left[2]]
         .iter()
         .map(|n| f.value(n.id(), &dual).unwrap_or(0.0))
@@ -232,7 +232,7 @@ fn a_non_conforming_interface_is_rejected() -> Result<()> {
     // The facing edge sits at x = 1.5: the two sides do not describe one surface.
     let (b0, b1) = (node(1.5, 0.0)?, node(1.5, 1.0)?);
     let (side_a, side_b) = (edge(&a0, &a1)?, edge(&b0, &b1)?);
-    // Une cible valide, pour que ce soit bien la géométrie qui soit refusée.
+    // A valid target, so that it really is the geometry that gets refused.
     let target = model::fick(&side_a, SPECIES)?;
     let err = model::interface_transfer(
         &side_a,
@@ -253,8 +253,8 @@ fn a_non_conforming_interface_is_rejected() -> Result<()> {
 #[test]
 fn the_interface_takes_its_nature_from_its_target() -> Result<()> {
     let (_, model, _) = two_square_model(5.0)?;
-    // Les deux carrés de Fick, et l'interface qui les lie ; l'appui et l'entrée
-    // sont des contraintes et une charge, comptés à part.
+    // The two Fick squares, and the interface tying them; the support and the
+    // input are constraints and a load, counted apart.
     let diffusion = model.filter(Physics::Diffusion)?;
     assert!(diffusion
         .iter()
@@ -277,7 +277,7 @@ fn a_pair_its_target_does_not_assemble_is_rejected() -> Result<()> {
     let face = FiniteElementSpace::lagrange1(&m)?;
     let diffusion = model::fick(&face, SPECIES)?;
 
-    // Une résistance de contact thermique sur un modèle qui ne connaît pas `T`.
+    // A thermal contact resistance on a model that does not know `T`.
     let err = model::interface_transfer(
         &face,
         &face,
@@ -292,7 +292,7 @@ fn a_pair_its_target_does_not_assemble_is_rejected() -> Result<()> {
         "unexpected: {err}"
     );
 
-    // Primale et duale présentes, mais pas appariées entre elles : refusé aussi.
+    // Primal and dual present, but not paired together: refused too.
     let both = diffusion.union(&model::heat_conduction(&face)?)?;
     let err = model::interface_transfer(
         &face,
@@ -305,7 +305,7 @@ fn a_pair_its_target_does_not_assemble_is_rejected() -> Result<()> {
     .to_string();
     assert!(err.contains("paired with `q`"), "unexpected: {err}");
 
-    // Deux natures dans une seule interface : on en construit une par physique.
+    // Two kinds in a single interface: one is built per physics.
     let err = model::interface_transfer(
         &face,
         &face,
@@ -374,7 +374,7 @@ fn two_square_model(h: f64) -> Result<(Geometry, Model, ElementField)> {
     ])?);
     let multiplier = mesh::barycenter(&imposed)?;
 
-    // La diffusion des deux carrés : c'est elle que l'appui contraint.
+    // The two squares' diffusion: that is what the support constrains.
     let fick_pair =
         model::fick(&square(&left)?, SPECIES)?.union(&model::fick(&square(&right)?, SPECIES)?)?;
     let model = fick_pair

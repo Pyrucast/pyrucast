@@ -33,7 +33,7 @@
 //! f.set(1, 0, 7.5).unwrap();
 //! assert_eq!(SubField::min(&f, Some("T")).unwrap(), -3.0);
 //! assert_eq!(SubField::max(&f, Some("T")).unwrap(), 7.5);
-//! // Sans composante nommée, la réduction porte sur tout le champ.
+//! // Without a named component, the reduction covers the whole field.
 //! assert_eq!(SubField::min(&f, None).unwrap(), -3.0);
 //! ```
 
@@ -91,8 +91,8 @@ pub(crate) fn check_components(kind: &str, components: &[String]) -> Result<()> 
 /// # let temp = NodeField::from_submesh(&support.get(0).unwrap(),
 /// #                                    vec!["T".into()]).unwrap();
 /// # temp.get(0).unwrap().write().add_to_component("T", 4.0).unwrap();
-/// // Le jumeau Rust de l'argument Python `str | list[str]` : les
-/// // opérateurs de composantes se lisent pareil dans les deux sens.
+/// // The Rust twin of the Python argument `str | list[str]`: the component
+/// // operators read the same way on both sides.
 /// assert_eq!(temp.filter_components("T")?.components(), vec!["T".to_string()]);
 /// assert_eq!(temp.filter_components(["T"])?.components(), vec!["T".to_string()]);
 /// assert_eq!(temp.filter_components(vec!["T".to_string()])?.components(),
@@ -172,8 +172,8 @@ impl<const N: usize> IntoComponentNames for [&str; N] {
 /// # let temp = NodeField::from_submesh(&support.get(0).unwrap(),
 /// #                                    vec!["T".into()]).unwrap();
 /// # temp.get(0).unwrap().write().add_to_component("T", 4.0).unwrap();
-/// // Une vue en lecture sur **toutes** les zones à la fois : les guards
-/// // sont pris une fois, et les lectures concurrentes ne s'attendent pas.
+/// // A read view on **every** zone at once: the guards are taken once, and
+/// // concurrent reads do not wait for each other.
 /// let vue = temp.view()?;
 /// assert_eq!(vue.components(), &["T".to_string()]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -205,8 +205,8 @@ impl<S: Any + Send + Sync> FieldView<S> {
     /// # let temp = NodeField::from_submesh(&support.get(0).unwrap(),
     /// #                                    vec!["T".into()]).unwrap();
     /// # temp.get(0).unwrap().write().add_to_component("T", 4.0).unwrap();
-    /// // L'union des composantes des zones, dans l'ordre de première
-    /// // apparition — la même règle que partout ailleurs dans les agrégats.
+    /// // The union of the zones' components, in first-appearance order — the
+    /// // same rule as everywhere else in the aggregates.
     /// assert_eq!(temp.view()?.components(), &["T".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -241,7 +241,7 @@ impl<S: Any + Send + Sync> FieldView<S> {
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
 /// let mat = SubElementField::from_uniform_per_component(
 ///     fes.get(0)?, vec!["E".into(), "nu".into()], &[210_000.0, 0.3])?;
-/// // `rho` n'a pas été fourni : la table le dit une fois pour la zone.
+/// // `rho` was not supplied: the table says so once for the zone.
 /// let table = mat.resolve_optional_components(&["rho"]);
 /// assert_eq!(table[0], pyrucast::containers::field::ABSENT_COMPONENT);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -274,10 +274,10 @@ pub const ABSENT_COMPONENT: u32 = u32::MAX;
 /// # let temp = NodeField::from_submesh(&support.get(0).unwrap(),
 /// #                                    vec!["T".into()]).unwrap();
 /// # temp.get(0).unwrap().write().add_to_component("T", 4.0).unwrap();
-/// // Un contrat purement **structurel** : des composantes nommées et un
-/// // tampon plat où l'index de composante varie le plus vite. Champs
-/// // nodaux et champs par éléments le satisfont tous deux, d'où une
-/// // arithmétique écrite une seule fois.
+/// // A purely **structural** contract: named components and a flat buffer
+/// // where the component index varies fastest. Nodal fields and fields by
+/// // elements both satisfy it, hence an arithmetic written once only.
+
 /// let z = temp.get(0)?;
 /// let z = z.read();
 /// assert_eq!(z.components(), &["T".to_string()]);
@@ -355,7 +355,7 @@ pub trait SubField {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
-    /// // Un matériau rangé « à l'envers » par rapport à la convention.
+    /// // A material laid out "the other way round" from the convention.
     /// let mat = SubElementField::from_uniform_per_component(
     ///     fes.get(0)?, vec!["nu".into(), "E".into()], &[0.3, 210_000.0])?;
     /// // La table absorbe l'écart d'ordre : la lecture reste juste.
@@ -364,7 +364,7 @@ pub trait SubField {
     /// let row = mat.point_values(0, 0)?;
     /// assert_eq!(row[table[0] as usize], 210_000.0); // E
     /// assert_eq!(row[table[1] as usize], 0.3);       // nu
-    /// // Une composante requise absente erre ici, en se nommant.
+    /// // A required component that is missing errs here, naming itself.
     /// let err = mat.resolve_components(&["E", "sigma_y"], "material").unwrap_err();
     /// assert!(format!("{err}").contains("sigma_y"));
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -411,7 +411,7 @@ pub trait SubField {
     /// let mat = SubElementField::from_uniform_per_component(
     ///     fes.get(0)?, vec!["E".into(), "nu".into(), "alpha".into()],
     ///     &[210_000.0, 0.3, 1.2e-5])?;
-    /// // `alpha` a été fourni, `rho` non : la table le dit, une fois pour la zone.
+    /// // `alpha` was supplied, `rho` was not: the table says so, once for the zone.
     /// let table = mat.resolve_optional_components(&["alpha", "rho"]);
     /// assert_eq!(table[0], 2);
     /// assert_eq!(table[1], ABSENT_COMPONENT);
@@ -1047,8 +1047,8 @@ macro_rules! __field_op {
 /// # let temp = NodeField::from_submesh(&support.get(0).unwrap(),
 /// #                                    vec!["T".into()]).unwrap();
 /// # temp.get(0).unwrap().write().add_to_component("T", 4.0).unwrap();
-/// // Ce que l'agrégat ajoute au contrat de zone : les vues d'ensemble et
-/// // les opérations qui traversent toutes les zones.
+/// // What the aggregate adds to the zone contract: the overall views and the
+/// // operations that cross every zone.
 /// assert_eq!(temp.components(), vec!["T".to_string()]);
 /// assert_eq!(temp.map_subs(|s| Ok(s.map_all(f64::sqrt)))?
 ///     .get(0)?.read().value(n[0].id(), "T")?, 2.0);
@@ -1499,8 +1499,8 @@ impl<A: Aggregate> Field for A where A::Sub: SubField {}
 /// # temp.get(0).unwrap().write().add_to_component("T", 4.0).unwrap();
 /// # use pyrucast::containers::field::MapValues;
 /// # use pyrucast::ops::field;
-/// // Ce qui unifie la zone et l'agrégat pour les maths élément par
-/// // élément : une seule définition de `sqrt` sert les quatre types de
+/// // What unifies the zone and the aggregate for element-wise mathematics:
+/// // a single definition of `sqrt` serves all four types of
 /// // champ.
 /// assert_eq!(field::sqrt(&temp)?.get(0)?.read().value(n[0].id(), "T")?, 2.0);
 /// let z = temp.get(0)?;
@@ -1564,8 +1564,8 @@ impl MapValues for ElementField {
 /// #                                    vec!["T".into()]).unwrap();
 /// # temp.get(0).unwrap().write().add_to_component("T", 4.0).unwrap();
 /// # use pyrucast::ops::field;
-/// // Le produit scalaire rend un champ à **une** composante, nommée
-/// // `psca`, quelle que soit la saveur du champ d'entrée.
+/// // The scalar product returns a field with **one** component, named
+/// // `psca`, whatever the input field's flavour.
 /// let p = field::psca(&temp, &temp)?;
 /// assert_eq!(p.get(0)?.read().components(), &["psca".to_string()]);
 /// assert_eq!(p.get(0)?.read().value(n[0].id(), "psca")?, 16.0);

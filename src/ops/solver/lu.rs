@@ -179,8 +179,8 @@ pub(crate) fn lu_solve_vec(lu: &SparseLu, b: &[f64]) -> Vec<f64> {
 /// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
 /// # use pyrucast::ops::solver::lu::{SolveMethod, SolveOptions};
 /// # use pyrucast::ops::model;
-/// // Un seul jeton aujourd'hui — LU creuse — mais l'énumération laisse la
-/// // place à un autre moteur sans toucher aux appels.
+/// // A single token today — sparse LU — but the enumeration leaves room for
+/// // another engine without touching the calls.
 /// assert_eq!(SolveMethod::default(), SolveMethod::Lu);
 /// let o = SolveOptions { method: SolveMethod::Lu, cache: false };
 /// assert!(solver::lu::solve_with_options(&k, &charge, &o).is_ok());
@@ -228,15 +228,15 @@ pub enum SolveMethod {
 /// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
 /// # use pyrucast::ops::solver::lu::{SolveMethod, SolveOptions};
 /// # use pyrucast::ops::model;
-/// // Par défaut, LU creuse avec le cache de factorisation actif : le
-/// // premier `solve` factorise, les suivants ne font que les descentes.
+/// // By default, sparse LU with the factorization cache on: the first
+/// // `solve` factorizes, the next ones only run the substitutions.
 /// let d = SolveOptions::default();
 /// assert!(d.cache);
 /// assert!(k.cached_factorization::<solver::lu::Factorization>().is_none());
 /// solver::lu::solve_with_options(&k, &charge, &d)?;
 /// assert!(k.cached_factorization::<solver::lu::Factorization>().is_some());
 ///
-/// // `cache: false` factorise à neuf et **ne touche pas** au cache.
+/// // `cache: false` factorizes afresh and **does not touch** the cache.
 /// let sans = SolveOptions { method: SolveMethod::Lu, cache: false };
 /// solver::lu::solve_with_options(&k, &charge, &sans)?;
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -299,10 +299,10 @@ impl Default for SolveOptions {
 /// # use pyrucast::ops::solver::lu::Factorization;
 /// # use std::sync::Arc;
 /// # use pyrucast::ops::model;
-/// // Un état **dérivé**, jamais persisté : il porte la LU et la
-/// // disposition des DDL qui la rend utilisable. On ne l'appelle pas
-/// // directement — `solve` la dépose dans le cache de la matrice et l'y
-/// // reprend au solve suivant.
+/// // A **derived** state, never persisted: it carries the LU and the DOF
+/// // layout that makes it usable. It is not called directly — `solve` drops
+/// // it in the matrix's cache and picks it up again at the next solve.
+
 /// k.store_factorization(Arc::new(Factorization::new(&k)?));
 /// assert!(k.cached_factorization::<Factorization>().is_some());
 /// let u = solver::lu::solve(&k, &charge)?;
@@ -425,13 +425,13 @@ impl Factorization {
 /// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
 /// #                                      vec!["imposed_T".into()]).unwrap();
 /// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
-/// // Une barre encastrée à gauche à 100 °C, sans autre charge : toute la
-/// // barre est à 100 °C. La solution porte aussi la **réaction** au nœud
-/// // multiplicateur — d'où deux zones.
+/// // A bar clamped on the left at 100 °C, with no other load: the whole bar
+/// // is at 100 °C. The solution also carries the **reaction** at the
+/// // multiplier node — hence two zones.
 /// let u = solver::lu::solve(&k, &charge)?;
 /// assert!((u.get(0)?.read().value(n[2].id(), "T")? - 100.0).abs() < 1e-9);
-/// // Une zone par support du modèle : la barre, les nœuds imposés, et le
-/// // multiplicateur qui porte la **réaction**.
+/// // One zone per support of the model: the bar, the imposed nodes, and the
+/// // multiplier carrying the **reaction**.
 /// assert_eq!(u.len(), 3);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -530,11 +530,11 @@ pub fn solve_with_options(
 /// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
 /// # use std::sync::atomic::{AtomicBool, Ordering};
 /// # use pyrucast::ops::model;
-/// // Le jeton est sondé **autour** des étapes lourdes : la factorisation
-/// // creuse est un appel de bibliothèque sans point d'arrêt coopératif.
+/// // The token is polled **around** the heavy stages: the sparse
+/// // factorization is a library call with no cooperative stopping point.
 /// let stop = AtomicBool::new(false);
 /// assert!(solver::lu::solve_cancellable(&k, &charge, &stop).is_ok());
-/// // Jeton armé d'avance : l'arrêt tombe à la première frontière de phase.
+/// // Token armed in advance: the stop lands at the first phase boundary.
 /// stop.store(true, Ordering::Relaxed);
 /// assert!(solver::lu::solve_cancellable(&k, &charge, &stop).is_err());
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -583,7 +583,7 @@ pub fn solve_cancellable(
 /// # use pyrucast::ops::solver::lu::SolveOptions;
 /// # use std::sync::atomic::AtomicBool;
 /// # use pyrucast::ops::model;
-/// // La forme complète, celle vers laquelle route la liaison Python.
+/// // The full form, the one the Python binding routes to.
 /// let stop = AtomicBool::new(false);
 /// let u = solver::lu::solve_cancellable_with_options(
 ///     &k, &charge, &SolveOptions::default(), &stop)?;

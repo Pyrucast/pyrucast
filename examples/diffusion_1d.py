@@ -24,7 +24,7 @@ C'est l'équivalent Python du test d'intégration Rust ``tests/fick.rs``.
 
 Lancement
 ---------
-Après avoir compilé l'extension dans le venv ::
+Once the extension is built in the venv ::
 
     maturin develop --features extension-module
     python examples/diffusion_1d.py
@@ -32,7 +32,7 @@ Après avoir compilé l'extension dans le venv ::
 
 import pyrucast
 
-# ── Données du problème ──────────────────────────────────────────────────────
+# ── Problem data ────────────────────────────────────────────────────────────
 SPECIES = "H2"  # l'espèce qui diffuse — tous les noms la portent
 D = 2.0  # diffusivité
 J = 10.0  # flux d'espèce injecté en x = 0

@@ -60,9 +60,9 @@ use crate::ops::element_field::gradient::AXES;
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = mesh::poi1_from_nodes(&n).unwrap();
-/// // L'opérateur Bᵀ : d'un champ aux points de Gauss vers un champ nodal.
-/// // Un flux **uniforme** a une divergence nodale de somme nulle — ce qui
-/// // ne sort par un nœud entre y par un autre.
+/// // The Bᵀ operator: from a field at the Gauss points to a nodal field.
+/// // A **uniform** flux has a nodal divergence summing to zero — what does
+/// // not leave through one node enters through another.
 /// # let mut q = ElementField::new(&fes, vec!["q_x".into(), "q_y".into()])?;
 /// # q.get(0)?.write().set_uniform("q_x", 1.0)?;
 /// let d = node_field::divergence(&q, "q")?;
@@ -72,9 +72,9 @@ use crate::ops::element_field::gradient::AXES;
 ///     .sum();
 /// assert!(total.abs() < 1e-12);
 ///
-/// // Le **même** opérateur sur une grandeur tensorielle : le préfixe suffit à
-/// // trancher le rang, `sigma_xx` n'étant pas `sigma_x`. La divergence d'un
-/// // tenseur est un vecteur, donc une composante par axe.
+/// // The **same** operator on a tensor quantity: the prefix is enough to
+/// // settle the rank, `sigma_xx` not being `sigma_x`. A tensor's divergence
+/// // is a vector, hence one component per axis.
 /// # let mut sig = ElementField::new(&fes,
 /// #     vec!["sigma_xx".into(), "sigma_xy".into(), "sigma_yy".into()])?;
 /// # sig.get(0)?.write().set_uniform("sigma_xx", 100.0)?;
@@ -106,9 +106,9 @@ fn subspace_divergence(field: &Handle<SubElementField>, prefix: &str) -> Result<
         (s.submesh(), s.space_dim(), s.is_axisymmetric())
     };
 
-    // Les deux jeux de noms cherchés. Sur une géométrie de révolution le tenseur
-    // porte en plus son orthoradial, en queue de liste : c'est la place que le
-    // noyau du continuum lui réserve.
+    // The two sets of names looked for. On a revolution geometry the tensor also
+    // carries its hoop term, at the tail of the list: that is the place the
+    // continuum kernel reserves for it.
     let vector: Vec<String> = (0..space_dim)
         .map(|a| format!("{prefix}_{}", AXES[a]))
         .collect();
@@ -119,8 +119,8 @@ fn subspace_divergence(field: &Handle<SubElementField>, prefix: &str) -> Result<
     let carries = |names: &[String]| names.iter().all(|n| f.components().contains(n));
     let (is_vector, is_tensor) = (carries(&vector), carries(&tensor));
 
-    // Le rang se tranche **ici**, une fois pour la zone, et se transmet au noyau
-    // sous forme d'un tableau d'index — jamais un nom relu au point de Gauss.
+    // The rank is settled **here**, once for the zone, and handed to the kernel
+    // as an index array — never a name read again at the Gauss point.
     let (names, duals) = match (is_vector, is_tensor) {
         (true, false) => (vector, vec![format!("div_{prefix}")]),
         (false, true) => (
@@ -183,8 +183,8 @@ fn divergence_element(
         let dn = &mut dn_buf[..geom.n_nodes * d]; // [i * d + a]
         geom.dn_dx(g, dn)?;
         let det_j_w = geom.det_j_w(g);
-        // La ligne du point, tranchée une fois : elle était relue par nom, et
-        // rebornée, pour chaque composante de chaque nœud de chaque point.
+        // The point's row, settled once: it used to be read by name, and re-bounded,
+        // for every component of every node of every point.
         let row = field.row(geom.cell, g);
         for i in 0..geom.n_nodes {
             let mut grad_dot_f = 0.0;
@@ -288,8 +288,8 @@ mod tests {
         assert!((lhs - rhs).abs() < 1e-12, "adjoint: {lhs} ≠ {rhs}");
     }
 
-    /// Ni vecteur ni tenseur : `F_x` seul sur un espace 2-D ne complète aucun
-    /// des deux jeux de noms, et l'opérateur le dit plutôt que de deviner.
+    /// Neither vector nor tensor: `F_x` alone on a 2-D space completes neither set
+    /// of names, and the operator says so rather than guess.
     #[test]
     fn a_name_of_neither_rank_is_rejected() {
         let coords = Handle::new(Coords::new(2).unwrap());
@@ -299,7 +299,7 @@ mod tests {
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
         mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        // Une seule composante, et pas au bon rang : `F_x` seul en 2-D.
+        // A single component, and not at the right rank: `F_x` alone in 2-D.
         let field = SubElementField::new(fes.get(0).unwrap(), vec!["F_x".into()]).unwrap();
         let mut ef = ElementField::empty();
         ef.add_sub(Handle::new(field)).unwrap();

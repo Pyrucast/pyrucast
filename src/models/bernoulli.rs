@@ -313,7 +313,7 @@ impl Domain for Bernoulli {
         }
     }
 
-    /// La raideur géométrique de la poutre lit son effort normal.
+    /// The beam's geometric stiffness reads its axial force.
     fn element_state_reads(&self, kind: MatrixKind) -> Vec<String> {
         match kind {
             MatrixKind::Geometric => vec!["N".to_string()],
@@ -684,8 +684,8 @@ fn congruent<const N: usize>(
 /// back is the classical `ρAL/420·[156, 22L, 54, −13L; …]`, which
 /// `models::beam` asserts against that very table. Bernoulli therefore adds no
 /// derivation of its own — it is the `Φ → 0` end of one.
-/// Une composante facultative, lue par l'indice que la zone a résolu — absente,
-/// elle se nomme dans l'erreur plutôt que de valoir zéro en silence.
+/// An optional component, read through the index the zone resolved — when
+/// missing, it names itself in the error rather than silently being zero.
 fn optional(row: &[f64], lay: &ElementLayout, slot: usize, name: &str) -> Result<f64> {
     match lay.optional_material[slot] {
         ABSENT_COMPONENT => Err(PyrucastError::Message(format!(

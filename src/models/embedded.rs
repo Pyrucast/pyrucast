@@ -68,8 +68,8 @@ use std::collections::HashSet;
 ///
 /// ```
 /// # use pyrucast::models::embedded::DEFAULT_TOL;
-/// // La tolérance par défaut se **transmet** : le constructeur reçoit un
-/// // nombre, jamais une absence à tester.
+/// // The default tolerance is **handed over**: the constructor receives a
+/// // number, never an absence to test for.
 /// assert_eq!(DEFAULT_TOL, 1e-6);
 /// ```
 pub const DEFAULT_TOL: f64 = 1e-6;
@@ -96,8 +96,8 @@ pub const DEFAULT_TOL: f64 = 1e-6;
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # use pyrucast::models::embedded;
-/// // Dérivés plutôt que tabulés : `multiplier` et `imposed_value` laissés
-/// // à `None` prennent ces valeurs.
+/// // Derived rather than tabulated: `multiplier` and `imposed_value` left at
+/// // `None` take these values.
 /// assert_eq!(
 ///     (embedded::default_multiplier("u_x").as_str(),
 ///      embedded::default_imposed_value("u_x").as_str()),
@@ -130,8 +130,8 @@ pub fn default_multiplier(variable: &str) -> String {
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # use pyrucast::models::embedded;
-/// // Dérivés plutôt que tabulés : `multiplier` et `imposed_value` laissés
-/// // à `None` prennent ces valeurs.
+/// // Derived rather than tabulated: `multiplier` and `imposed_value` left at
+/// // `None` take these values.
 /// assert_eq!(
 ///     (embedded::default_multiplier("u_x").as_str(),
 ///      embedded::default_imposed_value("u_x").as_str()),
@@ -191,9 +191,9 @@ struct Component {
 /// # let mut barre = SubMesh::new(coords.clone(), ElementType::SEG2);
 /// # barre.add_cell(&[p[0].id(), p[1].id()])?;
 /// # let immergee = Mesh::from_submesh(barre);
-/// // Une barre baignée dans un volume : chaque nœud immergé est lié à
-/// // l'interpolation de l'hôte, avec des poids Nᵢ **variant d'un nœud à
-/// // l'autre** — une relation par nœud et par composante.
+/// // A bar immersed in a volume: every immersed node is tied to the host's
+/// // interpolation, with Nᵢ weights **varying from one node to the next** —
+/// // one relation per node and per component.
 /// # let cible = pyrucast::ops::model::elasticity(
 /// #     &FiniteElementSpace::lagrange1(&maillage)?,
 /// #     pyrucast::models::tensor::Kinematics::PlaneStress)?;
@@ -262,9 +262,9 @@ impl Embedded {
     /// # let mut barre = SubMesh::new(coords.clone(), ElementType::SEG2);
     /// # barre.add_cell(&[p[0].id(), p[1].id()])?;
     /// # let immergee = Mesh::from_submesh(barre);
-    /// // Une barre baignée dans un volume : chaque nœud immergé est lié à
-    /// // l'interpolation de l'hôte, avec des poids Nᵢ **variant d'un nœud à
-    /// // l'autre** — une relation par nœud et par composante.
+    /// // A bar immersed in a volume: every immersed node is tied to the host's
+    /// // interpolation, with Nᵢ weights **varying from one node to the next** —
+    /// // one relation per node and per component.
     /// # let cible = pyrucast::ops::model::elasticity(
     /// #     &FiniteElementSpace::lagrange1(&maillage)?,
     /// #     pyrucast::models::tensor::Kinematics::PlaneStress)?;
@@ -593,16 +593,16 @@ fn unique_nodes(mesh: &Mesh) -> Result<Vec<NodeId>> {
 #[cfg(test)]
 mod tests {
 
-    /// Une élasticité 3-D sur le maillage hôte : la cible que la contrainte
-    /// baignée contraint, et dont elle lit les duales.
+    /// A 3-D elasticity on the host mesh: the target the immersed constraint
+    /// constrains, and whose duals it reads.
     fn cible_mecanique(host: &Mesh) -> crate::containers::model::Model {
         let fes =
             crate::containers::finite_element_space::FiniteElementSpace::lagrange1(host).unwrap();
         crate::ops::model::elasticity(&fes, crate::models::tensor::Kinematics::Full3D).unwrap()
     }
 
-    /// La cible d'un test dont l'hôte est une SEG2 : une barre déclare les
-    /// mêmes primales de déplacement, et c'est tout ce que la contrainte y lit.
+    /// The target of a test whose host is a SEG2: a bar declares the same
+    /// displacement primals, and that is all the constraint reads there.
     fn cible_barre(host: &Mesh) -> crate::containers::model::Model {
         let fes =
             crate::containers::finite_element_space::FiniteElementSpace::lagrange1(host).unwrap();

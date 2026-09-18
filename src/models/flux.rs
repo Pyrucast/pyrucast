@@ -65,14 +65,14 @@ pub fn density_name(dual: &str) -> String {
 /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// // La cible : le modèle qu'on charge. C'est lui qui possède la ligne « q ».
+/// // The target: the model being loaded. It is the one that owns the "q" row.
 /// let cible = model::heat_conduction(&fes)?;
 /// let charge = Flux::new(zone, &cible, "q".into())?;
-/// // Une charge n'a pas de primale : elle écrit dans la ligne duale d'une
+/// // A load has no primal: it writes into the dual row of another
 /// // autre physique, et n'introduit aucune inconnue.
 /// assert!(charge.primal_vars().is_empty());
 /// assert_eq!(charge.dual_vars(), vec!["q".to_string()]);
-/// // Sa dérivée est nulle : aucune matrice, d'aucun genre.
+/// // Its derivative is zero: no matrix, of any kind.
 /// assert!(charge.matrix_layout(MatrixKind::Stiffness).is_none());
 /// assert_eq!(charge.material_components(), vec!["phi_q".to_string()]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -113,14 +113,14 @@ impl Flux {
     /// # let zone = fes.get(0).unwrap();
     /// # let cible = model::heat_conduction(&fes)?;
     /// assert!(Flux::new(zone.clone(), &cible, "q".into()).is_ok());
-    /// // Une ligne duale vide ne désigne rien : refusé à la construction.
+    /// // An empty dual row designates nothing: refused at construction.
     /// assert!(Flux::new(zone.clone(), &cible, String::new()).is_err());
-    /// // Une ligne que la cible n'assemble pas non plus : c'est tout l'intérêt
+    /// // A row the target does not assemble either: that is the whole point
     /// // de recevoir le modèle chargé.
     /// assert!(Flux::new(zone, &cible, "f_x".into()).is_err());
-    /// // Une formulation qui possède sa propre interpolation (poutre) ne peut
-    /// // pas recevoir de charge cohérente d'ici : elle seule connaît ses
-    /// // fonctions de forme. Tranché à la construction, pas au point de Gauss.
+    /// // A formulation owning its own interpolation (a beam) cannot receive a
+    /// // consistent load from here: it alone knows its shape functions. Settled
+    /// // at construction, not at the Gauss point.
     /// # use pyrucast::atoms::Interpolation;
     /// let poutre = FiniteElementSpace::new(&maillage, Interpolation::ModelEmbedded).unwrap();
     /// assert!(Flux::new(poutre.get(0).unwrap(), &cible, "q".into()).is_err());
@@ -138,11 +138,11 @@ impl Flux {
                     .into(),
             ));
         }
-        // La nature de la charge est celle du terme qu'elle charge. Le nom de la
-        // ligne ne la donne pas — l'utilisateur le choisit librement —, mais le
-        // modèle chargé, si : on cherche le sous-modèle qui possède cette duale.
-        // Une ligne que personne n'assemble bâtissait auparavant une charge
-        // muette ; c'est désormais une erreur de construction.
+        // The load's kind is that of the term it loads. The row's name does not give
+        // it — the user picks it freely — but the loaded model does: we look for the
+        // sub-model that owns that dual.
+        // A row nobody assembles used to build a mute load; it is now a construction
+        // error.
         let physics = owner_physics(target, |sub| sub.as_kind().dual_vars().contains(&dual))
             .ok_or_else(|| {
                 PyrucastError::Message(format!(
@@ -150,11 +150,11 @@ impl Flux {
                     target.dual_vars()
                 ))
             })?;
-        // Une charge répartie pondère par les fonctions de forme **du champ** :
-        // il lui en faut une, et c'est un fait de la zone, tranché ici une fois
-        // pour toutes plutôt qu'à chaque point de Gauss. Une formulation qui
-        // possède sa propre interpolation (poutre `ModelEmbedded`) doit fournir
-        // sa charge cohérente elle-même.
+        // A distributed load weights by the **field's** shape functions: it needs
+        // one, and that is a fact of the zone, settled here once and for all rather
+        // than at every Gauss point. A formulation owning its own interpolation (a
+        // `ModelEmbedded` beam) must supply its consistent load itself.
+
         crate::models::kernel::require_field_basis(&fespace, "shape values")?;
         let submesh = fespace.read().submesh();
         let support = submesh.read().to_poi1()?;
@@ -226,9 +226,9 @@ impl SubModelKind for Flux {
     ) -> Result<()> {
         let geom = &geoms[0];
         let phi = lay.material[0] as usize;
-        // Sur une base C¹ (poutre de Bernoulli) la base du champ n'est pas la
-        // base géométrique : c'est elle qui porte les moments nodaux d'une
-        // charge répartie. Le tampon est sur la pile, hors de la boucle.
+        // On a C¹ basis (a Bernoulli beam) the field's basis is not the geometric
+        // one: it is the basis that carries the nodal moments of a distributed load.
+        // The buffer is on the stack, outside the loop.
         let mut n_buf = [0.0_f64; MAX_CELL_DOFS];
         for g in 0..geom.n_gauss {
             let shape = geom.field_n_at_g(g, &mut n_buf);
@@ -295,8 +295,8 @@ crate::physics_operator! {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
     /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// // Une charge répartie sur le modèle thermique qu'elle alimente : c'est
-    /// // lui qui possède la ligne « q », et qui en donne la nature.
+    /// // A load distributed over the thermal model it feeds: that model owns the
+    /// // "q" row, and gives its kind.
     /// let conduction = model::heat_conduction(&fes)?;
     /// let charge = model::flux(&fes, &conduction, "q".into())?;
     /// assert_eq!(charge.dual_vars(), vec!["q".to_string()]);

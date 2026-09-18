@@ -1,19 +1,19 @@
-"""Masques par valeur — `mask` et le sucre de comparaison.
+"""Masks by value — `mask` and the comparison sugar.
 
-`mask` transforme un champ en un **indicateur 0/1 de même structure** (mêmes
-zones, même support, mêmes composantes) : ``1.0`` là où la bande de valeurs
-tient, ``0.0`` sinon, **composante par composante**. C'est le ``MASQUE`` de
-Cast3M. Comme le résultat a exactement la forme de l'entrée, il se multiplie
-terme à terme avec elle — l'usage canonique pour « annuler ce qui sort d'une
+`mask` turns a field into a **0/1 indicator of the same structure** (same
+zones, same support, same components): ``1.0`` where the value band holds,
+``0.0`` otherwise, **component by component**. It is Cast3M's ``MASQUE``. As
+the result has exactly the input's shape, it multiplies term by term with it —
+the canonical use for "zeroing out what falls outside a
 bande ».
 
-La bande est fixée par quatre bornes de comparaison qui reprennent une pour
-une les opérateurs Python : ``ge`` (``>=``), ``gt`` (``>``), ``le`` (``<=``),
+The band is set by four comparison bounds that match the Python operators one
+for one: ``ge`` (``>=``), ``gt`` (``>``), ``le`` (``<=``),
 ``lt`` (``<``). Et le sucre : ``champ >= x`` construit directement le masque.
 
 Lancement
 ---------
-Après avoir compilé l'extension dans le venv ::
+Once the extension is built in the venv ::
 
     maturin develop --features extension-module
     python examples/field_mask.py
@@ -21,12 +21,12 @@ Après avoir compilé l'extension dans le venv ::
 
 import pyrucast
 
-# Température (°C) le long d'une ligne de 5 nœuds.
+# Temperature (°C) along a line of 5 nodes.
 TEMPERATURES = [10.0, 25.0, 50.0, 75.0, 90.0]
 
 
 def _line_field(values, component="T"):
-    """NodeField mono-zone POI1 : un nœud par valeur, une composante."""
+    """A single-zone POI1 NodeField: one node per value, one component."""
     c = pyrucast.Coords(1)
     nodes = [c.add_node([float(i)]) for i in range(len(values))]
     mesh = pyrucast.Mesh(c, "POI1")
@@ -52,30 +52,30 @@ def main() -> None:
         print(f"{i:4d} {TEMPERATURES[i]:7.1f} {chauds.value(n, 'T'):7.0f}")
     assert _values(chauds, nodes) == [0.0, 0.0, 1.0, 1.0, 1.0]
 
-    # Combien de nœuds chauds ? Le masque étant 0/1, il suffit de sommer.
+    # How many hot nodes? The mask being 0/1, summing is enough.
     n_chauds = sum(_values(chauds, nodes))
     print(f"\nnœuds chauds : {int(n_chauds)} / {len(nodes)}")
     assert n_chauds == 3.0
 
-    # ── 2. Multiplier par le masque : annuler ce qui sort de la bande ─────────
-    # On garde la température des seuls nœuds chauds, les autres tombent à 0.
+    # ── 2. Multiplying by the mask: zeroing out what falls outside the band ──
+    # Only the hot nodes' temperature is kept, the others drop to 0.
     chaud_seul = temperature * chauds
-    print("\nT restreinte aux nœuds chauds :", _values(chaud_seul, nodes))
+    print("\nT restricted to the hot nodes:", _values(chaud_seul, nodes))
     assert _values(chaud_seul, nodes) == [0.0, 0.0, 50.0, 75.0, 90.0]
 
     # ── 3. Sucre de comparaison : `champ >= x` construit le masque ───────────
-    # Strictement équivalent au mask() de l'étape 1.
+    # Strictly equivalent to step 1's mask().
     assert _values(temperature >= 50.0, nodes) == _values(chauds, nodes)
-    # Le raccourci le plus lisible pour « annuler hors bande » :
+    # The most readable shortcut for "zero out of band":
     chaud_seul_bis = temperature * (temperature >= 50.0)
     assert _values(chaud_seul_bis, nodes) == _values(chaud_seul, nodes)
 
     # ── 4. Bornes strictes vs inclusives ─────────────────────────────────────
-    # Bande ouverte 10 < T < 90 (gt / lt) : exclut les deux extrémités.
+    # Open band 10 < T < 90 (gt / lt): excludes both ends.
     milieu = temperature.mask(gt=10.0, lt=90.0)
     print("\n10 < T < 90 (strict) :", _values(milieu, nodes))
     assert _values(milieu, nodes) == [0.0, 1.0, 1.0, 1.0, 0.0]
-    # Avec bornes inclusives (ge / le), les extrémités passent.
+    # With inclusive bounds (ge / le), the ends pass.
     assert _values(temperature.mask(ge=10.0, le=90.0), nodes) == [
         1.0,
         1.0,
@@ -84,9 +84,9 @@ def main() -> None:
         1.0,
     ]
 
-    # ── 5. Masque par composante (le filtre `components`) ────────────────────
-    # Un champ de déplacement à deux composantes (UX, UY) ; on ne masque
-    # que UX.
+    # ── 5. Mask per component (the `components` filter) ──────────────────────
+    # A displacement field with two components (UX, UY); only UX is masked.
+
     c = pyrucast.Coords(1)
     vnodes = [c.add_node([float(i)]) for i in range(3)]
     vmesh = pyrucast.Mesh(c, "POI1")
@@ -97,8 +97,8 @@ def main() -> None:
         depl[0].set_value(n, "UX", ux)
         depl[0].set_value(n, "UY", uy)
 
-    # Masque « positif » sur UX seulement : UY reste à 1.0 (neutre du produit),
-    # donc `depl * m` annule UX < 0 mais laisse UY intact.
+    # A "positive" mask on UX only: UY stays at 1.0 (the product's identity), so
+    # `depl * m` zeroes UX < 0 but leaves UY untouched.
     m = depl.mask(ge=0.0, components=["UX"])
     filtre = depl * m
     ux = [filtre.value(n, "UX") for n in vnodes]

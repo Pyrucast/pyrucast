@@ -112,8 +112,8 @@ fn shear_ratios_of(model: BeamModel) -> &'static [&'static str] {
 /// # let fes = FiniteElementSpace::new(&maillage, Interpolation::ModelEmbedded).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # use pyrucast::models::timoshenko::Timoshenko;
-/// // La poutre exacte : son interpolation dépend du matériau par Φ, donc
-/// // elle appartient à la formulation, non à l'espace.
+/// // The exact beam: its interpolation depends on the material through Φ, so
+/// // it belongs to the formulation, not to the space.
 /// let t = Timoshenko::new(zone.clone())?;
 /// assert!(t.material_components().contains(&"A_s".to_string()));
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -147,8 +147,8 @@ impl Timoshenko {
     /// # let fes = FiniteElementSpace::new(&maillage, Interpolation::ModelEmbedded).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # use pyrucast::models::timoshenko::Timoshenko;
-    /// // La poutre exacte : son interpolation dépend du matériau par Φ, donc
-    /// // elle appartient à la formulation, non à l'espace.
+    /// // The exact beam: its interpolation depends on the material through Φ, so
+    /// // it belongs to the formulation, not to the space.
     /// let t = Timoshenko::new(zone.clone())?;
     /// assert!(t.material_components().contains(&"A_s".to_string()));
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -312,7 +312,7 @@ impl Domain for Timoshenko {
         }
     }
 
-    /// La raideur géométrique de la poutre lit son effort normal.
+    /// The beam's geometric stiffness reads its axial force.
     fn element_state_reads(&self, kind: MatrixKind) -> Vec<String> {
         match kind {
             MatrixKind::Geometric => vec!["N".to_string()],
@@ -328,8 +328,8 @@ impl Domain for Timoshenko {
         ke: &mut [f64],
     ) -> Result<()> {
         let geom = &geoms[0];
-        // Chaque configuration a son contrat (`material_of`) ; les constantes se
-        // lisent par les indices que la zone a résolus, dans cet ordre-là.
+        // Every configuration has its contract (`material_of`); the constants are read
+        // through the indices the zone resolved, in that order.
         let m = |k: usize| material.row(geom.cell, 0)[lay.material[k] as usize];
         match self.model {
             // [E, I, G, A_s]
@@ -364,8 +364,8 @@ impl Domain for Timoshenko {
         let geom = &geoms[0];
         let row = material.row(geom.cell, 0);
         let m = |k: usize| row[lay.material[k] as usize];
-        // `rho` ferme la liste des composantes facultatives de chaque
-        // configuration ; sans elle il n'y a pas de masse à intégrer.
+        // `rho` closes each configuration's list of optional components; without it
+        // there is no mass to integrate.
         let rho = optional(row, lay, lay.optional_material.len() - 1, "rho")?;
         match self.model {
             // [E, I, G, A_s] + facultatives [A, rho]
@@ -478,7 +478,7 @@ impl Behavior for Timoshenko {
     ) -> Result<()> {
         let m = |k: usize| material[lay.material[k] as usize];
         let e = |k: usize| deformation[lay.deformation[k] as usize];
-        // La portée : la seule géométrie dont `Φ` ait besoin, et elle est là.
+        // The span: the only geometry `Φ` needs, and it is right there.
         let l = beam::span(geom.node_coord(0), geom.node_coord(1));
         match self.model {
             // [E, I, G, A_s] × [κ, γ]
@@ -502,9 +502,9 @@ impl Behavior for Timoshenko {
                 out[3] = m(5) * m(4) * e(3); // G·J·torsion
                 out[4] = m(5) * m(6) * e(4); // G·A_sy·γ_y
                 out[5] = m(5) * m(7) * e(5); // G·A_sz·γ_z
-                                             // Un plan de flexion par `Φ`, chacun avec son inertie et sa
+                                             // One bending plane per `Φ`, each with its inertia and its pair — the pairing
                                              // section réduite : x'-y' porte `I_z` et `A_sy`, x'-z' l'autre
-                                             // paire — l'appariement que `b_into` attend.
+                                             // `b_into` expects.
                 out[6] = beam::phi(m(0) * m(3), Some(m(5) * m(6)), l);
                 out[7] = beam::phi(m(0) * m(2), Some(m(5) * m(7)), l);
             }
@@ -520,8 +520,8 @@ impl Behavior for Timoshenko {
 // 1-D beam has no rotation to make, so its kernels are the bare blocks.
 
 /// The exact bending stiffness of a 1-D beam, on `[w_A, θ_A, w_B, θ_B]`.
-/// Une composante facultative, lue par l'indice que la zone a résolu — absente,
-/// elle se nomme dans l'erreur plutôt que de valoir zéro en silence.
+/// An optional component, read through the index the zone resolved — when
+/// missing, it names itself in the error rather than silently being zero.
 fn optional(row: &[f64], lay: &ElementLayout, slot: usize, name: &str) -> Result<f64> {
     match lay.optional_material[slot] {
         ABSENT_COMPONENT => Err(PyrucastError::Message(format!(

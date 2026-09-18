@@ -38,8 +38,8 @@ use serde::{Deserialize, Serialize};
 /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
 /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
 /// # let mat = MatRead::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &[]);
-/// // Même motif que `PlasticLaw` : les DDL, l'opérateur élastique et le
-/// // montage incrémental sont partagés ; seule diffère la loi qui dégrade
+/// // Same pattern as `PlasticLaw`: the DOFs, the elastic operator and the
+/// // incremental setup are shared; only the degrading law differs
 /// // la contrainte.
 /// assert_eq!(DamageLaw::ALL.len(), 3);
 /// assert_eq!(DamageLaw::Mazars.internal_names(), vec!["kappa".to_string()]);
@@ -132,7 +132,7 @@ impl DamageLaw {
     /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
     /// # let mat = MatRead::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &[]);
     /// # use pyrucast::named::Named;
-    /// // Réciproque exacte de `from_name`, pour les trois lois.
+    /// // The exact inverse of `from_name`, for the three laws.
     /// assert!(DamageLaw::ALL.iter()
     ///     .all(|l| DamageLaw::from_name(l.name()) == Some(*l)));
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -200,8 +200,8 @@ impl DamageLaw {
     /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
     /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
     /// # let mat = MatRead::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &[]);
-    /// // Mazars : un seuil et deux branches. SiC/SiC porte en plus les axes
-    /// // du tissage, donc **plus de composantes en 3-D qu'en 2-D**.
+    /// // Mazars: one threshold and two branches. SiC/SiC also carries the
+    /// // weaving axes, hence **more components in 3-D than in 2-D**.
     /// assert!(DamageLaw::Mazars.material_components(2).contains(&"eps_d0"));
     /// assert!(DamageLaw::SicSic.material_components(3).len()
     ///         > DamageLaw::SicSic.material_components(2).len());
@@ -236,7 +236,7 @@ impl DamageLaw {
     /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
     /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
     /// # let mat = MatRead::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &[]);
-    /// // L'état de la loi, au-delà du `damage` rapporté pour la visualisation.
+    /// // The law's state, beyond the `damage` reported for visualization.
     /// assert_eq!(DamageLaw::Mazars.internal_names(), vec!["kappa".to_string()]);
     /// // Damage-TC en porte quatre : deux seuils et deux endommagements.
     /// assert_eq!(DamageLaw::DamageTc.internal_names().len(), 4);
@@ -271,13 +271,13 @@ impl DamageLaw {
     /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
     /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
     /// # let mat = MatRead::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &[]);
-    /// // Sous le seuil `eps_d0`, rien ne s'endommage.
+    /// // Below the `eps_d0` threshold, nothing is damaged.
     /// let petit = [1e-5, 0.0, 0.0, 0.0, 0.0, 0.0];
     /// let u = DamageLaw::Mazars.update(&petit, &[0.0], &mat, 2)?;
     /// assert_eq!(u.damage, 0.0);
     ///
-    /// // Au-delà, l'endommagement croît et la contrainte est **dégradée** :
-    /// // elle tombe sous la contrainte élastique correspondante.
+    /// // Beyond it, damage grows and the stress is **degraded**: it falls below
+    /// // the corresponding elastic stress.
     /// let grand = [1e-3, 0.0, 0.0, 0.0, 0.0, 0.0];
     /// let u = DamageLaw::Mazars.update(&grand, &[0.0], &mat, 2)?;
     /// assert!(u.damage > 0.0 && u.damage < 1.0);
@@ -336,8 +336,8 @@ impl std::fmt::Display for DamageLaw {
 /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
 /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
 /// # let mat = MatRead::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &[]);
-/// // `damage` est un **résumé** pour la visualisation ; l'état est `vars`.
-/// // Une loi à plusieurs endommagements y rapporte le pire.
+/// // `damage` is a **summary** for visualization; the state is `vars`.
+/// // A law with several damages reports the worst one there.
 /// let u = DamageLaw::Mazars.update(&[1e-3, 0.0, 0.0, 0.0, 0.0, 0.0], &[0.0], &mat, 2)?;
 /// assert_eq!(u.internal().len(), DamageLaw::Mazars.internal_names().len());
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -363,7 +363,7 @@ impl DamageUpdate {
     ///
     /// ```
     /// # use pyrucast::models::damage::law::DamageUpdate;
-    /// // Une histoire à deux variables, et rien d'alloué pour la porter.
+    /// // A history of two variables, and nothing allocated to carry it.
     /// let u = DamageUpdate::new([0.0; 6], 0.4, &[1e-4, 0.4]);
     /// assert_eq!(u.damage, 0.4);
     /// assert_eq!(u.internal(), &[1e-4, 0.4]);
@@ -383,7 +383,7 @@ impl DamageUpdate {
     ///
     /// ```
     /// # use pyrucast::models::damage::law::DamageUpdate;
-    /// // Une loi sans histoire en rend une tranche vide, non un `Vec`.
+    /// // A law without history returns an empty slice of it, not a `Vec`.
     /// let u = DamageUpdate::new([0.0; 6], 0.0, &[]);
     /// assert!(u.internal().is_empty());
     /// ```
@@ -417,7 +417,7 @@ impl DamageUpdate {
 /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
 /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
 /// # let mat = MatRead::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &[]);
-/// // La partie positive, dont se servent les lois pour séparer traction
+/// // The positive part, which the laws use to separate tension
 /// // et compression.
 /// assert_eq!((law::pos(3.0), law::pos(-3.0)), (3.0, 0.0));
 /// # Ok::<(), pyrucast::PyrucastError>(())

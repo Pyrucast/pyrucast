@@ -115,16 +115,16 @@ impl DofIndex {
 /// # let modele = model::heat_conduction(&fes).unwrap();
 /// # let materiaux = element_field::material_field(&modele,
 /// #     &[("k", 1.0), ("rho", 2.0), ("cp", 3.0)]).unwrap();
-/// // Le motif est **matériau-indépendant** : il se bâtit une fois, puis
-/// // les deux phases numériques le remplissent — la série, référence
-/// // bit-à-bit, et la parallèle par coloriage.
+/// // The pattern is **material-independent**: it is built once, then the two
+/// // numerical phases fill it — the serial one, a bit-for-bit reference, and
+/// // the parallel one by colouring.
 /// let k = matrix::stiffness(&modele, &materiaux)?;
 /// let motif = scatter::build_pattern(&k)?;
 /// let serie = scatter::scatter_serial(&k, &motif)?;
 /// let para = scatter::scatter_parallel(&k, &motif)?;
 /// assert_eq!(serie.len(), motif.nnz());
 /// assert_eq!(para.len(), serie.len());
-/// // Mêmes valeurs, à l'ordre de sommation des couleurs près.
+/// // The same values, up to the colours' summation order.
 /// for (a, b) in serie.iter().zip(&para) {
 ///     assert!((a - b).abs() < 1e-12);
 /// }
@@ -456,16 +456,16 @@ fn computed_slots(
 /// # let modele = model::heat_conduction(&fes).unwrap();
 /// # let materiaux = element_field::material_field(&modele,
 /// #     &[("k", 1.0), ("rho", 2.0), ("cp", 3.0)]).unwrap();
-/// // Le motif est **matériau-indépendant** : il se bâtit une fois, puis
-/// // les deux phases numériques le remplissent — la série, référence
-/// // bit-à-bit, et la parallèle par coloriage.
+/// // The pattern is **material-independent**: it is built once, then the two
+/// // numerical phases fill it — the serial one, a bit-for-bit reference, and
+/// // the parallel one by colouring.
 /// let k = matrix::stiffness(&modele, &materiaux)?;
 /// let motif = scatter::build_pattern(&k)?;
 /// let serie = scatter::scatter_serial(&k, &motif)?;
 /// let para = scatter::scatter_parallel(&k, &motif)?;
 /// assert_eq!(serie.len(), motif.nnz());
 /// assert_eq!(para.len(), serie.len());
-/// // Mêmes valeurs, à l'ordre de sommation des couleurs près.
+/// // The same values, up to the colours' summation order.
 /// for (a, b) in serie.iter().zip(&para) {
 ///     assert!((a - b).abs() < 1e-12);
 /// }
@@ -503,9 +503,9 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<Vec<f64>>
                 // the closures below capture the table, so no cell ever matches
                 // a component name. The guards are dropped straight away — the
                 // drivers take the handles and hold their own.
-                // Les gardes des entrées vivent le temps du bloc : `inputs` pointe
-                // dedans. Celle du matériau, elle, est relâchée aussitôt — les
-                // pilotes prennent la poignée et tiennent la leur.
+                // The inputs' guards live for the block's duration: `inputs` points inside
+                // them. The material's own is released at once — the drivers take the handle
+                // and hold theirs.
                 let state_guard = match &recipe.inputs {
                     KernelInputs::State(h) => Some(h.read()),
                     _ => None,
@@ -516,8 +516,8 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<Vec<f64>>
                     } => Some((deformation.read(), prev.read())),
                     _ => None,
                 };
-                // Résolus **une fois pour le bloc**, avant la région parallèle :
-                // les fermetures capturent les tables, donc aucune maille ne
+                // Resolved **once for the block**, before the parallel region: the closures
+                // capture the tables, so no cell
                 // compare jamais un nom de composante.
                 let (lay, zone) = {
                     let mat = material.read();
@@ -645,16 +645,16 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<Vec<f64>>
 /// # let modele = model::heat_conduction(&fes).unwrap();
 /// # let materiaux = element_field::material_field(&modele,
 /// #     &[("k", 1.0), ("rho", 2.0), ("cp", 3.0)]).unwrap();
-/// // Le motif est **matériau-indépendant** : il se bâtit une fois, puis
-/// // les deux phases numériques le remplissent — la série, référence
-/// // bit-à-bit, et la parallèle par coloriage.
+/// // The pattern is **material-independent**: it is built once, then the two
+/// // numerical phases fill it — the serial one, a bit-for-bit reference, and
+/// // the parallel one by colouring.
 /// let k = matrix::stiffness(&modele, &materiaux)?;
 /// let motif = scatter::build_pattern(&k)?;
 /// let serie = scatter::scatter_serial(&k, &motif)?;
 /// let para = scatter::scatter_parallel(&k, &motif)?;
 /// assert_eq!(serie.len(), motif.nnz());
 /// assert_eq!(para.len(), serie.len());
-/// // Mêmes valeurs, à l'ordre de sommation des couleurs près.
+/// // The same values, up to the colours' summation order.
 /// for (a, b) in serie.iter().zip(&para) {
 ///     assert!((a - b).abs() < 1e-12);
 /// }
@@ -693,9 +693,9 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<Vec<f64
                 // the closures below capture the table, so no cell ever matches
                 // a component name. The guards are dropped straight away — the
                 // drivers take the handles and hold their own.
-                // Les gardes des entrées vivent le temps du bloc : `inputs` pointe
-                // dedans. Celle du matériau, elle, est relâchée aussitôt — les
-                // pilotes prennent la poignée et tiennent la leur.
+                // The inputs' guards live for the block's duration: `inputs` points inside
+                // them. The material's own is released at once — the drivers take the handle
+                // and hold theirs.
                 let state_guard = match &recipe.inputs {
                     KernelInputs::State(h) => Some(h.read()),
                     _ => None,
@@ -706,8 +706,8 @@ pub fn scatter_parallel(k: &Matrix, pattern: &AssemblyPattern) -> Result<Vec<f64
                     } => Some((deformation.read(), prev.read())),
                     _ => None,
                 };
-                // Résolus **une fois pour le bloc**, avant la région parallèle :
-                // les fermetures capturent les tables, donc aucune maille ne
+                // Resolved **once for the block**, before the parallel region: the closures
+                // capture the tables, so no cell
                 // compare jamais un nom de composante.
                 let (lay, zone) = {
                     let mat = material.read();

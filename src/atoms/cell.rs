@@ -53,8 +53,8 @@ use crate::handle::Handle;
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
-/// // Une vue légère sur **une** maille : sa connectivité, sans les
-/// // fonctions de forme — c'est `Element` qui les porte.
+/// // A light view on **one** cell: its connectivity, without the shape
+/// // functions — `Element` is what carries those.
 /// let c = maillage.cell(0, 0)?;
 /// assert_eq!(c.node_ids().len(), 3);
 /// assert_eq!(c.element_type(), ElementType::TRI3);
@@ -194,7 +194,7 @@ impl Cell {
     /// # let mut sm = SubMesh::new(coords, ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let sm = Handle::new(sm);
-    /// // Chaque `Node` rendu porte un ticket de plus sur le magasin.
+    /// // Every `Node` returned carries one more ticket on the store.
     /// let noeuds = Cell::new(sm, 0).unwrap().nodes().unwrap();
     /// assert_eq!(noeuds.len(), 3);
     /// assert_eq!(noeuds[0].position().unwrap(), vec![0.0, 0.0]);
@@ -208,12 +208,12 @@ impl Cell {
     }
 }
 
-/// Structure, **sans verrou** : le sous-maillage porteur et l'indice.
+/// Structure, **without a lock**: the carrying submesh and the index.
 ///
-/// Le type d'élément et les nœuds demanderaient de lire le sous-maillage, donc
-/// de prendre un guard — ce qu'un affichage de diagnostic ne doit pas faire :
-/// `{:?}` s'écrit dans un message d'erreur ou une trace, parfois en tenant
-/// précisément le verrou en cause. Ces informations vivent dans `dump`, appelé
+/// The element type and the nodes would require reading the submesh, hence
+/// taking a guard — which a diagnostic display must not do: `{:?}` is written
+/// in an error message or a trace, sometimes while holding precisely the lock
+/// at fault. That information lives in `dump`, called
 /// en connaissance de cause.
 impl fmt::Debug for Cell {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -224,13 +224,13 @@ impl fmt::Debug for Cell {
     }
 }
 
-/// Résumé, **sans verrou** : `Cell #0 @ <SubMesh #ea6020>`.
+/// Summary, **without a lock**: `Cell #0 @ <SubMesh #ea6020>`.
 ///
-/// La connectivité et le type d'élément exigeaient d'aller les lire dans le
-/// sous-maillage. Une `Cell` n'est qu'une vue — un handle et un indice — et son
-/// affichage court ne doit pas pouvoir bloquer : le handle s'imprime sans
-/// toucher à l'objet, par choix délibéré (voir `Handle`), et cette prudence
-/// vaut aussi pour ses vues.
+/// The connectivity and the element type would have to be read from the
+/// submesh. A `Cell` is only a view — a handle and an index — and its short
+/// display must not be able to block: the handle prints without touching the
+/// object, by deliberate choice (see `Handle`), and that caution holds for its
+/// views too.
 impl fmt::Display for Cell {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Cell #{} @ {}", self.idx, self.sm)
@@ -284,7 +284,7 @@ impl crate::dump::Dump for Cell {
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
-/// // Le parcours des mailles d'une zone, sans allocation par maille.
+/// // The walk over a zone's cells, without a per-cell allocation.
 /// assert_eq!(maillage.cells(0)?.count(), 1);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```

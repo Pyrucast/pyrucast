@@ -1,34 +1,34 @@
-"""Élasticité orthotrope — plaque tirée hors de ses axes matériau.
+"""Orthotropic elasticity — a plate pulled off its material axes.
 
 Problème
 --------
-Un carré unité en contraintes planes, tiré uniformément (traction ``S``) sur son
-bord droit, avec des appuis à rouleaux sur les bords gauche et bas. Le matériau
-est **orthotrope** : rigide dans une direction, souple dans l'autre.
+A unit square in plane stress, pulled uniformly (traction ``S``) on its right
+edge, with roller supports on the left and bottom edges. The material is
+**orthotropic**: stiff in one direction, compliant in the other.
 
-Ce que l'exemple montre, c'est l'effet du **repère d'orthotropie**. Il est donné
-par des vecteurs, comme dans Cast3M (``MATE 'DIRECTION' V1 V2``) : les
-composantes ``V1X``, ``V1Y`` voyagent dans le champ matériau au même titre que
-les modules. On balaie l'angle du premier axe matériau de 0° à 90°.
+What the example shows is the effect of the **orthotropy frame**. It is given
+by vectors, as in Cast3M (``MATE 'DIRECTION' V1 V2``): the components ``V1X``,
+``V1Y`` travel in the material field just like the moduli. The first material
+axis's angle is swept from 0° to 90°.
 
-Deux cas ont une solution analytique, et ce sont les bornes du balayage :
+Two cases have an analytical solution, and they are the sweep's bounds:
 
-  * **0°** — l'axe rigide est aligné sur la traction ::
+  * **0°** — the stiff axis is aligned with the traction ::
 
         u_x(1, y) = S / E_1
 
-  * **90°** — c'est l'axe souple qui travaille ::
+  * **90°** — it is the compliant axis that works ::
 
         u_x(1, y) = S / E_2
 
-Entre les deux, la plaque **cisaille** : hors de ses axes, un matériau
-orthotrope couple traction et distorsion (le terme ``D_16`` du tenseur tourné
-n'est plus nul), et le bord droit ne reste pas droit. C'est précisément ce que
-l'anisotropie apporte, et ce qu'un calcul isotrope ne peut pas produire.
+In between, the plate **shears**: off its axes, an orthotropic material couples
+traction and distortion (the ``D_16`` term of the rotated tensor is no longer
+zero), and the right edge does not stay straight. That is precisely what
+anisotropy brings, and what an isotropic computation cannot produce.
 
 Lancement
 ---------
-Après avoir compilé l'extension dans le venv ::
+Once the extension is built in the venv ::
 
     maturin develop --features extension-module
     python examples/plaque_orthotrope.py
@@ -38,17 +38,17 @@ import math
 
 import pyrucast
 
-# ── Données du problème ──────────────────────────────────────────────────────
-E1 = 200.0  # module dans la direction rigide (axe matériau 1)
+# ── Problem data ────────────────────────────────────────────────────────────
+E1 = 200.0  # modulus in the stiff direction (material axis 1)
 E2 = 50.0  # module transverse
 NU12 = 0.25
 G12 = 30.0
-S = 2.0  # traction sur le bord droit
+S = 2.0  # traction on the right edge
 N = 4  # grille N×N de QUA4
 
 
 def maillage():
-    """La grille QUA4 du carré unité, ses nœuds et son espace EF."""
+    """The unit square's QUA4 grid, its nodes and its FE space."""
     h = 1.0 / N
     c = pyrucast.Coords(2)
     grid = [[c.add_node([i * h, j * h]) for i in range(N + 1)] for j in range(N + 1)]
@@ -62,7 +62,7 @@ def maillage():
 
 
 def rouleau(target, c, noeuds, variable):
-    """Appui glissant ``variable = 0`` sur les nœuds donnés."""
+    """A roller support ``variable = 0`` on the given nodes."""
     imposed = pyrucast.Mesh(c, "POI1")
     for n in noeuds:
         imposed.unit().add_cell([n])
@@ -71,18 +71,18 @@ def rouleau(target, c, noeuds, variable):
 
 
 def resoudre(angle_deg):
-    """Le déplacement du coin (1, 0) pour un axe matériau à ``angle_deg``."""
+    """The displacement of corner (1, 0) for a material axis at ``angle_deg``."""
     c, grid, fes = maillage()
 
-    # Élasticité orthotrope + les deux appuis.
+    # Orthotropic elasticity + both supports.
     model = pyrucast.model.elasticity(fes, "plane_stress", symmetry="orthotropic")
     model = model | rouleau(model, c, [grid[j][0] for j in range(N + 1)], "u_x")
     model = model | rouleau(model, c, [grid[0][i] for i in range(N + 1)], "u_y")
 
-    # Le repère matériau est une donnée matériau comme une autre.
+    # The material frame is material data like any other.
     a = math.radians(angle_deg)
-    # Traction S sur le bord droit, en charges nodales cohérentes : un terme du
-    # modèle, dont la densité vit dans le matériau.
+    # Traction S on the right edge, as consistent nodal loads: a term of the
+    # model, whose density lives in the material.
     bord = pyrucast.Mesh(c, "SEG2")
     for j in range(N):
         bord.unit().add_cell([grid[j][N], grid[j + 1][N]])
@@ -118,16 +118,16 @@ def resoudre(angle_deg):
 
 
 def main() -> None:
-    print("Élasticité orthotrope — balayage du repère matériau")
+    print("Orthotropic elasticity — sweeping the material frame")
     print(f"  E_1 = {E1}, E_2 = {E2}, nu_12 = {NU12}, G_12 = {G12}, traction S = {S}")
     print()
-    print("  angle    u_x(1,0)    écart u_x sur le bord droit")
+    print("  angle    u_x(1,0)    u_x gap on the right edge")
     print("  " + "-" * 46)
     for angle in (0.0, 22.5, 45.0, 67.5, 90.0):
         ux, distorsion = resoudre(angle)
         print(f"  {angle:5.1f}°  {ux:10.6f}  {distorsion:+14.6f}")
 
-    # Les deux bornes sont analytiques : l'axe rigide, puis l'axe souple.
+    # Both bounds are analytical: the stiff axis, then the compliant one.
     ux0, _ = resoudre(0.0)
     ux90, _ = resoudre(90.0)
     print()
@@ -136,12 +136,12 @@ def main() -> None:
     assert abs(ux0 - S / E1) < 1e-10
     assert abs(ux90 - S / E2) < 1e-10
 
-    # Hors axes, la traction induit du cisaillement — le bord droit se gauchit.
+    # Off axis, the traction induces shear — the right edge warps.
     _, distorsion45 = resoudre(45.0)
     assert abs(distorsion45) > 1e-4, "un orthotrope hors axes doit cisailler"
     print()
-    print(f"  À 45°, le bord droit se gauchit de {distorsion45:+.6f} :")
-    print("  c'est le couplage traction/cisaillement de l'orthotropie hors axes.")
+    print(f"  At 45°, the right edge warps by {distorsion45:+.6f}:")
+    print("  this is the traction/shear coupling of off-axis orthotropy.")
 
 
 if __name__ == "__main__":

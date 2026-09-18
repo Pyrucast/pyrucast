@@ -49,10 +49,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 ///
 /// ```
 /// # use pyrucast::parallel;
-/// // Découper un travail minuscule coûte plus qu'il ne rapporte : en deçà
-/// // de ce grain, une boucle parallèle tourne de fait séquentiellement.
+/// // Splitting a tiny job costs more than it pays: below this grain, a
+/// // parallel loop in fact runs sequentially.
 /// assert_eq!(parallel::MIN_PARALLEL_LEN, 256);
-/// // S'applique par `.with_min_len(MIN_PARALLEL_LEN)` sur un itérateur indexé.
+/// // Applied through `.with_min_len(MIN_PARALLEL_LEN)` on an indexed iterator.
 /// ```
 pub const MIN_PARALLEL_LEN: usize = 256;
 
@@ -63,9 +63,9 @@ pub const MIN_PARALLEL_LEN: usize = 256;
 ///
 /// ```
 /// # use pyrucast::parallel;
-/// // Chaque case est écrite **exactement une fois** : le résultat ne
-/// // dépend pas du nombre de fils. C'est l'unique primitive derrière les
-/// // maths de champ élément par élément.
+/// // Every slot is written **exactly once**: the result does not depend on
+/// // the number of threads. It is the single primitive behind the
+/// // element-wise field mathematics.
 /// let mut v = vec![1.0, 4.0, 9.0];
 /// parallel::map_inplace(&mut v, f64::sqrt);
 /// assert_eq!(v, vec![1.0, 2.0, 3.0]);
@@ -81,7 +81,7 @@ pub fn map_inplace(buf: &mut [f64], f: impl Fn(f64) -> f64 + Sync + Send) {
 ///
 /// ```
 /// # use pyrucast::parallel;
-/// // Une seule composante d'un tampon entrelacé : ici la deuxième de trois.
+/// // A single component of an interleaved buffer: here the second of three.
 /// let mut v = vec![1.0, 10.0, 100.0, 2.0, 20.0, 200.0];
 /// parallel::map_component_inplace(&mut v, 3, 1, |x| x * 2.0);
 /// assert_eq!(v, vec![1.0, 20.0, 100.0, 2.0, 40.0, 200.0]);
@@ -118,8 +118,8 @@ pub(crate) fn add_atomic(a: &AtomicU64, v: f64) {
 ///
 /// ```
 /// # use pyrucast::parallel;
-/// // L'accumulateur d'un scatter colorié, tenu en atomiques. Dans une
-/// // couleur, les mailles touchent des cases **disjointes** : `add` ne
+/// // The accumulator of a coloured scatter, held in atomics. Within one
+/// // colour, the cells touch **disjoint** slots: `add` does not
 /// // court jamais.
 /// let couleurs = vec![vec![0, 1]];
 /// let mut v = vec![0.0; 2];
@@ -139,10 +139,10 @@ impl Scatter<'_> {
     ///
     /// ```
     /// # use pyrucast::parallel;
-    /// // Les contributions **s'accumulent** dans la case visée — d'une couleur
-    /// // à la suivante, jamais au sein d'une même. Trois mailles écrivant la
-    /// // même case doivent donc être de trois couleurs : c'est exactement ce
-    /// // que le coloriage garantit, et sans quoi les additions se perdraient.
+    /// // The contributions **accumulate** in the targeted slot — from one colour
+    /// // to the next, never within one. Three cells writing the same slot must
+    /// // therefore be of three colours: that is exactly what the colouring
+    /// // guarantees, and without which the additions would be lost.
     /// let couleurs = vec![vec![0], vec![1], vec![2]];
     /// let mut v = vec![0.0; 1];
     /// parallel::colored_scatter(&mut v, &couleurs, 1, || (), |_cell, _s, out| {
@@ -178,14 +178,14 @@ impl Scatter<'_> {
 ///
 /// ```
 /// # use pyrucast::parallel;
-/// // Les mailles sont partagées en couleurs qui touchent des cases
-/// // disjointes ; chaque case additionne donc ses mailles dans un ordre
-/// // fixe — couleur croissante, puis ordre des mailles — quel que soit
+/// // The cells are split into colours touching disjoint slots; every slot
+/// // therefore adds its cells in a fixed order — increasing colour, then
+/// // cell order — whatever the
 /// // `RAYON_NUM_THREADS`.
 /// let couleurs = vec![vec![0, 2], vec![1]];
 /// let mut v = vec![0.0; 3];
 /// parallel::colored_scatter(&mut v, &couleurs, 1, || 0usize, |cell, tampon, out| {
-///     *tampon += 1; // un état par tâche, réutilisé d'une maille à l'autre
+///     *tampon += 1; // one state per task, reused from one cell to the next
 ///     out.add(cell, (cell + 1) as f64);
 ///     Ok(())
 /// })?;

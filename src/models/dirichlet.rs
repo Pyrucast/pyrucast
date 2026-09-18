@@ -70,8 +70,8 @@ use serde::{Deserialize, Serialize};
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # use pyrucast::models::dirichlet;
-/// // Dérivés plutôt que tabulés : `multiplier` et `imposed_value` laissés
-/// // à `None` prennent ces valeurs.
+/// // Derived rather than tabulated: `multiplier` and `imposed_value` left at
+/// // `None` take these values.
 /// assert_eq!(
 ///     (dirichlet::default_multiplier("T").as_str(),
 ///      dirichlet::default_imposed_value("T").as_str()),
@@ -104,8 +104,8 @@ pub fn default_multiplier(imposed_variable: &str) -> String {
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # use pyrucast::models::dirichlet;
-/// // Dérivés plutôt que tabulés : `multiplier` et `imposed_value` laissés
-/// // à `None` prennent ces valeurs.
+/// // Derived rather than tabulated: `multiplier` and `imposed_value` left at
+/// // `None` take these values.
 /// assert_eq!(
 ///     (dirichlet::default_multiplier("T").as_str(),
 ///      dirichlet::default_imposed_value("T").as_str()),

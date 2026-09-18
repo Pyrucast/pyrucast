@@ -132,8 +132,8 @@ fn echoes_sigma_zz(space_dim: usize, kinematics: Kinematics) -> bool {
 /// # let zone = fes.get(0).unwrap();
 /// # use pyrucast::models::plasticity::Plasticity;
 /// # use pyrucast::models::plasticity::law::PlasticLaw;
-/// // La physique élastoplastique d'une zone : sa loi décide du matériau
-/// // qu'elle réclame et de l'état qu'elle porte.
+/// // A zone's elastoplastic physics: its law decides the material it
+/// // demands and the state it carries.
 /// let p = Plasticity::new(zone.clone(), Kinematics::PlaneStrain)?;
 /// assert!(p.material_components().contains(&"sigma_y".to_string()));
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -165,8 +165,8 @@ impl Plasticity {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # use pyrucast::models::plasticity::Plasticity;
-    /// // Von Mises **parfaite** : la loi par défaut, celle avec laquelle cette
-    /// // physique est née.
+    /// // **Perfect** von Mises: the default law, the one this physics was born
+    /// // with.
     /// let p = Plasticity::new(zone.clone(), Kinematics::PlaneStrain)?;
     /// assert_eq!(p.material_components().len(), 3); // E, nu, sigma_y
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -198,12 +198,12 @@ impl Plasticity {
     /// # let zone = fes.get(0).unwrap();
     /// # use pyrucast::models::plasticity::Plasticity;
     /// # use pyrucast::models::plasticity::law::PlasticLaw;
-    /// // La loi explicite, et le contrôle de cohérence entre la cinématique et
+    /// // The explicit law, and the coherence check between the kinematics and
     /// // la dimension de l'espace.
     /// let p = Plasticity::with_law(
     ///     zone.clone(), Kinematics::PlaneStrain, PlasticLaw::Isotropic)?;
     /// assert!(p.material_components().contains(&"H".to_string()));
-    /// // Un modèle solide sur une zone 2-D est refusé.
+    /// // A solid model on a 2-D zone is refused.
     /// assert!(Plasticity::with_law(
     ///     zone.clone(), Kinematics::Full3D, PlasticLaw::Perfect).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -221,11 +221,11 @@ impl Plasticity {
 }
 
 impl Plasticity {
-    /// Le préambule commun aux deux noyaux de point : la matière lue par
+    /// The preamble common to both point kernels: the matter read by
     /// position, `ε(B)`, et l'état en A reconstruit en 3-D plein.
     ///
-    /// Passé par fermeture parce que `PrevState` emprunte un tableau de pile —
-    /// et générique, donc monomorphisé : aucun appel virtuel n'entre ici.
+    /// Passed by closure because `PrevState` borrows a stack array — and generic,
+    /// hence monomorphized: no virtual call gets in here.
     fn with_law_inputs<R>(
         &self,
         lay: &ZoneLayout,
@@ -373,7 +373,7 @@ impl Domain for Plasticity {
         self.law.as_law().optional_material_components()
     }
 
-    /// Les mêmes noyaux que l'élasticité, donc les mêmes lectures d'état.
+    /// The same kernels as elasticity, hence the same state reads.
     fn element_state_reads(&self, kind: MatrixKind) -> Vec<String> {
         self.continuum.element_state_reads(kind)
     }
@@ -558,14 +558,14 @@ impl Behavior for Plasticity {
         )
     }
 
-    /// Le module algorithmique `D_alg` au point — la dérivée du **pas**
-    /// `ε(B) ↦ σ(B)` à état A figé, non une tangente à une surface en un point.
-    /// C'est pourquoi il reçoit exactement les entrées d'`integrate_point` : les
-    /// deux extrémités du pas sont dans sa définition, et une loi dérivée par
-    /// différences finies relance littéralement son retour radial depuis `prev`.
+    /// The algorithmic modulus `D_alg` at the point — the derivative of the
+    /// **step** `ε(B) ↦ σ(B)` at frozen state A, not a tangent to a surface at a
+    /// point. That is why it receives exactly `integrate_point`'s inputs: both
+    /// ends of the step are in its definition, and a law differentiated by finite
+    /// differences literally replays its radial return from `prev`.
     ///
-    /// Il n'est appelé que par `ops::matrix::tangent`, jamais par COMP : c'est
-    /// tout l'objet de la séparation, puisque huit lois sur dix le paient douze
+    /// It is called only by `ops::matrix::tangent`, never by COMP: that is the
+    /// whole point of the split, since eight laws out of ten pay for it twelve
     /// retours radiaux.
     fn tangent_point(
         &self,
@@ -584,8 +584,8 @@ impl Behavior for Plasticity {
             prev,
             material,
             |params, eps_b, prev_state| {
-                // Le pas d'abord : en contraintes planes, c'est lui qui résout la
-                // composante hors plan que la tangente évalue ensuite.
+                // The step first: in plane stress, it is the step that resolves the
+                // out-of-plane component the tangent then evaluates.
                 let (_, eps_b_full) = self.law.as_law().incremental_step(
                     eps_b,
                     prev_state,

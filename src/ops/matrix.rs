@@ -85,8 +85,8 @@ pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
 ///
 /// ```
 /// # use pyrucast::ops::matrix::AssemblyInputs;
-/// // `stiffness` et `mass` passent par là ; `tangent` par la variante qui
-/// // porte les entrées de la loi.
+/// // `stiffness` and `mass` go through here; `tangent` through the variant
+/// // that carries the law's inputs.
 /// assert!(matches!(AssemblyInputs::MaterialOnly, AssemblyInputs::MaterialOnly));
 /// ```
 pub enum AssemblyInputs<'a> {
@@ -131,7 +131,7 @@ impl AssemblyInputs<'_> {
                     }
                 };
                 let deformation = deformation.sub_for_fespace(fespace)?;
-                // Sous cette ligne, `prev` est toujours un champ réel.
+                // Below this line, `prev` is always a real field.
                 let prev = match prev {
                     Some(p) => p.sub_for_fespace(fespace)?,
                     None => Handle::new(
@@ -193,12 +193,12 @@ impl AssemblyInputs<'_> {
 /// # let modele = model::heat_conduction(&fes).unwrap();
 /// # let materiaux = element_field::material_field(&modele,
 /// #     &[("k", 1.0), ("rho", 2.0), ("cp", 3.0)]).unwrap();
-/// // Une seule machinerie pour les quatre natures : `stiffness` et `mass`
-/// // n'en sont que les formes nommées.
+/// // A single machinery for the four kinds: `stiffness` and `mass` are only
+/// // its named forms.
 /// let k = matrix::assemble_kind(&modele, &materiaux, MatrixKind::Stiffness, matrix::AssemblyInputs::MaterialOnly)?;
 /// assert_eq!(k.dense()?, matrix::stiffness(&modele, &materiaux)?.dense()?);
 /// let m = matrix::assemble_kind(&modele, &materiaux, MatrixKind::Mass, matrix::AssemblyInputs::MaterialOnly)?;
-/// // La capacité somme à ρ·c_p × aire ; la conduction, elle, somme à zéro.
+/// // The capacity sums to ρ·c_p × area; the conduction sums to zero.
 /// assert!((m.dense()?.iter().sum::<f64>() - 2.0 * 3.0 * 0.5).abs() < 1e-9);
 /// assert!(k.dense()?.iter().sum::<f64>().abs() < 1e-9);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -408,8 +408,8 @@ fn build_contribution(
 /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 /// # let model = model::heat_conduction(&fes).unwrap();
-/// // La matrice de capacité d'une conduction lit `rho` **et** `cp` : c'est
-/// // ρ·c_p qui multiplie ∫ Nᵀ N, pas la seule densité.
+/// // A conduction's capacity matrix reads `rho` **and** `cp`: it is ρ·c_p
+/// // that multiplies ∫ Nᵀ N, not the density alone.
 /// let materials =
 ///     element_field::material_field(&model, &[("k", 1.0), ("rho", 2.0), ("cp", 1.0)]).unwrap();
 /// let m = matrix::mass(&model, &materials).unwrap();
@@ -458,7 +458,7 @@ pub fn mass(model: &Model, materials: &ElementField) -> Result<Matrix> {
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::containers::field::SubField;
 /// # use pyrucast::ops::model;
-/// // Une contrainte uniaxiale σ_xx = 3, portée aux points de Gauss.
+/// // A uniaxial stress σ_xx = 3, carried at the Gauss points.
 /// let mut stress =
 ///     ElementField::new(&fes, vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_xy".into()])
 ///         .unwrap();
@@ -482,10 +482,10 @@ pub fn geometric(model: &Model, materials: &ElementField, stress: &ElementField)
 ///
 /// `state` is the behaviour field produced by [`crate::ops::element_field::behavior::integrate`]
 /// at the current iterate: besides the stress it carries the per-Gauss
-/// évalué **au point de Gauss**, à partir de ce que la loi demande — les mêmes
-/// entrées que `behavior::integrate`. Aucun champ de modules n'est matérialisé :
-/// il n'aurait eu que cet assembleur pour lecteur. `prev` à `None` vaut l'état de
-/// repos, résolu ici et jamais plus bas. `materials` résout chaque zone comme
+/// evaluated **at the Gauss point**, from what the law asks for — the same
+/// inputs as `behavior::integrate`. No modulus field is materialized: it would
+/// have had this assembler as its only reader. `prev` at `None` means the rest
+/// state, resolved here and never further down. `materials` resolves each zone
 /// [`stiffness`].
 ///
 /// ```
@@ -509,8 +509,8 @@ pub fn geometric(model: &Model, materials: &ElementField, stress: &ElementField)
 /// #     element_field::material_field(&model, &[("E", 210.0), ("nu", 0.3)]).unwrap();
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::ops::model;
-/// // Élasticité : sa tangente est constante, et l'on retrouve la raideur —
-/// // sans qu'aucun champ de modules n'ait été matérialisé pour l'y porter.
+/// // Elasticity: its tangent is constant, and the stiffness comes back —
+/// // without any modulus field having been materialized to carry it there.
 /// let strain = ElementField::new(
 ///     &fes, vec!["eps_xx".into(), "eps_yy".into(), "eps_xy".into()]).unwrap();
 /// let kt = matrix::tangent(&model, &materials, &strain, None, None).unwrap();
@@ -569,7 +569,7 @@ pub fn tangent(
 /// let m = matrix::mass(&model, &materials).unwrap();
 /// let diagonale = matrix::lump(&m).unwrap();
 ///
-/// // La somme est conservée ; les termes hors diagonale sont repliés dessus.
+/// // The sum is preserved; the off-diagonal terms are folded onto it.
 /// let somme = |x: &pyrucast::containers::matrix::Matrix| -> f64 {
 ///     x.dense().unwrap().iter().sum()
 /// };
@@ -608,7 +608,7 @@ pub fn lump(m: &Matrix) -> Result<Matrix> {
 // ─── Méthodes de délégation ────────────────────────────────────────────────
 //
 // Voir `CONVENTIONS.md` § « Le verbe exposé aussi en méthode ». Le nom change
-// entre les deux formes : la fonction libre reçoit le qualificatif de son
+// between the two forms: the free function gets its qualifier from its
 // module (`matrix::stiffness`), la méthode n'en a pas et doit le porter
 // (`model.stiffness_matrix`).
 

@@ -55,7 +55,7 @@ use crate::models::{CellGeom, Physics};
 ///
 /// ```
 /// # use pyrucast::models::transfer;
-/// // Le nom n'est pas tabulé : il se déduit de ce que l'appelant transporte.
+/// // The name is not tabulated: it follows from what the caller carries.
 /// assert_eq!(transfer::coefficient_name("T"), "h_T");
 /// assert_eq!(transfer::coefficient_name("c_H2"), "h_c_H2");
 /// ```
@@ -100,8 +100,8 @@ pub fn ambient_name(primal: &str) -> String {
 ///
 /// ```
 /// # use pyrucast::models::transfer;
-/// // L'**entrée** d'une loi d'interface : le saut a₁ − a₂. Une loi de bord
-/// // n'en a pas besoin — son entrée est le champ lui-même.
+/// // An interface law's **input**: the jump a₁ − a₂. A border law does not
+/// // need it — its input is the field itself.
 /// assert_eq!(transfer::jump_name("T"), "jump_T");
 /// ```
 pub fn jump_name(primal: &str) -> String {
@@ -117,8 +117,8 @@ pub fn jump_name(primal: &str) -> String {
 /// let paires = vec![("T".to_string(), "q".to_string())];
 /// assert_eq!(transfer::material_contract("BoundaryTransfer", &paires)?,
 ///            vec!["h_T".to_string()]);
-/// // Une loi qui ne transporte rien n'a ni matrice ni coefficient : c'est
-/// // une erreur d'appel, pas un cas dégénéré à laisser passer.
+/// // A law that transports nothing has neither matrix nor coefficient: that
+/// // is a call error, not a degenerate case to let through.
 /// assert!(transfer::material_contract("BoundaryTransfer", &[]).is_err());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -149,9 +149,9 @@ pub fn material_contract(label: &str, components: &[(String, String)]) -> Result
 /// ```
 /// # use pyrucast::models::transfer;
 /// # use pyrucast::models::Physics;
-/// // La nature d'une loi de transfert ne se déduit pas des noms de
-/// // variables, que l'appelant choisit : elle vient de la cible, est
-/// // gardée, puis rendue ici sous la forme d'une tranche `'static`.
+/// // A transfer law's kind does not follow from the variable names, which the
+/// // caller picks: it comes from the target, is kept, then given back here as
+/// // a `'static` slice.
 /// assert_eq!(transfer::physics_slice(Physics::Thermal), &[Physics::Thermal]);
 /// ```
 pub fn physics_slice(physics: Physics) -> &'static [Physics] {
@@ -211,9 +211,9 @@ pub(crate) fn owner_physics(target: &Model, owns: impl Fn(&SubModel) -> bool) ->
 /// assert_eq!(film.physics(), &[Physics::Thermal]);
 /// let appui = BoundaryTransfer::new(zone.clone(), &deux, vec![("u_x".into(), "f_x".into())])?;
 /// assert_eq!(appui.physics(), &[Physics::Mechanical]);
-/// // Présentes mais pas appariées chez la cible : refusé.
+/// // Present but not paired at the target: refused.
 /// assert!(BoundaryTransfer::new(zone.clone(), &deux, vec![("u_x".into(), "f_y".into())]).is_err());
-/// // Deux natures dans un seul terme : refusé.
+/// // Two kinds in a single term: refused.
 /// assert!(BoundaryTransfer::new(
 ///     zone, &deux, vec![("T".into(), "q".into()), ("u_x".into(), "f_x".into())]).is_err());
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -297,13 +297,13 @@ pub(crate) fn target_physics(
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["h_T".into()], &[2.0]).unwrap());
 /// # use pyrucast::models::ElementLayout;
-/// // Un coefficient `h_<primal>` par couple transféré, dans l'ordre que
-/// // `material_components` déclare — ici un seul, donc l'identité.
+/// // One `h_<primal>` coefficient per transferred pair, in the order
+/// // `material_components` declares — here only one, hence the identity.
 /// let lay = ElementLayout {
 ///     material: vec![0], optional_material: vec![], state: vec![],
 /// };
-/// // h ∫ N_i N_j dΓ : la mesure vient du côté **ligne**, ce qui fait que
-/// // les quatre blocs d'une interface s'intègrent identiquement.
+/// // h ∫ N_i N_j dΓ: the measure comes from the **row** side, which is what
+/// // makes an interface's four blocks integrate identically.
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support,
 ///     vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
@@ -312,7 +312,7 @@ pub(crate) fn target_physics(
 ///         transfer::exchange_matrix(&geoms[0], &geoms[0], m, &lay.material, 1.0, ke)
 ///     },
 /// )?;
-/// // La somme des entrées vaut h × la longueur du segment.
+/// // The entries sum to h × the segment's length.
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
 /// assert!((total - 2.0).abs() < 1e-12);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -390,10 +390,10 @@ pub fn exchange_matrix(
 /// # let flux = SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["flux_T".into()], &[1.0])?;
 /// # let fe = std::sync::Mutex::new(vec![0.0; 2]);
-/// // ∫ Nᵀ · flux dΓ — le résidu d'une loi de transfert, du côté nodal. Les
-/// // composantes lues sont résolues **une fois**, avant la boucle.
+/// // ∫ Nᵀ · flux dΓ — a transfer law's residual, on the nodal side. The
+/// // components read are resolved **once**, before the loop.
 /// let lay = flux.resolve_components(&["flux_T"], "flux")?;
-/// // Une densité unité sur un segment de longueur 1 se partage en deux.
+/// // A unit density on a segment of length 1 splits in two.
 /// pyrucast::models::kernel::reduce_cells(&zone, |geom| {
 ///     transfer::internal_force(geom, &flux, &lay, &mut fe.lock().unwrap())?;
 ///     Ok(0.0)

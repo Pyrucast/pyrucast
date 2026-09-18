@@ -83,8 +83,8 @@ use std::collections::HashSet;
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # use pyrucast::models::contact;
-/// // Dérivés plutôt que tabulés : `multiplier` et `imposed_value` laissés
-/// // à `None` prennent ces valeurs.
+/// // Derived rather than tabulated: `multiplier` and `imposed_value` left at
+/// // `None` take these values.
 /// assert_eq!(
 ///     (contact::default_multiplier().as_str(),
 ///      contact::default_imposed_value().as_str()),
@@ -117,8 +117,8 @@ pub fn default_multiplier() -> String {
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # use pyrucast::models::contact;
-/// // Dérivés plutôt que tabulés : `multiplier` et `imposed_value` laissés
-/// // à `None` prennent ces valeurs.
+/// // Derived rather than tabulated: `multiplier` and `imposed_value` left at
+/// // `None` take these values.
 /// assert_eq!(
 ///     (contact::default_multiplier().as_str(),
 ///      contact::default_imposed_value().as_str()),

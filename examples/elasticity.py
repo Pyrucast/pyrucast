@@ -43,7 +43,7 @@ def main() -> None:
     top = pyrucast.mesh.line(c.add_node([0.0, 1.0]), c.add_node([1.0, 1.0]), N)
     mesh = pyrucast.mesh.sweep(bottom, top, N)
 
-    # Nœuds rangés par idx(i, j) (i selon x, j selon y) en relisant la
+    # Nodes laid out by idx(i, j) (i along x, j along y) by reading the
     # connectivité QUA4 : maille (cy, cx) = cy*N + cx, nœuds locaux 0..3.
     grid = [None] * ((N + 1) * (N + 1))
     for cy in range(N):

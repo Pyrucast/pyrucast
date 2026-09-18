@@ -21,7 +21,7 @@ C'est l'équivalent Python du test d'intégration Rust ``tests/thermal_line.rs``
 
 Lancement
 ---------
-Après avoir compilé l'extension dans le venv ::
+Once the extension is built in the venv ::
 
     maturin develop --features extension-module
     python examples/thermal_line_1d.py
@@ -29,7 +29,7 @@ Après avoir compilé l'extension dans le venv ::
 
 import pyrucast
 
-# ── Données du problème ──────────────────────────────────────────────────────
+# ── Problem data ────────────────────────────────────────────────────────────
 K = 1.0  # conductivité
 Q = 10.0  # source de chaleur (flux de Neumann) en x = 0
 T_IMPOSED = 20.0  # température imposée en x = 1

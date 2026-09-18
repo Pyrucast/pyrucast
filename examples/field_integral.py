@@ -1,19 +1,19 @@
 """Intégrale et résultante d'un champ.
 
-Deux réductions « champ → scalaire », composante par composante :
+Two "field → scalar" reductions, component by component:
 
-- ``integral(field, comp, fespace=…)`` intègre sur le support par la quadrature
-  éléments finis, ``∫_Ω f dΩ``. Sur un ``NodeField`` les valeurs nodales sont
-  relevées aux points de Gauss par les **fonctions de forme** ``N_i`` ; sur un
-  ``ElementField`` les valeurs (déjà aux Gauss) sont intégrées directement. On
-  y calcule la résultante d'une *densité* de force distribuée.
-- ``field.sum(comp)`` somme les valeurs par nœud — la résultante d'un champ de
-  forces *déjà nodales* (efforts internes, réactions…). ``xtx(field)`` en donne
-  la norme au carré ``Σ v²``.
+- ``integral(field, comp, fespace=…)`` integrates over the support with the
+  finite element quadrature, ``∫_Ω f dΩ``. On a ``NodeField`` the nodal values
+  are lifted to the Gauss points by the **shape functions** ``N_i``; on an
+  ``ElementField`` the values (already at the Gauss points) are integrated
+  directly. The resultant of a distributed force *density* is computed there.
+- ``field.sum(comp)`` sums the values node by node — the resultant of a field
+  of *already nodal* forces (internal forces, reactions…). ``xtx(field)`` gives
+  its squared norm ``Σ v²``.
 
 Lancement
 ---------
-Après avoir compilé l'extension dans le venv ::
+Once the extension is built in the venv ::
 
     maturin develop --features extension-module
     python examples/field_integral.py
@@ -21,11 +21,11 @@ Après avoir compilé l'extension dans le venv ::
 
 import pyrucast
 
-N = 8  # éléments SEG2 sur [0, 1]
+N = 8  # SEG2 elements on [0, 1]
 
 
 def _line(n_elems):
-    """Maillage SEG2 sur ``[0, 1]``, ses nœuds, et l'espace EF Lagrange-1."""
+    """A SEG2 mesh on ``[0, 1]``, its nodes, and the Lagrange-1 FE space."""
     c = pyrucast.Coords(1)
     nodes = [c.add_node([i / n_elems]) for i in range(n_elems + 1)]
     seg = pyrucast.Mesh(c, "SEG2")
@@ -36,9 +36,9 @@ def _line(n_elems):
 
 def main() -> None:
     nodes, seg, fes = _line(N)
-    pts = pyrucast.mesh.poi1_from_nodes(nodes)  # support nodal (POI1) des mêmes nœuds
+    pts = pyrucast.mesh.poi1_from_nodes(nodes)  # nodal (POI1) support of the same nodes
 
-    # ── 1. Intégrale d'un champ *nodal* (via les fonctions de forme N_i) ─────
+    # ── 1. Integral of a *nodal* field (through the shape functions N_i) ─────
     # f ≡ 1  ⇒  ∫₀¹ 1 dx = longueur = 1.
     unite = pyrucast.NodeField(pts, ["f"])
     for n in nodes:
@@ -55,24 +55,24 @@ def main() -> None:
     print(f"∫ x dx          = {aire:.6f}   (attendu 0.5)")
     assert abs(aire - 0.5) < 1e-12
 
-    # ── 2. Même intégrale, d'un champ *par élément* (valeurs déjà aux Gauss) ─
-    # Densité constante c ≡ 3 ⇒ ∫₀¹ 3 dx = 3. Pas de fespace : quadrature directe.
+    # ── 2. The same integral, of a field *by element* (values already at Gauss) ─
+    # Constant density c ≡ 3 ⇒ ∫₀¹ 3 dx = 3. No fespace: direct quadrature.
     densite = pyrucast.ElementField(fes, ["c"])
     densite[0].set_uniform("c", 3.0)
     total = pyrucast.measure.integral(densite, "c")
     print(f"∫ 3 dx (Gauss)  = {total:.6f}   (attendu 3.0)")
     assert abs(total - 3.0) < 1e-12
 
-    # ── 3. Résultante d'un champ de forces *nodales* : somme par nœud ────────
+    # ── 3. Resultant of a field of *nodal* forces: sum node by node ──────────
     forces = pyrucast.NodeField(pts, ["fx", "fy"])
     for n in nodes:
-        forces[0].set_value(n, "fx", 2.0)  # +2 selon x à chaque nœud
-        forces[0].set_value(n, "fy", -1.0)  # -1 selon y à chaque nœud
+        forces[0].set_value(n, "fx", 2.0)  # +2 along x at every node
+        forces[0].set_value(n, "fy", -1.0)  # -1 along y at every node
     rx, ry = forces.sum("fx"), forces.sum("fy")
-    print(f"résultante      = ({rx:.1f}, {ry:.1f})   sur {N + 1} nœuds")
+    print(f"resultant       = ({rx:.1f}, {ry:.1f})   over {N + 1} nodes")
     assert rx == 2.0 * (N + 1) and ry == -1.0 * (N + 1)
 
-    # Norme au carré (p.ex. critère de convergence sur un résidu).
+    # Squared norm (e.g. a convergence criterion on a residual).
     norme2 = pyrucast.measure.xtx(forces)
     print(f"‖forces‖²        = {norme2:.1f}")
     assert norme2 == (N + 1) * (2.0**2 + 1.0**2)

@@ -64,13 +64,13 @@ use std::any::Any;
 /// #                                    vec!["T".into()]).unwrap();
 /// # temp.get(0).unwrap().write().add_to_component("T", 4.0).unwrap();
 /// // Toute la mécanique d'accès — longueur, indexation, itération, union —
-/// // se dérive de deux méthodes seulement, `items` et `items_mut`. Un même
-/// // vocabulaire vaut donc pour les maillages, les champs, les modèles et
-/// // les matrices.
+/// // is derived from two methods only, `items` and `items_mut`. One same
+/// // vocabulary therefore holds for meshes, fields, models and
+/// // matrices.
 /// assert_eq!(maillage.len(), 1);
 /// assert!(!maillage.is_empty());
 /// assert_eq!(maillage.iter().count(), 1);
-/// // Et l'union partage les zones plutôt que de les copier.
+/// // And the union shares the zones rather than copying them.
 /// # use pyrucast::handle::Handle as H;
 /// let deux = maillage.union(&support)?;
 /// assert_eq!(deux.len(), 2);
@@ -389,8 +389,8 @@ pub trait Aggregate: Default {
 /// #                                    vec!["T".into()]).unwrap();
 /// # temp.get(0).unwrap().write().add_to_component("T", 4.0).unwrap();
 /// # use pyrucast::aggregate::DebugItems;
-/// // Une vue `Debug` qui **déréférence** les handles : sans elle, un
-/// // agrégat s'afficherait comme une liste de pointeurs. La sortie est une
+/// // A `Debug` view that **dereferences** the handles: without it, an
+/// // aggregate would show as a list of pointers. The output is a
 /// // **map** `#tag: objet`, le tag identifiant la zone.
 /// let rendu = format!("{:?}", DebugItems(Aggregate::items(&maillage)));
 /// assert!(rendu.starts_with('{'));
@@ -916,8 +916,8 @@ macro_rules! impl_dump_pymethod {
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
 /// # sm.add_cell(&[n[0].id(), n[1].id()])?;
-/// // Ce que la macro donne à chaque agrégat, sans alias par type : le même
-/// // vocabulaire pour les maillages, les champs, les modèles et les
+/// // What the macro gives every aggregate, with no per-type alias: the same
+/// // vocabulary for meshes, fields, models and
 /// // matrices.
 /// let m = Mesh::from_submesh(sm);
 /// assert_eq!(m.len(), 1);
@@ -986,10 +986,10 @@ macro_rules! impl_aggregate_std_traits {
 
         impl std::fmt::Debug for $T {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                // `summary` reprend ce que `Display` ajoute en suffixe (le total
-                // de mailles, les dimensions d'une matrice…) : sans lui, la
-                // structure en dirait **moins** que le résumé, et la gradation
-                // des trois niveaux serait inversée.
+                // `summary` picks up what `Display` adds as a suffix (the cell total, a
+                // matrix's dimensions…): without it, the structure would say **less** than
+                // the summary, and the gradation of the three levels would be inverted.
+
                 let extra = <$T as $crate::aggregate::Aggregate>::display_extra(self);
                 let extra = extra.as_deref().map(|e| e.trim_start_matches(", "));
                 let mut s = f.debug_struct(<$T as $crate::aggregate::Aggregate>::type_name());
@@ -1014,10 +1014,10 @@ macro_rules! impl_aggregate_std_traits {
                     $crate::aggregate::Aggregate::len(self),
                     <$T as $crate::aggregate::Aggregate>::sub_display_name(),
                 )?;
-                // Les identifiants des zones — ce que l'utilisateur manipule.
-                // Élidés au-delà de trois : le résumé doit rester d'une taille
-                // bornée quel que soit l'objet (`CONVENTIONS.md` § « Trois
-                // niveaux d'affichage »), sans quoi 300 zones donneraient une
+                // The zones' identifiers — what the user handles.
+                // Elided beyond three: the summary must stay of a bounded size whatever the
+                // object (`CONVENTIONS.md` § "Three display levels"), without which 300
+                // zones would give a
                 // ligne de 2 700 caractères.
                 let items = $crate::aggregate::Aggregate::items(self);
                 if !items.is_empty() {
@@ -1065,13 +1065,13 @@ macro_rules! impl_aggregate_std_traits {
             /// #     Handle::new(sm)
             /// # };
             /// # let (a, b) = (faire(ElementType::SEG2), faire(ElementType::SEG2));
-            /// // Deux sous-objets seuls ne savent pas nommer leur agrégat :
-            /// // le constructeur est porté par le type agrégat.
+            /// // Two sub-objects alone cannot name their aggregate: the constructor is
+            /// // carried by the aggregate type.
             /// let m = Mesh::union_subs(&a, &b)?;
             /// assert_eq!(m.len(), 2);
             ///
-            /// // Le même sous-objet deux fois ne compte qu'une : la
-            /// // déduplication se fait **par handle**, pas par contenu.
+            /// // The same sub-object twice counts once: deduplication goes **by
+            /// // handle**, not by content.
             /// assert_eq!(Mesh::union_subs(&a, &a)?.len(), 1);
             /// # Ok::<(), pyrucast::PyrucastError>(())
             /// ```
@@ -1114,8 +1114,8 @@ macro_rules! impl_aggregate_dump {
                 let mut out = format!("{self}\n");
                 for (i, h) in $crate::aggregate::Aggregate::items(self).iter().enumerate() {
                     let body = $crate::dump::Dump::render(&*h.read(), opts);
-                    // Le handle de la zone sur le séparateur : deux `dump`
-                    // successifs disent alors si `[0]` est le même objet.
+                    // The zone's handle on the separator: two successive `dump` then say whether
+                    // `[0]` is the same object.
                     out.push_str(&format!("── [{i}] {h} ──\n"));
                     for line in body.lines() {
                         out.push_str("  ");

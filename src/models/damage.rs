@@ -253,7 +253,7 @@ impl Domain for Damage {
         &["alpha", "rho"]
     }
 
-    /// Les mêmes noyaux que l'élasticité, donc les mêmes lectures d'état.
+    /// The same kernels as elasticity, hence the same state reads.
     fn element_state_reads(&self, kind: MatrixKind) -> Vec<String> {
         self.continuum.element_state_reads(kind)
     }
