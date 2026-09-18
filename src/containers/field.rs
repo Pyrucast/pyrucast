@@ -277,7 +277,6 @@ pub const ABSENT_COMPONENT: u32 = u32::MAX;
 /// // A purely **structural** contract: named components and a flat buffer
 /// // where the component index varies fastest. Nodal fields and fields by
 /// // elements both satisfy it, hence an arithmetic written once only.
-
 /// let z = temp.get(0)?;
 /// let z = z.read();
 /// assert_eq!(z.components(), &["T".to_string()]);

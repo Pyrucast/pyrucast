@@ -45,7 +45,6 @@ use crate::handle::Handle;
 ///
 /// // On a POI1 input, a point's centroid is the point: that is the canonical
 /// // way to give oneself co-located nodes — Lagrange multipliers, for one.
-
 /// let nuage = mesh::poi1_from_nodes(&[p(&[3.0, 0.0, 0.0])])?;
 /// let mult = mesh::barycenter(&nuage)?;
 /// assert_eq!(mult.node(0, 0, 0)?.position()?, vec![3.0, 0.0, 0.0]);

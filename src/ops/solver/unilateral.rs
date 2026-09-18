@@ -164,7 +164,6 @@ pub enum ActiveSetMethod {
 /// # use pyrucast::ops::model;
 /// // By default: Schur complement, cache on, and a complementarity tolerance
 /// // that covers **both** the multiplier's sign and the gap's.
-
 /// let d = UnilateralOptions::default();
 /// assert!(d.cache && d.max_iter > 0 && d.tol > 0.0);
 /// assert!(solver::unilateral::solve_with_options(&k, &modele, &charge, &d).is_ok());

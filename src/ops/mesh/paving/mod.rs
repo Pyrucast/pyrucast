@@ -135,7 +135,6 @@ const FRONT_RELAX: f64 = 0.5;
 /// // A 20 × 20 square at size 1 holds 400 unit cells. Free relaxation rounds
 /// // the front's corners, which then stops losing nodes and pays for the
 /// // domain's middle; projected onto the front, it leaves the square square.
-
 /// let libre = mesh::pave_surface(&contour, ElementType::QUA4, Some(1.0), false,
 ///     FrontRelax::Free)?;
 /// let le_long = mesh::pave_surface(&contour, ElementType::QUA4, Some(1.0), false,

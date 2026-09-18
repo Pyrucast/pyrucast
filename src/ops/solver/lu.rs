@@ -302,7 +302,6 @@ impl Default for SolveOptions {
 /// // A **derived** state, never persisted: it carries the LU and the DOF
 /// // layout that makes it usable. It is not called directly — `solve` drops
 /// // it in the matrix's cache and picks it up again at the next solve.
-
 /// k.store_factorization(Arc::new(Factorization::new(&k)?));
 /// assert!(k.cached_factorization::<Factorization>().is_some());
 /// let u = solver::lu::solve(&k, &charge)?;

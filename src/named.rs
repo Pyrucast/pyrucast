@@ -76,7 +76,6 @@ pub trait Named: Copy + Sized + 'static {
     ///
     /// // An alias follows the same policy as a canonical name: that is precisely
     /// // what the hand-written parsers did not guarantee.
-
     /// assert_eq!(Interpolation::from_name("lag1"), Some(Interpolation::Lagrange1));
     /// assert_eq!(Interpolation::from_name("LAGRANGE1"), Some(Interpolation::Lagrange1));
     /// ```
