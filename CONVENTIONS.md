@@ -445,7 +445,7 @@ lit pas comme du Rust, ses erreurs pointent dans l'expansion, et voir le code
 réel demande `cargo expand`. Ce coût est fixe ; ce qu'il achète croît avec le
 nombre d'expansions. **Sous quelques expansions, on écrit les méthodes.**
 
-L'ordre de grandeur retenu est **quatre**. `py_field_unary!` est expansé onze
+L'ordre de grandeur retenu est **quatre**. `impl_field_transform_pymethod!` est expansé onze
 fois par famille et rembourse largement ; `min`, `sum`, `components`,
 `__pow__` ou `__richcmp__`, engendrés une ou deux fois, sont écrits à la main
 dans le module de leur classe.
@@ -456,13 +456,34 @@ macro.** Les quatre `__richcmp__` des champs appellent tous
 comparaison — vit à un seul endroit, en Rust ordinaire, et se trouve en
 cherchant son nom.
 
-**Une macro par forme engendrée, et son nom la décrit.** Regrouper plusieurs
-formes sous un même nom, chacune reconnue à son mot-clé, ne mutualise rien :
-les règles d'une `macro_rules!` ne partagent aucune ligne, et le lecteur doit
-apprendre un vocabulaire (`optional:`, `named:`, `scalar:`…) pour choisir. Deux
-familles de conteneurs se traitent de même — `py_field_unary!` et
-`py_subfield_unary!` plutôt qu'un paramètre de famille, pour que chaque corps
-nomme son trait et son accès en clair.
+**Une macro par forme engendrée, et son nom dit l'item produit.** Regrouper
+plusieurs formes sous un même nom, chacune reconnue à son mot-clé, ne mutualise
+rien : les règles d'une `macro_rules!` ne partagent aucune ligne, et le lecteur
+doit apprendre un vocabulaire pour choisir. Deux familles de conteneurs se
+traitent de même — `impl_field_transform_pymethod!` et
+`impl_subfield_transform_pymethod!` plutôt qu'un paramètre de famille, pour que
+chaque corps nomme son trait et son accès en clair.
+
+Le nom suit trois règles, dans cet ordre :
+
+1. **Il nomme ce qui est produit, pas ce qu'on passe.** Une macro lie *toute*
+   fonction de la forme attendue ; l'inventaire du jour n'est pas une propriété
+   d'elle. `impl_field_transform_pymethod!` et non `..._math!` — la méthode
+   engendrée transforme un champ en champ de même saveur, que la fonction passée
+   soit `sqrt` ou `normalize`. Même piège sur l'arité : la fonction liée est
+   unaire, la méthode produite ne prend **aucun** argument.
+2. **Il nomme l'espèce Python produite**, puisque le dépôt a un côté Rust et un
+   binding : `pymethod` pour une méthode ordinaire, `pyslot` pour un slot,
+   `pyfunction` pour une fonction libre. `mutator` seul désignerait aussi bien
+   `Field::add_to_component`, qui est du Rust.
+3. **Il porte le préfixe de ce qu'il fait à la déclaration** : `impl_` quand il
+   ajoute des méthodes à un type déjà déclaré, `define_` quand il crée un item
+   neuf (`define_polymorphic_pyfunction!` engendre une fonction qui n'existait
+   pas).
+
+Deux à trois mots, comme dans l'écosystème (`vec!`, `bitflags!`,
+`wrap_pyfunction!`) : un nom de macro se relit à chaque appel, et `generate_`
+est de toute façon redondant avec le `!`.
 
 ## Le sens d'une macro : nommer ses types, ou les recevoir
 
@@ -472,7 +493,7 @@ pas affaire de goût : il suit le sens de la dépendance.
 
 **En aval** — la macro vit dans un module qui importe déjà les types servis.
 Elle les nomme, et prend la **liste** de ceux qu'elle sert :
-`py_field_component_scalar! { /// … [PyNodeField, PyElementField], add_to_component }`,
+`impl_field_mutator_pymethod! { /// … [PyNodeField, PyElementField], add_to_component }`,
 la doc en `///` en tête d'appel. Un appel par famille au lieu de quatre appels,
 et surtout la documentation écrite **une seule fois** — un type par appel la
 ferait recopier autant de fois qu'il y a de saveurs. C'est la forme des macros

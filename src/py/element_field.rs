@@ -488,35 +488,35 @@ crate::impl_dump_pymethod!(handle PySubElementField, handle);
 // doit être expansé dans le module qui déclare son `#[pyclass]`, sans quoi pyo3
 // engendre un appel de trampoline `unsafe` que l'édition 2024 ne couvre plus.
 
-crate::py_field_binary_op! {
+crate::impl_field_binary_pyslot! {
     /// `field + other` — element-wise sum.
     [PyElementField], __add__, |a, b| a + b
 }
-crate::py_subfield_binary_op! {
+crate::impl_subfield_binary_pyslot! {
     /// `field + other` — element-wise sum.
     [PySubElementField], __add__, |a, b| a + b
 }
-crate::py_field_binary_op! {
+crate::impl_field_binary_pyslot! {
     /// `field - other` — element-wise difference.
     [PyElementField], __sub__, |a, b| a - b
 }
-crate::py_subfield_binary_op! {
+crate::impl_subfield_binary_pyslot! {
     /// `field - other` — element-wise difference.
     [PySubElementField], __sub__, |a, b| a - b
 }
-crate::py_field_binary_op! {
+crate::impl_field_binary_pyslot! {
     /// `field * other` — element-wise product.
     [PyElementField], __mul__, |a, b| a * b
 }
-crate::py_subfield_binary_op! {
+crate::impl_subfield_binary_pyslot! {
     /// `field * other` — element-wise product.
     [PySubElementField], __mul__, |a, b| a * b
 }
-crate::py_field_binary_op! {
+crate::impl_field_binary_pyslot! {
     /// `field / other` — element-wise quotient.
     [PyElementField], __truediv__, |a, b| a / b
 }
-crate::py_subfield_binary_op! {
+crate::impl_subfield_binary_pyslot! {
     /// `field / other` — element-wise quotient.
     [PySubElementField], __truediv__, |a, b| a / b
 }

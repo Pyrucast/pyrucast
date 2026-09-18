@@ -2084,7 +2084,7 @@ pub trait Behavior: Domain {
 /// Two doc blocks, because the two audiences differ: the Rust one carries the
 /// `///` comment and its doctest, the Python one a string literal, which is
 /// what lands in the `.pyi`. Sharing a single block would put a Rust doctest
-/// into a Python docstring. Same shape as `py_field_unary!` in
+/// into a Python docstring. Same shape as `define_polymorphic_pyfunction!` in
 /// `src/py/ops/field.rs`, the house precedent.
 ///
 /// ```

@@ -93,7 +93,7 @@ pub fn psca(py: Python<'_>, x: &Bound<'_, PyAny>, y: &Bound<'_, PyAny>) -> PyRes
 /// wrapper types and applies the matching `ops::field::$name`, **and** the four
 /// methods that are its « sujet » face. The documentation is written once, at
 /// the call site, and reaches the free function and the four methods alike.
-macro_rules! py_field_math {
+macro_rules! define_polymorphic_pyfunction {
     ($(#[doc = $doc:literal])* $name:ident) => {
         $(#[doc = $doc])*
         #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
@@ -143,58 +143,58 @@ macro_rules! py_field_math {
             ))
         }
 
-        $crate::py_field_unary! {
+        $crate::impl_field_transform_pymethod! {
             $(#[doc = $doc])*
             [PyNodeField, PyElementField], $name
         }
-        $crate::py_subfield_unary! {
+        $crate::impl_subfield_transform_pymethod! {
             $(#[doc = $doc])*
             [PySubNodeField, PySubElementField], $name
         }
     };
 }
 
-py_field_math! {
+define_polymorphic_pyfunction! {
     /// Element-wise absolute value of a field.
     abs
 }
-py_field_math! {
+define_polymorphic_pyfunction! {
     /// Element-wise square root of a field (`nan` for negatives).
     sqrt
 }
-py_field_math! {
+define_polymorphic_pyfunction! {
     /// Element-wise exponential `eˣ` of a field.
     exp
 }
-py_field_math! {
+define_polymorphic_pyfunction! {
     /// Element-wise natural logarithm of a field (`-inf`/`nan` for ≤ 0).
     log
 }
-py_field_math! {
+define_polymorphic_pyfunction! {
     /// Element-wise base-10 logarithm of a field.
     log10
 }
-py_field_math! {
+define_polymorphic_pyfunction! {
     /// Element-wise cosine of a field (radians).
     cos
 }
-py_field_math! {
+define_polymorphic_pyfunction! {
     /// Element-wise sine of a field (radians).
     sin
 }
-py_field_math! {
+define_polymorphic_pyfunction! {
     /// Element-wise tangent of a field (radians).
     tan
 }
-py_field_math! {
+define_polymorphic_pyfunction! {
     /// Element-wise hyperbolic sine of a field.
     sinh
 }
-py_field_math! {
+define_polymorphic_pyfunction! {
     /// Element-wise hyperbolic cosine of a field.
     cosh
 }
-py_field_math! {
+define_polymorphic_pyfunction! {
     /// Element-wise hyperbolic tangent of a field.
     tanh
 }

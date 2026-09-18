@@ -1,18 +1,22 @@
 //! Les trois formes de méthode que les champs répètent assez pour valoir une
 //! macro.
 //!
-//! Une macro ne se justifie que par son **nombre d'expansions** : ici `unary`
-//! (11 par famille), `binary_op` (8) et `component_scalar` (4). Les formes plus
-//! rares — `min`, `sum`, `components`, `__pow__`, `__richcmp__`… — sont écrites
-//! à la main dans `node_field.rs` et `element_field.rs`, où elles se lisent
-//! d'une traite.
+//! Une macro ne se justifie que par son **nombre d'expansions** : la méthode de
+//! transformation est engendrée onze fois par famille, le slot binaire huit
+//! fois, le mutateur de composante quatre. Les formes plus rares — `min`,
+//! `sum`, `components`, `__pow__`, `__richcmp__`… — sont écrites à la main dans
+//! `node_field.rs` et `element_field.rs`, où elles se lisent d'une traite.
 //!
-//! Chaque forme existe en deux macros, une par famille de champ : `py_field_*`
-//! pour les agrégats (`PyNodeField`, `PyElementField`), qui tiennent leur
-//! valeur dans `self.inner` ; `py_subfield_*` pour les sous-conteneurs
-//! (`PySubNodeField`, `PySubElementField`), qui la lisent à travers
-//! `self.handle`. Deux macros plutôt qu'un paramètre de famille : le corps
-//! nomme alors son trait et son accès en clair, et se lit sans détour.
+//! Chaque forme existe en deux macros, une par famille de champ :
+//! `impl_field_*` pour les agrégats (`PyNodeField`, `PyElementField`), qui
+//! tiennent leur valeur dans `self.inner` ; `impl_subfield_*` pour les
+//! sous-conteneurs (`PySubNodeField`, `PySubElementField`), qui la lisent à
+//! travers `self.handle`. Deux macros plutôt qu'un paramètre de famille : le
+//! corps nomme alors son trait et son accès en clair, et se lit sans détour.
+//!
+//! Le nom d'une macro dit l'**item produit**, pas ce qu'on lui passe : elle lie
+//! n'importe quelle fonction de la forme attendue, et l'inventaire du jour n'en
+//! est pas une propriété.
 
 /// Pose le même bloc de méthodes sur chaque type de la liste, dans un
 /// `#[pymethods]` par type. C'est le seul code que les macros de ce fichier
@@ -23,7 +27,7 @@
 /// comprises.
 ///
 /// ```ignore
-/// py_field_impl!(stub [PyNodeField, PyElementField] {
+/// impl_pymethods_for_each!(stub [PyNodeField, PyElementField] {
 ///     fn zero(&self) -> f64 { 0.0 }
 /// });
 /// ```
@@ -41,7 +45,7 @@
 /// expose les quatre noms `__ge__`/`__gt__`/`__le__`/`__lt__`.
 #[doc(hidden)]
 #[macro_export]
-macro_rules! py_field_impl {
+macro_rules! impl_pymethods_for_each {
     (stub [$($T:ident),+ $(,)?] $corps:tt) => {
         $(
             #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pymethods)]
@@ -57,14 +61,15 @@ macro_rules! py_field_impl {
     };
 }
 
-/// Engendre, sur un **agrégat**, la méthode d'une math élémentaire : elle
-/// applique `ops::field::$nom` à tout le champ et rend un champ de même saveur.
+/// Engendre, sur un **agrégat**, une méthode sans argument qui rend un champ de
+/// même saveur : elle applique à tout le champ la fonction de `ops::field` qui
+/// porte son nom, laquelle ne prend que le champ.
 ///
 /// Arguments : la documentation en `///`, la liste des types, le nom de la
 /// méthode — qui est aussi celui de la fonction de `ops::field` appelée.
 ///
 /// ```ignore
-/// py_field_unary! {
+/// impl_field_transform_pymethod! {
 ///     /// Element-wise square root of a field (`nan` for negatives).
 ///     [PyNodeField, PyElementField], sqrt
 /// }
@@ -79,13 +84,14 @@ macro_rules! py_field_impl {
 /// }
 /// ```
 ///
-/// Les onze maths élémentaires passent par le chapeau `py_field_math!` de
-/// `py/ops/field.rs`, qui engendre d'un coup la fonction libre et les méthodes
-/// des quatre saveurs, avec un texte écrit une fois.
+/// Les onze appels d'aujourd'hui — `sqrt`, `exp`, `cos`… — passent par
+/// `define_polymorphic_pyfunction!` (`py/ops/field.rs`), qui engendre d'un coup
+/// la fonction libre qui dispatche et les méthodes des quatre saveurs, avec un
+/// texte écrit une fois.
 #[macro_export]
-macro_rules! py_field_unary {
+macro_rules! impl_field_transform_pymethod {
     ($(#[doc = $doc:literal])* [$($T:ident),+ $(,)?], $nom:ident) => {
-        $crate::py_field_impl!(stub [$($T),+] {
+        $crate::impl_pymethods_for_each!(stub [$($T),+] {
             $(#[doc = $doc])*
             fn $nom(&self) -> ::pyo3::PyResult<Self> {
                 let out = $crate::ops::field::$nom(&self.inner)?;
@@ -98,9 +104,9 @@ macro_rules! py_field_unary {
 /// La même, sur un **sous-conteneur** : la valeur est lue à travers le handle,
 /// et le résultat reçoit un handle neuf.
 #[macro_export]
-macro_rules! py_subfield_unary {
+macro_rules! impl_subfield_transform_pymethod {
     ($(#[doc = $doc:literal])* [$($T:ident),+ $(,)?], $nom:ident) => {
-        $crate::py_field_impl!(stub [$($T),+] {
+        $crate::impl_pymethods_for_each!(stub [$($T),+] {
             $(#[doc = $doc])*
             fn $nom(&self) -> ::pyo3::PyResult<Self> {
                 let out = $crate::ops::field::$nom(&*self.handle.read())?;
@@ -120,7 +126,7 @@ macro_rules! py_subfield_unary {
 /// et la closure appliquée terme à terme.
 ///
 /// ```ignore
-/// py_field_binary_op! {
+/// impl_field_binary_pyslot! {
 ///     /// `field + other` — element-wise sum.
 ///     [PyNodeField], __add__, |a, b| a + b
 /// }
@@ -131,9 +137,9 @@ macro_rules! py_subfield_unary {
 /// appelle un autre, et l'édition 2024 ne couvre plus implicitement ce corps —
 /// `unsafe_op_in_unsafe_fn` se déclenche dès que l'`impl` vit ailleurs.
 #[macro_export]
-macro_rules! py_field_binary_op {
+macro_rules! impl_field_binary_pyslot {
     ($(#[doc = $doc:literal])* [$($T:ident),+ $(,)?], $nom:ident, $f:expr) => {
-        $crate::py_field_impl!(stub [$($T),+] {
+        $crate::impl_pymethods_for_each!(stub [$($T),+] {
             $(#[doc = $doc])*
             fn $nom(&self, rhs: &::pyo3::Bound<'_, ::pyo3::PyAny>) -> ::pyo3::PyResult<Self> {
                 self.binary(rhs, $f)
@@ -146,9 +152,9 @@ macro_rules! py_field_binary_op {
 /// `scalar_or_combine` — un scalaire s'applique partout, un autre sous-champ
 /// se combine élément par élément.
 #[macro_export]
-macro_rules! py_subfield_binary_op {
+macro_rules! impl_subfield_binary_pyslot {
     ($(#[doc = $doc:literal])* [$($T:ident),+ $(,)?], $nom:ident, $f:expr) => {
-        $crate::py_field_impl!(stub [$($T),+] {
+        $crate::impl_pymethods_for_each!(stub [$($T),+] {
             $(#[doc = $doc])*
             fn $nom(&self, rhs: &::pyo3::Bound<'_, ::pyo3::PyAny>) -> ::pyo3::PyResult<Self> {
                 self.scalar_or_combine(rhs, $f)
@@ -165,15 +171,15 @@ macro_rules! py_subfield_binary_op {
 /// méthode — qui est aussi celui de la méthode du trait `Field` appelée.
 ///
 /// ```ignore
-/// py_field_component_scalar! {
+/// impl_field_mutator_pymethod! {
 ///     /// Add `scalar` to `component` on every zone that defines it.
 ///     [PyNodeField, PyElementField], add_to_component
 /// }
 /// ```
 #[macro_export]
-macro_rules! py_field_component_scalar {
+macro_rules! impl_field_mutator_pymethod {
     ($(#[doc = $doc:literal])* [$($T:ident),+ $(,)?], $nom:ident) => {
-        $crate::py_field_impl!(stub [$($T),+] {
+        $crate::impl_pymethods_for_each!(stub [$($T),+] {
             $(#[doc = $doc])*
             fn $nom(&self, component: &str, scalar: f64) -> ::pyo3::PyResult<()> {
                 use $crate::containers::field::Field;
@@ -187,9 +193,9 @@ macro_rules! py_field_component_scalar {
 /// La même, sur un **sous-conteneur** : la mutation a lieu en place, dans sa
 /// zone à lui, sous le seul **write** guard que prennent ces macros.
 #[macro_export]
-macro_rules! py_subfield_component_scalar {
+macro_rules! impl_subfield_mutator_pymethod {
     ($(#[doc = $doc:literal])* [$($T:ident),+ $(,)?], $nom:ident) => {
-        $crate::py_field_impl!(stub [$($T),+] {
+        $crate::impl_pymethods_for_each!(stub [$($T),+] {
             $(#[doc = $doc])*
             fn $nom(&self, component: &str, scalar: f64) -> ::pyo3::PyResult<()> {
                 use $crate::containers::field::SubField;
