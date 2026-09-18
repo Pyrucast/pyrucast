@@ -1,24 +1,24 @@
-//! Ce que les slots des champs partagent : deux fonctions, pas une macro.
+//! What the field slots share: two functions, not a macro.
 //!
-//! `__pow__` et `__richcmp__` existent en quatre exemplaires — un par saveur de
-//! champ —, et doivent être écrits dans le module qui déclare leur `#[pyclass]`
-//! (un slot engendre chez pyo3 un trampoline `unsafe fn` que l'édition 2024 ne
-//! couvre plus hors de ce module). Ce qu'ils ont de commun n'est pas leur
-//! forme, qui tient en quelques lignes, mais leur **sémantique** : quelle bande
-//! de valeurs dit une comparaison, et pourquoi un modulo est refusé. C'est ce
-//! qui vit ici, appelé par les huit méthodes.
+//! `__pow__` and `__richcmp__` exist in four copies — one per field flavour —
+//! and must be written in the module declaring their `#[pyclass]` (pyo3
+//! generates for a slot an `unsafe fn` trampoline that edition 2024 no longer
+//! covers outside that module). What they have in common is not their shape,
+//! which is a handful of lines, but their **semantics**: which value band a
+//! comparison stands for, and why a modulo is refused. That is what lives here,
+//! called by the eight methods.
 
 use crate::atoms::Band;
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::pyclass::CompareOp;
 
-/// La bande de valeurs que dit cette comparaison : `>= x` borne par le bas,
-/// `< x` par le haut, etc.
+/// The value band this comparison stands for: `>= x` bounds from below, `< x`
+/// from above, and so on.
 ///
-/// `None` quand la comparaison n'a pas de bande — `==` et `!=`, qui ne sont pas
-/// des seuils, et tout membre droit qui n'est pas un scalaire. L'appelant rend
-/// alors `NotImplemented`, laissant Python chercher l'opération réfléchie.
+/// `None` when the comparison has no band — `==` and `!=`, which are not
+/// thresholds, and any right-hand side that is not a scalar. The caller then
+/// returns `NotImplemented`, leaving Python to look for the reflected operation.
 pub(crate) fn band_of(op: CompareOp, other: &Bound<'_, PyAny>) -> PyResult<Option<Band>> {
     let Ok(x) = other.extract::<f64>() else {
         return Ok(None);
@@ -33,8 +33,8 @@ pub(crate) fn band_of(op: CompareOp, other: &Bound<'_, PyAny>) -> PyResult<Optio
     Ok(Some(band))
 }
 
-/// Refuse la forme ternaire `pow(x, y, z)` : un modulo n'a pas de sens sur des
-/// flottants, et l'accepter silencieusement le ferait disparaître du calcul.
+/// Refuses the ternary `pow(x, y, z)` form: a modulo makes no sense on floats,
+/// and accepting it silently would drop it from the computation.
 pub(crate) fn reject_modulo(modulo: &Bound<'_, PyAny>) -> PyResult<()> {
     if modulo.is_none() {
         return Ok(());

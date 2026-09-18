@@ -1,30 +1,28 @@
-//! Les trois formes de méthode que les champs répètent assez pour valoir une
+//! The three method shapes the field wrappers repeat often enough to earn a
 //! macro.
 //!
-//! Une macro ne se justifie que par son **nombre d'expansions** : la méthode de
-//! transformation est engendrée onze fois par famille, le slot binaire huit
-//! fois, le mutateur de composante quatre. Les formes plus rares — `min`,
-//! `sum`, `components`, `__pow__`, `__richcmp__`… — sont écrites à la main dans
-//! `node_field.rs` et `element_field.rs`, où elles se lisent d'une traite.
+//! A macro only pays for itself through its **number of expansions**: the
+//! transform method is generated eleven times per family, the binary slot eight
+//! times, the component mutator four. Rarer shapes — `min`, `sum`,
+//! `components`, `__pow__`, `__richcmp__`… — are written by hand in
+//! `node_field.rs` and `element_field.rs`, where they read in one go.
 //!
-//! Chaque forme existe en deux macros, une par famille de champ :
-//! `impl_field_*` pour les agrégats (`PyNodeField`, `PyElementField`), qui
-//! tiennent leur valeur dans `self.inner` ; `impl_subfield_*` pour les
-//! sous-conteneurs (`PySubNodeField`, `PySubElementField`), qui la lisent à
-//! travers `self.handle`. Deux macros plutôt qu'un paramètre de famille : le
-//! corps nomme alors son trait et son accès en clair, et se lit sans détour.
+//! Every shape comes as two macros, one per field family: `impl_field_*` for the
+//! aggregates (`PyNodeField`, `PyElementField`), which hold their value in
+//! `self.inner`; `impl_subfield_*` for the sub-containers (`PySubNodeField`,
+//! `PySubElementField`), which read it through `self.handle`. Two macros rather
+//! than one family parameter: each body then names its trait and its access
+//! outright, and reads without a detour.
 //!
-//! Le nom d'une macro dit l'**item produit**, pas ce qu'on lui passe : elle lie
-//! n'importe quelle fonction de la forme attendue, et l'inventaire du jour n'en
-//! est pas une propriété.
+//! A macro's name states the **item it produces**, not what is handed to it: it
+//! binds any function of the expected shape, and today's inventory is no
+//! property of the macro.
 
-/// Pose le même bloc de méthodes sur chaque type de la liste, dans un
-/// `#[pymethods]` par type. C'est le seul code que les macros de ce fichier
-/// partagent.
+/// Puts the same block of methods on every type of the list, in one
+/// `#[pymethods]` per type. This is the only code the macros of this file share.
 ///
-/// Arguments : `stub` ou `bare` selon que le bloc doit être décoré pour
-/// pyo3-stub-gen, la liste des types, puis le bloc lui-même, accolades
-/// comprises.
+/// Arguments: `stub` or `bare`, depending on whether the block must be decorated
+/// for pyo3-stub-gen; the list of types; then the block itself, braces included.
 ///
 /// ```ignore
 /// impl_pymethods_for_each!(stub [PyNodeField, PyElementField] {
@@ -32,17 +30,18 @@
 /// });
 /// ```
 ///
-/// **Le bloc arrive en un seul `tt`**, et non décomposé. C'est ce qui permet
-/// d'écrire la documentation en `///` au site d'appel : capturée ligne à ligne
-/// (`$(#[doc = $doc:literal])*`), elle ne peut pas se répéter à l'intérieur
-/// d'une boucle sur les types, rustc refusant deux répétitions de longueurs
-/// différentes au même niveau. Un `tt`, lui, se recopie librement.
+/// **The block arrives as a single `tt`**, not taken apart. That is what allows
+/// the documentation to be written as `///` at the call site: captured line by
+/// line (`$(#[doc = $doc:literal])*`), it cannot repeat inside a loop over the
+/// types — rustc refuses two repetitions of different lengths at one level. A
+/// `tt`, on the other hand, is copied freely.
 ///
-/// **Le bloc nomme son type `Self`**, puisqu'il ignore lequel le portera.
+/// **The block names its type `Self`**, since it does not know which one will
+/// carry it.
 ///
-/// `bare` n'est plus utilisé par ce fichier : il reste pour un bloc qu'il ne
-/// faudrait pas déclarer au stub, comme l'est `__richcmp__`, dont CPython
-/// expose les quatre noms `__ge__`/`__gt__`/`__le__`/`__lt__`.
+/// `bare` is no longer used by this file: it remains for a block that must not be
+/// declared to the stub, as `__richcmp__` is — CPython exposes it under the four
+/// names `__ge__`/`__gt__`/`__le__`/`__lt__`.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! impl_pymethods_for_each {
@@ -61,12 +60,12 @@ macro_rules! impl_pymethods_for_each {
     };
 }
 
-/// Engendre, sur un **agrégat**, une méthode sans argument qui rend un champ de
-/// même saveur : elle applique à tout le champ la fonction de `ops::field` qui
-/// porte son nom, laquelle ne prend que le champ.
+/// Generates, on an **aggregate**, an argument-less method returning a field of
+/// the same flavour: it applies to the whole field the `ops::field` function
+/// bearing its name, which takes the field alone.
 ///
-/// Arguments : la documentation en `///`, la liste des types, le nom de la
-/// méthode — qui est aussi celui de la fonction de `ops::field` appelée.
+/// Arguments: the documentation as `///`, the list of types, the method name —
+/// which is also the name of the `ops::field` function called.
 ///
 /// ```ignore
 /// impl_field_transform_pymethod! {
@@ -75,7 +74,7 @@ macro_rules! impl_pymethods_for_each {
 /// }
 /// ```
 ///
-/// engendre sur chacun des deux types :
+/// generates, on each of the two types:
 ///
 /// ```ignore
 /// fn sqrt(&self) -> PyResult<Self> {
@@ -84,10 +83,10 @@ macro_rules! impl_pymethods_for_each {
 /// }
 /// ```
 ///
-/// Les onze appels d'aujourd'hui — `sqrt`, `exp`, `cos`… — passent par
-/// `define_polymorphic_pyfunction!` (`py/ops/field.rs`), qui engendre d'un coup
-/// la fonction libre qui dispatche et les méthodes des quatre saveurs, avec un
-/// texte écrit une fois.
+/// Today's eleven calls — `sqrt`, `exp`, `cos`… — go through
+/// `define_polymorphic_pyfunction!` (`py/ops/field.rs`), which generates in one
+/// go the dispatching free function and the methods of all four flavours, from a
+/// text written once.
 #[macro_export]
 macro_rules! impl_field_transform_pymethod {
     ($(#[doc = $doc:literal])* [$($T:ident),+ $(,)?], $nom:ident) => {
@@ -101,8 +100,8 @@ macro_rules! impl_field_transform_pymethod {
     };
 }
 
-/// La même, sur un **sous-conteneur** : la valeur est lue à travers le handle,
-/// et le résultat reçoit un handle neuf.
+/// The same, on a **sub-container**: the value is read through the handle, and
+/// the result gets a fresh one.
 #[macro_export]
 macro_rules! impl_subfield_transform_pymethod {
     ($(#[doc = $doc:literal])* [$($T:ident),+ $(,)?], $nom:ident) => {
@@ -118,12 +117,12 @@ macro_rules! impl_subfield_transform_pymethod {
     };
 }
 
-/// Engendre, sur un **agrégat**, un opérateur binaire (`__add__`, `__sub__`,
-/// `__mul__`, `__truediv__`) : il passe le membre droit et la closure au
-/// dispatcheur `binary` que la saveur définit dans son bloc inhérent.
+/// Generates, on an **aggregate**, a binary operator slot (`__add__`, `__sub__`,
+/// `__mul__`, `__truediv__`): it hands the right-hand side and the closure to the
+/// `binary` dispatcher each flavour defines in its inherent block.
 ///
-/// Arguments : la documentation en `///`, la liste des types, le nom du slot,
-/// et la closure appliquée terme à terme.
+/// Arguments: the documentation as `///`, the list of types, the slot name, and
+/// the closure applied term by term.
 ///
 /// ```ignore
 /// impl_field_binary_pyslot! {
@@ -132,10 +131,10 @@ macro_rules! impl_subfield_transform_pymethod {
 /// }
 /// ```
 ///
-/// **À appeler depuis le module qui déclare le `#[pyclass]`**, avec une liste
-/// d'un seul type : pyo3 engendre pour un slot un trampoline `unsafe fn` qui en
-/// appelle un autre, et l'édition 2024 ne couvre plus implicitement ce corps —
-/// `unsafe_op_in_unsafe_fn` se déclenche dès que l'`impl` vit ailleurs.
+/// **To be called from the module declaring the `#[pyclass]`**, with a
+/// single-type list: pyo3 generates for a slot an `unsafe fn` trampoline calling
+/// another one, and edition 2024 no longer covers that body implicitly —
+/// `unsafe_op_in_unsafe_fn` fires as soon as the `impl` lives elsewhere.
 #[macro_export]
 macro_rules! impl_field_binary_pyslot {
     ($(#[doc = $doc:literal])* [$($T:ident),+ $(,)?], $nom:ident, $f:expr) => {
@@ -148,9 +147,9 @@ macro_rules! impl_field_binary_pyslot {
     };
 }
 
-/// La même, sur un **sous-conteneur** : son dispatcheur s'appelle
-/// `scalar_or_combine` — un scalaire s'applique partout, un autre sous-champ
-/// se combine élément par élément.
+/// The same, on a **sub-container**: its dispatcher is called
+/// `scalar_or_combine` — a scalar applies everywhere, another sub-field combines
+/// element by element.
 #[macro_export]
 macro_rules! impl_subfield_binary_pyslot {
     ($(#[doc = $doc:literal])* [$($T:ident),+ $(,)?], $nom:ident, $f:expr) => {
@@ -163,12 +162,12 @@ macro_rules! impl_subfield_binary_pyslot {
     };
 }
 
-/// Engendre, sur un **agrégat**, une mutation de composante par un scalaire
-/// (`add_to_component` et ses trois voisines). La mutation descend aux zones
-/// qui définissent la composante, et la méthode ne rend rien.
+/// Generates, on an **aggregate**, a component mutation by a scalar
+/// (`add_to_component` and its three siblings). The mutation reaches down to the
+/// zones defining the component, and the method returns nothing.
 ///
-/// Arguments : la documentation en `///`, la liste des types, le nom de la
-/// méthode — qui est aussi celui de la méthode du trait `Field` appelée.
+/// Arguments: the documentation as `///`, the list of types, the method name —
+/// which is also the name of the `Field` trait method called.
 ///
 /// ```ignore
 /// impl_field_mutator_pymethod! {
@@ -190,8 +189,8 @@ macro_rules! impl_field_mutator_pymethod {
     };
 }
 
-/// La même, sur un **sous-conteneur** : la mutation a lieu en place, dans sa
-/// zone à lui, sous le seul **write** guard que prennent ces macros.
+/// The same, on a **sub-container**: the mutation happens in place, in its own
+/// zone, under the only **write** guard these macros take.
 #[macro_export]
 macro_rules! impl_subfield_mutator_pymethod {
     ($(#[doc = $doc:literal])* [$($T:ident),+ $(,)?], $nom:ident) => {

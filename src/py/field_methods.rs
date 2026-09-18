@@ -1,16 +1,16 @@
-//! Les verbes de champ dont l'appel sert **deux classes à la fois**.
+//! The field verbs whose call serves **two classes at once**.
 //!
-//! Les quatre mutateurs de composante (`add_`, `sub_`, `mul_`, `div_to_component`)
-//! valent pour les deux saveurs d'une famille, et n'appartiennent donc à aucun
-//! module de classe : leur appel vit ici, et sa documentation avec lui.
+//! The four component mutators (`add_`, `sub_`, `mul_`, `div_to_component`) hold
+//! for both flavours of a family, and therefore belong to no class module: their
+//! call lives here, and its documentation with it.
 //!
-//! Les macros qu'ils appellent sont dans `field_macros.rs`. Les autres verbes
-//! de champ sont écrits à la main dans `node_field.rs` et `element_field.rs`,
-//! ou y appellent une macro quand ce sont des slots.
+//! The macros they call are in `field_macros.rs`. The other field verbs are
+//! written by hand in `node_field.rs` and `element_field.rs`, or call a macro
+//! there when they are slots.
 //!
-//! La documentation reste **distincte par famille** : l'opération sur un
-//! agrégat porte sur les zones qui définissent la composante, celle sur un
-//! sous-champ sur sa seule zone.
+//! The documentation stays **distinct per family**: the operation on an aggregate
+//! bears on the zones defining the component, the one on a sub-field on its
+//! single zone.
 
 use crate::py::element_field::{PyElementField, PySubElementField};
 use crate::py::node_field::{PyNodeField, PySubNodeField};
