@@ -181,14 +181,14 @@ def test_reads_a_pyramid():
     assert groups["<ungrouped>"].element_types() == ["PYRA5"]
 
 
-# ── from_gmsh_arrays : le maillage déjà en mémoire ───────────────────────────
-# Ces tests n'ont pas besoin de gmsh : ils fabriquent les tableaux à la main,
-# dans la forme où gmsh les rend. Ils restent donc dans la passe normale.
+# ── from_gmsh_arrays: the mesh already in memory ────────────────────────────
+# These tests do not need gmsh: they build the arrays by hand, in the shape
+# gmsh returns them. They therefore stay in the normal pass.
 
 
 def square_arrays():
-    """`SQUARE_V2` sous la forme que gmsh tend : table des nœuds, puis un bloc
-    par (entité, type d'élément) avec sa connectivité à plat."""
+    """`SQUARE_V2` in the shape gmsh hands over: the node table, then one block
+    per (entity, element type) with its flattened connectivity."""
     tags = [1, 2, 3, 4]
     coords = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0]
     blocks = [
@@ -199,12 +199,12 @@ def square_arrays():
 
 
 def shape(groups):
-    """Ce qu'un import *est*, comparable d'une voie à l'autre."""
+    """What an import *is*, comparable from one path to the other."""
     return {k: (m.element_types(), m.cell_counts()) for k, m in groups.items()}
 
 
 def test_arrays_agree_with_the_file():
-    """La voie mémoire et la voie fichier rendent le même maillage."""
+    """The memory path and the file path return the same mesh."""
     tags, coords, blocks = square_arrays()
     memoire = pyrucast.mesh.from_gmsh_arrays(
         pyrucast.Coords(dim=2), tags, coords, blocks
@@ -214,8 +214,8 @@ def test_arrays_agree_with_the_file():
 
 
 def test_arrays_from_python_lists():
-    """Une `list` n'exporte aucun tampon : c'est le repli par conversion, et il
-    doit donner exactement le même résultat que le chemin sans copie."""
+    """A `list` exports no buffer: this is the conversion fallback, and it must
+    give exactly the same result as the copy-free path."""
     tags, coords, blocks = square_arrays()
     groups = pyrucast.mesh.from_gmsh_arrays(
         pyrucast.Coords(dim=2), tags, coords, blocks
@@ -225,7 +225,7 @@ def test_arrays_from_python_lists():
 
 
 def test_arrays_from_numpy_take_the_buffer_path():
-    """Le chemin sans copie : des tableaux numpy contigus du bon dtype."""
+    """The copy-free path: contiguous numpy arrays of the right dtype."""
     np = pytest.importorskip("numpy")
     tags, coords, blocks = square_arrays()
     groups = pyrucast.mesh.from_gmsh_arrays(
@@ -243,11 +243,11 @@ def test_arrays_from_numpy_take_the_buffer_path():
 
 
 def test_arrays_accept_a_non_contiguous_view():
-    """Une vue à pas non unitaire n'a pas de tampon contigu à prêter : le repli
-    doit la lire quand même, sans se tromper d'éléments."""
+    """A strided view has no contiguous buffer to lend: the fallback must read it
+    all the same, without mistaking the elements."""
     np = pytest.importorskip("numpy")
     tags, coords, _ = square_arrays()
-    # Un tableau sur deux : les tags voulus sont aux indices pairs.
+    # Every other array entry: the wanted tags sit at the even indices.
     espace = np.zeros(2 * len(tags), dtype=np.uint64)
     espace[::2] = tags
     groups = pyrucast.mesh.from_gmsh_arrays(
@@ -257,7 +257,7 @@ def test_arrays_accept_a_non_contiguous_view():
 
 
 def test_arrays_share_one_coords():
-    """Un nœud entre deux groupes est le même des deux côtés."""
+    """A node between two groups is the same on both sides."""
     tags, coords, blocks = square_arrays()
     c = pyrucast.Coords(dim=2)
     groups = pyrucast.mesh.from_gmsh_arrays(c, tags, coords, blocks)

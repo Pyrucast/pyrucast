@@ -1,27 +1,27 @@
-"""Contrainte multi-points (MPC) — imposition par condensation (élimination maître/esclave).
+"""Multi-point constraint (MPC) — imposed by condensation (master/slave elimination).
 
 Physique
 --------
-Conduction 1-D `-u'' = 0` sur `[0, 1]` (barre SEG2, `k = 1`). On impose les
-mêmes contraintes que la voie Lagrange, mais par **élimination** : chaque
+1-D conduction `-u'' = 0` on `[0, 1]` (a SEG2 bar, `k = 1`). The same
+constraints as the Lagrange path are imposed, but by **elimination**: each
 relation `Σ aₖ·u(nœudₖ, varₖ) = g` élimine un degré de liberté *esclave*
-(`u_s = (g − Σ_{k≠s} aₖ·u_k)/a_s`). Le système résolu est **réduit** (pas de
-degré multiplicateur) et défini, `K̂ û = f̂` avec `K̂ = Tᵀ K T`, puis prolongé
+(`u_s = (g − Σ_{k≠s} aₖ·u_k)/a_s`). The system solved is **reduced** (no
+multiplier degree) and definite, `K̂ û = f̂` with `K̂ = Tᵀ K T`, then extended
 `u = T·û + u₀`.
 
-Deux voies pour un même résultat
+Two paths to the same result
 --------------------------------
-`solve(K, rhs)` résout le système augmenté par multiplicateurs de Lagrange ;
-`solve_eliminate(K, model, rhs)` condense les contraintes. Les deux produisent le
-**même** champ. L'élimination récupère en prime la *réaction* (équivalent du
-multiplicateur) dans la ligne duale de chaque esclave.
+`solve(K, rhs)` solves the system augmented by Lagrange multipliers;
+`solve_eliminate(K, model, rhs)` condenses the constraints. Both produce the
+**same** field. The elimination recovers, as a bonus, the *reaction* (the
+multiplier's equivalent) in each slave's dual row.
 
 Mise en donnée
 --------------
 Ici, un cas **non chaîné** (esclaves disjoints, le périmètre v1) : Dirichlet
-`T(node0) = 0` + MPC `2·T(node4) − 1·T(node2) = 1.5`. La relation à deux termes
-injecte des réactions aux deux nœuds, donc le champ minimise l'énergie sous
-contrainte (il n'est pas simplement `u = x`).
+`T(node0) = 0` + MPC `2·T(node4) − 1·T(node2) = 1.5`. The two-term relation
+injects reactions at both nodes, so the field minimizes the energy under
+constraint (it is not simply `u = x`).
 
 Lancement ::
 
@@ -64,7 +64,7 @@ def main():
 
     model = base | dirichlet | mpc
 
-    # Charge : second membres via le helper `constraint_rhs`, fusionnés avec `|`.
+    # Load: right-hand sides through the `constraint_rhs` helper, merged with `|`.
     rhs = dirichlet.constraint_rhs([(nodes[0], 0.0)]) | mpc.constraint_rhs(
         [(nodes[4], 1.5)]
     )
@@ -79,13 +79,13 @@ def main():
         b = elimination.value(node, "T")
         print(f"{i * H:.3f}  {a:12.6f}  {b:12.6f}")
 
-    # La relation tient exactement sur le champ condensé.
+    # The relation holds exactly on the condensed field.
     t2 = elimination.value(nodes[2], "T")
     t4 = elimination.value(nodes[4], "T")
     print(f"\nrelation : 2·T(node4) − T(node2) = {2.0 * t4 - t2:.4f}  (attendu 1.5)")
 
-    # Réactions (équivalent des multiplicateurs), lues à la ligne duale des
-    # esclaves aux nœuds contraints.
+    # Reactions (the multipliers' equivalent), read at the slaves' dual row at the
+    # constrained nodes.
     print(f"réaction node0 (Dirichlet) : {elimination.value(nodes[0], dual):+.4f}")
     print(f"réaction node4 (MPC)       : {elimination.value(nodes[4], dual):+.4f}")
 

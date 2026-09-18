@@ -96,9 +96,9 @@ fn side_coeffs(p: &[[f64; 2]], i: usize, j: usize, cell: usize) -> Result<SideCo
 
 /// The elimination of one rotation, as a matrix on the quadratic shape
 /// functions: `[degree of freedom][shape function]`.
-/// Les deux matrices d'élimination d'un DKT/DKQ : `3n` degrés de liberté de
-/// coque vers `2n` fonctions de forme du champ de rotation. `n ≤ 4`, donc au
-/// plus `12 × 8` — sur la **pile**, comme tout ce qu'une maille manipule.
+/// A DKT/DKQ's two elimination matrices: `3n` shell degrees of freedom towards
+/// the rotation field's `2n` shape functions. `n ≤ 4`, hence at most `12 × 8` —
+/// on the **stack**, like everything a cell handles.
 type Elimination = [[f64; 8]; 12];
 
 /// The two rotations as linear forms in the quadratic shape functions:
@@ -218,9 +218,9 @@ fn bending_b(
 ) -> Result<()> {
     let n = p.len();
     let cell = geom.cell;
-    // Le couple d'éléments est un fait de la **maille**, tranché une fois par
-    // `element_stiffness` — le redemander à chaque point de Gauss reprouvait
-    // ce que l'appelant venait d'établir.
+    // The element pair is a fact of the **cell**, settled once by
+    // `element_stiffness` — asking again at every Gauss point re-proved what the
+    // caller had just established.
     let (linear, quadratic) = pair;
     let xi = geom.gauss_xi(g);
 
@@ -317,10 +317,10 @@ fn bending_b(
 /// #               vec!["u_x".to_string(), "u_y".to_string(), "u_z".to_string(),
 /// #                    "r_x".to_string(), "r_y".to_string(), "r_z".to_string()]);
 /// # use pyrucast::models::shell::kirchhoff;
-/// // **Une** `CellGeom`, non deux : il n'y a pas de terme de cisaillement,
-/// // donc pas de seconde quadrature pour l'intégrer.
+/// // **One** `CellGeom`, not two: there is no shear term, hence no second
+/// // quadrature to integrate it with.
 /// # use pyrucast::models::ElementLayout;
-/// // `E`, `nu`, `h` dans l'ordre du contrat : la table est l'identité.
+/// // `E`, `nu`, `h` in the contract's order: the table is the identity.
 /// let lay = ElementLayout {
 ///     material: vec![0, 1, 2], optional_material: vec![], state: vec![],
 /// };
@@ -359,8 +359,8 @@ pub fn element_stiffness(
     let kd = drilling_law(e, nu, h);
 
     let frame = local_frame(geom)?;
-    // Le couple linéaire/quadratique et l'élimination, tranchés **une fois**
-    // pour la maille.
+    // The linear/quadratic pair and the elimination, settled **once** for the
+    // cell.
     let setup = BendingSetup::Discrete(Setup::new(geom, &frame)?);
 
     let mut local: ShellMatrix = [0.0; MAX_SHELL_DOFS * MAX_SHELL_DOFS];

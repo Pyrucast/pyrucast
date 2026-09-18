@@ -1,15 +1,15 @@
-"""Thermo-mécanique **pas-à-pas** au-dessus de la couche Python haut niveau.
+"""**Step-by-step** thermo-mechanics above the high-level Python layer.
 
-Démo bout-en-bout de :func:`pyrucast.thermomechanics.step_by_step` : une plaque plane est chauffée
+End-to-end demo of :func:`pyrucast.thermomechanics.step_by_step`: a flat plate is heated
 progressivement (histoire de température) et se dilate librement (appuis simples).
-À chaque instant, ``step_by_step`` résout la thermique (stationnaire) puis la
+At every instant, ``step_by_step`` solves the thermics (steady) then the
 mécanique non linéaire (Newton modifié + accélération d'Anderson), le couplage
 étant faible — la température alimente la déformation thermique.
 
-L'utilisateur ne fournit qu'un **dictionnaire** (maillage, modèle, charges,
-matériaux, instants) ; il le récupère complété des résultats par pas. Pour une
-mécanique élasto-plastique, il suffit de remplacer ``model.elasticity`` par
-``model.plasticity_perfect`` : le même appel gère la boucle non linéaire.
+The user supplies only a **dictionary** (mesh, model, loads, materials,
+instants); it comes back filled with the per-step results. For elasto-plastic
+mechanics, replacing ``model.elasticity`` with ``model.plasticity_perfect`` is
+all it takes: the same call handles the nonlinear loop.
 
 Lancement ::
 
@@ -17,7 +17,7 @@ Lancement ::
     python examples/thermomecanique_pas_a_pas.py
 
 Variables d'environnement : ``PYRUCAST_NX`` / ``PYRUCAST_NY`` (mailles),
-``PYRUCAST_NSTEPS`` (pas de température).
+``PYRUCAST_NSTEPS`` (temperature steps).
 """
 
 import os
@@ -39,7 +39,7 @@ def main():
         f"Plaque chauffée {NX}×{NY} QUA4 (L={LENGTH}, H={HEIGHT}), "
         f"E={E}, ν={NU}, α={ALPHA}"
     )
-    print(f"Température : {T_REF} → {T_HOT} °C en {NSTEPS} pas (dilatation libre)\n")
+    print(f"Temperature: {T_REF} → {T_HOT} °C in {NSTEPS} steps (free expansion)\n")
 
     # ── Maillage : grille de QUA4 ───────────────────────────────────────────
     c = pc.Coords(2)
@@ -71,9 +71,9 @@ def main():
         return pc.model.dirichlet(target, var, imposed, pc.mesh.barycenter(imposed))
 
     # ── Modèle : conduction + élasticité (contraintes planes) + Dirichlet ────
-    # Thermique : température imposée sur les bords gauche/droit (un
-    # multiplicateur par nœud ⇒ champ uniforme). Mécanique : appuis simples
-    # (u_x=0 à gauche, u_y=0 en bas) ⇒ dilatation libre, sans contrainte.
+    # Thermics: imposed temperature on the left/right edges (one multiplier per
+    # node ⇒ a uniform field). Mechanics: simple supports (u_x=0 on the left,
+    # u_y=0 at the bottom) ⇒ free expansion, without stress.
     th_imposed = pc.mesh.poi1_from_nodes(left + right)
     th_mult = pc.mesh.translate(th_imposed, [0.0, 0.0])
     thermal = pc.model.heat_conduction(fes)
@@ -89,14 +89,14 @@ def main():
         model, [("k", K_COND), ("E", E), ("nu", NU), ("alpha", ALPHA)]
     )
 
-    # ── Histoire de température : Evolution à valeur CHAMP (t ∈ [0, 1]) ──────
+    # ── Temperature history: an Evolution with a FIELD value (t ∈ [0, 1]) ────
     cold = pc.NodeField(th_mult, ["imposed_T"])
     cold[0].add_to_component("imposed_T", T_REF)
     hot = pc.NodeField(th_mult, ["imposed_T"])
     hot[0].add_to_component("imposed_T", T_HOT)
     loads = pc.Evolution([(0.0, cold), (1.0, hot)], out_of_range="clamp")
 
-    # ── Mise en donnée : un seul dictionnaire (fespace + maillage déduits du
+    # ── Setup: a single dictionary (fespace + mesh deduced from the
     #    modèle) ───────────────────────────────────────────────────────────────
     data = {
         "times": [step / NSTEPS for step in range(NSTEPS + 1)],
@@ -106,7 +106,7 @@ def main():
         "t_ref": T_REF,
     }
 
-    # ── Calcul pas-à-pas ────────────────────────────────────────────────────
+    # ── Step-by-step computation ────────────────────────────────────────────
     pc.thermomechanics.step_by_step(data)
 
     # ── Résultats ───────────────────────────────────────────────────────────
@@ -120,19 +120,19 @@ def main():
             f"{r['mech_anderson']:>6} {ux:>14.6e}"
         )
 
-    # Contrôle : dilatation libre ⇒ u_x = α·ΔT·L au bout.
+    # Check: free expansion ⇒ u_x = α·ΔT·L at the end.
     dT = T_HOT - T_REF
     expected = ALPHA * dT * LENGTH
     ux = data["results"][-1]["displacement"].value(tip, "u_x")
     print(f"\nu_x(bout) = {ux:.6e}   attendu α·ΔT·L = {expected:.6e}")
     assert abs(ux - expected) < 1e-7, "dilatation libre non retrouvée"
 
-    # Export du dernier pas (déplacement) pour visualisation.
+    # Export of the last step (displacement) for visualization.
     import tempfile
 
     out = os.path.join(tempfile.gettempdir(), "thermomecanique_pas_a_pas.vtk")
     pc.export.export_vtk(mesh, out, data["results"][-1]["displacement"])
-    print(f"Dernier pas exporté : {out}")
+    print(f"Last step exported: {out}")
 
 
 if __name__ == "__main__":

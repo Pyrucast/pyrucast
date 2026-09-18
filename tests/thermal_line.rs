@@ -26,7 +26,7 @@ use pyrucast::Result;
 
 #[test]
 fn thermal_line_recovers_analytical_solution() -> Result<()> {
-    // ── Données du problème ────────────────────────────────────────────────
+    // ── Problem data ───────────────────────────────────────────────────────
     const K: f64 = 1.0; // conductivité
     const Q: f64 = 10.0; // source de chaleur (flux de Neumann) en x = 0
     const T_IMPOSED: f64 = 20.0; // température imposée en x = 1

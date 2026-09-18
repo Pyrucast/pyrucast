@@ -2,21 +2,21 @@
 
 Physique
 --------
-Une température imposée ΔT engendre une déformation thermique libre
+An imposed temperature ΔT generates a free thermal strain
 `ε_th = α·(T − T_ref)`. En petites déformations la rigidité reste élastique ;
-le terme thermique n'agit que sur le second membre (charge thermique
-équivalente `f_th = ∫ Bᵀ D ε_th`) et sur la contrainte réelle
-`σ = D:(ε(u) − ε_th)`. Non couplé : la mécanique ne rétroagit pas sur le thermique.
+the thermal term acts only on the right-hand side (equivalent thermal load
+`f_th = ∫ Bᵀ D ε_th`) and on the real stress
+`σ = D:(ε(u) − ε_th)`. Uncoupled: the mechanics does not feed back on the thermics.
 
-Briques composées à la main (aucun opérateur « tout-en-un ») :
+Bricks composed by hand (no "all-in-one" operator):
 `interp_to_gauss` (T nodale → points de Gauss), `thermal_strain` (EPTH),
 `integrate_behavior` (σ = D:ε), `internal_forces` (BSIG), `solve`, puis
-`deformation` et une soustraction de champs pour ε_méca = ε(u) − ε_th.
+`deformation` and a field subtraction for ε_mech = ε(u) − ε_th.
 
-`alpha` voyage par le champ matériau (`material_field`) comme composante
-**facultative** de l'élasticité, à côté de `E`/`nu`.
+`alpha` travels through the material field (`material_field`) as an
+**optional** component of the elasticity, beside `E`/`nu`.
 
-Deux régimes sur la même barre
+Two regimes on the same bar
 ------------------------------
 - **bloquée** (deux bords en x encastrés) : `σ_xx = −E·α·ΔT`, `σ_yy = 0` ;
 - **libre** (appuis simples) : dilatation `u = α·ΔT·(x, y)`, `σ ≈ 0`.
@@ -41,7 +41,7 @@ def _clamp(target, nodes, var):
 
 
 def _bar():
-    """Grille NX×NY de QUA4 sur [0,L]×[0,H]. Renvoie (coords, grid, fes, idx)."""
+    """An NX×NY grid of QUA4 on [0,L]×[0,H]. Returns (coords, grid, fes, idx)."""
     c = pyrucast.Coords(2)
     hx, hy = L / NX, H / NY
 
@@ -64,7 +64,7 @@ def _bar():
 
 
 def _uniform_temperature(c, grid, fes, value):
-    """Champ de température 'T' = value partout, porté aux points de Gauss."""
+    """A temperature field 'T' = value everywhere, carried at the Gauss points."""
     t_mesh = pyrucast.Mesh(c, "POI1")
     for node in grid:
         t_mesh.unit().add_cell([node])
@@ -75,7 +75,7 @@ def _uniform_temperature(c, grid, fes, value):
 
 
 def _displacement(solution, c, grid):
-    """Extrait un champ (u_x, u_y) propre (sans les multiplicateurs de Lagrange)."""
+    """Extracts a clean (u_x, u_y) field (without the Lagrange multipliers)."""
     u_mesh = pyrucast.Mesh(c, "POI1")
     for node in grid:
         u_mesh.unit().add_cell([node])
@@ -92,9 +92,9 @@ def _solve_thermal(model, materials, fes, c, grid):
         _uniform_temperature(c, grid, fes, T_REF + DT), materials, fes, T_REF
     )
     sig_th = pyrucast.element_field.integrate_behavior(model, eps_th, materials)
-    # Une **charge**, pas un résidu : la divergence du tenseur prescrit, donc
-    # l'opérateur géométrique. On renomme ensuite en lignes duales — c'est là,
-    # et seulement là, que ces nombres deviennent des forces.
+    # A **load**, not a residual: the divergence of the prescribed tensor, hence
+    # the geometric operator. They are then renamed into dual rows — that is
+    # where, and only where, these numbers become forces.
     f_th = (
         pyrucast.node_field.divergence(sig_th, "sigma")
         .rename_component("div_sigma_x", "f_x")
@@ -153,9 +153,7 @@ def main() -> None:
     assert abs(ux - ALPHA * DT * L) < 1e-9 and abs(uy - ALPHA * DT * H) < 1e-9
     assert abs(sigma[0].value(0, 0, "sigma_xx")) < 1e-6
 
-    print(
-        "\nOK : barre bloquée → σ_xx = −E·α·ΔT ; barre libre → dilatation sans contrainte."
-    )
+    print("\nOK: blocked bar → σ_xx = −E·α·ΔT; free bar → expansion without stress.")
 
 
 if __name__ == "__main__":

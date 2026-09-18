@@ -1,17 +1,17 @@
-"""Barre / treillis — barre en traction, comparée à l'analytique.
+"""Bar / truss — a bar in tension, compared with the analytical solution.
 
 Physique
 --------
-Élément `SEG2` à 2 nœuds ne transmettant que l'effort axial. Loi : `N = E·A·ε`
-avec `ε = du/ds` (déformation axiale le long de la barre). Rigidité globale
-`K_e = (E·A/L)·[[c⊗c, -c⊗c], [-c⊗c, c⊗c]]`, où `c` est le cosinus directeur
-(déduit des coordonnées des nœuds) — marche en 1-D/2-D/3-D.
+A 2-node `SEG2` element transmitting the axial force only. Law: `N = E·A·ε`
+with `ε = du/ds` (axial strain along the bar). Global stiffness
+`K_e = (E·A/L)·[[c⊗c, -c⊗c], [-c⊗c, c⊗c]]`, where `c` is the direction cosine
+(derived from the nodes' coordinates) — works in 1-D/2-D/3-D.
 
 Problème
 --------
-Barre horizontale de longueur `L`, encastrée à gauche (`u_x = u_y = 0`),
-appuyée transversalement à droite (`u_y = 0`), force axiale `F` à droite.
-Une barre n'ayant aucune raideur transversale, on bloque `u_y` aux deux nœuds.
+A horizontal bar of length `L`, clamped on the left (`u_x = u_y = 0`),
+transversally supported on the right (`u_y = 0`), axial force `F` on the right.
+A bar having no transverse stiffness, `u_y` is blocked at both nodes.
 Solution analytique : `u_x = F·L / (E·A)`.
 
 Lancement ::
@@ -26,7 +26,7 @@ E, A, L, F = 210.0e9, 1.0e-4, 2.0, 1000.0
 
 
 def _clamp(target, node, var):
-    """Dirichlet homogène (u = 0) sur `var` au nœud `node`."""
+    """Homogeneous Dirichlet (u = 0) on `var` at node `node`."""
     imposed = pyrucast.mesh.poi1_from_nodes([node])
     multiplier = pyrucast.mesh.barycenter(imposed)
     return pyrucast.model.dirichlet(target, var, imposed, multiplier)
@@ -42,7 +42,7 @@ def main() -> None:
     model = pyrucast.model.truss(fes)
     model = model | _clamp(model, n0, "u_x")
     model = model | _clamp(model, n0, "u_y")
-    model = model | _clamp(model, n1, "u_y")  # pas de raideur transversale
+    model = model | _clamp(model, n1, "u_y")  # no transverse stiffness
 
     materials = pyrucast.element_field.material_field(model, [("E", E), ("A", A)])
 

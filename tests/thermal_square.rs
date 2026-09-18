@@ -33,14 +33,14 @@ use pyrucast::Result;
 
 #[test]
 fn thermal_square_recovers_analytical_solution() -> Result<()> {
-    // ── Données du problème ────────────────────────────────────────────────
+    // ── Problem data ───────────────────────────────────────────────────────
     const K: f64 = 1.0; // conductivité
     const Q: f64 = 10.0; // flux de chaleur TOTAL injecté sur le bord gauche
     const T_IMPOSED: f64 = 20.0; // température imposée sur le bord droit
     const N: usize = 4; // N×N éléments QUA4
     let h = 1.0 / N as f64;
 
-    // ── Maillage : grille structurée (N+1)×(N+1) de QUA4 sur [0,1]² ─────────
+    // ── Mesh: a structured (N+1)×(N+1) grid of QUA4 on [0,1]² ──────────────
     let coords = Handle::new(Coords::new(2)?);
     let idx = |i: usize, j: usize| j * (N + 1) + i; // nœud colonne i, ligne j
     let mut grid: Vec<Node> = Vec::with_capacity((N + 1) * (N + 1));

@@ -1,23 +1,23 @@
-"""Conduction thermique 1-D — ligne chauffée, comparée à l'analytique.
+"""1-D thermal conduction — a heated line, compared with the analytical solution.
 
 Problème
 --------
-Sur le segment [0, 1] :
+On the segment [0, 1]:
 
-  * en x = 0 : une **source de chaleur** (flux de Neumann ``Q``) ;
-  * en x = 1 : une **température imposée** ``T = 20`` (Dirichlet).
+  * at x = 0: a **heat source** (Neumann flux ``Q``);
+  * at x = 1: an **imposed temperature** ``T = 20`` (Dirichlet).
 
-En régime stationnaire sans génération volumique, ``T'' = 0`` : le profil est
-linéaire. La solution analytique est ::
+In the steady regime without volume generation, ``T'' = 0``: the profile is
+linear. The analytical solution is ::
 
     u(x) = 20 + (Q / k) * (1 - x)
 
-et le multiplicateur de Lagrange au nœud imposé (la *réaction* qui maintient
-``T = 20``) vaut exactement ``Q`` : tout le flux injecté en x = 0 ressort en
+and the Lagrange multiplier at the imposed node (the *reaction* holding
+``T = 20``) is exactly ``Q``: all the flux injected at x = 0 leaves at
 x = 1 (bilan d'énergie).
 
-C'est l'équivalent Python du test d'intégration Rust ``tests/thermal_line.rs``
-(et du chapitre « Conduction thermique » du livre).
+This is the Python equivalent of the Rust integration test ``tests/thermal_line.rs``
+(and of the book's "Conduction thermique" chapter).
 
 Lancement
 ---------
@@ -39,7 +39,7 @@ N_ELEMS = 4
 def main() -> None:
     h = 1.0 / N_ELEMS
 
-    # ── Maillage : une ligne de N_ELEMS SEG2 sur [0, 1] (mailleur `line`) ─
+    # ── Mesh: a line of N_ELEMS SEG2 on [0, 1] (the `line` mesher) ───────
     c = pyrucast.Coords(1)
     x0 = c.add_node([0.0])
     x1 = c.add_node([1.0])
@@ -49,8 +49,8 @@ def main() -> None:
     fes = pyrucast.FiniteElementSpace(mesh)
 
     # ── Modèle : conduction + Dirichlet T = 20 en x = 1 ──────────────────────
-    # Le support des multiplicateurs est fabriqué depuis le nœud imposé par le
-    # mesher `barycenter` (un nœud neuf colocalisé). Le modèle ne crée rien.
+    # The multipliers' support is built from the imposed node by the `barycenter`
+    # mesher (a fresh co-located node). The model creates nothing.
     imposed = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
     multiplier = pyrucast.mesh.barycenter(imposed)
     mult = multiplier.node(0, 0, 0)
@@ -62,7 +62,7 @@ def main() -> None:
     materials = pyrucast.element_field.material_field(model, [("k", K)])
 
     # ── Chargement : source Q en x = 0 (composante duale "q"), valeur imposée
-    #    T = 20 au nœud-multiplicateur (slot "imposed_T") ─────────────────────
+    #    T = 20 at the multiplier node ("imposed_T" slot) ─────────────────────
     load_mesh = pyrucast.mesh.poi1_from_nodes([nodes[0], mult])
     rhs = pyrucast.NodeField(load_mesh, ["imposed_T", "q"])
     rhs[0].set_value(nodes[0], "q", Q)
@@ -72,7 +72,7 @@ def main() -> None:
     K_mat = pyrucast.matrix.stiffness(model, materials)
     solution = pyrucast.solver.solve(K_mat, rhs)
 
-    # ── Comparaison à l'analytique u(x) = 20 + (Q/k)(1 - x) ──────────────────
+    # ── Compared with the analytical u(x) = 20 + (Q/k)(1 - x) ────────────────
     print(f"{'x':>6} {'T_calc':>12} {'T_exact':>12}")
     tol = 1e-10
     for i, node in enumerate(nodes):
@@ -87,7 +87,7 @@ def main() -> None:
     print(f"\nréaction λ = {reaction:.6f}  (attendu {Q})")
     assert abs(reaction - Q) < tol
 
-    print("\nOK : profil et réaction conformes à la solution analytique.")
+    print("\nOK: profile and reaction matching the analytical solution.")
 
 
 if __name__ == "__main__":

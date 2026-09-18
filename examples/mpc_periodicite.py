@@ -1,23 +1,23 @@
-"""Contrainte multi-points (MPC) — relation linéaire par multiplicateurs de Lagrange.
+"""Multi-point constraint (MPC) — a linear relation through Lagrange multipliers.
 
 Physique
 --------
-Conduction 1-D `-u'' = 0` sur `[0, 1]` (barre SEG2, `k = 1`), dont la solution
-analytique est linéaire. Les MPC imposent une relation `Σ aₖ·u(nœudₖ, varₖ) = g`
-sur le **même** système augmenté que Dirichlet — c'en est la généralisation à
-plusieurs termes (Dirichlet = relation à un seul terme, coefficient 1).
+1-D conduction `-u'' = 0` on `[0, 1]` (a SEG2 bar, `k = 1`), whose analytical
+solution is linear. MPCs impose a relation `Σ aₖ·u(nodeₖ, varₖ) = g` on the
+**same** augmented system as Dirichlet — they are its generalization to
+several terms (Dirichlet = a one-term relation, coefficient 1).
 
 Mise en donnée
 --------------
-Chaque terme est un tuple `(maillage POI1, variable, dual, coefficient)`. Les
-maillages sont appariés élément-par-élément : la relation `r` relie la `r`-ème
-cellule de chaque terme-maillage au `r`-ème nœud multiplicateur. Le dual se
-trouve avec `model.dual_of(variable)`. Le second membre `g` est écrit par
-l'utilisateur dans le champ de charge, à la composante `mpc_rhs` du nœud
+Every term is a tuple `(POI1 mesh, variable, dual, coefficient)`. The meshes
+are paired element by element: relation `r` ties the `r`-th cell of each
+term-mesh to the `r`-th multiplier node. The dual is found with
+`model.dual_of(variable)`. The right-hand side `g` is written by the user in
+the load field, at the `mpc_rhs` component of the
 multiplicateur (défaut `g = 0`).
 
-Ici : Dirichlet `T(0) = 0` + MPC `1·T(1) − 1·T(0) = 1`. La relation impose donc
-`T(1) = 1`, et la conduction sans source complète en `u(x) = x`.
+Here: Dirichlet `T(0) = 0` + MPC `1·T(1) − 1·T(0) = 1`. The relation therefore
+imposes `T(1) = 1`, and source-free conduction completes it into `u(x) = x`.
 
 Lancement ::
 
@@ -61,10 +61,10 @@ def main():
     model = base | dirichlet | mpc
 
     # Charge : valeur imposée de Dirichlet + second membre g de la MPC. Le helper
-    # `constraint_rhs` construit chaque second membre à partir d'un nœud désignant
-    # la relation : le nœud contraint pour Dirichlet, un nœud-terme pour la MPC.
-    # Il retrouve seul le nœud multiplicateur et la composante imposée
-    # (`imposed_T`, `mpc_rhs`). On fusionne les deux avec `|`.
+    # `constraint_rhs` builds each right-hand side from a node designating the
+    # relation: the constrained node for Dirichlet, a term node for the MPC.
+    # It finds the multiplier node and the imposed component on its own
+    # (`imposed_T`, `mpc_rhs`). Both are merged with `|`.
     rhs = dirichlet.constraint_rhs([(nodes[0], 0.0)]) | mpc.constraint_rhs(
         [(nodes[-1], 1.0)]
     )

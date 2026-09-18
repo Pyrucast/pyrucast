@@ -1,4 +1,4 @@
-"""Source des exemples Python de `formation/langage-python.md` et `fe-space.md`.
+"""Source of the Python examples of `formation/langage-python.md` and `fe-space.md`.
 
 **The code lives at module level, not inside test functions**: mdbook does not
 strip the indentation of an included excerpt, so a block anchored inside a
@@ -11,7 +11,7 @@ Voir `book/src/developper/documentation-et-tests.md`.
 
 import pyrucast
 
-# ── Le module et ses sous-modules ───────────────────────────────────────────
+# ── The module and its submodules ───────────────────────────────────────────
 
 # ANCHOR: import
 import pyrucast as pc
@@ -20,7 +20,7 @@ import pyrucast as pc
 assert hasattr(pc, "mesh")
 
 
-# ── Les trois objets de départ ──────────────────────────────────────────────
+# ── The three starting objects ──────────────────────────────────────────────
 
 # ANCHOR: objets
 c = pc.Coords(2)  # Cast3M : OPTI 'DIME' 2
@@ -53,7 +53,7 @@ modele = modele | pc.model.dirichlet(modele, "T", impose, multiplicateur)
 assert len(modele) == 3
 
 
-# ── Les conditions limites, deux physiques ──────────────────────────────────
+# ── The boundary conditions, two physics ────────────────────────────────────
 
 # ANCHOR: bloquer
 pc.model.dirichlet(modele, "T", impose, multiplicateur)  # Cast3M : BLOQ 'T' ...
@@ -62,7 +62,7 @@ pc.model.dirichlet(mecanique, "u_x", impose, multiplicateur)  # Cast3M : BLOQ 'U
 # ANCHOR_END: bloquer
 
 
-# ── Espace éléments finis : le constructeur par défaut ──────────────────────
+# ── Finite element space: the default constructor ───────────────────────────
 
 # ANCHOR: fespace
 import pyrucast
@@ -75,10 +75,10 @@ n2 = c.add_node([0.0, 2.0])
 mesh = pyrucast.Mesh(c, "TRI3")
 mesh.unit().add_cell([n0, n1, n2])
 
-# Constructeur par défaut : Lagrange1 + Gauss partout.
+# Default constructor: Lagrange1 + Gauss everywhere.
 fes = pyrucast.FiniteElementSpace(mesh)
 assert len(fes) == 1  # 1 sous-espace = 1 sous-maillage
-sub = fes[0]  # vue typée du sous-espace 0
+sub = fes[0]  # typed view of subspace 0
 assert sub.element_type == "TRI3"
 assert sub.interpolation == "LAGRANGE1"
 assert sub.quadrature == "GAUSS"
@@ -86,41 +86,41 @@ assert sub.gauss_count() == 3
 assert sub.space_dim == 2
 assert sub.ref_dim == 2
 
-# Évaluations à un point de Gauss donné.
+# Evaluations at a given Gauss point.
 for g in range(sub.gauss_count()):
     print(sub.gauss_xi(g), sub.gauss_weight(g))
     print(sub.n_at_g(g))  # N_i(ξ_g), flat
     print(sub.dn_at_g(g))  # ∂N_i/∂ξ_j(ξ_g), flat
 
-# Grandeurs physiques (à la volée) sur la cellule 0.
+# Physical quantities (on the fly) on cell 0.
 print(sub.jacobian(0, 0))  # J, flat row-major
 print(sub.det_jacobian(0, 0))  # |J|, scalaire
 print(sub.dn_dx(0, 0))  # ∂N_i/∂x_a, flat row-major
 # ANCHOR_END: fespace
 
 
-# ── Les autres constructeurs ────────────────────────────────────────────────
+# ── The other constructors ──────────────────────────────────────────────────
 
 # ANCHOR: fespace_variantes
-# Même Lagrange1 + même Gauss pour tous les sous-maillages, explicite.
+# Same Lagrange1 + same Gauss for every submesh, explicitly.
 fes = pyrucast.FiniteElementSpace(mesh, interpolation="LAGRANGE1", quadrature="GAUSS")
 
-# Forme « class method » équivalente au constructeur par défaut.
+# "Class method" form equivalent to the default constructor.
 fes = pyrucast.FiniteElementSpace.lagrange1(mesh)
 
-# (Interpolation, quadrature) explicites par sous-maillage.
+# (Interpolation, quadrature) explicit per submesh.
 fes = pyrucast.FiniteElementSpace.with_choices(mesh, [("LAGRANGE1", "GAUSS")])
 # ANCHOR_END: fespace_variantes
 
 assert len(fes) == 1
 
 
-# ── Déplacement de maillage : les évaluations suivent ───────────────────────
+# ── Moving the mesh: the evaluations follow ─────────────────────────────────
 
 # ANCHOR: deplacement
 print(sub.det_jacobian(0, 0))  # |J| initial
 
-# Déplacement d'un nœud → toutes les évaluations à venir voient les
+# Moving a node → every evaluation to come sees the
 # nouvelles coordonnées.
 n1.set_position([4.0, 0.0])
 print(sub.det_jacobian(0, 0))  # |J| recalculé

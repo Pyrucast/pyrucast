@@ -47,8 +47,8 @@
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
 /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
 /// # let mesh = Mesh::from_submesh(sm);
-/// // Précision, et deux plafonds au-delà desquels les rendus élident et
-/// // ajoutent un « … (N de plus) » : un dump ne grossit jamais sans borne.
+/// // Precision, and two ceilings beyond which the renderings elide and add a
+/// // "… (N more)": a dump never grows without bound.
 /// let d = DumpOptions::default();
 /// assert_eq!((d.precision, d.max_rows, d.max_cols), (3, 20, 12));
 /// ```
@@ -95,12 +95,12 @@ impl Default for DumpOptions {
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
 /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
 /// # let mesh = Mesh::from_submesh(sm);
-/// // `render` rend le texte, `dump` l'imprime : le contenu est fait pour
-/// // être **regardé** dans un terminal, non analysé — les accesseurs
-/// // typés sont là pour le reste.
+/// // `render` returns the text, `dump` prints it: the content is meant to be
+/// // **looked at** in a terminal, not parsed — the typed accessors are there
+/// // for the rest.
 /// let texte = mesh.render(&DumpOptions::default());
 /// assert!(texte.contains("SEG2"));
-/// // `dump_with` est la même chose, imprimée avec des options choisies.
+/// // `dump_with` is the same thing, printed with chosen options.
 /// mesh.dump_with(&DumpOptions { precision: 6, ..Default::default() });
 /// ```
 pub trait Dump {
@@ -138,7 +138,7 @@ pub fn py_print(py: pyo3::Python<'_>, text: &str) -> pyo3::PyResult<()> {
 ///
 /// ```
 /// # use pyrucast::dump::fmt_float;
-/// // Précision fixe : les zéros de queue sont **conservés**, pour que les
+/// // Fixed precision: trailing zeros are **kept**, so that the
 /// // colonnes d'un tableau s'alignent.
 /// assert_eq!(fmt_float(1.5, 3), "1.500");
 /// assert_eq!(fmt_float(-0.25, 1), "-0.2");
@@ -153,7 +153,7 @@ pub fn fmt_float(v: f64, precision: usize) -> String {
 /// length as `headers`. Column 0 is treated as a **label column** and is always
 /// kept; the remaining columns are capped at `opts.max_cols`. Rows are capped at
 /// `opts.max_rows`. Truncation appends `⋮` cue rows/columns and a trailing
-/// `… (N de plus)` note.
+/// `… (N more)` note.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -168,13 +168,13 @@ pub fn fmt_float(v: f64, precision: usize) -> String {
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
 /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
 /// # let mesh = Mesh::from_submesh(sm);
-/// // La colonne 0 est une **colonne d'étiquettes** : elle est toujours
-/// // gardée, les autres étant plafonnées.
+/// // Column 0 is a **label column**: it is always kept, the others being
+/// // capped.
 /// let entetes = vec!["nœud".to_string(), "x".to_string()];
 /// let lignes = vec![vec!["0".to_string(), "0.000".to_string()]];
 /// let t = dump::table(&entetes, &lignes, &DumpOptions::default());
 /// assert!(t.contains("nœud") && t.contains("0.000"));
-/// // Au-delà du plafond de lignes, l'élision est annoncée.
+/// // Beyond the row ceiling, the elision is announced.
 /// let longues: Vec<Vec<String>> = (0..50)
 ///     .map(|i| vec![i.to_string(), "0".to_string()]).collect();
 /// assert!(dump::table(&entetes, &longues, &DumpOptions::default())
@@ -275,8 +275,8 @@ pub fn table(headers: &[String], rows: &[Vec<String>], opts: &DumpOptions) -> St
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
 /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
 /// # let mesh = Mesh::from_submesh(sm);
-/// // Une grille dense dont les étiquettes de ligne et de colonne sont
-/// // posées **sur** la grille — ce dont vit le dump d'une matrice.
+/// // A dense grid whose row and column labels are laid **on** the grid —
+/// // what a matrix's dump lives on.
 /// let l = vec!["a".to_string(), "b".to_string()];
 /// let g = dump::labeled_grid(&l, &l, &[1.0, 0.0, 0.0, 1.0], &DumpOptions::default());
 /// assert!(g.contains('a') && g.contains("1.000"));

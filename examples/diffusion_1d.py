@@ -1,26 +1,26 @@
-"""Diffusion de Fick 1-D — barreau alimenté en espèce, comparé à l'analytique.
+"""1-D Fick diffusion — a bar fed with a species, compared with the analytical solution.
 
 Problème
 --------
-Sur le segment [0, 1] :
+On the segment [0, 1]:
 
   * en x = 0 : un **flux d'espèce** imposé ``J`` (Neumann) ;
-  * en x = 1 : une **concentration imposée** ``c = 1`` (Dirichlet).
+  * at x = 1: an **imposed concentration** ``c = 1`` (Dirichlet).
 
-En régime stationnaire sans source volumique le profil est linéaire ::
+In the steady regime without a volume source the profile is linear ::
 
     c(x) = 1 + (J / D) * (1 - x)
 
-et le multiplicateur de Lagrange au nœud imposé vaut exactement ``J`` : tout ce
-qui entre en x = 0 ressort en x = 1 (bilan de matière).
+and the Lagrange multiplier at the imposed node is exactly ``J``: everything
+entering at x = 0 leaves at x = 1 (mass balance).
 
-L'opérateur est celui de la conduction thermique ; ce qui change, c'est la
-**physique**. La primale est la concentration ``c``, la duale le flux ``j``, et
-la nature déclarée est ``"diffusion"`` — si bien qu'un modèle couplé
-thermo-diffusif se sépare avec ``model.filter(...)``, ce que la deuxième partie
+The operator is the thermal conduction one; what changes is the **physics**.
+The primal is the concentration ``c``, the dual the flux ``j``, and the kind
+declared is ``"diffusion"`` — so that a coupled thermo-diffusive model splits
+with ``model.filter(...)``, which the second part
 de l'exemple montre.
 
-C'est l'équivalent Python du test d'intégration Rust ``tests/fick.rs``.
+This is the Python equivalent of the Rust integration test ``tests/fick.rs``.
 
 Lancement
 ---------
@@ -33,16 +33,16 @@ Once the extension is built in the venv ::
 import pyrucast
 
 # ── Problem data ────────────────────────────────────────────────────────────
-SPECIES = "H2"  # l'espèce qui diffuse — tous les noms la portent
+SPECIES = "H2"  # the diffusing species — every name carries it
 D = 2.0  # diffusivité
 J = 10.0  # flux d'espèce injecté en x = 0
 C_IMPOSED = 1.0  # concentration imposée en x = 1
 N_ELEMS = 4
-K = 5.0  # conductivité thermique, pour la partie couplée
+K = 5.0  # thermal conductivity, for the coupled part
 
 
 def ligne(n_elems):
-    """Une ligne de ``n_elems`` SEG2 sur [0, 1], avec ses nœuds."""
+    """A line of ``n_elems`` SEG2 on [0, 1], with its nodes."""
     c = pyrucast.Coords(1)
     h = 1.0 / n_elems
     nodes = [c.add_node([i * h]) for i in range(n_elems + 1)]
@@ -66,7 +66,7 @@ def profil_stationnaire() -> None:
     model = cible | pyrucast.model.dirichlet(cible, f"c_{SPECIES}", imposed, multiplier)
     materials = pyrucast.element_field.material_field(model, [(f"D_{SPECIES}", D)])
 
-    # ── Chargement : flux J en x = 0, valeur imposée au multiplicateur ───────
+    # ── Loading: flux J at x = 0, imposed value at the multiplier ────────────
     load = pyrucast.Mesh(c, "POI1")
     load.unit().add_cell([nodes[0]])
     load.unit().add_cell([mult])
@@ -97,12 +97,12 @@ def profil_stationnaire() -> None:
 
 
 def couplage_avec_la_thermique() -> None:
-    """Diffusion et conduction sur le même maillage : deux physiques distinctes."""
+    """Diffusion and conduction on the same mesh: two distinct physics."""
     _c, _nodes, fes, _h = ligne(3)
     model = pyrucast.model.fick(fes, SPECIES) | pyrucast.model.heat_conduction(fes)
 
-    # Un seul champ matériau porte les deux jeux : l'assembleur résout chaque
-    # zone par les composantes que sa physique exige (`D` ici, `k` là).
+    # A single material field carries both sets: the assembler resolves each zone
+    # through the components its physics requires (`D` here, `k` there).
     materials = pyrucast.element_field.material_field(
         model, [(f"D_{SPECIES}", D), ("k", K)]
     )

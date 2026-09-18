@@ -45,8 +45,8 @@ use serde::{Deserialize, Serialize};
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["k".into()], &[2.0]).unwrap());
 /// # use pyrucast::models::heat_conduction;
-/// // La primale de la conduction : c'est ce nom que doit citer une loi de
-/// // bord ou une contrainte pour s'y coupler.
+/// // The conduction's primal: that is the name a border law or a constraint
+/// // must cite to couple to it.
 /// assert_eq!(heat_conduction::PRIMAL_VAR, "T");
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -235,8 +235,8 @@ impl HeatConduction {
     /// #     zone.clone(), vec!["k".into()], &[2.0]).unwrap());
     /// # use pyrucast::models::heat_conduction::HeatConduction;
     /// # use pyrucast::models::Domain;
-    /// // Bâtit le POI1 stable des nœuds de la zone, réutilisé comme support de
-    /// // ligne et de colonne de **tous** les blocs assemblés.
+    /// // Builds the stable POI1 of the zone's nodes, reused as the row and column
+    /// // support of **every** assembled block.
     /// let hc = HeatConduction::new(zone.clone())?;
     /// assert_eq!(hc.material_components(), vec!["k".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -273,7 +273,7 @@ impl HeatConduction {
     /// #     zone.clone(), vec!["k".into()], &[2.0]).unwrap());
     /// # use pyrucast::models::heat_conduction::HeatConduction;
     /// # use pyrucast::models::Domain;
-    /// // Le constructeur général, dont `new` est le cas isotrope.
+    /// // The general constructor, of which `new` is the isotropic case.
     /// let ortho = HeatConduction::with_symmetry(zone.clone(), MaterialSymmetry::Orthotropic)?;
     /// assert!(ortho.material_components().len() > 1);
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -498,10 +498,10 @@ impl Behavior for HeatConduction {
 /// #     zone.clone(), vec!["k".into()], &[2.0]).unwrap());
 /// # use pyrucast::models::heat_conduction;
 /// # use pyrucast::models::ElementLayout;
-/// // Le champ est rangé dans l'ordre du contrat : la table est l'identité.
+/// // The field is laid out in the contract's order: the table is the identity.
 /// let lay = ElementLayout { material: vec![0], optional_material: vec![], state: vec![] };
-/// // ∫ ∇Nᵀ k ∇N. Une conductivité constante donne une matrice singulière :
-/// // un champ de température uniforme ne conduit rien.
+/// // ∫ ∇Nᵀ k ∇N. A constant conductivity gives a singular matrix: a uniform
+/// // temperature field conducts nothing.
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support,
 ///     vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
@@ -603,12 +603,12 @@ pub fn element_stiffness(
 /// #     zone.clone(), vec!["rho".into(), "cp".into()], &[3.0, 4.0]).unwrap());
 /// # use pyrucast::models::heat_conduction;
 /// # use pyrucast::models::ElementLayout;
-/// // `rho` et `cp` sont les deux composantes **facultatives** du contrat de
-/// // conduction : la conductivité ne les demande jamais, la capacité si.
+/// // `rho` and `cp` are the conduction contract's two **optional**
+/// // components: the conductivity never asks for them, the capacity does.
 /// let lay = ElementLayout {
 ///     material: vec![], optional_material: vec![0, 1], state: vec![],
 /// };
-/// // ∫ ρ c_p Nᵀ N : la capacité thermique. Sa somme vaut ρ·c_p × aire —
+/// // ∫ ρ c_p Nᵀ N: the thermal capacity. Its sum is ρ·c_p × area —
 /// // la capacité de la maille entière.
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support,

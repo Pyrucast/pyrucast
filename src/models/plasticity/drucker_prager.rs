@@ -64,13 +64,13 @@
 //! Six of the nine are optional, and their defaults are what makes the simple
 //! cone the zero-configuration case:
 //!
-//! | Cast3M | here | défaut | ce qu'il fait |
+//! | Cast3M | here | default | what it does |
 //! |---|---|---|---|
-//! | `ALFA` | `friction` | requis | pente du cône |
+//! | `ALFA` | `friction` | required | the cone's slope |
 //! | `K` | `k` | requis | cohésion |
-//! | `GAMM` | `psi` | requis | dilatance du potentiel |
-//! | `BETA` | `beta` | 1 | poids déviatorique du critère |
-//! | `DELT` | `delta` | 1 | poids déviatorique du potentiel |
+//! | `GAMM` | `psi` | required | the potential's dilatancy |
+//! | `BETA` | `beta` | 1 | the criterion's deviatoric weight |
+//! | `DELT` | `delta` | 1 | the potential's deviatoric weight |
 //! | `H` | `H` | 0 | module d'écrouissage |
 //! | `ETA` | `friction_ult` | `friction` | pente de la surface ultime |
 //! | `MU` | `beta_ult` | `beta` | poids déviatorique ultime |
@@ -227,21 +227,21 @@ impl Params {
 /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
 /// #                         vars: &[] };
-/// // Sensible à la pression : une traction hydrostatique plastifie, là où
-/// // von Mises la laisserait passer indéfiniment. Le retour se fait sur
-/// // l'**apex** du cône, à I₁ = k/α, quelle que soit l'intensité.
+/// // Pressure sensitive: a hydrostatic tension yields, where von Mises would
+/// // let it pass indefinitely. The return lands on the cone's **apex**, at
+/// // I₁ = k/α, whatever the intensity.
 /// for s in [200.0, 1000.0] {
 ///     let pas = plasticity::drucker_prager::return_map(
 ///         &[s, s, s, 0.0, 0.0, 0.0], &repos, &mat)?;
 ///     assert!((tensor::i1(&pas.sigma) - 200.0).abs() < 1e-9);
-///     // L'apex ne produit aucun écoulement **déviatorique** : `p`, qui
-///     // cumule celui-ci, reste nul, tandis que ε_p gonfle en volume.
+///     // The apex produces no **deviatoric** flow: `p`, which accumulates
+///     // it, stays zero, while ε_p swells in volume.
 ///     assert_eq!(pas.p, 0.0);
 ///     assert!(tensor::i1(&pas.eps_p) > 0.0);
 /// }
 ///
-/// // Hors de l'apex, `p` croît, et l'écoulement est **non associé** : la
-/// // dilatance `psi` diffère du frottement, donc ε_p n'est pas isochore.
+/// // Off the apex, `p` grows, and the flow is **non-associated**: the
+/// // dilatancy `psi` differs from the friction, so ε_p is not isochoric.
 /// let pas = plasticity::drucker_prager::return_map(
 ///     &[400.0, 0.0, 0.0, 0.0, 0.0, 0.0], &repos, &mat)?;
 /// assert!(pas.p > 0.0);

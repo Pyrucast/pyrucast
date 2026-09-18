@@ -33,10 +33,10 @@ use std::fmt;
 ///
 /// ```
 /// # use pyrucast::atoms::{ElementType, Interpolation};
-/// // Le degré d'interpolation du **champ**, distinct de celui de la
+/// // The **field's** interpolation degree, distinct from the
 /// // géométrie : un élément peut être sous-paramétrique.
 /// assert_eq!(Interpolation::Lagrange1.shape_count(ElementType::TRI3), 3);
-/// // Hermite porte deux fonctions par nœud — une valeur, une pente.
+/// // Hermite carries two functions per node — one value, one slope.
 /// assert_eq!(Interpolation::Hermite3.shape_count(ElementType::SEG2), 4);
 /// ```
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
@@ -94,7 +94,7 @@ impl Interpolation {
     /// ```
     /// # use pyrucast::atoms::{ElementType, Interpolation};
     /// assert!(Interpolation::Lagrange1.is_compatible_with(ElementType::TRI3));
-    /// // Hermite cubique n'est défini que sur le segment.
+    /// // Cubic Hermite is defined on the segment only.
     /// assert!(Interpolation::Hermite3.is_compatible_with(ElementType::SEG2));
     /// assert!(!Interpolation::Hermite3.is_compatible_with(ElementType::TRI3));
     /// ```
@@ -113,7 +113,7 @@ impl Interpolation {
     /// ```
     /// # use pyrucast::atoms::{ElementType, Interpolation};
     /// // « Aucune base de champ » : la formulation possède la sienne, sous
-    /// // forme close — une barre, un portique.
+    /// // closed form — a bar, a frame.
     /// assert!(Interpolation::ModelEmbedded.is_model_embedded());
     /// assert!(!Interpolation::Lagrange1.is_model_embedded());
     /// ```
@@ -130,10 +130,10 @@ impl Interpolation {
     ///
     /// ```
     /// # use pyrucast::atoms::{ElementType, Interpolation};
-    /// // Le nombre de nœuds pour les familles de Lagrange…
+    /// // The node count for the Lagrange families…
     /// assert_eq!(Interpolation::Lagrange1.shape_count(ElementType::QUA4), 4);
     /// assert_eq!(Interpolation::Lagrange2.shape_count(ElementType::QUA8), 8);
-    /// // …et le double pour Hermite, qui tabule aussi les pentes.
+    /// // …and twice that for Hermite, which also tabulates the slopes.
     /// assert_eq!(Interpolation::Hermite3.shape_count(ElementType::SEG2), 4);
     /// ```
     pub fn shape_count(self, element_type: ElementType) -> usize {
@@ -206,8 +206,8 @@ impl Interpolation {
     ///
     /// ```
     /// # use pyrucast::atoms::{ElementType, Interpolation};
-    /// // Au centre du triangle de référence, les trois N_i valent 1/3 —
-    /// // et somment à 1, comme partout.
+    /// // At the reference triangle's centre, the three N_i are 1/3 —
+    /// // and sum to 1, as everywhere.
     /// let n = Interpolation::Lagrange1.shape(ElementType::TRI3, &[1.0 / 3.0, 1.0 / 3.0])?;
     /// assert!(n.iter().all(|v| (v - 1.0 / 3.0).abs() < 1e-12));
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -243,10 +243,10 @@ impl Interpolation {
     ///
     /// ```
     /// # use pyrucast::atoms::{ElementType, Interpolation};
-    /// // Sur un TRI3 les dérivées sont constantes : ∂N/∂ξ = [-1, 1, 0].
+    /// // On a TRI3 the derivatives are constant: ∂N/∂ξ = [-1, 1, 0].
     /// let d = Interpolation::Lagrange1.dshape_dxi(ElementType::TRI3, &[0.0, 0.0])?;
     /// assert_eq!(d.len(), 3 * 2); // ∂N_i/∂ξ_k, à plat
-    /// // Elles somment au vecteur nul : la partition de l'unité, dérivée.
+    /// // They sum to the null vector: the partition of unity, differentiated.
     /// assert!((d[0] + d[2] + d[4]).abs() < 1e-12);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -274,11 +274,11 @@ impl Interpolation {
     ///
     /// ```
     /// # use pyrucast::atoms::{ElementType, Interpolation};
-    /// // Les dérivées **secondes** : ce qu'exige une équation d'ordre quatre,
-    /// // et que seules les familles C¹ tabulent.
+    /// // The **second** derivatives: what a fourth-order equation requires, and
+    /// // what only the C¹ families tabulate.
     /// let d2 = Interpolation::Hermite3.d2shape_dxi2(ElementType::SEG2, &[0.0])?;
     /// assert!(d2.iter().any(|v| v.abs() > 1e-12));
-    /// // Une base de Lagrange n'en a pas — et le dit plutôt que de rendre zéro.
+    /// // A Lagrange basis has none — and says so rather than return zero.
     /// assert!(Interpolation::Lagrange1.d2shape_dxi2(ElementType::SEG2, &[0.0]).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```

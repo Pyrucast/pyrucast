@@ -1,18 +1,18 @@
-"""Évolution comme loi matériau — module d'Young fonction de la température.
+"""Evolution as a material law — Young's modulus as a function of temperature.
 
 Idée
 ----
-Une évolution **scalaire** typée `E(T)` (module d'Young en fonction de la
-température) s'utilise comme une **fonction de transfert** : au lieu d'un
-scalaire, on lui passe un **champ de température** et elle rend un **champ de
-module d'Young**, nœud par nœud.
+A **scalar** evolution typed `E(T)` (Young's modulus as a function of
+temperature) is used as a **transfer function**: instead of a scalar, it is
+handed a **temperature field** and it returns a **Young's modulus field**, node
+by node.
 
 Deux ingrédients typés :
 
-- `abscissa_type="T"`  — choisit la composante lue dans le champ d'entrée ;
+- `abscissa_type="T"`  — picks the component read in the input field;
 - `ordinate_type="young"` — nomme la composante produite.
 
-La **correspondance de type** est vérifiée : si le champ d'entrée n'a pas de
+The **type match** is checked: if the input field has no
 composante `"T"`, l'appel échoue.
 
 Exécution
@@ -32,10 +32,10 @@ def main() -> None:
         ordinate_type="young",
     )
 
-    # Utilisation scalaire classique : E à 150 °C (interpolation linéaire).
+    # Classic scalar use: E at 150 °C (linear interpolation).
     print("E(150 °C) =", law.interpolate(150.0), "Pa")
 
-    # ── Un champ de température sur une ligne de 5 nœuds ──────────────────────
+    # ── A temperature field on a line of 5 nodes ─────────────────────────────
     c = pc.Coords(1)
     nodes = [c.add_node([float(i)]) for i in range(5)]
     mesh = pc.Mesh(c, "POI1")
@@ -45,7 +45,7 @@ def main() -> None:
     for i, n in enumerate(nodes):
         temperature[0].set_value(n, "T", 25.0 * i)  # 0, 25, 50, 75, 100 °C
 
-    # ── Champ → champ : la loi appliquée nœud par nœud ───────────────────────
+    # ── Field → field: the law applied node by node ──────────────────────────
     young = law.interpolate(temperature)
     print("composante produite :", young.components())  # ['young']
     for i, n in enumerate(nodes):

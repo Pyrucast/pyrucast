@@ -115,13 +115,13 @@ const CHABOCHE_D_C: usize = 11;
 /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
 /// #                         vars: &[] };
-/// // Une bissection plutôt qu'un Newton : le résidu est monotone, et un
+/// // A bisection rather than a Newton: the residual is monotone, and one
 /// // Newton non gardé dépasserait vers un multiplicateur négatif ou
-/// // partirait à l'infini sur une loi raide.
+/// // would run off to infinity on a stiff law.
 /// let dp = plasticity::viscous::solve_multiplier(
 ///     PlasticLaw::CreepNorton, 1.0, 1.0, |dp| Ok(0.5 - dp))?;
 /// assert!((dp - 0.25).abs() < 1e-9); // dp = dt·(0,5 − dp) ⇒ dp = 0,25
-/// // Un taux nul à l'origine : rien ne coule, le multiplicateur est nul.
+/// // A zero rate at the origin: nothing flows, the multiplier is zero.
 /// assert_eq!(plasticity::viscous::solve_multiplier(
 ///     PlasticLaw::CreepNorton, 1.0, 1.0, |_| Ok(0.0))?, 0.0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -269,10 +269,10 @@ fn scale_deviator(
 /// let trial = [100.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 /// let pas = plasticity::viscous::norton(&trial, &repos, &mat, 1.0)?;
 /// assert!(pas.p > 0.0);
-/// // Le taux est en (q/K)^n : dix fois plus longtemps, bien plus de fluage.
+/// // The rate goes as (q/K)^n: ten times longer, far more creep.
 /// let long = plasticity::viscous::norton(&trial, &repos, &mat, 10.0)?;
 /// assert!(long.p > pas.p);
-/// // Un pas de temps nul ne fait rien couler.
+/// // A zero time step makes nothing flow.
 /// assert_eq!(plasticity::viscous::norton(&trial, &repos, &mat, 0.0)?.p, 0.0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -320,14 +320,14 @@ pub fn norton(trial: &[f64; 6], prev: &PrevState, mat: &MatParams, dt: f64) -> R
 /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
 /// #                         vars: &[] };
-/// // Fluage primaire par écrouissage en déformation : le taux décroît à
-/// // mesure que `p` s'accumule, d'où un fluage qui **ralentit**.
+/// // Primary creep by strain hardening: the rate decreases as `p`
+/// // accumulates, hence a creep that **slows down**.
 /// let trial = [200.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 /// let premier = plasticity::viscous::lemaitre(&trial, &repos, &mat, 1.0)?;
 /// let plus_loin = PrevState { p: 0.01, ..repos };
 /// let ensuite = plasticity::viscous::lemaitre(&trial, &plus_loin, &mat, 1.0)?;
 /// assert!(ensuite.p - plus_loin.p < premier.p);
-/// // `p` est plancherisé : au tout premier pas le taux serait infini.
+/// // `p` is floored: at the very first step the rate would be infinite.
 /// assert!(premier.p.is_finite());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -388,9 +388,9 @@ pub fn lemaitre(
 /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
 /// #                         vars: &[0.0] };
-/// // Un étage primaire **saturant** plus un étage secondaire constant. La
-/// // déformation primaire est suivie comme variable interne propre, ce qui
-/// // est la seule façon d'intégrer juste sous charge variable.
+/// // A **saturating** primary stage plus a constant secondary one. The
+/// // primary strain is tracked as an internal variable of its own, which is
+/// // the only way to integrate correctly under a varying load.
 /// let trial = [200.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 /// let pas = plasticity::viscous::blackburn(&trial, &repos, &mat, 1.0)?;
 /// assert_eq!(pas.internal().len(), 1); // p_prim
@@ -491,7 +491,7 @@ pub fn blackburn(
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
 /// #                         vars: &[0.0; 8] };
 /// // Écrouissages cinématique (Armstrong-Frederick) et isotrope : l'état
-/// // porte une contrainte cinématique **tensorielle** et un traînage.
+/// // carries a **tensorial** kinematic stress and a drag.
 /// let trial = [400.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 /// let pas = plasticity::viscous::chaboche(&trial, &repos, &mat, 1.0, false)?;
 /// assert!(pas.p > 0.0);
@@ -567,7 +567,7 @@ pub fn chaboche(
         eps_p[i] += dp * dir[i];
     }
 
-    // Les variables internes s'assemblent sur la pile : la contrainte
+    // The internal variables are assembled on the stack: the
     // cinématique, l'écrouissage isotrope, puis l'endommagement s'il y en a.
     let mut vars = [0.0_f64; MAX_INTERNAL_VARS];
     let mut n = x_new.len();

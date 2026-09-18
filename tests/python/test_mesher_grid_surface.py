@@ -88,19 +88,19 @@ def _spin(pts, deg):
 
 
 def test_a_turned_shape_is_meshed_as_if_it_were_square_on():
-    """L'orientation de la grille est prise sur le contour.
+    """The grid's orientation is taken from the contour.
 
-    Rien dans le contrat ne l'attache aux axes du repère, donc une forme
-    tournée obtient exactement ce qu'une forme d'équerre obtient. Avant que
-    l'orientation ne soit détectée, le rectangle à 30° rendait 454 mailles
-    dont 20 triangles, avec un jacobien tombant à 0,138.
+    Nothing in the contract ties it to the frame's axes, so a rotated shape gets
+    exactly what a square-on shape gets. Before the orientation was detected, the
+    rectangle at 30° returned 454 cells of which 20 triangles, with a Jacobian
+    dropping to 0.138.
     """
     corners = [(0.0, 0.0), (0.6, 0.0), (0.6, 0.3), (0.0, 0.3)]
     for deg in (0.0, 5.0, 30.0, 45.0):
         coords = pc.Coords(2)
         contour = _on_grid(coords, _spin(corners, deg), 0.02)
         mesh = pc.mesh.grid_surface(contour, "QUA4", size=0.02)
-        assert _cells(mesh) == {"QUA4": 450}, f"à {deg}°"
+        assert _cells(mesh) == {"QUA4": 450}, f"at {deg}°"
 
 
 def test_a_circle_gets_a_core_and_a_frontal_band():
@@ -117,17 +117,17 @@ def test_a_circle_gets_a_core_and_a_frontal_band():
 
 
 def test_the_mesh_boundary_is_exactly_the_contour():
-    """Le contrat, dans sa formulation la plus forte.
+    """The contract, in its strongest formulation.
 
-    Un mailleur en grille pose ses propres nœuds : il ne tient ce contrat que
-    parce qu'il partage ceux du contour là où ils coïncident. On vérifie donc
-    les deux sens — tout segment du contour est une arête de bord du maillage,
-    et le maillage n'a pas d'autre arête de bord. Aucun nœud ajouté sur le
-    bord, aucun perdu, aucun trou à l'intérieur.
+    A grid mesher lays its own nodes: it holds this contract only because it
+    shares the contour's where they coincide. Both directions are therefore
+    checked — every segment of the contour is a border edge of the mesh, and the
+    mesh has no other border edge. No node added on the border, none lost, no hole
+    inside.
     """
     coords = pc.Coords(2)
-    # Un L, que la grille rejoint exactement, et un trou circulaire, qu'elle
-    # ne peut pas rejoindre et qui revient au front.
+    # An L, which the grid meets exactly, and a circular hole, which it cannot
+    # meet and which falls back to the front.
     outer = _on_grid(
         coords,
         [(0.0, 0.0), (3.0, 0.0), (3.0, 0.6), (1.5, 0.6), (1.5, 1.2), (0.0, 1.2)],

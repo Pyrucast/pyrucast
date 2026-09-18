@@ -1,10 +1,10 @@
-//! Source des exemples Rust de `book/src/memory-model.md` et
+//! Source of the Rust examples of `book/src/memory-model.md` and
 //! `book/src/developper/interrompre-une-fonction.md`.
 //!
-//! Les pages tirent ces fonctions par `{{#include …:ancre}}` et `cargo test`
-//! les exécute. L'ancre couvre la **fonction entière**, signature comprise :
-//! en Rust tout code vit dans un `fn`, et mdbook n'enlève pas l'indentation —
-//! montrer la fonction est donc plus honnête que montrer un corps décalé.
+//! The pages pull these functions through `{{#include …:anchor}}` and
+//! `cargo test` runs them. The anchor covers the **whole function**, signature
+//! included: in Rust all code lives in a `fn`, and mdbook does not strip the
+//! indentation — showing the function is therefore more honest than showing a
 //!
 //! Voir `book/src/developper/documentation-et-tests.md`.
 
@@ -16,7 +16,7 @@ use pyrucast::ops::mesh::triangulate_surface_cancellable;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-/// Deux tickets sur le même objet ; l'objet meurt avec le dernier.
+/// Two tickets on the same object; the object dies with the last one.
 // ANCHOR: partage
 #[test]
 fn un_handle_est_un_ticket() {
@@ -28,7 +28,7 @@ fn un_handle_est_un_ticket() {
 }
 // ANCHOR_END: partage
 
-/// Le verrou porte sur *cet* objet seul, et dure le temps du guard.
+/// The lock covers *this* object alone, and lasts as long as the guard.
 // ANCHOR: guards
 #[test]
 fn un_guard_par_objet() {
@@ -42,7 +42,7 @@ fn un_guard_par_objet() {
 }
 // ANCHOR_END: guards
 
-/// Un jeton d'annulation partagé, armé par qui l'on veut.
+/// A shared cancellation token, armed by whoever you like.
 // ANCHOR: annulation
 #[test]
 fn un_jeton_partage_interrompt_le_mailleur() {
@@ -59,19 +59,19 @@ fn un_jeton_partage_interrompt_le_mailleur() {
     let contour = Mesh::from_submesh(sm);
 
     let stop = Arc::new(AtomicBool::new(false));
-    // Un handler Ctrl+C (crate `ctrlc`, à ajouter à son propre Cargo.toml),
-    // un thread de supervision, un timeout… arment le même jeton :
+    // A Ctrl+C handler (the `ctrlc` crate, to add to your own Cargo.toml), a
+    // supervising thread, a timeout… all arm the same token:
     //     let s = stop.clone();
     //     ctrlc::set_handler(move || s.store(true, Ordering::Relaxed)).ok();
 
     let mesh = triangulate_surface_cancellable(&contour, ElementType::TRI3, Some(0.5), &*stop);
     assert!(mesh.is_ok()); // rien n'a armé le jeton : le maillage aboutit
 
-    // Jeton armé d'avance : le mailleur s'arrête au premier point de contrôle.
+    // Token armed in advance: the mesher stops at the first checkpoint.
     stop.store(true, Ordering::Relaxed);
     let interrompu =
         triangulate_surface_cancellable(&contour, ElementType::TRI3, Some(0.5), &*stop);
     assert!(interrompu.is_err());
-    // `Deadline::after(Duration::from_secs(10))` marcherait tout aussi bien.
+    // `Deadline::after(Duration::from_secs(10))` would work just as well.
 }
 // ANCHOR_END: annulation

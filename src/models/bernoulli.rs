@@ -101,7 +101,7 @@ fn behavior_of(model: BeamModel) -> &'static [&'static str] {
 /// # let zone = fes.get(0).unwrap();
 /// # use pyrucast::models::bernoulli::Bernoulli;
 /// // La poutre d'Euler-Bernoulli : flèche interpolée en Hermite cubique,
-/// // d'où deux fonctions de forme par nœud.
+/// // hence two shape functions per node.
 /// let b = Bernoulli::new(zone.clone())?;
 /// assert!(b.material_components().contains(&"E".to_string()));
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -136,7 +136,7 @@ impl Bernoulli {
     /// # let zone = fes.get(0).unwrap();
     /// # use pyrucast::models::bernoulli::Bernoulli;
     /// // La poutre d'Euler-Bernoulli : flèche interpolée en Hermite cubique,
-    /// // d'où deux fonctions de forme par nœud.
+    /// // hence two shape functions per node.
     /// let b = Bernoulli::new(zone.clone())?;
     /// assert!(b.material_components().contains(&"E".to_string()));
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -184,8 +184,8 @@ impl Bernoulli {
     /// The cell's length and its unit direction, from the node coordinates.
     fn axis(&self, geom: &CellGeom) -> Result<(f64, [f64; 3])> {
         let d = geom.space_dim;
-        // Deux emprunts immuables coexistent : rien à recopier, et la direction
-        // tient dans trois nombres.
+        // Two immutable borrows coexist: nothing to copy, and the direction fits in
+        // three numbers.
         let (a, b) = (geom.node_coord(0), geom.node_coord(1));
         let mut delta = [0.0_f64; 3];
         for i in 0..d {
@@ -331,10 +331,10 @@ impl Domain for Bernoulli {
         let geom = &geoms[0];
         let row = material.row(geom.cell, 0);
         let m = |k: usize| row[lay.material[k] as usize];
-        // `rho` ferme la liste des facultatives ; sans elle, pas de masse.
+        // `rho` closes the list of optional components; without it, no mass.
         let rho = optional(row, lay, lay.optional_material.len() - 1, "rho")?;
-        // Une poutre de Bernoulli ne déclare **ni** `G` **ni** `A_s` : cette
-        // absence *est* l'énoncé qu'il n'y a pas de souplesse au cisaillement.
+        // A Bernoulli beam declares **neither** `G` **nor** `A_s`: that absence *is*
+        // the statement that there is no shear compliance.
         match self.model {
             // [E, I] + facultatives [A, rho]
             BeamModel::Planar1d => {
@@ -400,8 +400,8 @@ impl Domain for Bernoulli {
     ) -> Result<()> {
         let geom = &geoms[0];
         let (l, dir) = self.axis(geom)?;
-        // Le contrat de chaque configuration (`material_of`), lu par les indices
-        // que la zone a résolus une fois.
+        // Each configuration's contract (`material_of`), read through the indices the
+        // zone resolved once.
         let row = material.row(geom.cell, 0);
         let m = |k: usize| row[lay.material[k] as usize];
         let e = m(0);
@@ -656,7 +656,7 @@ fn congruent<const N: usize>(
 ) {
     // `local · T` first, then `Tᵀ · (…)`: two matrix products rather than a
     // triple loop, and the intermediate is what a reader can check by eye.
-    // Il vit sur la pile : une poutre en assemblait un par maille.
+    // It lives on the stack: a beam used to assemble one per cell.
     let mut lt = [[0.0_f64; N]; N];
     for i in 0..side {
         for j in 0..side {

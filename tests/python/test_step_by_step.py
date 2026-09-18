@@ -1,15 +1,15 @@
 """Tests de la couche Python haut niveau ``step_by_step`` (thermo-mécanique).
 
-``step_by_step`` découpe le modèle par physique, résout à chaque pas la thermique
+``step_by_step`` splits the model per physics, solves at each step the thermics
 (stationnaire) puis la mécanique non linéaire (Newton modifié + Anderson), le
 couplage étant faible (température → déformation thermique).
 
 Cas de validation : plaque plane chauffée uniformément et libre de se dilater
 (appuis simples). Solution analytique fermée :
 
-* thermique — température imposée sur les bords gauche/droit à ``T_HOT`` ⇒ champ
-  **uniforme** ``T = T_HOT`` (pas de source, conduction) ;
-* mécanique — dilatation libre ``u = α·ΔT·(x, y)`` avec ``ΔT = T_HOT − T_REF`` et
+* thermics — imposed temperature on the left/right edges at ``T_HOT`` ⇒ a
+  **uniform** field ``T = T_HOT`` (no source, conduction);
+* mechanics — free expansion ``u = α·ΔT·(x, y)`` with ``ΔT = T_HOT − T_REF`` and
   contrainte quasi nulle.
 """
 
@@ -28,7 +28,7 @@ def _clamp(target, nodes, var):
 
 
 def _bar():
-    """Grille NX×NY de QUA4 sur [0,L]×[0,H]. Renvoie (coords, grid, mesh, fes, idx)."""
+    """An NX×NY grid of QUA4 on [0,L]×[0,H]. Returns (coords, grid, mesh, fes, idx)."""
     c = pc.Coords(2)
     hx, hy = L / NX, H / NY
 
@@ -56,8 +56,8 @@ def test_step_by_step_free_thermal_expansion():
     right = [grid[idx(NX, j)] for j in range(NY + 1)]
     bottom = [grid[idx(i, 0)] for i in range(NX + 1)]
 
-    # Thermique : chaque nœud gauche+droit épinglé à T_HOT (un multiplicateur par
-    # nœud via `translate` ⇒ température uniforme, pas seulement en moyenne).
+    # Thermics: every left+right node pinned at T_HOT (one multiplier per node
+    # through `translate` ⇒ a uniform temperature, not merely on average).
     th_nodes = left + right
     th_imposed = pc.mesh.poi1_from_nodes(th_nodes)
     th_mult = pc.mesh.translate(th_imposed, [0.0, 0.0])
@@ -65,7 +65,7 @@ def test_step_by_step_free_thermal_expansion():
     thermal_dir = pc.model.dirichlet(thermal, "T", th_imposed, th_mult)
 
     # Modèle complet : conduction + élasticité (contraintes planes) + Dirichlet.
-    # Mécanique : appuis simples (u_x=0 à gauche, u_y=0 en bas, valeur 0 ⇒ pas de
+    # Mechanics: simple supports (u_x=0 on the left, u_y=0 at the bottom, value 0
     # charge) ⇒ dilatation libre.
     mecanique = pc.model.elasticity(fes, "plane_stress")
     model = (
@@ -80,12 +80,12 @@ def test_step_by_step_free_thermal_expansion():
         model, [("k", K_COND), ("E", E), ("nu", NU), ("alpha", ALPHA)]
     )
 
-    # Charge unionée : imposed_T = T_HOT sur tous les multiplicateurs thermiques
+    # Unioned load: imposed_T = T_HOT on every thermal multiplier
     # (aucune charge mécanique — dilatation libre).
     loads = pc.NodeField(th_mult, ["imposed_T"])
     loads[0].add_to_component("imposed_T", T_HOT)
 
-    # fespace et maillage sont déduits du modèle : seul `model` est requis.
+    # fespace and mesh are deduced from the model: only `model` is required.
     data = {
         "times": [0.0, 1.0],
         "model": model,
@@ -96,7 +96,7 @@ def test_step_by_step_free_thermal_expansion():
 
     out = pc.thermomechanics.step_by_step(data)
 
-    # Le même dictionnaire est renvoyé, complété.
+    # The same dictionary is returned, filled in.
     assert out is data
     results = data["results"]
     assert len(results) == 2
@@ -120,9 +120,9 @@ def test_step_by_step_free_thermal_expansion():
             assert abs(displacement.value(node, "u_x") - ALPHA * dT * x) < 1e-7
             assert abs(displacement.value(node, "u_y") - ALPHA * dT * y) < 1e-7
 
-    # Contrainte quasi nulle (dilatation libre). Les matériaux gardent leurs deux
-    # zones (thermique + mécanique) : chaque opérateur résout la sienne par
-    # composante, sans consolidation.
+    # Near-zero stress (free expansion). The materials keep their two zones
+    # (thermal + mechanical): every operator resolves its own by component,
+    # without consolidation.
     sigma = pc.element_field.integrate_behavior(
         model.filter("mechanical"),
         pc.element_field.deformation(displacement, fes)
@@ -145,7 +145,7 @@ def test_step_by_step_free_thermal_expansion():
 
 
 def test_step_by_step_returns_history_per_time():
-    """La liste des résultats a un élément par instant, dans l'ordre."""
+    """The result list has one item per instant, in order."""
     c, grid, mesh, fes, idx = _bar()
     left = [grid[idx(0, j)] for j in range(NY + 1)]
     bottom = [grid[idx(i, 0)] for i in range(NX + 1)]
@@ -167,7 +167,7 @@ def test_step_by_step_returns_history_per_time():
         model, [("k", K_COND), ("E", E), ("nu", NU), ("alpha", ALPHA)]
     )
 
-    # Histoire de température montant de T_REF à T_HOT (Evolution à valeur champ).
+    # Temperature history rising from T_REF to T_HOT (a field-valued Evolution).
     cold = pc.NodeField(th_mult, ["imposed_T"])
     cold[0].add_to_component("imposed_T", T_REF)
     hot = pc.NodeField(th_mult, ["imposed_T"])
@@ -187,7 +187,7 @@ def test_step_by_step_returns_history_per_time():
     results = data["results"]
     assert [r["time"] for r in results] == times
 
-    # La flèche de dilatation croît avec la température imposée (monotone).
+    # The expansion's deflection grows with the imposed temperature (monotone).
     tip = grid[idx(NX, NY)]
     prev = -1.0
     for r in results:

@@ -1,11 +1,11 @@
-//! Source des exemples Rust de `book/src/visualization.md`.
+//! Source of the Rust examples of `book/src/visualization.md`.
 //!
-//! Tout le fichier est derrière `#![cfg(feature = "viz")]` : sans la feature,
-//! `pyrucast::viz` n'existe pas et le fichier se compile à vide. `check_rust`
-//! lance `cargo test --features viz`, qui l'exerce pour de bon.
+//! The whole file sits behind `#![cfg(feature = "viz")]`: without the feature,
+//! `pyrucast::viz` does not exist and the file compiles empty. `check_rust`
+//! runs `cargo test --features viz`, which exercises it for real.
 //!
-//! Les extraits écrivent des SVG sous des noms courts ; le module bascule dans
-//! un dossier jetable et **rend** le répertoire courant à la fin.
+//! The excerpts write SVGs under short names; the module switches into a
+//! throwaway folder and **gives the current directory back** at the end.
 //!
 //! Voir `book/src/developper/documentation-et-tests.md`.
 
@@ -21,7 +21,7 @@ use pyrucast::ops::mesh;
 use pyrucast::viz::{ColorScale, Colormap, FieldArg, MeshStyle, Revolve, View};
 use pyrucast::Result;
 
-/// Un dossier jetable, et le triangle 3-D dont tous les extraits se servent.
+/// A throwaway folder, and the 3-D triangle every excerpt uses.
 fn scene() -> Result<(std::path::PathBuf, Handle<Coords>, Mesh)> {
     let dossier = std::env::temp_dir().join(format!("pyrucast_viz_{}", std::process::id()));
     std::fs::create_dir_all(&dossier).unwrap();
@@ -71,8 +71,8 @@ fn chaque_zone_porte_sa_couleur() -> Result<()> {
     sm.set_face_color(RgbColor::new(220, 60, 60));
     assert_eq!(sm.face_color(), RgbColor::new(220, 60, 60));
 
-    // La même couleur pour **toutes** les zones d'un maillage, sans boucle :
-    // la méthode rend le maillage, donc elle s'enchaîne.
+    // The same colour for **every** zone of a mesh, without a loop: the method
+    // returns the mesh, so it chains.
     let bleu = RgbColor::new(60, 60, 220);
     assert_eq!(maillage.set_face_color(bleu).cell_count(), 1);
     assert!(maillage.iter().all(|z| z.read().face_color() == bleu));
@@ -86,8 +86,8 @@ fn tracer_un_champ_avec_son_echelle() -> Result<()> {
     let (dossier, _, mesh) = scene()?;
     let poi1_h = mesh::to_poi1(&mesh)?.get(0)?;
 
-    // Champ déplacement à 2 composantes "UX" / "UY" sur un POI1. `FieldArg`
-    // prend l'**agrégat** : une zone seule se remonte par `NodeField::from_sub`.
+    // A displacement field with 2 components "UX" / "UY" on a POI1. `FieldArg`
+    // takes the **aggregate**: a lone zone is lifted by `NodeField::from_sub`.
     let sub = SubNodeField::from_poi1(&poi1_h, vec!["UX".into(), "UY".into()])?;
     // ... remplissage ...
     let u = NodeField::from_sub(sub);
@@ -103,7 +103,7 @@ fn tracer_un_champ_avec_son_echelle() -> Result<()> {
         None, // titre
     )?;
 
-    // Composante "UY", colormap coolwarm, bornes fixées à [-1, 1], plat.
+    // Component "UY", coolwarm colormap, bounds fixed at [-1, 1], flat.
     let scale = ColorScale {
         cmap: Colormap::CoolWarm,
         vmin: Some(-1.0),
@@ -134,7 +134,7 @@ fn peau_opaque_ou_fil_de_fer() -> Result<()> {
         MeshStyle::Surface,
         None, // titre
     )?;
-    // Fil de fer : toutes les arêtes.
+    // Wireframe: every edge.
     mesh.plot_styled(
         View::iso(),
         Some(&dossier.join("fil.svg")),
@@ -145,7 +145,7 @@ fn peau_opaque_ou_fil_de_fer() -> Result<()> {
 }
 // ANCHOR_END: style
 
-/// Une section axisymétrique : la révolution n'a de sens que sur elle.
+/// An axisymmetric section: revolution only makes sense on one.
 fn section_axisymetrique() -> Result<(std::path::PathBuf, Mesh)> {
     let dossier = std::env::temp_dir().join(format!("pyrucast_rev_{}", std::process::id()));
     std::fs::create_dir_all(&dossier).unwrap();
@@ -162,7 +162,7 @@ fn section_axisymetrique() -> Result<(std::path::PathBuf, Mesh)> {
 // ANCHOR: revolution
 #[test]
 fn le_corps_de_revolution_se_demande_dans_la_vue() -> Result<()> {
-    // Le maillage doit être **axisymétrique** : c'est son repère qui donne
+    // The mesh must be **axisymmetric**: it is its frame that gives
     // l'axe autour duquel le balayage tourne.
     let (dossier, mesh) = section_axisymetrique()?;
 
@@ -172,7 +172,7 @@ fn le_corps_de_revolution_se_demande_dans_la_vue() -> Result<()> {
     };
     mesh.plot(vue, Some(&dossier.join("piece.svg")))?;
 
-    // Balayage partiel, ou finesse angulaire choisie à la main.
+    // Partial sweep, or angular fineness picked by hand.
     let _ = Revolve::new(270.0).unwrap(); // un secteur par 10°
     let _ = Revolve::with_sectors(360.0, 72).unwrap(); // silhouette plus lisse
     Ok(())

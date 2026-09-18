@@ -82,14 +82,14 @@ use crate::models::beam::{BeamB, BeamModel};
 /// # let mut mat = ElementField::new(&fes,
 /// #     vec!["E".into(), "A".into(), "I".into(), "G".into(), "A_s".into()])?;
 /// # for c in ["E", "A", "I", "G", "A_s"] { mat.get(0)?.write().set_uniform(c, 1.0)?; }
-/// // Les déformations **généralisées** d'une poutre : allongement,
-/// // courbure, distorsion — non un tenseur, la section étant réduite à
+/// // A beam's **generalized** strains: elongation, curvature, distortion —
+/// // not a tensor, the section being reduced to
 /// // trois nombres.
 /// u.get(0)?.write().set_value(n[1].id(), "u_x", 1.0)?;
 /// let d = element_field::beam_deformation(&u, &fes, &mat)?;
 /// assert_eq!(d.get(0)?.read().components(),
 ///            &["eps".to_string(), "kappa".to_string(), "gamma".to_string()]);
-/// // Un allongement de 1 sur une portée de 2 : ε = 0,5, et rien d'autre.
+/// // An elongation of 1 over a span of 2: ε = 0.5, and nothing else.
 /// assert!((d.get(0)?.read().value(0, 0, "eps")? - 0.5).abs() < 1e-12);
 /// assert!(d.get(0)?.read().value(0, 0, "kappa")?.abs() < 1e-12);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -125,8 +125,8 @@ fn subspace_beam_deformation(
     // One read guard on the subspace, held for every property we read off it.
     let s = fespace.read();
     let space_dim = s.space_dim();
-    // La configuration se lit sur la dimension, et avec elle les DDL lus et
-    // les déformations produites — l'opérateur n'a pas sa propre table.
+    // The configuration reads off the dimension, and with it the DOFs read and
+    // the strains produced — the operator has no table of its own.
     let model = BeamModel::from_space_dim(space_dim)
         .map_err(|e| PyrucastError::Message(format!("beam_deformation: {e}")))?;
     let (dofs, out_comps) = (model.primal(), model.strains());
@@ -162,9 +162,9 @@ fn subspace_beam_deformation(
         fespace.clone(),
         out_comps.iter().map(|s| s.to_string()).collect(),
     )?;
-    // Les constantes de section, situées **une fois pour la zone** : un plan de
-    // flexion en 1-D/2-D, deux en 3-D. Elles étaient cherchées par nom à chaque
-    // point de Gauss de chaque maille.
+    // The section constants, located **once for the zone**: one bending plane in
+    // 1-D/2-D, two in 3-D. They used to be looked up by name at every Gauss point
+    // of every cell.
     let slots: Vec<BendingSlots> = if space_dim == 3 {
         vec![
             BendingSlots::resolve(&mat, "I_z", "A_sy")?,
@@ -176,14 +176,14 @@ fn subspace_beam_deformation(
 
     let n_cells = conn.len() / n_nodes;
     let n_dof = 2 * model.dofs_per_node();
-    // Les deux tampons vivent hors des boucles : `b_into` réécrit tout le bloc
-    // qu'il occupe, et le vecteur des DDL tient dans douze nombres.
+    // Both buffers live outside the loops: `b_into` rewrites the whole block it
+    // occupies, and the DOF vector fits in twelve numbers.
     let mut b: BeamB = [[0.0; 12]; 6];
     let mut d = [0.0_f64; 12];
     for cell in 0..n_cells {
         let ids = &conn[cell * n_nodes..(cell + 1) * n_nodes];
-        // La ligne matériau de la maille : elle ne change pas d'un point de
-        // Gauss au suivant.
+        // The cell's material row: it does not change from one Gauss point to the
+        // next.
         let row = mat.row(cell, 0);
         // Nodal DOFs and coordinates of the two endpoints. `d` follows the
         // columns of `B`: node-major, variable-minor.

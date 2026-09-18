@@ -120,9 +120,9 @@ use std::fmt;
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// // Une zone matériau : les valeurs vivent aux **points de Gauss**, pas aux
-/// // nœuds — c'est ce qui permet à un champ d'être discontinu d'une maille
-/// // à l'autre sans rien moyenner.
+/// // A material zone: the values live at the **Gauss points**, not at the
+/// // nodes — that is what lets a field be discontinuous from one cell to the
+/// // next without averaging anything.
 /// let acier = SubElementField::from_uniform_per_component(
 ///     zone.clone(), vec!["E".into(), "nu".into()], &[210_000.0, 0.3])?;
 /// assert_eq!(acier.cell_count(), 1);
@@ -165,7 +165,7 @@ impl SubElementField {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// // Une zone matériau : un champ par point de Gauss, tout à zéro.
+    /// // A material zone: one field per Gauss point, all zero.
     /// let f = SubElementField::new(zone.clone(), vec!["E".into(), "nu".into()])?;
     /// assert_eq!(f.component_count(), 2);
     /// assert_eq!(f.get(0, 0, 0)?, 0.0);
@@ -208,7 +208,7 @@ impl SubElementField {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// // La forme courante d'un matériau homogène : une valeur par composante.
+    /// // The common form of a homogeneous material: one value per component.
     /// let acier = SubElementField::from_uniform_per_component(
     ///     zone.clone(), vec!["E".into(), "nu".into()], &[210_000.0, 0.3])?;
     /// assert_eq!(acier.value(0, 0, "E")?, 210_000.0);
@@ -323,7 +323,7 @@ impl SubElementField {
     /// let mut f = SubElementField::new(zone.clone(), vec!["k".into()])?;
     /// f.set(0, 0, 0, 1.5)?;
     /// assert_eq!(f.get(0, 0, 0)?, 1.5);
-    /// // Les trois index sont vérifiés : hors maille, hors Gauss, hors composante.
+    /// // All three indices are checked: cell, Gauss point, component.
     /// assert!(f.get(0, 0, 1).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -384,7 +384,7 @@ impl SubElementField {
     /// let f = SubElementField::from_uniform_per_component(
     ///     zone.clone(), vec!["s_xx".into(), "s_yy".into(), "s_xy".into()],
     ///     &[10.0, 20.0, 5.0])?;
-    /// // Le tenseur entier en un point, dans l'ordre des composantes.
+    /// // The whole tensor at one point, in the components' order.
     /// assert_eq!(f.point_values(0, 0)?, &[10.0, 20.0, 5.0]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -506,7 +506,7 @@ impl SubElementField {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// let mut f = SubElementField::new(zone.clone(), vec!["k".into()])?;
-    /// // Matériau constant par maille : tous les points de Gauss d'un coup.
+    /// // Material constant per cell: every Gauss point at once.
     /// f.set_cell_uniform(0, "k", 4.0)?;
     /// assert!((0..f.gauss_count()).all(|g| f.value(0, g, "k").unwrap() == 4.0));
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -643,8 +643,8 @@ impl crate::dump::Dump for SubElementField {
                 rows.push(row);
             }
         }
-        // Le support, que le `Display` ne nomme pas : sans lui le niveau
-        // « contenu » en dirait moins que le niveau « structure ».
+        // The support, which `Display` does not name: without it the "content" level
+        // would say less than the "structure" level.
         format!(
             "{self}\n  support: {}\n{}",
             self.support,
@@ -694,7 +694,7 @@ crate::impl_subfield_field_ops!(SubElementField);
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// // L'agrégat : une zone par sous-espace EF, chacune avec ses composantes.
+/// // The aggregate: one zone per FE subspace, each with its components.
 /// let mut f = ElementField::new(&fes, vec!["k".into()])?;
 /// f.get(0)?.write().set_uniform("k", 1.5)?;
 /// assert_eq!(f.get(0)?.read().value(0, 0, "k")?, 1.5);
@@ -749,7 +749,7 @@ impl ElementField {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// // Les mêmes composantes sur toutes les zones de l'espace EF.
+    /// // The same components on every zone of the FE space.
     /// let f = ElementField::new(&fes, vec!["E".into(), "nu".into()])?;
     /// assert_eq!(f.len(), fes.len());
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -888,7 +888,7 @@ impl ElementField {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// // Une liste de composantes **par zone** : c'est ce qui permet à un
+    /// // A list of components **per zone**: that is what lets a
     /// // modèle multi-physique de porter `k` ici et `E`, `nu` là.
     /// let f = ElementField::with(&fes, &[vec!["k".into()]])?;
     /// assert_eq!(f.get(0)?.read().components(), &["k".to_string()]);

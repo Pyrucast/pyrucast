@@ -531,7 +531,7 @@ impl Behavior for Fick {
 /// #     zone.clone(), vec!["D_H2".into()], &[2.0]).unwrap());
 /// # use pyrucast::models::fick;
 /// # use pyrucast::models::ElementLayout;
-/// // Le champ est rangé dans l'ordre du contrat : la table est l'identité.
+/// // The field is laid out in the contract's order: the table is the identity.
 /// let lay = ElementLayout { material: vec![0], optional_material: vec![], state: vec![] };
 /// // Le même laplacien que la conduction, avec la diffusivité de l'espèce.
 /// let bloc = assemble_block(

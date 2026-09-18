@@ -1,13 +1,13 @@
 """Cylindre épais sous pression interne — calcul axisymétrique (solution de Lamé).
 
-Un solide de **révolution** se maille dans son plan méridien `(r, z)` : des
-`Coords` axisymétriques (`x = r`, `y = z`) suffisent à faire porter le facteur
-`2πr` à **toutes** les intégrales — rigidité, masse, flux réparti, volumes. Le
-modèle `"axisymmetric"` y ajoute la seule chose qui relève de la mécanique : la
+A solid of **revolution** is meshed in its meridian plane `(r, z)`:
+axisymmetric `Coords` (`x = r`, `y = z`) are enough to make **every** integral
+carry the `2πr` factor — stiffness, mass, distributed flux, volumes. The
+`"axisymmetric"` model adds the only thing that belongs to the mechanics: the
 déformation orthoradiale `ε_θθ = u_r / r`.
 
 Problème : cylindre `a ≤ r ≤ b` sous pression interne `p`, en déformations
-planes (`u_z = 0` aux deux extrémités). Solution de Lamé :
+plane ends (`u_z = 0` at both ends). Lamé's solution:
 
     σ_rr = A − B/r²,  σ_θθ = A + B/r²,  u_r = (1+ν)/E · [(1−2ν)·A·r + B/r]
     A = p a²/(b²−a²),  B = p a² b²/(b²−a²)
@@ -23,7 +23,7 @@ NR, NZ = 40, 1  # mailles radiales / axiales
 
 
 def main():
-    # ── Maillage QUA4 du plan méridien ─────────────────────────────────────
+    # ── QUA4 mesh of the meridian plane ────────────────────────────────────
     # `Coords.axisymmetric()` : dim 2 implicite, x = r ≥ 0, y = z.
     c = pyrucast.Coords.axisymmetric()
 
@@ -49,7 +49,7 @@ def main():
     fes = pyrucast.FiniteElementSpace(mesh)
 
     # ── Modèle : élasticité axisymétrique + déformations planes ────────────
-    # u_z = 0 sur les deux faces z : c'est ce qui réalise l'hypothèse plane.
+    # u_z = 0 on both z faces: that is what realizes the plane assumption.
     ends = [grid[idx(i, j)] for i in range(NR + 1) for j in (0, NZ)]
     imposed = pyrucast.mesh.poi1_from_nodes(ends)
     model = pyrucast.model.elasticity(fes, "axisymmetric")
@@ -59,7 +59,7 @@ def main():
 
     # ── Chargement : pression interne sur r = a ────────────────────────────
     # La géométrie étant axisymétrique, `flux` intègre ∫ 2πr N p et donne
-    # directement l'effort total sur l'anneau — aucun facteur à la main.
+    # the total force on the ring directly — no factor by hand.
     inner = pyrucast.Mesh(c, "SEG2")
     for j in range(NZ):
         inner.unit().add_cell([grid[idx(0, j)], grid[idx(0, j + 1)]])
@@ -75,7 +75,7 @@ def main():
     k = pyrucast.matrix.stiffness(model, materials)
     solution = pyrucast.solver.solve(k, rhs)
 
-    # ── Comparaison à Lamé ─────────────────────────────────────────────────
+    # ── Compared with Lamé ─────────────────────────────────────────────────
     a2, b2 = A * A, B * B
     ca = P * a2 / (b2 - a2)
     cb = P * a2 * b2 / (b2 - a2)
@@ -91,9 +91,9 @@ def main():
         rel = abs(got - exact) / abs(exact)
         worst = max(worst, rel)
         print(f"{r:8.4f} {got:14.6e} {exact:14.6e} {rel:11.2%}")
-    print(f"\nÉcart relatif maximal sur le déplacement : {worst:.2%}")
+    print(f"\nLargest relative gap on the displacement: {worst:.2%}")
 
-    # Le volume de la pièce sort de la même géométrie, sans facteur ajouté.
+    # The part's volume comes out of the same geometry, with no added factor.
     ones = pyrucast.NodeField(mesh, ["one"])
     ones.add_to_component("one", 1.0)
     volume = pyrucast.measure.integral(ones, "one", fes)

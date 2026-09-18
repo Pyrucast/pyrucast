@@ -1,7 +1,7 @@
-//! Source des exemples Rust de `book/src/conventions.md` et `book/src/model.md`.
+//! Source of the Rust examples of `book/src/conventions.md` and `book/src/model.md`.
 //!
-//! Les pages tirent ces fonctions par `{{#include …:ancre}}` et `cargo test`
-//! les exécute. L'ancre couvre la **fonction entière**, signature comprise.
+//! The pages pull these functions through `{{#include …:anchor}}` and
+//! runs them. The anchor covers the **whole function**, signature included.
 //!
 //! Voir `book/src/developper/documentation-et-tests.md`.
 
@@ -23,7 +23,7 @@ fn une_erreur_se_lit_et_se_filtre() {
     let err = Coords::new(0).unwrap_err();
     assert!(err.to_string().contains("dim must be ≥ 1"));
 
-    // Pattern-matching sur les variantes.
+    // Pattern matching on the variants.
     match Coords::new(0) {
         Ok(_) => unreachable!(),
         Err(pyrucast::PyrucastError::Message(msg)) => println!("erreur : {msg}"),
@@ -63,7 +63,7 @@ fn un_seul_mecanisme_de_serialisation() {
 // ANCHOR: modele
 #[test]
 fn un_modele_se_declare_et_s_assemble() -> Result<()> {
-    // 1-D : maillage [0, 1] à un seul SEG2.
+    // 1-D: a [0, 1] mesh with a single SEG2.
     let coords = Handle::new(Coords::new(1)?);
     let a = Node::create_in(coords.clone(), &[0.0])?;
     let b = Node::create_in(coords.clone(), &[1.0])?;
@@ -71,20 +71,20 @@ fn un_modele_se_declare_et_s_assemble() -> Result<()> {
     mesh.add_cell(&[a.id(), b.id()])?;
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
 
-    // Modèle : conduction (le matériau est fourni à l'assemblage, pas ici)
-    // + Dirichlet à gauche. Constructeurs au niveau parent (balaient les
-    // sous-espaces de `fes`), composés par `union` — on ne construit jamais
-    // de `SubModel` à la main (cf. CONVENTIONS.md).
+    // Model: conduction (the material is supplied at assembly, not here) +
+    // Dirichlet on the left. Constructors at the parent level (they sweep
+    // `fes`'s subspaces), composed with `union` — a `SubModel` is never built by
+    // hand (see CONVENTIONS.md).
     let hc = model::heat_conduction(&fes)?;
-    // Maillage des nœuds imposés + support des multiplicateurs (barycenter
-    // colocalise des nœuds neufs). Le modèle ne crée aucun nœud lui-même.
+    // Mesh of the imposed nodes + support of the multipliers (barycenter
+    // co-locates fresh nodes). The model creates no node itself.
     let imposed = mesh::poi1_from_nodes(std::slice::from_ref(&a))?;
     let multiplier = mesh::barycenter(&imposed)?;
     let dir = model::dirichlet(&hc, "T", &imposed, &multiplier, RelationSense::Equality)?;
     let model = hc.union(&dir)?;
 
-    // Matériau k = 1, appliqué aux sous-modèles qui en ont besoin (Dirichlet
-    // est automatiquement ignoré), puis assemblage.
+    // Material k = 1, applied to the sub-models that need it (Dirichlet is
+    // skipped automatically), then assembly.
     let materials = element_field::material_field(&model, &[("k", 1.0)])?;
     let k = matrix::stiffness(&model, &materials)?;
     assert_eq!(k.n_rows()?, 3); // 2 nœuds physiques + 1 multiplicateur

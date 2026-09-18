@@ -89,9 +89,9 @@ use std::fmt;
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
 /// # use pyrucast::coords::CoordinateFrame;
-/// // Le repère appartient à la **géométrie**, non à une physique : c'est
-/// // lui qui change la mesure d'intégration dΩ, donc raideur, masse, flux
-/// // réparti, volumes et forces internes à la fois.
+/// // The frame belongs to the **geometry**, not to a physics: it is what
+/// // changes the integration measure dΩ, hence stiffness, mass, distributed
+/// // flux, volumes and internal forces all at once.
 /// assert_eq!(Coords::new(2)?.frame(), CoordinateFrame::Cartesian);
 /// let axi = Coords::axisymmetric()?;
 /// assert_eq!(axi.frame(), CoordinateFrame::Axisymmetric);
@@ -140,9 +140,9 @@ impl fmt::Display for CoordinateFrame {
 /// ```
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
-/// // Des positions à **identité stable** : un nœud garde son `NodeId` quoi
-/// // qu'il advienne des tableaux. S'y ajoutent plusieurs configurations,
-/// // une permutation pour le solveur, et un ramasse-miettes.
+/// // Positions with a **stable identity**: a node keeps its `NodeId` whatever
+/// // happens to the arrays. Several configurations are added to that, a
+/// // permutation for the solver, and a garbage collector.
 /// let c = Handle::new(Coords::new(2)?);
 /// let id = c.write().add_node(&[1.0, 2.0])?;
 /// assert_eq!(c.read().position(id)?, vec![1.0, 2.0]);
@@ -296,7 +296,7 @@ impl Coords {
     /// let id = c.add_node(&[0.0, 0.0]).unwrap();
     /// c.decref(id).unwrap();
     /// c.gc();
-    /// // Le nœud est mort mais la place reste réservée : capacité ≠ node_count.
+    /// // The node is dead but its slot stays reserved: capacity ≠ node_count.
     /// assert_eq!((c.node_count(), c.capacity()), (0, 1));
     /// ```
     pub fn capacity(&self) -> usize {
@@ -368,11 +368,11 @@ impl Coords {
     /// ```
     /// # use pyrucast::coords::Coords;
     /// let mut c = Coords::new(2).unwrap();
-    /// // Trois points d'un coup : les identifiants sortent contigus.
+    /// // Three points at once: the identifiers come out contiguous.
     /// let ids = c.add_nodes(&[0.0, 0.0, 1.0, 0.0, 0.0, 1.0]).unwrap();
     /// assert_eq!((ids.start, ids.end), (0, 3));
     /// assert_eq!(c.position(pyrucast::atoms::NodeId(2)).unwrap(), &[0.0, 1.0]);
-    /// // Un tampon qui ne tombe pas juste sur la dimension est refusé.
+    /// // A buffer that does not land squarely on the dimension is refused.
     /// assert!(c.add_nodes(&[1.0, 2.0, 3.0]).is_err());
     /// ```
     pub fn add_nodes(&mut self, flat: &[f64]) -> Result<std::ops::Range<u32>> {
@@ -455,7 +455,7 @@ impl Coords {
     /// let mut c = Coords::new(2)?;
     /// let a = c.add_node(&[0.0, 0.0])?;
     /// let b = c.add_node(&[1.0, 0.0])?;
-    /// // Une unité par occurrence : `a` compte double dans cette liste.
+    /// // One unit per occurrence: `a` counts twice in this list.
     /// c.incref_all(&[a, b, a])?;
     /// assert_eq!((c.refcount(a), c.refcount(b)), (3, 2));
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -575,7 +575,7 @@ impl Coords {
     /// let a = Node::create_in(coords.clone(), &[0.0, 1.0])?;
     /// let b = Node::create_in(coords.clone(), &[2.0, 3.0])?;
     /// coords.read().ensure_all_alive(&[a.id(), b.id()])?;
-    /// // Un nœud collecté est refusé — et il l'est **avant** la boucle.
+    /// // A collected node is refused — and it is, **before** the loop.
     /// drop(a);
     /// coords.write().gc();
     /// assert!(coords.read().ensure_all_alive(&[b.id()]).is_ok());
@@ -753,9 +753,9 @@ impl Coords {
     /// # use pyrucast::coords::Coords;
     /// let mut c = Coords::new(2).unwrap();
     /// for _ in 0..3 { c.add_node(&[0.0, 0.0]).unwrap(); }
-    /// // permutation[0] = 2 : le nœud d'id 0 est en position solveur 2.
+    /// // permutation[0] = 2: the node with id 0 is at solver position 2.
     /// c.set_permutation(vec![2, 0, 1]).unwrap();
-    /// // Ce doit être une vraie permutation des positions.
+    /// // It must be a true permutation of the positions.
     /// assert!(c.set_permutation(vec![0, 0, 1]).is_err());
     /// ```
     pub fn set_permutation(&mut self, perm: Vec<u32>) -> Result<()> {

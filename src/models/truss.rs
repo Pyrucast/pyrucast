@@ -235,7 +235,7 @@ impl Domain for Truss {
         &["rho"]
     }
 
-    /// La raideur géométrique de la barre lit son effort normal.
+    /// The bar's geometric stiffness reads its axial force.
     fn element_state_reads(&self, kind: MatrixKind) -> Vec<String> {
         match kind {
             MatrixKind::Geometric => vec!["n".to_string()],
@@ -302,7 +302,7 @@ impl Behavior for Truss {
         out: &mut [f64],
     ) -> Result<()> {
         let d = self.space_dim;
-        // Sur la pile : ce noyau tourne à chaque point de Gauss.
+        // On the stack: this kernel runs at every Gauss point.
         let mut c = [0.0_f64; 3];
         cell_cosine(geom, d, &mut c)?;
         // (i,j) → flat strain-component index (symmetric, i ≤ j), the order
@@ -336,9 +336,9 @@ fn cell_cosine(geom: &CellGeom, space_dim: usize, out: &mut [f64; 3]) -> Result<
         out[a] = xb[a] - xa[a];
     }
     let len = out[..space_dim].iter().map(|v| v * v).sum::<f64>().sqrt();
-    // Le `Result` gardait le vide : on divisait par `len` sans jamais le
-    // tester, et une maille dégénérée rendait `Ok(NaN)` — un résultat faux
-    // qui traversait tout l'assemblage. Maintenant il garde quelque chose.
+    // The `Result` guarded emptiness: we divided by `len` without ever testing
+    // it, and a degenerate cell returned `Ok(NaN)` — a wrong result that crossed
+    // the whole assembly. Now it guards something.
     if len <= f64::EPSILON {
         return Err(crate::error::PyrucastError::Message(format!(
             "Truss: cell {} has zero length",
@@ -390,7 +390,7 @@ fn cell_cosine(geom: &CellGeom, space_dim: usize, out: &mut [f64; 3]) -> Result<
 ///     |geoms, m, s, ke| truss::element_stiffness(&geoms[0], m, &lay, ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
-/// // Une barre libre est singulière : la translation d'ensemble ne coûte rien.
+/// // A free bar is singular: the overall translation costs nothing.
 /// assert!(total.abs() < 1e-9);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -402,7 +402,7 @@ pub fn element_stiffness(
 ) -> Result<()> {
     let sd = geom.space_dim;
     let side = 2 * sd;
-    // Les cosinus directeurs **et** la longueur, d'un seul parcours.
+    // The direction cosines **and** the length, in a single pass.
     let mut c = [0.0_f64; 3];
     let len = cell_cosine(geom, sd, &mut c)?;
     // `E` then `A`, in the order `MATERIAL_COMPONENTS` declares.
@@ -452,7 +452,7 @@ pub fn element_stiffness(
 /// # use pyrucast::models::{truss, ElementLayout};
 /// # use pyrucast::containers::field::ABSENT_COMPONENT;
 /// // La masse lit `A` (seconde composante requise) et `rho` (la seule
-/// // facultative) ; `E` n'entre pas, et n'est pas dans ce champ-ci.
+/// // optional); `E` does not enter, and is not in this field.
 /// let lay = ElementLayout {
 ///     material: vec![ABSENT_COMPONENT, 1],
 ///     optional_material: vec![0],
@@ -465,7 +465,7 @@ pub fn element_stiffness(
 ///     |geoms, m, s, ke| truss::element_mass(&geoms[0], m, &lay, ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
-/// // La masse cohérente somme à ρ·A·L par direction : ici deux fois 0,06.
+/// // The consistent mass sums to ρ·A·L per direction: here twice 0.06.
 /// assert!((total - 2.0 * 3.0 * 0.01 * 2.0).abs() < 1e-9);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -531,7 +531,7 @@ pub fn element_mass(
 /// #     zone.clone(), vec!["n".into()], &[100.0]).unwrap());
 /// # let ddl = || (vec!["f_x".to_string(), "f_y".to_string()], vec!["u_x".to_string(), "u_y".to_string()]);
 /// # use pyrucast::models::{truss, ElementLayout};
-/// // La raideur géométrique ne lit que l'effort normal `n`.
+/// // The geometric stiffness reads the axial force `n` only.
 /// let lay = ElementLayout {
 ///     material: vec![], optional_material: vec![], state: vec![0],
 /// };
@@ -542,8 +542,8 @@ pub fn element_mass(
 ///     |geoms, m, s, ke| truss::element_geometric(&geoms[0], s.unwrap(), &lay, ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
-/// // La raideur **géométrique** vient de l'effort normal, non du matériau.
-/// // Elle est singulière elle aussi.
+/// // The **geometric** stiffness comes from the axial force, not the material.
+/// // It is singular as well.
 /// assert!(total.abs() < 1e-9);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```

@@ -36,9 +36,9 @@ use crate::handle::Handle;
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// let meca = model::elasticity(&fes, Kinematics::PlaneStress)?;
-/// // Les composantes **requises** doivent toutes être là ; les
-/// // **facultatives** — `alpha`, la dilatation — ne sont gardées que si on
-/// // les donne, et à la suite. Le reste est écarté.
+/// // The **required** components must all be there; the **optional** ones —
+/// // `alpha`, the expansion — are kept only if given, and after them. The
+/// // rest is discarded.
 /// let m = element_field::sub_material_field(
 ///     &meca.get(0)?.read(),
 ///     &[("E", 210e3), ("nu", 0.3), ("alpha", 1.2e-5), ("inconnu", 1.0)])?;

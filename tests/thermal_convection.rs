@@ -38,7 +38,7 @@ use pyrucast::Result;
 
 #[test]
 fn thermal_convection_recovers_analytical_solution() -> Result<()> {
-    // ── Données du problème ────────────────────────────────────────────────
+    // ── Problem data ───────────────────────────────────────────────────────
     const K: f64 = 2.0; // conductivité
     const Q: f64 = 10.0; // densité de flux injectée sur le bord gauche
     const H: f64 = 5.0; // coefficient d'échange (film) sur le bord droit
@@ -46,7 +46,7 @@ fn thermal_convection_recovers_analytical_solution() -> Result<()> {
     const N: usize = 4; // N×N éléments QUA4
     let step = 1.0 / N as f64;
 
-    // ── Maillage : grille structurée (N+1)×(N+1) de QUA4 sur [0,1]² ─────────
+    // ── Mesh: a structured (N+1)×(N+1) grid of QUA4 on [0,1]² ──────────────
     let coords = Handle::new(Coords::new(2)?);
     let idx = |i: usize, j: usize| j * (N + 1) + i; // nœud colonne i, ligne j
     let mut grid: Vec<Node> = Vec::with_capacity((N + 1) * (N + 1));
@@ -73,7 +73,7 @@ fn thermal_convection_recovers_analytical_solution() -> Result<()> {
 
     // ── Modèle : conduction (volume) + convection (bord droit x = 1) ───────
     // Le bord droit est un maillage SEG2 bâti sur les nœuds de la grille ;
-    // il s'intègre comme une ligne (matrice de film h ∫ N_i N_j dΓ).
+    // it integrates as a line (film matrix h ∫ N_i N_j dΓ).
     let mut right_edge = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
     for j in 0..N {
         right_edge.add_cell(&[grid[idx(N, j)].id(), grid[idx(N, j + 1)].id()])?;
@@ -85,10 +85,10 @@ fn thermal_convection_recovers_analytical_solution() -> Result<()> {
         model::boundary_transfer(&right_fes, &conduction, vec![("T".into(), "q".into())])?;
     let model = conduction.union(&convection)?;
 
-    // Matériau : k pour la conduction, h et l'ambiant pour la convection (chaque
-    // sous-modèle prélève la composante qu'il requiert dans la liste fournie).
+    // Material: k for the conduction, h and the ambient for the convection (each
+    // sub-model takes the component it requires from the supplied list).
     // ── Chargement ─────────────────────────────────────────────────────────
-    // Source : flux uniforme (densité Q) sur le bord gauche, en charges nodales
+    // Source: uniform flux (density Q) on the left edge, as nodal loads
     // cohérentes via `flux`.
     let mut left_edge = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
     for j in 0..N {
@@ -102,16 +102,16 @@ fn thermal_convection_recovers_analytical_solution() -> Result<()> {
         &[("k", K), ("h_T", H), ("a_ext_T", T_EXT), ("phi_q", Q)],
     )?;
 
-    // Les deux termes donnés — la source du bord gauche et la part externe
-    // h·T_ext de la convection — appartiennent tous deux au modèle, qui les
-    // rend ensemble. Plus rien à unioner à la main, donc plus rien à oublier.
+    // Both given terms — the left edge's source and the convection's external
+    // part h·T_ext — belong to the model, which returns them together. Nothing
+    // left to union by hand, hence nothing left to forget.
     let rhs = pyrucast::ops::node_field::external_forces(&model, &materials)?;
 
-    // ── Assemblage + résolution (K rendue définie par le terme de film) ────
+    // ── Assembly + solve (K made definite by the film term) ────────────────
     let stiffness = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let solution = solve(&stiffness, &rhs)?;
 
-    // ── Comparaison à l'analytique T(x) = T_ext + Q/h + (Q/k)(1 − x), ∀ y ──
+    // ── Compared with the analytical T(x) = T_ext + Q/h + (Q/k)(1 − x), ∀ y ─
     let tol = 1e-9;
     for j in 0..=N {
         for i in 0..=N {
@@ -126,8 +126,8 @@ fn thermal_convection_recovers_analytical_solution() -> Result<()> {
         }
     }
 
-    // Bilan d'énergie : tout le flux injecté ressort par convection, donc la
-    // température du bord droit vaut exactement T_ext + Q/h.
+    // Energy balance: all the injected flux leaves by convection, so the right
+    // edge's temperature is exactly T_ext + Q/h.
     let t_right = solution.value(grid[idx(N, 0)].id(), "T")?;
     assert!(
         (t_right - (T_EXT + Q / H)).abs() < tol,
