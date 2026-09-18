@@ -44,15 +44,13 @@ DOC_PROPRE = {
         "documented for that receiver alone, not of the free function returning `Any`"
     ),
     "mask": "same — the product is determined by the receiver's flavour",
-    "merge_nodes": (
-        "a `Py<Self>` receiver rather than `PyRef`: with `in_place` it returns the "
-        "object itself, not a borrowed view — written by hand"
-    ),
 }
 
-# The "See …" pointers the stub is still allowed to carry: those of the
-# hand-written methods, and nothing else. This count can only shrink.
-DOC_PROPRE_DANS_LE_STUB = ["merge_nodes"]
+# The "See …" pointers the stub is still allowed to carry: **none**. A pointer is
+# dead text in the `.pyi` the IDEs read, so a method written by hand — even
+# `merge_nodes`, whose `Py<Self>` receiver keeps it out of `#[py_op]` — copies
+# its free function's documentation instead of pointing at it.
+DOC_PROPRE_DANS_LE_STUB = []
 
 # The binding's sources, for checking the pointers' targets.
 OPS_RS = pathlib.Path(__file__).resolve().parents[2] / "src" / "py" / "ops"

@@ -1888,7 +1888,34 @@ class Mesh:
         """
     def merge_nodes(self, tol: builtins.float, in_place: builtins.bool = False) -> Mesh:
         r"""
-        Voir `pyrucast.mesh.merge_nodes`.
+        Weld together nodes closer than `tol`, redirecting the connectivity to one
+        representative per cluster.
+        
+        Returns a new mesh mirroring `mesh` (same submeshes, types and colours)
+        with welded-away nodes redirected to their cluster representative — the
+        smallest-id node of the cluster, which keeps its own coordinates (no
+        averaging). Cells that collapse onto a repeated node (a degenerate segment,
+        triangle, …) are dropped. `tol` must be ≥ 0; `tol = 0` welds only exactly
+        coincident nodes. `mesh` itself is left untouched.
+        
+        A cluster is a connected component of the « closer than `tol` » relation:
+        the weld propagates from node to node, so on a chain a—b—c where a and c
+        are further apart than `tol`, all three still end up as one — which is why
+        a `tol` of the order of the element size collapses a whole region rather
+        than a seam.
+        
+        With `in_place=True` the connectivity of `mesh`'s **own** submeshes is
+        rewritten instead — the assumed side effect — and the very same mesh object
+        is returned. Since the union `mesh_a | mesh_b` shares its submeshes rather
+        than copying them, welding that union in place welds `mesh_a` and `mesh_b`
+        themselves: afterwards they really do share their interface nodes. The mesh
+        structure is preserved (same submeshes, same cells in the same order), so a
+        cell that *would* collapse is an error here instead of being dropped, as is
+        a submesh already sealed by a finite-element space, field or matrix. Both
+        are checked before anything is written: a rejected call changes nothing.
+        
+        Every call prints a one-line tally on stdout once the weld is done — nodes
+        welded, cells dropped, tolerance used.
         """
     def positions(self, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> NodeField:
         r"""
