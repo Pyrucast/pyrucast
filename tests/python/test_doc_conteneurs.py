@@ -1,16 +1,16 @@
-"""Source des exemples Python des pages de conteneurs du book.
+"""Source of the Python examples on the book's container pages.
 
 Couvre `field.md`, `mesh.md`, `node.md`, `node-field.md`, `element-field.md`,
-`aggregate.md`, `introduction.md`, `model.md` et `matrix.md`. Chaque bloc de ces
-pages vient d'ici par `{{#include …:ancre}}`, et pytest l'exécute.
+`aggregate.md`, `introduction.md`, `model.md` and `matrix.md`. Every block of
+those pages comes from here through `{{#include …:anchor}}`, and pytest runs it.
 
 Voir `book/src/developper/documentation-et-tests.md`.
 
-**Le code vit au niveau module, pas dans des fonctions de test** : mdbook
-n'enlève pas l'indentation d'un extrait inclus, si bien qu'un bloc ancré dans
-une fonction s'afficherait décalé de quatre espaces. pytest exécute donc ce
-fichier à la **collecte** ; un exemple qui casse est une erreur de collecte, au
-traceback complet et au code de retour non nul.
+**The code lives at module level, not inside test functions**: mdbook does not
+strip the indentation of an included excerpt, so a block anchored inside a
+function would show up shifted by four spaces. pytest therefore runs this file
+at **collection** time; an example that breaks is a collection error, with a
+full traceback and a non-zero exit code.
 """
 
 import pyrucast
@@ -52,7 +52,7 @@ u = _champ_nodal(n, ["u_x"], 7.0)
 # ANCHOR: arithmetique
 scaled = mat * 1.1  # nouveau champ, toutes composantes × 1.1
 shifted = u - 5.0  # nouveau champ
-energy = u**2.0  # puissance élément par élément (exposant fractionnaire OK)
+energy = u**2.0  # element-wise power (fractional exponent is fine)
 # ANCHOR_END: arithmetique
 assert energy[0][n[0], "u_x"] == 49.0
 
@@ -60,7 +60,7 @@ assert energy[0][n[0], "u_x"] == 49.0
 
 mat = _champ_materiau(["E", "nu"], 100.0)
 # ANCHOR: mul_to_component
-mat.mul_to_component("E", 0.95)  # ne met à l'échelle que "E"
+mat.mul_to_component("E", 0.95)  # scales "E" only
 # ANCHOR_END: mul_to_component
 assert mat.unit().value(0, 0, "E") == 95.0
 assert mat.unit().value(0, 0, "nu") == 100.0
@@ -76,8 +76,8 @@ sy = _champ_nodal(n, ["v"], 4.0, support)
 # ANCHOR: maths_champ
 import pyrucast as pc
 
-champ2 = pc.field.cos(champ1)  # cosinus de chaque valeur
-e = pc.field.exp(pc.field.abs(u) * -1.0)  # elles se composent librement
+champ2 = pc.field.cos(champ1)  # cosine of every value
+e = pc.field.exp(pc.field.abs(u) * -1.0)  # they compose freely
 norme = pc.field.sqrt(sx**2.0 + sy**2.0)
 # ANCHOR_END: maths_champ
 assert abs(norme[0][n[0], "v"] - 5.0) < 1e-12
@@ -95,8 +95,8 @@ a = c.add_node([0.0, 0.0])
 b = c.add_node([1.0, 0.0])
 n3 = c.add_node([0.5, 1.0])
 
-# Mesh(coords, type) crée un maillage à un seul sous-maillage ; unit() en
-# donne la vue, add_cell ajoute une cellule.
+# Mesh(coords, type) creates a mesh with a single submesh; unit() gives the
+# view of it, add_cell adds a cell.
 mesh = pyrucast.Mesh(c, "TRI3")
 mesh.unit().add_cell([a, b, n3])
 print(mesh)  # Mesh: 1 submesh(es), 1 cell(s) total
@@ -141,20 +141,20 @@ tri.unit().add_cell([ns[0], ns[1], ns[2]])
 qua = pyrucast.Mesh(c, "QUA4")
 qua.unit().add_cell([ns[0], ns[1], ns[2], ns[3]])
 
-# Union de deux maillages (zones partagées par handle).
+# Union of two meshes (zones shared by handle).
 mesh = tri | qua
 print(len(mesh))  # 2 sous-maillages
 print(mesh)  # Mesh: 2 submesh(es), 2 cell(s) total
 
-# Ajout en place : `add_sub` pour une zone, `add_subs` pour toutes celles
-# d'un autre agrégat (concaténation, sans déduplication).
+# In-place addition: `add_sub` for one zone, `add_subs` for all those of
+# another aggregate (concatenation, without deduplication).
 tri.add_subs(qua)
 print(len(tri))  # 2 sous-maillages
 # ANCHOR_END: aggregat
 assert len(mesh) == 2
 assert len(tri) == 2
 
-# ── premiers pas ───────────────────────────────────────────
+# ── first steps ────────────────────────────────────────────
 
 # ANCHOR: premiers_pas
 import pyrucast
@@ -191,14 +191,14 @@ print(poi)  # Mesh: 1 submesh(es), 2 cell(s) total
 # ANCHOR_END: node_api
 assert poi.cell_count() == 2
 
-# ── Champ aux nœuds ─────────────────────────────────────────────────────────
+# ── Field at the nodes ──────────────────────────────────────────────────────
 
 
 def _maillage_a_deux_zones():
-    """Deux nuages POI1 unis : le support d'un champ à composantes par zone.
+    """Two POI1 clouds united: the support of a field with per-zone components.
 
-    Monté ici pour que la fonction de test ne nomme pas `pyrucast` avant son
-    ancre — un `import pyrucast` dans une ancre en fait une variable locale.
+    Set up here so the test function does not name `pyrucast` before its anchor —
+    an `import pyrucast` inside an anchor makes it a local variable.
     """
     c = pyrucast.Coords(2)
     x, y = c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0])
@@ -219,7 +219,7 @@ mesh = pyrucast.Mesh(c, "POI1")
 mesh.unit().add_cell([a])
 mesh.unit().add_cell([b])
 
-# Un SubNodeField par submesh du support (Mesh ou SubMesh).
+# One SubNodeField per submesh of the support (Mesh or SubMesh).
 u = pyrucast.NodeField(mesh, ["UX", "UY"])
 print(u)  # NodeField: 1 subfield(s)
 print(u.unit())  # SubNodeField: 2 node(s), 2 component(s) [UX, UY]
@@ -228,22 +228,22 @@ print(u.unit())  # SubNodeField: 2 node(s), 2 component(s) [UX, UY]
 u[0][a, "UX"] = 1.5
 print(u.value(a, "UX"))  # 1.5
 
-# Lecture par lot : liste de nœuds (ou Mesh/SubMesh POI1) → liste ordonnée.
+# Batch read: a list of nodes (or a POI1 Mesh/SubMesh) → an ordered list.
 print(u.values([a, b], "UX"))  # [1.5, 0.0]
-print(u.values(mesh, "UX"))  # [1.5, 0.0]  — points du maillage POI1
+print(u.values(mesh, "UX"))  # [1.5, 0.0]  — points of the POI1 mesh
 print(u.min("UX"), u.max("UX"))  # 0.0 1.5
-print(u.sum("UX"))  # 1.5  — Σ sur les nœuds (résultante d'un champ de forces)
+print(u.sum("UX"))  # 1.5  — Σ over the nodes (resultant of a force field)
 
-# Composantes par zone (multiphysique) :
+# Components per zone (multiphysics):
 f = pyrucast.NodeField.with_components_per_submesh(two_zone_mesh, [["T"], ["UX", "UY"]])
 print(f.components())  # ['T', 'UX', 'UY']
-f.check()  # cohérence des interfaces (lève sinon)
-g = pyrucast.node_field.consolidate(f)  # fusion au plus juste
+f.check()  # interface coherence (raises otherwise)
+g = pyrucast.node_field.consolidate(f)  # merge as tightly as possible
 # ANCHOR_END: node_field_api
 assert u.value(a, "UX") == 1.5
 assert f.components() == ["T", "UX", "UY"]
 
-# ── Champ aux points de Gauss ───────────────────────────────────────────────
+# ── Field at the Gauss points ───────────────────────────────────────────────
 
 
 # ── element field api ──────────────────────────────────────
@@ -260,28 +260,28 @@ mesh = pyrucast.Mesh(c, "TRI3")
 mesh.unit().add_cell([a, b, c2])
 fes = pyrucast.FiniteElementSpace(mesh)
 
-# Champ matériau : une zone par sous-espace de `fes`.
+# Material field: one zone per subspace of `fes`.
 mat = pyrucast.ElementField(fes, ["E", "nu"])
 print(mat)  # ElementField: 1 subfield(s)
 print(mat.unit())  # SubElementField: 1 cell(s) × 3 gauss × 2 component(s) [E, nu]
 
-# Écriture via la zone ; lecture via la zone (ou les stats agrégat).
-z = mat.unit()  # la seule zone (erreur s'il y en avait plusieurs)
+# Writing through the zone; reading through the zone (or the aggregate stats).
+z = mat.unit()  # the only zone (an error if there were several)
 z.set_uniform("E", 210e9)
 z.set_uniform("nu", 0.3)
 assert z.value(0, 0, "E") == 210e9
 
-# Accès dictionnaire-like sur la zone — `sub[cell, gauss, "name"]`.
+# Dictionary-like access on the zone — `sub[cell, gauss, "name"]`.
 z[0, 2, "nu"] = 0.28
 assert z[0, 2, "nu"] == 0.28
 
-# Stats et arithmétique au niveau agrégat.
+# Stats and arithmetic at the aggregate level.
 print(mat.min("E"), mat.max("E"))  # 210000000000.0 210000000000.0
-print(mat.sum("E"))  # Σ sur les points de Gauss
+print(mat.sum("E"))  # Σ over the Gauss points
 mat.mul_to_component("E", 0.95)  # en place, seulement "E"
 scaled = mat * 1.1  # nouveau champ
 
-# Composantes par sous-espace (multiphysique / multi-matériau).
+# Components per subspace (multiphysics / multi-material).
 ef = pyrucast.ElementField.with_components_per_subspace(fes, [["E", "nu"]])
 print(ef.components())  # ['E', 'nu']
 # ANCHOR_END: element_field_api
@@ -302,16 +302,16 @@ mesh = pyrucast.Mesh(c, "SEG2")
 mesh.unit().add_cell([a, b])
 fes = pyrucast.FiniteElementSpace(mesh)
 
-# Modèle : conduction (matériau fourni à l'assemblage) + Dirichlet à gauche.
-# Constructeurs au niveau parent, composés par `|` — pas de SubModel à la main.
-# Le maillage des multiplicateurs est fabriqué depuis les nœuds imposés.
+# Model: conduction (material supplied at assembly) + Dirichlet on the left.
+# Constructors at the parent level, composed with `|` — no SubModel by hand.
+# The multipliers' mesh is built from the imposed nodes.
 imposed = pyrucast.mesh.poi1_from_nodes([a])
 multiplier = pyrucast.mesh.barycenter(imposed)
 cible = pyrucast.model.heat_conduction(fes)
 
 model = cible | pyrucast.model.dirichlet(cible, "T", imposed, multiplier)
 
-# Matériau k = 1 (les sous-modèles Dirichlet sont ignorés automatiquement).
+# Material k = 1 (the Dirichlet sub-models are skipped automatically).
 materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
 
 K = pyrucast.matrix.stiffness(model, materials)
@@ -336,15 +336,15 @@ support, a, b = _support_de_deux_noeuds()
 # ANCHOR: matrix_api
 import pyrucast
 
-# Les entrées vivent dans un **bloc**, jamais dans l'agrégat : un bloc
-# connaît ses supports POI1 (lignes et colonnes) et ses variables.
+# The entries live in a **block**, never in the aggregate: a block knows its
+# POI1 supports (rows and columns) and its variables.
 k = pyrucast.Matrix.block(support, support, ["q"], ["T"], symmetric=True)
 bloc = k[0]
 bloc.add_entry(a, "q", a, "T", 2.0)
 bloc.add_entry(a, "q", b, "T", -1.0)
 bloc.add_entry(b, "q", a, "T", -1.0)
 bloc.add_entry(b, "q", b, "T", 2.0)
-k.finalize()  # requis avant tout usage solveur
+k.finalize()  # required before any solver use
 
 assert k.n_rows() == 2
 assert k.n_cols() == 2

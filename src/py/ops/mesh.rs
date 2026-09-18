@@ -1513,7 +1513,7 @@ pub fn select_sub_cells(
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyMesh {
-    /// Voir `pyrucast.mesh.merge_nodes`.
+    /// See `pyrucast.mesh.merge_nodes`.
     #[pyo3(signature = (tol, in_place=false))]
     fn merge_nodes(
         slf: Py<Self>,

@@ -8,10 +8,10 @@ exécutables, parce qu'ils portent la garde qu'un utilisateur écrirait de
 toute façon pour un script qui doit tourner aussi en intégration continue —
 la même condition que winit teste lui-même (`DISPLAY` ou `WAYLAND_DISPLAY`).
 
-**Le code vit au niveau module, pas dans des fonctions de test** : mdbook
-n'enlève pas l'indentation d'un extrait inclus. pytest exécute donc ce fichier
-à la **collecte** ; un exemple qui casse est une erreur de collecte, au
-traceback complet et au code de retour non nul.
+**The code lives at module level, not inside test functions**: mdbook does not
+strip the indentation of an included excerpt. pytest therefore runs this file
+at **collection** time; an example that breaks is a collection error, with a
+full traceback and a non-zero exit code.
 
 Voir `book/src/developper/documentation-et-tests.md`.
 """
@@ -74,5 +74,5 @@ if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
 assert os.path.exists("plaque.svg")
 
 
-# Fin des extraits : on rend le répertoire courant.
+# End of the excerpts: the current directory is given back.
 os.chdir(_CWD)

@@ -6,11 +6,11 @@ Voir `book/src/developper/documentation-et-tests.md`.
 Le montage vit **hors** des ancres — le lecteur du chapitre n'a pas besoin de
 revoir la construction d'un maillage à chaque opérateur.
 
-**Le code vit au niveau module, pas dans des fonctions de test** : mdbook
-n'enlève pas l'indentation d'un extrait inclus, si bien qu'un bloc ancré dans
-une fonction s'afficherait décalé de quatre espaces. pytest exécute donc ce
-fichier à la **collecte** ; un exemple qui casse est une erreur de collecte, au
-traceback complet et au code de retour non nul.
+**The code lives at module level, not inside test functions**: mdbook does not
+strip the indentation of an included excerpt, so a block anchored inside a
+function would show up shifted by four spaces. pytest therefore runs this file
+at **collection** time; an example that breaks is a collection error, with a
+full traceback and a non-zero exit code.
 """
 
 import pyrucast

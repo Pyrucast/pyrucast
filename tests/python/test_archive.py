@@ -1,7 +1,7 @@
 """Sauvegarde et relecture d'un graphe d'objets, côté Python.
 
-L'exigence que ces tests gardent : les objets relus gardent leur cohérence
-**sans duplication** — deux champs sur un support restent deux champs sur un
+The requirement these tests keep: objects read back keep their coherence
+**without duplication** — two fields on one support stay two fields on one
 support.
 """
 
@@ -11,7 +11,7 @@ import pyrucast
 
 
 def line(n=3):
-    """Une ligne de `n` SEG2, ses coordonnées et son maillage."""
+    """A line of `n` SEG2, its coordinates and its mesh."""
     c = pyrucast.Coords(2)
     nodes = [c.add_node([float(i), 0.0]) for i in range(n + 1)]
     m = pyrucast.Mesh(c, "SEG2")
@@ -21,7 +21,7 @@ def line(n=3):
 
 
 def cloud(c, nodes):
-    """Le nuage POI1 de `nodes` — le support sur lequel vit un champ nodal."""
+    """The POI1 cloud of `nodes` — the support a nodal field lives on."""
     poi = pyrucast.Mesh(c, "POI1")
     for n in nodes:
         poi.unit().add_cell([n])
@@ -32,35 +32,35 @@ def cloud(c, nodes):
 
 
 def test_le_partage_survit(tmp_path):
-    """Deux champs sur un support restent deux champs sur UN support.
+    """Two fields on one support stay two fields on ONE support.
 
-    L'observable est l'union : elle fusionne les zones qui partagent un
-    support, et les laisse côte à côte sinon. Une zone après union ⇒ le
-    support est bien un seul objet, pas deux copies aux mêmes nœuds.
+    The observable is the union: it merges the zones that share a support, and
+    leaves them side by side otherwise. One zone after the union ⇒ the support
+    really is a single object, not two copies at the same nodes.
     """
     c, m, nodes = line()
     poi = cloud(c, nodes)
     t = pyrucast.NodeField(poi, ["T"])
     f = pyrucast.NodeField(poi, ["f"])
-    assert len(t | f) == 1, "le gabarit lui-même doit partager le support"
+    assert len(t | f) == 1, "the template itself must share the support"
 
     chemin = str(tmp_path / "etude.pyr")
     pyrucast.save(chemin, {"temperature": t, "force": f, "maillage": m, "coords": c})
 
     objets = pyrucast.load(chemin)
     fusion = objets["temperature"] | objets["force"]
-    assert len(fusion) == 1, "relus, les deux champs doivent partager UN support"
+    assert len(fusion) == 1, "read back, both fields must share ONE support"
     assert sorted(fusion[0].components()) == ["T", "f"]
 
-    # Une seule Coords pour tout le fichier : ajouter un nœud par le maillage
-    # se voit par la racine `coords`.
+    # A single Coords for the whole file: adding a node through the mesh shows up
+    # through the `coords` root.
     avant = objets["coords"].node_count()
     objets["maillage"].coords().add_node([9.0, 9.0])
     assert objets["coords"].node_count() == avant + 1
 
 
 def test_les_clefs_sont_libres(tmp_path):
-    """Une clef peut porter espace, accent, unité — ce n'est pas un identifiant."""
+    """A key may carry a space, an accent, a unit — it is not an identifier."""
     _, m, _ = line()
     chemin = str(tmp_path / "clefs.pyr")
     pyrucast.save(chemin, {"maillage très fin": m, "T (°C)": 20.0})
@@ -71,7 +71,7 @@ def test_les_clefs_sont_libres(tmp_path):
 
 
 def test_relire_ajoute_a_cote(tmp_path):
-    """Relire ne remplace rien : les objets déjà vivants sont intacts."""
+    """Reading back replaces nothing: the objects already alive are untouched."""
     c, m, _ = line()
     chemin = str(tmp_path / "a_cote.pyr")
     pyrucast.save(chemin, {"maillage": m})
@@ -80,13 +80,13 @@ def test_relire_ajoute_a_cote(tmp_path):
     relu = pyrucast.load(chemin)["maillage"]
     assert relu[0].cell_count() == avant
 
-    # Les deux Coords sont distinctes : toucher l'une ne touche pas l'autre.
+    # The two Coords are distinct: touching one does not touch the other.
     n_avant = c.node_count()
     relu.coords().add_node([42.0, 42.0])
     assert c.node_count() == n_avant, "la session d'origine n'a pas bougé"
 
 
-# ─── Les valeurs simples ────────────────────────────────────────────────────
+# ─── The simple values ──────────────────────────────────────────────────────
 
 
 def test_valeurs_simples(tmp_path):
@@ -157,12 +157,12 @@ def test_un_fichier_etranger_est_refuse(tmp_path):
         pyrucast.load(str(chemin))
 
 
-# ─── Une étude complète ─────────────────────────────────────────────────────
+# ─── A complete study ───────────────────────────────────────────────────────
 
 
 def test_une_etude_complete(tmp_path):
     """Maillage, espace, modèle, matériau, chargement : sauvés ensemble, relus,
-    réassemblés — la solution doit être celle d'avant."""
+    reassembled — the solution must be the one from before."""
     c = pyrucast.Coords(1)
     n = 4
     nodes = [c.add_node([i / n]) for i in range(n + 1)]
@@ -208,7 +208,7 @@ def test_une_etude_complete(tmp_path):
     assert o["conductivite"] == 1.0
 
     # Réassembler depuis le modèle relu : la CSR et la factorisation n'étaient
-    # pas dans le fichier, elles se rebâtissent.
+    # not in the file, they are rebuilt.
     k2 = pyrucast.matrix.stiffness(o["modele"], o["materiaux"])
     apres = pyrucast.solver.solve(k2, o["chargement"])
 

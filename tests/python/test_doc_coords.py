@@ -1,7 +1,7 @@
 """Source des exemples Python de `book/src/coords.md`.
 
-**Le code vit au niveau module, pas dans des fonctions de test** : mdbook
-n'enlève pas l'indentation d'un extrait inclus, si bien qu'un bloc ancré dans
+**The code lives at module level, not inside test functions**: mdbook does not
+strip the indentation of an included excerpt, so a block anchored inside a
 une fonction s'afficherait décalé de quatre espaces dans le book. Au niveau
 module, l'extrait est exactement ce qu'un utilisateur écrirait.
 

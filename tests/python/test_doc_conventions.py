@@ -1,10 +1,10 @@
 """Source des exemples Python de `book/src/conventions.md` et
 `thermomecanique-pas-a-pas.md`.
 
-**Le code vit au niveau module, pas dans des fonctions de test** : mdbook
-n'enlève pas l'indentation d'un extrait inclus. pytest exécute donc ce fichier
-à la **collecte** ; un exemple qui casse est une erreur de collecte, au
-traceback complet et au code de retour non nul.
+**The code lives at module level, not inside test functions**: mdbook does not
+strip the indentation of an included excerpt. pytest therefore runs this file
+at **collection** time; an example that breaks is a collection error, with a
+full traceback and a non-zero exit code.
 
 Voir `book/src/developper/documentation-et-tests.md`.
 """

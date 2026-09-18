@@ -1,8 +1,8 @@
-//! Source des exemples Rust de `book/src/matrix.md`.
+//! Source of the Rust examples of `book/src/matrix.md`.
 //!
-//! La page tire ces fonctions par `{{#include …:ancre}}` et `cargo test` les
+//! The page pulls these functions through `{{#include …:anchor}}` and
 //! exécute. L'ancre couvre la **fonction entière**, signature comprise : en
-//! Rust tout code vit dans un `fn`, et mdbook n'enlève pas l'indentation.
+//! Rust all code lives in a `fn`, and mdbook does not strip the indentation.
 //!
 //! Voir `book/src/developper/documentation-et-tests.md`.
 
@@ -20,8 +20,8 @@ use pyrucast::ops::model;
 use pyrucast::ops::{element_field, matrix, mesh, solver};
 use pyrucast::Result;
 
-/// Une barre thermique à deux SEG2, Dirichlet à gauche : le modèle, ses
-/// matériaux, le nœud-multiplicateur et son chargement.
+/// A thermal bar of two SEG2, Dirichlet on the left: the model, its materials,
+/// the multiplier node and its loading.
 fn barre() -> Result<(
     Model,
     pyrucast::containers::element_field::ElementField,
@@ -82,8 +82,8 @@ fn diviser_une_matrice_ne_reecrit_aucune_valeur() -> Result<()> {
     let dt = 0.1;
 
     let mut m_dt = (&m / dt)?; // facteur = 1/dt sur chaque bloc, aucune valeur réécrite
-                               // Le facteur d'un bloc **calculé** ne se matérialise qu'à l'assemblage :
-                               // sans ce `assemble`, la relecture rendrait des zéros.
+                               // A **computed** block's factor materializes only at assembly: without this
+                               // `assemble`, reading back would return zeros.
     m_dt.assemble()?;
     assert_eq!(m.get(a, "q", a, "T"), m_dt.get(a, "q", a, "T") * dt); // m inchangée
     Ok(())
@@ -112,8 +112,8 @@ fn composer_deux_matrices_puis_resoudre() -> Result<()> {
 // ANCHOR: bloc_carre
 #[test]
 fn les_entrees_vivent_dans_un_bloc() -> Result<()> {
-    // Les entrées vivent dans un **bloc**, jamais dans l'agrégat : un bloc
-    // connaît ses supports POI1 (lignes et colonnes) et ses noms de variables.
+    // The entries live in a **block**, never in the aggregate: a block knows its
+    // POI1 supports (rows and columns) and its variable names.
     let coords = Handle::new(Coords::new(1)?);
     let a = Node::create_in(coords.clone(), &[0.0])?;
     let b = Node::create_in(coords.clone(), &[1.0])?;
@@ -133,7 +133,7 @@ fn les_entrees_vivent_dans_un_bloc() -> Result<()> {
         true, // symétrique
     )?;
 
-    // Modèle simple à 2 nœuds (segment) :
+    // A simple 2-node model (a segment):
     //   K = [[ 2, -1], [-1,  2]]
     block.add_entry(a.id(), "q", a.id(), "T", 2.0)?;
     block.add_entry(a.id(), "q", b.id(), "T", -1.0)?;
@@ -164,9 +164,9 @@ fn un_bloc_de_lagrange_est_rectangulaire() -> Result<()> {
         Handle::new(sm)
     };
 
-    // 2 contraintes : les multiplicateurs m0/m1 lient les nœuds primaires a/b.
-    // Le bloc est rectangulaire dès que les deux supports diffèrent — ici ils
-    // ont la même taille, mais ce sont deux nuages de nœuds distincts.
+    // 2 constraints: the multipliers m0/m1 tie the primary nodes a/b.
+    // The block is rectangular as soon as the two supports differ — here they
+    // have the same size, but they are two distinct node clouds.
     let m0 = Node::create_in(coords.clone(), &[0.0])?;
     let m1 = Node::create_in(coords.clone(), &[1.0])?;
     let mult_support = {
@@ -191,9 +191,9 @@ fn un_bloc_de_lagrange_est_rectangulaire() -> Result<()> {
     c.finalize()?;
     assert_eq!(c.n_rows()?, 2);
     assert_eq!(c.n_cols()?, 2);
-    // "T" est interné une seule fois dans la table de noms même s'il apparaît
-    // côté ligne ET côté colonne (la collision est résolue par les `NodeId`
-    // distincts : les multiplicateurs sont des nœuds à part entière).
+    // "T" is interned once only in the name table even though it appears on the
+    // row side AND the column side (the collision is settled by the distinct
+    // `NodeId`: the multipliers are nodes in their own right).
     assert_eq!(c.field_names().len(), 1);
     Ok(())
 }
@@ -208,37 +208,37 @@ fn lire_une_matrice_assemblee() -> Result<()> {
     let x = NodeField::from_submesh(&k.col_mesh()?.get(0)?, vec!["T".into()])?;
 
     // Toutes ces lectures traversent l'état assemblé : elles rendent un
-    // `Result` et échouent tant que `finalize()` (ou `assemble()`) n'a pas
+    // `Result` and fail until `finalize()` (or `assemble()`) has
     // été appelé.
 
-    // Valeur à une coordonnée (somme de toutes les entrées COO à ce point).
+    // Value at a coordinate (the sum of every COO entry at that point).
     let v: f64 = k.get(a, "q", a, "T");
 
-    // Vue dense ligne-major (flat Vec, pratique pour Python).
+    // Dense row-major view (a flat Vec, handy for Python).
     let d: Vec<f64> = k.dense()?;
     assert_eq!(d.len(), k.n_rows()? * k.n_cols()?);
 
-    // Vue dense typée nalgebra (column-major DMatrix), prête pour LU/Cholesky.
+    // Typed nalgebra dense view (column-major DMatrix), ready for LU/Cholesky.
     let m: nalgebra::DMatrix<f64> = k.to_dmatrix()?;
 
-    // Vues creuses nalgebra-sparse, prêtes pour les solveurs creux. `to_csr`
-    // matérialise ; `csr_arrays` emprunte les trois tableaux sans rien copier.
+    // nalgebra-sparse sparse views, ready for the sparse solvers. `to_csr`
+    // materializes; `csr_arrays` borrows the three arrays without copying.
     let csr: nalgebra_sparse::CsrMatrix<f64> = k.to_csr()?;
     let csc: nalgebra_sparse::CscMatrix<f64> = k.to_csc()?;
     let (offsets, cols, vals): (&[usize], &[usize], &[f64]) = k.csr_arrays()?;
     assert_eq!(offsets.len(), k.n_rows()? + 1);
     assert_eq!(cols.len(), vals.len());
 
-    // Itération sur les triplets bruts (ordre d'insertion préservé). Une
-    // entrée est un 5-uplet `(nœud ligne, var duale, nœud colonne, var
-    // primale, valeur)` — les noms de variables y sont déjà résolus.
+    // Iteration over the raw triplets (insertion order preserved). An entry is a
+    // 5-tuple `(row node, dual var, column node, primal var, value)` — the
+    // variable names are already resolved there.
     for (row_node, row_var, col_node, col_var, value) in k.iter_entries() {
         let _ = (row_node, row_var, col_node, col_var, value);
     }
 
-    // Produit matrice · champ : `x` est lu aux DOFs *colonnes* (vars
-    // **primales**), le résultat est un `NodeField` sur les DOFs *lignes*
-    // (vars **duales**) — `K · u = f`. L'opérateur `*` en est le sucre.
+    // Matrix · field product: `x` is read at the *column* DOFs (**primal** vars),
+    // the result is a `NodeField` on the *row* DOFs (**dual** vars) — `K · u = f`.
+    // The `*` operator is its sugar.
     let y: NodeField = k.mul_field(&x)?;
     let y_sucre: NodeField = (&k * &x)?; // le même produit, en opérateur
 

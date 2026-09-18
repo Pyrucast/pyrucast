@@ -1,6 +1,6 @@
 //! Source des exemples Rust de `book/src/coords.md`.
 //!
-//! La page tire ces fonctions par `{{#include …:ancre}}` et `cargo test` les
+//! The page pulls these functions through `{{#include …:anchor}}` and
 //! exécute. L'ancre couvre la **fonction entière**, signature comprise : en
 //! Rust tout code vit dans un `fn`, et mdbook n'enlève pas l'indentation d'un
 //! extrait inclus — montrer la fonction est donc plus honnête que montrer un

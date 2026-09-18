@@ -1,13 +1,13 @@
-"""Source des exemples Python de `book/src/visualization.md`.
+"""Source of the Python examples of `book/src/visualization.md`.
 
-Les extraits écrivent des fichiers sous des noms courts (`piece.svg`, …) : le
-module bascule le répertoire courant vers un dossier temporaire, si bien que
-l'extrait affiché reste exactement celui qu'un utilisateur écrirait.
+The excerpts write files under short names (`piece.svg`, …): the module
+switches the current directory to a temporary folder, so that the displayed
+excerpt stays exactly what a user would write.
 
-**Le code vit au niveau module, pas dans des fonctions de test** : mdbook
-n'enlève pas l'indentation d'un extrait inclus. pytest exécute donc ce fichier
-à la **collecte** ; un exemple qui casse est une erreur de collecte, au
-traceback complet et au code de retour non nul.
+**The code lives at module level, not inside test functions**: mdbook does not
+strip the indentation of an included excerpt. pytest therefore runs this file
+at **collection** time; an example that breaks is a collection error, with a
+full traceback and a non-zero exit code.
 
 Voir `book/src/developper/documentation-et-tests.md`.
 """
@@ -17,9 +17,9 @@ import tempfile
 
 import pyrucast
 
-# Répertoire de travail jetable — les noms de fichiers des extraits restent
-# courts. Le module **rend** le répertoire courant à la fin : au niveau module
-# il n'y a pas de fixture, et le laisser déplacé piégerait les autres fichiers.
+# A throwaway working directory — the excerpts' file names stay short. The
+# module **gives back** the current directory at the end: at module level
+# there is no fixture, and leaving it moved would trap the other files.
 _TMP = tempfile.TemporaryDirectory()
 _CWD = os.getcwd()
 os.chdir(_TMP.name)
@@ -36,8 +36,8 @@ def _triangle():
 
 
 def _champ_nodal(noeuds, composantes, valeur=1.0, support=None):
-    """Deux appels sans `support` fabriquent deux nuages **distincts** : une
-    `Evolution` de champs exige au contraire le même support à chaque pas."""
+    """Two calls without `support` build two **distinct** clouds: an `Evolution`
+    of fields, by contrast, requires the same support at every step."""
     support = support or pyrucast.mesh.poi1_from_nodes(noeuds)
     f = pyrucast.NodeField(support, composantes)
     for i, noeud in enumerate(noeuds):
@@ -53,8 +53,8 @@ def _champ_nodal(noeuds, composantes, valeur=1.0, support=None):
 
 _, mesh, _ = _triangle()
 # ANCHOR: formats
-mesh.plot(save="piece.svg")  # à versionner, à publier
-mesh.plot(save="piece.svgz")  # à empiler par centaines
+mesh.plot(save="piece.svg")  # to version, to publish
+mesh.plot(save="piece.svgz")  # to stack by the hundred
 # ANCHOR_END: formats
 
 # ── vue et export ──────────────────────────────────────────
@@ -79,8 +79,10 @@ mesh.plot(view=(45.0, 35.264, 1.0), save="triangle.svg")
 _, mesh, n = _triangle()
 t_field = _champ_nodal(n, ["T"], 20.0)
 # ANCHOR: titre
-mesh.plot(save="piece.svg", title="poutre encastrée")  # légende centrée en bas du SVG
-mesh.plot(save="t.svg", field=t_field, title="température")  # combinable avec field
+mesh.plot(
+    save="piece.svg", title="cantilever beam"
+)  # caption centred at the SVG's bottom
+mesh.plot(save="t.svg", field=t_field, title="temperature")  # combines with field
 # mesh.plot(title="ma pièce")  # nomme la fenêtre interactive (bloquant)
 # ANCHOR_END: titre
 
@@ -88,12 +90,12 @@ mesh.plot(save="t.svg", field=t_field, title="température")  # combinable avec 
 
 coords, _, _ = _triangle()
 # ANCHOR: couleur
-sm = pyrucast.Mesh(coords, "TRI3")[0]  # vue du sous-maillage unique
+sm = pyrucast.Mesh(coords, "TRI3")[0]  # view of the single submesh
 sm.face_color = (220, 60, 60)
 assert sm.face_color == (220, 60, 60)
 
-# La même couleur pour **toutes** les zones d'un maillage, sans boucle : la
-# méthode rend le maillage, donc elle s'enchaîne.
+# The same colour for **every** zone of a mesh, without a loop: the method
+# returns the mesh, so it chains.
 piece = pyrucast.Mesh(coords, "TRI3").set_face_color((60, 60, 220))
 assert all(zone.face_color == (60, 60, 220) for zone in piece)
 # ANCHOR_END: couleur
@@ -110,7 +112,7 @@ fes = pyrucast.FiniteElementSpace(mesh)
 flux_field = pyrucast.ElementField(fes, ["q"])
 flux_field[0].set_uniform("q", 3.0)
 # ANCHOR: champ
-# Composante par défaut, viridis, échelle auto.
+# Default component, viridis, automatic scale.
 mesh.plot(save="t.svg", field=t_field)
 
 # Composante "UY", colormap "coolwarm", bornes fixées.
@@ -123,10 +125,10 @@ mesh.plot(
     vmax=1.0,
 )
 
-# Plafond seul fixé : le plancher suit le minimum des données.
+# Ceiling only set: the floor follows the data's minimum.
 mesh.plot(save="t.svg", field=t_field, vmax=100.0)
 
-# Champ aux points de Gauss : strictement le même appel.
+# Field at the Gauss points: strictly the same call.
 mesh.plot(save="flux.svg", field=flux_field)
 # ANCHOR_END: champ
 
@@ -141,7 +143,7 @@ t_field = _champ_nodal(n, ["T"], 20.0)
 mesh.plot(save="solide.svg")  # peau opaque (défaut)
 mesh.plot(save="fil.svg", wireframe=True)  # fil de fer
 
-# Sans objet avec un champ : lève ValueError.
+# Pointless with a field: raises ValueError.
 # mesh.plot(save="x.svg", field=t_field, wireframe=True)
 # ANCHOR_END: wireframe
 
@@ -149,10 +151,10 @@ mesh.plot(save="fil.svg", wireframe=True)  # fil de fer
 
 
 def _champ_par_elements(mesh, composante, valeur):
-    """Un `ElementField` uniforme, monté sans nommer `pyrucast` chez l'appelant.
+    """A uniform `ElementField`, set up without naming `pyrucast` at the caller.
 
-    Un `import pyrucast` dans une ancre en fait une variable locale : le module
-    devient inutilisable avant l'ancre, dans la même fonction.
+    An `import pyrucast` inside an anchor makes it a local variable: the module
+    becomes unusable before the anchor, within the same function.
     """
     f = pyrucast.ElementField(pyrucast.FiniteElementSpace(mesh), [composante])
     f[0].set_uniform(composante, valeur)
@@ -170,11 +172,11 @@ import pyrucast
 # Géométrie seule.
 pyrucast.export.export_vtk(mesh, "maillage.vtk")
 
-# Géométrie + champ aux nœuds (POINT_DATA).
+# Geometry + field at the nodes (POINT_DATA).
 pyrucast.export.export_vtk(mesh, "solution.vtk", field=temperature)
 
-# Géométrie + champ aux points de Gauss (CELL_DATA) : une valeur par
-# cellule = moyenne intra-élément des points de Gauss de la cellule.
+# Geometry + field at the Gauss points (CELL_DATA): one value per cell = the
+# intra-element mean of the cell's Gauss points.
 pyrucast.export.export_vtk(mesh, "contraintes.vtk", field=stresses)
 # ANCHOR_END: vtk
 
@@ -196,10 +198,10 @@ import pyrucast as pc
 e = pc.Evolution([(0.0, 10.0), (1.0, 20.0), (2.0, 5.0)])
 e.plot(save="courbe.svg", x_label="temps", y_label="T", title="évolution de T")
 
-# Évolution d'un champ aux nœuds : un NodeField complet par pas de temps.
+# Evolution of a field at the nodes: one whole NodeField per time step.
 ev = pc.Evolution([(0.0, champ_t0), (1.0, champ_t1), (2.0, champ_t2)])
-ev.plot(save="frame.png", frame=2)  # une valeur tabulée (défaut : la dernière)
-ev.plot(save="frame_surf.png", mesh=maillage)  # rendu surfacique sur un maillage fourni
+ev.plot(save="frame.png", frame=2)  # one tabulated value (default: the last)
+ev.plot(save="frame_surf.png", mesh=maillage)  # surface rendering on a supplied mesh
 # ANCHOR_END: evolution
 
 # ── Axisymétrie : le corps de révolution ────────────────────────────────────
@@ -214,14 +216,14 @@ coords = pyrucast.Coords.axisymmetric()  # (r, z), r ≥ 0
 section = [coords.add_node(p) for p in ([1.0, 0.0], [2.0, 0.0], [1.0, 1.0])]
 mesh = pyrucast.Mesh(coords, "TRI3")
 mesh.unit().add_cell(section)
-# … calcul, puis un champ de température aux nœuds de la section :
+# … computation, then a temperature field at the section's nodes:
 t_field = pyrucast.NodeField(pyrucast.mesh.poi1_from_nodes(section), ["T"])
 
 mesh.plot(save="section.svg")  # la section plane (défaut)
 mesh.plot(save="piece.svg", revolve=True)  # le corps de révolution complet
-mesh.plot(save="coupe.svg", revolve=True, revolve_angle=270.0)  # ouvert à 270°
-mesh.plot(save="t3d.svg", field=t_field, revolve=True)  # champ sur le corps
+mesh.plot(save="coupe.svg", revolve=True, revolve_angle=270.0)  # opened to 270°
+mesh.plot(save="t3d.svg", field=t_field, revolve=True)  # field on the body
 # ANCHOR_END: revolve
 
-# Fin des extraits : on rend le répertoire courant.
+# End of the excerpts: the current directory is given back.
 os.chdir(_CWD)

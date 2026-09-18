@@ -1,6 +1,6 @@
 //! Source des exemples Rust de `book/src/fe-space.md`.
 //!
-//! La page tire ces fonctions par `{{#include …:ancre}}` et `cargo test` les
+//! The page pulls these functions through `{{#include …:anchor}}` and
 //! exécute. L'ancre couvre la **fonction entière**, signature comprise.
 //!
 //! Voir `book/src/developper/documentation-et-tests.md`.

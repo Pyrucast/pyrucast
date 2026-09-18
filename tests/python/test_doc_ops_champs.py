@@ -1,20 +1,20 @@
-"""Source des exemples de `book/src/operateurs/champs.md`.
+"""Source of the examples of `book/src/operateurs/champs.md`.
 
-Chaque bloc de la page vient d'ici par `{{#include …:ancre}}`. Le montage vit hors des ancres. Voir
+Every block of the page comes from here through `{{#include …:anchor}}`. The setup lives outside the anchors. See
 `book/src/developper/documentation-et-tests.md`.
 
-**Le code vit au niveau module, pas dans des fonctions de test** : mdbook
-n'enlève pas l'indentation d'un extrait inclus, si bien qu'un bloc ancré dans
-une fonction s'afficherait décalé de quatre espaces. pytest exécute donc ce
-fichier à la **collecte** ; un exemple qui casse est une erreur de collecte, au
-traceback complet et au code de retour non nul.
+**The code lives at module level, not inside test functions**: mdbook does not
+strip the indentation of an included excerpt, so a block anchored inside a
+function would show up shifted by four spaces. pytest therefore runs this file
+at **collection** time; an example that breaks is a collection error, with a
+full traceback and a non-zero exit code.
 """
 
 import pyrucast
 
 
 def _plaque():
-    """Une plaque de deux QUA4, son espace EF, et ses nœuds."""
+    """A plate of two QUA4, its FE space, and its nodes."""
     c = pyrucast.Coords(2)
     n = [
         c.add_node([x, y]) for y in (0.0, 1.0) for x in (0.0, 1.0, 2.0)
@@ -26,11 +26,11 @@ def _plaque():
 
 
 def _champ_nodal(mesh, noeuds, composantes, valeurs, support=None):
-    """Un `NodeField` sur le nuage POI1 des nœuds donnés.
+    """A `NodeField` on the POI1 cloud of the given nodes.
 
-    `support` se repasse tel quel d'un champ à l'autre : deux appels à
-    `poi1_from_nodes` fabriquent deux supports **distincts**, et les réductions
-    qui apparient nœud à nœud (`xty`) rendraient alors zéro.
+    `support` is handed over as is from one field to the next: two calls to
+    `poi1_from_nodes` build two **distinct** supports, and the reductions that
+    pair node to node (`xty`) would then return zero.
     """
     support = support or pyrucast.mesh.poi1_from_nodes(noeuds)
     f = pyrucast.NodeField(support, composantes)
@@ -52,7 +52,7 @@ temperature = _champ_nodal(
 sigma = pyrucast.ElementField(fes, ["vm"])
 sigma[0].set_uniform("vm", 300e6)
 # ANCHOR: select
-# Nœuds dont la température est entre 20 et 80 °C (bornes inclusives).
+# Nodes whose temperature lies between 20 and 80 °C (inclusive bounds).
 chauds = pyrucast.mesh.select(temperature, ge=20.0, le=80.0)
 
 # Cellules dont la contrainte de von Mises dépasse un seuil (borne basse seule).
@@ -61,7 +61,7 @@ critiques = pyrucast.mesh.select(sigma, ge=250e6, components=["vm"])
 assert chauds.cell_count() == 3  # 50, 30, 70
 assert critiques.cell_count() == 2
 
-# ── Masque : même structure, valeurs réécrites ──────────────────────────────
+# ── Mask: same structure, values rewritten ──────────────────────────────────
 
 
 # ── mask ───────────────────────────────────────────────────
@@ -72,11 +72,11 @@ temperature = _champ_nodal(
     mesh, n, ["T"], [[t] for t in (10.0, 50.0, 90.0, 30.0, 70.0, 100.0)]
 )
 # ANCHOR: mask
-# Remet à zéro les valeurs négatives d'un champ, composante par composante.
+# Resets a field's negative values to zero, component by component.
 positif = champ * champ.mask(ge=0.0)
 
-# Sucre : les comparaisons construisent directement un masque.
-positif = champ * (champ >= 0.0)  # même chose
+# Sugar: comparisons build a mask directly.
+positif = champ * (champ >= 0.0)  # the same thing
 chauds = temperature > 80.0  # NodeField 0/1
 # ANCHOR_END: mask
 assert positif[0][n[0], "v"] == 0.0
@@ -92,10 +92,10 @@ _, mesh, fes, n = _plaque()
 solution = _champ_nodal(mesh, n, ["u_x", "u_y"], [[0.1, 0.2]] * 6)
 model = pyrucast.model.elasticity(fes, "plane_stress")
 # ANCHOR: filter_rename
-# Retire les multiplicateurs de Lagrange d'un résultat de solve.
+# Removes the Lagrange multipliers from a solve result.
 u = solution.filter_components(model.primal_vars())
 
-# Renomme une composante avant export.
+# Renames a component before exporting.
 export = u.rename_component("u_x", "DX")
 # ANCHOR_END: filter_rename
 assert u.components() == ["u_x", "u_y"]
@@ -110,7 +110,7 @@ node = n[0]
 ux = champ["u_x"]  # == filter_components(champ, "u_x")
 depl = champ[["u_x", "u_y"]]  # == filter_components(champ, ["u_x", "u_y"])
 zone = champ[0]  # inchangé : la zone (SubNodeField)
-val = champ[0][node, "u_x"]  # inchangé : la valeur au nœud
+val = champ[0][node, "u_x"]  # unchanged: the value at the node
 # ANCHOR_END: indexation
 assert ux.components() == ["u_x"]
 assert depl.components() == ["u_x", "u_y"]
@@ -123,11 +123,11 @@ _, mesh, _, n = _plaque()
 u1 = _champ_nodal(mesh, n, ["u_x", "u_y", "u_z"], [[0.1, 0.2, 0.3]] * 6)
 u2 = _champ_nodal(mesh, n, ["u_x", "u_y"], [[1.0, 1.0]] * 6)
 # ANCHOR: alignement
-u = u1[u2.components()]  # u1 réduit au jeu de composantes de u2
+u = u1[u2.components()]  # u1 cut down to u2's set of components
 # ANCHOR_END: alignement
 assert u.components() == ["u_x", "u_y"]
 
-# ── Mathématiques élément par élément ───────────────────────────────────────
+# ── Element-wise mathematics ────────────────────────────────────────────────
 
 
 # ── maths ──────────────────────────────────────────────────
@@ -141,13 +141,13 @@ signal = _champ_nodal(mesh, n, ["s"], [[-1.0], [2.0], [-3.0], [4.0], [-5.0], [6.
 # Atténuation exponentielle d'un champ de température.
 attenue = pyrucast.field.exp(temperature * -0.1)
 
-# Magnitude d'un champ (combiné à l'arithmétique scalaire de champ).
+# Magnitude of a field (combined with scalar field arithmetic).
 amplitude = pyrucast.field.abs(signal)
 # ANCHOR_END: maths
 assert attenue[0][n[0], "T"] > 0.0
 assert amplitude[0][n[0], "s"] == 1.0
 
-# ── Réductions à un nombre ──────────────────────────────────────────────────
+# ── Reductions to a number ──────────────────────────────────────────────────
 
 
 # ── xty ────────────────────────────────────────────────────
@@ -157,8 +157,8 @@ support = pyrucast.mesh.poi1_from_nodes(n)
 forces = _champ_nodal(mesh, n, ["f_x", "f_y"], [[1.0, 2.0]] * 6, support)
 deplacements = _champ_nodal(mesh, n, ["f_x", "f_y"], [[0.5, 0.5]] * 6, support)
 # ANCHOR: xty
-# Énergie de déformation externe : travail des efforts nodaux dans le champ
-# de déplacement (mêmes composantes, même maillage).
+# External strain energy: work of the nodal forces in the displacement field
+# (same components, same mesh).
 energie = pyrucast.measure.xty(forces, deplacements)
 # ANCHOR_END: xty
 assert energie == 6 * (1.0 * 0.5 + 2.0 * 0.5)
@@ -168,8 +168,8 @@ assert energie == 6 * (1.0 * 0.5 + 2.0 * 0.5)
 _, mesh, _, n = _plaque()
 vitesse = _champ_nodal(mesh, n, ["v_x", "v_y"], [[3.0, 4.0]] * 6)
 # ANCHOR: psca
-# Norme au carré d'un champ vectoriel, nœud par nœud.
-norme2 = pyrucast.field.psca(vitesse, vitesse)  # champ à une composante "psca"
+# Squared norm of a vector field, node by node.
+norme2 = pyrucast.field.psca(vitesse, vitesse)  # one-component field, "psca"
 # ANCHOR_END: psca
 assert norme2[0][n[0], "psca"] == 25.0
 
@@ -179,9 +179,9 @@ _, mesh, fes, n = _plaque()
 densite = _champ_nodal(mesh, n, ["f_y"], [[1.0]] * 6)
 champ_unite = _champ_nodal(mesh, n, ["u"], [[1.0]] * 6)
 # ANCHOR: integral
-# Résultante d'une densité de force surfacique f_y sur une plaque (via N_i).
+# Resultant of a surface force density f_y on a plate (through N_i).
 r_y = pyrucast.measure.integral(densite, "f_y", fespace=fes)
-# Mesure du domaine : ∫ 1 dΩ.
+# Measure of the domain: ∫ 1 dΩ.
 aire = pyrucast.measure.integral(champ_unite, "u", fespace=fes)
 # ANCHOR_END: integral
 assert abs(aire - 2.0) < 1e-12
@@ -193,16 +193,16 @@ _, mesh, _, n = _plaque()
 forces = _champ_nodal(mesh, n, ["f_x", "f_y"], [[1.0, 2.0]] * 6)
 residu = _champ_nodal(mesh, n, ["f_x", "f_y"], [[3.0, 4.0]] * 6)
 # ANCHOR: sommes
-# Résultante d'un champ de forces nodales, composante par composante.
+# Resultant of a nodal force field, component by component.
 rx = forces.sum("f_x")
 ry = forces.sum("f_y")
-# Norme du résidu au carré, pour un test de convergence.
+# Squared norm of the residual, for a convergence test.
 r2 = pyrucast.measure.xtx(residu)
-# Même norme, restreinte aux seules composantes de translation.
+# The same norm, restricted to the translation components alone.
 r2_uy = pyrucast.measure.xtx(residu, components=["f_y"])
-# Extremums d'une composante nommée…
+# Extrema of a named component…
 fy_max = forces.max("f_y")
-# …ou, sans argument, de tout le champ, composantes confondues.
+# …or, without an argument, of the whole field, components pooled.
 partout = forces.min()
 # ANCHOR_END: sommes
 assert rx == 6.0 and ry == 12.0

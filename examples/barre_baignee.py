@@ -37,7 +37,7 @@ def main():
     fes = pyrucast.FiniteElementSpace(host)
     base = pyrucast.model.heat_conduction(fes)
 
-    # Coins fixés au champ linéaire (Dirichlet).
+    # Corners fixed to the linear field (Dirichlet).
     corner_mesh = pyrucast.mesh.poi1_from_nodes(corner_nodes)
     corner_mult = pyrucast.mesh.barycenter(corner_mesh)
     dirichlet = pyrucast.model.dirichlet(base, "T", corner_mesh, corner_mult)

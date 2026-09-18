@@ -1,21 +1,21 @@
-"""Source des exemples Python des pages `book/src/contraintes*.md`.
+"""Source of the Python examples of the `book/src/contraintes*.md` pages.
 
 Voir `book/src/developper/documentation-et-tests.md`.
 
-**Le code vit au niveau module, pas dans des fonctions de test** : mdbook
-n'enlève pas l'indentation d'un extrait inclus, si bien qu'un bloc ancré dans
-une fonction s'afficherait décalé de quatre espaces. pytest exécute donc ce
-fichier à la **collecte** ; un exemple qui casse est une erreur de collecte, au
-traceback complet et au code de retour non nul.
+**The code lives at module level, not inside test functions**: mdbook does not
+strip the indentation of an included excerpt, so a block anchored inside a
+function would show up shifted by four spaces. pytest therefore runs this file
+at **collection** time; an example that breaks is a collection error, with a
+full traceback and a non-zero exit code.
 """
 
 import pyrucast
 
 
 def _barre_elastique(n=2, dim=2):
-    """Une barre SEG2. En 1-D elle n'a qu'un DDL par nœud, ce qu'exige un
+    """A SEG2 bar. In 1-D it has one DOF per node, which is what a
     système unilatéral : en 2-D, `u_y` resterait libre et la matrice
-    singulière dès que la butée se relâche."""
+    singular as soon as the stop releases."""
     c = pyrucast.Coords(dim)
     noeuds = [c.add_node([i / n] + [0.0] * (dim - 1)) for i in range(n + 1)]
     mesh = pyrucast.Mesh(c, "SEG2")
@@ -31,7 +31,7 @@ def _support_et_multiplicateur(noeud):
     return imposed, mult
 
 
-# ── Sens d'une contrainte : la butée unilatérale ────────────────────────────
+# ── A constraint's sense: the unilateral stop ───────────────────────────────
 
 
 # ── butee ──────────────────────────────────────────────────
@@ -47,8 +47,8 @@ assert len(butee) == 1
 # ── solve unilateral ───────────────────────────────────────
 
 _, _, fes, noeuds = _barre_elastique(dim=1)
-# Barre encastrée à gauche (égalité) et butée à droite (u_x ≥ 0) : il faut
-# les deux, un modèle qui ne tient que par sa butée ne converge pas.
+# Bar clamped on the left (equality) and stopped on the right (u_x ≥ 0): both
+# are needed, a model held by its stop alone does not converge.
 gauche, mult_g = _support_et_multiplicateur(noeuds[0])
 droite, mult_d = _support_et_multiplicateur(noeuds[-1])
 barre = pyrucast.model.truss(fes)
@@ -59,8 +59,8 @@ materials = pyrucast.element_field.material_field(
     model, [("E", 210_000.0), ("A", 1e-2)]
 )
 k = pyrucast.matrix.stiffness(model, materials)
-# `constraint_rhs` s'appelle sur **une** contrainte, pas sur le modèle
-# complet : chacune apporte sa part du chargement.
+# `constraint_rhs` is called on **one** constraint, not on the whole model:
+# each brings its share of the loading.
 rhs = encastrement.constraint_rhs([(noeuds[0], 0.0)]) | butee.constraint_rhs(
     [(noeuds[-1], 0.0)]
 )
@@ -71,7 +71,7 @@ solution = pyrucast.solver.solve_unilateral(
 # ANCHOR_END: solve_unilateral
 assert solution.node_count() > 0
 
-# ── Chargement d'une contrainte ─────────────────────────────────────────────
+# ── Loading of a constraint ─────────────────────────────────────────────────
 
 
 # ── constraint rhs ─────────────────────────────────────────
@@ -116,7 +116,7 @@ assert rhs.node_count() > 0
 
 
 def _deux_blocs(N=2):
-    """Deux blocs QUA4 empilés, l'un au-dessus de l'autre avec un jeu."""
+    """Two QUA4 blocks stacked, one above the other with a gap."""
     c = pyrucast.Coords(2)
 
     def idx(i, j):
@@ -157,8 +157,8 @@ def _bloquer(target, noeuds, var):
 
 c, bas, haut, bottom, top, idx, N = _deux_blocs()
 fes = pyrucast.FiniteElementSpace(bas | haut)
-# Bloquer u_x partout et u_y sous le bloc bas : sans ces appuis le système
-# est libre en translation et l'ensemble actif se met à cycler.
+# Block u_x everywhere and u_y under the lower block: without those supports
+# the system is free in translation and the active set starts to cycle.
 elasticite = pyrucast.model.elasticity(fes, "plane_stress")
 appuis = _bloquer(elasticite, bottom + top, "u_x") | _bloquer(
     elasticite, [bottom[idx(i, 0)] for i in range(N + 1)], "u_y"
@@ -169,15 +169,15 @@ for i in range(N):
 edge_fes = pyrucast.FiniteElementSpace(edge)
 S = 1.0
 # ANCHOR: contact
-# Maître : bord supérieur du bloc bas, parcouru en −x (normale +y, vers l'esclave).
+# Master: upper edge of the lower block, walked in −x (normal +y, towards the slave).
 master = pyrucast.Mesh(c, "SEG2")
 for i in reversed(range(N)):
     master.unit().add_cell([bottom[idx(i + 1, N)], bottom[idx(i, N)]])
-# Esclave : nœuds du bord inférieur du bloc haut.
+# Slave: nodes of the upper block's lower edge.
 slave = pyrucast.mesh.poi1_from_nodes([top[idx(i, 0)] for i in range(N + 1)])
 
 contact = pyrucast.model.contact(elasticite, slave, master, ["u_x", "u_y"])
-# La pression du bord supérieur est un terme du modèle, comme le contact.
+# The upper edge's pressure is a term of the model, like the contact.
 charge = pyrucast.model.flux(edge_fes, elasticite, "f_y")
 model = elasticite | appuis | contact | charge
 materials = pyrucast.element_field.material_field(
@@ -192,7 +192,7 @@ solution = pyrucast.solver.solve_unilateral(
 assert solution.node_count() > 0
 
 
-# ── Le second membre géométrique du contact ─────────────────────────────────
+# ── The contact's geometric right-hand side ─────────────────────────────────
 
 traction = pyrucast.node_field.external_forces(model, materials)
 
@@ -216,7 +216,7 @@ for i in range(4):
     mesh.unit().add_cell([nodes[i], nodes[i + 1]])
 fes = pyrucast.FiniteElementSpace(mesh)
 
-# 2) Supports de multiplicateurs : barycenter colocalise des nœuds neufs.
+# 2) Multiplier supports: barycenter co-locates fresh nodes.
 imposed_left = pyrucast.mesh.poi1_from_nodes([nodes[0]])
 imposed_right = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
 mult_mesh_left = pyrucast.mesh.barycenter(imposed_left)
@@ -227,20 +227,20 @@ right = pyrucast.model.dirichlet(conduction, "T", imposed_right, mult_mesh_right
 mult_left = mult_mesh_left.node(0, 0, 0)
 mult_right = mult_mesh_right.node(0, 0, 0)
 
-# 3) Modèle complet : conduction + les deux Dirichlet.
+# 3) Whole model: conduction + both Dirichlet.
 model = conduction | left | right
 materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
 
-# 4) Chargement : le helper `constraint_rhs` désigne chaque contrainte par son
-#    nœud contraint et écrit u_d au slot imposed_T du nœud-multiplicateur. On
-#    fusionne les deux avec `|`.
+# 4) Loading: the `constraint_rhs` helper designates each constraint by its
+#    constrained node and writes u_d at the multiplier node's imposed_T slot.
+#    Both are merged with `|`.
 rhs = left.constraint_rhs([(nodes[0], 0.0)]) | right.constraint_rhs([(nodes[-1], 1.0)])
 
 # 5) Assemblage + résolution.
 K = pyrucast.matrix.stiffness(model, materials)
 solution = pyrucast.solver.solve(K, rhs)
-assert abs(solution.value(nodes[2], "T") - 0.5) < 1e-10  # T au milieu
-assert abs(solution.value(mult_left, "lambda_T") - 1.0) < 1e-10  # flux à gauche
+assert abs(solution.value(nodes[2], "T") - 0.5) < 1e-10  # T in the middle
+assert abs(solution.value(mult_left, "lambda_T") - 1.0) < 1e-10  # flux on the left
 # ANCHOR_END: dirichlet_complet
 
 
@@ -278,9 +278,9 @@ model = base | dirichlet | mpc
 materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
 
 # Chargement : valeur imposée de Dirichlet + second membre g de la MPC. Le
-# helper `constraint_rhs` désigne chaque relation par un nœud (nœud contraint
-# pour Dirichlet, nœud-terme pour la MPC) et retrouve seul le nœud-multiplicateur
-# et la composante (`imposed_T`, `mpc_rhs`). On fusionne les deux avec `|`.
+# `constraint_rhs` helper designates each relation by a node (the constrained
+# node for Dirichlet, the term node for the MPC) and finds the multiplier node
+# and component on its own (`imposed_T`, `mpc_rhs`). Both are merged with `|`.
 rhs = dirichlet.constraint_rhs([(nodes[0], 0.0)]) | mpc.constraint_rhs(
     [(nodes[-1], 1.0)]
 )
@@ -315,12 +315,12 @@ host.unit().add_cell(corner_nodes)
 fes = pyrucast.FiniteElementSpace(host)
 base = pyrucast.model.heat_conduction(fes)
 
-# Coins fixés au champ linéaire (Dirichlet).
+# Corners fixed to the linear field (Dirichlet).
 corner_mesh = pyrucast.mesh.poi1_from_nodes(corner_nodes)
 corner_mult = pyrucast.mesh.barycenter(corner_mesh)
 dirichlet = pyrucast.model.dirichlet(base, "T", corner_mesh, corner_mult)
 
-# Nœud immergé, lié à l'hôte.
+# Immersed node, tied to the host.
 p = c.add_node([0.3, 0.6, 0.2])
 bar = pyrucast.mesh.poi1_from_nodes([p])
 embedded = pyrucast.model.embedded(base, bar, host, ["T"])
@@ -329,7 +329,7 @@ emb_mult = embedded.multiplier_mesh().node(0, 0, 0)
 model = base | dirichlet | embedded
 materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
 
-# Chargement : valeur du champ à chaque coin, g = 0 (tie) au nœud immergé.
+# Loading: the field's value at each corner, g = 0 (tie) at the immersed node.
 rhs = dirichlet.constraint_rhs([(n, field(x)) for n, x in zip(corner_nodes, corners)])
 rhs = rhs | embedded.constraint_rhs([(p, 0.0)])
 

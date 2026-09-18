@@ -1,21 +1,21 @@
-"""Source des exemples Python des pages d'opérateurs et de physiques.
+"""Source of the Python examples of the operator and physics pages.
 
 Couvre `operateurs/{solveur,comportement,construction}.md`, `thermique.md`,
 `diffusion.md` et `echanges.md`. Voir
 `book/src/developper/documentation-et-tests.md`.
 
-**Le code vit au niveau module, pas dans des fonctions de test** : mdbook
-n'enlève pas l'indentation d'un extrait inclus, si bien qu'un bloc ancré dans
-une fonction s'afficherait décalé de quatre espaces. pytest exécute donc ce
-fichier à la **collecte** ; un exemple qui casse est une erreur de collecte, au
-traceback complet et au code de retour non nul.
+**The code lives at module level, not inside test functions**: mdbook does not
+strip the indentation of an included excerpt, so a block anchored inside a
+function would show up shifted by four spaces. pytest therefore runs this file
+at **collection** time; an example that breaks is a collection error, with a
+full traceback and a non-zero exit code.
 """
 
 import pyrucast
 
 
 def _barre_thermique(n_elements=2, dim=1):
-    """Une barre SEG2, son espace EF, et ses nœuds."""
+    """A SEG2 bar, its FE space, and its nodes."""
     c = pyrucast.Coords(dim)
     noeuds = []
     for i in range(n_elements + 1):
@@ -29,7 +29,7 @@ def _barre_thermique(n_elements=2, dim=1):
 
 
 def _modele_dirichlet(fes, noeud):
-    """Conduction + une température imposée, et le nœud-multiplicateur."""
+    """Conduction + one imposed temperature, and the multiplier node."""
     imposed = pyrucast.mesh.poi1_from_nodes([noeud])
     mult = pyrucast.mesh.barycenter(imposed)
     cible = pyrucast.model.heat_conduction(fes)
@@ -68,11 +68,11 @@ K = pyrucast.matrix.stiffness(model, materials)
 solution = pyrucast.solver.solve(K, rhs)  # factorise puis résout
 T = solution.value(some_node, "T")
 
-# Résolutions ultérieures sur la MÊME matrice : la factorisation est réutilisée.
+# Later solves on the SAME matrix: the factorization is reused.
 sol2 = pyrucast.solver.solve(K, autre_rhs)  # descente/remontée seulement
 sol3 = pyrucast.solver.solve(
     K, autre_rhs, cache=False
-)  # refactorise, sans toucher le cache
+)  # refactorizes, without touching the cache
 # ANCHOR_END: solve
 assert abs(T - 1.0) < 1e-9
 assert abs(sol2.value(some_node, "T") - sol3.value(some_node, "T")) < 1e-12
@@ -86,7 +86,7 @@ rhs = _chargement(mult_mesh, mult_node, 1.0)
 # ANCHOR: eliminate
 K = pyrucast.matrix.stiffness(model, materials)
 lagrange = pyrucast.solver.solve(K, rhs)  # système augmenté
-condense = pyrucast.solver.solve_eliminate(K, model, rhs)  # système réduit — même champ
+condense = pyrucast.solver.solve_eliminate(K, model, rhs)  # reduced system — same field
 # ANCHOR_END: eliminate
 assert abs(lagrange.value(noeuds[0], "T") - condense.value(noeuds[0], "T")) < 1e-9
 
@@ -102,11 +102,11 @@ model = cible | pyrucast.model.dirichlet(cible, "T", imposed, mult, sense=">=")
 materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
 rhs = _chargement(mult, mult_node, 1.0)
 # ANCHOR: unilateral
-K = pyrucast.matrix.stiffness(model, materials)  # modèle avec sense=">="
-solution = pyrucast.solver.solve_unilateral(K, model, rhs)  # "schur" par défaut
-reaction = solution.value(mult_node, "lambda_T")  # 0 si la butée est relâchée
+K = pyrucast.matrix.stiffness(model, materials)  # model with sense=">="
+solution = pyrucast.solver.solve_unilateral(K, model, rhs)  # "schur" by default
+reaction = solution.value(mult_node, "lambda_T")  # 0 if the stop is released
 
-# Forcer l'ancienne méthode (refactorisation à chaque pas) :
+# Forcing the old method (refactorization at every step):
 sol2 = pyrucast.solver.solve_unilateral(K, model, rhs, active_set="refactorize")
 # ANCHOR_END: unilateral
 assert abs(solution.value(noeuds[0], "T") - sol2.value(noeuds[0], "T")) < 1e-9
@@ -114,7 +114,7 @@ assert abs(solution.value(noeuds[0], "T") - sol2.value(noeuds[0], "T")) < 1e-9
 # ── Comportement ────────────────────────────────────────────────────────────
 
 
-# ── boucle pas a pas ───────────────────────────────────────
+# ── step-by-step loop ──────────────────────────────────────
 
 _, _, fes, n = _plaque_2d()
 model = pyrucast.model.plasticity_perfect(fes, "plane_stress")
@@ -124,13 +124,13 @@ materials = pyrucast.element_field.material_field(
 u = pyrucast.NodeField(pyrucast.mesh.poi1_from_nodes(n), ["u_x", "u_y"])
 nsteps = 2
 # ANCHOR: pas_a_pas
-state = None  # VAR0 = prev ; None au premier pas
+state = None  # VAR0 = prev; None at the first step
 for step in range(1, nsteps + 1):
-    ...  # charge du pas → boucle de Newton sur u
+    ...  # the step's load → Newton loop on u
     eps = pyrucast.element_field.deformation(u, fes)  # ε(B)
     out = pyrucast.element_field.integrate_behavior(model, eps, materials, prev=state)
     ...  # F_int (BSIG), résidu, correction de u
-    state = out  # commit : prev ← VAR1 pour le pas suivant
+    state = out  # commit: prev ← VAR1 for the next step
 # ANCHOR_END: pas_a_pas
 assert len(state) == 1
 
@@ -147,7 +147,7 @@ solution = pyrucast.NodeField(
     pyrucast.mesh.poi1_from_nodes(noeuds), ["u_x", "u_y", "r_z"]
 )
 # ANCHOR: beam_deformation
-# Solution (w, theta) déjà obtenue par le solveur.
+# Solution (w, theta) already obtained from the solver.
 eps = pyrucast.element_field.beam_deformation(solution, fes, materials)  # (κ, γ)
 forces = pyrucast.element_field.integrate_behavior(model, eps, materials)
 # forces porte le moment M = E·I·κ et l'effort tranchant V = G·A_s·γ.
@@ -170,10 +170,10 @@ solution = pyrucast.NodeField(
     ["u_x", "u_y", "u_z", "r_x", "r_y", "r_z"],
 )
 # ANCHOR: shell_deformation
-# Solution (six DDL par nœud) déjà obtenue par le solveur.
+# Solution (six DOFs per node) already obtained from the solver.
 eps = pyrucast.element_field.shell_deformation(solution, fes, "thick")
 forces = pyrucast.element_field.integrate_behavior(model, eps, materials)
-# forces porte les résultantes de membrane N, de flexion M, le moment de
+# forces carries the membrane resultants N, the bending ones M, the
 # vrillage M_drill, et — en `thick` — l'effort tranchant Q.
 # ANCHOR_END: shell_deformation
 assert len(forces) == 1
@@ -187,19 +187,19 @@ support = pyrucast.mesh.poi1_from_nodes(n)
 solution = pyrucast.NodeField(support, ["u_x", "u_y"])
 f_ext = pyrucast.NodeField(support, ["f_x", "f_y"])
 # ANCHOR: forces_internes
-# Solution déjà obtenue par le solveur.
+# Solution already obtained from the solver.
 eps = pyrucast.element_field.deformation(solution, fes)  # ε = B·u
 sig = pyrucast.element_field.integrate_behavior(model, eps, materials)  # COMP : σ
 f_int = pyrucast.node_field.internal_forces(model, sig, solution, materials)
 # L'autre côté du bilan. L'élasticité seule n'a aucun terme donné : le champ
-# revient vide, et tout l'extérieur vient du chargement construit à la main.
+# comes back empty, and everything external comes from the hand-built loading.
 f_ext_modele = pyrucast.node_field.external_forces(model, materials)
 residu = f_ext - f_int  # Σ f_ext − Σ f_int
 # ANCHOR_END: forces_internes
 assert residu.node_count() > 0
 assert f_ext_modele.node_count() == 0
 
-# ── Construction du champ matériau ──────────────────────────────────────────
+# ── Building the material field ─────────────────────────────────────────────
 
 
 def _deux_modeles():
@@ -220,8 +220,8 @@ import pyrucast
 # Thermique : conductivité uniforme.
 materials = pyrucast.element_field.material_field(thermique, [("k", 1.0)])
 
-# Élasticité : deux propriétés. Chaque physique déclare les composantes
-# qu'elle exige : `material_field` refuse celles qui manquent.
+# Elasticity: two properties. Every physics declares the components it
+# requires: `material_field` refuses the missing ones.
 materials = pyrucast.element_field.material_field(
     elastique, [("E", 210e9), ("nu", 0.3)]
 )
@@ -274,7 +274,7 @@ assert len(model.filter("thermal")) == 1
 
 
 def _plaque_et_bord():
-    """Une plaque QUA4 et l'espace EF de son bord gauche."""
+    """A QUA4 plate and the FE space of its left edge."""
     c, mesh, fes, n = _plaque_2d()
     bord_mesh = pyrucast.Mesh(c, "SEG2")
     bord_mesh.unit().add_cell([n[0], n[3]])
@@ -295,7 +295,7 @@ assert len(model) == 2
 
 
 def _deux_corps_en_vis_a_vis():
-    """Deux plaques accolées, et l'espace EF de leur face commune de chaque côté."""
+    """Two abutting plates, and the FE space of their shared face on each side."""
     c = pyrucast.Coords(2)
     g = [c.add_node(p) for p in ([0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0])]
     d = [c.add_node(p) for p in ([1.0, 0.0], [2.0, 0.0], [2.0, 1.0], [1.0, 1.0])]
@@ -333,7 +333,7 @@ fes, peau, _, _ = _plaque_et_bord()
 gauche, droite, face_gauche, face_droite = _deux_corps_en_vis_a_vis()
 semelle = peau
 # ANCHOR: echanges
-# Film thermique : entre dans la raideur de la conduction qu'il refroidit, et
+# Thermal film: enters the stiffness of the conduction it cools, and
 # en prend la nature.
 conduction = pyrucast.model.heat_conduction(fes)
 model = conduction | pyrucast.model.boundary_transfer(peau, conduction, [("T", "q")])
@@ -341,17 +341,17 @@ materials = pyrucast.element_field.material_field(
     model, [("k", 5.0), ("h_T", 12.0), ("a_ext_T", 20.0)]
 )
 
-# Résistance de contact entre deux maillages.
+# Contact resistance between two meshes.
 corps = pyrucast.model.heat_conduction(gauche) | pyrucast.model.heat_conduction(droite)
 joint = pyrucast.model.interface_transfer(face_gauche, face_droite, corps, [("T", "q")])
 
-# Fondation élastique : la même loi, sur des déplacements.
+# Elastic foundation: the same law, on displacements.
 plaque = pyrucast.model.elasticity(fes, "plane_stress")
 appui = pyrucast.model.boundary_transfer(
     semelle, plaque, [("u_x", "f_x"), ("u_y", "f_y")]
 )
 
-# Aucune nature en argument : chacun a pris celle de sa cible.
+# No kind in argument: each took its target's own.
 joint[0].physics()  # ["thermal"]
 appui[0].physics()  # ["mechanical"]
 # ANCHOR_END: echanges

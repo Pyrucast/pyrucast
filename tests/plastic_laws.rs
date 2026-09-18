@@ -207,11 +207,11 @@ fn every_law_has_a_consistent_tangent() -> Result<()> {
     // one good to machine precision, and pays only in its convergence *rate* —
     // and it is more honest to state the figure than to loosen every tolerance
     // to the worst case.
-    // Le cône **écrouissable** s'ajoute à la liste parce que son retour n'est
-    // plus en forme fermée : la surface bouge avec le multiplicateur, donc la
-    // condition de cohérence est résolue par Newton. Une tangente numérique au
-    // travers d'un retour itératif est exactement le montage où une convergence
-    // trop lâche se verrait — et ne se verrait que là.
+    // The **hardenable** cone joins the list because its return is no longer in
+    // closed form: the surface moves with the multiplier, so the consistency
+    // condition is solved by Newton. A numerical tangent through an iterative
+    // return is exactly the setup where a loose convergence would show — and
+    // would show only there.
     let hardening = dp(&[
         ("friction", 0.3),
         ("k", 30.0),
@@ -462,8 +462,8 @@ impl Cube {
 
 // ─── Le Drucker-Prager général (Cast3M PLASTIQUE DRUCKER_PRAGER) ────────────
 
-/// Élasticité commune à tous les jeux ci-dessous, pour que l'état d'essai soit
-/// comparable d'un cas à l'autre.
+/// Elasticity common to every set below, so that the trial state is
+/// comparable from one case to the next.
 const DP_ELASTIC: [(&str, f64); 2] = [("E", 20_000.0), ("nu", 0.2)];
 
 /// Un jeu Drucker-Prager, élasticité comprise.
@@ -473,9 +473,9 @@ fn dp(extra: &[(&'static str, f64)]) -> Vec<(&'static str, f64)> {
     v
 }
 
-/// `beta` pondère la part déviatorique du critère. Le laisser à son défaut de 1
-/// redonne le cône simple ; le porter à 2 resserre la surface d'autant, et c'est
-/// sur *cette* surface que le retour doit atterrir.
+/// `beta` weights the criterion's deviatoric part. Leaving it at its default
+/// of 1 gives the plain cone back; raising it to 2 tightens the surface by as
+/// much, and it is on *that* surface the return must land.
 #[test]
 fn the_deviatoric_weight_reshapes_the_cone() -> Result<()> {
     let cube = Cube::new(
@@ -489,9 +489,9 @@ fn the_deviatoric_weight_reshapes_the_cone() -> Result<()> {
     Ok(())
 }
 
-/// L'écrouissage `dk = H·dp` : la surface atteinte n'est plus `k` mais
-/// `k + H·p`, avec le `p` que le retour a lui-même produit. C'est la condition
-/// de cohérence qui devient non linéaire, et donc le seul cas où la loi itère.
+/// The hardening `dk = H·dp`: the surface reached is no longer `k` but
+/// `k + H·p`, with the `p` the return itself produced. It is the consistency
+/// condition that becomes nonlinear, hence the only case where the law iterates.
 #[test]
 fn hardening_moves_the_surface_by_h_times_p() -> Result<()> {
     let (k, h) = (30.0, 8_000.0);
@@ -514,14 +514,14 @@ fn hardening_moves_the_surface_by_h_times_p() -> Result<()> {
         "surface atteinte {reached}, attendue k + H·p = {expected} (p = {})",
         s.p
     );
-    // Et elle a bien bougé : sans écrouissage on serait resté sur `k`.
+    // And it did move: without hardening we would have stayed on `k`.
     assert!(reached > k * 1.01, "la surface n'a pas durci : {reached}");
     Ok(())
 }
 
 /// Le **critère ultime** borne l'écrouissage. Poussé assez loin, l'état atterrit
-/// sur la surface ultime et n'en bouge plus : deux déformations croissantes y
-/// donnent la même surface.
+/// on the ultimate surface and moves no further: two increasing strains give
+/// the same surface there.
 #[test]
 fn the_ultimate_surface_caps_the_hardening() -> Result<()> {
     let (k, k_ult) = (30.0, 45.0);
@@ -548,13 +548,13 @@ fn the_ultimate_surface_caps_the_hardening() -> Result<()> {
     Ok(())
 }
 
-/// Cast3M `PLASTIQUE DRUCKER_PARFAIT` est ce modèle avec `psi = friction` — un
-/// écoulement **associé**. Ce qui le distingue est mesurable : le potentiel
-/// étant le critère, la chute volumique et la chute déviatorique sont dans le
-/// rapport que la normale à la surface impose, `9K·ψ / 3μ·δ`.
+/// Cast3M's `PLASTIQUE DRUCKER_PARFAIT` is this model with `psi = friction` —
+/// an **associated** flow. What sets it apart is measurable: the potential
+/// being the criterion, the volumetric drop and the deviatoric drop stand in
+/// the ratio the surface's normal imposes, `9K·ψ / 3μ·δ`.
 ///
-/// L'état d'essai est obtenu du même cube rendu élastique par une cohésion
-/// inatteignable — c'est ce qui permet de mesurer les deux chutes.
+/// The trial state comes from the same cube made elastic by an unreachable
+/// cohesion — which is what allows both drops to be measured.
 #[test]
 fn associated_flow_recovers_the_perfect_model_of_cast3m() -> Result<()> {
     let (e, nu, friction) = (20_000.0, 0.2, 0.3);

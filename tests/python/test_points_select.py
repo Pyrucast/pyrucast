@@ -1,10 +1,10 @@
-"""Tests Python de la sélection de nœuds par région géométrique —
+"""Python tests of node selection by geometric region —
 ``points_in_*`` / ``points_on_*`` / ``points_below_plane``.
 
-Chaque opérateur renvoie un maillage POI1 calqué sur l'entrée : un
-sous-maillage par sous-maillage, éventuellement vide. La requête « nœud le
-plus proche », qui ne peut en renvoyer qu'un, est la méthode
-``mesh.nearest_node`` et non un opérateur de cette famille.
+Every operator returns a POI1 mesh modelled on the input: one submesh per
+submesh, possibly empty. The "nearest node" query, which can only return one,
+is the ``mesh.nearest_node`` method and not an operator of this family.
+
 """
 
 import math
@@ -15,7 +15,7 @@ import pyrucast
 
 
 def _cloud(dim, points):
-    """Maillage POI1 d'un seul sous-maillage, un nœud par coordonnée."""
+    """A POI1 mesh of a single submesh, one node per coordinate."""
     c = pyrucast.Coords(dim)
     m = pyrucast.Mesh(c, "POI1")
     ids = [c.add_node(list(p)) for p in points]
@@ -25,7 +25,7 @@ def _cloud(dim, points):
 
 
 def _coords_of(sel, sub=0):
-    """Coordonnées des nœuds sélectionnés dans un sous-maillage, dans l'ordre."""
+    """Coordinates of the nodes selected in a submesh, in order."""
     return [sel.node(sub, i, 0).position() for i in range(sel.cell_counts()[sub])]
 
 
@@ -33,13 +33,13 @@ def _coords_of(sel, sub=0):
 
 
 def test_sphere_in_and_on_2d():
-    # Croix de 5 points autour de l'origine, à distance 0 et 1.
+    # A cross of 5 points about the origin, at distance 0 and 1.
     _, m = _cloud(2, [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [2.0, 0.0]])
 
     inside = pyrucast.mesh.points_in_sphere(m, [0.0, 0.0], 1.0)
     assert _coords_of(inside) == [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
 
-    # Le disque plein perd son centre quand on ne garde que le cercle.
+    # The filled disc loses its centre when only the circle is kept.
     on = pyrucast.mesh.points_on_sphere(m, [0.0, 0.0], 1.0)
     assert _coords_of(on) == [[1.0, 0.0], [0.0, 1.0]]
 
@@ -54,7 +54,7 @@ def test_plane_on_and_below():
     face = pyrucast.mesh.points_on_plane(m, [0.0, 0.0, 0.0], [0.0, 0.0, 3.0])
     assert _coords_of(face) == [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]
 
-    # Sous le plan z = 1 : tout le monde (le plan est inclus).
+    # Below the z = 1 plane: everyone (the plane is included).
     below = pyrucast.mesh.points_below_plane(m, [0.0, 0.0, 1.0], [0.0, 0.0, 1.0])
     assert len(_coords_of(below)) == 3
 
@@ -69,11 +69,11 @@ def test_plane_on_and_below():
 def test_line_is_infinite_where_the_cylinder_is_capped():
     _, m = _cloud(2, [[0.0, 0.0], [1.0, 1.0], [3.0, 3.0], [1.0, 0.0]])
 
-    # La droite passe par les trois points de la diagonale, même au-delà de b.
+    # The line passes through the diagonal's three points, even beyond b.
     on_line = pyrucast.mesh.points_on_line(m, [0.0, 0.0], [1.0, 1.0])
     assert _coords_of(on_line) == [[0.0, 0.0], [1.0, 1.0], [3.0, 3.0]]
 
-    # Le cylindre, lui, s'arrête à sa section d'extrémité.
+    # The cylinder, for its part, stops at its end section.
     capped = pyrucast.mesh.points_in_cylinder(m, [0.0, 0.0], [1.0, 1.0], 1e-9)
     assert _coords_of(capped) == [[0.0, 0.0], [1.0, 1.0]]
 
@@ -82,10 +82,10 @@ def test_cylinder_surface_excludes_the_end_discs():
     _, m = _cloud(
         3,
         [
-            [1.0, 0.0, 1.0],  # sur le tube
-            [0.0, 0.0, 1.0],  # sur l'axe
-            [0.5, 0.0, 0.0],  # dans le disque du bas
-            [1.0, 0.0, 5.0],  # au-delà de la section haute
+            [1.0, 0.0, 1.0],  # on the tube
+            [0.0, 0.0, 1.0],  # on the axis
+            [0.5, 0.0, 0.0],  # inside the bottom disc
+            [1.0, 0.0, 5.0],  # beyond the top section
         ],
     )
     base, top = [0.0, 0.0, 0.0], [0.0, 0.0, 2.0]
@@ -101,18 +101,18 @@ def test_cylinder_surface_excludes_the_end_discs():
 
 
 def test_cone_defaults_to_an_apex_and_degenerates_to_a_cylinder():
-    # Rayon 2 en z = 0, sommet en z = 2 : rayon local 1 à mi-hauteur.
+    # Radius 2 at z = 0, apex at z = 2: local radius 1 at mid-height.
     _, m = _cloud(3, [[1.0, 0.0, 1.0], [0.4, 0.0, 1.0], [1.6, 0.0, 1.0]])
     base, top = [0.0, 0.0, 0.0], [0.0, 0.0, 2.0]
 
-    # top_radius vaut 0 par défaut : le cône vrai, `top` est son sommet.
+    # top_radius is 0 by default: the true cone, `top` being its apex.
     on = pyrucast.mesh.points_on_cone(m, base, top, 2.0)
     assert _coords_of(on) == [[1.0, 0.0, 1.0]]
 
     inside = pyrucast.mesh.points_in_cone(m, base, top, 2.0)
     assert _coords_of(inside) == [[1.0, 0.0, 1.0], [0.4, 0.0, 1.0]]
 
-    # Rayons égaux : un cylindre, les trois points sont dedans.
+    # Equal radii: a cylinder, the three points are inside.
     cyl = pyrucast.mesh.points_in_cone(m, base, top, 2.0, 2.0)
     assert len(_coords_of(cyl)) == 3
 
@@ -124,10 +124,10 @@ def test_torus_tube_around_its_directrix():
     _, m = _cloud(
         3,
         [
-            [2.5, 0.0, 0.0],  # sur le tube, équateur extérieur
-            [2.0, 0.0, 0.0],  # sur la directrice, donc dedans
-            [0.0, 0.0, 0.0],  # centre du trou, dehors
-            [0.0, 2.0, 0.5],  # sur le tube, un quart de tour plus loin
+            [2.5, 0.0, 0.0],  # on the tube, outer equator
+            [2.0, 0.0, 0.0],  # on the directrix, hence inside
+            [0.0, 0.0, 0.0],  # centre of the hole, outside
+            [0.0, 2.0, 0.5],  # on the tube, a quarter turn further
         ],
     )
     center, axis = [0.0, 0.0, 0.0], [0.0, 0.0, 1.0]
@@ -145,7 +145,7 @@ def test_torus_needs_a_3d_mesh():
         pyrucast.mesh.points_in_torus(m, [0.0, 0.0], [0.0, 1.0], 2.0, 0.5)
 
 
-# --- structure du résultat -------------------------------------------------
+# --- structure of the result -----------------------------------------------
 
 
 def test_result_mirrors_the_submeshes_including_empty_zones():
@@ -153,7 +153,7 @@ def test_result_mirrors_the_submeshes_including_empty_zones():
     a, b = c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0])
     far = c.add_node([0.5, 9.0])
 
-    # Zone 0 sur y = 0, zone 1 loin au-dessus.
+    # Zone 0 at y = 0, zone 1 far above.
     m = pyrucast.Mesh(c, "SEG2")
     m.unit().add_cell([a, b])
     high = pyrucast.Mesh(c, "POI1")
@@ -162,29 +162,29 @@ def test_result_mirrors_the_submeshes_including_empty_zones():
 
     sel = pyrucast.mesh.points_on_plane(m, [0.0, 0.0], [0.0, 1.0])
     assert sel.element_types() == ["POI1", "POI1"]
-    # La seconde zone ne sélectionne rien mais reste présente et vide.
+    # The second zone selects nothing but stays present and empty.
     assert sel.cell_counts() == [2, 0]
 
-    # `consolidate_mesh` est la voie pour retomber sur un nuage unique.
+    # `consolidate_mesh` is the way back to a single cloud.
     assert pyrucast.mesh.consolidate(sel).cell_counts() == [2]
 
 
 def test_tolerance_defaults_to_the_model_scale():
     _, m = _cloud(2, [[0.0, 0.0], [1.0, 0.01]])
 
-    # Précision par défaut (1e-6 × diagonale) : le second nœud est hors bande.
+    # Default precision (1e-6 × diagonal): the second node is out of band.
     assert (
         len(_coords_of(pyrucast.mesh.points_on_plane(m, [0.0, 0.0], [0.0, 1.0]))) == 1
     )
 
-    # Tolérance explicite plus large que son décalage : il rentre.
+    # An explicit tolerance wider than its offset: it gets in.
     loose = pyrucast.mesh.points_on_plane(m, [0.0, 0.0], [0.0, 1.0], tol=0.02)
     assert len(_coords_of(loose)) == 2
 
 
 def test_selection_feeds_elements_on():
-    """La sortie POI1 est un maillage de points ordinaire : elle se rebranche
-    sur `elements_on` pour remonter aux éléments portés par la sélection."""
+    """The POI1 output is an ordinary point mesh: it plugs back into
+    `elements_on` to get back to the elements the selection carries."""
     c = pyrucast.Coords(2)
     ids = [c.add_node(p) for p in ([0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0])]
     m = pyrucast.Mesh(c, "QUA4")
@@ -197,8 +197,8 @@ def test_selection_feeds_elements_on():
 
 
 def test_nearest_node_is_the_single_node_query():
-    """Le pendant « un seul nœud » de la famille : une méthode du maillage,
-    qui renvoie un `Node` et non un maillage POI1."""
+    """The family's "single node" counterpart: a method of the mesh, which
+    returns a `Node` and not a POI1 mesh."""
     _, m = _cloud(2, [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]])
     node = m.nearest_node([0.9, 0.9])
     assert isinstance(node, pyrucast.Node)
@@ -221,8 +221,8 @@ def test_invalid_arguments_raise():
 
 
 def test_axisymmetric_selection_reads_the_meridian_plane():
-    """En axisymétrie les nœuds sont testés dans le demi-plan (r, z) où ils
-    sont stockés : le « cercle » est un cercle du méridien, pas une sphère du
+    """Under axisymmetry the nodes are tested in the (r, z) half-plane where they
+    are stored: the "circle" is a circle of the meridian, not a sphere of the
     solide de révolution."""
     c = pyrucast.Coords.axisymmetric()
     m = pyrucast.Mesh(c, "POI1")

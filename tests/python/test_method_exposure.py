@@ -1,14 +1,14 @@
-"""Garde-fou de la règle « le verbe exposé aussi en méthode ».
+"""Guard for the rule "the verb also exposed as a method".
 
-`CONVENTIONS.md` § « Le verbe exposé aussi en méthode » : une fonction libre
-est **aussi** une méthode de son sujet si (1) son premier argument est le
-sujet, (2) elle rend un conteneur, (3) elle a un sens pour toute instance du
-type. Ce test lit le stub — donc aucune liste de fonctions à tenir à la main —
-et vérifie que la projection est complète : toute fonction qui remplit (1) et
-(2) porte une méthode, sauf si elle figure ci-dessous avec sa raison.
+`CONVENTIONS.md` § "The verb also exposed as a method": a free function is
+**also** a method of its subject if (1) its first argument is the subject,
+(2) it returns a container, (3) it makes sense for every instance of the type.
+This test reads the stub — hence no list of functions to keep by hand — and
+checks that the projection is complete: every function meeting (1) and (2)
+carries a method, unless it appears below with its reason.
 
-Ajouter une fonction ici demande une raison écrite. C'est le prix de
-l'exception, et c'est voulu.
+Adding a function here demands a written reason. That is the price of the
+exception, and it is deliberate.
 """
 
 import pathlib
@@ -33,32 +33,32 @@ CONTAINERS = {
     "SubEvolution",
 }
 
-# Les quatre saveurs de champ, pour les opérateurs polymorphes (`typing.Any`).
+# The four field flavours, for the polymorphic operators (`typing.Any`).
 FIELDS = ["NodeField", "SubNodeField", "ElementField", "SubElementField"]
 
-# Méthodes qui ne portent pas la documentation de **leur fonction libre** —
-# chacune avec la raison qui l'y oblige.
+# Methods that do not carry **their free function's** documentation — each
+# with the reason that forces it.
 DOC_PROPRE = {
     "select": (
-        "opérateur polymorphe : la méthode naît d'une fonction par saveur, "
-        "documentée pour ce seul receveur, et non de la fonction libre à `Any`"
+        "polymorphic operator: the method is born of one function per flavour, "
+        "documented for that receiver alone, not of the free function returning `Any`"
     ),
-    "mask": "idem — le produit est déterminé par la saveur du receveur",
+    "mask": "same — the product is determined by the receiver's flavour",
     "merge_nodes": (
-        "receveur `Py<Self>` et non `PyRef` : avec `in_place` elle rend l'objet "
-        "lui-même, pas une vue empruntée — écrite à la main"
+        "a `Py<Self>` receiver rather than `PyRef`: with `in_place` it returns the "
+        "object itself, not a borrowed view — written by hand"
     ),
 }
 
-# Les pointeurs « Voir … » que le stub a encore le droit de porter : ceux des
-# méthodes écrites à la main, et rien d'autre. Ce compte ne peut que décroître.
+# The "See …" pointers the stub is still allowed to carry: those of the
+# hand-written methods, and nothing else. This count can only shrink.
 DOC_PROPRE_DANS_LE_STUB = ["merge_nodes"]
 
-# Les sources du binding, pour le contrôle des cibles de pointeurs.
+# The binding's sources, for checking the pointers' targets.
 OPS_RS = pathlib.Path(__file__).resolve().parents[2] / "src" / "py" / "ops"
 
-# Fonction libre -> nom de la méthode, quand le nom change parce que la méthode
-# doit porter le qualificatif que le module fournissait à la fonction.
+# Free function -> method name, when the name changes because the method must
+# carry the qualifier the module supplied to the function.
 RENAMED = {
     "stiffness": "stiffness_matrix",
     "mass": "mass_matrix",
@@ -69,38 +69,38 @@ RENAMED = {
     "consolidate_node": "consolidate",
     "consolidate_element": "consolidate",
     # Noms plats de l'extension : `_pyrucast` étant plat, `node_field.mask` et
-    # `element_field.mask` s'y enregistrent sous des noms distincts.
+    # `element_field.mask` register there under distinct names.
     "mask_node": "mask",
     "mask_element": "mask",
 }
 
-# Modules Python entiers sans méthode, avec la raison. La dérogation vaut par
-# **construction** — elle tient pour chaque fonction du module, celles à venir
-# comprises — et c'est ce qui la distingue d'une exclusion nom par nom.
+# Whole Python modules without a method, with the reason. The waiver holds by
+# **construction** — it holds for every function of the module, those to come
+# included — and that is what sets it apart from a name-by-name exclusion.
 NO_METHOD_MODULES = {
     "model": (
-        "condition (1) : le premier argument est le **support** que le modèle "
-        "recouvre (l'espace EF, ou les maillages que relie une contrainte), pas "
-        "un sujet qu'on transforme. `fes.heat_conduction()` ferait promettre à "
-        "tout espace EF les 28 physiques du catalogue."
+        "condition (1): the first argument is the **support** the model covers "
+        "(the FE space, or the meshes a constraint relates), not a subject being "
+        "transformed. `fes.heat_conduction()` would have every FE space promise "
+        "the catalogue's 28 physics."
     ),
 }
 
-# Sans méthode, avec la raison. Condition (3) sauf mention contraire.
+# Without a method, with the reason. Condition (3) unless stated otherwise.
 NO_METHOD = {
-    "deformation": "exige des composantes de déplacement u_x/u_y/u_z",
+    "deformation": "requires displacement components u_x/u_y/u_z",
     "beam_deformation": "exige déplacements + rotations",
-    "shell_deformation": "exige les six DDL de coque, et la formulation",
-    "thermal_strain": "exige une température, et alpha dans le matériau",
-    "merge": "symétrique — `a | b` est déjà sa forme",
-    "psca": "symétrique — l'ordre ne compte pas",
+    "shell_deformation": "requires the six shell DOFs, and the formulation",
+    "thermal_strain": "requires a temperature, and alpha in the material",
+    "merge": "symmetric — `a | b` is already its form",
+    "psca": "symmetric — order does not matter",
 }
 
 PYI = pathlib.Path(pyrucast.__file__).parent / "_pyrucast" / "__init__.pyi"
 
 
 def free_functions():
-    """(nom, type du sujet, type de retour) des fonctions libres du stub."""
+    """(name, subject type, return type) of the stub's free functions."""
     for name, args, ret in re.findall(
         r"^def (\w+)\((.*?)\) -> ([^:]+):", PYI.read_text(), re.M
     ):
@@ -120,12 +120,12 @@ def free_functions():
 
 
 def subjects(first):
-    """Les types concrets d'un sujet — quatre pour un opérateur polymorphe."""
+    """A subject's concrete types — four for a polymorphic operator."""
     return FIELDS if first == "Any" else [first]
 
 
 def excluded_by_module():
-    """Les noms couverts par une dérogation de module entier."""
+    """The names covered by a whole-module waiver."""
     return {
         name
         for module in NO_METHOD_MODULES
@@ -147,28 +147,28 @@ def test_every_eligible_operator_is_also_a_method():
 
 
 def test_exclusions_are_documented_and_real():
-    """Toute exclusion doit porter une raison et viser une fonction existante."""
+    """Every exclusion must carry a reason and target an existing function."""
     names = {name for name, _, _ in free_functions()}
     for fn, reason in NO_METHOD.items():
-        assert reason.strip(), f"{fn} : exclusion sans raison écrite"
+        assert reason.strip(), f"{fn}: exclusion without a written reason"
         assert fn in names, f"{fn} : exclusion périmée, la fonction n'existe plus"
 
 
 def test_module_exclusions_are_documented_and_real():
-    """Une dérogation de module doit viser un module vivant qui en a besoin.
+    """A module waiver must target a living module that needs it.
 
-    « Qui en a besoin » = au moins une de ses fonctions serait éligible aux
-    conditions (1) et (2) sans elle. Un module dont plus aucune fonction ne
-    l'est verrait sa dérogation devenir du bruit, et ce test la signale.
+    "Needs it" = at least one of its functions would be eligible under
+    conditions (1) and (2) without it. A module where no function is eligible
+    any more would see its waiver become noise, and this test reports it.
     """
     eligible = {name for name, _, _ in free_functions()}
     for module, reason in NO_METHOD_MODULES.items():
-        assert reason.strip(), f"{module} : dérogation sans raison écrite"
+        assert reason.strip(), f"{module}: waiver without a written reason"
         names = set(getattr(pyrucast, module).__all__)
-        assert names, f"{module} : dérogation sur un module vide"
+        assert names, f"{module}: waiver on an empty module"
         assert names & eligible, (
-            f"{module} : dérogation périmée, plus aucune de ses fonctions "
-            "n'est éligible à la projection en méthode"
+            f"{module}: stale waiver, none of its functions is eligible "
+            "for the projection into a method any more"
         )
 
 
@@ -179,16 +179,16 @@ def test_renames_point_to_existing_functions():
 
 
 def test_methods_carry_the_doc_of_their_function():
-    """Une méthode dérivée affiche la documentation de sa fonction libre.
+    """A derived method displays its free function's documentation.
 
-    C'est l'acquis de `#[py_op]` et de `py_field_unary!` : le texte est écrit
-    une fois, sur la fonction, et **recopié** sur la méthode — donc `help()`
-    comme le stub des IDE le montrent en entier. Un pointeur « Voir … » qui
-    reviendrait ici serait une régression de l'aide affichée, invisible
+    That is what `#[py_op]` and `impl_field_transform_pymethod!` won: the text
+    is written once, on the function, and **copied** onto the method — so
+    `help()` and the IDEs' stub show it in full. A "See …" pointer coming back
+    here would be a regression of the displayed help, invisible otherwise since
     autrement puisque le code compilerait très bien.
 
-    Le test part du stub, donc d'aucune liste tenue à la main : il confronte
-    chaque fonction libre à la méthode de même nom, ou de nom renommé.
+    The test starts from the stub, hence from no hand-kept list: it confronts
+    every free function with the method of the same, or renamed, name.
     """
     manquantes = []
     for nom, first, _ret in free_functions():
@@ -204,38 +204,38 @@ def test_methods_carry_the_doc_of_their_function():
                 continue
             manquantes.append(f"{cls}.{methode}  (← {nom}) : {porte.__doc__!r:.60}")
     assert not manquantes, (
-        "méthodes qui n'affichent pas la doc de leur fonction :\n  "
+        "methods that do not display their function's doc:\n  "
         + "\n  ".join(manquantes)
     )
 
 
 def test_no_pointer_survives_in_the_stub():
-    """Aucune docstring du stub ne se réduit à « Voir … ».
+    """No docstring of the stub boils down to "See …".
 
-    C'est ce que lisent Pylance et PyCharm : un pointeur y est du texte mort,
-    faute de mécanisme de lien. Le compte est borné par les seules méthodes
-    écrites à la main, et il ne peut que décroître.
+    That is what Pylance and PyCharm read: a pointer there is dead text, for
+    want of a link mechanism. The count is bounded by the hand-written methods
+    alone, and it can only shrink.
     """
-    restants = re.findall(r"Voir `pyrucast\.[\w.]+`", PYI.read_text())
+    restants = re.findall(r"See `pyrucast\.[\w.]+`", PYI.read_text())
     assert len(restants) <= len(DOC_PROPRE_DANS_LE_STUB), (
-        f"{len(restants)} pointeurs dans le stub, {len(DOC_PROPRE_DANS_LE_STUB)} "
-        f"attendus au plus : {sorted(set(restants))}"
+        f"{len(restants)} pointers in the stub, {len(DOC_PROPRE_DANS_LE_STUB)} "
+        f"expected at most: {sorted(set(restants))}"
     )
 
 
 def test_every_pointer_aims_at_a_living_target():
-    """Un pointeur « Voir `pyrucast.X.Y` » doit viser quelque chose qui existe.
+    """A pointer "See `pyrucast.X.Y`" must target something that exists.
 
-    Rien ne le vérifiait, et douze pointeurs ont pointé dans le vide pendant
-    des mois : `field.mask` après le déménagement du verbe vers `node_field` et
-    `element_field`, `field.filter_components` et `field.rename_component` qui
-    n'ont jamais eu de fonction libre. Le code compilait, les tests passaient,
-    et l'utilisateur lisait au survol le nom d'une fonction inexistante.
+    Nothing checked it, and twelve pointers pointed into the void for months:
+    `field.mask` after the verb moved to `node_field` and `element_field`,
+    `field.filter_components` and `field.rename_component`, which never had a
+    free function at all. The code compiled, the tests passed, and the user read
+    the name of a non-existent function on hover.
     """
     morts = []
     for source in sorted(OPS_RS.glob("*.rs")):
         for ligne, texte in enumerate(source.read_text().split("\n"), 1):
-            m = re.search(r"/// Voir `pyrucast\.(\w+)\.(\w+)`\.", texte)
+            m = re.search(r"/// See `pyrucast\.(\w+)\.(\w+)`\.", texte)
             if not m:
                 continue
             module, verbe = m.groups()
@@ -255,13 +255,13 @@ def test_chaining_actually_works():
         pyrucast.mesh.line(a, b, 1), pyrucast.mesh.line(d, e, 1), 1
     )
     # méthode, puis méthode, puis méthode — la forme libre ferait trois appels
-    # imbriqués à lire de l'intérieur vers l'extérieur.
+    # calls to read from the inside out.
     contour = quad.border().consolidate()
     assert contour.cell_count() == 4
 
     xs = quad.positions(["X"])
     droite = xs.select(ge=1.0)  # champ nodal → Mesh : le module suit la sortie
-    assert droite.cell_count() == 2  # deux POI1, les nœuds de x = 1
+    assert droite.cell_count() == 2  # two POI1, the nodes at x = 1
 
     # renommage et filtrage de composantes, eux aussi chaînables
     assert xs.rename_component("X", "abscisse").components() == ["abscisse"]

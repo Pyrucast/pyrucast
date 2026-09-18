@@ -1,16 +1,16 @@
-"""Source des exemples Python de `book/src/sauvegarde.md` et `evolution.md`.
+"""Source of the Python examples of `book/src/sauvegarde.md` and `evolution.md`.
 
-Chaque bloc de ces pages vient d'ici par `{{#include …:ancre}}`.
+Every block of those pages comes from here through `{{#include …:anchor}}`.
 
-**Le code vit au niveau module, pas dans des fonctions de test** : mdbook
-n'enlève pas l'indentation d'un extrait inclus, si bien qu'un bloc ancré dans
-une fonction s'afficherait décalé de quatre espaces. pytest exécute donc ce
-fichier à la **collecte** ; un exemple qui casse est une erreur de collecte, au
-traceback complet et au code de retour non nul.
+**The code lives at module level, not inside test functions**: mdbook does not
+strip the indentation of an included excerpt, so a block anchored inside a
+function would show up shifted by four spaces. pytest therefore runs this file
+at **collection** time; an example that breaks is a collection error, with a
+full traceback and a non-zero exit code.
 
-Les extraits de sauvegarde écrivent des fichiers sous des noms courts
-(`etude.pyr`) : le module bascule une fois pour toutes dans un répertoire
-temporaire, ce qui laisse l'extrait affiché tel qu'un utilisateur l'écrirait.
+The save excerpts write files under short names (`etude.pyr`): the module
+switches once and for all into a temporary directory, which leaves the
+displayed excerpt as a user would write it.
 
 Voir `book/src/developper/documentation-et-tests.md`.
 """
@@ -20,16 +20,16 @@ import tempfile
 
 import pyrucast
 
-# Répertoire de travail jetable — les noms de fichiers des extraits restent
-# courts. Le module rend le répertoire courant à la fin : au niveau module il
-# n'y a pas de fixture, et le laisser déplacé piégerait les autres fichiers.
+# A throwaway working directory — the excerpts' file names stay short. The
+# short. The module gives the current directory back at the end: at module
+# level there is no fixture, and leaving it moved would trap the other files.
 _TMP = tempfile.TemporaryDirectory()
 _CWD = os.getcwd()
 os.chdir(_TMP.name)
 
 
 def _support_et_champs():
-    """Un nuage POI1 et deux champs posés dessus, sur le **même** support."""
+    """A POI1 cloud and two fields laid on it, on the **same** support."""
     c = pyrucast.Coords(2)
     noeuds = [c.add_node([float(i), 0.0]) for i in range(3)]
     support = pyrucast.mesh.poi1_from_nodes(noeuds)
@@ -47,7 +47,7 @@ def _maillage_et_materiaux():
     return c, mesh, fes, mat, n
 
 
-# ── Sauvegarde : un dictionnaire à l'aller, un dictionnaire au retour ───────
+# ── Saving: a dictionary on the way out, a dictionary on the way back ───────
 
 _c, mesh, fes, mat, _n = _maillage_et_materiaux()
 temperature = pyrucast.NodeField(pyrucast.mesh.poi1_from_nodes(_n), ["T"])
@@ -59,7 +59,7 @@ pyrucast.save(
         "maillage fin": mesh,
         "T (°C)": temperature,
         "materiaux": mat,
-        "pas de temps": 0.05,
+        "time step": 0.05,
         "instants": [0.0, 0.1, 0.2],
     },
 )
@@ -73,7 +73,7 @@ assert mesh2.cell_count() == mesh.cell_count()
 assert t2.components() == ["T"]
 
 
-# ── Le partage survit à l'aller-retour ──────────────────────────────────────
+# ── Sharing survives the round trip ─────────────────────────────────────────
 
 _c2, support, _ = _support_et_champs()
 
@@ -83,22 +83,20 @@ f = pyrucast.NodeField(support, ["f"])
 pyrucast.save("etude.pyr", {"T": t, "f": f})
 
 o = pyrucast.load("etude.pyr")
-assert len(o["T"] | o["f"]) == 1  # une seule zone : le support est un seul objet
+assert len(o["T"] | o["f"]) == 1  # a single zone: the support is one object
 # ANCHOR_END: partage
 
 
-# ── Un maillage entraîne ses dépendances ────────────────────────────────────
+# ── A mesh drags its dependencies along ─────────────────────────────────────
 
 # ANCHOR: dependances
-pyrucast.save(
-    "m.pyr", {"maillage": mesh}
-)  # écrit aussi la Coords et les sous-maillages
+pyrucast.save("m.pyr", {"maillage": mesh})  # also writes the Coords and the submeshes
 # ANCHOR_END: dependances
 
 assert pyrucast.load("m.pyr")["maillage"].cell_count() == mesh.cell_count()
 
 
-# ── Ce qui n'est pas sauvé : les états dérivés ──────────────────────────────
+# ── What is not saved: the derived states ───────────────────────────────────
 
 _imposed = pyrucast.mesh.poi1_from_nodes([_n[0]])
 _mult = pyrucast.mesh.barycenter(_imposed)
@@ -122,7 +120,7 @@ u = pyrucast.solver.solve(k, o["chargement"])  # refactorise
 assert u.node_count() > 0
 
 
-# ── Les compteurs de nœuds ne traversent pas ────────────────────────────────
+# ── The node counters do not cross over ─────────────────────────────────────
 
 _c3 = pyrucast.Coords(2)
 _c3.add_node([0.0, 0.0])
@@ -130,11 +128,11 @@ pyrucast.save("coords_seules.pyr", {"c": _c3})
 
 # ANCHOR: refcount
 c2 = pyrucast.load("coords_seules.pyr")["c"]
-c2.gc()  # collecte tout : rien dans le fichier ne retenait ces nœuds
+c2.gc()  # collects everything: nothing in the file held those nodes
 # ANCHOR_END: refcount
 
 
-# ── Évolution : une courbe, sa zone ─────────────────────────────────────────
+# ── Evolution: one curve, its zone ──────────────────────────────────────────
 
 pc = pyrucast
 
@@ -165,7 +163,7 @@ young = loi.interpolate(temperature)  # temperature : NodeField de composante "T
 assert young.components() == ["young"]
 
 
-# ── Toutes les formes d'interpolation ───────────────────────────────────────
+# ── Every form of interpolation ─────────────────────────────────────────────
 
 champ_t0 = pyrucast.NodeField(pyrucast.mesh.poi1_from_nodes(_n), ["T"])
 champ_t1 = pyrucast.NodeField(champ_t0.support_mesh(), ["T"])
@@ -173,24 +171,24 @@ champ_t1 = pyrucast.NodeField(champ_t0.support_mesh(), ["T"])
 # ANCHOR: interpolate
 import pyrucast as pc
 
-# Courbe scalaire (une SubEvolution).
+# Scalar curve (one SubEvolution).
 se = pc.SubEvolution([(0.0, 10.0), (1.0, 20.0)])
 print(se.interpolate(0.5))  # 15.0
-print(se.interpolate(2.0, out_of_range="clamp"))  # 20.0 (sinon : erreur)
+print(se.interpolate(2.0, out_of_range="clamp"))  # 20.0 (otherwise: an error)
 
 # Agrégat scalaire → liste de flottants.
 e = pc.Evolution([(0.0, 10.0), (1.0, 20.0)])
 print(e.interpolate(0.5))  # [15.0]
 
-# Bas niveau : composition de courbes par zone avec `|`.
+# Low level: composing per-zone curves with `|`.
 agg = pc.SubEvolution([(0.0, 1.0), (1.0, 2.0)]) | pc.SubEvolution(
     [(0.0, 3.0), (1.0, 4.0)]
 )
 print(agg.interpolate(0.5))  # [1.5, 3.5]
 
-# Haut niveau temps-major : un NodeField complet par pas → NodeField interpolé.
+# High level, time-major: one whole NodeField per step → interpolated NodeField.
 ev = pc.Evolution([(0.0, champ_t0), (2.0, champ_t1)])
-champ = ev.interpolate(1.0)  # NodeField à mi-chemin
+champ = ev.interpolate(1.0)  # NodeField halfway
 
 # Courbe de transfert : passer un champ → champ (loi matériau E(T)).
 loi = pc.Evolution(
@@ -203,14 +201,14 @@ assert se.interpolate(0.5) == 15.0
 assert e.interpolate(0.5) == [15.0]
 
 
-# ── Tracé d'une évolution ───────────────────────────────────────────────────
+# ── Plotting an evolution ───────────────────────────────────────────────────
 
 # ANCHOR: plot
 e = pc.Evolution([(0.0, 10.0), (1.0, 20.0), (2.0, 5.0)])
 e.plot(save="courbe.svg", x_label="temps", y_label="T")  # courbe scalaire
-ev.plot(save="frame.png", frame=1)  # champ tabulé (un pas)
+ev.plot(save="frame.png", frame=1)  # tabulated field (one step)
 # ANCHOR_END: plot
 
 
-# Fin des extraits : on rend le répertoire courant.
+# End of the excerpts: the current directory is given back.
 os.chdir(_CWD)

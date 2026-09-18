@@ -1,8 +1,8 @@
 //! Source des exemples Rust de `book/src/triangulation.md`.
 //!
-//! La page tire ces fonctions par `{{#include …:ancre}}` et `cargo test` les
+//! The page pulls these functions through `{{#include …:anchor}}` and
 //! exécute. L'ancre couvre la **fonction entière**, signature comprise : en
-//! Rust tout code vit dans un `fn`, et mdbook n'enlève pas l'indentation.
+//! Rust all code lives in a `fn`, and mdbook does not strip the indentation.
 //!
 //! Voir `book/src/developper/documentation-et-tests.md`.
 
