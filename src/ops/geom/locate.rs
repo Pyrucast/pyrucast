@@ -46,15 +46,15 @@ use crate::parallel::*;
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = mesh::poi1_from_nodes(&n).unwrap();
-/// // Localiser un point dans le maillage hôte : la maille qui le contient,
-/// // ses coordonnées de référence, et les poids Nᵢ qui l'interpolent —
-/// // c'est de là que vient le couplage d'une barre baignée.
+/// // Locating a point in the host mesh: the cell containing it, its reference
+/// // coordinates, and the Nᵢ weights that interpolate it — that is where an
+/// // immersed bar's coupling comes from.
 /// let l = geom::locate_points(&maillage, &[vec![0.5, 0.5]], 1e-6)?;
 /// let l = l[0].as_ref().unwrap();
 /// assert_eq!(l.cell, 0);
 /// assert_eq!(l.nodes.len(), 3);
 /// assert!((l.weights.iter().sum::<f64>() - 1.0).abs() < 1e-12);
-/// // Hors du maillage, `None` plutôt qu'une erreur : c'est un renseignement.
+/// // Outside the mesh, `None` rather than an error: this is information.
 /// assert!(geom::locate_points(&maillage, &[vec![9.0, 9.0]], 1e-6)?[0].is_none());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -105,15 +105,15 @@ pub struct Location {
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = mesh::poi1_from_nodes(&n).unwrap();
-/// // Localiser un point dans le maillage hôte : la maille qui le contient,
-/// // ses coordonnées de référence, et les poids Nᵢ qui l'interpolent —
-/// // c'est de là que vient le couplage d'une barre baignée.
+/// // Locating a point in the host mesh: the cell containing it, its reference
+/// // coordinates, and the Nᵢ weights that interpolate it — that is where an
+/// // immersed bar's coupling comes from.
 /// let l = geom::locate_points(&maillage, &[vec![0.5, 0.5]], 1e-6)?;
 /// let l = l[0].as_ref().unwrap();
 /// assert_eq!(l.cell, 0);
 /// assert_eq!(l.nodes.len(), 3);
 /// assert!((l.weights.iter().sum::<f64>() - 1.0).abs() < 1e-12);
-/// // Hors du maillage, `None` plutôt qu'une erreur : c'est un renseignement.
+/// // Outside the mesh, `None` rather than an error: this is information.
 /// assert!(geom::locate_points(&maillage, &[vec![9.0, 9.0]], 1e-6)?[0].is_none());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```

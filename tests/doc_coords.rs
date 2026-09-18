@@ -1,9 +1,9 @@
-//! Source des exemples Rust de `book/src/coords.md`.
+//! Source of the Rust examples of `book/src/coords.md`.
 //!
 //! The page pulls these functions through `{{#include …:anchor}}` and
 //! exécute. L'ancre couvre la **fonction entière**, signature comprise : en
-//! Rust tout code vit dans un `fn`, et mdbook n'enlève pas l'indentation d'un
-//! extrait inclus — montrer la fonction est donc plus honnête que montrer un
+//! Rust all code lives in a `fn`, and mdbook does not strip an included
+//! excerpt's indentation — showing the function is therefore more honest than
 //! corps décalé de quatre espaces.
 //!
 //! Voir `book/src/developper/documentation-et-tests.md`.
@@ -13,11 +13,11 @@ use pyrucast::coords::Coords;
 
 #[test]
 fn le_repere_se_choisit_a_la_construction() {
-    // Cartésien (par défaut) : dim libre.
+    // Cartesian (the default): free dim.
     let plan = Coords::new(2).unwrap();
     assert!(!plan.is_axisymmetric());
 
-    // Révolution : la dimension vaut nécessairement 2, donc pas d'argument.
+    // Revolution: the dimension is necessarily 2, hence no argument.
     let axi = Coords::axisymmetric().unwrap();
     assert_eq!(axi.dim(), 2);
     assert!(axi.is_axisymmetric());
@@ -30,7 +30,7 @@ use pyrucast::handle::Handle;
 #[test]
 fn un_noeud_survit_tant_qu_on_le_tient() {
     let coords = Handle::new(Coords::new(2).unwrap());
-    // add_node initialise refcount = 1 ; sans décrément, le nœud est protégé.
+    // add_node initializes refcount = 1; without a decrement, the node is protected.
     let id = coords.write().add_node(&[0.0, 0.0]).unwrap();
     assert_eq!(coords.write().gc(), 0);
 
@@ -48,7 +48,7 @@ fn une_seconde_configuration_clone_la_courante() {
 
     let c2 = coords.write().add_config("deformed");
     coords.write().select(c2).unwrap();
-    // les `set_position` suivants modifient désormais la configuration "deformed".
+    // the following `set_position` now change the "deformed" configuration.
     coords.write().set_position(id, &[0.1, 0.05]).unwrap();
 
     coords.write().select(0).unwrap();
@@ -67,12 +67,12 @@ fn une_permutation_renumerote_pour_le_solveur() {
     coords.write().add_node(&[1.0, 0.0]).unwrap();
     coords.write().add_node(&[0.5, 1.0]).unwrap();
 
-    // Permutation posée à la main (le calcul automatique reste à écrire).
+    // Permutation set by hand (the automatic computation is still to be written).
     coords.write().set_permutation(vec![2, 0, 1]).unwrap();
-    // permutation[0] = 2 : le nœud d'id 0 est en position solveur 2.
+    // permutation[0] = 2: the node with id 0 is at solver position 2.
     println!("{:?}", coords.read().permutation());
 
-    // Retour à l'identité.
+    // Back to the identity.
     coords.write().clear_permutation();
     assert!(coords.read().permutation().is_none());
 }

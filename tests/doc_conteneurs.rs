@@ -1,9 +1,9 @@
-//! Source des exemples Rust des pages de conteneurs du book.
+//! Source of the Rust examples on the book's container pages.
 //!
 //! Couvre `introduction.md`, `node.md`, `mesh.md`, `node-field.md`,
 //! `element-field.md`, `evolution.md`, `sauvegarde.md`, `compilation.md` et
-//! `operateurs/assemblage.md`. Les pages tirent ces fonctions par
-//! `{{#include …:ancre}}` et `cargo test` les exécute. L'ancre couvre la
+//! `operateurs/assemblage.md`. The pages pull these functions through
+//! `{{#include …:anchor}}` and `cargo test` runs them. The anchor covers the
 //! **fonction entière**, signature comprise.
 //!
 //! Voir `book/src/developper/documentation-et-tests.md`.
@@ -35,8 +35,8 @@ fn un_maillage_minimal() -> Result<()> {
     let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
     sm.add_cell(&[a.id(), b.id()])?;
 
-    // L'agrégat ne porte pas la `Coords` : ce sont les sous-maillages qui la
-    // tiennent. `Mesh::from_submesh(sm)` est le raccourci pour le cas à un seul.
+    // The aggregate does not carry the `Coords`: the submeshes are what hold it.
+    // `Mesh::from_submesh(sm)` is the shortcut for the single-submesh case.
     let mut mesh = Mesh::empty();
     mesh.add_sub(Handle::new(sm))?;
     println!("{}", mesh); // Mesh: 1 submesh(es), 1 cell(s) total
@@ -99,7 +99,7 @@ fn un_champ_aux_noeuds_s_ecrit_par_zone_et_se_lit_par_agregat() -> Result<()> {
     assert_eq!(u.value(a.id(), "UX")?, 1.5);
     assert_eq!(u.value(b.id(), "UX")?, 0.0); // valeur par défaut
 
-    // Depuis un maillage multi-zones : un SubNodeField par submesh.
+    // From a multi-zone mesh: one SubNodeField per submesh.
     let mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::POI1));
     let field = NodeField::new(&mesh, vec!["T".into()])?;
     assert_eq!(field.len(), mesh.len());
@@ -119,7 +119,7 @@ fn un_champ_aux_points_de_gauss_porte_le_materiau() -> Result<()> {
     mesh.add_cell(&[a.id(), b.id(), c.id()])?;
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
 
-    // Élasticité linéaire 2-D : deux propriétés matériau, une zone (un sous-espace).
+    // 2-D linear elasticity: two material properties, one zone (one subspace).
     let mat = ElementField::new(&fes, vec!["E".into(), "nu".into()])?;
     {
         let mut z = mat.get(0)?.write(); // la zone (SubElementField) — guard
@@ -128,13 +128,13 @@ fn un_champ_aux_points_de_gauss_porte_le_materiau() -> Result<()> {
         assert_eq!(z.value(0, 0, "E")?, 210e9);
     }
 
-    // Composantes par sous-espace (multi-matériau) :
+    // Components per subspace (multi-material):
     let mat2 = ElementField::with(
         &fes,
         &[vec!["E".into(), "nu".into()]], // une liste par sous-espace
     )?;
 
-    // Statistiques et arithmétique au niveau agrégat.
+    // Statistics and arithmetic at the aggregate level.
     assert_eq!(Field::max(&mat, Some("E"))?, 210e9);
     let scaled = &mat * 1.1; // nouveau champ (référence : préserve `mat`)
     mat.mul_to_component("E", 0.95)?; // en place, seulement "E"
@@ -171,8 +171,8 @@ fn une_evolution_interpole_scalaires_et_champs() -> Result<()> {
 // ANCHOR: archive
 #[test]
 fn sauver_et_relire_un_graphe_d_objets() -> Result<()> {
-    // `tempfile` n'est pas une dépendance du projet : un nom unique dans le
-    // répertoire temporaire du système suffit.
+    // `tempfile` is not a dependency of the project: a unique name in the system's
+    // temporary directory is enough.
     let chemin = std::env::temp_dir().join(format!("pyrucast_doc_{}.pyr", std::process::id()));
     let chemin = chemin.to_str().unwrap().to_string();
     let chemin = chemin.as_str();

@@ -54,9 +54,9 @@ const B_C: usize = 6;
 /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
 /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
 /// # let mat = MatRead::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &[]);
-/// // Les paramètres de Mazars, lus une fois par maille : le seuil `eps_d0`
-/// // et les deux branches, traction et compression. Ils ne sont pas
-/// // exposés champ par champ — c'est `update` qui les emploie.
+/// // Mazars's parameters, read once per cell: the threshold `eps_d0` and the
+/// // two branches, tension and compression. They are not exposed field by
+/// // field — `update` is what uses them.
 /// let u = damage::mazars::update(&[1e-3, 0.0, 0.0, 0.0, 0.0, 0.0], &[0.0], &mat)?;
 /// assert!(u.damage > 0.0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -162,7 +162,7 @@ fn mazars_update(eps: &[f64; 6], kappa_old: f64, p: &MazarsParams) -> ([f64; 6],
 /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
 /// # let mat = MatRead::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &[]);
 /// // Un seuil `eps_d0`, puis deux branches : traction (A_t, B_t) et
-/// // compression (A_c, B_c), mélangées par la part de traction.
+/// // compression (A_c, B_c), blended by the tensile share.
 /// assert!(damage::mazars::MATERIAL.contains(&"eps_d0"));
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -192,17 +192,17 @@ pub const MATERIAL: &[&str] = &["E", "nu", "eps_d0", "A_t", "B_t", "A_c", "B_c"]
 /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
 /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
 /// # let mat = MatRead::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &[]);
-/// // `kappa` est la mémoire de la loi : il **ne décroît pas**. Décharger
-/// // après avoir endommagé ne répare rien.
+/// // `kappa` is the law's memory: it **does not decrease**. Unloading after
+/// // damaging repairs nothing.
 /// let grand = [1e-3, 0.0, 0.0, 0.0, 0.0, 0.0];
 /// let charge = damage::mazars::update(&grand, &[0.0], &mat)?;
 /// let petit = [1e-5, 0.0, 0.0, 0.0, 0.0, 0.0];
 /// let decharge = damage::mazars::update(&petit, &charge.vars, &mat)?;
 /// assert_eq!(decharge.internal()[0], charge.internal()[0]);
-/// // `damage` est recalculé depuis κ, d'où l'égalité à l'arrondi près.
+/// // `damage` is recomputed from κ, hence equality up to rounding.
 /// assert!((decharge.damage - charge.damage).abs() < 1e-12);
-/// // La contrainte, elle, retombe : la raideur est celle du matériau
-/// // endommagé, pas celle du matériau sain.
+/// // The stress, for its part, falls back: the stiffness is the damaged
+/// // material's, not the sound material's.
 /// assert!(decharge.sigma[0] < charge.sigma[0]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```

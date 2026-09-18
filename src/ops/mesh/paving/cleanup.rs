@@ -139,9 +139,9 @@ pub fn run(
     for _ in 0..ROUNDS {
         let before = report.total();
         report.doublets += remove_doublets(pts, movable, quads, tris, &mut alive, &alive_tri);
-        // La paire avant le nœud seul : c'est le motif le plus spécifique, et
-        // il fait mieux — deux nœuds et deux mailles d'un coup au lieu d'un et
-        // d'un. Dans l'autre ordre, l'effondrement d'un nœud prend l'un des
+        // The pair before the lone node: it is the most specific pattern, and it does
+        // better — two nodes and two cells at once instead of one and one. In the
+        // other order, collapsing a node takes one of the
         // deux et la paire n'a jamais sa chance.
         report.pairs += collapse_pair(pts, movable, quads, tris, &mut alive, &mut alive_tri);
         report.absorbed += collapse_valence3(pts, movable, quads, tris, &mut alive, &mut alive_tri);
@@ -528,9 +528,9 @@ fn collapse_pair(
                 let v = v as usize;
                 movable[v] && want[v] == 4 && (val[v] == 3 || val[v] == 4)
             };
-            // Au moins un des deux doit être en défaut, et la somme rester
-            // faible : à 6 l'étoile borde un hexagone, à 7 un heptagone, et
-            // au-delà la redécoupe n'économise plus rien.
+            // At least one of the two must be deficient, and the sum stay low: at 6 the
+            // star borders a hexagon, at 7 a heptagon, and beyond that the re-cut saves
+            // nothing any more.
             let s = val[a as usize] + val[b as usize];
             if a < b && poor(a) && poor(b) && (6..=7).contains(&s) && s.min(7) > 5 {
                 pairs.push((a, b));
@@ -547,7 +547,7 @@ fn collapse_pair(
             continue;
         }
         // L'étoile de la paire : `val(a) + val(b) - 2` cellules, celles qui
-        // portent l'arête `a–b` comptant pour les deux.
+        // carry the edge `a–b`, counting for both.
         let mut star: Vec<u32> = Vec::new();
         for &e in inc[a as usize].iter().chain(inc[b as usize].iter()) {
             if live(e, alive, alive_tri) && !star.contains(&e) {
@@ -634,9 +634,9 @@ fn collapse_pair(
             .chain(std::iter::once(was))
             .fold(f64::INFINITY, f64::min);
 
-        // La découpe reprend les emplacements de l'étoile — elle y tient
+        // The cut reuses the star's slots — it fits in them,
         // toujours, `2q' + t' = 2q + t - 2` laissant `q' ≤ q` et `t' ≤ t` — et
-        // ceux dont elle ne veut pas restent morts.
+        // those it does not want stay dead.
         let (mut free_q, mut free_t) = (Vec::new(), Vec::new());
         let (mut was_q, mut was_t) = (Vec::new(), Vec::new());
         for &e in &star {
@@ -1378,7 +1378,7 @@ mod tests {
 
     #[test]
     fn a_pair_of_valence_three_nodes_gives_up_two_cells_at_once() {
-        // Le motif que ni le doublet ni l'effondrement d'un nœud seul ne
+        // The pattern that neither the doublet nor a lone node's collapse
         // reachs: two interior nodes of valence three sharing an edge. Giving
         // up either alone would drop two neighbours from four to three — one
         // irregular node traded for two — so the single-node pass refuses it,
@@ -1431,7 +1431,7 @@ mod tests {
 
     #[test]
     fn a_pair_whose_star_holds_a_triangle_sheds_two_cells_too() {
-        // La paire n'a pas à être 3-3, ni son étoile à être toute en
+        // The pair need not be 3-3, nor its star be entirely in
         // quadrangles. Round two adjacent nodes the star holds
         // `val(a) + val(b) - 2` cells, and the boundary follows: at 3 and 4,
         // with one triangle among the five, that is a **heptagon** — and
@@ -1470,7 +1470,7 @@ mod tests {
                 && tris.iter().all(|t| !t.contains(&a) && !t.contains(&b)),
             "les deux nœuds sont partis"
         );
-        // Et l'heptagone est couvert exactement : le bord n'a pas bougé.
+        // And the heptagon is covered exactly: the border has not moved.
         let area = |p: &[Point2]| {
             0.5 * (0..p.len())
                 .map(|i| p[i].x * p[(i + 1) % p.len()].y - p[(i + 1) % p.len()].x * p[i].y)

@@ -147,8 +147,8 @@ pub fn default_imposed_value() -> String {
 /// # let a = mesh::poi1_from_nodes(&n[..1])?;
 /// # let b = mesh::poi1_from_nodes(&n[1..2])?;
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes)?;
-/// // « Les deux nœuds ont la même température » : Σ aₖ·uₖ = g, avec un λ
-/// // par relation.
+/// // "Both nodes have the same temperature": Σ aₖ·uₖ = g, with one λ per
+/// // relation.
 /// let m = Mpc::new(
 ///     vec![MpcTerm::new(&cible, &a, "T", 1.0)?,
 ///          MpcTerm::new(&cible, &b, "T", -1.0)?],
@@ -200,8 +200,8 @@ impl MpcTerm {
     /// # let a = mesh::poi1_from_nodes(&n[..1])?;
     /// # let b = mesh::poi1_from_nodes(&n[1..2])?;
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes)?;
-    /// // « Les deux nœuds ont la même température » : Σ aₖ·uₖ = g, avec un λ
-    /// // par relation.
+    /// // "Both nodes have the same temperature": Σ aₖ·uₖ = g, with one λ per
+    /// // relation.
     /// let m = Mpc::new(
     ///     vec![MpcTerm::new(&cible, &a, "T", 1.0)?,
     ///          MpcTerm::new(&cible, &b, "T", -1.0)?],
@@ -267,8 +267,8 @@ impl MpcTerm {
 /// # let a = mesh::poi1_from_nodes(&n[..1])?;
 /// # let b = mesh::poi1_from_nodes(&n[1..2])?;
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes)?;
-/// // « Les deux nœuds ont la même température » : Σ aₖ·uₖ = g, avec un λ
-/// // par relation.
+/// // "Both nodes have the same temperature": Σ aₖ·uₖ = g, with one λ per
+/// // relation.
 /// let m = Mpc::new(
 ///     vec![MpcTerm::new(&cible, &a, "T", 1.0)?,
 ///          MpcTerm::new(&cible, &b, "T", -1.0)?],
@@ -332,8 +332,8 @@ impl Mpc {
     /// # let a = mesh::poi1_from_nodes(&n[..1])?;
     /// # let b = mesh::poi1_from_nodes(&n[1..2])?;
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes)?;
-    /// // « Les deux nœuds ont la même température » : Σ aₖ·uₖ = g, avec un λ
-    /// // par relation.
+    /// // "Both nodes have the same temperature": Σ aₖ·uₖ = g, with one λ per
+    /// // relation.
     /// let m = Mpc::new(
     ///     vec![MpcTerm::new(&cible, &a, "T", 1.0)?,
     ///          MpcTerm::new(&cible, &b, "T", -1.0)?],
@@ -571,7 +571,7 @@ fn share(mesh: &Mesh) -> Result<Mesh> {
 #[cfg(test)]
 mod tests {
 
-    /// Une conduction sur un segment : la cible qu'une relation contraint.
+    /// A conduction on a segment: the target a relation constrains.
     fn cible_conduction(coords: &Handle<Coords>, a: &Node) -> crate::containers::model::Model {
         let b = Node::create_in(coords.clone(), &[2.0]).unwrap();
         let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);

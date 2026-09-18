@@ -2,16 +2,16 @@
 
 Physique
 --------
-Poutre 2-D orientée à 3 DOFs par nœud (`u_x, u_y, rz`). La rigidité locale
+An oriented 2-D beam with 3 DOFs per node (`u_x, u_y, rz`). The local
 combine l'effort axial (`E·A/L`, comme un treillis), la flexion (`E·I`) et le
-cisaillement réduit (`G·A_s`, comme la poutre de Timoshenko), puis est tournée
-dans le repère global : `K = Tᵀ K_loc T`, où `T` vient des cosinus directeurs
-de l'élément — n'importe quelle orientation dans le plan fonctionne.
+reduced shear (`G·A_s`, like the Timoshenko beam), then is rotated into the
+global frame: `K = Tᵀ K_loc T`, where `T` comes from the element's direction
+cosines — any orientation in the plane works.
 
 Problème
 --------
-Console inclinée à 45°, encastrée à la base (`u_x = u_y = rz = 0`), charge `P`
-**perpendiculaire** à la poutre au bout libre. La charge étant purement
+A cantilever inclined at 45°, clamped at the base (`u_x = u_y = rz = 0`), load
+`P` **perpendicular** to the beam at the free end. The load being purely
 transverse, le bout se déplace de `δ = P·L³/(3·E·I) + P·L/(G·A_s)` le long de la
 perpendiculaire (déplacement axial ≈ 0).
 
@@ -35,13 +35,13 @@ def _clamp(target, node, var):
 
 
 def main() -> None:
-    c = s = 1.0 / math.sqrt(2.0)  # direction à 45°
+    c = s = 1.0 / math.sqrt(2.0)  # direction at 45°
     px, py = -s, c  # perpendiculaire unitaire
 
     coords = pyrucast.Coords(2)
     base = coords.add_node([0.0, 0.0])
     tip = coords.add_node([L * c, L * s])
-    mesh = pyrucast.mesh.line(base, tip, N)  # ligne de N SEG2 à 45° (`line`)
+    mesh = pyrucast.mesh.line(base, tip, N)  # a line of N SEG2 at 45° (`line`)
     fes = pyrucast.FiniteElementSpace(mesh, interpolation="MODEL_EMBEDDED")
 
     model = pyrucast.model.timoshenko(fes)

@@ -69,15 +69,15 @@ const H: usize = 3;
 /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
 /// #                         vars: &[] };
-/// // Sans écrouissage (`hardening = 0`), la projection ramène **exactement**
-/// // q sur σ_y, et la déformation plastique est purement déviatorique.
+/// // Without hardening (`hardening = 0`), the projection brings q back
+/// // **exactly** onto σ_y, and the plastic strain is purely deviatoric.
 /// let trial = [400.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 /// let pas = plasticity::von_mises::return_map(&trial, &repos, &mat, 0.0)?;
 /// assert!((tensor::von_mises_stress(&pas.sigma) - 250.0).abs() < 1e-6);
 /// assert!(tensor::i1(&pas.eps_p).abs() < 1e-12); // écoulement isochore
 ///
-/// // Avec écrouissage isotrope, le seuil monte de H·p : la contrainte
-/// // retenue est **plus grande**.
+/// // With isotropic hardening, the threshold rises by H·p: the stress
+/// // retained is **larger**.
 /// let dur = plasticity::von_mises::return_map(&trial, &repos, &mat, 20_000.0)?;
 /// assert!(tensor::von_mises_stress(&dur.sigma) > 250.0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -156,12 +156,12 @@ pub fn return_map(
 /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
 /// #                         vars: &[] };
-/// // Sous le seuil, la tangente cohérente **est** la tangente élastique.
+/// // Below the threshold, the consistent tangent **is** the elastic tangent.
 /// let sous = [100.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 /// let d = plasticity::von_mises::tangent(&sous, &mat, 0.0, 0.0);
 /// assert_eq!(d, elastic::elastic_tangent(mat.lambda, mat.mu));
 ///
-/// // Au-delà, elle s'assouplit : le module apparent chute.
+/// // Beyond it, it softens: the apparent modulus drops.
 /// let au_dela = [400.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 /// let dp = plasticity::von_mises::tangent(&au_dela, &mat, 0.0, 0.0);
 /// assert!(dp[0][0] < d[0][0]);

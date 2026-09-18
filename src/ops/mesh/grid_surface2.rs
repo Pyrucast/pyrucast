@@ -113,9 +113,9 @@ use crate::ops::mesh::{contour, paving};
 /// #     .union(&cote(&[0.0, 2.0], &[0.0, 0.0])).unwrap();
 /// # mesh::merge_nodes(&quatre, 1e-6, true).unwrap();
 /// # let contour = mesh::consolidate(&quatre).unwrap();
-/// // La variante dont les lignes viennent **une par nœud du contour** et
-/// // dont les rangées ont le droit de plier : meilleure sur les formes
-/// // rectilinéaires, moins bonne sur les courbes.
+/// // The variant whose rows come **one per contour node** and whose rows are
+/// // allowed to bend: better on rectilinear shapes, worse on curved ones.
+
 /// let m = mesh::grid_surface2(&contour, ElementType::QUA4, Some(0.5), 1, false, mesh::FrontRelax::Free)?;
 /// assert!(m.cell_count() > 0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -160,11 +160,11 @@ pub fn grid_surface2(
 /// # mesh::merge_nodes(&quatre, 1e-6, true).unwrap();
 /// # let contour = mesh::consolidate(&quatre).unwrap();
 /// # use std::sync::atomic::AtomicBool;
-/// // Le jeton est sondé aux **points de contrôle** du mailleur, non entre
-/// // deux instructions : un contour aussi court est pavé avant d'en
-/// // atteindre un, et l'appel aboutit même jeton armé. C'est la même
-/// // granularité que partout ailleurs — l'arrêt tombe à la frontière de
-/// // phase suivante, pas au milieu d'une.
+/// // The token is polled at the mesher's **checkpoints**, not between two
+/// // instructions: a contour this short is paved before reaching one, and the
+/// // call succeeds even with the token armed. It is the same granularity as
+/// // everywhere else — the stop lands at the next phase boundary, not in the
+/// // middle of one.
 /// let stop = AtomicBool::new(false);
 /// assert!(mesh::grid_surface2_cancellable(
 ///     &contour, ElementType::QUA4, Some(0.5), 1, false, mesh::FrontRelax::Free, &stop).is_ok());

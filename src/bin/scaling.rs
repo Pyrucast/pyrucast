@@ -271,10 +271,10 @@ fn run_cube(n: usize, reps: u32) {
     });
     debug_assert_eq!(une.len(), 1);
 
-    // Le pendant nodal de l'union. Deux zones à composantes disjointes sur un
-    // même support : la fusion, qui parcourt tous les nœuds. Puis la même
-    // union avec un support distinct : il n'y a rien à fusionner, et cette
-    // phase mesure que rien n'est recopié non plus.
+    // The nodal counterpart of the union. Two zones with disjoint components on
+    // one support: the merge, which walks every node. Then the same union with a
+    // distinct support: there is nothing to merge, and this phase measures that
+    // nothing is copied either.
     let support = fespace.get(0).unwrap().read().submesh();
     let coords = support.read().coords();
     let depl = NodeField::from_sub(
@@ -319,14 +319,14 @@ fn run_cube(n: usize, reps: u32) {
 
     println!("\n── mémoire des intermédiaires (nnz = {nnz}) ──");
     let row = |name: &str, b: usize| println!("{name:<34} {}", bytes(b));
-    // Ce que l'assembleur alloue réellement aujourd'hui.
+    // What the assembler really allocates today.
     row("motif : position des nœuds", 2 * cells * 8 * 4);
     row("motif : colonnes avant dédup", cells * ke_len * 4);
     row("block_slots (bases par nœud)", cells * (8 * 3 * 8) * 4);
     row("CSR : valeurs", nnz * 8);
     row("CSR : col_indices", nnz * std::mem::size_of::<usize>());
     row("tampon atomique du scatter", nnz * 8);
-    // Ce qu'il allouait avant, pour l'échelle.
+    // What it used to allocate, for scale.
     println!(
         "\n   (avant : paires (r,c) {} ; block_slots {} ; ke toutes matérialisées {})",
         bytes(cells * ke_len * std::mem::size_of::<(usize, usize)>()),

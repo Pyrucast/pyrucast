@@ -1038,14 +1038,14 @@ impl TagIndex {
 /// ```
 /// # use pyrucast::ops::mesh::GmshBlock;
 /// # use pyrucast::atoms::ElementType;
-/// // Deux triangles partageant une arête, dans le groupe physique « plaque ».
+/// // Two triangles sharing an edge, in the physical group "plaque".
 /// let plaque = ["plaque".to_string()];
 /// let bloc = GmshBlock {
 ///     element_type: 2, // le code gmsh de TRI3
 ///     node_tags: &[1, 2, 3, 2, 4, 3],
 ///     groups: &plaque,
 /// };
-/// // La connectivité est à plat : sa longueur dit le nombre de mailles.
+/// // The connectivity is flat: its length tells the cell count.
 /// let npc = ElementType::TRI3.nodes_per_cell();
 /// assert_eq!(bloc.node_tags.len() / npc, 2);
 /// ```
@@ -1082,8 +1082,8 @@ pub struct GmshBlock<'a> {
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::ops::mesh::{self, GmshBlock};
-/// // Ce que gmsh tend : les tags des nœuds, leurs trois coordonnées chacun,
-/// // et un bloc par type d'élément dont la connectivité est à plat.
+/// // What gmsh hands over: the nodes' tags, their three coordinates each,
+/// // and one block per element type whose connectivity is flat.
 /// let tags = [1_u64, 2, 3, 4];
 /// let xyz = [
 ///     0.0, 0.0, 0.0, //
@@ -1098,7 +1098,7 @@ pub struct GmshBlock<'a> {
 ///     groups: &plaque,
 /// }];
 ///
-/// // Le `Coords` est 2-D : la troisième coordonnée de gmsh tombe.
+/// // The `Coords` is 2-D: gmsh's third coordinate is dropped.
 /// let coords = Handle::new(Coords::new(2)?);
 /// let regions = mesh::from_gmsh_arrays(coords.clone(), &tags, &xyz, &blocs)?;
 /// assert_eq!(regions.len(), 1);
@@ -1172,9 +1172,9 @@ pub fn from_gmsh_arrays(
 /// # $MeshFormat\n2.2 0 8\n$EndMeshFormat\n\
 /// # $Nodes\n3\n1 0 0 0\n2 1 0 0\n3 0 1 0\n$EndNodes\n\
 /// # $Elements\n1\n1 2 2 7 1 1 2 3\n$EndElements\n";
-/// // Les nœuds atterrissent dans le `Coords` fourni — qui peut déjà porter
-/// // de la géométrie, l'import s'y fondant — de sorte que l'appelant garde
-/// // la poignée dont il a besoin pour poser ses conditions aux limites.
+/// // The nodes land in the supplied `Coords` — which may already carry
+/// // geometry, the import blending into it — so that the caller keeps the
+/// // handle it needs to set its boundary conditions.
 /// # let chemin = std::env::temp_dir()
 /// #     .join(format!("pyrucast_gmsh_{}.msh", std::process::id()));
 /// # std::fs::write(&chemin, maillage_gmsh)?;
@@ -1203,7 +1203,7 @@ pub fn read_gmsh(coords: Handle<Coords>, path: &Path) -> Result<Vec<(String, Mes
 /// # $MeshFormat\n2.2 0 8\n$EndMeshFormat\n\
 /// # $Nodes\n3\n1 0 0 0\n2 1 0 0\n3 0 1 0\n$EndNodes\n\
 /// # $Elements\n1\n1 2 2 7 1 1 2 3\n$EndElements\n";
-/// // Les mailles reviennent **groupées** par nom de région physique.
+/// // The cells come back **grouped** by physical region name.
 /// let coords = Handle::new(Coords::new(2)?);
 /// let regions = mesh::read_gmsh_str(coords.clone(), maillage_gmsh)?;
 /// assert_eq!(regions.len(), 1);
@@ -1226,7 +1226,7 @@ pub fn read_gmsh_str(coords: Handle<Coords>, text: &str) -> Result<Vec<(String, 
 /// # $MeshFormat\n2.2 0 8\n$EndMeshFormat\n\
 /// # $Nodes\n3\n1 0 0 0\n2 1 0 0\n3 0 1 0\n$EndNodes\n\
 /// # $Elements\n1\n1 2 2 7 1 1 2 3\n$EndElements\n";
-/// // La même chose depuis des octets bruts — ASCII **ou** binaire.
+/// // The same thing from raw bytes — ASCII **or** binary.
 /// let coords = Handle::new(Coords::new(2)?);
 /// let regions = mesh::gmsh::read_gmsh_bytes(coords.clone(), maillage_gmsh.as_bytes())?;
 /// assert_eq!(regions[0].1.cell_count(), 1);

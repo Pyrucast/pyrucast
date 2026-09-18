@@ -33,7 +33,7 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
     const N: usize = 2; // N×N QUA4 grid
     let h = 1.0 / N as f64;
 
-    // ── Maillage QUA4 sur [0,1]² ───────────────────────────────────────────
+    // ── QUA4 mesh on [0,1]² ────────────────────────────────────────────────
     let coords = Handle::new(Coords::new(2)?);
     let idx = |i: usize, j: usize| j * (N + 1) + i;
     let mut grid: Vec<Node> = Vec::new();
@@ -59,7 +59,7 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
 
     // ── Modèle : élasticité plane stress + appuis (rollers) ────────────────
-    // L'appui reçoit le modèle qu'il contraint : le dual s'y lit, et les nœuds
+    // The support receives the model it constrains: the dual is read there, and
     // contraints s'y vérifient.
     let roller = |target: &Model, nodes: &[Node], var: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(nodes)?);
@@ -72,9 +72,9 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
     model = model.union(&roller(&model, &left, "u_x")?)?;
     model = model.union(&roller(&model, &bottom, "u_y")?)?;
 
-    // ── Chargement : traction S sur le bord droit (charges nodales cohérentes,
-    //    sur la composante f_x). La charge est un sous-modèle : elle rejoint le
-    //    modèle, sa densité le matériau. ─────────────────────────────────────
+    // ── Loading: traction S on the right edge (consistent nodal loads, on the
+    //    f_x component). The load is a sub-model: it joins the model, its density
+    //    the material. ──────────────────────────────────────────────────────
     let mut right_edge = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
     for j in 0..N {
         right_edge.add_cell(&[grid[idx(N, j)].id(), grid[idx(N, j + 1)].id()])?;
@@ -92,7 +92,7 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
     let stiffness = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let solution = solve(&stiffness, &rhs)?;
 
-    // ── Comparaison à l'analytique u_x = (S/E)·x, u_y = −(ν S/E)·y ─────────
+    // ── Compared with the analytical u_x = (S/E)·x, u_y = −(ν S/E)·y ───────
     let tol = 1e-10;
     for j in 0..=N {
         for i in 0..=N {

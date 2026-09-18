@@ -96,8 +96,8 @@ type NamedDof = (NodeId, String);
 /// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
 /// # use pyrucast::ops::solver::unilateral::{ActiveSetMethod, UnilateralOptions};
 /// # use pyrucast::ops::model;
-/// // Les deux variantes parcourent la **même** trajectoire de statuts et
-/// // convergent au même résultat ; seule diffère la façon de factoriser.
+/// // Both variants walk the **same** status trajectory and converge to the
+/// // same result; only the way of factorizing differs.
 /// let lire = |o| {
 ///     let u = solver::unilateral::solve_with_options(&k, &modele, &charge, &o).unwrap();
 ///     u.get(0).unwrap().read().value(n[2].id(), "T").unwrap()
@@ -162,9 +162,9 @@ pub enum ActiveSetMethod {
 /// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
 /// # use pyrucast::ops::solver::unilateral::UnilateralOptions;
 /// # use pyrucast::ops::model;
-/// // Par défaut : complément de Schur, cache actif, et une tolérance de
-/// // complémentarité qui porte **à la fois** sur le signe du multiplicateur
-/// // et sur celui du jeu.
+/// // By default: Schur complement, cache on, and a complementarity tolerance
+/// // that covers **both** the multiplier's sign and the gap's.
+
 /// let d = UnilateralOptions::default();
 /// assert!(d.cache && d.max_iter > 0 && d.tol > 0.0);
 /// assert!(solver::unilateral::solve_with_options(&k, &modele, &charge, &d).is_ok());
@@ -290,8 +290,8 @@ struct ActiveSetState {
 /// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
 /// #                                      vec!["imposed_T".into()]).unwrap();
 /// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
-/// // Une contrainte `≥` : la boucle d'ensemble actif décide, relation par
-/// // relation, laquelle est saturée. Ici l'appui à 100 °C est actif, et la
+/// // A `≥` constraint: the active-set loop decides, relation by relation,
+/// // which one is saturated. Here the support at 100 °C is active, and the
 /// // barre entière s'y met.
 /// let u = solver::unilateral::solve(&k, &modele, &charge)?;
 /// assert!((u.get(0)?.read().value(n[2].id(), "T")? - 100.0).abs() < 1e-9);

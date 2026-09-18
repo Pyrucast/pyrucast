@@ -63,10 +63,10 @@ use std::collections::HashMap;
 /// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
 /// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
 /// # }
-/// // ∫ T dΩ sur le triangle (0,0), (2,0), (0,2), d'aire 2. La moyenne
-/// // des trois valeurs nodales étant 50, l'intégrale vaut 100.
+/// // ∫ T dΩ over the triangle (0,0), (2,0), (0,2), of area 2. The three nodal
+/// // values averaging 50, the integral is 100.
 /// assert!((measure::integral(&temp, &fes, "T")? - 100.0).abs() < 1e-9);
-/// // Une composante absente est une erreur.
+/// // A missing component is an error.
 /// assert!(measure::integral(&temp, &fes, "q").is_err());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -76,8 +76,8 @@ pub fn integral(field: &NodeField, fespace: &FiniteElementSpace, component: &str
     for sub_h in fespace {
         let submesh = sub_h.read().submesh();
         let conn: Vec<NodeId> = submesh.read().connectivity().to_vec();
-        // Cette intégrale interpole le champ nodal : il lui faut une base de
-        // champ, et c'est un fait de la zone.
+        // This integral interpolates the nodal field: it needs a field basis, and
+        // that is a fact of the zone.
         kernel::require_field_basis(sub_h, "shape values")?;
 
         // Gather this subspace's nodal values for `component` once (serial), so
@@ -92,9 +92,9 @@ pub fn integral(field: &NodeField, fespace: &FiniteElementSpace, component: &str
 
         total += kernel::reduce_cells(sub_h, |geom| {
             let ids = geom.node_ids();
-            // Les valeurs de la maille, rassemblées **une fois** : elles ne
-            // changent pas d'un point de Gauss au suivant, et les hacher à
-            // chaque point revenait à reposer la même question n_gauss fois.
+            // The cell's values, gathered **once**: they do not change from one Gauss
+            // point to the next, and hashing them at every point amounted to asking the
+            // same question n_gauss times.
             let mut cell_vals = [0.0_f64; MAX_CELL_DOFS];
             for (i, id) in ids.iter().enumerate() {
                 cell_vals[i] = vals[id];
@@ -151,8 +151,8 @@ pub fn integral(field: &NodeField, fespace: &FiniteElementSpace, component: &str
 /// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
 /// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
 /// # }
-/// // Le pendant pour un champ **par éléments** : il n'a besoin d'aucun
-/// // espace EF, le champ portant déjà son support.
+/// // The counterpart for a field **by elements**: it needs no FE space, the
+/// // field already carrying its support.
 /// # let mut f = ElementField::new(&fes, vec!["q".into()])?;
 /// # f.get(0)?.write().set_uniform("q", 3.0)?;
 /// assert!((measure::integral_element(&f, "q")? - 3.0 * 2.0).abs() < 1e-9);
@@ -164,7 +164,7 @@ pub fn integral_element(field: &ElementField, component: &str) -> Result<f64> {
     for sub_h in field {
         let s = sub_h.read();
         // L'indice était calculé ici puis **jeté**, et la boucle le
-        // recherchait par nom à chaque point de Gauss. On le garde.
+        // used to look it up by name at every Gauss point. We keep it.
         let Some(idx) = s.component_index(component) else {
             continue; // this zone does not carry the component — skip it
         };

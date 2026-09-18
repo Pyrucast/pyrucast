@@ -176,8 +176,8 @@ struct Component {
 /// # maitre.add_cell(&[n[0].id(), n[1].id()])?;
 /// # let master = Mesh::from_submesh(maitre);
 /// # let slave = mesh::poi1_from_nodes(&n[2..3])?;
-/// // Une relation **unilatérale** par nœud esclave, appariée dès la
-/// // construction à sa facette maître la plus proche.
+/// // One **unilateral** relation per slave node, paired at construction with
+/// // its nearest master facet.
 /// # let cible = pyrucast::ops::model::truss(
 /// #     &FiniteElementSpace::lagrange1(&maillage)?)?;
 /// let c = Contact::new(&cible, &slave, &master,
@@ -248,8 +248,8 @@ impl Contact {
     /// # maitre.add_cell(&[n[0].id(), n[1].id()])?;
     /// # let master = Mesh::from_submesh(maitre);
     /// # let slave = mesh::poi1_from_nodes(&n[2..3])?;
-    /// // Une relation **unilatérale** par nœud esclave, appariée dès la
-    /// // construction à sa facette maître la plus proche.
+    /// // One **unilateral** relation per slave node, paired at construction with
+    /// // its nearest master facet.
     /// # let cible = pyrucast::ops::model::truss(
     /// #     &FiniteElementSpace::lagrange1(&maillage)?)?;
     /// let c = Contact::new(&cible, &slave, &master,
@@ -389,8 +389,8 @@ impl Contact {
     /// # maitre.add_cell(&[n[0].id(), n[1].id()])?;
     /// # let master = Mesh::from_submesh(maitre);
     /// # let slave = mesh::poi1_from_nodes(&n[2..3])?;
-    /// // Une relation **unilatérale** par nœud esclave, appariée dès la
-    /// // construction à sa facette maître la plus proche.
+    /// // One **unilateral** relation per slave node, paired at construction with
+    /// // its nearest master facet.
     /// # let cible = pyrucast::ops::model::truss(
     /// #     &FiniteElementSpace::lagrange1(&maillage)?)?;
     /// let c = Contact::new(&cible, &slave, &master,
@@ -592,9 +592,9 @@ fn unique_nodes(mesh: &Mesh) -> Result<Vec<NodeId>> {
 #[cfg(test)]
 mod tests {
 
-    /// Une barre sur le maillage maître : la cible que le contact contraint,
-    /// dont il lit les duales. Une SEG2 dans un plan est une variété, pas un
-    /// solide — c'est une physique structurale qui y vit.
+    /// A bar on the master mesh: the target the contact constrains, whose duals it
+    /// reads. A SEG2 in a plane is a manifold, not a solid — a structural physics
+    /// is what lives there.
     fn cible_mecanique(master: &Mesh) -> crate::containers::model::Model {
         let fes =
             crate::containers::finite_element_space::FiniteElementSpace::lagrange1(master).unwrap();

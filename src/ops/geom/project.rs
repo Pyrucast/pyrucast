@@ -55,16 +55,16 @@ use super::locate::{interpolation_for, reference_centroid, solve_normal};
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = mesh::poi1_from_nodes(&n).unwrap();
-/// // La « surface » est de dimension topologique **dim − 1** : en 2-D, des
-/// // segments. C'est le bord du maillage qui joue ce rôle.
+/// // The "surface" has topological dimension **dim − 1**: in 2-D, segments.
+/// // The mesh's border is what plays that part.
 /// let bord = mesh::border(&maillage, None)?;
-/// // Un point hors facette **retombe dessus**, les coordonnées de
-/// // référence étant bornées au domaine.
+/// // A point off the facet **falls back onto it**, the reference coordinates
+/// // being bounded to the domain.
 /// let p = geom::project_points(&bord, &[vec![1.0, -5.0]])?;
 /// assert!((p[0].point[1] - 0.0).abs() < 1e-12); // ramené sur l'arête y = 0
 /// assert!((p[0].weights.iter().sum::<f64>() - 1.0).abs() < 1e-12);
-/// // Le `gap` est **signé** : positif du côté de la normale, négatif
-/// // derrière — c'est lui qui dit la pénétration, en contact.
+/// // The `gap` is **signed**: positive on the normal's side, negative behind
+/// // — it is what tells the penetration, in contact.
 /// assert!(p[0].gap.abs() > 0.0);
 /// assert!((p[0].normal.iter().map(|x| x * x).sum::<f64>() - 1.0).abs() < 1e-12);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -123,16 +123,16 @@ pub struct Projection {
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = mesh::poi1_from_nodes(&n).unwrap();
-/// // La « surface » est de dimension topologique **dim − 1** : en 2-D, des
-/// // segments. C'est le bord du maillage qui joue ce rôle.
+/// // The "surface" has topological dimension **dim − 1**: in 2-D, segments.
+/// // The mesh's border is what plays that part.
 /// let bord = mesh::border(&maillage, None)?;
-/// // Un point hors facette **retombe dessus**, les coordonnées de
-/// // référence étant bornées au domaine.
+/// // A point off the facet **falls back onto it**, the reference coordinates
+/// // being bounded to the domain.
 /// let p = geom::project_points(&bord, &[vec![1.0, -5.0]])?;
 /// assert!((p[0].point[1] - 0.0).abs() < 1e-12); // ramené sur l'arête y = 0
 /// assert!((p[0].weights.iter().sum::<f64>() - 1.0).abs() < 1e-12);
-/// // Le `gap` est **signé** : positif du côté de la normale, négatif
-/// // derrière — c'est lui qui dit la pénétration, en contact.
+/// // The `gap` is **signed**: positive on the normal's side, negative behind
+/// // — it is what tells the penetration, in contact.
 /// assert!(p[0].gap.abs() > 0.0);
 /// assert!((p[0].normal.iter().map(|x| x * x).sum::<f64>() - 1.0).abs() < 1e-12);
 /// # Ok::<(), pyrucast::PyrucastError>(())

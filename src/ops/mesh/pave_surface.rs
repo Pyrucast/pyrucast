@@ -144,8 +144,8 @@ pub fn pave_surface(
 /// # mesh::merge_nodes(&quatre, 1e-6, true).unwrap();
 /// # let contour = mesh::consolidate(&quatre).unwrap();
 /// # use std::sync::atomic::{AtomicBool, Ordering};
-/// // Le jeton est sondé aux points de contrôle du mailleur : armé d'avance,
-/// // l'appel s'arrête au premier d'entre eux.
+/// // The token is polled at the mesher's checkpoints: armed in advance, the
+/// // call stops at the first of them.
 /// let stop = AtomicBool::new(true);
 /// assert!(mesh::pave_surface_cancellable(
 ///     &contour, ElementType::QUA4, Some(0.5), false, mesh::FrontRelax::Free, &stop).is_err());

@@ -32,12 +32,12 @@ use crate::error::{PyrucastError, Result};
 /// use pyrucast::atoms::ElementType;
 /// use pyrucast::named::Named;
 ///
-/// // La casse et les espaces de bord ne comptent pas.
+/// // Case and surrounding spaces do not count.
 /// assert_eq!(ElementType::from_name(" tri3 "), Some(ElementType::TRI3));
 /// assert_eq!(ElementType::from_name("TRI3"), Some(ElementType::TRI3));
 /// // Un nom inconnu reste inconnu.
 /// assert_eq!(ElementType::from_name("TRI4"), None);
-/// // `name` est la forme canonique, et la réciproque exacte de `from_name`.
+/// // `name` is the canonical form, and the exact inverse of `from_name`.
 /// assert_eq!(ElementType::TRI3.name(), "TRI3");
 /// ```
 pub trait Named: Copy + Sized + 'static {
@@ -74,9 +74,9 @@ pub trait Named: Copy + Sized + 'static {
     /// use pyrucast::atoms::Interpolation;
     /// use pyrucast::named::Named;
     ///
-    /// // Un alias suit la même politique qu'un nom canonique : c'est
-    /// // précisément ce que les analyseurs écrits à la main ne garantissaient
-    /// // pas.
+    /// // An alias follows the same policy as a canonical name: that is precisely
+    /// // what the hand-written parsers did not guarantee.
+
     /// assert_eq!(Interpolation::from_name("lag1"), Some(Interpolation::Lagrange1));
     /// assert_eq!(Interpolation::from_name("LAGRANGE1"), Some(Interpolation::Lagrange1));
     /// ```
@@ -102,7 +102,7 @@ pub trait Named: Copy + Sized + 'static {
     /// use pyrucast::named::Named;
     ///
     /// assert_eq!(ElementType::parse("qua4")?, ElementType::QUA4);
-    /// // Le message porte le nom refusé *et* les noms acceptés.
+    /// // The message carries the refused name *and* the accepted ones.
     /// let err = ElementType::parse("QUA5").unwrap_err().to_string();
     /// assert!(err.contains("QUA5") && err.contains("QUA4"));
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -149,7 +149,7 @@ pub trait Named: Copy + Sized + 'static {
 /// ```
 /// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::named::Named;
-/// // Le trait est la seule chose que la macro demande au type.
+/// // The trait is the only thing the macro asks of the type.
 /// assert_eq!(Kinematics::from_name("SOLID"), Some(Kinematics::Full3D));
 /// ```
 #[macro_export]
@@ -159,8 +159,8 @@ macro_rules! named_enum {
         impl<'a, 'py> ::pyo3::FromPyObject<'a, 'py> for $ty {
             type Error = ::pyo3::PyErr;
 
-            // `::pyo3::PyErr` plutôt que `Self::Error` : un énuméré qui porte
-            // une variante `Error` — `OutOfRange` en a une — rendrait le type
+            // `::pyo3::PyErr` rather than `Self::Error`: an enumeration carrying an
+            // `Error` variant — `OutOfRange` has one — would make the type
             // associé ambigu.
             fn extract(
                 obj: ::pyo3::Borrowed<'a, 'py, ::pyo3::PyAny>,

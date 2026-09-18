@@ -3,15 +3,15 @@
 Physique
 --------
 Continuum en petites déformations : équilibre `∇·σ = 0`, loi de Hooke
-`σ = D : ε`, cinématique `ε = ½(∇u + ∇uᵀ)`. La rigidité est
+`σ = D : ε`, kinematics `ε = ½(∇u + ∇uᵀ)`. The stiffness is
 `K = ∫ Bᵀ D B dΩ` (B : matrice déformation-déplacement en Voigt, D : matrice
 constitutive isotrope, ici en contraintes planes).
 
 Problème
 --------
 Carré unité, appuis `u_x = 0` (bord gauche) et `u_y = 0` (bord bas), traction
-`S` sur le bord droit appliquée en charges nodales cohérentes par l'opérateur
-`flux` (sur la composante `f_x`). Solution exacte (uniaxiale) :
+`S` on the right edge applied as consistent nodal loads by the `flux` operator
+(on the `f_x` component). Exact (uniaxial) solution:
 `u_x = (S/E)·x`, `u_y = -(ν·S/E)·y`.
 
 Lancement ::
@@ -38,7 +38,7 @@ def main() -> None:
     def idx(i, j):
         return j * (N + 1) + i
 
-    # Grille N×N de QUA4 par balayage de deux lignes SEG2 (`sweep`).
+    # An N×N grid of QUA4 by sweeping two SEG2 lines (`sweep`).
     bottom = pyrucast.mesh.line(c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0]), N)
     top = pyrucast.mesh.line(c.add_node([0.0, 1.0]), c.add_node([1.0, 1.0]), N)
     mesh = pyrucast.mesh.sweep(bottom, top, N)
@@ -61,7 +61,7 @@ def main() -> None:
     model = model | _clamp(model, left, "u_x")
     model = model | _clamp(model, bottom, "u_y")
 
-    # Traction S sur le bord droit → charges nodales cohérentes (op flux).
+    # Traction S on the right edge → consistent nodal loads (the flux op).
     right = pyrucast.Mesh(c, "SEG2")
     for j in range(N):
         right.unit().add_cell([grid[idx(N, j)], grid[idx(N, j + 1)]])
@@ -84,7 +84,7 @@ def main() -> None:
             print(f"{x:5.2f} {y:5.2f} {ux:12.6e} {uy:12.6e}")
             assert abs(ux - S / E * x) < tol
             assert abs(uy + NU * S / E * y) < tol
-    print("\nOK : champ uniaxial conforme à u_x=(S/E)x, u_y=-(νS/E)y.")
+    print("\nOK: uniaxial field matching u_x=(S/E)x, u_y=-(νS/E)y.")
 
 
 if __name__ == "__main__":

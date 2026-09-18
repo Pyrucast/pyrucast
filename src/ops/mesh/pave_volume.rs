@@ -103,7 +103,7 @@ const SMOOTH_SWEEPS: usize = 12;
 /// # let enveloppe = mesh::convert(&mesh::skin(&cube, mesh::skin::DEFAULT_ANGLE_DEG).unwrap(),
 /// #                               ElementType::TRI3).unwrap();
 /// // Couche limite hexaédrique, raccord pyramidal, cœur tétraédrique :
-/// // trois types d'éléments dans le même maillage.
+/// // three element types in the same mesh.
 /// let v = mesh::pave_volume(&enveloppe, 1, Some(0.2), Some(0.5))?;
 /// assert!(v.cell_count() > 0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -141,8 +141,8 @@ pub fn pave_volume(
 /// # let enveloppe = mesh::convert(&mesh::skin(&cube, mesh::skin::DEFAULT_ANGLE_DEG).unwrap(),
 /// #                               ElementType::TRI3).unwrap();
 /// # use std::sync::atomic::{AtomicBool, Ordering};
-/// // Le jeton est sondé aux points de contrôle du mailleur : armé d'avance,
-/// // l'appel s'arrête au premier d'entre eux.
+/// // The token is polled at the mesher's checkpoints: armed in advance, the
+/// // call stops at the first of them.
 /// let stop = AtomicBool::new(true);
 /// assert!(mesh::pave_volume_cancellable(
 ///     &enveloppe, 1, Some(0.2), Some(0.5), &stop).is_err());
@@ -730,15 +730,15 @@ mod tests {
         report("cube 6³, 2 couches", &cube, 2, Some(0.06), Some(0.2));
         report("cube 6³, épaisseur libre", &cube, 1, None, Some(0.2));
 
-        // B. Plaque mince : la place disponible borne le pas, la couture ferme.
+        // B. Thin plate: the available room bounds the step, the seam closes.
         let plaque = box_skin_sized(8, 1, 8, 0.08);
         report("plaque mince 1×0,08×1", &plaque, 1, Some(1.0), Some(0.2));
 
-        // C. Barreau allongé : une direction bien plus fine que les autres.
+        // C. Elongated bar: one direction far finer than the others.
         let barreau = box_skin_sized(10, 2, 2, 0.25);
         report("barreau 1×0,25×1", &barreau, 1, Some(0.1), Some(0.25));
 
-        // D. Solide rentrant : le coin concave est ce qui force le front à
+        // D. Re-entrant solid: the concave corner is what forces the front to
         //    retenir des facettes pendant que les autres avancent.
         let ell = ell_skin(6, 0.6, 4);
         report("L rentrant, 1 couche", &ell, 1, Some(0.08), Some(0.2));

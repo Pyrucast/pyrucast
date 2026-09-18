@@ -77,18 +77,18 @@ use crate::parallel::*;
 /// # use pyrucast::ops::mesh;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
 /// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
-/// // Deux lignes bout à bout mais aux nœuds **distincts** : la fusion les
-/// // recoud, et le nuage passe de quatre nœuds à trois.
+/// // Two lines end to end but with **distinct** nodes: the merge stitches them
+/// // back, and the cloud goes from four nodes to three.
 /// let a = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[1.0, 0.0, 0.0]), 1, ElementType::SEG2)?;
 /// let b = mesh::line(&p(&[1.0, 0.0, 0.0]), &p(&[2.0, 0.0, 0.0]), 1, ElementType::SEG2)?;
 /// let deux = a.union(&b)?;
-/// // `to_poi1` dédoublonne **par zone** : sur deux zones il compte encore
+/// // `to_poi1` deduplicates **per zone**: over two zones it still counts
 /// // quatre nœuds. Consolider d'abord donne le vrai nuage.
 /// assert_eq!(mesh::to_poi1(&mesh::consolidate(&deux)?)?.cell_count(), 4);
 /// let cousu = mesh::merge_nodes(&deux, 1e-6, false)?;
 /// assert_eq!(mesh::to_poi1(&mesh::consolidate(&cousu)?)?.cell_count(), 3);
-/// // La structure est intacte : mêmes zones, mêmes mailles, dans le même
-/// // ordre — seul **à quel nœud** une maille se réfère a changé.
+/// // The structure is untouched: same zones, same cells, in the same order —
+/// // only **which node** a cell refers to has changed.
 /// assert_eq!(cousu.cell_count(), deux.cell_count());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -571,7 +571,7 @@ mod tests {
     fn a_chain_of_close_nodes_closes_into_one_cluster() {
         let coords = coords2();
         // a—b—c espacés de 0,9 : a touche b, b touche c, mais a et c sont à
-        // 1,8, soit bien plus que la tolérance.
+        // 1.8, that is far more than the tolerance.
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
         let b = Node::create_in(coords.clone(), &[0.9, 0.0]).unwrap();
         let c = Node::create_in(coords.clone(), &[1.8, 0.0]).unwrap();
@@ -583,12 +583,12 @@ mod tests {
         mesh.add_cell(&[c.id(), far.id()]).unwrap();
 
         let merged = merge_nodes(&mesh, 1.0, false).unwrap();
-        // La grappe est une composante connexe : la chaîne se referme, et les
-        // trois nœuds pointent sur `a`, le plus petit identifiant.
+        // The cluster is a connected component: the chain closes, and the three nodes
+        // point to `a`, the smallest identifier.
         for cell in 0..3 {
             assert_eq!(merged.node(0, cell, 0).unwrap().id(), a.id());
         }
-        // Le nœud lointain, lui, n'a pas bougé.
+        // The distant node, for its part, has not moved.
         assert_eq!(merged.node(0, 0, 1).unwrap().id(), far.id());
     }
 

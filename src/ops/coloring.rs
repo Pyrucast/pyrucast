@@ -55,13 +55,13 @@ use std::hash::Hash;
 /// #     &[("k", 1.0), ("rho", 2.0), ("cp", 3.0)]).unwrap();
 /// # use pyrucast::ops::coloring;
 /// # use pyrucast::ops::model;
-/// // Deux mailles qui partagent une clé — un nœud — ne peuvent pas être de
-/// // la même couleur : c'est ce qui rend le scatter parallèle sans course.
+/// // Two cells sharing a key — a node — cannot be of the same colour: that is
+/// // what makes the scatter parallel without a race.
 /// let couleurs = coloring::greedy_color(2, 2, &[0u32, 1, 1, 2]);
 /// assert_eq!(couleurs.len(), 2); // elles partagent le nœud 1
-/// // Sans clé commune, une seule couleur suffit.
+/// // Without a shared key, one colour is enough.
 /// assert_eq!(coloring::greedy_color(2, 2, &[0u32, 1, 2, 3]).len(), 1);
-/// // Et chaque maille apparaît exactement une fois.
+/// // And every cell appears exactly once.
 /// assert_eq!(couleurs.iter().map(|c| c.len()).sum::<usize>(), 2);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -98,8 +98,8 @@ pub fn greedy_color<K: Eq + Hash + Copy>(
 /// ```
 /// # use pyrucast::atoms::NodeId;
 /// # use pyrucast::ops::coloring;
-/// // Deux mailles qui partagent le nœud 1 : deux couleurs, comme la forme
-/// // générique — mais sans une seule table de hachage.
+/// // Two cells sharing node 1: two colours, like the generic form — but
+/// // without a single hash table.
 /// let conn = [NodeId(0), NodeId(1), NodeId(1), NodeId(2)];
 /// let couleurs = coloring::greedy_color_nodes(2, 2, &conn, 3);
 /// assert_eq!(couleurs, vec![vec![0], vec![1]]);

@@ -87,8 +87,8 @@ pub fn newell_normal(points: &[Point3]) -> Option<Vector3> {
 /// # use pyrucast::atoms::Point2;
 /// # use pyrucast::ops::mesh::triangulation;
 /// # use pyrucast::atoms::Vector3;
-/// // Deux vecteurs unitaires orthogonaux entre eux et à la normale : de quoi
-/// // ramener une facette 3-D dans son plan.
+/// // Two unit vectors orthogonal to each other and to the normal: enough to
+/// // bring a 3-D facet back into its plane.
 /// let (u, v) = triangulation::in_plane_basis(Vector3::new(0.0, 0.0, 2.0));
 /// assert!((u.norm() - 1.0).abs() < 1e-12);
 /// assert!(u.dot(&v).abs() < 1e-12);
@@ -120,8 +120,8 @@ pub fn in_plane_basis(normal: Vector3) -> (Vector3, Vector3) {
 /// ```
 /// # use pyrucast::atoms::Point2;
 /// # use pyrucast::ops::mesh::triangulation;
-/// // Positive dans le sens trigonométrique, négative dans l'autre — c'est
-/// // ce qui distingue un contour extérieur d'un trou.
+/// // Positive counter-clockwise, negative the other way — that is what
+/// // distinguishes an outer contour from a hole.
 /// let carre = [Point2::new(0.0, 0.0), Point2::new(1.0, 0.0),
 ///              Point2::new(1.0, 1.0), Point2::new(0.0, 1.0)];
 /// assert!((triangulation::signed_area(&carre) - 1.0).abs() < 1e-12);
@@ -160,8 +160,8 @@ pub fn signed_area(points: &[Point2]) -> f64 {
 /// ```
 /// # use pyrucast::atoms::Point2;
 /// # use pyrucast::ops::mesh::triangulation;
-/// // Un garde-fou partagé : une maille retournée est une erreur nommée,
-/// // pas un jacobien négatif découvert à l'assemblage.
+/// // A shared guard: a flipped cell is a named error, not a negative Jacobian
+/// // discovered at assembly.
 /// let pts = [Point2::new(0.0, 0.0), Point2::new(1.0, 0.0), Point2::new(0.0, 1.0)];
 /// let bonnes = [[0u32, 1, 2]];
 /// assert!(triangulation::reject_cells_turned_the_wrong_way(

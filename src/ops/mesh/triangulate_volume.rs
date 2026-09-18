@@ -247,8 +247,8 @@ pub fn triangulate_volume(
 /// # let enveloppe = mesh::convert(&mesh::skin(&cube, mesh::skin::DEFAULT_ANGLE_DEG).unwrap(),
 /// #                               ElementType::TRI3).unwrap();
 /// # use std::sync::atomic::{AtomicBool, Ordering};
-/// // Le jeton est sondé aux points de contrôle du mailleur : armé d'avance,
-/// // l'appel s'arrête au premier d'entre eux.
+/// // The token is polled at the mesher's checkpoints: armed in advance, the
+/// // call stops at the first of them.
 /// let stop = AtomicBool::new(true);
 /// assert!(mesh::triangulate_volume_cancellable(
 ///     &enveloppe, Some(0.5), false, &stop).is_err());

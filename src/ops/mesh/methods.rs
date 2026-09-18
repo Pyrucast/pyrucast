@@ -1,14 +1,14 @@
-//! Méthodes de délégation — la face « sujet » des opérateurs de ce module.
+//! Delegation methods — the "subject" face of this module's operators.
 //!
-//! Une fonction libre qui remplit les trois conditions de `CONVENTIONS.md`
-//! (§ « Le verbe exposé aussi en méthode ») est **aussi** exposée comme
-//! méthode de son sujet, pour permettre le chaînage. Ces méthodes ne
+//! A free function meeting the three conditions of `CONVENTIONS.md`
+//! (§ "The verb also exposed as a method") is **also** exposed as a method of
+//! its subject, to allow chaining. These methods do not
 //! contiennent **aucune** logique : elles appellent la fonction libre,
 //! receveur compris. La fonction libre reste la forme canonique et porte la
 //! documentation.
 //!
-//! Les `impl` vivent ici plutôt que dans `containers/` : un conteneur ne doit
-//! pas dépendre d'un opérateur, et Rust autorise un `impl` inhérent dans
+//! The `impl`s live here rather than in `containers/`: a container must not
+//! depend on an operator, and Rust allows an inherent `impl` in
 //! n'importe quel module de la crate de définition.
 
 use crate::atoms::Band;
@@ -291,9 +291,9 @@ impl Mesh {
     }
 }
 
-// `select` part d'un champ mais rend un `Mesh` : la fonction libre vit donc
-// dans `ops::mesh`, et l'`impl` la suit. Le nom perd son qualificatif — le
-// type du sujet dit déjà s'il s'agit de nœuds ou de mailles.
+// `select` starts from a field but returns a `Mesh`: the free function
+// therefore lives in `ops::mesh`, and the `impl` follows it. The name loses
+// its qualifier — the subject's type already says whether it is nodes or cells.
 impl NodeField {
     /// Voir [`mesh::select_nodes`](fn@crate::ops::mesh::select_nodes).
     pub fn select(&self, band: &Band, components: Option<Vec<String>>) -> Result<Mesh> {

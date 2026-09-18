@@ -201,11 +201,11 @@ pub fn grid_surface(
 /// # mesh::merge_nodes(&quatre, 1e-6, true).unwrap();
 /// # let contour = mesh::consolidate(&quatre).unwrap();
 /// # use std::sync::atomic::AtomicBool;
-/// // Le jeton est sondé aux **points de contrôle** du mailleur, non entre
-/// // deux instructions : un contour aussi court est pavé avant d'en
-/// // atteindre un, et l'appel aboutit même jeton armé. C'est la même
-/// // granularité que partout ailleurs — l'arrêt tombe à la frontière de
-/// // phase suivante, pas au milieu d'une.
+/// // The token is polled at the mesher's **checkpoints**, not between two
+/// // instructions: a contour this short is paved before reaching one, and the
+/// // call succeeds even with the token armed. It is the same granularity as
+/// // everywhere else — the stop lands at the next phase boundary, not in the
+/// // middle of one.
 /// let stop = AtomicBool::new(false);
 /// assert!(mesh::grid_surface_cancellable(
 ///     &contour, ElementType::QUA4, Some(0.5), 1, false, mesh::FrontRelax::Free, &stop).is_ok());

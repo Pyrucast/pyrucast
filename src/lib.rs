@@ -59,21 +59,21 @@ pub use error::{PyrucastError, Result};
 /// Library version (taken from `Cargo.toml`).
 ///
 /// ```
-/// // Celle de `Cargo.toml`, et celle qu'une archive inscrit en tête.
+/// // The one from `Cargo.toml`, and the one an archive writes in its header.
 /// assert!(pyrucast::VERSION.split('.').count() >= 2);
 /// ```
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Features réellement compilées dans ce binaire, dans un ordre stable.
+/// Features actually compiled into this binary, in a stable order.
 ///
-/// La sdist publiée sur PyPI ne compile que `extension-module` : une installation
-/// depuis les sources n'a donc **pas** la visualisation, alors qu'elle porte le
-/// même numéro de version que les wheels. Cette constante rend la différence
-/// lisible sur la machine où elle se produit, plutôt que dans une page de
+/// The sdist published on PyPI compiles `extension-module` only: an install
+/// from source therefore has **no** visualization, although it carries the same
+/// version number as the wheels. This constant makes the difference readable on
+/// the machine where it happens, rather than in a page of
 /// documentation.
 ///
 /// ```
-/// // `viz-interactive` implique `viz` — la liste ne peut pas dire le contraire.
+/// // `viz-interactive` implies `viz` — the list cannot say otherwise.
 /// let f = pyrucast::FEATURES;
 /// assert!(!f.contains(&"viz-interactive") || f.contains(&"viz"));
 /// ```
@@ -106,7 +106,7 @@ pyo3_stub_gen::define_stub_info_gatherer!(stub_info);
 #[pymodule]
 fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", VERSION)?;
-    // Un tuple, non une liste : ce que le binaire porte ne se modifie pas
+    // A tuple, not a list: what the binary carries is not modified
     // depuis Python.
     m.add("__features__", pyo3::types::PyTuple::new(m.py(), FEATURES)?)?;
     m.add_function(wrap_pyfunction!(py::archive::save, m)?)?;

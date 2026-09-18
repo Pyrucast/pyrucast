@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 /// ```
 /// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::models::continuum::elastic;
-/// // La cinématique choisie décide du nombre de composantes de Voigt.
+/// // The chosen kinematics decides the number of Voigt components.
 /// assert_eq!(elastic::constitutive(210e3, 0.3, Kinematics::PlaneStress, 2).len(), 3);
 /// assert_eq!(elastic::constitutive(210e3, 0.3, Kinematics::Axisymmetric, 2).len(), 4);
 /// assert_eq!(elastic::constitutive(210e3, 0.3, Kinematics::Full3D, 3).len(), 6);
@@ -178,7 +178,7 @@ pub fn i1(sigma: &[f64; 6]) -> f64 {
 /// ```
 /// # use pyrucast::models::tensor;
 /// # use pyrucast::models::plasticity::law;
-/// // Le déviateur est de trace nulle, et laisse les cisaillements intacts.
+/// // The deviator is trace-free, and leaves the shears untouched.
 /// let s = tensor::deviator(&[3.0, 0.0, 0.0, 0.0, 0.0, 5.0]);
 /// assert!(tensor::i1(&s).abs() < 1e-12);
 /// assert_eq!(s[5], 5.0);
@@ -201,9 +201,9 @@ pub fn deviator(sigma: &[f64; 6]) -> [f64; 6] {
 /// ```
 /// # use pyrucast::models::tensor;
 /// # use pyrucast::models::plasticity::law;
-/// // J₂ = ½ s:s, les hors-diagonaux comptés **deux fois**.
+/// // J₂ = ½ s:s, the off-diagonal terms counted **twice**.
 /// assert_eq!(tensor::j2(&[0.0, 0.0, 0.0, 0.0, 0.0, 1.0]), 1.0);
-/// // Insensible à la pression : ajouter une part sphérique ne change rien.
+/// // Pressure insensitive: adding a spherical part changes nothing.
 /// let a = tensor::j2(&[1.0, -1.0, 0.0, 0.0, 0.0, 0.0]);
 /// let b = tensor::j2(&[101.0, 99.0, 100.0, 0.0, 0.0, 0.0]);
 /// assert!((a - b).abs() < 1e-9);
@@ -222,8 +222,8 @@ pub fn j2(sigma: &[f64; 6]) -> f64 {
 /// ```
 /// # use pyrucast::models::tensor;
 /// # use pyrucast::models::plasticity::law;
-/// // J₃ = det(s) — ce qui distingue traction et compression, et fait
-/// // l'angle de Lode des critères à quatre paramètres.
+/// // J₃ = det(s) — what distinguishes tension from compression, and makes
+/// // the Lode angle of the four-parameter criteria.
 /// assert!(tensor::j3(&[1.0, 1.0, 1.0, 0.0, 0.0, 0.0]).abs() < 1e-12);
 /// assert!(tensor::j3(&[2.0, -1.0, -1.0, 0.0, 0.0, 0.0]) > 0.0);
 /// ```

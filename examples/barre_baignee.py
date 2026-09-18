@@ -1,10 +1,10 @@
-"""Barre « baignée » dans un volume : contrainte embedded.
+"""A bar "immersed" in a volume: an embedded constraint.
 
-Un cube HEX8 en conduction thermique, ses huit coins fixés à un champ linéaire
-`T(x) = 1 + 2x + 3y + 4z` — que l'interpolation trilinéaire du HEX8 reproduit
-exactement à l'intérieur. Un nœud immergé au cœur du cube est lié à l'hôte par
-une contrainte `model.embedded` : sa température résolue égale l'interpolation de
-l'hôte au même point, sans que les deux maillages partagent de nœud.
+A HEX8 cube in thermal conduction, its eight corners fixed to a linear field
+`T(x) = 1 + 2x + 3y + 4z` — which the HEX8's trilinear interpolation reproduces
+exactly inside. A node immersed at the cube's core is tied to the host by a
+`model.embedded` constraint: its solved temperature equals the host's
+interpolation at the same point, without the two meshes sharing a node.
 
 Lancer : `python examples/barre_baignee.py` (après `maturin develop`).
 """
@@ -42,7 +42,7 @@ def main():
     corner_mult = pyrucast.mesh.barycenter(corner_mesh)
     dirichlet = pyrucast.model.dirichlet(base, "T", corner_mesh, corner_mult)
 
-    # Nœud immergé au cœur du cube, lié à l'hôte.
+    # Node immersed at the cube's core, tied to the host.
     p = c.add_node([0.3, 0.6, 0.2])
     bar = pyrucast.mesh.poi1_from_nodes([p])
     embedded = pyrucast.model.embedded(base, bar, host, ["T"])
@@ -50,7 +50,7 @@ def main():
     model = base | dirichlet | embedded
     materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
 
-    # Chargement : valeur du champ à chaque coin (Dirichlet) ; g = 0 au nœud
+    # Loading: the field's value at each corner (Dirichlet); g = 0 at the
     # immergé (liaison rigide, le défaut).
     rhs = dirichlet.constraint_rhs(
         [(n, field(x)) for n, x in zip(corner_nodes, CORNERS)]

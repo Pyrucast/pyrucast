@@ -49,10 +49,10 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 /// # use pyrucast::atoms::Point2;
 /// # use pyrucast::ops::mesh::triangulation;
 /// # use pyrucast::ops::mesh::triangulation::RefinementOptions;
-/// // Par défaut, aucun raffinement demandé.
+/// // By default, no refinement requested.
 /// assert!(!RefinementOptions::default().is_active());
-/// // Ruppert n'est **prouvé terminer** que jusqu'à 20,7° ; au-delà, un
-/// // plafond de points de Steiner rend une erreur claire plutôt qu'une
+/// // Ruppert is **proven to terminate** only up to 20.7°; beyond that, a cap
+/// // on Steiner points returns a clear error rather than a
 /// // divergence.
 /// let o = RefinementOptions { max_edge_length: Some(0.5), min_angle_deg: Some(20.0) };
 /// assert!(o.is_active());
@@ -1491,12 +1491,12 @@ fn in_circle_tolerant(a: Point2, b: Point2, c: Point2, d: Point2) -> bool {
 /// ```
 /// # use pyrucast::atoms::Point2;
 /// # use pyrucast::ops::mesh::triangulation;
-/// // L'enveloppe convexe d'un carré : deux triangles, quel que soit le
-/// // découpage choisi par la condition de Delaunay.
+/// // A square's convex hull: two triangles, whatever the split the Delaunay
+/// // condition picks.
 /// let carre = [Point2::new(0.0, 0.0), Point2::new(1.0, 0.0),
 ///              Point2::new(1.0, 1.0), Point2::new(0.0, 1.0)];
 /// assert_eq!(triangulation::delaunay_2d(&carre)?.len(), 2);
-/// // Moins de trois points : rien à trianguler.
+/// // Fewer than three points: nothing to triangulate.
 /// assert!(triangulation::delaunay_2d(&carre[..2]).is_err());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -1552,13 +1552,13 @@ pub fn delaunay_2d(points: &[Point2]) -> Result<Vec<[usize; 3]>> {
 /// ```
 /// # use pyrucast::atoms::Point2;
 /// # use pyrucast::ops::mesh::triangulation;
-/// // Une contrainte force une arête à survivre à la triangulation, même
+/// // A constraint forces an edge to survive the triangulation, even
 /// // si Delaunay seul aurait choisi l'autre diagonale.
 /// let carre = [Point2::new(0.0, 0.0), Point2::new(1.0, 0.0),
 ///              Point2::new(1.0, 1.0), Point2::new(0.0, 1.0)];
 /// let cells = triangulation::constrained_delaunay_2d(&carre, &[(1, 3)])?;
 /// assert_eq!(cells.len(), 2);
-/// // La diagonale (1,3) est bien une arête d'un des deux triangles.
+/// // The diagonal (1,3) is indeed an edge of one of the two triangles.
 /// assert!(cells.iter().any(|t| t.contains(&1) && t.contains(&3)));
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -1634,7 +1634,7 @@ pub fn constrained_delaunay_2d(
 /// ```
 /// # use pyrucast::atoms::Point2;
 /// # use pyrucast::ops::mesh::triangulation;
-/// // Un carré percé d'un carré : la couronne est maillée, le trou reste
+/// // A square pierced by a square: the ring is meshed, the hole stays
 /// // vide. Huit sommets, huit triangles.
 /// let outer = vec![Point2::new(0.0, 0.0), Point2::new(3.0, 0.0),
 ///                  Point2::new(3.0, 3.0), Point2::new(0.0, 3.0)];
@@ -1739,8 +1739,8 @@ pub fn triangulate_polygon_with_holes(
 /// # use pyrucast::atoms::Point2;
 /// # use pyrucast::ops::mesh::triangulation;
 /// # use pyrucast::ops::mesh::triangulation::RefinementOptions;
-/// // Le raffinement **ajoute des points** : la fonction rend donc les
-/// // sommets en plus des mailles, contrairement à sa version brute.
+/// // Refinement **adds points**: the function therefore returns the vertices
+/// // on top of the cells, unlike its raw version.
 /// let outer = vec![Point2::new(0.0, 0.0), Point2::new(3.0, 0.0),
 ///                  Point2::new(3.0, 3.0), Point2::new(0.0, 3.0)];
 /// let (pts, cells) = triangulation::triangulate_polygon_with_holes_refined(

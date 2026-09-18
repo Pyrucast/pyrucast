@@ -1,4 +1,4 @@
-//! Source des exemples Rust de `book/src/fe-space.md`.
+//! Source of the Rust examples of `book/src/fe-space.md`.
 //!
 //! The page pulls these functions through `{{#include …:anchor}}` and
 //! exécute. L'ancre couvre la **fonction entière**, signature comprise.
@@ -13,7 +13,7 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::Result;
 
-/// Le triangle (0,0), (2,0), (0,2) et son espace EF par défaut.
+/// The triangle (0,0), (2,0), (0,2) and its default FE space.
 fn triangle() -> Result<(Handle<Coords>, Mesh, FiniteElementSpace)> {
     let coords = Handle::new(Coords::new(2)?);
     let a = Node::create_in(coords.clone(), &[0.0, 0.0])?;
@@ -41,7 +41,7 @@ fn le_constructeur_par_defaut_pose_lagrange1_et_gauss() -> Result<()> {
     let s = sub.read();
     assert_eq!(s.gauss_count(), 3);
     // Le triangle (0,0), (2,0), (0,2) a |J| = 4 partout :
-    // mapping affine, det(J) = 4 = 2 × aire physique du triangle (1/2 × 2 × 2).
+    // affine mapping, det(J) = 4 = 2 × the triangle's physical area (1/2 × 2 × 2).
     for g in 0..s.gauss_count() {
         let dj = s.det_jacobian(0, g)?;
         assert!((dj - 4.0).abs() < 1e-12);
@@ -77,7 +77,7 @@ fn evaluer_les_grandeurs_sur_une_cellule() -> Result<()> {
             let jac = s.jacobian(cell_idx, g)?;
             let det_j = s.det_jacobian(cell_idx, g)?;
             let dn_dx = s.dn_dx(cell_idx, g)?;
-            // … utiliser ces buffers dans l'assemblage matrice-élémentaire …
+            // … use these buffers in the element matrix assembly …
             let _ = (n, dn, jac, det_j, dn_dx);
         }
     }
@@ -95,11 +95,11 @@ fn deplacer_un_noeud_change_les_evaluations_a_venir() -> Result<()> {
     mesh.add_cell(&[a.id(), b.id()])?;
     let sub = FiniteElementSpace::lagrange1(&mesh)?.get(0)?;
 
-    // SEG2 initial : nœuds en x=0 et x=1 → |J| = 0.5 (longueur 1 sur [-1,+1]).
+    // Initial SEG2: nodes at x=0 and x=1 → |J| = 0.5 (length 1 over [-1,+1]).
     let dj_before = sub.read().det_jacobian(0, 0)?;
     assert!((dj_before - 0.5).abs() < 1e-12);
 
-    // Étirement : on déplace le second nœud en x=4 → |J| = 2.0 (longueur 4 sur [-1,+1]).
+    // Stretch: the second node moves to x=4 → |J| = 2.0 (length 4 over [-1,+1]).
     coords.write().set_position(b.id(), &[4.0, 0.0])?;
     let dj_after = sub.read().det_jacobian(0, 0)?;
     assert!((dj_after - 2.0).abs() < 1e-12);

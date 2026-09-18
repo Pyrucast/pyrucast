@@ -1,4 +1,4 @@
-//! Source des exemples Rust de `book/src/triangulation.md`.
+//! Source of the Rust examples of `book/src/triangulation.md`.
 //!
 //! The page pulls these functions through `{{#include …:anchor}}` and
 //! exécute. L'ancre couvre la **fonction entière**, signature comprise : en
@@ -21,7 +21,7 @@ fn l_aire_signee_donne_le_sens_de_parcours() {
     ];
     assert!((signed_area(&pts) - 1.0).abs() < 1e-12);
 
-    // Même carré CW — aire = -1.
+    // The same square CW — area = -1.
     let pts_cw: Vec<_> = pts.iter().cloned().rev().collect();
     assert!((signed_area(&pts_cw) + 1.0).abs() < 1e-12);
 }
@@ -41,10 +41,10 @@ fn le_decoupage_par_oreilles_rend_n_moins_2_triangles() {
         Point2::new(-0.5, 1.5),
     ];
     let triangles = ear_clip_2d(&pts).unwrap();
-    // n - 2 = 3 triangles, indices dans pts.
+    // n - 2 = 3 triangles, indices into pts.
     assert_eq!(triangles.len(), 3);
 
-    // Vérifier qu'un triangle est CCW (aire signée > 0).
+    // Checking that a triangle is CCW (signed area > 0).
     for [i, j, k] in &triangles {
         let area = signed_area(&[pts[*i], pts[*j], pts[*k]]);
         assert!(area > 0.0, "triangle non-CCW détecté");
@@ -58,7 +58,7 @@ use pyrucast::ops::mesh::triangulation::{in_plane_basis, newell_normal};
 
 #[test]
 fn un_contour_3d_planaire_se_ramene_a_un_repere_local() {
-    // Triangle dans le plan y = 0 (plan xz).
+    // A triangle in the y = 0 plane (the xz plane).
     let pts = vec![
         Point3::new(0.0, 0.0, 0.0),
         Point3::new(1.0, 0.0, 0.0),
@@ -70,11 +70,11 @@ fn un_contour_3d_planaire_se_ramene_a_un_repere_local() {
     assert!(normal.y.abs() > 0.99);
 
     let (u, v) = in_plane_basis(normal);
-    // u et v sont orthogonaux entre eux et à la normale.
+    // u and v are orthogonal to each other and to the normal.
     assert!(u.dot(&v).abs() < 1e-12);
     assert!(u.dot(&normal).abs() < 1e-12);
 
-    // Projeter un point dans le repère local (u, v).
+    // Projecting a point into the local frame (u, v).
     let origin = Point3::new(0.0, 0.0, 0.0);
     let p = Point3::new(0.5, 0.0, 0.5);
     let pu = (p - origin).dot(&u);
@@ -122,7 +122,7 @@ fn un_polygone_troue_se_triangule_directement() {
         Point2::new(1.0, 3.0),
     ];
     let triangles = triangulate_polygon_with_holes(&outer, &[hole]).unwrap();
-    // Aire = 16 - 4 = 12 ; sans Steiner : 6 triangles bruts.
+    // Area = 16 - 4 = 12; without Steiner: 6 raw triangles.
     println!("{} triangles", triangles.len());
     assert!(!triangles.is_empty());
 }
@@ -145,8 +145,8 @@ fn le_raffinement_de_ruppert_insere_des_points_de_steiner() {
         max_edge_length: Some(1.0),
         min_angle_deg: Some(20.0),
     };
-    // Le raffinement insère des points de Steiner : la fonction renvoie donc
-    // **les points** (entrée + Steiner) *et* les triangles qui les indexent.
+    // The refinement inserts Steiner points: the function therefore returns
+    // **the points** (input + Steiner) *and* the triangles indexing them.
     let (points, triangles) = triangulate_polygon_with_holes_refined(&outer, &[], opts).unwrap();
     println!(
         "{} triangles après raffinement, {} points",

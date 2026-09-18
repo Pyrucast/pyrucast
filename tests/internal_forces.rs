@@ -158,8 +158,8 @@ fn bernoulli_planar_1d_internal_forces_match_k_times_u() -> Result<()> {
 
 #[test]
 fn bernoulli_frame_2d_internal_forces_match_k_times_u() -> Result<()> {
-    // Incliné : la rotation vers les axes globaux doit se transposer avec le
-    // reste, et une poutre horizontale ne le dirait pas.
+    // Inclined: the rotation to the global axes must transpose with the rest, and
+    // a horizontal beam would not say so.
     let (fes, nodes) = chain(
         &[&[0.0, 0.0], &[1.2, 0.9], &[2.4, 1.8]],
         Interpolation::Hermite3,
@@ -191,7 +191,7 @@ fn bernoulli_frame_3d_internal_forces_match_k_times_u() -> Result<()> {
             ("G", 80_000.0),
         ],
         &nodes,
-        // Les deux plans de flexion, l'axial et la torsion, tous excités.
+        // Both bending planes, the axial term and the torsion, all excited.
         &[
             ("f_x", 30.0),
             ("f_y", 50.0),
@@ -211,7 +211,7 @@ fn timoshenko_planar_1d_internal_forces_match_k_times_u() -> Result<()> {
     check_beam(
         &fes,
         &model::timoshenko(&fes)?,
-        // Trapue : `Φ` pèse, et une section élancée le cacherait.
+        // Stocky: `Φ` weighs in, and a slender section would hide it.
         &[
             ("E", 210_000.0),
             ("I", 1.0e-4),
@@ -253,7 +253,7 @@ fn timoshenko_frame_3d_internal_forces_match_k_times_u() -> Result<()> {
     check_beam(
         &fes,
         &model::timoshenko(&fes)?,
-        // Les deux plans portent leur **propre** `Φ` : des inerties et des
+        // Both planes carry their **own** `Φ`: inertias and
         // sections réduites différentes les distinguent, et un appariement
         // croisé se verrait.
         &[

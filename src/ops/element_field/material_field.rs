@@ -44,11 +44,11 @@ use crate::handle::Handle;
 ///     &[("E", 210e3), ("nu", 0.3), ("alpha", 1.2e-5), ("inconnu", 1.0)])?;
 /// assert_eq!(m.components(),
 ///            &["E".to_string(), "nu".to_string(), "alpha".to_string()]);
-/// // Une composante requise manquante est une erreur.
+/// // A missing required component is an error.
 /// assert!(element_field::sub_material_field(
 ///     &meca.get(0)?.read(), &[("E", 210e3)]).is_err());
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
-/// // Une contrainte n'a pas de matière à recevoir.
+/// // A constraint has no matter to receive.
 /// let appui = model::dirichlet(&cible, "T", &impose, &mult,
 ///                              RelationSense::Equality)?;
 /// assert!(element_field::sub_material_field(
@@ -126,8 +126,8 @@ pub fn sub_material_field(
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
-/// // Les mêmes valeurs pour **tous** les sous-modèles qui demandent de la
-/// // matière ; ceux qui n'en veulent pas sont sautés sans erreur.
+/// // The same values for **every** sub-model that asks for matter; those that
+/// // want none are skipped without an error.
 /// let modele = model::heat_conduction(&fes)?.union(
 ///     &model::dirichlet(&cible, "T", &impose, &mult,
 ///                       RelationSense::Equality)?)?;
@@ -184,15 +184,15 @@ pub fn material_field(
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// // Une liste **par sous-modèle**, quand deux physiques cohabitent et
-/// // n'attendent pas les mêmes constantes.
+/// // One list **per sub-model**, when two physics live together and do not
+/// // expect the same constants.
 /// let modele = model::heat_conduction(&fes)?
 ///     .union(&model::elasticity(&fes, Kinematics::PlaneStress)?)?;
 /// let mat = element_field::material_field_per_sub_model(
 ///     &modele, &[&[("k", 1.0)], &[("E", 210e3), ("nu", 0.3)]])?;
 /// assert_eq!(mat.len(), 2);
 /// assert_eq!(mat.get(0)?.read().components(), &["k".to_string()]);
-/// // Il en faut exactement autant que de sous-modèles.
+/// // Exactly as many are needed as there are sub-models.
 /// assert!(element_field::material_field_per_sub_model(
 ///     &modele, &[&[("k", 1.0)]]).is_err());
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -297,7 +297,7 @@ mod tests {
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
         let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
-        // La cible que l'appui contraint : il y lit son dual et y vérifie sa
+        // The target the support constrains: it reads its dual there and checks its
         // variable.
         let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
         let mut sm = SubMesh::new(coords.clone(), crate::atoms::ElementType::SEG2);

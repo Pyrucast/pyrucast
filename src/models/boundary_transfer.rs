@@ -88,8 +88,8 @@ use serde::{Deserialize, Serialize};
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// // L'échange de surface, contre la conduction qu'il refroidit : nommer ses
-/// // DDL est ce qui fait que le terme s'y couple.
+/// // The surface exchange, against the conduction it cools: naming its DOFs
+/// // is what makes the term couple to it.
 /// let conduction = model::heat_conduction(&fes)?;
 /// let b = BoundaryTransfer::new(zone, &conduction, vec![("T".into(), "q".into())])?;
 /// assert_eq!(b.primal_vars(), vec!["T".to_string()]);
@@ -144,14 +144,14 @@ impl BoundaryTransfer {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// let conduction = model::heat_conduction(&fes)?;
-    /// // La nature n'est pas un argument : elle vient de la conduction, qui
+    /// // The kind is not an argument: it comes from the conduction, which
     /// // assemble `T` et `q`.
     /// let film = BoundaryTransfer::new(zone.clone(), &conduction, vec![("T".into(), "q".into())])?;
     /// assert_eq!(film.physics(), &[Physics::Thermal]);
-    /// // Une paire que la cible n'assemble pas ne se couplerait à rien : refusée.
+    /// // A pair the target does not assemble would couple to nothing: refused.
     /// assert!(BoundaryTransfer::new(zone.clone(), &conduction, vec![("u_x".into(), "f_x".into())])
     ///     .is_err());
-    /// // Un échange porte une seule nature : thermique et mécanique mêlées, refusé.
+    /// // An exchange carries one kind: thermal and mechanical mixed, refused.
     /// let deux = conduction.union(&model::elasticity(&fes, Kinematics::PlaneStress)?)?;
     /// assert!(BoundaryTransfer::new(
     ///     zone.clone(), &deux, vec![("T".into(), "q".into()), ("u_x".into(), "f_x".into())])
@@ -394,7 +394,7 @@ crate::physics_operator! {
     /// let conduction = model::heat_conduction(&fes)?;
     /// let film = model::boundary_transfer(&fes_bord, &conduction, vec![("T".into(), "q".into())])?;
     /// assert_eq!(film.primal_vars(), vec!["T".to_string()]);
-    /// // Réuni à la conduction, il se range avec elle sous la même nature.
+    /// // United with the conduction, it files under the same kind as it.
     /// let m = conduction.union(&film)?;
     /// assert_eq!(m.filter(Physics::Thermal)?.len(), 2);
     /// # Ok::<(), pyrucast::PyrucastError>(())

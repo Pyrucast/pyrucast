@@ -208,8 +208,8 @@ fn transpose(a: &[[f64; 12]; 12]) -> [[f64; 12]; 12] {
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
 ///     DofOrdering::NodesThenVars, true, &mat, None,
-///     // Le noyau prend les constantes de section, pas le champ : c'est la
-///     // physique qui lit son contrat, lui ne fait que les maths.
+///     // The kernel takes the section constants, not the field: the physics
+///     // is what reads its contract, the kernel only does the maths.
 ///     |geoms, m, s, ke| frame3d::element_stiffness(
 ///         &geoms[0], 210000.0 * 0.01, 80000.0 * 2e-05, 210000.0,
 ///         1e-05, 1e-05, 80000.0, 0.008, 0.008, ke),
@@ -217,9 +217,9 @@ fn transpose(a: &[[f64; 12]; 12]) -> [[f64; 12]; 12] {
 /// // Portique spatial : axial, torsion et flexion autour de deux axes
 /// // principaux — six DDL par nœud.
 /// assert_eq!((bloc.n_rows(), bloc.n_cols()), (12, 12));
-/// // La somme brute des entrées ne vaut pas zéro : les DDL mêlent
-/// // translations et rotations, et seul le mode de **translation** est
-/// // rigide. On vérifie plutôt la symétrie, propre à toute raideur.
+/// // The raw sum of the entries is not zero: the DOFs mix translations and
+/// // rotations, and only the **translation** mode is rigid. The symmetry,
+/// // proper to any stiffness, is checked instead.
 /// let d = bloc.dense();
 /// assert!((0..12).all(|i| (0..12).all(|j| (d[i * 12 + j] - d[j * 12 + i]).abs() < 1e-6)));
 /// # Ok::<(), pyrucast::PyrucastError>(())

@@ -84,8 +84,8 @@ use serde::{Deserialize, Serialize};
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["D_H2".into()], &[2.0]).unwrap());
 /// # use pyrucast::models::fick;
-/// // L'espèce nomme la concentration : c'est ce qui permet à plusieurs
-/// // diffusions de coexister dans un même modèle.
+/// // The species names the concentration: that is what lets several
+/// // diffusions coexist in one model.
 /// assert_eq!(fick::primal_var("H2"), "c_H2");
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -217,7 +217,7 @@ fn flux_components(space_dim: usize, species: &str) -> Vec<String> {
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # use pyrucast::models::fick::{self, Fick};
-/// // L'espèce nomme tout : la concentration, le flux et la diffusivité.
+/// // The species names everything: the concentration, the flux, the diffusivity.
 /// let f = Fick::new(zone.clone(), "H2")?;
 /// assert_eq!(f.primal_vars(), vec![fick::primal_var("H2")]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -299,8 +299,8 @@ impl Fick {
     /// # use pyrucast::models::SubModelKind;
     /// let f = Fick::with_symmetry(zone.clone(), MaterialSymmetry::Isotropic, "H2")?;
     /// assert_eq!(f.dual_vars(), vec!["j_H2".to_string()]);
-    /// // Une espèce vide est refusée : elle rendrait les `c`/`j` nus que le
-    /// // suffixe existe précisément pour éviter.
+    /// // An empty species is refused: it would give back the bare `c`/`j` the
+    /// // suffix exists precisely to avoid.
     /// assert!(Fick::with_symmetry(zone.clone(), MaterialSymmetry::Isotropic, "").is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -533,7 +533,7 @@ impl Behavior for Fick {
 /// # use pyrucast::models::ElementLayout;
 /// // The field is laid out in the contract's order: the table is the identity.
 /// let lay = ElementLayout { material: vec![0], optional_material: vec![], state: vec![] };
-/// // Le même laplacien que la conduction, avec la diffusivité de l'espèce.
+/// // The same Laplacian as the conduction, with the species' diffusivity.
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support,
 ///     vec!["j_H2".into()], vec!["c_H2".into()], DofOrdering::NodesThenVars, true,
@@ -633,7 +633,7 @@ pub fn element_stiffness(
 /// #     zone.clone(), vec!["poro".into()], &[3.0]).unwrap());
 /// # use pyrucast::models::fick;
 /// # use pyrucast::models::ElementLayout;
-/// // `poro` est la seule composante **facultative** du contrat de Fick.
+/// // `poro` is the Fick contract's only **optional** component.
 /// let lay = ElementLayout {
 ///     material: vec![], optional_material: vec![0], state: vec![],
 /// };

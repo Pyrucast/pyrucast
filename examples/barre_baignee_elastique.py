@@ -1,11 +1,11 @@
-"""Barre « baignée » dans un volume élastique : contrainte embedded vectorielle.
+"""A bar "immersed" in an elastic volume: a vector embedded constraint.
 
-Le cas qui motive le baignage : un nœud immergé suit les **déplacements** de
+The case that motivates immersion: an immersed node follows the host's
 l'interpolation volumique, en x, y **et** z. Un cube HEX8 en traction uniaxiale
 (élasticité 3-D) a le champ linéaire `u_x = (S/E)x`, `u_y = −(νS/E)y`,
-`u_z = −(νS/E)z` ; un nœud immergé au cœur, lié à l'hôte par
-`model.embedded(volume, ..., ["u_x", "u_y", "u_z"])`, retrouve ce
-champ à sa position — sans que la barre et le volume partagent de nœud.
+`u_z = −(νS/E)z`; a node immersed at the core, tied to the host by
+`model.embedded(volume, ..., ["u_x", "u_y", "u_z"])`, recovers that
+field at its position — without the bar and the volume sharing a node.
 
 Lancer : `python examples/barre_baignee_elastique.py` (après `maturin develop`).
 """
@@ -14,7 +14,7 @@ import pyrucast
 
 E = 210.0  # module d'Young
 NU = 0.3  # coefficient de Poisson
-S = 2.0  # traction sur la face x = 1
+S = 2.0  # traction on the x = 1 face
 
 CORNERS = [
     [0.0, 0.0, 0.0],
@@ -38,7 +38,7 @@ def main():
     fes = pyrucast.FiniteElementSpace(host)
     model = pyrucast.model.elasticity(fes, "full_3d")
 
-    # Appuis de symétrie sur les trois faces passant par l'origine.
+    # Symmetry supports on the three faces through the origin.
     def clamp(target, ids, var):
         picked = [nodes[i] for i in ids]
         imposed = pyrucast.mesh.poi1_from_nodes(picked)
@@ -49,14 +49,14 @@ def main():
     model = model | clamp(model, [0, 1, 4, 5], "u_y")  # face y = 0
     model = model | clamp(model, [0, 1, 2, 3], "u_z")  # face z = 0
 
-    # Nœud immergé au cœur du cube, lié en u_x/u_y/u_z (liaison rigide, g = 0).
+    # Node immersed at the cube's core, tied in u_x/u_y/u_z (rigid tie, g = 0).
     pc = [0.4, 0.7, 0.2]
     p = c.add_node(pc)
     bar = pyrucast.mesh.poi1_from_nodes([p])
     embedded = pyrucast.model.embedded(model, bar, host, ["u_x", "u_y", "u_z"])
     model = model | embedded
 
-    # Traction S sur la face x = 1 (QUA4 [1, 2, 6, 5]) → charges nodales cohérentes.
+    # Traction S on the x = 1 face (QUA4 [1, 2, 6, 5]) → consistent nodal loads.
     face = pyrucast.Mesh(c, "QUA4")
     face.unit().add_cell([nodes[1], nodes[2], nodes[6], nodes[5]])
     face_fes = pyrucast.FiniteElementSpace(face)

@@ -113,16 +113,16 @@ fn matmul(a: &[[f64; 6]; 6], b: &[[f64; 6]; 6]) -> [[f64; 6]; 6] {
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
 ///     DofOrdering::NodesThenVars, true, &mat, None,
-///     // Le noyau prend les constantes de section, pas le champ : c'est la
-///     // physique qui lit son contrat, lui ne fait que les maths.
+///     // The kernel takes the section constants, not the field: the physics
+///     // is what reads its contract, the kernel only does the maths.
 ///     |geoms, m, s, ke| frame::element_stiffness(
 ///         &geoms[0], 210000.0 * 0.01, 210000.0 * 1e-05, 80000.0 * 0.008, ke),
 /// )?;
-/// // Portique plan : axial et flexion, ramenés aux axes globaux.
+/// // A plane frame: axial and bending, brought back to the global axes.
 /// assert_eq!((bloc.n_rows(), bloc.n_cols()), (6, 6));
-/// // La somme brute des entrées ne vaut pas zéro : les DDL mêlent
-/// // translations et rotations, et seul le mode de **translation** est
-/// // rigide. On vérifie plutôt la symétrie, propre à toute raideur.
+/// // The raw sum of the entries is not zero: the DOFs mix translations and
+/// // rotations, and only the **translation** mode is rigid. The symmetry,
+/// // proper to any stiffness, is checked instead.
 /// let d = bloc.dense();
 /// assert!((0..6).all(|i| (0..6).all(|j| (d[i * 6 + j] - d[j * 6 + i]).abs() < 1e-6)));
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -201,8 +201,8 @@ fn cell_frame(geom: &CellGeom) -> Result<(f64, f64, f64)> {
     let xb = geom.node_coord(1);
     let (dx, dy) = (xb[0] - xa[0], xb[1] - xa[1]);
     let l = (dx * dx + dy * dy).sqrt();
-    // Le `Result` gardait le vide : on divisait par `l` sans le tester, et une
-    // maille dégénérée rendait `Ok(NaN, NaN, NaN)`. Maintenant il garde.
+    // The `Result` guarded emptiness: we divided by `l` without testing it, and a
+    // degenerate cell returned `Ok(NaN, NaN, NaN)`. Now it guards.
     if l <= f64::EPSILON {
         return Err(PyrucastError::Message(format!(
             "Frame: cell {} has zero length",
@@ -297,7 +297,7 @@ pub fn element_mass(
 ///     |geoms, m, s, ke| frame::element_geometric(&geoms[0], 100.0, ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
-/// // C'est le signe de cette matrice qui décide de la charge critique.
+/// // It is this matrix's sign that decides the critical load.
 /// assert!(total.abs() < 1e-6);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```

@@ -72,8 +72,8 @@ use crate::models::ResidualContribution;
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = mesh::poi1_from_nodes(&n).unwrap();
-/// // La forme qui passe par le **modèle** : chaque sous-modèle y apporte
-/// // son propre opérateur, une barre n'ayant pas le Bᵀ d'un continuum.
+/// // The form that goes through the **model**: every sub-model brings its own
+/// // operator there, a bar not having a continuum's Bᵀ.
 /// # let modele = model::elasticity(&fes, Kinematics::PlaneStress)?;
 /// # let mut s = ElementField::new(&fes,
 /// #     vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_xy".into()])?;
@@ -159,9 +159,9 @@ pub fn internal_forces(
             zones
         };
         for zone in built {
-            // `r = Σ rᵢ` est une **somme**, pas un empilement : deux termes
-            // peuvent charger le même nœud dans la même composante, et une vue
-            // d'agrégat en choisirait un au lieu de les ajouter.
+            // `r = Σ rᵢ` is a **sum**, not a stack: two terms may load the same node in
+            // the same component, and an aggregate view would pick one instead of adding
+            // them.
             out = (&out + &zone)?;
         }
     }
@@ -317,10 +317,10 @@ mod tests {
         }
     }
 
-    /// Les forces internes d'un solide **sont** la divergence de son tenseur des
+    /// A solid's internal forces **are** the divergence of its stress tensor
     /// contraintes : l'opérateur de modèle et l'opérateur purement géométrique
-    /// donnent les mêmes nombres, nœud par nœud. C'est ce qui justifie qu'il
-    /// n'y en ait qu'un des deux à connaître la mécanique.
+    /// give the same numbers, node by node. That is what justifies only one of the
+    /// two knowing the mechanics.
     #[test]
     fn internal_forces_are_the_divergence_of_the_stress() {
         let coords = Handle::new(Coords::new(2).unwrap());

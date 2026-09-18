@@ -1,9 +1,9 @@
-//! Méthodes de délégation — la face « sujet » des opérateurs de ce module.
+//! Delegation methods — the "subject" face of this module's operators.
 //!
 //! Voir `CONVENTIONS.md` § « Le verbe exposé aussi en méthode ». La fonction
-//! libre reste la forme canonique ; ces méthodes ne contiennent aucune logique.
+//! function stays the canonical form; these methods contain no logic.
 //!
-//! Ne sont **pas** exposés ici, faute de sens pour toute instance du type :
+//! **Not** exposed here, for want of meaning for every instance of the type:
 //! `deformation`, `beam_deformation` (elles exigent des
 //! composantes de déplacement `u_x`/`u_y`/`u_z`) et `thermal_strain` (elle
 //! exige une température, et un `alpha` dans le matériau). Elles restent des

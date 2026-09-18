@@ -112,7 +112,7 @@ pub fn external_forces(model: &Model, materials: &ElementField) -> Result<NodeFi
             zones
         };
         for zone in built {
-            // `r = Σ rᵢ` est une **somme**, pas un empilement : deux termes
+            // `r = Σ rᵢ` is a **sum**, not a stack: two terms may load the same node in
             // peuvent charger le même nœud dans la même composante, et une
             // vue d'agrégat en choisirait un au lieu de les ajouter. `+` fait
             // l'union des supports et somme ce qui se recouvre.

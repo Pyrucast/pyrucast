@@ -2,17 +2,17 @@
 
 Physique
 --------
-Poutre 3-D à 6 DOFs par nœud (`u_x, u_y, u_z, r_x, r_y, r_z`). La rigidité
+A 3-D beam with 6 DOFs per node (`u_x, u_y, u_z, r_x, r_y, r_z`). The
 locale 12×12 combine l'effort axial (`E·A`), la torsion (`G·J`), et la flexion
-de Timoshenko dans les deux plans principaux (`E·I_z`/`G·A_sy` et
-`E·I_y`/`G·A_sz`). Elle est tournée dans le repère global `K = Tᵀ K_loc T` ;
-les axes de section sont orientés automatiquement (référence Z globale).
-L'élément (forme fermée, paramètres Φ) est nodalement exact pour des charges
+Timoshenko stiffness in both principal planes (`E·I_z`/`G·A_sy` and
+`E·I_y`/`G·A_sz`). It is rotated into the global frame `K = Tᵀ K_loc T`; the
+section axes are oriented automatically (global Z reference).
+The element (closed form, Φ parameters) is nodally exact for loads
 en bout.
 
 Problème
 --------
-Console le long de X, encastrée à la base (6 DOFs), charges au bout libre :
+A cantilever along X, clamped at the base (6 DOFs), loads at the free end:
 `f_y`, `f_z` et un moment de torsion `m_x`. Réponses découplées et exactes ::
 
     u_y = P_y·L³/(3·E·I_z) + P_y·L/(G·A_sy)
@@ -86,7 +86,7 @@ def main() -> None:
     ):
         print(f"{name:>5} {got:12.6f} {exact:12.6f}")
         assert abs(got - exact) < 1e-9
-    print("OK : flexions (2 plans) + torsion conformes à l'analytique.")
+    print("OK: bending (2 planes) + torsion matching the analytical solution.")
 
 
 if __name__ == "__main__":

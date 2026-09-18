@@ -70,12 +70,12 @@ mod tri6;
 ///
 /// ```
 /// # use pyrucast::atoms::ElementType;
-/// // Une face de TET10 est un TRI6 : elle porte ses nœuds milieux.
+/// // A TET10's face is a TRI6: it carries its mid-edge nodes.
 /// let f = &ElementType::TET10.as_kind().facets()[0];
 /// assert_eq!(f.element_type, ElementType::TRI6);
 /// assert_eq!(f.nodes.len(), 6);
-/// // Les coins seuls suffisent à apparier deux mailles voisines, quel que
-/// // soit leur degré.
+/// // The corners alone are enough to pair two neighbouring cells, whatever
+/// // their degree.
 /// assert_eq!(f.corners().len(), 3);
 /// ```
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -112,8 +112,8 @@ impl Facet {
 ///
 /// ```
 /// # use pyrucast::atoms::ElementType;
-/// // L'unique `match` par type d'élément : `as_kind()`. Tout le reste —
-/// // nombre de nœuds, facettes, domaine de référence — passe par le trait.
+/// // The single `match` per element type: `as_kind()`. All the rest — node
+/// // count, facets, reference domain — goes through the trait.
 /// let k = ElementType::TRI3.as_kind();
 /// assert_eq!(k.corner_count(), 3);
 /// assert_eq!(k.facets().len(), 3);
@@ -318,9 +318,9 @@ impl ElementType {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
-    /// // **L'unique** `match` par type d'élément de toute la bibliothèque :
-    /// // tout le reste — nombre de coins, facettes, domaine de référence —
-    /// // passe par le trait qu'il rend.
+    /// // **The single** `match` per element type in the whole library: all the
+    /// // rest — corner count, facets, reference domain — goes through the trait
+    /// // it returns.
     /// assert_eq!(ElementType::TRI3.as_kind().corner_count(), 3);
     /// assert_eq!(ElementType::HEX8.as_kind().facets().len(), 6);
     /// # Ok::<(), pyrucast::PyrucastError>(())

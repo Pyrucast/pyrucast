@@ -1,15 +1,15 @@
-//! Méthodes de délégation — la face « sujet » des opérateurs de ce module.
+//! Delegation methods — the "subject" face of this module's operators.
 //!
 //! Voir `CONVENTIONS.md` § « Le verbe exposé aussi en méthode » : la fonction
-//! libre reste la forme canonique et porte la documentation ; ces méthodes ne
-//! contiennent aucune logique. Les `impl` vivent ici plutôt que dans
-//! `containers/` — un conteneur ne doit pas dépendre d'un opérateur, et Rust
-//! autorise un `impl` inhérent dans n'importe quel module de la crate de
+//! function stays the canonical form and carries the documentation; these
+//! methods contain no logic. The `impl`s live here rather than in
+//! `containers/` — a container must not depend on an operator, and Rust allows
+//! an inherent `impl` in any module of the crate that
 //! définition.
 //!
-//! Ne sont **pas** exposés ici, faute de sens pour toute instance du type :
-//! `internal_forces` et `external_forces` (leur sujet est le modèle, pas un
-//! champ), et `merge`, qui est symétrique — `a | b` est déjà sa forme.
+//! **Not** exposed here, for want of meaning for every instance of the type:
+//! `internal_forces` and `external_forces` (their subject is the model, not a
+//! field), and `merge`, which is symmetric — `a | b` is already its form.
 
 use crate::containers::element_field::ElementField;
 use crate::containers::mesh::Mesh;

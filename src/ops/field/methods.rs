@@ -1,20 +1,20 @@
-//! Méthodes de délégation — la face « sujet » des opérateurs polymorphes.
+//! Delegation methods — the "subject" face of the polymorphic operators.
 //!
 //! Voir `CONVENTIONS.md` § « Le verbe exposé aussi en méthode ». La fonction
-//! libre reste la forme canonique ; ces méthodes ne contiennent aucune logique.
+//! function stays the canonical form; these methods contain no logic.
 //!
-//! Les opérateurs de ce module rendent un champ de la sorte reçue, donc les
+//! This module's operators return a field of the kind received, so the
 //! quatre saveurs (`NodeField` / `SubNodeField` / `ElementField` /
-//! `SubElementField`) portent les mêmes méthodes. `psca` n'y figure pas : le
-//! produit scalaire est **symétrique**, `a.psca(b)` suggérerait que l'ordre
+//! `SubElementField`) carry the same methods. `psca` is not among them: the
+//! scalar product is **symmetric**, `a.psca(b)` would suggest that the order
 //! compte.
 
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::Result;
 
-/// Génère, pour une saveur de champ, les onze maths élémentaires. Le masque
-/// n'est plus ici : `mask` produit un conteneur déterminé, il a donc rejoint
+/// Generates, for one field flavour, the eleven element-wise maths. The mask is
+/// no longer here: `mask` produces a determined container, so it has joined
 /// `ops::node_field` et `ops::element_field`.
 macro_rules! field_methods {
     ($T:ty) => {
