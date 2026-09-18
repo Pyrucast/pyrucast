@@ -90,10 +90,10 @@ use std::collections::HashMap;
 /// # let mut sm = SubMesh::new(coords, ElementType::SEG2);
 /// # sm.add_cell(&[a.id(), b.id()])?;
 /// # let maillage = Mesh::from_submesh(sm);
-/// // Un espace de Lagrange interpole : la question a un sens.
+/// // A Lagrange space interpolates: the question makes sense.
 /// let lagrange = FiniteElementSpace::lagrange1(&maillage)?;
 /// assert!(kernel::require_field_basis(&lagrange.get(0)?, "shape values").is_ok());
-/// // Un espace MODEL_EMBEDDED laisse l'interpolation à sa formulation.
+/// // A MODEL_EMBEDDED space leaves interpolation to its formulation.
 /// let poutre = FiniteElementSpace::new(&maillage, Interpolation::ModelEmbedded)?;
 /// let err = kernel::require_field_basis(&poutre.get(0)?, "shape values").unwrap_err();
 /// assert!(format!("{err}").contains("MODEL_EMBEDDED"));
@@ -235,10 +235,10 @@ fn scale_slope_slots_into(row: &[f64], j: f64, out: &mut [f64]) {
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-/// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
-/// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
-/// # // une physique. Ce noyau-ci ne lit aucun matériau, mais l'assembleur en
-/// # // veut un : on en donne un qui ne sert à rien plutôt qu'une `Option`.
+/// # // `CellGeom` only exists inside a driver: one is obtained by passing an
+/// # // element kernel to `assemble_block`, exactly as a physics does. This
+/// # // kernel reads no material, but the assembler wants one: we hand it a
+/// # // useless one rather than an `Option`.
 /// # use pyrucast::containers::element_field::SubElementField;
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
@@ -250,8 +250,8 @@ fn scale_slope_slots_into(row: &[f64], j: f64, out: &mut [f64]) {
 /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
 /// #     ).map(|_| ())
 /// # };
-/// // La géométrie d'une maille, sans jamais toucher au magasin : le noyau
-/// // ne voit que ça — ni rayon, ni verrou.
+/// // The geometry of a cell, without ever touching the store: the kernel
+/// // sees only this — no radius, no lock.
 /// noyau(&|geom| {
 ///     assert_eq!(geom.n_nodes, 3);
 ///     assert_eq!(geom.space_dim, 2);
@@ -314,10 +314,10 @@ impl<'a> CellGeom<'a> {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-    /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
-    /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
-    /// # // une physique. Ce noyau-ci ne lit aucun matériau, mais l'assembleur en
-    /// # // veut un : on en donne un qui ne sert à rien plutôt qu'une `Option`.
+    /// # // `CellGeom` only exists inside a driver: one is obtained by passing an
+    /// # // element kernel to `assemble_block`, exactly as a physics does. This
+    /// # // kernel reads no material, but the assembler wants one: we hand it a
+    /// # // useless one rather than an `Option`.
     /// # use pyrucast::containers::element_field::SubElementField;
     /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
     /// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
@@ -330,7 +330,7 @@ impl<'a> CellGeom<'a> {
     /// #     ).map(|_| ())
     /// # };
     /// noyau(&|geom| {
-    ///     assert_eq!(geom.node_ids().len(), 3); // dans l'ordre de connectivité
+    ///     assert_eq!(geom.node_ids().len(), 3); // in connectivity order
     ///     Ok(())
     /// })?;
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -359,10 +359,10 @@ impl<'a> CellGeom<'a> {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-    /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
-    /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
-    /// # // une physique. Ce noyau-ci ne lit aucun matériau, mais l'assembleur en
-    /// # // veut un : on en donne un qui ne sert à rien plutôt qu'une `Option`.
+    /// # // `CellGeom` only exists inside a driver: one is obtained by passing an
+    /// # // element kernel to `assemble_block`, exactly as a physics does. This
+    /// # // kernel reads no material, but the assembler wants one: we hand it a
+    /// # // useless one rather than an `Option`.
     /// # use pyrucast::containers::element_field::SubElementField;
     /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
     /// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
@@ -375,8 +375,8 @@ impl<'a> CellGeom<'a> {
     /// #     ).map(|_| ())
     /// # };
     /// noyau(&|geom| {
-    ///     // Les coordonnées sont rassemblées **paresseusement** : un noyau
-    ///     // purement local ne les paie pas.
+    ///     // Coordinates are gathered **lazily**: a purely local kernel does
+    ///     // not pay for them.
     ///     assert_eq!(geom.node_coord(1), &[2.0, 0.0]);
     ///     Ok(())
     /// })?;
@@ -422,10 +422,10 @@ impl<'a> CellGeom<'a> {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-    /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
-    /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
-    /// # // une physique. Ce noyau-ci ne lit aucun matériau, mais l'assembleur en
-    /// # // veut un : on en donne un qui ne sert à rien plutôt qu'une `Option`.
+    /// # // `CellGeom` only exists inside a driver: one is obtained by passing an
+    /// # // element kernel to `assemble_block`, exactly as a physics does. This
+    /// # // kernel reads no material, but the assembler wants one: we hand it a
+    /// # // useless one rather than an `Option`.
     /// # use pyrucast::containers::element_field::SubElementField;
     /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
     /// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
@@ -438,8 +438,8 @@ impl<'a> CellGeom<'a> {
     /// #     ).map(|_| ())
     /// # };
     /// noyau(&|geom| {
-    ///     // La matrice B, écrite dans un tampon de l'appelant : au point de
-    ///     // Gauss, une allocation coûte plus cher que l'algèbre qu'elle porte.
+    ///     // The B matrix, written into a caller's buffer: at the Gauss point,
+    ///     // an allocation costs more than the algebra it carries.
     ///     let mut b = [0.0_f64; 6];
     ///     geom.dn_dx(0, &mut b)?;
     ///     assert!((b[0] + b[2] + b[4]).abs() < 1e-12);
@@ -483,10 +483,10 @@ impl<'a> CellGeom<'a> {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-    /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
-    /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
-    /// # // une physique. Ce noyau-ci ne lit aucun matériau, mais l'assembleur en
-    /// # // veut un : on en donne un qui ne sert à rien plutôt qu'une `Option`.
+    /// # // `CellGeom` only exists inside a driver: one is obtained by passing an
+    /// # // element kernel to `assemble_block`, exactly as a physics does. This
+    /// # // kernel reads no material, but the assembler wants one: we hand it a
+    /// # // useless one rather than an `Option`.
     /// # use pyrucast::containers::element_field::SubElementField;
     /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
     /// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
@@ -532,10 +532,10 @@ impl<'a> CellGeom<'a> {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-    /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
-    /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
-    /// # // une physique. Ce noyau-ci ne lit aucun matériau, mais l'assembleur en
-    /// # // veut un : on en donne un qui ne sert à rien plutôt qu'une `Option`.
+    /// # // `CellGeom` only exists inside a driver: one is obtained by passing an
+    /// # // element kernel to `assemble_block`, exactly as a physics does. This
+    /// # // kernel reads no material, but the assembler wants one: we hand it a
+    /// # // useless one rather than an `Option`.
     /// # use pyrucast::containers::element_field::SubElementField;
     /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
     /// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
@@ -548,7 +548,7 @@ impl<'a> CellGeom<'a> {
     /// #     ).map(|_| ())
     /// # };
     /// noyau(&|geom| {
-    ///     assert_eq!(geom.gauss_xi(0).len(), 2); // dans l'élément de référence
+    ///     assert_eq!(geom.gauss_xi(0).len(), 2); // in the reference element
     ///     Ok(())
     /// })?;
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -577,10 +577,10 @@ impl<'a> CellGeom<'a> {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-    /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
-    /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
-    /// # // une physique. Ce noyau-ci ne lit aucun matériau, mais l'assembleur en
-    /// # // veut un : on en donne un qui ne sert à rien plutôt qu'une `Option`.
+    /// # // `CellGeom` only exists inside a driver: one is obtained by passing an
+    /// # // element kernel to `assemble_block`, exactly as a physics does. This
+    /// # // kernel reads no material, but the assembler wants one: we hand it a
+    /// # // useless one rather than an `Option`.
     /// # use pyrucast::containers::element_field::SubElementField;
     /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
     /// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
@@ -593,8 +593,8 @@ impl<'a> CellGeom<'a> {
     /// #     ).map(|_| ())
     /// # };
     /// noyau(&|geom| {
-    ///     // Le nombre de formes du **champ** : il diffère de `n_nodes` dès que
-    ///     // l'interpolation est d'Hermite.
+    ///     // The number of **field** shapes: it differs from `n_nodes` as soon
+    ///     // as the interpolation is Hermite.
     ///     assert_eq!(geom.shape_count(), 3);
     ///     Ok(())
     /// })?;
@@ -629,10 +629,10 @@ impl<'a> CellGeom<'a> {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-    /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
-    /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
-    /// # // une physique. Ce noyau-ci ne lit aucun matériau, mais l'assembleur en
-    /// # // veut un : on en donne un qui ne sert à rien plutôt qu'une `Option`.
+    /// # // `CellGeom` only exists inside a driver: one is obtained by passing an
+    /// # // element kernel to `assemble_block`, exactly as a physics does. This
+    /// # // kernel reads no material, but the assembler wants one: we hand it a
+    /// # // useless one rather than an `Option`.
     /// # use pyrucast::containers::element_field::SubElementField;
     /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
     /// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
@@ -645,8 +645,8 @@ impl<'a> CellGeom<'a> {
     /// #     ).map(|_| ())
     /// # };
     /// noyau(&|geom| {
-    ///     // Le tampon ne sert qu'aux bases C¹ : ici la méthode prête
-    ///     // directement la ligne déjà en mémoire.
+    ///     // The buffer serves C¹ bases only: here the method lends the row
+    ///     // already in memory, directly.
     ///     let mut buf = [0.0_f64; 8];
     ///     assert_eq!(geom.field_n_at_g(0, &mut buf).len(), geom.shape_count());
     ///     Ok(())
@@ -700,10 +700,10 @@ impl<'a> CellGeom<'a> {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
     /// # sm.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
-    /// // Les dérivées secondes **physiques**, ce qu'exige la courbure d'une
-    /// // poutre. Réservées aux espaces C¹ sur un segment — `Bernoulli::new`
-    /// // refuse tout autre espace, et c'est là que la question se tranche,
-    /// // une fois, plutôt qu'à chaque point de Gauss.
+    /// // The **physical** second derivatives, what a beam's curvature demands.
+    /// // Reserved for C¹ spaces on a segment — `Bernoulli::new` refuses any
+    /// // other space, and that is where the question is settled, once, rather
+    /// // than at every Gauss point.
     /// let hermite = FiniteElementSpace::new(&maillage, Interpolation::Hermite3)?;
     /// kernel::reduce_cells(&hermite.get(0)?, |geom| {
     ///     let mut buf = [0.0_f64; 8];
@@ -738,15 +738,15 @@ impl<'a> CellGeom<'a> {
     /// segment is embedded in a plane or in space — there the consumer has
     /// already rotated into a local axis running from node 0 to node 1.
     fn segment_jacobian(&self) -> f64 {
-        // Une base C¹ vit sur un élément de référence 1-D. Ce n'est pas une
-        // donnée à vérifier ici : `Bernoulli::new` refuse un espace non-Hermite,
-        // et `RefData::snapshot` n'a de tables C¹ que pour un tel espace.
+        // A C¹ basis lives on a 1-D reference element. This is not data to be
+        // checked here: `Bernoulli::new` refuses a non-Hermite space, and
+        // `RefData::snapshot` has C¹ tables only for such a space.
         debug_assert_eq!(
             self.rd.ref_dim, 1,
             "a C¹ basis needs a 1-D reference element"
         );
-        // Deux emprunts immuables coexistent : la copie ne servait à rien, et
-        // elle coûtait deux allocations **par point de Gauss** sur une poutre C¹.
+        // Two immutable borrows coexist: the copy served no purpose, and it cost
+        // two allocations **per Gauss point** on a C¹ beam.
         let (a, b) = (self.node_coord(0), self.node_coord(1));
         if self.space_dim == 1 {
             return (b[0] - a[0]) / 2.0;
@@ -776,10 +776,10 @@ impl<'a> CellGeom<'a> {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-    /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
-    /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
-    /// # // une physique. Ce noyau-ci ne lit aucun matériau, mais l'assembleur en
-    /// # // veut un : on en donne un qui ne sert à rien plutôt qu'une `Option`.
+    /// # // `CellGeom` only exists inside a driver: one is obtained by passing an
+    /// # // element kernel to `assemble_block`, exactly as a physics does. This
+    /// # // kernel reads no material, but the assembler wants one: we hand it a
+    /// # // useless one rather than an `Option`.
     /// # use pyrucast::containers::element_field::SubElementField;
     /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
     /// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
@@ -793,8 +793,8 @@ impl<'a> CellGeom<'a> {
     /// # };
     /// noyau(&|geom| {
     ///     // Le point de Gauss en coordonnées **physiques** : Σ N_i x_i.
-    ///     // La règle du TRI3 place ses points aux **milieux des arêtes** :
-    ///     // le premier est donc sur le bord, en (1, 0).
+    ///     // The TRI3 rule places its points at the **edge midpoints**: the
+    ///     // first one is therefore on the border, at (1, 0).
     ///     let mut x = [0.0_f64; 2];
     ///     geom.x_at_g(0, &mut x);
     ///     assert_eq!(x, [1.0, 0.0]);
@@ -833,7 +833,7 @@ impl<'a> CellGeom<'a> {
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::models::kernel::assemble_block;
-    /// // Le rayon n'a de sens que sur un repère de **révolution**.
+    /// // The radius only makes sense on a **revolution** frame.
     /// let coords = Handle::new(Coords::axisymmetric()?);
     /// # let n: Vec<Node> = [[1.0, 0.0], [3.0, 0.0], [1.0, 2.0]]
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -852,7 +852,7 @@ impl<'a> CellGeom<'a> {
     ///     |geoms, _m, _s, _ke| {
     ///         let geom = &geoms[0];
     ///         assert!(geom.axisymmetric);
-    ///         // `x = r` : le rayon est l'abscisse du point de Gauss.
+    ///         // `x = r`: the radius is the abscissa of the Gauss point.
     ///         let mut x = [0.0_f64; 2];
     ///         geom.x_at_g(0, &mut x);
     ///         assert_eq!(geom.radius(0), x[0]);
@@ -918,10 +918,10 @@ impl<'a> CellGeom<'a> {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-    /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
-    /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
-    /// # // une physique. Ce noyau-ci ne lit aucun matériau, mais l'assembleur en
-    /// # // veut un : on en donne un qui ne sert à rien plutôt qu'une `Option`.
+    /// # // `CellGeom` only exists inside a driver: one is obtained by passing an
+    /// # // element kernel to `assemble_block`, exactly as a physics does. This
+    /// # // kernel reads no material, but the assembler wants one: we hand it a
+    /// # // useless one rather than an `Option`.
     /// # use pyrucast::containers::element_field::SubElementField;
     /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
     /// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
@@ -934,8 +934,8 @@ impl<'a> CellGeom<'a> {
     /// #     ).map(|_| ())
     /// # };
     /// noyau(&|geom| {
-    ///     // Une tangente par direction de l'élément de référence : deux pour
-    ///     // une surface, une pour une ligne. Elles arrivent à plat,
+    ///     // One tangent per direction of the reference element: two for a
+    ///     // surface, one for a line. They arrive flat,
     ///     // `out[k * space_dim + a]`.
     ///     let mut t = [0.0_f64; 4];
     ///     geom.tangents(0, &mut t);
@@ -987,10 +987,10 @@ impl<'a> CellGeom<'a> {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-    /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
-    /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
-    /// # // une physique. Ce noyau-ci ne lit aucun matériau, mais l'assembleur en
-    /// # // veut un : on en donne un qui ne sert à rien plutôt qu'une `Option`.
+    /// # // `CellGeom` only exists inside a driver: one is obtained by passing an
+    /// # // element kernel to `assemble_block`, exactly as a physics does. This
+    /// # // kernel reads no material, but the assembler wants one: we hand it a
+    /// # // useless one rather than an `Option`.
     /// # use pyrucast::containers::element_field::SubElementField;
     /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
     /// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
@@ -1002,9 +1002,9 @@ impl<'a> CellGeom<'a> {
     /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
     /// #     ).map(|_| ())
     /// # };
-    /// // Une fonction libre : la normale déduite des tangentes — le produit
-    /// // vectoriel en 3-D, la rotation d'un quart de tour en 2-D. Elle porte
-    /// // la **norme** des tangentes, elle n'est pas normalisée ;
+    /// // A free function: the normal derived from the tangents — the cross
+    /// // product in 3-D, a quarter-turn rotation in 2-D. It carries the
+    /// // **norm** of the tangents, it is not normalized;
     /// // [`normal`](Self::normal) s'en charge.
     /// let mut nu = [0.0_f64; 2];
     /// CellGeom::normal_from_tangents(&[2.0, 0.0], 1, 2, &mut nu);
@@ -1018,8 +1018,8 @@ impl<'a> CellGeom<'a> {
         out: &mut [f64],
     ) {
         let t = |k: usize, a: usize| tangents[k * space_dim + a];
-        // Une normale se prend sur un bord : une tangente en 2-D, deux en 3-D.
-        // `CellGeom::normal` l'établit pour la zone avant d'appeler.
+        // A normal is taken on a border: one tangent in 2-D, two in 3-D.
+        // `CellGeom::normal` establishes it for the zone before calling.
         debug_assert!(
             n_tangents == 1 || n_tangents == 2,
             "a normal needs 1 tangent (2-D) or 2 (3-D)"
@@ -1071,23 +1071,23 @@ impl<'a> CellGeom<'a> {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-    /// // La normale **unitaire** — celle que `normal_from_tangents` rend
-    /// // brute, divisée par sa norme. Elle n'a de sens que sur une facette :
-    /// // une dimension de référence de moins que l'espace.
+    /// // The **unit** normal — the one `normal_from_tangents` returns raw,
+    /// // divided by its norm. It only makes sense on a facet: one reference
+    /// // dimension fewer than the space.
     /// kernel::reduce_cells(&zone, |geom| {
     ///     let mut nu = [0.0_f64; 3];
     ///     geom.normal(0, &mut nu)?;
     ///     assert!((nu.iter().map(|x| x * x).sum::<f64>() - 1.0).abs() < 1e-12);
-    ///     assert!((nu[2].abs() - 1.0).abs() < 1e-12); // le triangle est dans z = 0
+    ///     assert!((nu[2].abs() - 1.0).abs() < 1e-12); // the triangle lies in z = 0
     ///     Ok(0.0)
     /// })?;
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn normal(&self, g: usize, out: &mut [f64]) -> Result<()> {
         let (d, r) = (self.space_dim, self.rd.ref_dim);
-        // Cette fonction rend un `Result` de toute façon — la normale nulle est
-        // un fait du point — donc la précondition de forme, elle, y reste : elle
-        // n'aurait nulle part ailleurs où vivre, et elle ne coûte rien ici.
+        // This function returns a `Result` anyway — a null normal is a fact of
+        // the point — so the shape precondition stays here: it would have
+        // nowhere else to live, and it costs nothing here.
         if d < 2 || r + 1 != d {
             return Err(PyrucastError::Message(format!(
                 "CellGeom::normal: a {r}-D cell in a {d}-D space has no normal — a normal is \
@@ -1136,10 +1136,10 @@ impl<'a> CellGeom<'a> {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-    /// # // `CellGeom` n'existe qu'à l'intérieur d'un pilote : on en obtient un en
-    /// # // passant un noyau d'élément à `assemble_block`, exactement comme le fait
-    /// # // une physique. Ce noyau-ci ne lit aucun matériau, mais l'assembleur en
-    /// # // veut un : on en donne un qui ne sert à rien plutôt qu'une `Option`.
+    /// # // `CellGeom` only exists inside a driver: one is obtained by passing an
+    /// # // element kernel to `assemble_block`, exactly as a physics does. This
+    /// # // kernel reads no material, but the assembler wants one: we hand it a
+    /// # // useless one rather than an `Option`.
     /// # use pyrucast::containers::element_field::SubElementField;
     /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
     /// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
@@ -1152,11 +1152,11 @@ impl<'a> CellGeom<'a> {
     /// #     ).map(|_| ())
     /// # };
     /// noyau(&|geom| {
-    ///     // **L'unique endroit** où se décide la mesure d'intégration : ici
-    ///     // |J|·w, et 2πr·|J|·w en révolution. C'est ce qui permet à toute
-    ///     // physique d'intégrer sur l'anneau complet sans rien changer.
+    ///     // **The single place** where the integration measure is decided:
+    ///     // |J|·w here, and 2πr·|J|·w under revolution. That is what lets any
+    ///     // physics integrate over the full ring without changing a thing.
     ///     let aire: f64 = (0..geom.n_gauss).map(|g| geom.det_j_w(g)).sum();
-    ///     assert!((aire - 2.0).abs() < 1e-12); // l'aire du triangle
+    ///     assert!((aire - 2.0).abs() < 1e-12); // the triangle's area
     ///     Ok(())
     /// })?;
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -1242,10 +1242,10 @@ impl<'a> CellGeom<'a> {
 /// # let mut entree = SubElementField::new(zone.clone(), vec!["eps".into()])?;
 /// # entree.set_uniform("eps", 2.0)?;
 /// # let entree = Handle::new(entree);
-/// // Un noyau **au point de Gauss** : la loi de comportement en est un —
-/// // lire la déformation et le matériau, écrire la contrainte. Ce noyau-ci
-/// // ne lit ni état antérieur ni matériau : on lui en passe qui ne serviront
-/// // pas, plutôt que des `Option` à déballer.
+/// // A kernel **at the Gauss point**: a behaviour law is one — read the
+/// // strain and the material, write the stress. This kernel reads neither
+/// // previous state nor material: we pass it some that will go unused,
+/// // rather than `Option`s to unwrap.
 /// let sortie = kernel::element_pointwise(
 ///     &zone, &entree, &entree, &mat_bidon, vec!["sig".into()],
 ///     |_geom, _g, ligne, _prev, _mat, slot| {
@@ -1466,9 +1466,9 @@ pub(crate) const MAX_CELL_DOFS: usize = 96;
 /// # let mat_bidon = Handle::new(
 /// #     pyrucast::containers::element_field::SubElementField::from_uniform_per_component(
 /// #         zone.clone(), vec!["k".into()], &[1.0]).unwrap());
-/// // Le pilote appelle un noyau **pur et séquentiel** par maille ; la
-/// // parallélisation, l'emprunt zéro-copie et le rangement en COO sont à
-/// // lui. Ici, une matrice identité locale.
+/// // The driver calls a **pure, sequential** kernel per cell; the
+/// // parallelism, the zero-copy borrow and the COO layout are its own.
+/// // Here, a local identity matrix.
 /// let bloc = kernel::assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support,
 ///     vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
@@ -1553,12 +1553,12 @@ pub fn assemble_block(
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-/// # // Ce noyau ne lit aucun matériau ; l'assembleur en veut un, on lui en
-/// # // donne un qui ne sert à rien plutôt qu'une `Option` à déballer.
+/// # // This kernel reads no material; the assembler wants one, so we hand
+/// # // it a useless one rather than an `Option` to unwrap.
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
-/// // Ce que rend `element_block_triplets` : la taille du bloc et ses
-/// // triplets, en numérotation **locale** au bloc.
+/// // What `element_block_triplets` returns: the block size and its
+/// // triplets, in numbering **local** to the block.
 /// let (nr, nc, trips): kernel::BlockTriplets = kernel::element_block_triplets(
 ///     std::slice::from_ref(&zone), &support, &support, 1, 1,
 ///     DofOrdering::NodesThenVars, &mat, None,
@@ -1601,12 +1601,12 @@ pub type BlockTriplets = (usize, usize, Vec<(usize, usize, f64)>);
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-/// # // Ce noyau ne lit aucun matériau ; l'assembleur en veut un, on lui en
-/// # // donne un qui ne sert à rien plutôt qu'une `Option` à déballer.
+/// # // This kernel reads no material; the assembler wants one, so we hand
+/// # // it a useless one rather than an `Option` to unwrap.
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
-/// // Ce que rend `element_block_triplets` : la taille du bloc et ses
-/// // triplets, en numérotation **locale** au bloc.
+/// // What `element_block_triplets` returns: the block size and its
+/// // triplets, in numbering **local** to the block.
 /// let (nr, nc, trips): kernel::BlockTriplets = kernel::element_block_triplets(
 ///     std::slice::from_ref(&zone), &support, &support, 1, 1,
 ///     DofOrdering::NodesThenVars, &mat, None,
@@ -1669,12 +1669,12 @@ pub fn element_block_triplets(
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-/// # // Ce noyau ne lit aucun matériau ; l'assembleur en veut un, on lui en
-/// # // donne un qui ne sert à rien plutôt qu'une `Option` à déballer.
+/// # // This kernel reads no material; the assembler wants one, so we hand
+/// # // it a useless one rather than an `Option` to unwrap.
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
-/// // La même chose, **groupée par maille** : ce que consomme l'assembleur
-/// // global pour verser droit dans le CSR sans matérialiser de valeurs.
+/// // The same thing, **grouped per cell**: what the global assembler
+/// // consumes to pour straight into the CSR without materializing values.
 /// let (nr, nc, par_maille): kernel::BlockTripletsPerCell =
 ///     kernel::element_block_triplets_per_cell(
 ///         std::slice::from_ref(&zone), &support, &support, 1, 1,
@@ -1682,7 +1682,7 @@ pub fn element_block_triplets(
 ///         |geoms, _m, _s, ke| { ke[0] = geoms[0].det_j_w(0); Ok(()) },
 ///     )?;
 /// assert_eq!((nr, nc), (3, 3));
-/// assert_eq!(par_maille.len(), 1); // une maille
+/// assert_eq!(par_maille.len(), 1); // one cell
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub type BlockTripletsPerCell = (usize, usize, Vec<Vec<(usize, usize, f64)>>);
@@ -1721,12 +1721,12 @@ pub type BlockTripletsPerCell = (usize, usize, Vec<Vec<(usize, usize, f64)>>);
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-/// # // Ce noyau ne lit aucun matériau ; l'assembleur en veut un, on lui en
-/// # // donne un qui ne sert à rien plutôt qu'une `Option` à déballer.
+/// # // This kernel reads no material; the assembler wants one, so we hand
+/// # // it a useless one rather than an `Option` to unwrap.
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
-/// // La même chose, **groupée par maille** : ce que consomme l'assembleur
-/// // global pour verser droit dans le CSR sans matérialiser de valeurs.
+/// // The same thing, **grouped per cell**: what the global assembler
+/// // consumes to pour straight into the CSR without materializing values.
 /// let (nr, nc, par_maille): kernel::BlockTripletsPerCell =
 ///     kernel::element_block_triplets_per_cell(
 ///         std::slice::from_ref(&zone), &support, &support, 1, 1,
@@ -1734,7 +1734,7 @@ pub type BlockTripletsPerCell = (usize, usize, Vec<Vec<(usize, usize, f64)>>);
 ///         |geoms, _m, _s, ke| { ke[0] = geoms[0].det_j_w(0); Ok(()) },
 ///     )?;
 /// assert_eq!((nr, nc), (3, 3));
-/// assert_eq!(par_maille.len(), 1); // une maille
+/// assert_eq!(par_maille.len(), 1); // one cell
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn element_block_triplets_per_cell(
@@ -1807,10 +1807,10 @@ pub fn element_block_triplets_per_cell(
     };
     let row_pos = pos_map(&row_nodes);
     let col_pos = pos_map(&col_nodes);
-    // La position de **chaque nœud de la connectivité**, d'un seul parcours,
-    // avant la région parallèle. La hacher dans la boucle reposait la même
-    // question à chaque maille et à chaque assemblage, pour une réponse qui est
-    // un fait de la zone ; et l'erreur se nomme ici, où l'on sait encore quoi.
+    // The position of **every node of the connectivity**, in a single pass,
+    // before the parallel region. Hashing it inside the loop asked the same
+    // question at every cell and every assembly, for an answer that is a fact
+    // of the zone; and the error is named here, where we still know what for.
     let lookup = |pos: &HashMap<NodeId, u32>, side: &str| -> Result<Vec<u32>> {
         conn.iter()
             .map(|nid| {
@@ -1906,14 +1906,14 @@ pub fn element_block_triplets_per_cell(
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
 /// # let zone = fes.get(0)?;
 /// # let support = zone.read().submesh().read().to_poi1()?;
-/// // Le **motif** seul, sans valeurs : c'est lui qui est mis en cache et
-/// // réutilisé d'un assemblage à l'autre, la matière ne le changeant pas.
+/// // The **pattern** alone, without values: this is what gets cached and
+/// // reused from one assembly to the next, matter leaving it unchanged.
 /// let motif = kernel::element_block_pattern(
 ///     &zone, &support, &support, 1, 1, DofOrdering::NodesThenVars,
 /// )?;
 /// assert_eq!((motif.nrows, motif.ncols), (3, 3));
-/// assert_eq!(motif.entries_per_cell(), 3 * 3); // toutes les paires d'une maille
-/// // La paire `(ligne, colonne)` d'une entrée se regénère à la demande.
+/// assert_eq!(motif.entries_per_cell(), 3 * 3); // every pair of a cell
+/// // An entry's `(row, column)` pair is regenerated on demand.
 /// assert_eq!(motif.row_index(0, 0, 0), 0);
 /// assert_eq!(motif.col_index(0, 2, 0), 2);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -1971,7 +1971,7 @@ impl BlockPattern {
     /// # let support = zone.read().submesh().read().to_poi1()?;
     /// # let motif = kernel::element_block_pattern(
     /// #     &zone, &support, &support, 1, 1, DofOrdering::NodesThenVars)?;
-    /// // La ligne d'une entrée, regénérée depuis la position du nœud.
+    /// // An entry's row, regenerated from the node's position.
     /// assert_eq!(motif.row_index(0, 0, 0), 0);
     /// assert_eq!(motif.row_index(0, 2, 0), 2);
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -2005,7 +2005,7 @@ impl BlockPattern {
     /// # let support = zone.read().submesh().read().to_poi1()?;
     /// # let motif = kernel::element_block_pattern(
     /// #     &zone, &support, &support, 1, 1, DofOrdering::NodesThenVars)?;
-    /// // La colonne, de même — le motif ne stocke aucune paire.
+    /// // The column likewise — the pattern stores no pair.
     /// assert_eq!(motif.col_index(0, 1, 0), 1);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -2038,7 +2038,7 @@ impl BlockPattern {
     /// # let support = zone.read().submesh().read().to_poi1()?;
     /// # let motif = kernel::element_block_pattern(
     /// #     &zone, &support, &support, 1, 1, DofOrdering::NodesThenVars)?;
-    /// // Un TRI3 scalaire : trois nœuds au carré.
+    /// // A scalar TRI3: three nodes squared.
     /// assert_eq!(motif.entries_per_cell(), 3 * 3);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -2070,12 +2070,12 @@ impl BlockPattern {
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
 /// # let zone = fes.get(0)?;
 /// # let support = zone.read().submesh().read().to_poi1()?;
-/// // Le motif compact : la position de chaque nœud dans les deux supports.
+/// // The compact pattern: each node's position in both supports.
 /// let motif = kernel::element_block_pattern(
 ///     &zone, &support, &support, 1, 1, DofOrdering::NodesThenVars,
 /// )?;
 /// assert_eq!((motif.nrows, motif.ncols), (3, 3));
-/// assert_eq!(motif.row_slot.len(), 3); // une maille, trois nœuds
+/// assert_eq!(motif.row_slot.len(), 3); // one cell, three nodes
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn element_block_pattern(
@@ -2165,13 +2165,13 @@ fn check_conforming(
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-/// # // Ce noyau ne lit aucun matériau ; l'assembleur en veut un, on lui en
-/// # // donne un qui ne sert à rien plutôt qu'une `Option` à déballer.
+/// # // This kernel reads no material; the assembler wants one, so we hand
+/// # // it a useless one rather than an `Option` to unwrap.
 /// # use pyrucast::containers::element_field::SubElementField;
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["k".into()], &[1.0]).unwrap());
-/// // Les valeurs du bloc de couplage, groupées par maille — le noyau y
-/// // reçoit **deux** jeux de `CellGeom`, un par côté.
+/// // The coupling block's values, grouped per cell — the kernel receives
+/// // **two** sets of `CellGeom` there, one per side.
 /// let (nr, nc, par_maille) = kernel::coupling_block_triplets_per_cell(
 ///     std::slice::from_ref(&zone), std::slice::from_ref(&zone),
 ///     &support, &support, 1, 1, DofOrdering::NodesThenVars, &mat,
@@ -2323,7 +2323,7 @@ pub fn coupling_block_triplets_per_cell(
 /// # let zone = fes.get(0)?;
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["k".into()], &[1.0])?);
-/// // Un noyau qui écrit l'identité : on retrouve `ke` en ligne-major,
+/// // A kernel writing the identity: `ke` comes back in row-major order,
 /// // maille après maille, et rien d'autre — ni ligne, ni colonne.
 /// let (valeurs, ke_len) = kernel::element_block_values_per_cell(
 ///     std::slice::from_ref(&zone), 1, 1, &mat,
@@ -2335,8 +2335,8 @@ pub fn coupling_block_triplets_per_cell(
 ///         Ok(())
 ///     },
 /// )?;
-/// assert_eq!(ke_len, 3 * 3); // un TRI3, une variable de chaque côté
-/// assert_eq!(valeurs.len(), ke_len); // une seule maille
+/// assert_eq!(ke_len, 3 * 3); // a TRI3, one variable on each side
+/// assert_eq!(valeurs.len(), ke_len); // a single cell
 /// assert_eq!(valeurs[0], 1.0);
 /// assert_eq!(valeurs[1], 0.0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -2442,8 +2442,8 @@ pub fn element_block_values_per_cell(
 /// # let zone = fes.get(0)?;
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["k".into()], &[1.0])?);
-/// // Les mêmes valeurs que la forme en deux temps, mailles jamais toutes
-/// // matérialisées : chaque `ke` est produite puis consommée sur-le-champ.
+/// // The same values as the two-step form, with cells never all
+/// // materialized: each `ke` is produced then consumed on the spot.
 /// let noyau = |geoms: &[kernel::CellGeom], _m: &SubElementField, ke: &mut [f64]| {
 ///     ke[0] = geoms[0].det_j_w(0);
 ///     Ok(())
@@ -2555,7 +2555,7 @@ pub fn element_block_colored(
 /// # let zone = fes.get(0)?;
 /// # let mat = Handle::new(SubElementField::from_uniform_per_component(
 /// #     zone.clone(), vec!["h".into()], &[1.0])?);
-/// // Une interface conforme avec elle-même : deux SEG2 en vis-à-vis.
+/// // An interface conforming with itself: two SEG2 facing each other.
 /// let (valeurs, ke_len) = kernel::coupling_block_values_per_cell(
 ///     std::slice::from_ref(&zone), std::slice::from_ref(&zone), 1, 1, &mat,
 ///     |row_geoms, _col_geoms, _m, ke| {
@@ -2563,7 +2563,7 @@ pub fn element_block_colored(
 ///         Ok(())
 ///     },
 /// )?;
-/// assert_eq!(ke_len, 2 * 2); // deux nœuds de chaque côté
+/// assert_eq!(ke_len, 2 * 2); // two nodes on each side
 /// assert!(valeurs[0] > 0.0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -2661,9 +2661,9 @@ pub fn coupling_block_values_per_cell(
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
 /// # let zone = fes.get(0)?;
 /// # let support = zone.read().submesh().read().to_poi1()?;
-/// // Un bloc **hors diagonale** : ses lignes vivent sur un maillage, ses
-/// // colonnes sur celui d'en face. C'est ce qu'exige une loi d'interface.
-/// // Ici les deux côtés sont le même, ce qui suffit à montrer la forme.
+/// // An **off-diagonal** block: its rows live on one mesh, its columns on
+/// // the facing one. That is what an interface law demands.
+/// // Here both sides are the same, which is enough to show the shape.
 /// let motif = kernel::coupling_block_pattern(
 ///     &zone, &zone, &support, &support, 1, 1, DofOrdering::NodesThenVars)?;
 /// assert_eq!((motif.nrows, motif.ncols), (3, 3));
@@ -2774,9 +2774,9 @@ fn local_positions(ids: &[NodeId], pos: &HashMap<NodeId, u32>, side: &str) -> Re
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-/// // Le pilote des **producteurs de champ nodal** : forces internes, flux.
-/// // L'écriture concurrente passe par un coloriage, d'où un résultat
-/// // reproductible bit à bit.
+/// // The driver of the **nodal field producers**: internal forces, fluxes.
+/// // Concurrent writing goes through a colouring, hence a bit-for-bit
+/// // reproducible result.
 /// let f = kernel::scatter_to_nodes(
 ///     std::slice::from_ref(&zone), &support, vec!["q".into()],
 ///     |geoms, fe| {
@@ -2834,9 +2834,9 @@ pub fn scatter_to_nodes(
     // and the map is total.
     let unique: Vec<NodeId> = support.read().connectivity().to_vec();
     let slot_of: HashMap<NodeId, usize> = unique.iter().enumerate().map(|(k, &n)| (n, k)).collect();
-    // La case de **chaque nœud de la connectivité**, d'un seul parcours, avant
-    // la région parallèle. Le commentaire ci-dessus dit que la table est
-    // totale : autant s'en servir une fois plutôt que la hacher par maille.
+    // The slot of **every node of the connectivity**, in a single pass, before
+    // the parallel region. The comment above says the table is total: better
+    // to use it once than to hash it per cell.
     let slots: Vec<usize> = conn
         .iter()
         .map(|nid| {
@@ -2933,8 +2933,8 @@ pub fn scatter_to_nodes(
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-/// // Une réduction sur les mailles : l'aire du maillage, par exemple, se
-/// // lit comme la somme des mesures d'intégration.
+/// // A reduction over the cells: the mesh area, for one, reads as the sum
+/// // of the integration measures.
 /// let aire = kernel::reduce_cells(&zone, |geom| {
 ///     Ok((0..geom.n_gauss).map(|g| geom.det_j_w(g)).sum())
 /// })?;
@@ -3042,11 +3042,11 @@ mod tests {
         .unwrap();
     }
 
-    /// `radius` is meaningless without the revolution hypothesis. Ce n'est pas
-    /// une donnée à valider mais une faute de programmation : `axisymmetric` est
-    /// public sur `CellGeom`, et dit si la question a un sens. Le `debug_assert`
-    /// l'attrape en développement, sans peser sur la production ni forcer un
-    /// `Result` que le noyau devrait dérouler à chaque point de Gauss.
+    /// `radius` is meaningless without the revolution hypothesis. This is not
+    /// data to validate but a programming mistake: `axisymmetric` is public on
+    /// `CellGeom`, and says whether the question makes sense. The
+    /// `debug_assert` catches it in development, without weighing on release
+    /// nor forcing a `Result` the kernel would unwind at every Gauss point.
     #[test]
     #[should_panic(expected = "Cartesian geometry")]
     fn radius_is_a_programming_error_on_a_cartesian_geometry() {

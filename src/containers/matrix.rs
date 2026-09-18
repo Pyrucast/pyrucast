@@ -120,8 +120,8 @@ use std::fmt;
 /// #     z
 /// # };
 /// # use pyrucast::containers::matrix::MatrixEntry;
-/// // Une entrée dont les DDL sont **matérialisés** : plus d'index, des
-/// // `(nœud, variable)` déjà résolus.
+/// // An entry whose DOFs are **materialized**: no more indices, but
+/// // `(node, variable)` already resolved.
 /// let entrees: Vec<MatrixEntry> = bloc().iter_entries();
 /// assert_eq!(entrees.len(), 4);
 /// assert_eq!((entrees[0].1.as_str(), entrees[0].3.as_str()), ("q", "T"));
@@ -160,8 +160,8 @@ pub type MatrixEntry = (NodeId, String, NodeId, String, f64);
 /// #     z.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
 /// #     z
 /// # };
-/// // Deux façons d'aplatir `(nœud, variable)` en un index de ligne. Sur
-/// // deux nœuds et deux variables, elles ne coïncident qu'aux extrémités.
+/// // Two ways to flatten `(node, variable)` into a row index. On two nodes
+/// // and two variables, they coincide only at the ends.
 /// assert_eq!(DofOrdering::NodesThenVars.to_index(1, 0, 2, 2), 2);
 /// assert_eq!(DofOrdering::VarsThenNodes.to_index(1, 0, 2, 2), 1);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -207,9 +207,9 @@ impl DofOrdering {
     /// #     z.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
     /// #     z
     /// # };
-    /// // `NodesThenVars` : toutes les variables du nœud 0, puis celles du nœud 1.
+    /// // `NodesThenVars`: every variable of node 0, then those of node 1.
     /// assert_eq!(DofOrdering::NodesThenVars.to_index(1, 1, 2, 2), 3);
-    /// // `VarsThenNodes` : tous les nœuds de la variable 0, puis ceux de la 1.
+    /// // `VarsThenNodes`: every node of variable 0, then those of variable 1.
     /// assert_eq!(DofOrdering::VarsThenNodes.to_index(1, 1, 2, 2), 3);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -254,7 +254,7 @@ impl DofOrdering {
     /// #     z.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
     /// #     z
     /// # };
-    /// // Réciproque exacte de `to_index`, pour les deux dispositions.
+    /// // The exact inverse of `to_index`, for both layouts.
     /// for o in [DofOrdering::NodesThenVars, DofOrdering::VarsThenNodes] {
     ///     for i in 0..4 {
     ///         let (nl, vi) = o.from_index(i, 2, 2);
@@ -289,8 +289,8 @@ impl crate::dump::Dump for DofOrdering {
 ///
 /// ```
 /// # use pyrucast::containers::matrix::KernelInputs;
-/// // Une raideur ne lit que son matériau — et c'est le défaut, parce que
-/// // c'est le cas de trois genres de matrice sur quatre.
+/// // A stiffness reads only its material — and that is the default, because
+/// // this is the case for three matrix kinds out of four.
 /// assert!(matches!(KernelInputs::default(), KernelInputs::MaterialOnly));
 /// ```
 #[derive(Clone, Default, Serialize, Deserialize)]
@@ -347,8 +347,8 @@ pub enum KernelInputs {
 /// # let support = zone.read().submesh().read().to_poi1().unwrap();
 /// # let modele = model::heat_conduction(&fes).unwrap();
 /// # let mat = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
-/// // Un bloc **calculé** ne matérialise aucune valeur : il porte la recette
-/// // que l'assembleur global déroule maille par maille, droit dans le CSR.
+/// // A **computed** block materializes no value: it carries the recipe
+/// // that the global assembler unwinds cell by cell, straight into the CSR.
 /// let recette = ComputedRecipe {
 ///     submodel: modele.get(0)?,
 ///     fespaces: vec![zone.clone()],
@@ -361,11 +361,11 @@ pub enum KernelInputs {
 ///     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
 ///     DofOrdering::NodesThenVars, true, recette)?;
 /// assert!(z.is_computed());
-/// // Sa structure est complète — d'où les requêtes structurelles qui
-/// // fonctionnent — mais il ne compte **aucune** entrée stockée.
+/// // Its structure is complete — hence the structural queries that
+/// // work — but it counts **no** stored entry.
 /// assert_eq!((z.n_rows(), z.n_cols()), (3, 3));
 /// assert_eq!(z.entry_count(), 0);
-/// // Et l'on ne peut rien y ajouter à la main.
+/// // And nothing can be added to it by hand.
 /// # let mut z = z;
 /// assert!(z.add_entry(n[0].id(), "q", n[0].id(), "T", 1.0).is_err());
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -426,8 +426,8 @@ fn default_factor() -> f64 {
 /// #     DofOrdering::NodesThenVars, true).unwrap();
 /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
 /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-/// // Un **bloc** : ses supports de ligne et de colonne, ses variables
-/// // duales et primales, et ses entrées. Rien ne vit dans l'agrégat.
+/// // A **block**: its row and column supports, its variables
+/// // dual and primal, and its entries. Nothing lives in the aggregate.
 /// assert_eq!((bloc.n_rows(), bloc.n_cols()), (2, 2));
 /// assert_eq!(bloc.dual_vars(), &["q".to_string()]);
 /// assert_eq!(bloc.get(a.id(), "q", a.id(), "T"), 2.0);
@@ -515,8 +515,8 @@ impl SubMatrix {
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-    /// // Le bloc connaît ses deux supports POI1 et ses deux jeux de variables :
-    /// // ses dimensions en découlent, nœuds × variables de chaque côté.
+    /// // The block knows its two POI1 supports and its two sets of variables:
+    /// // its dimensions follow, nodes × variables on each side.
     /// assert_eq!((bloc.n_rows(), bloc.n_cols()), (2, 2));
     /// ```
     pub fn new(
@@ -581,8 +581,8 @@ impl SubMatrix {
     /// # let support = zone.read().submesh().read().to_poi1().unwrap();
     /// # let modele = model::heat_conduction(&fes).unwrap();
     /// # let mat = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
-    /// // La même chose vue du constructeur : un gabarit dimensionné, vide,
-    /// // dont les valeurs viendront du noyau du sous-modèle.
+    /// // The same seen from the constructor: a sized, empty template,
+    /// // whose values will come from the sub-model's kernel.
     /// let z = SubMatrix::computed(
     ///     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
     ///     DofOrdering::NodesThenVars, true,
@@ -665,8 +665,8 @@ impl SubMatrix {
     /// #     z
     /// # };
     /// # use nalgebra_sparse::CooMatrix;
-    /// // La voie de l'assembleur : produire toutes les entrées en parallèle,
-    /// // puis les remettre d'un coup, sans passer par `add_entry`.
+    /// // The assembler's path: produce every entry in parallel,
+    /// // then hand them back in one go, without going through `add_entry`.
     /// let mut coo = CooMatrix::new(2, 2);
     /// coo.push(0, 0, 2.0);
     /// coo.push(1, 1, 2.0);
@@ -674,7 +674,7 @@ impl SubMatrix {
     ///     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
     ///     DofOrdering::NodesThenVars, true, coo)?;
     /// assert_eq!(z.get(a.id(), "q", a.id(), "T"), 2.0);
-    /// // Les indices sont **locaux** au bloc, et sa taille doit concorder.
+    /// // Indices are **local** to the block, and its size must match.
     /// assert!(SubMatrix::from_coo(
     ///     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
     ///     DofOrdering::NodesThenVars, true, CooMatrix::new(3, 3)).is_err());
@@ -745,8 +745,8 @@ impl SubMatrix {
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-    /// // Un bloc monté à la main porte ses valeurs ; un bloc *calculé* porte
-    /// // une recette que l'assembleur déroule.
+    /// // A hand-built block carries its values; a *computed* block carries
+    /// // a recipe the assembler unwinds.
     /// assert!(!bloc.is_computed());
     /// ```
     pub fn is_computed(&self) -> bool {
@@ -773,7 +773,7 @@ impl SubMatrix {
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-    /// assert!(bloc.recipe().is_none()); // pas une recette : des valeurs
+    /// assert!(bloc.recipe().is_none()); // not a recipe: values
     /// ```
     pub fn recipe(&self) -> Option<&ComputedRecipe> {
         self.recipe.as_ref()
@@ -803,8 +803,8 @@ impl SubMatrix {
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
     /// # use pyrucast::models::Physics;
-    /// // Un bloc monté à la main n'a pas de nature : `Matrix::filter` ne le
-    /// // sélectionnera par aucune. L'étiqueter `Other` le rend atteignable.
+    /// // A hand-built block has no kind: `Matrix::filter` will
+    /// // select it by none. Tagging it `Other` makes it reachable.
     /// assert!(bloc.physics().is_empty());
     /// bloc.set_physics(vec![Physics::Other]);
     /// assert_eq!(bloc.physics(), &[Physics::Other]);
@@ -844,8 +844,8 @@ impl SubMatrix {
     /// #     z
     /// # };
     /// # use pyrucast::models::Physics;
-    /// // La nature voyage avec le bloc jusqu'à la matrice assemblée : c'est
-    /// // elle que `Matrix::filter` lit.
+    /// // The kind travels with the block up to the assembled matrix:
+    /// // this is what `Matrix::filter` reads.
     /// let mut z = bloc();
     /// z.set_physics(vec![Physics::Thermal]);
     /// assert_eq!(z.physics(), &[Physics::Thermal]);
@@ -877,8 +877,8 @@ impl SubMatrix {
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-    /// // Le facteur d'échelle du bloc, appliqué à l'assemblage — ce que pose
-    /// // `&matrix / dt` sans réécrire une seule valeur.
+    /// // The block's scale factor, applied at assembly — what
+    /// // `&matrix / dt` sets without rewriting a single value.
     /// assert_eq!(bloc.factor(), 1.0);
     /// ```
     pub fn factor(&self) -> f64 {
@@ -905,7 +905,7 @@ impl SubMatrix {
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-    /// assert!(bloc.symmetric()); // déclaré à la construction
+    /// assert!(bloc.symmetric()); // declared at construction
     /// ```
     pub fn symmetric(&self) -> bool {
         self.symmetric
@@ -931,7 +931,7 @@ impl SubMatrix {
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-    /// // nœuds du support ligne × variables duales.
+    /// // nodes of the row support × dual variables.
     /// assert_eq!(bloc.n_rows(), 2);
     /// ```
     pub fn n_rows(&self) -> usize {
@@ -985,7 +985,7 @@ impl SubMatrix {
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-    /// assert_eq!(bloc.entry_count(), 4); // les quatre `add_entry` du montage
+    /// assert_eq!(bloc.entry_count(), 4); // the four `add_entry` of the setup
     /// ```
     pub fn entry_count(&self) -> usize {
         self.coo.nnz()
@@ -1063,7 +1063,7 @@ impl SubMatrix {
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-    /// // L'ordre des DDL dans le bloc : nœuds d'abord, ou variables d'abord.
+    /// // The DOF ordering inside the block: nodes first, or variables first.
     /// assert_eq!(bloc.ordering(), DofOrdering::NodesThenVars);
     /// ```
     pub fn ordering(&self) -> DofOrdering {
@@ -1099,7 +1099,7 @@ impl SubMatrix {
     /// #     z
     /// # };
     /// # use pyrucast::handle::Handle as H;
-    /// // Le support des **lignes** — les variables duales y vivent.
+    /// // The **row** support — the dual variables live there.
     /// assert!(H::same_object(bloc().row_support(), &support));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -1136,8 +1136,8 @@ impl SubMatrix {
     /// #     z
     /// # };
     /// # use pyrucast::handle::Handle as H;
-    /// // Celui des **colonnes**. Il diffère du précédent dès que le bloc couple
-    /// // deux maillages — un bloc de Lagrange, une loi d'interface.
+    /// // The **column** one. It differs from the former as soon as the block
+    /// // couples two meshes — a Lagrange block, an interface law.
     /// assert!(H::same_object(bloc().col_support(), &support));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -1166,7 +1166,7 @@ impl SubMatrix {
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-    /// // L'union des deux jeux, dédupliquée.
+    /// // The union of both sets, deduplicated.
     /// assert_eq!(bloc.field_names(), vec!["q".to_string(), "T".to_string()]);
     /// ```
     pub fn field_names(&self) -> Vec<String> {
@@ -1337,12 +1337,12 @@ impl SubMatrix {
     /// let mut z = SubMatrix::new(
     ///     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
     ///     DofOrdering::NodesThenVars, true)?;
-    /// // Deux appels au même endroit **s'accumulent** — c'est ce qui permet à
-    /// // l'assemblage de verser maille par maille sans rien relire.
+    /// // Two calls at the same place **accumulate** — that is what lets the
+    /// // assembly pour cell by cell without reading anything back.
     /// z.add_entry(a.id(), "q", a.id(), "T", 1.0)?;
     /// z.add_entry(a.id(), "q", a.id(), "T", 1.0)?;
     /// assert_eq!(z.get(a.id(), "q", a.id(), "T"), 2.0);
-    /// // Un nœud hors support, ou une variable non déclarée, est une erreur.
+    /// // A node outside the support, or an undeclared variable, is an error.
     /// assert!(z.add_entry(a.id(), "f_x", a.id(), "T", 1.0).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -1448,13 +1448,13 @@ impl SubMatrix {
     /// #     z.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
     /// #     z
     /// # };
-    /// // Les entrées en numérotation **locale**, telles que l'agrégat les
-    /// // reverse dans la matrice globale par sa table de translation.
+    /// // The entries in **local** numbering, as the aggregate
+    /// // pours into the global matrix through its translation table.
     /// let z = bloc();
     /// let t: Vec<_> = z.local_triplets().collect();
     /// assert_eq!(t.len(), 4);
     /// assert_eq!(t[0], (0, 0, 2.0));
-    /// // Elles ne portent **pas** le facteur : c'est l'appelant qui l'applique.
+    /// // They do **not** carry the factor: the caller applies it.
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn local_triplets(&self) -> impl Iterator<Item = (usize, usize, f64)> + '_ {
@@ -1484,8 +1484,8 @@ impl SubMatrix {
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-    /// // Les trois tableaux COO **locaux** au bloc, tels que l'assembleur les
-    /// // dissémine dans le motif global.
+    /// // The three COO arrays **local** to the block, as the assembler
+    /// // scatters into the global pattern.
     /// let (lignes, colonnes, valeurs) = bloc.local_coo_arrays();
     /// assert_eq!((lignes.len(), colonnes.len(), valeurs.len()), (4, 4, 4));
     /// ```
@@ -1547,8 +1547,8 @@ impl SubMatrix {
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
     /// assert_eq!(bloc.get(a.id(), "q", b.id(), "T"), -1.0);
-    /// // Une coordonnée absente rend **zéro**, pas une erreur : la lecture d'un
-    /// // bloc creux ne distingue pas « nul » de « hors motif ».
+    /// // An absent coordinate returns **zero**, not an error: reading
+    /// // a sparse block does not tell "zero" from "outside the pattern".
     /// assert_eq!(bloc.get(a.id(), "q", a.id(), "absente"), 0.0);
     /// ```
     pub fn get(&self, row_node: NodeId, row_var: &str, col_node: NodeId, col_var: &str) -> f64 {
@@ -1610,7 +1610,7 @@ impl SubMatrix {
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-    /// // Ordre d'insertion préservé ; noms de variables déjà résolus.
+    /// // Insertion order preserved; variable names already resolved.
     /// assert_eq!(bloc.iter_entries().len(), 4);
     /// assert_eq!(bloc.iter_entries()[0].4, 2.0);
     /// ```
@@ -1947,9 +1947,9 @@ impl crate::dump::Dump for SubMatrix {
         let row_labels: Vec<String> = self.row_dofs().iter().map(dof_label).collect();
         let col_labels: Vec<String> = self.col_dofs().iter().map(dof_label).collect();
         let data = self.dense();
-        // Ce que le `Display` ne dit pas — l'ordre des DDL décide de la lecture
-        // de la grille qui suit, et le facteur, de ses valeurs. Sans cette
-        // ligne, le niveau « contenu » en apprendrait moins que la structure.
+        // What `Display` does not say — the DOF ordering decides how to read the
+        // grid that follows, and the factor decides its values. Without this
+        // line, the "content" level would teach less than the structure does.
         format!(
             "{self}\n  symmetric: {}, ordering: {:?}, factor: {:?}\n  dual_vars: [{}], primal_vars: [{}]\n{}",
             self.symmetric,
@@ -2103,7 +2103,7 @@ struct AssembledData {
 /// #     DofOrdering::NodesThenVars, true).unwrap();
 /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
 /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-/// // L'agrégat : des blocs, une numérotation globale, un état assemblé.
+/// // The aggregate: blocks, a global numbering, an assembled state.
 /// let mut k = Matrix::empty();
 /// k.add_sub(Handle::new(bloc))?;
 /// k.finalize()?;
@@ -2176,7 +2176,7 @@ crate::impl_aggregate!(Matrix, SubMatrix, sub_matrix, "sub-matrix(es)", {
 /// let mut k = Matrix::empty();
 /// k.add_sub(Handle::new(bloc()))?;
 /// k.finalize()?;
-/// // Un DDL de ligne ou de colonne de l'agrégat, sous forme matérialisée.
+/// // A row or column DOF of the aggregate, in materialized form.
 /// let dofs: Vec<NamedDof> = k.row_dofs()?;
 /// assert_eq!(dofs[0], (a.id(), "q".to_string()));
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -2196,12 +2196,12 @@ pub type NamedDof = (NodeId, String);
 /// ```
 /// # use pyrucast::atoms::NodeId;
 /// # use pyrucast::containers::matrix::{dof_key, dof_node, dof_var, DofKey};
-/// // Le nœud en haut, la variable en bas : deux entiers dans un `u64`.
+/// // Node on top, variable below: two integers in one `u64`.
 /// let k: DofKey = dof_key(NodeId(7), 2);
 /// assert_eq!(dof_node(k), NodeId(7));
 /// assert_eq!(dof_var(k), 2);
-/// // L'ordre des clés est celui des nœuds, puis des variables — un tri par
-/// // clé range donc les DDL nœud par nœud.
+/// // Key order is nodes first, then variables — a sort by
+/// // key therefore lays the DOFs out node by node.
 /// assert!(dof_key(NodeId(7), 2) < dof_key(NodeId(8), 0));
 /// ```
 pub type DofKey = u64;
@@ -2211,7 +2211,7 @@ pub type DofKey = u64;
 /// ```
 /// # use pyrucast::atoms::NodeId;
 /// # use pyrucast::containers::matrix::{dof_key, dof_node, dof_var};
-/// // Le nœud en haut, la variable en bas : les deux tiennent dans un `u64`.
+/// // Node on top, variable below: both fit in a single `u64`.
 /// let k = dof_key(NodeId(7), 2);
 /// assert_eq!((dof_node(k), dof_var(k)), (NodeId(7), 2));
 /// ```
@@ -2332,8 +2332,8 @@ impl DofSeen {
 /// let mut k = Matrix::empty();
 /// k.add_sub(Handle::new(bloc()))?;
 /// k.finalize()?;
-/// // Fonction pure de la **structure** du modèle, pas de ses matériaux :
-/// // construite une fois, réutilisée d'un assemblage à l'autre.
+/// // A pure function of the model's **structure**, not of its materials:
+/// // built once, reused from one assembly to the next.
 /// let motif = scatter::build_pattern(&k)?;
 /// assert_eq!(motif.nnz(), 4);
 /// assert_eq!(motif.row_offsets.len(), motif.row_keys.len() + 1);
@@ -2402,13 +2402,13 @@ pub struct AssemblyPattern {
 /// let mut k = Matrix::empty();
 /// k.add_sub(Handle::new(bloc()))?;
 /// k.finalize()?;
-/// // Un bloc **littéral** range ses emplacements dans l'ordre de son COO ;
-/// // un bloc calculé les groupe par maille, dans l'ordre où le noyau les
+/// // A **literal** block lays its slots out in its COO order;
+/// // a computed block groups them per cell, in the order the kernel
 /// // produit.
 /// let motif = scatter::build_pattern(&k)?;
 /// match &motif.block_slots[0] {
 ///     BlockSlots::Literal(slots) => assert_eq!(slots.len(), 4),
-///     _ => unreachable!("ce bloc porte ses valeurs"),
+///     _ => unreachable!("this block carries its values"),
 /// }
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -2528,7 +2528,7 @@ impl AssemblyPattern {
     /// k.add_sub(Handle::new(bloc()))?;
     /// k.finalize()?;
     /// let motif = scatter::build_pattern(&k)?;
-    /// // Le nombre d'entrées **stockées** — celui du CSR, pas celui des blocs.
+    /// // The number of **stored** entries — the CSR's, not the blocks'.
     /// assert_eq!(motif.nnz(), motif.col_indices.len());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -2562,7 +2562,7 @@ impl AssemblyPattern {
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// # let motif = scatter::build_pattern(&k)?;
-    /// // Le motif numérote en clés ; les noms, il les rend sur demande.
+    /// // The pattern numbers in keys; names, it gives back on demand.
     /// assert_eq!(motif.row_dofs()[0], (a.id(), "q".to_string()));
     /// assert_eq!(motif.row_dofs().len(), motif.row_keys.len());
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -2736,13 +2736,13 @@ impl Matrix {
     /// # };
     /// let mut k = Matrix::empty();
     /// k.add_sub(Handle::new(bloc()))?;
-    /// // La taille se lit sur les blocs, sans assemblage…
+    /// // The size reads off the blocks, without assembly…
     /// assert_eq!((k.n_rows()?, k.n_cols()?), (2, 2));
-    /// // …mais les vues creuses n'existent qu'une fois la matrice finalisée.
+    /// // …but the sparse views exist only once the matrix is finalized.
     /// assert!(k.to_csr().is_err());
     /// k.finalize()?;
     /// assert_eq!(k.to_csr()?.nnz(), 4);
-    /// // Idempotent : un second appel ne réassemble rien.
+    /// // Idempotent: a second call reassembles nothing.
     /// k.finalize()?;
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -2853,7 +2853,7 @@ impl Matrix {
     /// k.finalize()?;
     /// assert!(k.cached_factorization::<usize>().is_none()); // rien encore
     /// k.store_factorization(Arc::new(42usize));
-    /// // Le transtypage est vérifié : un autre type ne rend rien.
+    /// // The downcast is checked: another type yields nothing.
     /// assert!(k.cached_factorization::<String>().is_none());
     /// assert_eq!(k.cached_factorization::<usize>().as_deref(), Some(&42));
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -2898,8 +2898,8 @@ impl Matrix {
     /// let mut k = Matrix::empty();
     /// k.add_sub(Handle::new(bloc()))?;
     /// k.finalize()?;
-    /// // Le solveur y dépose sa factorisation pour la réutiliser telle quelle
-    /// // au pas suivant ; toute modification de la matrice l'efface.
+    /// // The solver drops its factorization here to reuse it as is at the next
+    /// // step; any change to the matrix wipes it.
     /// k.store_factorization(Arc::new(42usize));
     /// assert_eq!(k.cached_factorization::<usize>().as_deref(), Some(&42));
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -3056,7 +3056,7 @@ impl Matrix {
     /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
-    /// // Une raideur de Galerkine est symétrique : le drapeau le déclare.
+    /// // A Galerkin stiffness is symmetric: the flag declares it.
     /// assert!(k.symmetric());
     /// ```
     pub fn symmetric(&self) -> bool {
@@ -3155,8 +3155,8 @@ impl Matrix {
     /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
-    /// // La forme compacte et la forme nommée disent la même chose : les noms
-    /// // vivent dans la table, la clé n'en porte que l'indice.
+    /// // The compact form and the named form say the same thing: names are
+    /// // live in the table, the key carries only their index.
     /// let noms = k.dof_vars()?;
     /// let cles = k.row_dof_keys()?;
     /// let nommes = k.row_dofs()?;
@@ -3194,8 +3194,8 @@ impl Matrix {
     /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
-    /// // La forme compacte d'un DDL de ligne : le nœud, et l'indice du nom
-    /// // dual dans la table — pas le nom lui-même.
+    /// // The compact form of a row DOF: the node, and the index of the
+    /// // dual name in the table — not the name itself.
     /// let cles = k.row_dof_keys()?;
     /// assert_eq!(dof_node(cles[0]), a.id());
     /// assert_eq!(k.dof_vars()?[dof_var(cles[0]) as usize], "q");
@@ -3232,7 +3232,7 @@ impl Matrix {
     /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
-    /// // Même forme côté colonne, sur les variables **primales**.
+    /// // Same shape on the column side, over the **primal** variables.
     /// let cles = k.col_dof_keys()?;
     /// assert_eq!(dof_node(cles[0]), a.id());
     /// assert_eq!(k.dof_vars()?[dof_var(cles[0]) as usize], "T");
@@ -3268,7 +3268,7 @@ impl Matrix {
     /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
-    /// // Les noms sont internés une seule fois, lignes et colonnes confondues.
+    /// // interned once only, rows and columns together.
     /// let noms = k.field_names();
     /// assert!(noms.contains(&"T".to_string()) && noms.contains(&"q".to_string()));
     /// ```
@@ -3293,7 +3293,7 @@ impl Matrix {
     /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
-    /// // Les noms sont internés une seule fois, lignes et colonnes confondues.
+    /// // interned once only, rows and columns together.
     /// let noms = k.field_names();
     /// assert!(noms.contains(&"T".to_string()) && noms.contains(&"q".to_string()));
     /// ```
@@ -3331,7 +3331,7 @@ impl Matrix {
     /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
-    /// assert_eq!(k.n_rows().unwrap(), 2); // deux nœuds, une variable duale
+    /// assert_eq!(k.n_rows().unwrap(), 2); // two nodes, one dual variable
     /// ```
     pub fn n_rows(&self) -> Result<usize> {
         Ok(self.row_dof_keys()?.len())
@@ -3387,11 +3387,11 @@ impl Matrix {
     /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
-    /// // Compte les entrées **stockées** dans les blocs. Un bloc *calculé*
-    /// // — ce que produit `stiffness` — n'en stocke aucune : ses valeurs
-    /// // naissent à l'assemblage et vivent dans le CSR global.
+    /// // Counts the entries **stored** in the blocks. A *computed* block — what
+    /// // `stiffness` produces — stores none: its values are born at assembly
+    /// // time and live in the global CSR.
     /// assert_eq!(k.entry_count(), 0);
-    /// assert_eq!(k.to_csr().unwrap().nnz(), 4); // le CSR, lui, les porte
+    /// assert_eq!(k.to_csr().unwrap().nnz(), 4); // the CSR does carry them
     /// ```
     pub fn entry_count(&self) -> usize {
         let mut total = 0usize;
@@ -3426,7 +3426,7 @@ impl Matrix {
     /// // Un SEG2 de longueur 1, k = 1 : K = [[1, -1], [-1, 1]].
     /// assert_eq!(k.get(a.id(), "q", a.id(), "T"), 1.0);
     /// assert_eq!(k.get(a.id(), "q", b.id(), "T"), -1.0);
-    /// // Une coordonnée absente du motif vaut zéro : la lecture ne lève pas.
+    /// // A coordinate absent from the pattern is zero: reading does not raise.
     /// assert_eq!(k.get(a.id(), "q", a.id(), "absente"), 0.0);
     /// ```
     pub fn get(&self, row_node: NodeId, row_field: &str, col_node: NodeId, col_field: &str) -> f64 {
@@ -3474,10 +3474,10 @@ impl Matrix {
     /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
-    /// // Un 5-uplet par entrée : nœud ligne, var duale, nœud colonne, var
-    /// // primale, valeur — les noms y sont déjà résolus. Comme
-    /// // `entry_count`, cela parcourt les entrées **stockées** : un bloc
-    /// // calculé n'en a aucune, ses valeurs vivant dans le CSR global.
+    /// // One 5-tuple per entry: row node, dual var, column node,
+    /// // primal var, value — names are already resolved there. Like
+    /// // `entry_count` walks the entries **stored**: a
+    /// // computed one has none, its values living in the global CSR.
     /// assert!(k.iter_entries().is_empty());
     /// ```
     pub fn iter_entries(&self) -> Vec<MatrixEntry> {
@@ -3518,7 +3518,7 @@ impl Matrix {
     /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
-    /// // Le CSR **est** l'état assemblé : emprunté, pas reconstruit.
+    /// // The CSR **is** the assembled state: borrowed, not rebuilt.
     /// assert_eq!(k.to_csr().unwrap().nnz(), 4);
     /// ```
     pub fn to_csr(&self) -> Result<CsrMatrix<f64>> {
@@ -3550,7 +3550,7 @@ impl Matrix {
     /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
-    /// // Les trois tableaux du CSR, empruntés — rien n'est recopié.
+    /// // The CSR's three arrays, borrowed — nothing is copied.
     /// let (offsets, cols, values) = k.csr_arrays()?;
     /// assert_eq!(offsets.len(), k.n_rows()? + 1);
     /// assert_eq!(cols.len(), values.len());
@@ -3584,7 +3584,7 @@ impl Matrix {
     /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
-    /// // Vue nalgebra (column-major), prête pour LU ou Cholesky.
+    /// // A nalgebra view (column-major), ready for LU or Cholesky.
     /// let m = k.to_dmatrix().unwrap();
     /// assert_eq!((m.nrows(), m.ncols()), (2, 2));
     /// ```
@@ -3720,7 +3720,7 @@ impl Matrix {
     /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
-    /// // K · [1, 1] = 0 : le mode rigide d'une conduction.
+    /// // K · [1, 1] = 0: the rigid mode of a conduction.
     /// assert_eq!(k.mul_dense(&[1.0, 1.0]).unwrap(), vec![0.0, 0.0]);
     /// ```
     pub fn mul_dense(&self, x: &[f64]) -> Result<Vec<f64>> {
@@ -3811,7 +3811,7 @@ impl Matrix {
     /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
-    /// // Le support **colonne** : celui d'un champ que l'on multiplie.
+    /// // The **column** support: that of a field being multiplied.
     /// assert_eq!(k.col_mesh().unwrap().cell_count(), 2);
     /// ```
     pub fn col_mesh(&self) -> Result<Mesh> {
@@ -3851,7 +3851,7 @@ impl Matrix {
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// # use pyrucast::models::Physics;
     /// # use pyrucast::ops::model;
-    /// // Le résultat n'est **pas** assemblé : appeler `assemble` avant de résoudre.
+    /// // The result is **not** assembled: call `assemble` before solving.
     /// let thermique = k.filter(Physics::Thermal).unwrap();
     /// assert_eq!(thermique.len(), 1);
     /// assert!(k.filter(Physics::Mechanical).unwrap().is_empty());
@@ -3892,7 +3892,7 @@ impl Matrix {
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// # use pyrucast::models::Physics;
     /// # use pyrucast::ops::model;
-    /// // Les natures **présentes**, dédupliquées.
+    /// // The kinds **present**, deduplicated.
     /// assert!(k.physics().contains(&Physics::Thermal));
     /// ```
     pub fn physics(&self) -> Vec<Physics> {
@@ -3970,8 +3970,8 @@ impl Matrix {
     /// let mut k = Matrix::empty();
     /// k.add_sub(Handle::new(bloc()))?;
     /// k.finalize()?;
-    /// // Un vecteur plat, dans l'ordre des DDL colonnes, redevient un champ —
-    /// // posé sur les supports POI1 **existants**, sans en matérialiser d'autre.
+    /// // A flat vector, in column DOF order, becomes a field again —
+    /// // laid on the **existing** POI1 supports, materializing no other.
     /// let f = k.field_from_col_values(&[10.0, 20.0])?;
     /// assert_eq!(f.get(0)?.read().value(b.id(), "T")?, 20.0);
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -4016,7 +4016,7 @@ impl Matrix {
     /// k.add_sub(Handle::new(bloc()))?;
     /// k.finalize()?;
     /// // Le jumeau côté lignes : la disposition dans laquelle arrive `A · x`,
-    /// // et dont les composantes sont les variables **duales**.
+    /// // and whose components are the **dual** variables.
     /// let f = k.field_from_row_values(&[1.0, 2.0])?;
     /// assert_eq!(f.get(0)?.read().value(b.id(), "q")?, 2.0);
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -4154,12 +4154,12 @@ impl Matrix {
     /// let mut k = Matrix::empty();
     /// k.add_sub(Handle::new(bloc()))?;
     /// k.finalize()?;
-    /// // `x` est lu aux DDL **colonnes** (primales), le résultat vit sur les
-    /// // DDL **lignes** (duales) : K · u = f. L'opérateur `*` en est le sucre.
+    /// // `x` is read at the **column** DOFs (primal), the result lives on the
+    /// // **Row** DOFs (dual): K · u = f. The `*` operator is its sugar.
     /// let x = NodeField::from_submesh(&k.col_mesh()?.get(0)?, vec!["T".into()])?;
     /// x.get(0)?.write().add_to_component("T", 1.0)?;
     /// let y = k.mul_field(&x)?;
-    /// // Les lignes de ce bloc somment à 1, donc K · 1 = 1.
+    /// // This block's rows sum to 1, hence K · 1 = 1.
     /// assert_eq!(y.get(0)?.read().value(a.id(), "q")?, 1.0);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
