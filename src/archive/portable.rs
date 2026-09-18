@@ -59,7 +59,7 @@ where
 
     fn from_bytes(bytes: &[u8]) -> Result<Self> {
         // `decode_from_slice` rend aussi le nombre d'octets lus ; un enregistrement
-        // porte sa propre longueur en amont, donc on n'en a pas l'usage ici.
+        // carries its own length upstream, so we have no use for it here.
         bincode::serde::decode_from_slice(bytes, bincode::config::standard())
             .map(|(value, _read)| value)
             .map_err(|e| PyrucastError::Serialization(e.to_string()))

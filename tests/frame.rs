@@ -44,7 +44,7 @@ fn frame_inclined_cantilever_perpendicular_load() -> Result<()> {
     let (px, py) = (-s, c); // unit perpendicular
     let h = L / N as f64;
 
-    // ── Maillage : N éléments SEG2 le long de la direction à 45° ───────────
+    // ── Mesh: N SEG2 elements along the 45° direction ──────────────────────
     let coords = Handle::new(Coords::new(2)?);
     let nodes: Vec<Node> = (0..=N)
         .map(|i| Node::create_in(coords.clone(), &[i as f64 * h * c, i as f64 * h * s]))
@@ -55,7 +55,7 @@ fn frame_inclined_cantilever_perpendicular_load() -> Result<()> {
     }
     let fes = FiniteElementSpace::new(&mesh, Interpolation::ModelEmbedded)?;
 
-    // ── Modèle : portique + encastrement complet à la base ─────────────────
+    // ── Model: frame + full clamping at the base ───────────────────────────
     let clamp = |target: &Model, node: &Node, var: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);
         let multiplier = mesh::barycenter(&imposed)?;
@@ -71,7 +71,7 @@ fn frame_inclined_cantilever_perpendicular_load() -> Result<()> {
         &[("E", E), ("A", A), ("I", I), ("G", G), ("A_s", A_S)],
     )?;
 
-    // ── Chargement : force P perpendiculaire à la poutre, au bout libre ────
+    // ── Loading: force P perpendicular to the beam, at the free end ────────
     let mut load_sm = SubMesh::new(coords.clone(), ElementType::POI1);
     load_sm.add_cell(&[nodes[N].id()])?;
     let load_sm = Handle::new(load_sm);
@@ -83,11 +83,11 @@ fn frame_inclined_cantilever_perpendicular_load() -> Result<()> {
     // ── Assemblage + résolution ────────────────────────────────────────────
     let solution = solve(&pyrucast::ops::matrix::stiffness(&model, &materials)?, &rhs)?;
 
-    // ── Comparaison : déplacement du bout = δ·(perpendiculaire) ────────────
+    // ── Comparison: the tip's displacement = δ·(perpendicular) ─────────────
     let delta = P * L.powi(3) / (3.0 * E * I) + P * L / (G * A_S);
     let ux = solution.value(nodes[N].id(), "u_x")?;
     let uy = solution.value(nodes[N].id(), "u_y")?;
-    // Projection sur la perpendiculaire (= δ) et sur l'axe (≈ 0).
+    // Projection onto the perpendicular (= δ) and onto the axis (≈ 0).
     let transverse = ux * px + uy * py;
     let axial = ux * c + uy * s;
     assert!(

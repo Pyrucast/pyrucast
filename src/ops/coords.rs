@@ -98,9 +98,9 @@ fn per_node_values(field: &NodeField, comps: &[String]) -> Result<Vec<(NodeId, V
 /// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
 /// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
 /// # }
-/// // Écrit les positions **dans le repère** : la réciproque de
-/// // `node_field::positions`. C'est un effet de bord assumé.
-/// // Les composantes par défaut sont `X`, `Y`, `Z` — celles que
+/// // Writes the positions **into the frame**: the inverse of
+/// // `node_field::positions`. It is an assumed side effect.
+/// // The default components are `X`, `Y`, `Z` — those that
 /// // `positions` produit.
 /// let cible = node_field::positions(&maillage, None)?;
 /// cible.get(0)?.write().add_to_component("X", 1.0)?;
@@ -156,9 +156,9 @@ pub fn set(field: &NodeField, components: Option<Vec<String>>) -> Result<()> {
 /// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
 /// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
 /// # }
-/// // Ajoute un déplacement aux positions, au lieu de les remplacer — la
+/// // Adds a displacement to the positions instead of replacing them — the
 /// // façon de passer en configuration déformée.
-/// // Les composantes par défaut sont ici `ux`, `uy`, `uz`.
+/// // The default components here are `ux`, `uy`, `uz`.
 /// let u = champ(vec!["ux".into(), "uy".into()]);
 /// u.get(0)?.write().add_to_component("ux", 0.5)?;
 /// ops_coords::displace(&u, None)?;

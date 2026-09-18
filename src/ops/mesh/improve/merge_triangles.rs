@@ -118,8 +118,8 @@ impl Cell {
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = mesh::poi1_from_nodes(&n).unwrap();
-/// // Apparie les triangles en quadrangles quand la paire est de qualité.
-/// // Un triangle isolé n'a personne avec qui s'apparier.
+/// // Pairs triangles into quadrangles when the pair is of good quality.
+/// // A lone triangle has nobody to pair with.
 /// assert_eq!(mesh::merge_triangles(&maillage)?.cell_count(), 1);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```

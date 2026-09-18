@@ -42,8 +42,8 @@ use crate::error::Result;
 /// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
 /// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
 /// # }
-/// // L'union de deux champs : **symétrique**, d'où l'opérateur `|` côté
-/// // Python. Les composantes s'additionnent, les supports se rejoignent.
+/// // The union of two fields: **symmetric**, hence the `|` operator on the
+/// // Python side. The components add up, the supports come together.
 /// let flux = champ(vec!["q".into()]);
 /// let f = node_field::merge(&temp, &flux)?;
 /// assert_eq!(f.get(0)?.read().components(), &["T".to_string(), "q".to_string()]);

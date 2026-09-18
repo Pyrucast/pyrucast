@@ -43,7 +43,7 @@ use std::fmt;
 ///
 /// ```
 /// # use pyrucast::atoms::NodeId;
-/// // Un identifiant nu : il circule partout, sans porter le magasin.
+/// // A bare identifier: it travels everywhere, without carrying the store.
 /// let id = NodeId(3);
 /// assert_eq!(id.0, 3);
 /// ```
@@ -77,7 +77,7 @@ impl crate::dump::Dump for NodeId {
 /// let coords = Handle::new(Coords::new(2).unwrap());
 /// let n = Node::create_in(coords.clone(), &[1.0, 2.0]).unwrap();
 ///
-/// // Un `Node` est un **ticket** : tant qu'il vit, le nœud survit au gc.
+/// // A `Node` is a **ticket**: as long as it lives, the node survives the gc.
 /// assert_eq!(coords.write().gc(), 0);
 /// drop(n);
 /// assert_eq!(coords.write().gc(), 1);
@@ -113,7 +113,7 @@ impl Node {
     /// # use pyrucast::handle::Handle;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// let n = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
-    /// // Un second accesseur sur le même id : le nœud a maintenant deux tickets.
+    /// // A second accessor on the same id: the node now has two tickets.
     /// let m = Node::acquire(coords.clone(), n.id()).unwrap();
     /// assert_eq!(m.id(), n.id());
     /// ```
@@ -154,7 +154,7 @@ impl Node {
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # use pyrucast::handle::Handle as H;
     /// let n = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
-    /// // Le nœud porte son magasin : aucun argument `Coords` ailleurs.
+    /// // The node carries its store: no `Coords` argument anywhere else.
     /// assert!(H::same_object(&n.coords(), &coords));
     /// ```
     pub fn coords(&self) -> Handle<Coords> {

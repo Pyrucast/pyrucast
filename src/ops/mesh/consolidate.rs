@@ -24,7 +24,7 @@ use std::collections::HashSet;
 /// # use pyrucast::ops::mesh;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
 /// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
-/// // Fusionne les zones de même type d'élément en une seule.
+/// // Merges the zones of the same element type into one.
 /// let a = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[1.0, 0.0, 0.0]), 1, ElementType::SEG2)?;
 /// let b = mesh::line(&p(&[1.0, 0.0, 0.0]), &p(&[2.0, 0.0, 0.0]), 1, ElementType::SEG2)?;
 /// let deux = a.union(&b)?;

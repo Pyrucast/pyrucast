@@ -80,7 +80,7 @@ use std::sync::Arc;
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
 /// # let handle = Handle::new(Coords::new(2).unwrap());
-/// // Le verrou porte sur **cet objet seul**, et dure le temps du guard :
+/// // The lock covers **this object alone**, and lasts as long as the guard:
 /// // plusieurs lectures peuvent coexister.
 /// let a = handle.read();
 /// let b = handle.read();
@@ -96,8 +96,8 @@ pub type ReadGuard<T> = ArcRwLockReadGuard<RawRwLock, T>;
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
 /// # let handle = Handle::new(Coords::new(2).unwrap());
-/// // L'écriture est exclusive, le temps de l'appel. Le relâcher avant de
-/// // reprendre en lecture est ce qui évite l'interblocage.
+/// // Writing is exclusive, for the duration of the call. Releasing it before
+/// // taking a read again is what avoids the deadlock.
 /// handle.write().add_node(&[0.0, 0.0])?;
 /// assert_eq!(handle.read().node_count(), 1);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -233,8 +233,8 @@ impl<T> Handle<T> {
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::coords::Coords;
     /// let a = Handle::new(Coords::new(2).unwrap());
-    /// // Les 24 bits de poids faible de l'adresse : assez court pour se lire
-    /// // d'un coup d'œil, assez large pour séparer des objets vivants ensemble.
+    /// // The address's low 24 bits: short enough to read at a glance, wide enough
+    /// // to tell apart objects alive together.
     /// assert_eq!(a.tag(), a.id() & 0xff_ffff);
     /// assert_eq!(a.tag(), a.clone().tag()); // stable pour un même objet
     /// ```

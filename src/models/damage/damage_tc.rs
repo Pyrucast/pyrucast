@@ -73,7 +73,7 @@ const A_C: usize = 5;
 /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
 /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
 /// # let mat = MatRead::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &[]);
-/// // Deux résistances et deux fragilités : traction et compression sont
+/// // Two strengths and two brittlenesses: tension and compression are
 /// // suivies séparément.
 /// assert!(damage::damage_tc::MATERIAL.contains(&"f_t"));
 /// assert!(damage::damage_tc::MATERIAL.contains(&"f_c"));
@@ -109,7 +109,7 @@ pub const MATERIAL: &[&str] = &["E", "nu", "f_t", "f_c", "A_t", "A_c"];
 /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
 /// # let mat = MatRead::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &[]);
 /// // Deux endommagements distincts : la traction en active un, la
-/// // compression l'autre — c'est ce qui **restitue la raideur** quand une
+/// // compression the other — that is what **restores the stiffness** when a
 /// // fissure se referme.
 /// let traction = damage::damage_tc::update(&[1e-3, 0.0, 0.0, 0.0, 0.0, 0.0], &[0.0; 4], &mat)?;
 /// let compression =

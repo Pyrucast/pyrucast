@@ -83,8 +83,8 @@ const SIGMA_C: usize = 6;
 /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
 /// #                         vars: &[] };
-/// // Le critère distingue traction et compression par l'angle de Lode :
-/// // à contrainte équivalente égale, la traction est bien plus pénalisante.
+/// // The criterion distinguishes tension from compression by the Lode angle:
+/// // at equal equivalent stress, tension is far more penalizing.
 /// let q = 20.0;
 /// let traction = plasticity::ottosen::yield_function(&[q, 0.0, 0.0, 0.0, 0.0, 0.0], &mat)?;
 /// let compression =
@@ -161,8 +161,8 @@ fn numerical_normal(sigma: &[f64; 6], mat: &MatParams, scale: f64) -> Result<[f6
 /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
 /// #                         vars: &[] };
-/// // Un essai hors surface est ramené dessus : la fonction de charge
-/// // s'annule à la solution.
+/// // A trial off the surface is brought back onto it: the yield function
+/// // vanishes at the solution.
 /// let trial = [40.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 /// let pas = plasticity::ottosen::return_map(&trial, &repos, &mat)?;
 /// assert!(plasticity::ottosen::yield_function(&pas.sigma, &mat)?.abs() < 1e-4);

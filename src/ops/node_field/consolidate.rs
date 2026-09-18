@@ -61,7 +61,7 @@ use crate::parallel::*;
 /// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
 /// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
 /// # }
-/// // Fusionne en une zone les champs qui partagent un support.
+/// // Merges into one zone the fields that share a support.
 /// let flux = champ(vec!["q".into()]);
 /// let deux = node_field::merge(&temp, &flux)?;
 /// assert_eq!(node_field::consolidate(&deux)?.len(), 1);

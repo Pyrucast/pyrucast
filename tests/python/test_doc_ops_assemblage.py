@@ -1,10 +1,10 @@
-"""Source des exemples de `book/src/operateurs/assemblage.md`.
+"""Source of the examples of `book/src/operateurs/assemblage.md`.
 
-Chaque section de la page tire son bloc d'ici par `{{#include …:ancre}}` : la page ne peut plus montrer un appel qui a cessé d'exister.
+Every section of the page pulls its block from here through `{{#include …:anchor}}`: the page can no longer show a call that has ceased to exist.
 Voir `book/src/developper/documentation-et-tests.md`.
 
-Le montage vit **hors** des ancres — le lecteur du chapitre n'a pas besoin de
-revoir la construction d'un maillage à chaque opérateur.
+The setup lives **outside** the anchors — the chapter's reader does not need
+to see a mesh built again at every operator.
 
 **The code lives at module level, not inside test functions**: mdbook does not
 strip the indentation of an included excerpt, so a block anchored inside a
@@ -17,7 +17,7 @@ import pyrucast
 
 
 def _modele_thermique():
-    """Barre 1-D à deux SEG2, conduction, Dirichlet à gauche."""
+    """A 1-D bar of two SEG2, conduction, Dirichlet on the left."""
     c = pyrucast.Coords(1)
     noeuds = [c.add_node([x]) for x in (0.0, 0.5, 1.0)]
     mesh = pyrucast.Mesh(c, "SEG2")
@@ -58,7 +58,7 @@ print(K)  # Matrix: n row(s) × n col(s), …
 assert K.n_rows() == K.n_cols()
 assert K.n_rows() > 0
 
-# ── Masse, et sa version diagonale ──────────────────────────────────────────
+# ── Mass, and its diagonal version ──────────────────────────────────────────
 
 
 # ── mass ───────────────────────────────────────────────────
@@ -107,7 +107,7 @@ materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
 k = pyrucast.matrix.stiffness(model, materials)
 m = pyrucast.matrix.stiffness(model, materials)
 dt = 0.1
-# Chargement : la température imposée, portée par le nœud-multiplicateur.
+# Loading: the imposed temperature, carried by the multiplier node.
 rhs = pyrucast.NodeField(multiplier, ["imposed_T"])
 rhs[0].set_value(multiplier.node(0, 0, 0), "imposed_T", 1.0)
 # ANCHOR: somme
@@ -166,14 +166,14 @@ edge = pyrucast.Mesh(c, "SEG2")
 edge.unit().add_cell([a, b])
 edge_fes = pyrucast.FiniteElementSpace(edge)
 Q = 2.0
-# Un autre chargement, porté par un nœud distinct : l'union les juxtapose.
+# Another loading, carried by a distinct node: the union sets them side by side.
 ailleurs = c.add_node([2.0])
 other_loads = pyrucast.NodeField(pyrucast.mesh.poi1_from_nodes([ailleurs]), ["q"])
 # ANCHOR: flux
-# Flux uniforme Q sur le bord gauche (maillage SEG2), versé dans la ligne duale
-# « q » du modèle chargé — c'est lui qui possède cette ligne et qui donne sa
-# nature à la charge. Celle-ci est un sous-modèle : sa densité vit dans le
-# matériau, sous le nom « phi_q », et son terme se demande au modèle.
+# Uniform flux Q on the left edge (a SEG2 mesh), poured into the dual row
+# "q" of the loaded model — it is the one that owns that row and gives its
+# kind to the load. The load is a sub-model: its density lives in the
+# material, under the name "phi_q", and its term is asked of the model.
 conduction = pyrucast.model.heat_conduction(edge_fes)
 charge = pyrucast.model.flux(edge_fes, conduction, "q")
 densite = pyrucast.element_field.material_field(charge, [("phi_q", Q)])

@@ -77,8 +77,8 @@ const FRAME_AT: usize = 11;
 /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
 /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
 /// # let mat = MatRead::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &[]);
-/// // Trois directions de tissage, chacune avec son seuil, sa saturation et
-/// // son endommagement maximal — plus l'axe du repère matériau.
+/// // Three weaving directions, each with its threshold, its saturation and its
+/// // maximum damage — plus the material frame's axis.
 /// assert!(damage::sic_sic::MATERIAL_2D.contains(&"V1X"));
 /// assert!(!damage::sic_sic::MATERIAL_2D.contains(&"V2X")); // 2-D : un seul axe
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -111,7 +111,7 @@ pub const MATERIAL_2D: &[&str] = &[
 /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
 /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
 /// # let mat = MatRead::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &[]);
-/// // En 3-D, le repère demande deux axes ; le troisième est V1 × V2.
+/// // In 3-D, the frame asks for two axes; the third is V1 × V2.
 /// assert!(damage::sic_sic::MATERIAL_3D.contains(&"V2X"));
 /// assert!(damage::sic_sic::MATERIAL_3D.len() > damage::sic_sic::MATERIAL_2D.len());
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -148,11 +148,11 @@ pub const MATERIAL_3D: &[&str] = &[
 /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
 /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
 /// # let mat = MatRead::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &[]);
-/// // Un endommagement **par direction de tissage** : l'état en porte six,
+/// // One damage **per weaving direction**: the state carries six of them,
 /// // trois seuils et trois endommagements.
 /// let u = damage::sic_sic::update(&[1e-3, 0.0, 0.0, 0.0, 0.0, 0.0], &[0.0; 6], &mat, 2)?;
 /// assert_eq!(u.internal().len(), 6);
-/// // Une traction selon le premier axe n'endommage que celui-là.
+/// // A tension along the first axis damages that one only.
 /// assert!(u.internal()[3] > 0.0);
 /// assert_eq!(u.internal()[4], 0.0);
 /// # Ok::<(), pyrucast::PyrucastError>(())

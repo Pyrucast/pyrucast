@@ -4,13 +4,13 @@
 //! function stays the canonical form; these methods contain no logic.
 //!
 //! **Not** exposed here, for want of meaning for every instance of the type:
-//! `deformation`, `beam_deformation` (elles exigent des
-//! composantes de déplacement `u_x`/`u_y`/`u_z`) et `thermal_strain` (elle
-//! exige une température, et un `alpha` dans le matériau). Elles restent des
+//! `deformation`, `beam_deformation` (they require displacement components
+//! `u_x`/`u_y`/`u_z`) and `thermal_strain` (it requires a temperature, and an
+//! `alpha` in the material). They stay
 //! fonctions libres seules.
 //!
 //! `sub_material_field` devient `SubModel::material_field` : le type fournit
-//! déjà le qualificatif `sub`, le nom de la méthode n'a pas à le porter.
+//! the `sub` qualifier already, the method's name need not carry it.
 
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::finite_element_space::FiniteElementSpace;

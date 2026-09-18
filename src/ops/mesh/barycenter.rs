@@ -36,16 +36,16 @@ use crate::handle::Handle;
 /// # use pyrucast::ops::mesh;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
 /// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
-/// // Un nœud neuf au centre de gravité de **chaque élément**, zone par
-/// // zone — autant de mailles POI1 que d'éléments en entrée.
+/// // A fresh node at the centroid of **every element**, zone by zone — as
+/// // many POI1 cells as elements on input.
 /// let l = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[2.0, 0.0, 0.0]), 2, ElementType::SEG2)?;
 /// let g = mesh::barycenter(&l)?;
 /// assert_eq!(g.cell_count(), 2);
 /// assert_eq!(g.node(0, 0, 0)?.position()?, vec![0.5, 0.0, 0.0]);
 ///
-/// // Sur une entrée POI1, le centroïde d'un point est le point : c'est la
-/// // façon canonique de se donner des nœuds colocalisés — des
-/// // multiplicateurs de Lagrange, par exemple.
+/// // On a POI1 input, a point's centroid is the point: that is the canonical
+/// // way to give oneself co-located nodes — Lagrange multipliers, for one.
+
 /// let nuage = mesh::poi1_from_nodes(&[p(&[3.0, 0.0, 0.0])])?;
 /// let mult = mesh::barycenter(&nuage)?;
 /// assert_eq!(mult.node(0, 0, 0)?.position()?, vec![3.0, 0.0, 0.0]);

@@ -33,7 +33,7 @@ fn thermal_line_recovers_analytical_solution() -> Result<()> {
     const N_ELEMS: usize = 4;
     let h = 1.0 / N_ELEMS as f64;
 
-    // ── Maillage : une ligne de SEG2 sur [0, 1] ────────────────────────────
+    // ── Mesh: a line of SEG2 on [0, 1] ─────────────────────────────────────
     let coords = Handle::new(Coords::new(1)?);
     let nodes: Vec<Node> = (0..=N_ELEMS)
         .map(|i| Node::create_in(coords.clone(), &[i as f64 * h]))
@@ -45,8 +45,8 @@ fn thermal_line_recovers_analytical_solution() -> Result<()> {
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
 
     // ── Modèle : conduction + Dirichlet T = 20 en x = 1 ────────────────────
-    // Le support des multiplicateurs est fabriqué depuis le nœud imposé par le
-    // mesher `barycenter` (un nœud neuf colocalisé). Le modèle ne crée rien.
+    // The multipliers' support is built from the imposed node by the
+    // `barycenter` mesher (a fresh co-located node). The model creates nothing.
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(
         nodes.last().unwrap(),
     ))?);
@@ -57,11 +57,11 @@ fn thermal_line_recovers_analytical_solution() -> Result<()> {
     let dirichlet = model::dirichlet(&conduction, "T", &imposed, &multiplier, Default::default())?;
     let model = conduction.union(&dirichlet)?;
 
-    // ── Matériau : k uniforme (Dirichlet est ignoré automatiquement) ───────
+    // ── Material: uniform k (Dirichlet is skipped automatically) ───────────
     let materials = pyrucast::ops::element_field::material_field(&model, &[("k", K)])?;
 
     // ── Chargement : source Q en x = 0 (composante duale "q"), valeur imposée
-    //    T = 20 au nœud-multiplicateur (slot "imposed_T") ───────────────────
+    //    T = 20 at the multiplier node ("imposed_T" slot) ──────────────────
     let node0 = nodes[0].id();
     let mut load_sm = SubMesh::new(coords.clone(), ElementType::POI1);
     load_sm.add_cell(&[node0])?;
@@ -76,7 +76,7 @@ fn thermal_line_recovers_analytical_solution() -> Result<()> {
     let stiffness = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let solution = solve(&stiffness, &rhs)?;
 
-    // ── Comparaison à la solution analytique u(x) = 20 + (Q/k)(1 − x) ──────
+    // ── Compared with the analytical solution u(x) = 20 + (Q/k)(1 − x) ─────
     let tol = 1e-10;
     for (i, node) in nodes.iter().enumerate() {
         let x = i as f64 * h;

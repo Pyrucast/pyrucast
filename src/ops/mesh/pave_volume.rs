@@ -739,12 +739,12 @@ mod tests {
         report("barreau 1×0,25×1", &barreau, 1, Some(0.1), Some(0.25));
 
         // D. Re-entrant solid: the concave corner is what forces the front to
-        //    retenir des facettes pendant que les autres avancent.
+        //    hold facets back while the others advance.
         let ell = ell_skin(6, 0.6, 4);
         report("L rentrant, 1 couche", &ell, 1, Some(0.08), Some(0.2));
         report("L rentrant, 2 couches", &ell, 2, Some(0.06), Some(0.2));
 
-        // E. Montée en taille sur le cube.
+        // E. Scaling up on the cube.
         for n in [8, 12, 16] {
             let s = box_skin(n, n, n);
             report(

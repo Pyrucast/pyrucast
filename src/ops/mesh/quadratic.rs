@@ -54,7 +54,7 @@ type PendingZone = (ElementType, usize, crate::atoms::RgbColor, Vec<NodeId>);
 /// # use pyrucast::ops::mesh;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
 /// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
-/// // Chaque arête gagne son nœud milieu : un SEG2 devient un SEG3.
+/// // Every edge gains its mid-node: a SEG2 becomes a SEG3.
 /// let l = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[2.0, 0.0, 0.0]), 2, ElementType::SEG2)?;
 /// let q = mesh::to_quadratic(&l)?;
 /// assert_eq!(q.element_types()?, vec![ElementType::SEG3]);

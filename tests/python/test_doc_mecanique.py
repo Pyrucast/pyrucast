@@ -1,8 +1,8 @@
-"""Source des exemples Python des pages `book/src/mecanique/*.md`.
+"""Source of the Python examples of the `book/src/mecanique/*.md` pages.
 
-Les lois de comportement s'écrivent toutes de la même façon — déclarer le
-modèle, poser le matériau, dériver la déformation, intégrer — et ces pages ne
-montrent que ce qui les distingue. Le montage commun vit donc ici, hors des
+Behaviour laws are all written the same way — declare the
+model, lay the material, derive the strain, integrate — and these pages
+show only what sets them apart. The common setup therefore lives here, outside
 ancres.
 
 Voir `book/src/developper/documentation-et-tests.md`.
@@ -18,7 +18,7 @@ import pyrucast
 
 
 def _plaque_2d():
-    """Un QUA4 unité, son espace EF, et un déplacement d'essai en traction."""
+    """A unit QUA4, its FE space, and a trial displacement in tension."""
     c = pyrucast.Coords(2)
     n = [c.add_node(p) for p in ([0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0])]
     mesh = pyrucast.Mesh(c, "QUA4")
@@ -32,7 +32,7 @@ def _plaque_2d():
 
 
 def _cube_3d():
-    """Un HEX8 unité : les lois en « solid » exigent un espace 3-D."""
+    """A unit HEX8: the laws in "solid" require a 3-D space."""
     c = pyrucast.Coords(3)
     base = [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]]
     n = [c.add_node([float(x), float(y), float(z)]) for z in (0, 1) for x, y, _ in base]
@@ -48,7 +48,7 @@ def _cube_3d():
 
 
 def _poutre_1d(dim=1):
-    """Une poutre de deux SEG2, dans un `Coords` de la dimension demandée."""
+    """A beam of two SEG2, in a `Coords` of the requested dimension."""
     c = pyrucast.Coords(dim)
     zero = [0.0] * dim
     noeuds = []
@@ -77,9 +77,9 @@ materials = pyrucast.element_field.material_field(
     model, [("E", 210_000.0), ("nu", 0.3), ("sigma_y", 250.0)]
 )
 
-# Déformation ε(B) issue du champ de déplacement courant (op géométrique).
+# Strain ε(B) from the current displacement field (a geometric op).
 strain = pyrucast.element_field.deformation(u, fes)
-# Intégration A→B : `prev` = sortie du pas précédent (None au premier pas).
+# Integration A→B: `prev` = the previous step's output (None at the first step).
 state = pyrucast.element_field.integrate_behavior(
     model, strain, materials, prev=prev_state
 )
@@ -118,11 +118,11 @@ materials = pyrucast.element_field.material_field(
     model, [("E", 150_000.0), ("nu", 0.3), ("K", 400.0), ("n", 5.0)]
 )
 
-# Le pas de temps est obligatoire : sans lui la loi refuse d'intégrer.
+# The time step is mandatory: without it the law refuses to integrate.
 strain = pyrucast.element_field.deformation(u, fes)
 state = pyrucast.element_field.integrate_behavior(model, strain, materials, dt=1e-3)
 
-# La sortie devient le `prev` du pas suivant.
+# The output becomes the next step's `prev`.
 state = pyrucast.element_field.integrate_behavior(
     model, strain, materials, prev=state, dt=1e-3
 )
@@ -184,7 +184,7 @@ materials = pyrucast.element_field.material_field(
 )
 strain = pyrucast.element_field.deformation(u, fes)
 state = pyrucast.element_field.integrate_behavior(model, strain, materials)
-# `state` porte d_plus, d_minus, r_plus, r_minus — et redevient le `prev` du pas suivant.
+# `state` carries d_plus, d_minus, r_plus, r_minus — and becomes the next step's `prev`.
 # ANCHOR_END: damage_tc
 assert len(state) == 1
 

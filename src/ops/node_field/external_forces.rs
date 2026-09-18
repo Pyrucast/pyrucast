@@ -58,8 +58,8 @@ use crate::models::{kernel, MatrixKind, ResidualContribution};
 /// # let mut mat = ElementField::new(&fes, vec!["k".into()])?;
 /// # mat.get(0)?.write().set_uniform("k", 1.0)?;
 /// let volume = model::heat_conduction(&fes)?;
-/// // La conduction seule n'a aucun terme à droite du signe égal : le champ
-/// // revient vide, et c'est la réponse juste.
+/// // Conduction alone has no term on the right of the equals sign: the field
+/// // comes back empty, and that is the right answer.
 /// assert_eq!(node_field::external_forces(&volume, &mat)?.len(), 0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -113,9 +113,9 @@ pub fn external_forces(model: &Model, materials: &ElementField) -> Result<NodeFi
         };
         for zone in built {
             // `r = Σ rᵢ` is a **sum**, not a stack: two terms may load the same node in
-            // peuvent charger le même nœud dans la même composante, et une
-            // vue d'agrégat en choisirait un au lieu de les ajouter. `+` fait
-            // l'union des supports et somme ce qui se recouvre.
+            // may load the same node in the same component, and an aggregate view would
+            // pick one instead of adding them. `+` unions the supports and sums what
+            // overlaps.
             let mut one = NodeField::empty();
             one.add_sub(zone)?;
             out = (&out + &one)?;

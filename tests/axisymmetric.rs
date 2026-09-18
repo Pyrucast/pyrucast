@@ -612,7 +612,7 @@ fn a_boundary_mesh_is_not_a_solid() -> Result<()> {
     Ok(())
 }
 
-// ─── Lois non linéaires : équivalence avec la loi 3-D ────────────────────────
+// ─── Nonlinear laws: equivalence with the 3-D law ───────────────────────────
 
 /// A single-cell model of `kind` ("plasticity" / "mazars") on the given
 /// geometry, plus its material field. `axisymmetric` picks the meridian-plane

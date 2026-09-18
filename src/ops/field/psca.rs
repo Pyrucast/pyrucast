@@ -50,8 +50,8 @@ use crate::error::Result;
 /// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
 /// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
 /// # }
-/// // Le produit scalaire **composante par composante**, sommé : un champ
-/// // à une composante, nommée `psca`.
+/// // The scalar product **component by component**, summed: a field with one
+/// // component, named `psca`.
 /// let a = champ(vec!["u_x".into(), "u_y".into()]);
 /// a.get(0)?.write().add_to_component("u_x", 3.0)?;
 /// a.get(0)?.write().add_to_component("u_y", 4.0)?;

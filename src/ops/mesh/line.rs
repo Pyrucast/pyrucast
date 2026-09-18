@@ -27,7 +27,7 @@ use crate::error::{PyrucastError, Result};
 /// // Un segment discrétisé : n mailles, n+1 nœuds.
 /// let l = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[3.0, 0.0, 0.0]), 3, ElementType::SEG2)?;
 /// assert_eq!(l.cell_count(), 3);
-/// // En quadratique, les nœuds milieux s'ajoutent.
+/// // In quadratic, the mid-nodes are added.
 /// let q = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[3.0, 0.0, 0.0]), 3, ElementType::SEG3)?;
 /// assert_eq!(q.cell_count(), 3);
 /// # Ok::<(), pyrucast::PyrucastError>(())

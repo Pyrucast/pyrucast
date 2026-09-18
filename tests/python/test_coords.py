@@ -59,7 +59,7 @@ def test_set_position_via_node():
 
 
 def test_node_coords_returns_owning_coords():
-    # Le `Coords` se récupère depuis le nœud même si la poignée d'origine
+    # The `Coords` is recovered from the node even if the original handle
     # a disparu côté Python.
     n = pyrucast.Coords(2).add_node([1.0, 2.0])
     pygc.collect()

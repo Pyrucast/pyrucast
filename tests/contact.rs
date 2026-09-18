@@ -136,8 +136,8 @@ fn patch_test_uniform_pressure_through_contact() -> Result<()> {
         top_edge.add_cell(&[tb.top[idx(i, N)].id(), tb.top[idx(i + 1, N)].id()])?;
     }
     let top_fes = FiniteElementSpace::lagrange1(&top_edge)?;
-    // La pression est un terme du modèle : elle le rejoint, sa densité rejoint
-    // le matériau, et on lui demande sa contribution.
+    // The pressure is a term of the model: it joins it, its density joins
+    // the material, and we ask it for its contribution.
     let model = tb
         .model
         .union(&model::flux(&top_fes, &tb.model, "f_y".into())?)?;

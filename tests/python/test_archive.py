@@ -95,7 +95,7 @@ def test_valeurs_simples(tmp_path):
         chemin,
         {
             "actif": True,
-            "pas": 12,
+            "step": 12,
             "dt": 0.05,
             "cas": "charge répartie",
             "instants": [0.0, 0.1, 0.2],
@@ -106,7 +106,7 @@ def test_valeurs_simples(tmp_path):
     )
     o = pyrucast.load(chemin)
     assert o["actif"] is True
-    assert o["pas"] == 12
+    assert o["step"] == 12
     assert o["dt"] == 0.05
     assert o["cas"] == "charge répartie"
     assert o["instants"] == [0.0, 0.1, 0.2]
@@ -152,7 +152,7 @@ def test_le_fichier_est_reproductible(tmp_path):
 
 def test_un_fichier_etranger_est_refuse(tmp_path):
     chemin = tmp_path / "faux.pyr"
-    chemin.write_bytes(b"ceci n'est pas une archive")
+    chemin.write_bytes(b"this is not an archive")
     with pytest.raises(RuntimeError, match="signature"):
         pyrucast.load(str(chemin))
 

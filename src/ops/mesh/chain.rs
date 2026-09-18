@@ -68,7 +68,7 @@ use std::collections::HashMap;
 /// # use pyrucast::ops::mesh;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
 /// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
-/// // Réordonne des segments épars en une ligne continue. Une ligne déjà
+/// // Reorders scattered segments into a continuous line. A line already
 /// // chaînée en ressort inchangée.
 /// let l = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[3.0, 0.0, 0.0]), 3, ElementType::SEG2)?;
 /// assert_eq!(mesh::chain(&l)?.cell_count(), 3);

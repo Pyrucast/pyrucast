@@ -71,7 +71,7 @@ const ALPHA: &str = "alpha";
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = mesh::poi1_from_nodes(&n).unwrap();
-/// // ε_th = α(T − T_ref)·I : purement sphérique, et **nulle à la
+/// // ε_th = α(T − T_ref)·I: purely spherical, and **zero at the
 /// // température de référence**.
 /// # let mut t = ElementField::new(&fes, vec!["T".into()])?;
 /// # t.get(0)?.write().set_uniform("T", 120.0)?;
@@ -80,7 +80,7 @@ const ALPHA: &str = "alpha";
 /// let eps = element_field::thermal_strain(&t, &m, &fes, 20.0)?;
 /// assert!((eps.get(0)?.read().value(0, 0, "eps_xx")? - 1e-3).abs() < 1e-12);
 /// assert!(eps.get(0)?.read().value(0, 0, "eps_xy")?.abs() < 1e-15);
-/// // À T = T_ref, rien.
+/// // At T = T_ref, nothing.
 /// let nulle = element_field::thermal_strain(&t, &m, &fes, 120.0)?;
 /// assert!(nulle.get(0)?.read().value(0, 0, "eps_xx")?.abs() < 1e-15);
 /// # Ok::<(), pyrucast::PyrucastError>(())

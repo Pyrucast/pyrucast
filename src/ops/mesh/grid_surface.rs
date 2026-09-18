@@ -155,8 +155,8 @@ use crate::ops::mesh::{contour, paving};
 /// #     .union(&cote(&[0.0, 2.0], &[0.0, 0.0])).unwrap();
 /// # mesh::merge_nodes(&quatre, 1e-6, true).unwrap();
 /// # let contour = mesh::consolidate(&quatre).unwrap();
-/// // Cœur en grille orientée sur le contour, plus une bande frontale de
-/// // `band` rangées pour raccorder la grille au bord.
+/// // A core grid oriented on the contour, plus a frontal band of
+/// // `band` rows to join the grid to the border.
 /// let m = mesh::grid_surface(&contour, ElementType::QUA4, Some(0.5), 1, false, mesh::FrontRelax::Free)?;
 /// assert!(m.cell_count() > 0);
 /// # Ok::<(), pyrucast::PyrucastError>(())

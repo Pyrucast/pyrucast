@@ -40,7 +40,7 @@ use crate::models::symmetry::MaterialSymmetry;
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// // Un sous-modèle par sous-espace : le modèle couvre **tout** l'espace EF.
+/// // One sub-model per subspace: the model covers the **whole** FE space.
 /// let m = model::heat_conduction(&fes)?;
 /// assert_eq!(m.len(), fes.len());
 /// assert_eq!(m.primal_vars(), vec!["T".to_string()]);

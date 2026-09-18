@@ -725,9 +725,9 @@ def methodes_de(nom_classe, methodes):
 VERIFICATIONS = {
     "includes": ("resolution of the book's includes", check_includes),
     "fences": ("no page owns code", check_fences),
-    "symboles": ("symboles cités en prose", check_symboles),
+    "symboles": ("symbols cited in prose", check_symboles),
     "doctests": ("doctest coverage ratchet", check_doctests),
-    "api-python": ("cliquet de citation de l'API Python", check_api_python),
+    "api-python": ("Python API citation ratchet", check_api_python),
 }
 
 

@@ -40,10 +40,10 @@ def test_divergence_rejects_a_name_of_neither_rank():
 
 
 def test_divergence_of_a_tensor_is_a_vector():
-    """Le même opérateur, un rang au-dessus : le préfixe suffit à trancher.
+    """The same operator, one rank up: the prefix is enough to settle it.
 
-    La divergence d'un tenseur des contraintes uniforme est de somme nulle —
-    c'est l'équilibre global, et ce sont les forces internes d'un solide.
+    The divergence of a uniform stress tensor sums to zero —
+    this is the global equilibrium, and these are a solid's internal forces.
     """
     c = pyrucast.Coords(2)
     n = [c.add_node(p) for p in ([0.0, 0.0], [2.0, 0.0], [0.0, 2.0])]

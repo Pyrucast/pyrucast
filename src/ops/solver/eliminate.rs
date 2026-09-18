@@ -103,8 +103,8 @@ struct SlaveInfo {
 /// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
 /// #                                      vec!["imposed_T".into()]).unwrap();
 /// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
-/// // L'artefact coûteux de l'élimination, mis en cache sur la matrice tout
-/// // comme la factorisation LU — et vidé dès que la matrice change.
+/// // The elimination's costly artefact, cached on the matrix just like the LU
+/// // factorization — and cleared as soon as the matrix changes.
 /// # use pyrucast::ops::solver::eliminate::Condensation;
 /// # use pyrucast::ops::model;
 /// assert!(k.cached_factorization::<Condensation>().is_none());
@@ -170,8 +170,8 @@ pub struct Condensation {
 /// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
 /// #                                      vec!["imposed_T".into()]).unwrap();
 /// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
-/// // La voie **alternative** à Lagrange : on élimine les esclaves au lieu
-/// // d'agrandir le système. Même solution, système plus petit.
+/// // The **alternative** path to Lagrange: the slaves are eliminated instead
+/// // of enlarging the system. Same solution, smaller system.
 /// let par_elimination = solver::eliminate::solve(&k, &modele, &charge)?;
 /// let par_lagrange = solver::lu::solve(&k, &charge)?;
 /// let lu = |f: &NodeField| f.get(0).unwrap().read().value(n[2].id(), "T").unwrap();
@@ -217,7 +217,7 @@ pub fn solve(matrix: &Matrix, model: &Model, rhs: &NodeField) -> Result<NodeFiel
 /// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
 /// # use pyrucast::ops::solver::lu::SolveOptions;
 /// # use pyrucast::ops::model;
-/// // `method` choisit le moteur direct du système **réduit** ; `cache`
+/// // `method` picks the **reduced** system's direct engine; `cache`
 /// // pilote la condensation.
 /// let u = solver::eliminate::solve_with_options(
 ///     &k, &modele, &charge, &SolveOptions::default())?;

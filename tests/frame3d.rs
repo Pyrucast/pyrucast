@@ -57,7 +57,7 @@ fn frame3d_cantilever_bending_and_torsion() -> Result<()> {
     }
     let fes = FiniteElementSpace::new(&mesh, Interpolation::ModelEmbedded)?;
 
-    // ── Modèle : cadre 3-D + encastrement complet (6 DOFs) à la base ───────
+    // ── Model: 3-D frame + full clamping (6 DOFs) at the base ──────────────
     let clamp = |target: &Model, node: &Node, var: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);
         let multiplier = mesh::barycenter(&imposed)?;
@@ -82,7 +82,7 @@ fn frame3d_cantilever_bending_and_torsion() -> Result<()> {
         ],
     )?;
 
-    // ── Chargement : f_y, f_z et m_x au bout libre ─────────────────────────
+    // ── Loading: f_y, f_z and m_x at the free end ──────────────────────────
     let mut load_sm = SubMesh::new(coords.clone(), ElementType::POI1);
     load_sm.add_cell(&[nodes[N].id()])?;
     let load_sm = Handle::new(load_sm);
@@ -96,7 +96,7 @@ fn frame3d_cantilever_bending_and_torsion() -> Result<()> {
     // ── Assemblage + résolution ────────────────────────────────────────────
     let solution = solve(&pyrucast::ops::matrix::stiffness(&model, &materials)?, &rhs)?;
 
-    // ── Comparaison à l'analytique (élément exact ⇒ nodalement exact) ──────
+    // ── Compared with the analytical solution (exact element ⇒ nodally exact) ─
     let tip = nodes[N].id();
     let uy = PY * L.powi(3) / (3.0 * E * IZ) + PY * L / (G * ASY);
     let uz = PZ * L.powi(3) / (3.0 * E * IY) + PZ * L / (G * ASZ);

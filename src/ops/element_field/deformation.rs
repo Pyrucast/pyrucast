@@ -56,13 +56,13 @@ use crate::ops::element_field::gradient::AXES;
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = mesh::poi1_from_nodes(&n).unwrap();
-/// // ε = ½(∇u + ∇uᵀ) aux points de Gauss. Une **translation** d'ensemble
-/// // ne déforme rien.
+/// // ε = ½(∇u + ∇uᵀ) at the Gauss points. An overall **translation**
+/// // deforms nothing.
 /// let u = NodeField::from_submesh(&support.get(0)?, vec!["u_x".into(), "u_y".into()])?;
 /// u.get(0)?.write().add_to_component("u_x", 0.5)?;
 /// let eps = element_field::deformation(&u, &fes)?;
 /// assert!(eps.get(0)?.read().value(0, 0, "eps_xx")?.abs() < 1e-12);
-/// // Un étirement uniforme en x, lui, se lit tel quel : u_x = 0,1·x donne
+/// // A uniform stretch in x, though, reads as is: u_x = 0.1·x gives
 /// // ε_xx = 0,1.
 /// # let x = node_field::positions(&maillage, None)?;
 /// let etire = NodeField::from_submesh(&support.get(0)?, vec!["u_x".into(), "u_y".into()])?;
@@ -79,8 +79,8 @@ pub fn deformation(u: &NodeField, fespace: &FiniteElementSpace) -> Result<Elemen
     let view = u.view()?;
     let mut out = ElementField::empty();
     for sub in fespace {
-        // Cet opérateur interpole : il lui faut une base de champ, et c'est un
-        // fait de la zone, tranché ici plutôt qu'à chaque point de Gauss.
+        // This operator interpolates: it needs a field basis, and that is a fact of
+        // the zone, settled here rather than at every Gauss point.
         kernel::require_field_basis(sub, "shape values")?;
         let (space_dim, axisymmetric) = {
             let s = sub.read();

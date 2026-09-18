@@ -71,14 +71,14 @@ pub(crate) fn material_contract(
 /// ```
 /// # use pyrucast::models::tensor::Kinematics;
 /// # use pyrucast::models::continuum::elastic;
-/// // Contraintes planes : σ_zz = 0, la souplesse hors plan est condensée.
-/// // Déformations planes : ε_zz = 0, le matériau est plus **raide**.
+/// // Plane stress: σ_zz = 0, the out-of-plane compliance is condensed.
+/// // Plane strain: ε_zz = 0, the material is **stiffer**.
 /// let cp = elastic::constitutive(210e3, 0.3, Kinematics::PlaneStress, 2);
 /// let dp = elastic::constitutive(210e3, 0.3, Kinematics::PlaneStrain, 2);
 /// assert!(dp[0][0] > cp[0][0]);
 /// // En contraintes planes, D₀₀ = E/(1−ν²).
 /// assert!((cp[0][0] - 210e3 / (1.0 - 0.09)).abs() < 1e-6);
-/// // Le bloc de cisaillement vaut μ dans les deux cas (Voigt de l'ingénieur).
+/// // The shear block is μ in both cases (engineering Voigt).
 /// assert!((cp[2][2] - dp[2][2]).abs() < 1e-6);
 /// ```
 pub fn constitutive(e: f64, nu: f64, kinematics: Kinematics, space_dim: usize) -> Vec<Vec<f64>> {
@@ -96,7 +96,7 @@ pub fn constitutive(e: f64, nu: f64, kinematics: Kinematics, space_dim: usize) -
 /// ```
 /// # use pyrucast::models::continuum::elastic;
 /// # use pyrucast::models::tensor::Kinematics;
-/// // La même matrice que `constitutive`, écrite sur la pile : `v` dit
+/// // The same matrix as `constitutive`, written on the stack: `v` tells
 /// // combien de lignes et de colonnes ont été remplies.
 /// let mut d = [[0.0_f64; 6]; 6];
 /// let v = elastic::constitutive_into(210_000.0, 0.3, Kinematics::PlaneStress, 2, &mut d);

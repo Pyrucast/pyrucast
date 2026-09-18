@@ -8,8 +8,8 @@
 ///
 /// ```
 /// # use pyrucast::atoms::{Point2, Vector2};
-/// // Un **point** : une position. Sa différence avec un autre est un
-/// // vecteur, ce que le typage impose plutôt que de le laisser au lecteur.
+/// // A **point**: a position. Its difference with another is a vector, which
+/// // the typing imposes rather than leave it to the reader.
 /// let a = Point2::new(1.0, 2.0);
 /// let v: Vector2 = Point2::new(4.0, 6.0) - a;
 /// assert_eq!(v, Vector2::new(3.0, 4.0));
@@ -29,7 +29,7 @@ pub type Point3 = nalgebra::Point3<f64>;
 ///
 /// ```
 /// # use pyrucast::atoms::Vector2;
-/// // Un **déplacement**, pas une position : il s'additionne, se norme et
+/// // A **displacement**, not a position: it adds up, has a norm and
 /// // se produit scalairement.
 /// let u = Vector2::new(3.0, 4.0);
 /// assert_eq!(u.norm(), 5.0);

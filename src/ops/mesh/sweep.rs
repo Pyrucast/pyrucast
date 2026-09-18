@@ -33,8 +33,8 @@ use crate::handle::Handle;
 /// # use pyrucast::ops::mesh;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
 /// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
-/// // Deux lignes **conformes** cousues par des QUA4 : le maillage n'est
-/// // pas une extrusion, les deux bords pouvant différer.
+/// // Two **conforming** lines stitched by QUA4: the mesh is
+/// // not an extrusion, the two borders being allowed to differ.
 /// let a = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[1.0, 0.0, 0.0]), 2, ElementType::SEG2)?;
 /// let b = mesh::line(&p(&[0.0, 1.0, 0.0]), &p(&[2.0, 1.0, 0.0]), 2, ElementType::SEG2)?;
 /// let s = mesh::sweep(&a, &b, 1, ElementType::QUA4)?;

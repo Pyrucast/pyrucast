@@ -1,4 +1,4 @@
-"""`border` : bord d'une surface, avec découpe optionnelle en arêtes par angle."""
+"""`border`: a surface's border, with optional splitting into edges by angle."""
 
 import pyrucast
 
@@ -24,7 +24,7 @@ def test_border_default_is_one_closed_loop():
 
 def test_border_angle_splits_into_open_aretes():
     mesh = _unit_square_quad()
-    # Quatre coins à 90° → quatre arêtes ouvertes d'un segment chacune.
+    # Four corners at 90° → four open edges of one segment each.
     b = pyrucast.mesh.border(mesh, angle_deg=45.0)
     assert len(b) == 4
     assert b.cell_counts() == [1, 1, 1, 1]

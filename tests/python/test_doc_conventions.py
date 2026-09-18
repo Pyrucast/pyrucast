@@ -1,4 +1,4 @@
-"""Source des exemples Python de `book/src/conventions.md` et
+"""Source of the Python examples of `book/src/conventions.md` and
 `thermomecanique-pas-a-pas.md`.
 
 **The code lives at module level, not inside test functions**: mdbook does not
@@ -16,7 +16,7 @@ import pyrucast
 _c = pyrucast.Coords(3)
 _base = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]]
 _n = [_c.add_node([x, y, z]) for z in (0.0, 1.0) for x, y, _ in _base]
-# Un HEX8 : `skin()` a besoin d'un volume pour rendre une peau.
+# A HEX8: `skin()` needs a volume to return a skin.
 maillage = pyrucast.Mesh(_c, "HEX8")
 maillage.unit().add_cell(_n)
 
@@ -42,7 +42,7 @@ rhs[0].set_value(_mult.node(0, 0, 0), "imposed_T", 1.0)
 # ── Le verbe exposé aussi en méthode ────────────────────────────────────────
 
 # ANCHOR: chainage
-# chaînage, quand les trois conditions tiennent :
+# chaining, when the three conditions hold:
 peau = maillage.skin().consolidate()
 libre = champ.select(ge=0.0)
 eps = u.gradient(fes)
@@ -60,7 +60,7 @@ assert f.components() == ["v", "w"]
 # ANCHOR: miroir
 import pyrucast
 
-# fonctions (opérateurs), rangées par conteneur produit — pas des méthodes :
+# functions (operators), laid out by produced container — not methods:
 poi = pyrucast.mesh.to_poi1(mesh)
 coords = pyrucast.node_field.positions(mesh)
 eps = pyrucast.element_field.deformation(u, fes)
@@ -93,11 +93,11 @@ c.add_node([0.0, 0.0])
 
 print(repr(c))  # vue structurelle — __repr__
 print(str(c))  # vue résumée cast3m — __str__
-print(c)  # même chose que str(c)
+print(c)  # same as str(c)
 # ANCHOR_END: affichage
 
 
-# ── Thermo-mécanique : les clés d'un résultat ───────────────────────────────
+# ── Thermo-mechanics: a result's keys ───────────────────────────────────────
 
 # ANCHOR: cles_resultat
 {
@@ -112,12 +112,12 @@ print(c)  # même chose que str(c)
 # ANCHOR_END: cles_resultat
 
 
-# ── Thermo-mécanique pas-à-pas : la mise en donnée complète ─────────────────
+# ── Step-by-step thermo-mechanics: the full setup ───────────────────────────
 
 
 def _modele_thermomecanique():
-    """Une plaque 2×2 QUA4 : conduction + élasticité + appuis, et son histoire
-    de température. Le montage complet est dans `examples/thermomechanique_pas_a_pas.py`."""
+    """A 2×2 QUA4 plate: conduction + elasticity + supports, and its history
+    of temperature. The full setup is in `examples/thermomechanique_pas_a_pas.py`."""
     import pyrucast as pc
 
     nx = ny = 2
@@ -179,7 +179,7 @@ import pyrucast as pc
 
 data = {
     "times": [0.0, 0.25, 0.5, 0.75, 1.0],
-    "model": model,  # fespace + maillage déduits du modèle
+    "model": model,  # fespace + mesh deduced from the model
     "loads": loads,  # NodeField unioné ou Evolution de champ
     "materials": materials,  # ElementField unioné ou Evolution de champ
     "t_ref": 20.0,

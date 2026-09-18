@@ -65,8 +65,8 @@ use crate::handle::Handle;
 /// # let modele = model::elasticity(&fes, Kinematics::PlaneStress).unwrap();
 /// # let materiaux = element_field::material_field(&modele,
 /// #     &[("E", 210e3), ("nu", 0.3)]).unwrap();
-/// // La loi de comportement, intégrée point de Gauss par point de Gauss :
-/// // une déformation entre, une contrainte sort. En élasticité linéaire,
+/// // The behaviour law, integrated Gauss point by Gauss point: a strain goes
+/// // in, a stress comes out. In linear elasticity,
 /// // σ_xx = E/(1−ν²)·ε_xx.
 /// let mut eps = ElementField::new(&fes,
 ///     vec!["eps_xx".into(), "eps_yy".into(), "eps_xy".into()])?;
@@ -333,9 +333,9 @@ mod tests {
         let state = integrate(&model, &def, None, &materials, None).unwrap();
         assert_eq!(state.len(), 1);
         let s = state.get(0).unwrap().read();
-        // Le champ d'état porte les efforts de section **et** `Φ` : la poutre
-        // exacte tient son interpolation du matériau, et son résidu relit ce
-        // rapport à chaque itération.
+        // The state field carries the section forces **and** `Φ`: the exact beam gets
+        // its interpolation from the material, and its residual reads that ratio again
+        // at every iteration.
         assert_eq!(
             s.components(),
             &[

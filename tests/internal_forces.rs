@@ -254,7 +254,7 @@ fn timoshenko_frame_3d_internal_forces_match_k_times_u() -> Result<()> {
         &fes,
         &model::timoshenko(&fes)?,
         // Both planes carry their **own** `Φ`: inertias and
-        // sections réduites différentes les distinguent, et un appariement
+        // different reduced sections set them apart, and a pairing
         // croisé se verrait.
         &[
             ("E", 210_000.0),

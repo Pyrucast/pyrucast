@@ -60,7 +60,7 @@ pub(crate) const AXES: [&str; 3] = ["x", "y", "z"];
 /// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
 /// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
 /// # }
-/// // ∇T aux points de Gauss. Sur ce triangle T croît de 10 à 50 sur deux
+/// // ∇T at the Gauss points. On this triangle T grows from 10 to 50 over two
 /// // unités en x : le gradient vaut 20.
 /// let g = element_field::gradient(&temp, &fes)?;
 /// assert!((g.get(0)?.read().value(0, 0, "grad_T_x")? - 20.0).abs() < 1e-9);

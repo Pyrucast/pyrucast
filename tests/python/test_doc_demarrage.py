@@ -1,12 +1,12 @@
-"""Source des exemples Python de `book/src/installation.md` et
+"""Source of the Python examples of `book/src/installation.md` and
 `book/src/formation/maillage.md`.
 
-Ces deux extraits ouvrent une **fenêtre interactive**, ce qui est précisément
-leur objet : le premier vérifie que la couche de visualisation est bien
-compilée, le second montre la vue à la souris. Ils restent néanmoins
+These two excerpts open an **interactive window**, which is precisely
+their purpose: the first checks that the visualization layer really is
+compiled, the second shows the view under the mouse. They nonetheless stay
 exécutables, parce qu'ils portent la garde qu'un utilisateur écrirait de
-toute façon pour un script qui doit tourner aussi en intégration continue —
-la même condition que winit teste lui-même (`DISPLAY` ou `WAYLAND_DISPLAY`).
+anyway for a script that must also run in continuous integration —
+the same condition winit tests itself (`DISPLAY` or `WAYLAND_DISPLAY`).
 
 **The code lives at module level, not inside test functions**: mdbook does not
 strip the indentation of an included excerpt. pytest therefore runs this file
@@ -21,8 +21,8 @@ import tempfile
 
 import pyrucast
 
-# Les extraits écrivent des fichiers sous des noms courts ; le module bascule
-# dans un dossier jetable et **rend** le répertoire courant à la fin.
+# The excerpts write files under short names; the module switches
+# into a throwaway folder and **gives the current directory back** at the end.
 _TMP = tempfile.TemporaryDirectory()
 _CWD = os.getcwd()
 os.chdir(_TMP.name)
@@ -42,8 +42,8 @@ b = c.add_node([1.0, 0.0])
 mesh = pyrucast.Mesh(c, "SEG2")  # un sous-maillage
 mesh.unit().add_cell([a, b])
 
-# Sans écran (intégration continue, session distante), `plot()` échouerait :
-# on retombe sur un fichier. C'est la condition que winit teste lui-même.
+# Without a screen (continuous integration, a remote session), `plot()` would fail:
+# we fall back to a file. That is the condition winit tests itself.
 ecran = os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
 mesh.plot(save=None if ecran else "apercu.svg")
 
@@ -63,10 +63,10 @@ plaque = pyrucast.Mesh(_c, "QUA4")
 plaque.unit().add_cell(_coins)
 
 # ANCHOR: plot_interactif
-plaque.plot(save="plaque.svg")  # export sans fenêtre
+plaque.plot(save="plaque.svg")  # export without a window
 
 # Fenêtre interactive (souris) — seulement s'il y a un écran, sinon `plot`
-# lève : ni DISPLAY ni WAYLAND_DISPLAY n'est défini.
+# raises: neither DISPLAY nor WAYLAND_DISPLAY is set.
 if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
     plaque.plot(save=None)
 # ANCHOR_END: plot_interactif

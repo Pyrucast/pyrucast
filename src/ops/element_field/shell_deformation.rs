@@ -80,8 +80,8 @@ const DOFS: [&str; 6] = ["u_x", "u_y", "u_z", "r_x", "r_y", "r_z"];
 /// # let noms = ["u_x", "u_y", "u_z", "r_x", "r_y", "r_z"]
 /// #     .iter().map(|s| s.to_string()).collect();
 /// # let mut u = SubNodeField::from_poi1(&support, noms)?;
-/// // Un étirement uniforme le long de `x` : la facette est dans le plan
-/// // z = 0 et sa première arête suit `x`, donc le repère local est le
+/// // A uniform stretch along `x`: the facet lies in the z = 0 plane and its
+/// // first edge follows `x`, so the local frame is the
 /// // repère global.
 /// u.set_value(n[1].id(), "u_x", 0.1)?;
 /// let d = shell_deformation(&NodeField::from_sub(u), &fes, ShellModel::Thick)?;

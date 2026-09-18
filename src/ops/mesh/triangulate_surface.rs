@@ -69,8 +69,8 @@ const MIN_ANGLE_DEG: f64 = 20.0;
 /// #     .union(&cote(&[0.0, 2.0], &[0.0, 0.0])).unwrap();
 /// # mesh::merge_nodes(&quatre, 1e-6, true).unwrap();
 /// # let contour = mesh::consolidate(&quatre).unwrap();
-/// // Le mailleur par triangulation contrainte : le contour est **respecté
-/// // à l'arête près**, et la taille cible pilote le raffinement.
+/// // The constrained triangulation mesher: the contour is **respected
+/// // edge for edge**, and the target size drives the refinement.
 /// let m = mesh::triangulate_surface(&contour, ElementType::TRI3, Some(0.5))?;
 /// assert!(m.cell_count() > 0);
 /// assert_eq!(m.element_types()?, vec![ElementType::TRI3]);

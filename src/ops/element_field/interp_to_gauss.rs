@@ -54,12 +54,12 @@ use crate::models::kernel::MAX_CELL_DOFS;
 /// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
 /// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
 /// # }
-/// // Un champ **nodal** porté aux points de Gauss par les fonctions de
-/// // forme — ce qu'attend une loi de comportement, qui travaille au point
+/// // A **nodal** field carried to the Gauss points by the shape functions —
+/// // what a behaviour law expects, working at the point
 /// // d'intégration.
 /// let g = element_field::interp_to_gauss(&temp, &fes)?;
 /// assert_eq!(g.get(0)?.read().components(), &["T".to_string()]);
-/// // Aux milieux d'arêtes du TRI3, la moyenne des deux nœuds concernés.
+/// // At the TRI3's edge midpoints, the mean of the two nodes involved.
 /// assert!((g.get(0)?.read().value(0, 0, "T")? - 30.0).abs() < 1e-9);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -68,8 +68,8 @@ pub fn interp_to_gauss(field: &NodeField, fespace: &FiniteElementSpace) -> Resul
     let view = field.view()?;
     let mut out = ElementField::empty();
     for sub in fespace {
-        // Cet opérateur interpole : il lui faut une base de champ, et c'est un
-        // fait de la zone, tranché ici plutôt qu'à chaque point de Gauss.
+        // This operator interpolates: it needs a field basis, and that is a fact of
+        // the zone, settled here rather than at every Gauss point.
         kernel::require_field_basis(sub, "shape values")?;
         // Point kernel: value at Gauss g = Σ_i N_i(g) · f_i, per component.
         let nc = components.len();

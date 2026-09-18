@@ -24,8 +24,8 @@ use std::fmt;
 ///
 /// ```
 /// # use pyrucast::atoms::{ElementType, QuadratureRule};
-/// // La règle d'intégration, choisie par sous-espace EF. Ses poids somment
-/// // à la mesure de l'élément de référence — 1/2 pour un triangle.
+/// // The integration rule, chosen per FE subspace. Its weights sum to the
+/// // reference element's measure — 1/2 for a triangle.
 /// let (_xi, w) = QuadratureRule::Gauss.points(ElementType::TRI3)?;
 /// assert!((w.iter().sum::<f64>() - 0.5).abs() < 1e-12);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -61,7 +61,7 @@ impl QuadratureRule {
     /// ```
     /// # use pyrucast::atoms::{ElementType, QuadratureRule};
     /// assert!(QuadratureRule::Gauss.is_compatible_with(ElementType::TRI3));
-    /// // Un point n'a pas d'élément de référence sur quoi intégrer.
+    /// // A point has no reference element to integrate over.
     /// assert!(!QuadratureRule::Gauss.is_compatible_with(ElementType::POI1));
     /// ```
     pub fn is_compatible_with(self, element_type: ElementType) -> bool {
@@ -90,10 +90,10 @@ impl QuadratureRule {
     ///
     /// ```
     /// # use pyrucast::atoms::{ElementType, QuadratureRule};
-    /// // `xi` est à plat, ligne-major : n_g × ref_dim ; `w` a n_g entrées.
+    /// // `xi` is flat, row-major: n_g × ref_dim; `w` has n_g entries.
     /// let (xi, w) = QuadratureRule::Gauss.points(ElementType::QUA4)?;
     /// assert_eq!((xi.len(), w.len()), (4 * 2, 4));
-    /// // La somme des poids est la mesure du carré de référence : 4.
+    /// // The weights sum to the reference square's measure: 4.
     /// assert!((w.iter().sum::<f64>() - 4.0).abs() < 1e-12);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```

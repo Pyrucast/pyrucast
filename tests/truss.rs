@@ -30,7 +30,7 @@ fn truss_bar_recovers_axial_elongation() -> Result<()> {
     const L: f64 = 2.0; // length (m)
     const F: f64 = 1000.0; // axial force at the right end (N)
 
-    // ── Maillage : une barre SEG2 horizontale ──────────────────────────────
+    // ── Mesh: one horizontal SEG2 bar ──────────────────────────────────────
     let coords = Handle::new(Coords::new(2)?);
     let n0 = Node::create_in(coords.clone(), &[0.0, 0.0])?;
     let n1 = Node::create_in(coords.clone(), &[L, 0.0])?;
@@ -55,7 +55,7 @@ fn truss_bar_recovers_axial_elongation() -> Result<()> {
     // ── Matériau E, A (Dirichlet ignoré automatiquement) ───────────────────
     let materials = pyrucast::ops::element_field::material_field(&model, &[("E", E), ("A", A)])?;
 
-    // ── Chargement : force axiale F au nœud droit ──────────────────────────
+    // ── Loading: axial force F at the right node ───────────────────────────
     let mut load_sm = SubMesh::new(coords.clone(), ElementType::POI1);
     load_sm.add_cell(&[n1.id()])?;
     let load_sm = Handle::new(load_sm);
@@ -74,7 +74,7 @@ fn truss_bar_recovers_axial_elongation() -> Result<()> {
         (ux - expected).abs() < 1e-10 * expected,
         "u_x = {ux}, attendu {expected}"
     );
-    // Le nœud gauche est encastré, le bout droit ne bouge pas transversalement.
+    // The left node is clamped, the right end does not move transversally.
     assert!(solution.value(n0.id(), "u_x")?.abs() < 1e-18);
     assert!(solution.value(n1.id(), "u_y")?.abs() < 1e-18);
 

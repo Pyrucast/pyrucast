@@ -65,7 +65,7 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
     }
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
 
-    // ── Dirichlet T = 20 sur le bord droit (x = 1) ─────────────────────────
+    // ── Dirichlet T = 20 on the right edge (x = 1) ──────────────────────────
     let right_nodes: Vec<Node> = (0..=N).map(|j| grid[idx(N, j)].clone()).collect();
     let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(&right_nodes)?);
     let multiplier = mesh::barycenter(&imposed)?;
@@ -77,10 +77,10 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
     let dirichlet = model::dirichlet(&conduction, "T", &imposed, &multiplier, Default::default())?;
     let model = conduction.union(&dirichlet)?;
     // ── Chargement ─────────────────────────────────────────────────────────
-    // Source : flux uniforme (densité Q) sur le bord gauche, transformé en
-    // charges nodales cohérentes par l'opérateur `flux` (Cast3m FLUX) — plus de
-    // répartition Q·h / Q·h/2 à la main. Le bord est un maillage SEG2 bâti sur
-    // les nœuds de la grille ; il s'intègre comme une ligne.
+    // Source: uniform flux (density Q) on the left edge, turned into
+    // consistent nodal loads by the `flux` operator (Cast3m FLUX) — no more
+    // Q·h / Q·h/2 distribution by hand. The edge is a SEG2 mesh built on
+    // the grid's nodes; it integrates as a line.
     let mut left_edge = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
     for j in 0..N {
         left_edge.add_cell(&[grid[idx(0, j)].id(), grid[idx(0, j + 1)].id()])?;
@@ -92,7 +92,7 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
         pyrucast::ops::element_field::material_field(&model, &[("k", K), ("phi_q", Q)])?;
     let source = pyrucast::ops::node_field::external_forces(&model, &materials)?;
 
-    // Valeur imposée T = 20 au slot "imposed_T" des nœuds-multiplicateurs.
+    // Imposed value T = 20 at the multiplier nodes' "imposed_T" slot.
     let mut imposed_sm = SubMesh::new(coords.clone(), ElementType::POI1);
     for m in &mults {
         imposed_sm.add_cell(&[m.id()])?;
@@ -103,14 +103,14 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
         imposed_load.set_value(m.id(), "imposed_T", T_IMPOSED)?;
     }
 
-    // Chargement = flux du bord + valeurs imposées (union des zones).
+    // Loading = the edge's flux + the imposed values (union of the zones).
     let rhs = source.union(&NodeField::from_sub(imposed_load))?;
 
     // ── Assemblage + résolution ────────────────────────────────────────────
     let stiffness = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let solution = solve(&stiffness, &rhs)?;
 
-    // ── Comparaison à l'analytique u(x) = 20 + (Q/k)(1 − x), ∀ y ───────────
+    // ── Compared with the analytical u(x) = 20 + (Q/k)(1 − x), ∀ y ─────────
     let tol = 1e-9;
     for j in 0..=N {
         for i in 0..=N {
@@ -124,7 +124,7 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
             );
         }
     }
-    // La réaction totale sur le bord imposé équilibre le flux injecté : Σλ = Q.
+    // The total reaction on the imposed edge balances the injected flux: Σλ = Q.
     let total_reaction: f64 = mults
         .iter()
         .map(|m| solution.value(m.id(), "lambda_T"))

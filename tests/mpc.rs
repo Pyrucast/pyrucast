@@ -162,15 +162,15 @@ fn a_multi_term_reaction_is_spread_by_its_coefficients() -> Result<()> {
     let k = stiffness(&model, &materials)?;
     let solution = solve(&k, &rhs)?;
 
-    // Le sélecteur, c'est le sous-modèle : on pointe la relation, on obtient sa
-    // réaction — sans traverser la conduction, qui n'a rien à dire ici.
+    // The selector is the sub-model: point at the relation, get its
+    // reaction — without crossing the conduction, which has nothing to say here.
     let mut relation_seule = Model::empty();
     relation_seule.add_sub(mpc_h)?;
     let state = ElementField::empty();
     let f_int =
         pyrucast::ops::node_field::internal_forces(&relation_seule, &state, &solution, &materials)?;
 
-    // Les noms se demandent au sous-modèle plutôt que de se deviner.
+    // The names are asked of the sub-model rather than guessed.
     let (mult_name, imposed_name) = {
         let k = mpc_h_names.read();
         let k = k.as_kind();

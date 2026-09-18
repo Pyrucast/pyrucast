@@ -64,12 +64,12 @@ def test_element_cell_view_matches_underlying_mesh():
 
 
 def test_element_repr_and_str():
-    """Résumé et structure d'un `Element` : sans verrou, donc sans type.
+    """Summary and structure of an `Element`: without a lock, hence without a type.
 
-    Une vue ne porte qu'un handle et un indice. Aller chercher le type
-    d'élément demanderait de lire le sous-espace, ce qu'un affichage de
-    diagnostic ne doit pas faire — `repr` s'écrit dans les messages d'erreur,
-    parfois en tenant le verrou en cause. Le type vit dans `dump`, appelé en
+    A view carries only a handle and an index. Going to fetch the type
+    element type would require reading the subspace, which a diagnostic
+    display must not do — `repr` is written in error messages,
+    sometimes while holding the lock at fault. The type lives in `dump`, called
     connaissance de cause.
     """
     _, _, _, fes = _seg2_fes()

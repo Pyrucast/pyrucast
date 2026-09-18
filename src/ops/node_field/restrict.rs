@@ -77,7 +77,7 @@ fn fill_from(sub: &mut SubNodeField, source: &NodeFieldView) {
 /// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
 /// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
 /// # }
-/// // Le champ ramené aux nœuds d'un maillage — un bord, une sélection.
+/// // The field brought back to a mesh's nodes — a border, a selection.
 /// let bout = mesh::poi1_from_nodes(&n[..1])?;
 /// let r = node_field::restrict(&temp, &bout)?;
 /// assert_eq!(r.node_count()?, 1);
@@ -151,9 +151,9 @@ pub fn restrict(field: &NodeField, mesh: &Mesh) -> Result<NodeField> {
 /// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
 /// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
 /// # }
-/// // La même chose en visant le support d'un **autre champ** : le résultat
-/// // s'apparie avec lui sous `same_support`, ce qui est ce qu'exige une
-/// // opération terme à terme.
+/// // The same thing targeting **another field's** support: the result pairs
+/// // with it under `same_support`, which is what a term-by-term operation
+/// // requires.
 /// # let bout = mesh::poi1_from_nodes(&n[..2])?;
 /// let cible = NodeField::from_submesh(&bout.get(0)?, vec!["q".into()])?;
 /// let r = node_field::restrict_like(&temp, &cible)?;

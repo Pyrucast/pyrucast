@@ -144,10 +144,10 @@ pub fn default_imposed_value(imposed_variable: &str) -> String {
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # use pyrucast::models::dirichlet::{self, Dirichlet};
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
-/// // Un appui : `u = u_d` aux nœuds imposés, par multiplicateur de Lagrange.
+/// // A support: `u = u_d` at the imposed nodes, through a Lagrange multiplier.
 /// let d = Dirichlet::new(&cible, "T", &impose, &mult,
 ///                        RelationSense::Equality)?;
-/// // Sans noms donnés, les défauts se dérivent de la variable imposée.
+/// // With no names given, the defaults derive from the imposed variable.
 /// assert_eq!(d.relations()?.len(), 1);
 /// assert_eq!(d.relations()?[0].imposed_value, dirichlet::default_imposed_value("T"));
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -211,10 +211,10 @@ impl Dirichlet {
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # use pyrucast::models::dirichlet::{self, Dirichlet};
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
-    /// // Un appui : `u = u_d` aux nœuds imposés, par multiplicateur de Lagrange.
+    /// // A support: `u = u_d` at the imposed nodes, through a Lagrange multiplier.
     /// let d = Dirichlet::new(&cible, "T", &impose, &mult,
     ///                        RelationSense::Equality)?;
-    /// // Sans noms donnés, les défauts se dérivent de la variable imposée.
+    /// // With no names given, the defaults derive from the imposed variable.
     /// assert_eq!(d.relations()?.len(), 1);
     /// assert_eq!(d.relations()?[0].imposed_value, dirichlet::default_imposed_value("T"));
     /// # Ok::<(), pyrucast::PyrucastError>(())

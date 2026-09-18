@@ -134,7 +134,7 @@ impl Continuum {
     /// // consistencies is violated — here the kinematics and the space.
     /// match Continuum::new(fes.get(0)?, Kinematics::Full3D, "Elasticity") {
     ///     Err(e) => assert!(format!("{e}").starts_with("Elasticity:")),
-    ///     Ok(_) => panic!("une cinématique 3-D dans un espace 2-D est refusée"),
+    ///     Ok(_) => panic!("3-D kinematics in a 2-D space is refused"),
     /// }
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```

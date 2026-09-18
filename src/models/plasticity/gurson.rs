@@ -107,8 +107,8 @@ fn effective_porosity(f: f64, q1: f64, f_c: f64, f_f: f64) -> f64 {
 /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
 /// #                         vars: &[0.001] };
-/// // La porosité **rétrécit** la surface de charge : à contrainte égale, un
-/// // métal plus poreux est plus près de céder.
+/// // Porosity **shrinks** the yield surface: at equal stress, a more porous
+/// // metal is closer to yielding.
 /// let s = [200.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 /// let sain = plasticity::gurson::yield_function(&s, 0.001, &mat)?;
 /// let poreux = plasticity::gurson::yield_function(&s, 0.05, &mat)?;
@@ -170,8 +170,8 @@ fn numerical_normal(sigma: &[f64; 6], f: f64, mat: &MatParams, scale: f64) -> Re
 /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
 /// #                         vars: &[0.001] };
-/// // La porosité **est** l'état : elle croît avec l'écoulement, et c'est
-/// // elle qui mène à la rupture ductile.
+/// // Porosity **is** the state: it grows with the flow, and it is what leads
+/// // to ductile failure.
 /// let trial = [800.0, 400.0, 400.0, 0.0, 0.0, 0.0];
 /// let pas = plasticity::gurson::return_map(&trial, &repos, &mat)?;
 /// assert!(pas.p > 0.0);

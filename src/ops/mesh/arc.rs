@@ -27,8 +27,8 @@ use crate::error::{PyrucastError, Result};
 /// # use pyrucast::ops::mesh;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
 /// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
-/// // Un quart de cercle : `node_a` et `node_b` sont sur l'arc, `center`
-/// // au centre. Le rayon vient de la distance, non d'un argument.
+/// // A quarter circle: `node_a` and `node_b` are on the arc, `center` at the
+/// // centre. The radius comes from the distance, not from an argument.
 /// let a = mesh::arc(&p(&[1.0, 0.0, 0.0]), &p(&[0.0, 0.0, 0.0]),
 ///                   &p(&[0.0, 1.0, 0.0]), 4, ElementType::SEG2)?;
 /// assert_eq!(a.cell_count(), 4);

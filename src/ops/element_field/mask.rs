@@ -102,7 +102,7 @@ where
 /// # }
 /// # let mut f = ElementField::new(&fes, vec!["q".into()])?;
 /// # f.get(0)?.write().set_uniform("q", 5.0)?;
-/// // Un indicateur 0/1 aux points de Gauss, de même forme que l'entrée.
+/// // A 0/1 indicator at the Gauss points, of the same shape as the input.
 /// let haute = Band::new(Some(10.0), None, None, None)?;
 /// assert_eq!(element_field::mask(&f, &haute, None)?
 ///     .get(0)?.read().value(0, 0, "q")?, 0.0);

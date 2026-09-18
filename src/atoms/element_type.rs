@@ -67,7 +67,7 @@ use std::fmt;
 ///
 /// ```
 /// # use pyrucast::atoms::ElementType;
-/// // Chaque variante connaît sa topologie et son nom d'échange.
+/// // Every variant knows its topology and its exchange name.
 /// # use pyrucast::named::Named;
 /// let t = ElementType::from_name("PENTA6").unwrap();
 /// assert_eq!((t.nodes_per_cell(), t.topological_dim()), (6, 3));
@@ -164,7 +164,7 @@ impl ElementType {
     ///
     /// ```
     /// # use pyrucast::atoms::ElementType;
-    /// // Tous les types, sans doublon — la liste que balaient les tests d'exhaustivité.
+    /// // Every type, without duplicates — the list the exhaustiveness tests sweep.
     /// assert!(ElementType::ALL.contains(&ElementType::TRI3));
     /// ```
     pub const ALL: &'static [ElementType] = &[

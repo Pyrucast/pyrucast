@@ -85,7 +85,7 @@ use std::collections::VecDeque;
 /// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
 /// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
 /// # }
-/// // Retourne chaque maille : sa connectivité est lue à l'envers, donc son
+/// // Flips every cell: its connectivity is read backwards, so its
 /// // premier nœud change — et l'inverser deux fois rend l'original.
 /// let i = mesh::invert(&maillage)?;
 /// assert_ne!(i.node(0, 0, 1)?.id(), maillage.node(0, 0, 1)?.id());
@@ -164,7 +164,7 @@ pub fn invert(mesh: &Mesh) -> Result<Mesh> {
 /// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
 /// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
 /// # }
-/// // Réoriente les mailles de proche en proche pour qu'elles s'accordent.
+/// // Reorients the cells step by step so that they agree.
 /// let o = mesh::orient(&maillage)?;
 /// assert_eq!(o.cell_count(), maillage.cell_count());
 /// # Ok::<(), pyrucast::PyrucastError>(())

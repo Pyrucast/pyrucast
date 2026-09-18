@@ -103,8 +103,8 @@ use crate::ops::mesh::paving::cleanup as pass;
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = mesh::poi1_from_nodes(&n).unwrap();
-/// // La **topologie** : qui est voisin de qui. Le bord n'est jamais touché,
-/// // donc un maillage à une seule maille en ressort intact.
+/// // The **topology**: who neighbours whom. The border is never touched,
+/// // so a mesh with a single cell comes out of it untouched.
 /// assert_eq!(mesh::cleanup(&maillage)?.cell_count(), 1);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```

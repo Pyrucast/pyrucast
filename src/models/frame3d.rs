@@ -215,7 +215,7 @@ fn transpose(a: &[[f64; 12]; 12]) -> [[f64; 12]; 12] {
 ///         1e-05, 1e-05, 80000.0, 0.008, 0.008, ke),
 /// )?;
 /// // Portique spatial : axial, torsion et flexion autour de deux axes
-/// // principaux — six DDL par nœud.
+/// // principal ones — six DOFs per node.
 /// assert_eq!((bloc.n_rows(), bloc.n_cols()), (12, 12));
 /// // The raw sum of the entries is not zero: the DOFs mix translations and
 /// // rotations, and only the **translation** mode is rigid. The symmetry,

@@ -241,7 +241,7 @@ pub fn vtk_mesh_string(mesh: &Mesh) -> Result<String> {
 /// # let dossier = std::env::temp_dir()
 /// #     .join(format!("pyrucast_vtk_{}", std::process::id()));
 /// # std::fs::create_dir_all(&dossier).unwrap();
-/// // Le même maillage, plus les valeurs **aux nœuds**.
+/// // The same mesh, plus the values **at the nodes**.
 /// let s = export::vtk::vtk_node_field_string(&maillage, &temp)?;
 /// assert!(s.contains("POINT_DATA 3"));
 /// assert!(s.contains("T"));
@@ -300,8 +300,8 @@ pub fn vtk_node_field_string(mesh: &Mesh, field: &NodeField) -> Result<String> {
 /// # let dossier = std::env::temp_dir()
 /// #     .join(format!("pyrucast_vtk_{}", std::process::id()));
 /// # std::fs::create_dir_all(&dossier).unwrap();
-/// // Et ici les valeurs **par maille** : les points de Gauss sont moyennés
-/// // par cellule, car VTK ne connaît pas de donnée au point d'intégration.
+/// // And here the values **per cell**: the Gauss points are averaged per
+/// // cell, since VTK knows no data at the integration point.
 /// let s = export::vtk::vtk_element_field_string(&maillage, &flux)?;
 /// assert!(s.contains("CELL_DATA 1"));
 /// assert!(s.contains("q"));

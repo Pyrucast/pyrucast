@@ -101,15 +101,15 @@ where
 /// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
 /// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
 /// # }
-/// // Un **indicateur 0/1** de même forme — mêmes zones, même support,
-/// // mêmes composantes — là où `select_nodes` extrait un maillage.
+/// // A **0/1 indicator** of the same shape — same zones, same support, same
+/// // components — where `select_nodes` extracts a mesh.
 /// let bande = Band::new(Some(40.0), None, None, None)?;
 /// let m = node_field::mask(&temp, &bande, None)?;
 /// assert_eq!(m.node_count()?, temp.node_count()?);
 /// assert_eq!(m.get(0)?.read().value(n[0].id(), "T")?, 0.0); // 10 < 40
 /// assert_eq!(m.get(0)?.read().value(n[2].id(), "T")?, 1.0); // 90 ≥ 40
-/// // D'où sa vocation : multipliable terme à terme, il annule les valeurs
-/// // hors bande sans toucher au support.
+/// // Hence its purpose: multipliable term by term, it zeroes the out-of-band
+/// // values without touching the support.
 /// let filtre = (&temp * &m)?;
 /// assert_eq!(filtre.get(0)?.read().value(n[2].id(), "T")?, 90.0);
 /// assert_eq!(filtre.get(0)?.read().value(n[0].id(), "T")?, 0.0);
@@ -150,7 +150,7 @@ pub fn mask(field: &NodeField, band: &Band, components: Option<Vec<String>>) -> 
 /// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
 /// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
 /// # }
-/// // La forme mono-zone, sans `Result` : rien ne peut échouer une fois la
+/// // The single-zone form, without a `Result`: nothing can fail once the
 /// // bande construite.
 /// let bande = Band::new(Some(40.0), None, None, None)?;
 /// let m = node_field::mask_sub(&temp.get(0)?.read(), &bande, None);

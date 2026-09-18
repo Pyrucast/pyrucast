@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 /// ```
 /// # use pyrucast::models::elasticity::law::ElasticLaw;
 /// # use pyrucast::named::Named;
-/// // Réciproque exacte de `from_name`, comme pour les deux autres familles.
+/// // The exact inverse of `from_name`, as for the other two families.
 /// assert!(ElasticLaw::ALL.iter().all(|l| ElasticLaw::from_name(l.name()) == Some(*l)));
 /// assert_eq!(ElasticLaw::default(), ElasticLaw::Linear);
 /// ```
@@ -50,7 +50,7 @@ impl ElasticLaw {
     ///
     /// ```
     /// # use pyrucast::models::elasticity::law::ElasticLaw;
-    /// // Une seule pour l'instant : l'axe existe, il n'a qu'un point.
+    /// // Only one for now: the axis exists, it has a single point.
     /// assert_eq!(ElasticLaw::ALL, [ElasticLaw::Linear]);
     /// ```
     pub const ALL: [ElasticLaw; 1] = [Self::Linear];

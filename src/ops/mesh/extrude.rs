@@ -25,7 +25,7 @@ use crate::error::Result;
 /// # use pyrucast::ops::mesh;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
 /// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
-/// // Un SEG2 extrudé devient un QUA4 : une couche, une maille.
+/// // An extruded SEG2 becomes a QUA4: one layer, one cell.
 /// let l = mesh::line(&p(&[0.0, 0.0, 0.0]), &p(&[1.0, 0.0, 0.0]), 1, ElementType::SEG2)?;
 /// let s = mesh::extrude(&l, &[0.0, 1.0, 0.0], 3)?;
 /// assert_eq!(s.cell_count(), 3);

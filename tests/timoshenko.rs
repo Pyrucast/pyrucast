@@ -34,7 +34,7 @@ fn timoshenko_cantilever_converges_without_locking() -> Result<()> {
     const P: f64 = 1.0; // transverse tip load
     const N: usize = 40; // beam elements
 
-    // ── Maillage : N éléments SEG2 alignés sur [0, L] (config 1-D) ─────────
+    // ── Mesh: N SEG2 elements aligned on [0, L] (1-D configuration) ────────
     let coords = Handle::new(Coords::new(1)?);
     let h = L / N as f64;
     let nodes: Vec<Node> = (0..=N)
@@ -46,7 +46,7 @@ fn timoshenko_cantilever_converges_without_locking() -> Result<()> {
     }
     let fes = FiniteElementSpace::new(&mesh, Interpolation::ModelEmbedded)?;
 
-    // ── Modèle : poutre + encastrement à gauche (w = θ = 0) ────────────────
+    // ── Model: beam + clamping on the left (w = θ = 0) ─────────────────────
     let clamp = |target: &Model, node: &Node, var: &str| -> Result<Model> {
         let imposed = Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(node))?);
         let multiplier = mesh::barycenter(&imposed)?;
@@ -62,7 +62,7 @@ fn timoshenko_cantilever_converges_without_locking() -> Result<()> {
         &[("E", E), ("I", I), ("G", G), ("A_s", A_S)],
     )?;
 
-    // ── Chargement : force transverse P au bout libre (composante f_w) ─────
+    // ── Loading: transverse force P at the free end (component f_w) ────────
     let mut load_sm = SubMesh::new(coords.clone(), ElementType::POI1);
     load_sm.add_cell(&[nodes[N].id()])?;
     let load_sm = Handle::new(load_sm);

@@ -29,8 +29,8 @@ use std::collections::HashMap;
 ///
 /// ```
 /// # use pyrucast::ops::mesh;
-/// // Le seuil par défaut se **transmet**, il ne se devine pas : `skin` reçoit
-/// // un angle, jamais une absence à tester.
+/// // The default threshold is **handed over**, not guessed: `skin` receives
+/// // an angle, never an absence to test for.
 /// assert_eq!(mesh::skin::DEFAULT_ANGLE_DEG, 1.0);
 /// ```
 pub const DEFAULT_ANGLE_DEG: f64 = 1.0;
@@ -131,7 +131,7 @@ fn facet_normal(c: &Coords, nodes: &[NodeId]) -> Result<[f64; 3]> {
 /// # use pyrucast::ops::mesh;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
 /// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
-/// // La peau d'un volume : les faces portées par **une seule** maille.
+/// // A volume's skin: the faces carried by **one** cell only.
 /// // Un hexaèdre isolé en a six.
 /// # let base = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]];
 /// # let n: Vec<Node> = (0..2)

@@ -11,8 +11,8 @@ use std::fmt;
 /// ```
 /// # use pyrucast::{PyrucastError, Result};
 /// # use pyrucast::coords::Coords;
-/// // Toute la bibliothèque rend ce `Result` : une erreur porte un message
-/// // qui nomme l'opération et ce qui a manqué, jamais un code nu.
+/// // The whole library returns this `Result`: an error carries a message
+/// // naming the operation and what was missing, never a bare code.
 /// fn repere(dim: u8) -> Result<Coords> {
 ///     Coords::new(dim)
 /// }

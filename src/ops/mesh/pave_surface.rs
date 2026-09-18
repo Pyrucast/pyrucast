@@ -97,11 +97,11 @@ use crate::ops::mesh::{contour, paving};
 /// #     .union(&cote(&[0.0, 2.0], &[0.0, 0.0])).unwrap();
 /// # mesh::merge_nodes(&quatre, 1e-6, true).unwrap();
 /// # let contour = mesh::consolidate(&quatre).unwrap();
-/// // Le pavage frontal : des quadrangles posés en rangées qui suivent le
-/// // contour, plutôt que des triangles appariés après coup.
+/// // Frontal paving: quadrangles laid in rows that follow the
+/// // contour, rather than triangles paired afterwards.
 /// let m = mesh::pave_surface(&contour, ElementType::QUA4, Some(0.5), false, mesh::FrontRelax::Free)?;
 /// assert!(m.cell_count() > 0);
-/// // `all_quad` exige que rien ne reste triangulaire — ce qui n'est
+/// // `all_quad` demands that nothing stay triangular — which is not
 /// // possible que si le contour a un nombre **pair** de segments.
 /// assert!(mesh::pave_surface(&contour, ElementType::QUA4, Some(0.5), true, mesh::FrontRelax::Free).is_ok());
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -634,7 +634,7 @@ mod tests {
     fn an_unknown_relaxation_name_is_not_read_as_the_default() {
         assert_eq!(FrontRelax::from_name("along"), Some(FrontRelax::Along));
         assert_eq!(FrontRelax::from_name("none"), Some(FrontRelax::Off));
-        // La casse ne compte plus, et `off` est un alias de `none`.
+        // Case no longer matters, and `off` is an alias of `none`.
         assert_eq!(FrontRelax::from_name("Along"), Some(FrontRelax::Along));
         assert_eq!(FrontRelax::from_name("OFF"), Some(FrontRelax::Off));
         assert_eq!(FrontRelax::from_name("nope"), None);

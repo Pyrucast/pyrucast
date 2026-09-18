@@ -78,7 +78,7 @@ fn edge_key(u: NodeId, v: NodeId) -> (NodeId, NodeId) {
 /// # use pyrucast::ops::mesh;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
 /// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
-/// // Le bord d'une surface : les arêtes portées par **une seule** maille,
+/// // A surface's border: the edges carried by **one** cell only,
 /// // chaînées en boucles fermées.
 /// # let q = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]];
 /// # let n: Vec<Node> = q.iter().map(|x| p(x)).collect();

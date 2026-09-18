@@ -53,9 +53,9 @@ use crate::ops::mesh::paving::smooth::{self, Incidence, Patch, Rule};
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = mesh::poi1_from_nodes(&n).unwrap();
-/// // La **géométrie** : où sont les nœuds. Tout nœud de bord est épinglé,
-/// // de sorte que le maillage garde exactement le contour reçu — et qu'un
-/// // maillage d'une seule maille, sans intérieur, est refusé en le disant.
+/// // The **geometry**: where the nodes are. Every border node is pinned,
+/// // so that the mesh keeps exactly the contour received — and that a
+/// // a single-cell mesh, with no interior, is refused with a word.
 /// assert!(mesh::regularize(&maillage, 3, false, false).is_err());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```

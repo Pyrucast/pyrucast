@@ -47,7 +47,7 @@ fn fick_line_recovers_the_linear_profile() -> Result<()> {
     const N_ELEMS: usize = 4;
     let h = 1.0 / N_ELEMS as f64;
 
-    // ── Maillage : une ligne de SEG2 sur [0, 1] ────────────────────────────
+    // ── Mesh: a line of SEG2 on [0, 1] ─────────────────────────────────────
     let coords = Handle::new(Coords::new(1)?);
     let nodes: Vec<Node> = (0..=N_ELEMS)
         .map(|i| Node::create_in(coords.clone(), &[i as f64 * h]))
@@ -79,7 +79,7 @@ fn fick_line_recovers_the_linear_profile() -> Result<()> {
     let materials =
         pyrucast::ops::element_field::material_field(&model, &[(&format!("D_{SPECIES}"), D)])?;
 
-    // ── Chargement : flux J en x = 0, concentration imposée au multiplicateur
+    // ── Loading: flux J at x = 0, imposed concentration at the multiplier
     let node0 = nodes[0].id();
     let mut load_sm = SubMesh::new(coords.clone(), ElementType::POI1);
     load_sm.add_cell(&[node0])?;
@@ -100,7 +100,7 @@ fn fick_line_recovers_the_linear_profile() -> Result<()> {
     let stiffness = pyrucast::ops::matrix::stiffness(&model, &materials)?;
     let solution = solve(&stiffness, &rhs)?;
 
-    // ── Comparaison au profil analytique c(x) = 1 + (J/D)(1 − x) ───────────
+    // ── Compared with the analytical profile c(x) = 1 + (J/D)(1 − x) ───────
     let tol = 1e-10;
     for (i, node) in nodes.iter().enumerate() {
         let x = i as f64 * h;
@@ -111,7 +111,7 @@ fn fick_line_recovers_the_linear_profile() -> Result<()> {
             "c(x={x}) : {got} ≠ {expected}"
         );
     }
-    // Bilan de matière : la réaction au bord imposé équilibre le flux injecté.
+    // Mass balance: the reaction at the imposed edge balances the injected flux.
     let reaction = solution.value(mult, &format!("lambda_{}", primal_var(SPECIES)))?;
     assert!((reaction - J).abs() < tol, "réaction λ : {reaction} ≠ {J}");
     Ok(())

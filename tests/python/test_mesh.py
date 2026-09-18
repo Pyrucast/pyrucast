@@ -882,7 +882,7 @@ def test_merge_nodes_prints_a_tally(capfd):
 
 
 def _triangle_et_segment():
-    """Un maillage à deux zones : un TRI3 et un SEG2, sur les mêmes nœuds."""
+    """A mesh with two zones: one TRI3 and one SEG2, on the same nodes."""
     c = pyrucast.Coords(2)
     a, b = c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0])
     cc = c.add_node([0.0, 1.0])
@@ -904,7 +904,7 @@ def test_copy_with_new_nodes_is_independent():
     assert neuf.id != ancien.id
     assert neuf.position() == ancien.position()
 
-    # Les nœuds neufs sont bien à part : bouger l'un ne bouge pas l'autre.
+    # The fresh nodes really are separate: moving one does not move the other.
     neuf.set_position([9.0, 9.0])
     assert ancien.position() == [0.0, 0.0]
 
@@ -915,13 +915,13 @@ def test_copy_without_new_nodes_shares_them():
 
     assert calque.cell_counts() == mesh.cell_counts()
     assert calque.node(0, 0, 0).id == mesh.node(0, 0, 0).id
-    # Par défaut, la copie prend des nœuds neufs.
+    # By default, the copy takes fresh nodes.
     assert mesh.copy().node(0, 0, 0).id != mesh.node(0, 0, 0).id
 
 
 def test_copy_is_unsealed_even_from_a_sealed_mesh():
     c, mesh = _triangle_et_segment()
-    pyrucast.FiniteElementSpace(mesh)  # scelle les deux zones
+    pyrucast.FiniteElementSpace(mesh)  # seals both zones
     assert mesh[0].is_sealed
 
     d = c.add_node([1.0, 1.0])
@@ -941,7 +941,7 @@ def test_set_face_color_paints_every_zone_and_chains():
     retour = mesh.set_face_color((220, 60, 60))
 
     assert [zone.face_color for zone in mesh] == [(220, 60, 60)] * 2
-    # Le maillage rendu est celui-ci : mêmes zones, donc on peut enchaîner.
+    # The mesh returned is this one: same zones, so chaining is possible.
     assert retour.cell_counts() == mesh.cell_counts()
     retour[1].face_color = (7, 8, 9)
     assert mesh[1].face_color == (7, 8, 9)

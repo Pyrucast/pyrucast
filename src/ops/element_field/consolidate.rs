@@ -55,7 +55,7 @@ use crate::parallel::*;
 /// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
 /// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
 /// # }
-/// // Le pendant par éléments : une zone par support, composantes réunies.
+/// // The counterpart by elements: one zone per support, components united.
 /// let a = ElementField::new(&fes, vec!["s_xx".into()])?;
 /// let b = ElementField::new(&fes, vec!["s_yy".into()])?;
 /// let deux = a.union(&b)?;
@@ -209,15 +209,15 @@ pub fn consolidate(field: &ElementField) -> Result<ElementField> {
 /// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
 /// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
 /// # }
-/// // Deux zones sur le même support **peuvent** coexister si leurs
-/// // composantes sont disjointes — c'est ce que ce contrôle autorise.
+/// // Two zones on the same support **may** coexist if their components are
+/// // disjoint — that is what this check allows.
 /// let a = ElementField::new(&fes, vec!["s_xx".into()])?;
 /// let b = ElementField::new(&fes, vec!["s_yy".into()])?;
 /// let deux = a.union(&b)?;
 /// assert_eq!(deux.len(), 2);
 /// assert!(element_field::check_unique_component_per_support(&deux).is_ok());
-/// // La même composante portée deux fois sur un support, non : l'union
-/// // elle-même la refuse, en nommant la composante fautive.
+/// // The same component carried twice on one support, no: the union itself
+/// // refuses it, naming the offending component.
 /// let doublon = ElementField::new(&fes, vec!["s_xx".into()])?;
 /// assert!(a.union(&doublon).is_err());
 /// # Ok::<(), pyrucast::PyrucastError>(())

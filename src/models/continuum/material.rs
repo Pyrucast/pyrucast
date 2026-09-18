@@ -31,12 +31,12 @@ use crate::containers::field::ABSENT_COMPONENT;
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
-/// // Un matériau rangé « à l'envers » du contrat de la loi.
+/// // A material laid out "the other way round" from the law's contract.
 /// let materiau = SubElementField::from_uniform_per_component(
 ///     fes.get(0)?, vec!["nu".into(), "E".into()], &[0.3, 210_000.0])?;
 /// let idx = materiau.resolve_components(&["E", "nu"], "material")?;
 /// let mat = MatRead::new(materiau.point_values(0, 0)?, &idx, &[]);
-/// // La table absorbe l'écart : `E` reste le premier du contrat.
+/// // The table absorbs the gap: `E` stays the contract's first.
 /// assert_eq!(mat.get(0), 210_000.0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -77,8 +77,8 @@ impl<'a> MatRead<'a> {
     /// let materiau = SubElementField::from_uniform_per_component(
     ///     fes.get(0)?, vec!["E".into(), "nu".into()], &[210_000.0, 0.3])?;
     /// let idx = materiau.resolve_components(&["E", "nu"], "material")?;
-    /// // Une loi sans composante facultative passe une tranche **vide**,
-    /// // jamais un `Option` : il n'y a rien à déballer.
+    /// // A law without optional components passes an **empty** slice, never an
+    /// // `Option`: there is nothing to unwrap.
     /// let mat = MatRead::new(materiau.point_values(0, 0)?, &idx, &[]);
     /// assert_eq!(mat.get(1), 0.3);
     /// assert!(mat.opt_idx.is_empty());
@@ -148,7 +148,7 @@ impl<'a> MatRead<'a> {
     ///     fes.get(0)?, vec!["E".into(), "nu".into(), "rho".into()],
     ///     &[210_000.0, 0.3, 7.8e-9])?;
     /// let idx = materiau.resolve_components(&["E", "nu"], "material")?;
-    /// // Le contrat optionnel est `["alpha", "rho"]` : `alpha` manque, `rho` non.
+    /// // The optional contract is `["alpha", "rho"]`: `alpha` is missing, `rho` is not.
     /// let opt = materiau.resolve_optional_components(&["alpha", "rho"]);
     /// let mat = MatRead::new(materiau.point_values(0, 0)?, &idx, &opt);
     /// assert_eq!(opt[0], ABSENT_COMPONENT);

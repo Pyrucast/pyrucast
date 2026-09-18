@@ -1,4 +1,4 @@
-"""`chain` : remise des mailles d'une ligne dans l'ordre du parcours."""
+"""`chain`: putting a line's cells back in walking order."""
 
 import pytest
 
@@ -6,7 +6,7 @@ import pyrucast
 
 
 def _nodes(n):
-    """`n` nœuds alignés sur l'axe x, le nœud d'indice i en x = i."""
+    """`n` nodes aligned on the x axis, the node of index i at x = i."""
     c = pyrucast.Coords(2)
     return c, [c.add_node([float(i), 0.0]) for i in range(n)]
 
@@ -19,7 +19,7 @@ def _seg2(c, cells):
 
 
 def _conn(mesh):
-    """Connectivité du premier sous-maillage, en numéros de nœuds."""
+    """Connectivity of the first submesh, in node numbers."""
     return [[node.id for node in cell] for cell in mesh[0]]
 
 
@@ -29,7 +29,7 @@ def _ids(cells):
 
 def test_chain_sorts_and_flips_a_shuffled_line():
     c, n = _nodes(5)
-    # En vrac, et deux segments à contresens.
+    # In no order, and two segments running the wrong way.
     mesh = _seg2(c, [[n[3], n[4]], [n[0], n[1]], [n[3], n[2]], [n[2], n[1]]])
 
     out = pyrucast.mesh.chain(mesh)
@@ -50,7 +50,7 @@ def test_chain_walks_a_closed_contour():
     suite = pyrucast.mesh.chain(pyrucast.mesh.border(carre))
     conn = _conn(suite)
     assert len(conn) == 4
-    # Chaque maille repart d'où la précédente est arrivée, et la boucle ferme.
+    # Every cell starts where the previous one ended, and the loop closes.
     for prev, cur in zip(conn, conn[1:] + conn[:1]):
         assert prev[1] == cur[0]
 

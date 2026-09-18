@@ -1,8 +1,8 @@
-//! Méthodes de délégation — la face « sujet » des solveurs.
+//! Delegation methods — the "subject" face of the solvers.
 //!
-//! Voir `CONVENTIONS.md` § « Le verbe exposé aussi en méthode ». Les trois
-//! variantes se rangent en famille derrière `Matrix::solve`, ce que l'ordre
-//! des arguments des fonctions libres reflète depuis qu'il met la matrice —
+//! See `CONVENTIONS.md` § "The verb also exposed as a method". The three
+//! variants file as a family behind `Matrix::solve`, which the order
+//! of the free functions' arguments has mirrored since it puts the matrix —
 //! le sujet — en tête.
 
 use crate::containers::matrix::Matrix;

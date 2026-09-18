@@ -34,7 +34,7 @@ use crate::handle::Handle;
 /// # let mut bord = SubMesh::new(coords.clone(), ElementType::SEG2);
 /// # bord.add_cell(&[n[0].id(), n[1].id()])?;
 /// # let fes_bord = FiniteElementSpace::lagrange1(&Mesh::from_submesh(bord))?;
-/// // Une résistance de contact : la conduction donne la nature de l'interface.
+/// // A contact resistance: the conduction gives the interface's kind.
 /// let conduction = model::heat_conduction(&fes)?;
 /// let m = model::interface_transfer(
 ///     &fes_bord, &fes_bord, &conduction, vec![("T".into(), "q".into())], DEFAULT_TOL)?;

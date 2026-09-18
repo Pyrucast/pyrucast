@@ -58,7 +58,7 @@ def main() -> None:
         os.environ.get("PYRUCAST_IMG_DIR", tempfile.gettempdir()), "annular_disc.svg"
     )
     final.plot(save=out)
-    print(f"figure écrite dans {out}")
+    print(f"figure written to {out}")
 
 
 if __name__ == "__main__":

@@ -42,14 +42,14 @@ macro_rules! field_unary {
         /// # let support = mesh::poi1_from_nodes(&n).unwrap();
         /// # let f = NodeField::from_submesh(&support.get(0).unwrap(), vec!["v".into()]).unwrap();
         /// # f.get(0).unwrap().write().add_to_component("v", 4.0).unwrap();
-        /// // Un champ **neuf** : toutes les valeurs, toutes les composantes,
-        /// // toutes les zones. Les mêmes fonctions valent pour une zone seule
-        /// // comme pour un agrégat, par le trait `MapValues`.
+        /// // A **fresh** field: every value, every component, every zone. The same
+        /// // functions hold for a lone zone as for an aggregate, through the
+        /// // `MapValues` trait.
         /// let g = field::sqrt(&f)?;
         /// assert_eq!(g.get(0)?.read().value(n[0].id(), "v")?, 2.0);
         /// assert_eq!(f.get(0)?.read().value(n[0].id(), "v")?, 4.0); // f intacte
         ///
-        /// // Résultats **non gardés**, à la manière de numpy : la racine d'un
+        /// // Results **unguarded**, numpy style: the square root of a
         /// // négatif rend `nan`, le logarithme de zéro `-inf`.
         /// # let neg = NodeField::from_submesh(&support.get(0)?, vec!["v".into()])?;
         /// # neg.get(0)?.write().add_to_component("v", -1.0)?;

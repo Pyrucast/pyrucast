@@ -31,7 +31,7 @@ def _seg2_heat_model(length=1.0, k=1.0, dirichlet_left=False):
 
 
 def _cible_1d(c, a):
-    """Une conduction sur un segment, pour servir de cible à une contrainte."""
+    """A conduction on a segment, to serve as a constraint's target."""
     b = c.add_node([1.0])
     m = pyrucast.Mesh(c, "SEG2")
     m.unit().add_cell([a, b])

@@ -46,8 +46,8 @@ use crate::handle::Handle;
 /// # let modele = model::heat_conduction(&fes).unwrap();
 /// # let materiaux = element_field::material_field(&modele,
 /// #     &[("k", 1.0), ("rho", 2.0), ("cp", 3.0)]).unwrap();
-/// // Quatre côtés **chaînés bout à bout** — la fin de l'un est le début du
-/// // suivant — et opposés deux à deux de même découpage : la grille les
+/// // Four sides **chained end to end** — the end of one is the start of the
+/// // next — and opposite in pairs with the same split: the grid
 /// // interpole.
 /// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
 /// # let (a, b, c, d) = (p(&[0.0, 0.0]), p(&[2.0, 0.0]), p(&[2.0, 2.0]), p(&[0.0, 2.0]));

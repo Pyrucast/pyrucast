@@ -45,7 +45,7 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
     const H: f64 = 1.0;
     let (hx, hy) = (L / NX as f64, H / NY as f64);
 
-    // ── Maillage QUA4 sur [0,L]×[0,H] ──────────────────────────────────────
+    // ── QUA4 mesh on [0,L]×[0,H] ───────────────────────────────────────────
     let coords = Handle::new(Coords::new(2)?);
     let idx = |i: usize, j: usize| j * (NX + 1) + i;
     let mut grid: Vec<Node> = Vec::new();
@@ -90,7 +90,7 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
         &[("E", E), ("nu", NU), ("alpha", ALPHA)],
     )?;
 
-    // ── Température imposée T = T_ref + ΔT partout, portée aux points de Gauss
+    // ── Imposed temperature T = T_ref + ΔT everywhere, carried at the Gauss points
     let support = Handle::new(SubMesh::poi1_from_nodes(&grid)?);
     let mut t_nodal = SubNodeField::from_poi1(&support, vec!["T".into()])?;
     for n in &grid {

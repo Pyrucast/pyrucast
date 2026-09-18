@@ -657,9 +657,9 @@ def test_min_max_without_component_pool_every_component():
     for i, n in enumerate(nodes):
         f[0].set_value(n, "U", float(i + 1))  # 1, 2, 3
         f[0].set_value(n, "V", -float(i + 1))  # -1, -2, -3
-    # Sans composante : la plus petite (resp. grande) valeur du champ entier.
-    assert f[0].min() == -3.0  # dans V
-    assert f[0].max() == 3.0  # dans U
+    # Without a component: the smallest (resp. largest) value of the whole field.
+    assert f[0].min() == -3.0  # in V
+    assert f[0].max() == 3.0  # in U
     assert f.min() == -3.0
     assert f.max() == 3.0
 
@@ -671,7 +671,7 @@ def test_min_max_fold_across_zones():
     f[1].set_value(nodes[3], "T", 5.0)
     assert f.min("T") == -2.0
     assert f.max("T") == 5.0
-    # Sans composante, la réduction traverse aussi les zones.
+    # Without a component, the reduction crosses the zones too.
     assert f.min() == -2.0
     assert f.max() == 5.0
 

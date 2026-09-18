@@ -14,8 +14,8 @@ use crate::handle::Handle;
 /// # use pyrucast::ops::mesh;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
 /// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
-/// // Tous les nœuds **vivants** d'un repère, en un POI1 — la porte de
-/// // sortie quand on a construit de la géométrie sans maillage.
+/// // Every **live** node of a frame, as a POI1 — the
+/// // way out when geometry has been built without a mesh.
 /// let _a = p(&[0.0, 0.0, 0.0]);
 /// let _b = p(&[1.0, 0.0, 0.0]);
 /// assert_eq!(mesh::from_live_nodes(coords.clone())?.cell_count(), 2);

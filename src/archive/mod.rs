@@ -12,7 +12,7 @@
 //! archive::save("etude.pyr", &[
 //!     ("maillage fin", mesh as &dyn archive::ArchiveRoot),
 //!     ("T (°C)",       temperature),
-//!     ("pas de temps", &0.05_f64),
+//!     ("time step", &0.05_f64),
 //! ])?;
 //!
 //! let mut objets = archive::load("etude.pyr")?;

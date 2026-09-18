@@ -17,7 +17,7 @@ use crate::error::{PyrucastError, Result};
 ///
 /// ```
 /// # use pyrucast::atoms::Band;
-/// // Les quatre bornes sont optionnelles et s'excluent deux à deux :
+/// // The four bounds are optional and mutually exclusive in pairs:
 /// // `ge`/`gt` d'un côté, `le`/`lt` de l'autre.
 /// let bande = Band::new(Some(0.0), None, None, Some(1.0)).unwrap(); // 0 ≤ v < 1
 /// assert!(bande.contains(0.0));

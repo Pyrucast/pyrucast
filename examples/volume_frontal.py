@@ -54,7 +54,7 @@ def main() -> None:
     tets = pc.mesh.triangulate_volume(
         pc.mesh.convert(skin, "TRI3"), 0.2, allow_surface_nodes=True
     )
-    print("tout tétra :", dict(zip(tets.element_types(), tets.cell_counts())))
+    print("all tets:", dict(zip(tets.element_types(), tets.cell_counts())))
 
 
 if __name__ == "__main__":

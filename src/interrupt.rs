@@ -33,7 +33,7 @@ use crate::error::{PyrucastError, Result};
 /// # use pyrucast::error::PyrucastError;
 /// # use pyrucast::interrupt::{Cancel, Deadline};
 /// # use std::sync::atomic::{AtomicBool, Ordering};
-/// // Le jeton décide **comment** l'arrêt est signalé ; les opérateurs
+/// // The token decides **how** the stop is signalled; the operators
 /// // n'en savent rien, et restent libres de toute considération de
 /// // frontal — Ctrl+C, délai, bouton d'interface.
 /// let stop = AtomicBool::new(false);
@@ -58,7 +58,7 @@ impl<C: Cancel + ?Sized> Cancel for &C {
 ///
 /// ```
 /// # use pyrucast::interrupt::{Cancel, NoCancel};
-/// // Le jeton qui ne s'arme jamais : ce que passent les fonctions publiques.
+/// // The token that never arms: what the public functions pass.
 /// assert!(NoCancel.check().is_ok());
 /// ```
 pub struct NoCancel;
@@ -97,7 +97,7 @@ impl Cancel for std::sync::atomic::AtomicBool {
 /// # use pyrucast::error::PyrucastError;
 /// # use pyrucast::interrupt::{Cancel, Deadline};
 /// # use std::time::{Duration, Instant};
-/// // Un délai d'horloge : la même interface qu'un jeton armé à la main.
+/// // A wall-clock deadline: the same interface as a hand-armed token.
 /// assert!(Deadline(Instant::now() + Duration::from_secs(3600)).check().is_ok());
 /// assert!(Deadline(Instant::now() - Duration::from_secs(1)).check().is_err());
 /// ```
@@ -109,7 +109,7 @@ impl Deadline {
     /// ```
     /// # use pyrucast::interrupt::{Cancel, Deadline};
     /// # use std::time::Duration;
-    /// // Échéance déjà passée : le premier point de contrôle s'arrête.
+    /// // A deadline already past: the first checkpoint stops.
     /// let echu = Deadline::after(Duration::from_millis(0));
     /// std::thread::sleep(Duration::from_millis(1));
     /// assert!(echu.check().is_err());

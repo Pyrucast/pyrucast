@@ -285,8 +285,8 @@ fn clamped_model(
     let mut model = model::elasticity_with_symmetry(fes, Kinematics::PlaneStress, symmetry)?;
     model = model.union(&roller(&model, &left, "u_x")?)?;
     model = model.union(&roller(&model, &bottom, "u_y")?)?;
-    // La traction du bord droit est un terme du modèle, pas un vecteur bâti à
-    // côté : elle le rejoint ici, sa densité rejoindra le matériau.
+    // The right edge's traction is a term of the model, not a vector built by
+    // side: it joins it here, its density will join the material.
     model = model.union(&model::flux(
         &right_edge_fes(grid, fes)?,
         &model,
@@ -295,7 +295,7 @@ fn clamped_model(
     Ok(model)
 }
 
-/// L'espace EF du bord droit, où s'applique la traction.
+/// The FE space of the right edge, where the traction applies.
 fn right_edge_fes(grid: &[Node], fes: &FiniteElementSpace) -> Result<FiniteElementSpace> {
     let idx = |i: usize, j: usize| j * (N + 1) + i;
     let coords = fes.get(0)?.read().submesh().read().coords();

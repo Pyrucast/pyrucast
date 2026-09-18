@@ -32,12 +32,12 @@ use crate::error::Result;
 /// # let coords = Handle::new(Coords::new(2).unwrap());
 /// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
 /// let barre = mesh::line(&p(&[0.0, 0.0]), &p(&[2.0, 0.0]), 2, ElementType::SEG2)?;
-/// // Des nœuds **neufs**, aux mêmes endroits : les deux maillages ne se
-/// // tiennent plus par la géométrie.
+/// // **Fresh** nodes, at the same places: the two meshes no longer hold each
+/// // other through the geometry.
 /// let neuve = mesh::copy(&barre, true)?;
 /// assert_ne!(neuve.node(0, 0, 0)?.id(), barre.node(0, 0, 0)?.id());
 /// assert_eq!(neuve.node(0, 0, 0)?.position()?, barre.node(0, 0, 0)?.position()?);
-/// // La même connectivité sur les **mêmes** nœuds : un calque, pas un double.
+/// // The same connectivity on the **same** nodes: a tracing, not a duplicate.
 /// let calque = mesh::copy(&barre, false)?;
 /// assert_eq!(calque.node(0, 0, 0)?.id(), barre.node(0, 0, 0)?.id());
 /// assert_eq!(calque.cell_count(), barre.cell_count());

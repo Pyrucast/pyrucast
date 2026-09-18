@@ -20,8 +20,8 @@ use crate::error::Result;
 /// # use pyrucast::ops::mesh;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
 /// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
-/// // Le pendant volumique : deux surfaces conformes cousues par des
-/// // hexaèdres ou des prismes, selon leur type.
+/// // The volume counterpart: two conforming surfaces stitched by
+/// // hexahedra or prisms, depending on their type.
 /// # let q = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]];
 /// # let n: Vec<Node> = q.iter().map(|x| p(x)).collect();
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::QUA4);

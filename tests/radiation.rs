@@ -148,7 +148,7 @@ fn radiation_answers_to_both_of_its_natures() -> Result<()> {
 #[test]
 fn radiation_without_a_conduction_is_rejected() -> Result<()> {
     let (fixture, _) = radiating_square()?;
-    // Une diffusion assemble `c_H2`/`j_H2`, pas `T`/`q`.
+    // A diffusion assembles `c_H2`/`j_H2`, not `T`/`q`.
     let diffusion = model::fick(&fixture.boundary_fes, "H2")?;
     let err = model::radiation(&fixture.boundary_fes, &diffusion)
         .unwrap_err()
@@ -157,7 +157,7 @@ fn radiation_without_a_conduction_is_rejected() -> Result<()> {
         err.contains("assembles no `T` paired with `q`"),
         "unexpected: {err}"
     );
-    // La cible peut être le modèle déjà réuni : il assemble toujours `T`/`q`.
+    // The target may be the already united model: it still assembles `T`/`q`.
     let coupled = fixture.bulk.union(&diffusion)?;
     assert!(model::radiation(&fixture.boundary_fes, &coupled).is_ok());
     Ok(())
@@ -176,8 +176,8 @@ fn no_flux_at_equilibrium() -> Result<()> {
     for g in 0..sub.gauss_count() {
         assert!(sub.value(0, g, "flux")?.abs() < 1e-20);
     }
-    // …but la tangente n'est pas nulle : la loi reste raide en ce point. Elle ne
-    // sort plus du comportement — on la demande, ce qui est tout l'objet de la
+    // …but the tangent is not zero: the law stays stiff at that point. It does
+    // no longer comes out of the behaviour — it is asked for, which is the whole
     // séparation.
     let kt = pyrucast::ops::matrix::tangent(&fixture.radiation, &materials, &at_gauss, None, None)?;
     let dense = kt.dense()?;

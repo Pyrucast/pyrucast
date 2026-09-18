@@ -209,7 +209,7 @@ const DEGENERATE_SHAPE: f64 = 1e-4;
 /// #     }), &[0.0, 0.0, 1.0]).unwrap(), 1).unwrap();
 /// # let enveloppe = mesh::convert(&mesh::skin(&cube, mesh::skin::DEFAULT_ANGLE_DEG).unwrap(),
 /// #                               ElementType::TRI3).unwrap();
-/// // Delaunay sous contrainte d'enveloppe : la peau est **gelée**, et le
+/// // Delaunay under a hull constraint: the skin is **frozen**, and the
 /// // volume rempli de tétraèdres.
 /// let v = mesh::triangulate_volume(&enveloppe, Some(0.5), false)?;
 /// assert!(v.cell_count() > 0);

@@ -59,13 +59,13 @@ fn axis_index(name: &str) -> Option<usize> {
 /// #     z.set_value(n[1].id(), "T", 50.0).unwrap();
 /// #     z.set_value(n[2].id(), "T", 90.0).unwrap();
 /// # }
-/// // Les coordonnées d'un maillage, **en tant que champ** : de quoi les
-/// // passer à l'arithmétique de champs comme n'importe quelle grandeur.
+/// // A mesh's coordinates, **as a field**: enough to
+/// // hand them to field arithmetic like any other quantity.
 /// let x = node_field::positions(&maillage, None)?;
 /// assert_eq!(x.get(0)?.read().components(), &["X".to_string(), "Y".to_string()]);
 /// assert_eq!(x.get(0)?.read().value(n[1].id(), "X")?, 2.0);
-/// // Les composantes se **choisissent**, mais parmi les axes : demander
-/// // autre chose est une erreur nommée, non un renommage silencieux.
+/// // The components are **chosen**, but among the axes: asking for
+/// // anything else is a named error, not a silent rename.
 /// let plan = node_field::positions(&maillage, Some(vec!["X".into()]))?;
 /// assert_eq!(plan.get(0)?.read().components(), &["X".to_string()]);
 /// assert!(node_field::positions(&maillage, Some(vec!["u_x".into()])).is_err());

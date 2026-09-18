@@ -108,8 +108,8 @@ fn each_direction_carries_its_own_stiffness() -> Result<()> {
 
     let materials = pyrucast::ops::element_field::material_field(
         &model,
-        // L'ambiant d'une fondation élastique est le déplacement vers lequel
-        // elle rappelle : zéro ici, mais il se déclare, il ne s'oublie pas.
+        // An elastic foundation's ambient is the displacement towards which
+        // it recalls: zero here, but it is declared, it is not forgotten.
         &[
             ("E", E),
             ("nu", NU),
@@ -158,7 +158,7 @@ fn the_foundation_takes_its_nature_from_the_elasticity() -> Result<()> {
     assert_eq!(appui.filter(Physics::Mechanical)?.len(), 1);
     assert!(appui.filter(Physics::Thermal)?.is_empty());
 
-    // Une conduction sur le même carré n'assemble aucun déplacement.
+    // A conduction on the same square assembles no displacement.
     let conduction = model::heat_conduction(&fes)?;
     let err = model::boundary_transfer(&right, &conduction, vec![("u_x".into(), "f_x".into())])
         .unwrap_err()
@@ -168,7 +168,7 @@ fn the_foundation_takes_its_nature_from_the_elasticity() -> Result<()> {
         "unexpected: {err}"
     );
 
-    // Réunies, chacune assemble sa paire ; un seul échange ne porte pas deux natures.
+    // United, each assembles its pair; one exchange does not carry two kinds.
     let both = elastic.union(&conduction)?;
     let err = model::boundary_transfer(
         &right,

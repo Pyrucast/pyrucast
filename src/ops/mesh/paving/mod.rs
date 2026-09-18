@@ -132,10 +132,10 @@ const FRONT_RELAX: f64 = 0.5;
 /// #     .union(&cote(&[0.0, 20.0], &[0.0, 0.0], 20)).unwrap();
 /// # mesh::merge_nodes(&carre, 1e-6, true).unwrap();
 /// # let contour = mesh::consolidate(&carre).unwrap();
-/// // Un carré 20 × 20 à la taille 1 tient 400 mailles unitaires. La
-/// // relaxation libre arrondit les coins du front, qui cesse alors de
-/// // perdre des nœuds et paie le milieu du domaine ; projetée sur le
-/// // front, elle laisse le carré carré.
+/// // A 20 × 20 square at size 1 holds 400 unit cells. Free relaxation rounds
+/// // the front's corners, which then stops losing nodes and pays for the
+/// // domain's middle; projected onto the front, it leaves the square square.
+
 /// let libre = mesh::pave_surface(&contour, ElementType::QUA4, Some(1.0), false,
 ///     FrontRelax::Free)?;
 /// let le_long = mesh::pave_surface(&contour, ElementType::QUA4, Some(1.0), false,
@@ -164,7 +164,7 @@ impl FrontRelax {
     /// use pyrucast::named::Named;
     /// use pyrucast::ops::mesh::FrontRelax;
     /// assert_eq!(FrontRelax::default().name(), "free");
-    /// // `off` est un alias de `none`, et la casse ne compte pas.
+    /// // `off` is an alias of `none`, and case does not matter.
     /// assert_eq!(FrontRelax::from_name("OFF"), Some(FrontRelax::Off));
     /// for m in [FrontRelax::Free, FrontRelax::Along, FrontRelax::Off] {
     ///     assert_eq!(FrontRelax::from_name(m.name()), Some(m));

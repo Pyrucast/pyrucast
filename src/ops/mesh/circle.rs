@@ -30,7 +30,7 @@ use crate::error::{PyrucastError, Result};
 /// # use pyrucast::ops::mesh;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
 /// # let p = |x: &[f64]| Node::create_in(coords.clone(), x).unwrap();
-/// // Un cercle **fermé** : autant de nœuds que de mailles, le dernier
+/// // A **closed** circle: as many nodes as cells, the last one
 /// // rejoignant le premier.
 /// let c = mesh::circle(&p(&[0.0, 0.0, 0.0]), &[0.0, 0.0, 1.0], 1.0, 8,
 ///                      ElementType::SEG2)?;

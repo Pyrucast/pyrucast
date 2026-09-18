@@ -17,9 +17,9 @@ use crate::models::kernel::MAX_CELL_DOFS;
 use crate::models::owned_components;
 use crate::models::tensor::Kinematics;
 
-/// Six lignes de Voigt sur la largeur d'une maille — la forme des tampons `B` et
-/// `D·B`. Sur la **pile** : un point de Gauss n'alloue rien, et six `Vec` par
-/// point, c'est ce que coûtait la version précédente.
+/// Six Voigt rows across a cell's width — the shape of the `B` and `D·B`
+/// buffers. On the **stack**: a Gauss point allocates nothing, and six `Vec`
+/// per point is what the previous version cost.
 pub(crate) type VoigtRows = [[f64; MAX_CELL_DOFS]; 6];
 
 /// Voigt component count: 3 in 2-D plane, **4** axisymmetric (the hoop joins

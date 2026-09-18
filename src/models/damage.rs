@@ -81,7 +81,7 @@ use serde::{Deserialize, Serialize};
 /// # let zone = fes.get(0).unwrap();
 /// # use pyrucast::models::damage::Damage;
 /// # use pyrucast::models::tensor::Kinematics;
-/// // Mazars par défaut : un seuil et deux branches, traction et compression.
+/// // Mazars by default: one threshold and two branches, tension and compression.
 /// let d = Damage::new(zone.clone(), Kinematics::PlaneStress)?;
 /// assert!(d.material_components().contains(&"eps_d0".to_string()));
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -113,7 +113,7 @@ impl Damage {
     /// # let zone = fes.get(0).unwrap();
     /// # use pyrucast::models::damage::Damage;
     /// # use pyrucast::models::tensor::Kinematics;
-    /// // Mazars par défaut : un seuil et deux branches, traction et compression.
+    /// // Mazars by default: one threshold and two branches, tension and compression.
     /// let d = Damage::new(zone.clone(), Kinematics::PlaneStress)?;
     /// assert!(d.material_components().contains(&"eps_d0".to_string()));
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -146,8 +146,8 @@ impl Damage {
     /// # use pyrucast::models::damage::{Damage};
     /// # use pyrucast::models::damage::law::{DamageLaw};
     /// # use pyrucast::models::tensor::Kinematics;
-    /// // La loi explicite. Damage-TC suit deux endommagements, donc réclame
-    /// // deux résistances là où Mazars n'en demande qu'une.
+    /// // The explicit law. Damage-TC tracks two damages, hence demands
+    /// // two strengths where Mazars asks for only one.
     /// let tc = Damage::with_law(
     ///     zone.clone(), Kinematics::PlaneStress, DamageLaw::DamageTc)?;
     /// assert!(tc.material_components().contains(&"f_t".to_string()));
