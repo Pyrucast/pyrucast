@@ -76,7 +76,7 @@ pub fn restrict_like(
     })
 }
 
-/// Merge two node fields « au plus juste »: structural union of their
+/// Merge two node fields as tightly as possible: structural union of their
 /// zones, consolidated — zones sharing a component set are fused, the
 /// others stay separate (nothing is densified).
 ///
@@ -223,12 +223,12 @@ pub fn mask(
     }
 }
 
-// Les deux saveurs de `mask`, chacune à son type précis. Elles ne sont pas
-// enregistrées dans le module — la fonction libre reste le seul point d'entrée
-// polymorphe — mais `#[py_op]` en tire la méthode du receveur, avec **leur**
-// documentation : celle d'une saveur, qui n'a pas à évoquer l'autre.
-// `#[pyfunction]` n'est là que pour rendre valide `#[pyo3(signature = …)]`,
-// que `#[py_op]` recopie sur la méthode.
+// The two flavours of `mask`, each at its precise type. They are not registered
+// in the module — the free function remains the only polymorphic entry point —
+// but `#[py_op]` derives the receiver's method from them, carrying **their**
+// documentation: that of one flavour, which need not mention the other.
+// `#[pyfunction]` is there only to make `#[pyo3(signature = …)]` valid, which
+// `#[py_op]` copies onto the method.
 
 /// Per-component 0/1 **mask** of this field against a value band — same
 /// structure as the field (Cast3M `MASQUE`): same zones, same support, same

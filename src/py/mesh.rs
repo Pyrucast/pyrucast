@@ -8,8 +8,8 @@ use crate::handle::Handle;
 use crate::py::coords::PyCoords;
 use crate::py::node::PyNode;
 use pyo3::exceptions::{PyIndexError, PyTypeError};
-// `PyValueError` ne sert plus qu'aux erreurs de la visualisation : les noms
-// d'énumérés passent désormais par `FromPyObject` (cf. `named_enum!`).
+// `PyValueError` now serves only the visualization errors: enum names go
+// through `FromPyObject` instead (see `named_enum!`).
 #[cfg(feature = "viz")]
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;

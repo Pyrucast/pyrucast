@@ -444,8 +444,8 @@ pub fn border(mesh: PyRef<PyMesh>, angle_deg: Option<f64>) -> PyResult<PyMesh> {
 #[pyfunction]
 #[pyo3(signature = (mesh, angle_deg=None))]
 pub fn skin(mesh: PyRef<PyMesh>, angle_deg: Option<f64>) -> PyResult<PyMesh> {
-    // Le kwarg facultatif de Python s'aplatit **ici**, à la frontière : passé
-    // ce point l'opérateur reçoit un angle, pas une absence à tester.
+    // Python's optional kwarg is flattened **here**, at the boundary: past
+    // this point the operator receives an angle, not an absence to test for.
     let angle_deg = angle_deg.unwrap_or(crate::ops::mesh::skin::DEFAULT_ANGLE_DEG);
     let result = crate::ops::mesh::skin(&mesh.inner, angle_deg)?;
     Ok(PyMesh { inner: result })
@@ -1367,11 +1367,11 @@ pub fn select(
     }
 }
 
-// Les quatre saveurs de `select`, chacune documentée pour son seul receveur.
-// Non enregistrées dans le module — la fonction libre ci-dessus reste le point
-// d'entrée polymorphe —, elles donnent à `#[py_op]` la méthode de chaque
-// saveur. `#[pyfunction]` n'y sert qu'à rendre valide la signature pyo3 que
-// `#[py_op]` recopie.
+// The four flavours of `select`, each documented for its sole receiver. Not
+// registered in the module — the free function above remains the polymorphic
+// entry point — they give `#[py_op]` the method of each flavour.
+// `#[pyfunction]` serves only to make valid the pyo3 signature that `#[py_op]`
+// copies.
 
 /// Select the **nodes** of this field passing a value band, zone by zone —
 /// a value-range filter returning a `Mesh` with one POI1 submesh per
@@ -1500,16 +1500,16 @@ pub fn select_sub_cells(
 
 // ─── Méthodes de délégation ────────────────────────────────────────────────
 //
-// La face « sujet » des opérateurs ci-dessus (`CONVENTIONS.md` § « Le verbe
-// exposé aussi en méthode »). Elles naissent désormais de `#[py_op]`, posé sur
-// la fonction libre : la méthode est dérivée de sa signature, et sa
-// documentation **recopiée** plutôt que pointée — c'est ce qui la fait
-// apparaître en entier dans `help()` comme dans le stub que lisent les IDE.
+// The "subject" face of the operators above (`CONVENTIONS.md`, § "Le verbe
+// exposé aussi en méthode"). They now come from `#[py_op]`, placed on the free
+// function: the method is derived from its signature, and its documentation
+// **copied** rather than pointed at — which is what makes it appear in full
+// in `help()` as in the stub the IDEs read.
 //
-// Ce bloc ne garde donc que ce qui sort du moule. `merge_nodes` en est : son
-// receveur est un `Py<Self>` et son retour un `Py<PyMesh>` — l'objet lui-même,
-// pas une vue empruntée. `#[py_op]` n'émet qu'un receveur `PyRef`, et se
-// compliquer pour un cas unique coûterait plus que cette méthode-ci.
+// This block therefore keeps only what breaks the mould. `merge_nodes` does:
+// its receiver is a `Py<Self>` and its return a `Py<PyMesh>` — the object
+// itself, not a borrowed view. `#[py_op]` emits only a `PyRef` receiver, and
+// bending it for a single case would cost more than this very method.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyMesh {

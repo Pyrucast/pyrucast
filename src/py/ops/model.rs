@@ -247,8 +247,8 @@ pub fn embedded(
         &immersed.inner,
         &host.inner,
         variables,
-        // Aplati à la frontière : le sous-modèle reçoit une tolérance, pas une
-        // absence à tester.
+        // Flattened at the boundary: the sub-model receives a tolerance, not an
+        // absence to test for.
         tol.unwrap_or(crate::models::embedded::DEFAULT_TOL),
     )?;
     Ok(PyModel { inner })

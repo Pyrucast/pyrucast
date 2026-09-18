@@ -15,7 +15,7 @@
 use crate::py::element_field::{PyElementField, PySubElementField};
 use crate::py::node_field::{PyNodeField, PySubNodeField};
 
-// ─── Les quatre mutateurs de composante ─────────────────────────────────────
+// ─── The four component mutators ────────────────────────────────────────────
 
 crate::impl_field_mutator_pymethod! {
     /// Add `scalar` to `component` on every zone that defines it.

@@ -567,9 +567,9 @@ class PySubNodeField:
 
 // ─── Opérateurs arithmétiques ───────────────────────────────────────────────
 //
-// Posés ici, et non dans `field_macros.rs` où vivent leurs macros : un slot
-// doit être expansé dans le module qui déclare son `#[pyclass]`, sans quoi pyo3
-// engendre un appel de trampoline `unsafe` que l'édition 2024 ne couvre plus.
+// Put here, and not in `field_macros.rs` where their macros live: a slot must be
+// expanded in the module declaring its `#[pyclass]`, otherwise pyo3 generates an
+// `unsafe` trampoline call that edition 2024 no longer covers.
 
 crate::impl_field_binary_pyslot! {
     /// `field + other` — element-wise sum.
@@ -631,14 +631,13 @@ impl PySubNodeField {
 
 // ─── Comparaisons ───────────────────────────────────────────────────────────
 //
-// Slot lui aussi, donc posé ici, et écrit à la main : il n'a qu'une forme, et
-// ne peut pas en avoir d'autre. Ce qu'il partage avec ses trois jumeaux est sa
-// sémantique, pas sa forme — `field_slots::band_of` dit quelle bande de valeurs
-// porte une comparaison.
+// A slot too, hence put here, and written by hand: it has one shape and cannot
+// have another. What it shares with its three twins is its semantics, not its
+// shape — `field_slots::band_of` says which value band a comparison stands for.
 //
-// Son bloc n'est **pas** décoré de `gen_stub_pymethods` : CPython expose ces
-// comparaisons sous les noms `__ge__`/`__gt__`/`__le__`/`__lt__`, déjà déclarés
-// à la main dans le stub — les faire engendrer ici les compterait deux fois.
+// Its block is **not** decorated with `gen_stub_pymethods`: CPython exposes these
+// comparisons under the names `__ge__`/`__gt__`/`__le__`/`__lt__`, already
+// declared by hand in the stub — generating them here would count them twice.
 
 #[pymethods]
 impl PyNodeField {
@@ -673,8 +672,8 @@ impl PySubNodeField {
         let Some(band) = crate::py::field_slots::band_of(op, other)? else {
             return Ok(py.NotImplemented());
         };
-        // `mask_sub` ne rend pas de `Result` — la zone est seule, il n'y a pas
-        // d'agrégat à reconstruire, donc rien à refuser.
+        // `mask_sub` returns no `Result` — the zone stands alone, there is no
+        // aggregate to rebuild, hence nothing to refuse.
         let out = crate::ops::node_field::mask_sub(&self.handle.read(), &band, None);
         Ok(Py::new(
             py,

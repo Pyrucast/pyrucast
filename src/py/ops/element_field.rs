@@ -303,9 +303,9 @@ pub fn mask(
     }
 }
 
-// Les deux saveurs de `mask` : même montage que dans `node_field` — non
-// enregistrées, elles ne servent qu'à donner à `#[py_op]` une méthode au type
-// précis et à la documentation propre.
+// The two flavours of `mask`: same setup as in `node_field` — unregistered, they
+// serve only to give `#[py_op]` a method at the precise type, with its own
+// documentation.
 
 /// Per-component 0/1 **mask** of this field against a value band — same
 /// structure as the field (Cast3M `MASQUE`): same zones, same support, same
