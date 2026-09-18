@@ -1,28 +1,28 @@
 """Formation débutant — 4. Mécanique non linéaire (plasticité).
 
-Reprend la plaque trouée encastrée à gauche, avec l'effort de la masse
-suspendue **monté progressivement** jusqu'à dépasser la limite élastique —
+Picks the holed plate clamped on the left back up, with the hung mass's force
+**ramped up** until it passes the elastic limit —
 l'équivalent Python de la table `PASAPAS` de Cast3M (section 9 de la
 formation) : ``pyrucast.thermomechanics.step_by_step`` orchestre la boucle
-sur les pas de charge et, à chaque pas, un Newton **modifié** (rigidité
-élastique, accéléré par l'accélération d'Anderson).
+over the load steps and, at each step, a **modified** Newton (elastic
+stiffness, sped up by Anderson acceleration).
 
-Il suffit de remplacer ``model.elasticity`` par ``Model.plasticity`` dans
-`formation/mecanique.py` pour obtenir ce script — le même appel
+Replacing ``model.elasticity`` with ``Model.plasticity`` in
+`formation/mecanique.py` is all it takes to get this script — the same call
 ``step_by_step`` gère la boucle non linéaire.
 
-Point d'attention pyrucast, propre à cette version de la librairie : la
-plasticité (`Model.plasticity`) ne consomme pas encore la composante
+A pyrucast caveat, specific to this version of the library: plasticity
+(`Model.plasticity`) does not consume the
 matériau optionnelle `alpha` (dilatation thermique, Cast3M `EPTH`) — le
-couplage thermo-plastique de la section 9.2 de Cast3M (où `sigma_y` dépend
-de la température) n'est donc pas repris ici.
+thermo-plastic coupling of Cast3M's section 9.2 (where `sigma_y` depends on
+temperature) is therefore not covered here.
 
 Lancement ::
 
     maturin develop --release
     python formation/plasticite.py
 
-    # Pour régénérer la figure du livre (book/src/formation/img/) :
+    # To regenerate the book figure (book/src/formation/img/):
     # PYRUCAST_FORMATION_IMG_DIR=book/src/formation/img python formation/plasticite.py
 """
 
@@ -36,17 +36,17 @@ RAYON_TROU = 0.025  # m
 CENTRE_TROU = (0.75 * LONGUEUR, HAUTEUR / 2.0)
 
 E, NU = 200e9, 0.3
-# σy volontairement modeste : la géométrie et le chargement de cette
-# formation ne sont pas à l'échelle d'un acier réel — ce qui compte est de
-# faire apparaître une zone plastique en quelques pas, pas la réalité
-# physique du matériau.
+# σy deliberately modest: this training's geometry and loading are not at the
+# scale of a real steel — what matters is to bring out a plastic zone in a
+# few steps, not the material's physical reality.
+
 SIGMA_Y = 5e6
 MASSE, G = 2500.0, 9.81
-FACTEUR_CHARGE = 6.0  # multiplicateur de la masse suspendue, pour dépasser σy
+FACTEUR_CHARGE = 6.0  # multiplier on the hung mass, to pass σy
 
 
 def construire_plaque_trouee():
-    """Même géométrie que `formation/mecanique.py`."""
+    """Same geometry as `formation/mecanique.py`."""
     coords = pc.Coords(2)
     p1 = coords.add_node([0.0, 0.0])
     p2 = coords.add_node([LONGUEUR, 0.0])
@@ -62,8 +62,8 @@ def construire_plaque_trouee():
     centre = coords.add_node(list(CENTRE_TROU))
     trou = pc.mesh.circle(centre, [0.0, 0.0, 1.0], RAYON_TROU, 16)
 
-    # Boucle extérieure CCW, trou horaire (CW) : orientation attendue par
-    # `triangulate_surface` (le trou est inversé, `trou` reste utilisable ci-dessous).
+    # Outer loop CCW, hole clockwise (CW): the orientation
+    # `triangulate_surface` expects (the hole is inverted, `trou` stays usable below).
     contour = boucle_ext | pc.mesh.invert(trou)
     plaque = pc.mesh.triangulate_surface(contour, "TRI3", size=0.02)
 
@@ -101,8 +101,8 @@ def main() -> None:
     # ANCHOR_END: chargement_evolution
 
     # ANCHOR: pas_a_pas
-    # DDL libres (hors encastrement) pour normer le résidu de Newton — sans
-    # quoi les grandes réactions d'appui masquent la convergence réelle.
+    # Free DOFs (outside the clamped end) to norm the Newton residual —
+    # without which the large support reactions mask the real convergence.
     x = pc.node_field.positions(plaque, ["X"])
     ddl_libres = pc.mesh.select(x, gt=1e-6)
 
@@ -133,7 +133,7 @@ def main() -> None:
     plaque.plot(
         save=chemin, field=dernier["state"], component="p", cmap="viridis", smooth=0
     )
-    print(f"Zone plastique (p) écrite dans {chemin}")
+    print(f"Plastic zone (p) written to {chemin}")
 
 
 if __name__ == "__main__":

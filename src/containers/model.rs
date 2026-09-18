@@ -27,12 +27,12 @@
 //! ├── stiffness(model, materials) -> Matrix   # rows: dual × cols: primal
 //! └── mass(model)                 -> Matrix   # same DOF layout, may be empty
 //!
-//! SubModel  (enum : stockage + sérialisation ; dispatch via as_kind())
+//! SubModel  (enum: storage + serialization; dispatch via as_kind())
 //! ├── HeatConduction(HeatConduction)
 //! ├── Dirichlet(Dirichlet)             # constraint = Lagrange multiplier
 //! └── ...
 //!
-//! SubModelKind  (trait : tout le comportement, co-localisé par physique)
+//! SubModelKind  (trait: all the behaviour, co-located per physics)
 //! └── primal_vars / dual_vars / material_* / build_*_blocks / render / ...
 //! ```
 //!
@@ -195,8 +195,8 @@ fn insert_relation_value(
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// // Une variante par physique ; tout le reste du code passe par
-/// // `as_kind()` plutôt que de refaire le `match`.
+/// // One variant per physics; all the rest of the code goes through
+/// // `as_kind()` rather than redoing the `match`.
 /// let m = SubModel::heat_conduction(zone.clone())?;
 /// assert!(matches!(m, SubModel::HeatConduction(_)));
 /// assert_eq!(m.physics(), &[Physics::Thermal]);
@@ -286,8 +286,8 @@ impl SubModel {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// // Le seul `match` par variante de la couche modèle : tout le reste
-    /// // — noms de variables, contrat matériau, assemblage — passe par là.
+    /// // The model layer's only per-variant `match`: everything else
+    /// // — variable names, material contract, assembly — goes through it.
     /// let m = SubModel::heat_conduction(zone.clone())?;
     /// assert_eq!(m.as_kind().primal_vars(), vec!["T".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -378,7 +378,7 @@ impl SubModel {
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// let m = SubModel::heat_conduction(zone.clone())?;
-    /// // Le matériau n'entre pas ici : le modèle reste immuable et sans matière.
+    /// // The material does not enter here: the model stays immutable and matterless.
     /// assert_eq!(m.material_components(), Some(vec!["k".to_string()]));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -413,8 +413,8 @@ impl SubModel {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// // Une conductivité orthotrope porte ses constantes **et ses axes** dans
-    /// // le champ matériau — d'où un contrat matériau plus large.
+    /// // An orthotropic conductivity carries its constants **and its axes** in
+    /// // the material field — hence a wider material contract.
     /// let iso = SubModel::heat_conduction(zone.clone())?;
     /// let ortho = SubModel::heat_conduction_with_symmetry(
     ///     zone.clone(), MaterialSymmetry::Orthotropic)?;
@@ -470,8 +470,8 @@ impl SubModel {
     /// # let mut bord = SubMesh::new(coords.clone(), ElementType::SEG2);
     /// # bord.add_cell(&[n[0].id(), n[1].id()])?;
     /// # let fes_bord = FiniteElementSpace::lagrange1(&Mesh::from_submesh(bord))?;
-    /// // Nommer les DDL de la physique de volume, c'est ce qui fait que le
-    /// // terme de bord se couple droit dedans.
+    /// // Naming the volumetric physics' DOFs is what makes the boundary term
+    /// // couple straight into it.
     /// let m = SubModel::boundary_transfer(
     ///     fes_bord.get(0)?, &cible, vec![("T".into(), "q".into())])?;
     /// assert_eq!(m.primal_vars(), vec!["T".to_string()]);
@@ -591,8 +591,8 @@ impl SubModel {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// // Isotrope : `E` et `nu`. Orthotrope : les modules par direction et les
-    /// // axes du matériau, tous portés par le champ matériau.
+    /// // Isotropic: `E` and `nu`. Orthotropic: the per-direction moduli and the
+    /// // material axes, all carried by the material field.
     /// let m = SubModel::elasticity_with_symmetry(
     ///     zone.clone(), Kinematics::PlaneStress, MaterialSymmetry::Orthotropic)?;
     /// assert!(m.material_components().unwrap().len() > 2);
@@ -635,7 +635,7 @@ impl SubModel {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// // L'espèce nomme les variables : une diffusion par espèce transportée.
+    /// // The species names the variables: one diffusion per transported species.
     /// let m = SubModel::fick(zone.clone(), "H2")?;
     /// assert_eq!(m.primal_vars(), vec!["c_H2".to_string()]);
     /// assert_eq!(m.dual_vars(), vec!["j_H2".to_string()]);
@@ -718,7 +718,7 @@ impl SubModel {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// // Mêmes DDL que la conduction : le rayonnement se couple droit dedans.
+    /// // Same DOFs as conduction: radiation couples straight into it.
     /// let m = SubModel::radiation(zone.clone(), &cible)?;
     /// assert_eq!(m.primal_vars(), vec!["T".to_string()]);
     /// assert_eq!(m.dual_vars(), vec!["q".to_string()]);
@@ -759,8 +759,8 @@ impl SubModel {
     /// # let mut b = SubMesh::new(coords.clone(), ElementType::SEG2);
     /// # b.add_cell(&[n[0].id(), n[1].id()])?;
     /// # use pyrucast::atoms::Interpolation;
-    /// // La flèche est interpolée en Hermite cubique : une base Lagrange
-    /// // porterait une flèche affine, de courbure identiquement nulle.
+    /// // The deflection is interpolated with cubic Hermite: a Lagrange basis
+    /// // would carry an affine deflection, of identically zero curvature.
     /// let poutres = FiniteElementSpace::new(&Mesh::from_submesh(b), Interpolation::Hermite3)?;
     /// let m = SubModel::bernoulli(poutres.get(0)?)?;
     /// assert!(m.has_behavior());
@@ -783,7 +783,7 @@ impl SubModel {
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::models::shell::ShellModel;
     /// # use pyrucast::models::Physics;
-    /// // Une coque vit sur une surface **plongée dans l'espace 3-D**.
+    /// // A shell lives on a surface **embedded in 3-D space**.
     /// # let coords = Handle::new(Coords::new(3).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
@@ -829,8 +829,8 @@ impl SubModel {
     /// # let mut bord = SubMesh::new(coords.clone(), ElementType::SEG2);
     /// # bord.add_cell(&[n[0].id(), n[1].id()])?;
     /// # let fes_bord = FiniteElementSpace::lagrange1(&Mesh::from_submesh(bord))?;
-    /// // Deux bords **conformes** : ici le même, ce qui suffit à montrer le
-    /// // contrat ; en pratique deux faces en vis-à-vis.
+    /// // Two **conforming** boundaries: here the same one, which is enough to
+    /// // show the contract; in practice two facing faces.
     /// let m = SubModel::interface_transfer(
     ///     fes_bord.get(0)?, fes_bord.get(0)?, &cible,
     ///     vec![("T".into(), "q".into())], 1e-6)?;
@@ -876,7 +876,7 @@ impl SubModel {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// // Von Mises sans écrouissage : `sigma_y` en plus de l'élasticité.
+    /// // Von Mises without hardening: `sigma_y` on top of elasticity.
     /// let m = SubModel::plasticity_perfect(zone.clone(), Kinematics::PlaneStrain)?;
     /// assert!(m.material_components().unwrap().contains(&"sigma_y".to_string()));
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -916,7 +916,7 @@ impl SubModel {
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # use pyrucast::models::plasticity::law::PlasticLaw;
-    /// // La loi d'écrouissage **déclare elle-même** le matériau qu'elle exige.
+    /// // The hardening law **declares by itself** the material it requires.
     /// let m = SubModel::plasticity_with_law(
     ///     zone.clone(), Kinematics::PlaneStrain, PlasticLaw::Perfect)?;
     /// assert!(m.has_behavior());
@@ -1040,8 +1040,8 @@ impl SubModel {
     /// # let mut b = SubMesh::new(coords.clone(), ElementType::SEG2);
     /// # b.add_cell(&[n[0].id(), n[1].id()])?;
     /// # use pyrucast::atoms::Interpolation;
-    /// // L'interpolation exacte dépend du matériau par Φ = 12EI/(G·A_s·L²) :
-    /// // elle appartient à la formulation, pas à l'espace.
+    /// // The exact interpolation depends on the material through
+    /// // Φ = 12EI/(G·A_s·L²): it belongs to the formulation, not to the space.
     /// let poutres =
     ///     FiniteElementSpace::new(&Mesh::from_submesh(b), Interpolation::ModelEmbedded)?;
     /// let m = SubModel::timoshenko(poutres.get(0)?)?;
@@ -1088,8 +1088,8 @@ impl SubModel {
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
-    /// // `u_d` n'est pas ici : il est écrit plus tard, au nœud multiplicateur,
-    /// // dans la composante `imposed_T`.
+    /// // `u_d` is not here: it is written later, at the multiplier node, in
+    /// // the `imposed_T` component.
     /// let m = SubModel::dirichlet(
     ///     &cible, "T", &impose, &mult, RelationSense::Equality)?;
     /// assert_eq!(m.multiplier_nodes().len(), 1);
@@ -1151,13 +1151,13 @@ impl SubModel {
     /// # use pyrucast::models::mpc::MpcTerm;
     /// # let a = mesh::poi1_from_nodes(&n[..1])?;
     /// # let b = mesh::poi1_from_nodes(&n[1..2])?;
-    /// // Une relation « les deux nœuds ont la même température » : la somme
-    /// // pondérée des termes vaut `g`, écrit plus tard au multiplicateur.
+    /// // A "both nodes have the same temperature" relation: the weighted sum
+    /// // of the terms equals `g`, written later at the multiplier.
     /// let m = SubModel::mpc(
     ///     vec![MpcTerm::new(&cible, &a, "T", 1.0)?,
     ///          MpcTerm::new(&cible, &b, "T", -1.0)?],
     ///     &mult, RelationSense::Equality)?;
-    /// assert_eq!(m.multiplier_nodes().len(), 1); // un λ par relation
+    /// assert_eq!(m.multiplier_nodes().len(), 1); // one λ per relation
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn mpc(
@@ -1171,7 +1171,7 @@ impl SubModel {
     /// Embedded (immersed) constraint sub-model: tie each node of `immersed` to
     /// the interpolation of `host` at that node, for every `(variable,
     /// target_dual)` in `components` (e.g. `[("u_x","f_x"), ("u_y","f_y"),
-    /// ("u_z","f_z")]`) — a bar « baignée » in a volume.
+    /// ("u_z","f_z")]`) — a bar "bathed" in a volume.
     ///
     /// The coupling weights are the host shape functions at each immersed node,
     /// computed once at build by locating the node in the host. `multipliers` /
@@ -1208,9 +1208,9 @@ impl SubModel {
     /// #     .map(|q| Node::create_in(coords.clone(), q).unwrap()).collect();
     /// # barre.add_cell(&[p[0].id(), p[1].id()])?;
     /// # let immergee = Mesh::from_submesh(barre);
-    /// // Une barre « baignée » dans le volume : chaque nœud immergé est lié à
-    /// // l'interpolation de l'hôte en ce point — les poids sont les N_i, donc
-    /// // des coefficients qui **varient d'un nœud à l'autre**.
+    /// // A bar "bathed" in the volume: each immersed node is tied to the
+    /// // host's interpolation at that point — the weights are the N_i, hence
+    /// // coefficients that **vary from one node to the next**.
     /// let m = SubModel::embedded(
     ///     &cible, &immergee, &maillage,
     ///     vec!["u_x".into(), "u_y".into()], pyrucast::models::embedded::DEFAULT_TOL)?;
@@ -1271,8 +1271,8 @@ impl SubModel {
     /// # maitre.add_cell(&[n[0].id(), n[1].id()])?;
     /// # let master = Mesh::from_submesh(maitre);
     /// # let slave = mesh::poi1_from_nodes(&n[2..3])?;
-    /// // Une relation **unilatérale** par nœud esclave, appariée à sa facette
-    /// // maître la plus proche dès la construction.
+    /// // One **unilateral** relation per slave node, paired with its nearest
+    /// // master facet as soon as it is built.
     /// let m = SubModel::contact(
     ///     &cible, &slave, &master,
     ///     vec!["u_x".into(), "u_y".into()])?;
@@ -1319,7 +1319,7 @@ impl SubModel {
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// let m = SubModel::elasticity(zone.clone(), Kinematics::PlaneStress)?;
-    /// // L'appariement est **positionnel** : primal_vars[i] ↔ dual_vars[i].
+    /// // The pairing is **positional**: primal_vars[i] ↔ dual_vars[i].
     /// assert_eq!(m.dual_of("u_x"), Some("f_x".into()));
     /// assert_eq!(m.dual_of("T"), None);
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -1364,7 +1364,7 @@ impl SubModel {
     /// let d = SubModel::dirichlet(
     ///     &cible, "T", &impose, &mult, RelationSense::Equality)?;
     /// assert_eq!(d.multiplier_nodes().len(), 1);
-    /// // Vide pour une physique volumique : elle n'introduit pas de multiplicateur.
+    /// // Empty for a volumetric physics: it introduces no multiplier.
     /// assert!(SubModel::heat_conduction(zone.clone())?.multiplier_nodes().is_empty());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -1410,8 +1410,8 @@ impl SubModel {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// let d = SubModel::dirichlet(
     ///     &cible, "T", &impose, &mult, RelationSense::Equality)?;
-    /// // Le maillage POI1 **partagé** — pas une copie : c'est la poignée sur
-    /// // laquelle bâtir le champ de chargement.
+    /// // The **shared** POI1 mesh — not a copy: it is the handle on which to
+    /// // build the load field.
     /// assert!(d.multiplier_mesh()?.node(0, 0, 0).is_ok());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -1476,8 +1476,8 @@ impl SubModel {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// let d = SubModel::dirichlet(
     ///     &cible, "T", &impose, &mult, RelationSense::Equality)?;
-    /// // On cite le nœud **contraint** ; la méthode retrouve son multiplicateur
-    /// // et y écrit la valeur, sous le bon nom de composante.
+    /// // One names the **constrained** node; the method finds its multiplier
+    /// // and writes the value there, under the right component name.
     /// let rhs = d.constraint_rhs(&[(n[0].id(), 100.0)])?;
     /// assert_eq!(rhs.get(0)?.read().components(), &["imposed_T".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -1573,7 +1573,7 @@ impl SubModel {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// let d = SubModel::dirichlet(
     ///     &cible, "T", &impose, &mult, RelationSense::Equality)?;
-    /// // Par **indice de relation** : la voie quand un nœud en clé plusieurs.
+    /// // By **relation index**: the way when one node keys several of them.
     /// let rhs = d.constraint_rhs_by_index(&[(0, 100.0)])?;
     /// assert_eq!(rhs.node_count()?, 1);
     /// assert!(d.constraint_rhs_by_index(&[(7, 0.0)]).is_err());
@@ -1680,7 +1680,7 @@ impl SubModel {
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// assert!(SubModel::heat_conduction(zone.clone())?.material_fespace().is_some());
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
-    /// // Une contrainte n'a pas de matière.
+    /// // A constraint has no matter.
     /// let d = SubModel::dirichlet(
     ///     &cible, "T", &impose, &mult, RelationSense::Equality)?;
     /// assert!(d.material_fespace().is_none());
@@ -1752,8 +1752,8 @@ impl SubModel {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// // La dilatation thermique est **facultative** : sans `alpha`, le modèle
-    /// // s'assemble sans elle.
+    /// // Thermal expansion is **optional**: without `alpha`, the model
+    /// // assembles without it.
     /// let m = SubModel::elasticity(zone.clone(), Kinematics::PlaneStress)?;
     /// assert!(m.optional_material_components().contains(&"alpha"));
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -1898,7 +1898,7 @@ impl SubModel {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// let d = SubModel::dirichlet(
     ///     &cible, "T", &impose, &mult, RelationSense::Equality)?;
-    /// assert!(!d.has_behavior()); // une contrainte n'a pas de loi de comportement
+    /// assert!(!d.has_behavior()); // a constraint has no constitutive law
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn has_behavior(&self) -> bool {
@@ -2011,9 +2011,9 @@ impl fmt::Display for SubModel {
 
 impl crate::dump::Dump for SubModel {
     fn render(&self, opts: &crate::dump::DumpOptions) -> String {
-        // Les physiques couvertes, que seule la structure (`Debug`) donnait.
-        // Posé ici plutôt que dans chacune des physiques : un seul endroit, et
-        // aucune ne peut l'oublier.
+        // The natures covered, which only the struct (`Debug`) used to give.
+        // Placed here rather than in each physics: a single place, and none of
+        // them can forget it.
         format!(
             "{}\n  physics: {:?}",
             self.as_kind().render(opts).trim_end(),
@@ -2056,8 +2056,8 @@ impl crate::dump::Dump for SubModel {
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
-/// // Un modèle se **compose** : la physique, puis les appuis. Chaque
-/// // sous-modèle garde sa nature, ce qui permet de les retrouver ensuite.
+/// // A model is **composed**: the physics, then the supports. Each sub-model
+/// // keeps its nature, which is what lets them be found again later.
 /// let m = model::heat_conduction(&fes)?.union(
 ///     &model::dirichlet(&cible, "T", &impose, &mult,
 ///                       RelationSense::Equality)?)?;
@@ -2149,9 +2149,9 @@ impl Model {
     /// # let slave = mesh::poi1_from_nodes(&n[2..3])?;
     /// let contact = model::contact(&cible, &slave, &master,
     ///     vec!["u_x".into(), "u_y".into()])?;
-    /// // Le second membre −g₀ du contact, prêt à unioner au chargement.
+    /// // The contact's right-hand side −g₀, ready to union into the load.
     /// assert_eq!(contact.contact_gaps()?.node_count()?, 1);
-    /// // Sur un modèle sans contact, la question n'a pas de réponse.
+    /// // On a model without contact, the question has no answer.
     /// assert!(model::heat_conduction(&fes)?.contact_gaps().is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -2218,7 +2218,7 @@ impl Model {
     /// let m = model::heat_conduction(&fes)?.union(
     ///     &model::dirichlet(&cible, "T", &impose, &mult,
     ///                       RelationSense::Equality)?)?;
-    /// // Les multiplicateurs de **toutes** les contraintes du modèle, partagés.
+    /// // The multipliers of **all** the model's constraints, shared.
     /// assert!(m.multiplier_mesh()?.node(0, 0, 0).is_ok());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -2264,7 +2264,7 @@ impl Model {
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// let m = model::elasticity(&fes, Kinematics::PlaneStress)?;
-    /// // Le dual conjugué, cherché sur l'ensemble des sous-modèles.
+    /// // The conjugate dual, looked up across all the sub-models.
     /// assert_eq!(m.dual_of("u_y"), Some("f_y".into()));
     /// assert_eq!(m.dual_of("T"), None);
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -2313,7 +2313,7 @@ impl Model {
     /// let m = model::heat_conduction(&fes)?.union(
     ///     &model::dirichlet(&cible, "T", &impose, &mult,
     ///                       RelationSense::Equality)?)?;
-    /// // Le chargement de contrainte du modèle entier, à unioner au chargement.
+    /// // The whole model's constraint load, to be unioned into the load.
     /// let rhs = m.constraint_rhs(&[(n[0].id(), 100.0)])?;
     /// assert_eq!(rhs.get(0)?.read().components(), &["imposed_T".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -2353,7 +2353,7 @@ impl Model {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// let m = model::dirichlet(&cible, "T", &impose, &mult,
     ///                          RelationSense::Equality)?;
-    /// // Les indices courent sur les relations, contrainte par contrainte.
+    /// // The indices run over the relations, constraint by constraint.
     /// assert!(m.constraint_rhs_by_index(&[(0, 100.0)]).is_ok());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -2412,7 +2412,7 @@ impl Model {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// // L'union des primales de tous les sous-modèles, dédupliquée.
+    /// // The union of every sub-model's primals, deduplicated.
     /// let m = model::heat_conduction(&fes)?
     ///     .union(&model::elasticity(&fes, Kinematics::PlaneStress)?)?;
     /// assert_eq!(m.primal_vars(),
@@ -2505,8 +2505,8 @@ impl Model {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// // L'espace EF est **déduit** du modèle : c'est ce qui permet aux
-    /// // opérateurs d'assemblage de ne recevoir que le modèle.
+    /// // The FE space is **deduced** from the model: that is what lets the
+    /// // assembly operators receive nothing but the model.
     /// let m = model::heat_conduction(&fes)?;
     /// assert_eq!(m.fespace()?.len(), fes.len());
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -2561,8 +2561,8 @@ impl Model {
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// let m = model::heat_conduction(&fes)?
     ///     .union(&model::elasticity(&fes, Kinematics::PlaneStress)?)?;
-    /// // Extraire une physique du modèle multi-physique — les sous-modèles
-    /// // sont **partagés**, pas copiés.
+    /// // Extracting one physics from the multi-physics model — the sub-models
+    /// // are **shared**, not copied.
     /// assert_eq!(m.filter(Physics::Thermal)?.primal_vars(), vec!["T".to_string()]);
     /// assert!(m.filter(Physics::Diffusion)?.is_empty());
     /// # Ok::<(), pyrucast::PyrucastError>(())

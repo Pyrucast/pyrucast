@@ -70,7 +70,7 @@ use std::fmt;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange, SubEvolution, SubValue, ValueKind};
 /// # use pyrucast::containers::evolution::ScalarSeriesSet;
-/// // Ce que consomme un tracé X-Y : une série étiquetée par zone.
+/// // What an X-Y plot consumes: one labelled series per zone.
 /// let e = Evolution::from_scalars(vec![(0.0, 20.0), (1.0, 120.0)], OutOfRange::Clamp)?;
 /// let series: ScalarSeriesSet = e.scalar_series_set()?;
 /// assert_eq!(series.len(), 1);
@@ -89,7 +89,7 @@ pub type ScalarSeriesSet = Vec<(String, Vec<(f64, f64)>)>;
 /// # let c = SubEvolution::new(
 /// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
 /// #     OutOfRange::Error).unwrap();
-/// // Trois réponses possibles à « et au-delà du dernier point tabulé ? »
+/// // Three possible answers to "and beyond the last tabulated point?"
 /// assert!(c.eval_scalar(2.0, Some(OutOfRange::Error)).is_err());
 /// assert_eq!(c.eval_scalar(2.0, Some(OutOfRange::Clamp))?, 120.0);
 /// assert_eq!(c.eval_scalar(2.0, Some(OutOfRange::Extrapolate))?, 220.0);
@@ -140,8 +140,8 @@ impl crate::named::Named for OutOfRange {
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange, SubEvolution, SubValue, ValueKind};
 /// # let c = SubEvolution::new(vec![(0.0, SubValue::Scalar(20.0))], OutOfRange::Clamp).unwrap();
-/// // Une courbe est homogène : scalaires, champs nodaux ou champs par
-/// // éléments, jamais un mélange.
+/// // A curve is homogeneous: scalars, nodal fields or element fields, never
+/// // a mixture.
 /// assert_eq!(c.kind(), ValueKind::Scalar);
 /// ```
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -171,8 +171,8 @@ impl ValueKind {
 /// # let c = SubEvolution::new(
 /// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
 /// #     OutOfRange::Clamp).unwrap();
-/// // Une valeur tabulée se lit par filtrage de variante — ou, pour le cas
-/// // scalaire, par le raccourci `eval_scalar`.
+/// // A tabulated value is read by variant matching — or, for the scalar
+/// // case, through the `eval_scalar` shortcut.
 /// match c.value_at(0)? {
 ///     SubValue::Scalar(v) => assert_eq!(v, 20.0),
 ///     SubValue::Node(_) | SubValue::Element(_) => unreachable!(),
@@ -240,7 +240,7 @@ fn lerp(lo: &SubValue, hi: &SubValue, t: f64) -> Result<SubValue> {
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange, SubEvolution, SubValue, ValueKind};
-/// // Une température qui monte de 20 à 120 en une unité de temps.
+/// // A temperature rising from 20 to 120 in one time unit.
 /// let c = SubEvolution::new(
 ///     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
 ///     OutOfRange::Clamp)?;
@@ -283,8 +283,8 @@ impl SubEvolution {
     /// # let courbe = SubEvolution::new(
     /// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
     /// #     OutOfRange::Clamp).unwrap();
-    /// // Les échantillons sont **triés** à la construction : les donner dans le
-    /// // désordre est licite, les donner deux fois à la même abscisse ne l'est pas.
+    /// // The samples are **sorted** at build time: giving them out of order is
+    /// // legal, giving them twice at the same abscissa is not.
     /// let c = SubEvolution::new(
     ///     vec![(1.0, SubValue::Scalar(120.0)), (0.0, SubValue::Scalar(20.0))],
     ///     OutOfRange::Clamp)?;
@@ -398,8 +398,8 @@ impl SubEvolution {
     /// let mut c = courbe;
     /// c.set_ordinate_type(Some("young".into()))?;
     /// assert_eq!(c.ordinate_type(), Some("young"));
-    /// // Une ordonnée n'a de type que sur une courbe **scalaire** : sur une
-    /// // courbe de champs, la pose échoue.
+    /// // An ordinate has a type only on a **scalar** curve: on a curve of
+    /// // fields, setting it fails.
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn set_ordinate_type(&mut self, t: Option<String>) -> Result<()> {
@@ -420,7 +420,7 @@ impl SubEvolution {
     /// # let courbe = SubEvolution::new(
     /// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
     /// #     OutOfRange::Clamp).unwrap();
-    /// // Forme chaînée, pour poser le type à la construction.
+    /// // Chained form, to set the type at build time.
     /// let c = SubEvolution::new(
     ///     vec![(20.0, SubValue::Scalar(210_000.0)), (300.0, SubValue::Scalar(180_000.0))],
     ///     OutOfRange::Clamp)?
@@ -440,8 +440,8 @@ impl SubEvolution {
     /// # let courbe = SubEvolution::new(
     /// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
     /// #     OutOfRange::Clamp).unwrap();
-    /// // Un module d'Young qui dépend de la température : les deux types posés
-    /// // ensemble font de la courbe une fonction de transfert nommée.
+    /// // A Young's modulus that depends on temperature: the two types set
+    /// // together make the curve a named transfer function.
     /// let c = courbe
     ///     .with_abscissa_type(Some("T".into()))
     ///     .with_ordinate_type(Some("young".into()))?;
@@ -553,7 +553,7 @@ impl SubEvolution {
     /// # let courbe = SubEvolution::new(
     /// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
     /// #     OutOfRange::Clamp).unwrap();
-    /// // La valeur **tabulée** d'indice k — sans interpolation.
+    /// // The **tabulated** value of index k — without interpolation.
     /// match courbe.value_at(1)? {
     ///     SubValue::Scalar(v) => assert_eq!(v, 120.0),
     ///     _ => unreachable!(),
@@ -605,13 +605,13 @@ impl SubEvolution {
     /// # let courbe = SubEvolution::new(
     /// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
     /// #     OutOfRange::Clamp).unwrap();
-    /// // Interpolation linéaire entre deux points tabulés…
+    /// // Linear interpolation between two tabulated points…
     /// match courbe.interpolate(0.25, None)? {
     ///     SubValue::Scalar(v) => assert_eq!(v, 45.0),
     ///     _ => unreachable!(),
     /// }
-    /// // …et hors domaine, la politique de la courbe s'applique — sauf si
-    /// // l'appel en impose une autre.
+    /// // …and out of range, the curve's policy applies — unless the call
+    /// // imposes another one.
     /// assert!(courbe.interpolate(2.0, Some(OutOfRange::Error)).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -689,7 +689,7 @@ impl SubEvolution {
     /// # let courbe = SubEvolution::new(
     /// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
     /// #     OutOfRange::Clamp).unwrap();
-    /// // Le raccourci sans filtrage de variante, pour une courbe scalaire.
+    /// // The shortcut without variant matching, for a scalar curve.
     /// assert_eq!(courbe.eval_scalar(0.5, None)?, 70.0);
     /// assert_eq!(courbe.eval_scalar(9.0, None)?, 120.0); // Clamp
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -730,9 +730,9 @@ impl SubEvolution {
     /// # let support = mesh::poi1_from_nodes(&n).unwrap();
     /// # let temp = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
     /// # temp.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
-    /// // Une conductivité qui dépend de la température : la courbe est une
-    /// // fonction de transfert, et ce sont les **types** qui l'accrochent au
-    /// // champ — l'abscisse nomme la composante lue, l'ordonnée celle produite.
+    /// // A conductivity that depends on temperature: the curve is a transfer
+    /// // function, and it is the **types** that hook it onto the field — the
+    /// // abscissa names the component read, the ordinate the one produced.
     /// let loi = SubEvolution::new(
     ///     vec![(20.0, SubValue::Scalar(50.0)), (120.0, SubValue::Scalar(30.0))],
     ///     OutOfRange::Clamp)?
@@ -881,7 +881,7 @@ impl crate::dump::Dump for SubEvolution {
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange, SubEvolution, SubValue, ValueKind};
 /// let e = Evolution::from_scalars(vec![(0.0, 20.0), (1.0, 120.0)], OutOfRange::Clamp)?;
-/// assert_eq!(e.len(), 1); // une courbe par zone ; ici une seule
+/// assert_eq!(e.len(), 1); // one curve per zone; here a single one
 /// match e.interpolate(0.5, None)? {
 ///     Interpolated::Scalars(v) => assert_eq!(v, vec![70.0]),
 ///     _ => unreachable!(),
@@ -927,8 +927,8 @@ crate::impl_aggregate_dump!(Evolution);
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange, SubEvolution, SubValue, ValueKind};
-/// // Interpoler un agrégat rend un agrégat — sauf pour les scalaires, dont
-/// // il n'existe pas d'agrégat : un `Vec<f64>`, une valeur par zone.
+/// // Interpolating an aggregate returns an aggregate — except for scalars,
+/// // of which no aggregate exists: a `Vec<f64>`, one value per zone.
 /// let e = Evolution::from_scalars(vec![(0.0, 20.0), (1.0, 120.0)], OutOfRange::Clamp)?;
 /// match e.interpolate(0.25, None)? {
 ///     Interpolated::Scalars(v) => assert_eq!(v, vec![45.0]),
@@ -996,7 +996,7 @@ impl Evolution {
     /// # let mut chaud = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
     /// # chaud.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
     /// let e = Evolution::from_node_fields(&[(0.0, &froid), (1.0, &chaud)], OutOfRange::Clamp)?;
-    /// // Un chargement à mi-course : le champ entier, zone par zone.
+    /// // A load at mid-course: the whole field, zone by zone.
     /// match e.interpolate(0.5, None)? {
     ///     Interpolated::Node(f) => assert_eq!(f.get(0)?.read().value(n[0].id(), "T")?, 70.0),
     ///     _ => unreachable!(),
@@ -1128,7 +1128,7 @@ impl Evolution {
     /// # froid.get(0).unwrap().write().add_to_component("T", 20.0).unwrap();
     /// # let mut chaud = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
     /// # chaud.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
-    /// // Le type est posé sur **toutes** les zones à la fois.
+    /// // The type is set on **all** the zones at once.
     /// let mut e = Evolution::from_node_fields(&[(0.0, &froid), (1.0, &chaud)], OutOfRange::Clamp)?;
     /// e.set_abscissa_type(Some("time".into()));
     /// assert_eq!(e.abscissa_type()?, Some("time".into()));
@@ -1162,7 +1162,7 @@ impl Evolution {
     /// # chaud.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
     /// let mut e = Evolution::from_scalars(vec![(0.0, 1.0), (1.0, 2.0)], OutOfRange::Clamp)?;
     /// e.set_ordinate_type(Some("young".into()))?;
-    /// // Sur une évolution de champs, l'ordonnée n'a pas de type à porter.
+    /// // On an evolution of fields, the ordinate has no type to carry.
     /// let mut champs = Evolution::from_node_fields(
     ///     &[(0.0, &froid), (1.0, &chaud)], OutOfRange::Clamp)?;
     /// assert!(champs.set_ordinate_type(Some("young".into())).is_err());
@@ -1216,9 +1216,9 @@ impl Evolution {
     /// # let temp = NodeField::from_submesh(&support.get(0).unwrap(),
     /// #                                    vec!["T".into()]).unwrap();
     /// # temp.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
-    /// // La courbe en **fonction de transfert** : ce sont les types qui
-    /// // l'accrochent au champ — l'abscisse nomme la composante lue,
-    /// // l'ordonnée celle produite.
+    /// // The curve as a **transfer function**: it is the types that hook it
+    /// // onto the field — the abscissa names the component read, the ordinate
+    /// // the one produced.
     /// let mut loi = Evolution::from_scalars(
     ///     vec![(20.0, 50.0), (120.0, 30.0)], OutOfRange::Clamp)?;
     /// loi.set_abscissa_type(Some("T".into()));
@@ -1263,8 +1263,8 @@ impl Evolution {
     /// #     f
     /// # };
     /// # let (froid, chaud) = (faire(20.0), faire(120.0));
-    /// // La courbe joue ici le rôle de **fonction de transfert** : `T` fournit
-    /// // les abscisses, `k` est la composante produite.
+    /// // The curve plays here the role of a **transfer function**: `T`
+    /// // supplies the abscissas, `k` is the component produced.
     /// let mut loi =
     ///     Evolution::from_scalars(vec![(20.0, 50.0), (120.0, 30.0)], OutOfRange::Clamp)?;
     /// loi.set_abscissa_type(Some("T".into()));
@@ -1337,7 +1337,7 @@ impl Evolution {
     /// # let mut chaud = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
     /// # chaud.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
     /// let e = Evolution::from_node_fields(&[(0.0, &froid), (1.0, &chaud)], OutOfRange::Clamp)?;
-    /// // Une grille commune à toutes les zones — ce qu'exige un curseur d'image.
+    /// // A grid common to every zone — what a frame slider requires.
     /// assert_eq!(e.shared_abscissas()?, vec![0.0, 1.0]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -1485,9 +1485,9 @@ impl Evolution {
     /// # let mut chaud = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
     /// # chaud.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
     /// let e = Evolution::from_scalars(vec![(0.0, 20.0), (1.0, 120.0)], OutOfRange::Clamp)?;
-    /// // Une série étiquetée par zone, prête pour un tracé X-Y.
+    /// // One labelled series per zone, ready for an X-Y plot.
     /// let series = e.scalar_series_set()?;
-    /// assert_eq!(series[0].0, "value"); // « zone i » dès qu'il y en a plusieurs
+    /// assert_eq!(series[0].0, "value"); // "zone i" as soon as there are several
     /// assert_eq!(series[0].1, vec![(0.0, 20.0), (1.0, 120.0)]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -1618,7 +1618,7 @@ impl Evolution {
     /// # let mut chaud = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
     /// # chaud.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
     /// let e = Evolution::from_scalars(vec![(0.0, 20.0), (1.0, 120.0)], OutOfRange::Clamp)?;
-    /// assert_eq!(e.len(), 1); // une seule courbe
+    /// assert_eq!(e.len(), 1); // a single curve
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn from_scalars(samples: Vec<(f64, f64)>, out_of_range: OutOfRange) -> Result<Self> {
@@ -1655,8 +1655,8 @@ impl Evolution {
     /// # froid.get(0).unwrap().write().add_to_component("T", 20.0).unwrap();
     /// # let mut chaud = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
     /// # chaud.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
-    /// // Les champs sont donnés **par date** ; l'évolution les transpose en une
-    /// // courbe par zone, les zones étant appariées par leur support.
+    /// // The fields are given **by date**; the evolution transposes them into
+    /// // one curve per zone, the zones being matched by their support.
     /// let e = Evolution::from_node_fields(&[(0.0, &froid), (1.0, &chaud)], OutOfRange::Clamp)?;
     /// assert_eq!(e.len(), froid.len());
     /// assert_eq!(e.frame_count()?, 2);
@@ -1721,8 +1721,8 @@ impl Evolution {
     /// #     f
     /// # };
     /// # let (froid, chaud) = (faire(20.0), faire(120.0));
-    /// // Les champs par éléments se transposent comme les champs nodaux : une
-    /// // courbe par sous-espace EF, apparié par son support.
+    /// // Element fields transpose like nodal fields: one curve per FE
+    /// // subspace, matched by its support.
     /// let e = Evolution::from_element_fields(&[(0.0, &froid), (1.0, &chaud)], OutOfRange::Clamp)?;
     /// assert_eq!(e.frame_count()?, 2);
     /// # Ok::<(), pyrucast::PyrucastError>(())

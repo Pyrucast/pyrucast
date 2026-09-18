@@ -1,46 +1,45 @@
-"""Poutre console élasto-plastique — Newton « maison » au-dessus de pyrucast.
+"""Elasto-plastic cantilever beam — a hand-rolled Newton loop on top of pyrucast.
 
-Version Python de `examples/plasticite_poutre_console.rs` (mêmes briques, même
-algorithme). Elle privilégie la lisibilité ; pour le **bench de parallélisme**,
-préférer l'exemple Rust (pur, sans surcoût interpréteur).
+Python version of `examples/plasticite_poutre_console.rs` (same building blocks,
+same algorithm). It favours readability; for the **parallelism bench**, prefer
+the Rust example (pure, with no interpreter overhead).
 
-Physique
---------
-Continuum 2-D en contraintes planes, petites déformations. Plasticité de von
-Mises parfaite (retour radial J2, sans écrouissage) : la contrainte équivalente
-est plafonnée à `sigma_y`. Poutre encastrée à gauche (`u_x = u_y = 0`), cisaillée
-vers le bas sur la face droite. On monte la charge par incréments ; au-delà de la
-première plastification, une zone plastique se développe près de l'encastrement
-et la flèche s'écarte de la réponse linéaire.
+Physics
+-------
+2-D plane-stress continuum, small strains. Perfect von Mises plasticity (J2
+radial return, no hardening): the equivalent stress is capped at `sigma_y`. Beam
+clamped at the left end (`u_x = u_y = 0`), sheared downwards on the right face.
+The load is raised by increments; beyond first yield a plastic zone develops
+near the clamped end and the deflection departs from the linear response.
 
-Rôle de pyrucast vs. rôle de l'exemple
---------------------------------------
-pyrucast ne connaît PAS Newton. Il fournit les opérateurs ponctuels :
+What pyrucast does vs. what the example does
+--------------------------------------------
+pyrucast knows NOTHING about Newton. It provides the pointwise operators:
 
-- `stiffness` : la rigidité **élastique** `K` (opérateur d'itération) ;
-- `deformation` : la déformation `ε = ½(∇u + ∇uᵀ)` aux points de Gauss ;
-- `integrate_behavior` (Cast3m `COMP`) : la loi au point — retour radial, qui
-  rend `σ` et l'état plastique mis à jour (`VAR0` → `VAR1`) ;
-- `internal_forces` (Cast3m `BSIG`) : les forces internes `∫ Bᵀ σ dΩ` ;
-- `solve` : la résolution linéaire (LU creux, factorisation en cache) ;
-- l'**arithmétique de champs** (`+ - *`), l'**union** (`|`) et `restrict_like`
-  (reprojection d'un champ sur le support/composantes d'un autre), qui
-  remplacent toute boucle nodale : `residual = f_ext - f_int`, `u = u + du` ;
-- une `Evolution` à valeur champ pour l'**histoire de chargement** : la charge
-  de chaque pas est interpolée au pseudo-temps (`load_evo.interpolate(t)`).
+- `stiffness`: the **elastic** stiffness `K` (iteration operator);
+- `deformation`: the strain `ε = ½(∇u + ∇uᵀ)` at the Gauss points;
+- `integrate_behavior` (Cast3m `COMP`): the law at the point — radial return,
+  which yields `σ` and the updated plastic state (`VAR0` → `VAR1`);
+- `internal_forces` (Cast3m `BSIG`): the internal forces `∫ Bᵀ σ dΩ`;
+- `solve`: the linear solve (sparse LU, cached factorisation);
+- **field arithmetic** (`+ - *`), the **union** (`|`) and `restrict_like`
+  (reprojection of a field onto the support/components of another), which
+  replace every nodal loop: `residual = f_ext - f_int`, `u = u + du`;
+- an `Evolution` with field values for the **loading history**: the load of each
+  step is interpolated at the pseudo-time (`load_evo.interpolate(t)`).
 
-L'exemple assemble sa propre boucle de Newton : résidu `r = F_ext − F_int`,
-incrément `δu = K⁻¹ r`, `u ← u + δu`, et le portage de l'état interne d'un pas
-au suivant. C'est un **Newton modifié** (opérateur constant = `K` élastique) :
-`K` est assemblé et factorisé une seule fois.
+The example assembles its own Newton loop: residual `r = F_ext − F_int`,
+increment `δu = K⁻¹ r`, `u ← u + δu`, and the carry-over of the internal state
+from one step to the next. This is a **modified Newton** (constant operator =
+elastic `K`): `K` is assembled and factorised once and for all.
 
-Lancement ::
+Run with ::
 
     maturin develop --release
     python examples/plasticite_poutre_console.py
 
-Variables d'environnement : `PYRUCAST_NX`, `PYRUCAST_NY` (mailles en long / en
-hauteur), `PYRUCAST_NSTEPS` (pas de charge), `PYRUCAST_PMAX` (charge finale).
+Environment variables: `PYRUCAST_NX`, `PYRUCAST_NY` (cells along the length /
+through the height), `PYRUCAST_NSTEPS` (load steps), `PYRUCAST_PMAX` (final load).
 """
 
 import os
@@ -49,10 +48,10 @@ import pyrucast
 
 
 def _plastic_diagnostics(state):
-    """(p_max, nombre de points de Gauss plastifiés) — `p > 0` marque un point.
+    """(p_max, number of yielded Gauss points) — `p > 0` marks a point.
 
-    Sans boucle : `p_max` par `max`, le comptage en masquant la composante `p`
-    en 0/1 (bande « > 1e-12 ») puis en la sommant."""
+    Without a loop: `p_max` through `max`, the count by masking the `p`
+    component into 0/1 (band "> 1e-12") then summing it."""
     p_max = state.max("p")
     masked = state.mask(gt=1e-12, components=["p"])
     n_plastic = round(masked.sum("p"))
@@ -60,7 +59,7 @@ def _plastic_diagnostics(state):
 
 
 def main():
-    # ── Paramètres (matériau acier, géométrie, chargement) ──────────────────
+    # ── Parameters (steel material, geometry, loading) ──────────────────────
     young, nu, sigma_y = 210_000.0, 0.3, 250.0
     length, height = 10.0, 1.0
     nx = int(os.environ.get("PYRUCAST_NX", 24))
@@ -69,14 +68,12 @@ def main():
     p_max_load = float(os.environ.get("PYRUCAST_PMAX", 5.0))
 
     print(
-        f"Poutre console plastique : {nx}×{ny} QUA4  (L={length}, H={height}), "
+        f"Plastic cantilever beam: {nx}×{ny} QUA4  (L={length}, H={height}), "
         f"E={young}, ν={nu}, σy={sigma_y}"
     )
-    print(
-        f"Chargement : 0 → {p_max_load} en {nsteps} pas (Newton modifié, K élastique)\n"
-    )
+    print(f"Loading: 0 → {p_max_load} in {nsteps} steps (modified Newton, elastic K)\n")
 
-    # ── Maillage : bords SEG2 gauche/droit puis balayage en QUA4 ────────────
+    # ── Mesh: left/right SEG2 edges, then a sweep into QUA4 ─────────────────
     c = pyrucast.Coords(2)
     pt_a = c.add_node([0.0, 0.0])
     pt_b = c.add_node([0.0, height])
@@ -87,22 +84,22 @@ def main():
     mesh = pyrucast.mesh.sweep(left_edge, right_edge, nx)
     fes = pyrucast.FiniteElementSpace(mesh)
 
-    # Nœud du bout (mi-hauteur) et maillage POI1 des nœuds LIBRES (X > 0) —
-    # support cible pour la norme du résidu sur les seuls DDL libres.
+    # Tip node (mid-height) and POI1 mesh of the FREE nodes (X > 0) — target
+    # support for the residual norm on the free DOFs only.
     tip = mesh.nearest_node([length, height / 2.0])
     coords_field = pyrucast.node_field.positions(mesh, ["X"])
     free_mesh = pyrucast.mesh.select(coords_field, ge=length / nx / 2.0)
     imposed_mesh = pyrucast.mesh.to_poi1(left_edge)
     multiplier = pyrucast.mesh.translate(imposed_mesh, [0.0, 0.0])
 
-    # ── Modèle : plasticité (contraintes planes) + encastrement (Dirichlet) ──
+    # ── Model: plasticity (plane stress) + clamped end (Dirichlet) ──────────
     model = pyrucast.model.plasticity_perfect(fes, "plane_stress")
     model = model | pyrucast.model.dirichlet(model, "u_x", imposed_mesh, multiplier)
     model = model | pyrucast.model.dirichlet(model, "u_y", imposed_mesh, multiplier)
 
-    # ── Charge de référence : cisaillement unitaire (densité −1) sur la face
-    #    droite, en efforts nodaux cohérents. C'est un terme du modèle : il le
-    #    rejoint, sa densité rejoint le matériau. ─────────────────────────────
+    # ── Reference load: unit shear (density −1) on the right face, as consistent
+    #    nodal forces. It is a term of the model: it joins the model, and its
+    #    density joins the material. ──────────────────────────────────────────
     right_fes = pyrucast.FiniteElementSpace(right_edge)
     model = model | pyrucast.model.flux(right_fes, model, "f_y")
     materials = pyrucast.element_field.material_field(
@@ -110,46 +107,48 @@ def main():
     )
     load_unit = pyrucast.node_field.external_forces(model, materials)
 
-    # Rigidité ÉLASTIQUE : opérateur d'itération du Newton modifié. Assemblée une
-    # fois ; `solve` met la factorisation en cache et la réutilise.
+    # ELASTIC stiffness: iteration operator of the modified Newton. Assembled
+    # once; `solve` caches the factorisation and reuses it.
     k = pyrucast.matrix.stiffness(model, materials)
 
-    # ── Histoire de chargement : une Evolution à valeur CHAMP, tabulée en
-    #    pseudo-temps t ∈ [0, 1]. Deux keyframes du champ d'effort nodal — nul en
-    #    t=0, complet (`p_max · charge_unitaire`) en t=1 — sur le MÊME support.
-    #    La charge de chaque pas est lue par interpolation linéaire. ────────────
+    # ── Loading history: an Evolution with FIELD values, tabulated against the
+    #    pseudo-time t ∈ [0, 1]. Two keyframes of the nodal force field — zero at
+    #    t=0, complete (`p_max · unit_load`) at t=1 — on the SAME support. The
+    #    load of each step is read by linear interpolation. ────────────────────
     zero_frame = load_unit * 0.0
     full_frame = load_unit * p_max_load
     load_evo = pyrucast.Evolution(
         [(0.0, zero_frame), (1.0, full_frame)], out_of_range="clamp"
     )
 
-    # ── État de la simulation (persistant entre les pas) ────────────────────
-    u = pyrucast.NodeField(mesh, ["u_x", "u_y"])  # déplacement cumulé, nul au départ
-    # L'état au repos : `None` au premier pas, où A est la configuration de
-    # référence. L'opérateur le matérialise lui-même, avec **toutes** les
-    # composantes que la loi relit ensuite — σ(A), ε(A), l'état interne — là où
-    # une liste écrite à la main en oublie.
+    # ── Simulation state (persistent across the steps) ──────────────────────
+    u = pyrucast.NodeField(
+        mesh, ["u_x", "u_y"]
+    )  # accumulated displacement, zero at first
+    # The state at rest: `None` at the first step, where A is the reference
+    # configuration. The operator materialises it itself, with **every** component
+    # the law reads back afterwards — σ(A), ε(A), the internal state — where a
+    # hand-written list forgets some.
     state = None
 
-    # ── Boucle sur les pas de charge ────────────────────────────────────────
-    # Newton modifié (opérateur = K élastique) : convergence linéaire, donc lente
-    # sur la branche plastique. Plafond d'itérations haut, résidu relatif 1e-6.
+    # ── Loop over the load steps ────────────────────────────────────────────
+    # Modified Newton (operator = elastic K): linear convergence, hence slow on
+    # the plastic branch. High iteration cap, relative residual 1e-6.
     max_newton = 200
     print(
-        f"{'pas':>4} {'P':>8} {'iter':>6} {'flèche u_y':>14} {'p_max':>14} {'n_plast':>8}"
+        f"{'step':>4} {'P':>8} {'iter':>6} {'deflection u_y':>14} {'p_max':>14} {'n_plast':>8}"
     )
 
     prev_defl = 0.0
     any_plasticity = False
 
     for step in range(1, nsteps + 1):
-        # Pseudo-temps du pas ∈ ]0, 1] ; la charge externe en découle par
-        # interpolation de l'Evolution (champ d'effort nodal du pas).
+        # Pseudo-time of the step ∈ ]0, 1]; the external load follows from it by
+        # interpolation of the Evolution (nodal force field of the step).
         t = step / nsteps
-        load_p = p_max_load * t  # cisaillement nominal au bout (pour l'affichage)
+        load_p = p_max_load * t  # nominal shear at the tip (for the display)
         load_scaled = load_evo.interpolate(t)
-        # Norme de la charge du pas (échelle relative du résidu) : xᵀx du champ.
+        # Norm of the step load (relative scale of the residual): xᵀx of the field.
         ext_norm = pyrucast.measure.xtx(load_scaled) ** 0.5
         tol = 1e-6 * ext_norm + 1e-12
 
@@ -158,21 +157,22 @@ def main():
         res_norm = float("inf")
 
         for _ in range(max_newton):
-            # ε(u) → entrée de comportement (ε | VAR0) → σ, VAR1 (COMP).
+            # ε(u) → behaviour input (ε | VAR0) → σ, VAR1 (COMP).
             strain = pyrucast.element_field.deformation(u, fes)
             out = pyrucast.element_field.integrate_behavior(
                 model, strain, materials, prev=state
             )
-            # Forces internes F_int = ∫ Bᵀ σ dΩ (BSIG).
+            # Internal forces F_int = ∫ Bᵀ σ dΩ (BSIG).
             f_int = pyrucast.node_field.internal_forces(model, out, u, materials)
 
-            # Résidu r = F_ext − F_int et sa norme sur les DDL **libres**, sans
-            # aucune boucle nodale — tout par les opérateurs et primitives :
-            # - `f_ext` = charge externe du pas reprojetée sur le support ET les
-            #   composantes de `f_int` (`restrict_like`) : `f_x` (=0) et `f_y` ;
-            # - `residual = f_ext − f_int` via l'opérateur `-` ;
-            # - la norme se lit sur les seuls nœuds libres : `residual` `restrict`é
-            #   à `free_mesh` puis `xtx` (les nœuds encastrés portent la réaction).
+            # Residual r = F_ext − F_int and its norm on the **free** DOFs, with
+            # no nodal loop at all — everything through the operators and the
+            # primitives:
+            # - `f_ext` = external load of the step reprojected onto the support
+            #   AND the components of `f_int` (`restrict_like`): `f_x` (=0), `f_y`;
+            # - `residual = f_ext − f_int` through the `-` operator;
+            # - the norm is read on the free nodes only: `residual` `restrict`ed
+            #   to `free_mesh` then `xtx` (the clamped nodes carry the reaction).
             f_ext = pyrucast.node_field.restrict_like(load_scaled, f_int)
             residual = f_ext - f_int
             res_norm = (
@@ -183,50 +183,52 @@ def main():
 
             if res_norm <= tol:
                 break
-            # δu = K⁻¹ r (K élastique, factorisation en cache). δu porte les DDL
-            # primaux ET duaux (multiplicateurs). Son support coïncide déjà avec
-            # celui de u (même compagnon POI1 caché de `to_poi1`, partagé par `solve`
-            # et `NodeField(mesh)`) ; `restrict_like` ne sert qu'à filtrer les
-            # composantes duales — sinon `u + δu` recopierait les multiplicateurs
-            # dans u par union. Puis u ← u + δu.
+            # δu = K⁻¹ r (elastic K, cached factorisation). δu carries the primal
+            # AND the dual DOFs (multipliers). Its support already coincides with
+            # that of u (same hidden POI1 companion from `to_poi1`, shared by
+            # `solve` and `NodeField(mesh)`); `restrict_like` only serves to filter
+            # out the dual components — otherwise `u + δu` would copy the
+            # multipliers into u by union. Then u ← u + δu.
             du = pyrucast.solver.solve(k, residual)
             u = u + pyrucast.node_field.restrict_like(du, u)
             iters += 1
 
         converged = res_norm <= tol
 
-        # Commit de l'état : VAR0 ← VAR1. La sortie de comportement convergée
-        # porte, en plus de l'état plastique (`eps_p_*`, `p`), les contraintes
-        # (`sig_*`) ; on la reporte telle quelle comme nouveau VAR0. La loi lit
-        # ses entrées par nom, donc les composantes surnuméraires sont ignorées.
+        # State commit: VAR0 ← VAR1. The converged behaviour output carries, on
+        # top of the plastic state (`eps_p_*`, `p`), the stresses (`sig_*`); it is
+        # carried over as it stands as the new VAR0. The law reads its inputs by
+        # name, so the extra components are ignored.
         state = last_out
 
-        # Diagnostics du pas.
+        # Diagnostics of the step.
         p_max_val, n_plastic = _plastic_diagnostics(state)
         defl = u.value(tip, "u_y")
         any_plasticity = any_plasticity or n_plastic > 0
-        flag = "" if converged else "  (résidu résiduel)"
+        flag = "" if converged else "  (residual left over)"
         print(
             f"{step:>4} {load_p:>8.3f} {iters:>6} {defl:>14.6e} {p_max_val:>14.6e} {n_plastic:>8}{flag}"
         )
 
-        # La flèche croît (en valeur absolue, vers le bas) avec la charge.
-        assert abs(defl) >= abs(prev_defl) - 1e-9, f"flèche non monotone au pas {step}"
+        # The deflection grows (in absolute value, downwards) with the load.
+        assert abs(defl) >= abs(prev_defl) - 1e-9, (
+            f"non-monotonic deflection at step {step}"
+        )
         prev_defl = defl
 
-    # Au-delà de la première plastification, une zone plastique doit apparaître.
+    # Beyond first yield, a plastic zone must appear.
     p_first_yield = sigma_y * (height * height / 6.0) / length
     if p_max_load > p_first_yield:
         assert any_plasticity, (
-            f"P_max={p_max_load} dépasse la première plastification "
-            f"(≈{p_first_yield:.2f}) mais aucun point plastique détecté"
+            f"P_max={p_max_load} exceeds first yield "
+            f"(≈{p_first_yield:.2f}) but no plastic point was detected"
         )
         print(
-            f"\nOK : plastification développée (P_max={p_max_load} > P_élastique≈{p_first_yield:.2f})."
+            f"\nOK: plasticity developed (P_max={p_max_load} > P_elastic≈{p_first_yield:.2f})."
         )
     else:
         print(
-            f"\nOK : réponse restée élastique (P_max={p_max_load} ≤ ≈{p_first_yield:.2f})."
+            f"\nOK: the response stayed elastic (P_max={p_max_load} ≤ ≈{p_first_yield:.2f})."
         )
 
 

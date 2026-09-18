@@ -1,38 +1,38 @@
 #!/usr/bin/env python3
-"""Garde-fous de la documentation — cinq vérifications, aucune compilation.
+"""Documentation guards — five checks, no compilation.
 
-Appelé par `script/check_doc.{sh,ps1}`, après `cargo doc` (dont il lit la
-sortie). Les règles qu'il fait respecter sont écrites dans `CONVENTIONS.md`,
-partie « Documentation et tests », et racontées dans
+Called by `script/check_doc.{sh,ps1}`, after `cargo doc` (whose output it
+reads). The rules it enforces are written in `CONVENTIONS.md`, part
+"Documentation et tests", and told in
 `book/src/developper/documentation-et-tests.md`.
 
-1. `includes`   — chaque `{{#include}}` du book résout : fichier, ancre, et un
-                  texte non vide. C'est le garde-fou le plus important, parce
-                  que le mécanisme porteur n'est gardé par rien d'autre : une
-                  ancre inexistante rend un bloc **vide**, code de retour 0,
-                  sans un mot.
-2. `fences`     — aucune page ne possède de code : tout bloc `rust`/`python`
-                  contient un include, sans exception.
-3. `symboles`   — la prose ne cite pas de symbole disparu. Rien d'autre ne
-                  couvre un paragraphe, et c'est là qu'étaient trois des neuf
-                  erreurs trouvées en août 2026.
-4. `doctests`   — cliquet de couverture Rust : un item public nouveau porte
-                  son exemple, et la dette existante ne peut que décroître.
-5. `api-python` — le pendant Python, à une granularité plus lâche : chaque
-                  entrée publique est **citée** par un exemple exécuté du book
-                  (`tests/python/test_doc_*.py`). Les docstrings Python étant
-                  écrites dans les `///` de `src/py/`, un doctest par item y
-                  coûterait un collecteur maison ; la citation donne la même
-                  garantie de non-régression pour vingt lignes.
+1. `includes`   — every `{{#include}}` of the book resolves: file, anchor, and
+                  a non-empty text. This is the most important guard, because
+                  nothing else guards the carrying mechanism: a missing anchor
+                  yields an **empty** block, exit code 0, without a word.
 
-Chaque registre de dérogations porte une **raison** et son test d'hygiène, qui
-échoue sur une entrée périmée — le motif de
-`tests/python/test_mirror_completeness.py`, réutilisé et non réinventé.
+2. `fences`     — no page owns code: every `rust`/`python` block contains an
+                  include, without exception.
+3. `symboles`   — the prose cites no vanished symbol. Nothing else covers a
+                  paragraph, and that is where three of the nine errors found
+                  in August 2026 were.
+4. `doctests`   — Rust coverage ratchet: a new public item carries its
+                  example, and the existing debt can only shrink.
+5. `api-python` — the Python counterpart, at a looser granularity: every
+                  public entry is **cited** by an executed example of the book
+                  (`tests/python/test_doc_*.py`). Python docstrings being
+                  written in the `///` of `src/py/`, one doctest per item
+                  would cost a home-made collector; citation gives the same
+                  non-regression guarantee for twenty lines.
 
-    python script/doc_lint.py            # tout
-    python script/doc_lint.py includes   # une seule vérification
-    python script/doc_lint.py --ratchet         # réécrit doc_coverage.txt
-    python script/doc_lint.py --ratchet-python  # réécrit python_coverage.txt
+Every waiver ledger carries a **reason** and its hygiene test, which fails on
+a stale entry — the pattern of
+`tests/python/test_mirror_completeness.py`, reused rather than reinvented.
+
+    python script/doc_lint.py            # everything
+    python script/doc_lint.py includes   # a single check
+    python script/doc_lint.py --ratchet         # rewrites doc_coverage.txt
+    python script/doc_lint.py --ratchet-python  # rewrites python_coverage.txt
 """
 
 from __future__ import annotations
@@ -53,22 +53,22 @@ EXEMPLES_PY = ROOT / "tests" / "python"
 # ── Registres ───────────────────────────────────────────────────────────────
 
 
-# Dette de migration : pages qui possèdent encore du code recopié. **Ce
-# registre ne peut que décroître** — l'hygiène refuse qu'une page dépasse son
-# compte, et exige qu'une page tombée à zéro soit retirée. Rien ne s'y ajoute.
+# Migration debt: pages that still own copied code. **This ledger can only
+# shrink** — hygiene refuses a page exceeding its count, and demands that a
+# page down to zero be removed. Nothing is ever added to it.
 DETTE_MIGRATION = {}
 
-# Symboles cités en prose que l'audit ne doit pas chercher à résoudre.
+# Symbols cited in prose that the audit must not try to resolve.
 SYMBOLES_TOLERES = {
-    "T::union_subs": "T est un paramètre de type, pas un type concret",
-    "ops::mesher": "nom historique, cité pour raconter le renommage du 2026-08-03",
-    "SubMesh::connectivity": "pub(crate) : la page Parallélisme décrit la machinerie interne",
-    "Type::membre": "métavariable de la page Documentation et tests",
-    "module::verbe": "métavariable : le marqueur des méthodes de délégation",
-    "Coords::acquire": "nom fautif, cité pour raconter ce que le garde-fou a trouvé",
+    "T::union_subs": "T is a type parameter, not a concrete type",
+    "ops::mesher": "historical name, cited to tell the 2026-08-03 renaming",
+    "SubMesh::connectivity": "pub(crate): the Parallelism page describes the internal machinery",
+    "Type::membre": "metavariable of the Documentation et tests page",
+    "module::verbe": "metavariable: the marker of delegation methods",
+    "Coords::acquire": "wrong name, cited to tell what the guard found",
 }
 
-# Racines qui ne viennent pas du crate : la partie droite ne s'y vérifie pas.
+# Roots that do not come from the crate: the right-hand side is not checked.
 CRATES_EXTERNES = {
     "std",
     "core",
@@ -120,7 +120,7 @@ TYPES_EXTERNES = {
 
 
 def pages():
-    """Les pages du book, chemin relatif à book/src, triées."""
+    """The book's pages, path relative to book/src, sorted."""
     return sorted(p for p in BOOK.rglob("*.md"))
 
 
@@ -129,7 +129,7 @@ def rel(p: Path) -> str:
 
 
 def fences(text: str):
-    """Les blocs délimités : (langue, lignes, numéro de la ligne d'ouverture)."""
+    """The fenced blocks: (language, lines, opening line number)."""
     out, opened, buf, start = [], None, [], 0
     for i, line in enumerate(text.split("\n"), 1):
         if opened is None:
@@ -145,17 +145,17 @@ def fences(text: str):
 
 
 def inline_codes(text: str):
-    """Les passages en `code inline`, hors blocs délimités.
+    """The `inline code` spans, outside fenced blocks.
 
-    Restreindre l'audit des symboles à ces passages est ce qui écarte les faux
-    positifs — noms de fichiers (`pyrucast.pth`), domaines (`pyrucast.github.io`)
-    et phrases courantes qui contiennent un `::` par accident.
+    Restricting the symbol audit to these spans is what rules out the false
+    positives — file names (`pyrucast.pth`), domains (`pyrucast.github.io`)
+    and everyday sentences that contain a `::` by accident.
     """
     without_blocks = re.sub(r"```.*?```", "", text, flags=re.S)
     return re.findall(r"`([^`\n]+)`", without_blocks)
 
 
-# ── 1. Résolution des includes ──────────────────────────────────────────────
+# ── 1. Include resolution ───────────────────────────────────────────────────
 
 
 def check_includes():
@@ -170,22 +170,22 @@ def check_includes():
             cible = (p.parent / chemin).resolve()
             ou = f"{rel(p)}:{ligne}"
             if not cible.exists():
-                erreurs.append(f"{ou} : fichier introuvable — {chemin}")
+                erreurs.append(f"{ou}: file not found — {chemin}")
                 continue
             source = cible.read_text(errors="ignore")
             if not ancre:
                 if not source.strip():
-                    erreurs.append(f"{ou} : le fichier inclus est vide — {chemin}")
+                    erreurs.append(f"{ou}: the included file is empty — {chemin}")
                 continue
             debut = re.search(rf"ANCHOR:\s*{re.escape(ancre)}\s*$", source, re.M)
             fin = re.search(rf"ANCHOR_END:\s*{re.escape(ancre)}\s*$", source, re.M)
             if not debut or not fin:
                 manque = "ANCHOR" if not debut else "ANCHOR_END"
-                erreurs.append(f"{ou} : {manque} « {ancre} » absente de {chemin}")
+                erreurs.append(f'{ou}: {manque} "{ancre}" missing from {chemin}')
                 continue
             corps = source[debut.end() : fin.start()]
             if not corps.strip():
-                erreurs.append(f"{ou} : l'ancre « {ancre} » de {chemin} est vide")
+                erreurs.append(f'{ou}: anchor "{ancre}" of {chemin} is empty')
     return erreurs
 
 
@@ -212,27 +212,27 @@ def check_fences():
         budget = DETTE_MIGRATION.get(nom)
         if budget is None:
             erreurs.append(
-                f"{nom} : {n} bloc(s) de code écrit(s) à la main. "
-                "Aucune page ne possède de code : écrire un test ou un exemple, "
+                f"{nom}: {n} hand-written code block(s). "
+                "No page owns code: write a test or an example, "
                 "l'encadrer d'ANCHOR, et l'inclure (CONVENTIONS.md, règle 1)."
             )
         elif n > budget:
             erreurs.append(
-                f"{nom} : {n} blocs écrits à la main, la dette n'en autorise que "
-                f"{budget}. Ce registre ne peut que décroître."
+                f"{nom}: {n} hand-written blocks, the debt allows only "
+                f"{budget}. This ledger can only shrink."
             )
-    # Hygiène : pas d'entrée périmée dans le registre.
+    # Hygiene: no stale entry in the ledger.
     for nom, budget in DETTE_MIGRATION.items():
         if nom not in vus:
-            erreurs.append(f"DETTE_MIGRATION : « {nom} » n'existe plus, la retirer")
+            erreurs.append(f'DETTE_MIGRATION: "{nom}" no longer exists, remove it')
         elif vus[nom] == 0:
             erreurs.append(
-                f"DETTE_MIGRATION : « {nom} » est migrée (0 bloc), la retirer du registre"
+                f'DETTE_MIGRATION: "{nom}" is migrated (0 block), remove it from the ledger'
             )
         elif vus[nom] < budget:
             erreurs.append(
-                f"DETTE_MIGRATION : « {nom} » est descendue à {vus[nom]} blocs, "
-                f"le registre en annonce {budget} — mettre à jour."
+                f'DETTE_MIGRATION: "{nom}" went down to {vus[nom]} blocks, '
+                f"the ledger announces {budget} — update it."
             )
     return erreurs
 
@@ -241,11 +241,11 @@ def check_fences():
 
 
 def variantes_denum(source: str):
-    """Les variantes de chaque `enum` du fichier, par comptage d'accolades.
+    """The variants of every `enum` of the file, by brace counting.
 
-    Sert de **repli** pour les types que la rustdoc ne documente pas
-    (`pub(crate)`) : l'appartenance exacte, elle, vient de
-    [`membres_par_type`], qui lit la rustdoc.
+    Serves as a **fallback** for the types rustdoc does not document
+    (`pub(crate)`): exact membership itself comes from
+    [`membres_par_type`], which reads the rustdoc.
     """
     noms = set()
     for m in re.finditer(r"\benum\s+[A-Z][A-Za-z0-9_]*[^{]*\{", source):
@@ -261,12 +261,12 @@ def variantes_denum(source: str):
 
 
 def membres_par_type():
-    """Pour chaque type public, l'ensemble exact de ses membres.
+    """For every public type, the exact set of its members.
 
-    Lu dans la rustdoc (`id="method.*"`, `variant.*`, `associatedconstant.*`),
-    qui est la seule source qui connaisse vraiment l'appartenance — un parseur
-    maison dirait qu'un nom existe *quelque part*, ce qui laisserait passer un
-    `Physics::Gauss`. Les méthodes de traits comptent : `mesh.clone()` est une
+    Read from the rustdoc (`id="method.*"`, `variant.*`, `associatedconstant.*`),
+    the only source that truly knows membership — a home-made parser would say
+    a name exists *somewhere*, which would let a `Physics::Gauss` through.
+    Trait methods count: `mesh.clone()` is a
     citation légitime.
     """
     carte = {}
@@ -285,7 +285,7 @@ def membres_par_type():
 
 
 def symboles_du_crate():
-    """Noms de modules, fonctions, types et membres définis dans src/."""
+    """Names of modules, functions, types and members defined in src/."""
     modules, fonctions, types, membres = set(), set(), set(), set()
     for p in (ROOT / "src").rglob("*.rs"):
         s = p.read_text(errors="ignore")
@@ -304,19 +304,19 @@ def check_symboles():
     if not (DOC / "all.html").exists():
         return ["target/doc absent — lancer `cargo doc --no-deps --lib` d'abord"]
     modules, fonctions, types, membres = symboles_du_crate()
-    modules.add("pyrucast")  # la racine du crate, telle qu'on l'écrit en Rust
+    modules.add("pyrucast")  # the crate root, as written in Rust
     par_type = membres_par_type()
     try:
         import pyrucast
     except ImportError:
-        return ["pyrucast n'est pas importable — lancer script/check_python.sh d'abord"]
+        return ["pyrucast is not importable — run script/check_python.sh first"]
 
     utilises = set()
     for p in pages():
         for extrait in inline_codes(p.read_text()):
-            # Le chemin entier, pas deux segments : `ops::matrix::stiffness`
-            # découpé en paires laisserait le **dernier** segment sans
-            # vérification — c'est-à-dire le nom qui bouge le plus souvent.
+            # The whole path, not two segments: `ops::matrix::stiffness` cut
+            # into pairs would leave the **last** segment unchecked — that is,
+            # the name that moves most often.
             for m in re.finditer(
                 r"\b(?:[A-Za-z_][A-Za-z0-9_]*::)+[A-Za-z_][A-Za-z0-9_]*\b", extrait
             ):
@@ -328,15 +328,15 @@ def check_symboles():
                 if segments[0] in CRATES_EXTERNES or segments[0] in TYPES_EXTERNES:
                     continue
                 if any(s.endswith("_") for s in segments):
-                    continue  # citation tronquée du genre `points_…`
+                    continue  # truncated citation of the `points_…` kind
                 faute = None
                 for i, s in enumerate(segments):
                     dernier = i == len(segments) - 1
                     if s in TYPES_EXTERNES or s in CRATES_EXTERNES:
                         break
                     if s in par_type and not dernier:
-                        # Type public : rustdoc donne la liste exacte de ses
-                        # membres, on n'a plus à se contenter d'un « ce nom
+                        # Public type: rustdoc gives the exact list of its
+                        # members, no need to settle for a "this name
                         # existe quelque part ».
                         suivant = segments[i + 1]
                         if suivant not in par_type[s]:
@@ -350,13 +350,13 @@ def check_symboles():
                         if s not in fonctions and s not in modules:
                             faute = f"fonction inconnue ({s})"
                     elif s not in modules:
-                        # La forme exacte du bug d'août : `assemble::stiffness`
-                        # a survécu au renommage parce que rien ne lisait la prose.
+                        # The exact shape of the August bug:
+                        # `assemble::stiffness` survived the renaming
                         faute = f"module inconnu ({s})"
                     if faute:
                         break
                 if faute:
-                    erreurs.append(f"{rel(p)} : {faute} dans « {chemin} »")
+                    erreurs.append(f'{rel(p)}: {faute} in "{chemin}"')
             for m in re.finditer(
                 r"\bpyrucast\.([a-z_][a-z0-9_]*)\.([a-z_][a-z0-9_]*)\b", extrait
             ):
@@ -366,7 +366,7 @@ def check_symboles():
                     utilises.add(cle)
                     continue
                 if verbe.endswith("_"):
-                    continue  # citation tronquée du genre `points_…`
+                    continue  # truncated citation of the `points_…` kind
                 objet = getattr(pyrucast, module, None)
                 if objet is None:
                     erreurs.append(f"{rel(p)} : module Python inconnu — {cle}")
@@ -374,30 +374,30 @@ def check_symboles():
                     erreurs.append(f"{rel(p)} : verbe Python inconnu — {cle}")
     for cle, raison in SYMBOLES_TOLERES.items():
         if not raison.strip():
-            erreurs.append(f"SYMBOLES_TOLERES : « {cle} » sans raison écrite")
+            erreurs.append(f'SYMBOLES_TOLERES: "{cle}" without a written reason')
         elif cle not in utilises:
-            erreurs.append(f"SYMBOLES_TOLERES : « {cle} » n'est plus cité, le retirer")
+            erreurs.append(f'SYMBOLES_TOLERES: "{cle}" is no longer cited, remove it')
     return erreurs
 
 
-# ── 4. Cliquet de couverture des doctests ───────────────────────────────────
+# ── 4. Doctest coverage ratchet ─────────────────────────────────────────────
 
 DOC = ROOT / "target" / "doc" / "pyrucast"
 
 
 def delegations():
-    """Les méthodes de **pure délégation** — celles dont toute la documentation
-    est « voir [la fonction libre] ».
+    """The **pure delegation** methods — those whose whole documentation is
+    "see [the free function]".
 
     Elles n'ont aucune logique : elles appellent l'opérateur, receveur compris.
-    C'est la fonction libre qui est la forme canonique et qui porte la
+    The free function is the canonical form and carries the
     documentation (`CONVENTIONS.md`, « Le verbe exposé aussi en méthode ») :
-    leur réclamer un exemple dupliquerait le sien, et donnerait un second texte
-    à faire vieillir.
+    demanding an example of them would duplicate its own, and give a second
+    text to let age.
 
-    Le critère est ce **marqueur intentionnel**, pas l'emplacement : ces blocs
-    vivent dans `src/ops/**/methods.rs` mais aussi au bas de `src/ops/matrix.rs`,
-    et certains sont produits par macro sur `impl $T`. Chercher par répertoire
+    The criterion is that **intentional marker**, not the location: these
+    blocks live in `src/ops/**/methods.rs` but also at the bottom of
+    `src/ops/matrix.rs`, and some are macro-produced on `impl $T`. Searching
     en laissait passer la moitié.
     """
     noms = set()
@@ -421,28 +421,28 @@ def delegations():
 
 
 def api_publique():
-    """L'ensemble public au sens de rustdoc : items libres + méthodes.
+    """The public set in rustdoc's sense: free items + methods.
 
-    Les items libres viennent de `all.html`, qui ne liste pas les méthodes ;
-    celles-ci se lisent sur la page de chaque type, dans la seule section
-    `implementations` — les impls de traits (`Debug`, `Clone`…) n'ont pas à
+    Free items come from `all.html`, which does not list methods; those are
+    read on each type's page, in the `implementations` section alone — trait
+    impls (`Debug`, `Clone`…) have no
     porter d'exemple.
 
-    Tout est nommé par **chemin complet** : treize types du crate sont
-    homonymes (`Facet`, `Grid`, `Interpolation`…), et une clé courte les
+    Everything is named by **full path**: thirteen types of the crate are
+    homonyms (`Facet`, `Grid`, `Interpolation`…), and a short key would
     confondrait.
     """
     tous = (DOC / "all.html").read_text(errors="ignore")
-    # `all.html` liste aussi ce qui est **réexporté d'un autre crate** : le
-    # `pub use rayon::prelude::*` de `parallel` y met treize traits qui ne sont
-    # pas de nous. Leur page rustdoc n'a pas de lien « source » vers
-    # `src/pyrucast/` — c'est ce qui les sépare des nôtres. Exiger un exemple
-    # sur `rayon::ParallelIterator` reviendrait à documenter rayon.
+    # `all.html` also lists what is **re-exported from another crate**: the
+    # `pub use rayon::prelude::*` of `parallel` puts thirteen traits there
+    # that are not ours. Their rustdoc page has no "source" link to
+    # `src/pyrucast/` — that is what sets them apart from ours. Demanding an
+    # example on `rayon::ParallelIterator` would amount to documenting rayon.
     libres = set()
     for href, nom in re.findall(r'<li><a href="([^"]+)">([^<]+)</a></li>', tous):
         page = DOC / href
-        # Le lien « source » est relatif : sa profondeur en `../` dépend de
-        # celle de la page. On cherche donc le segment, pas le chemin entier.
+        # The "source" link is relative: its `../` depth depends on the
+        # page's. So we look for the segment, not the whole path.
         if page.is_file() and "/src/pyrucast/" not in page.read_text(errors="ignore"):
             continue
         libres.add(nom)
@@ -456,16 +456,16 @@ def api_publique():
         i = h.find('id="implementations"')
         if i < 0:
             continue
-        # S'arrêter au premier bloc qui n'est plus le nôtre : les impls de
-        # traits, mais aussi les **méthodes héritées par `Deref`** (`Objects`
-        # déréférence vers `BTreeMap`). Exiger un exemple sur `BTreeMap::range`
+        # Stop at the first block that is no longer ours: trait impls, but
+        # also the **methods inherited through `Deref`** (`Objects`
+        # dereferences to `BTreeMap`). Demanding an example on
         # serait réclamer de documenter la bibliothèque standard.
         #
-        # Les impls **génériques** et **synthétiques** comptent au même titre :
-        # un type sans aucune impl de trait écrite à la main n'a pas de section
-        # `trait-implementations`, et sans elles la borne manquait — d'où les
-        # `from_subset`, `into_either` et `vzip` de nalgebra et d'either qui
-        # figuraient au registre comme s'ils étaient de nous.
+        # **Generic** and **synthetic** impls count just the same: a type
+        # without a single hand-written trait impl has no
+        # `trait-implementations` section, and without them the bound was
+        # missing — hence the `from_subset`, `into_either` and `vzip` of
+        # nalgebra and either that sat in the ledger as if they were ours.
         bornes = [
             x
             for x in (
@@ -481,19 +481,19 @@ def api_publique():
             re.findall(r'id="(?:method|associatedconstant)\.([A-Za-z0-9_]+)"', segment)
         ):
             methodes.add(f"{chemin}::{nom}")
-    # Les délégations sont documentées par leur cible, pas par elles-mêmes.
+    # Delegations are documented by their target, not by themselves.
     deleguees = delegations()
     methodes = {m for m in methodes if m.split("::")[-1] not in deleguees}
     return libres, methodes
 
 
 def items_documentes(publics):
-    """Les items portant un exemple, d'après `cargo test --doc -- --list`.
+    """The items carrying an example, per `cargo test --doc -- --list`.
 
-    Le chemin que rustdoc donne à un doctest est celui du module où vit
-    l'`impl`, pas celui du type : `ops::matrix::Matrix::assemble` désigne une
-    méthode de `containers::matrix::Matrix`. D'où le repli sur le suffixe
-    `Type::methode`, accepté seulement s'il ne désigne qu'un candidat.
+    The path rustdoc gives a doctest is that of the module where the `impl`
+    lives, not that of the type: `ops::matrix::Matrix::assemble` designates a
+    method of `containers::matrix::Matrix`. Hence the fallback on the
+    `Type::method` suffix, accepted only if it designates a single candidate.
     """
     sortie = subprocess.run(
         ["cargo", "test", "--doc", "--", "--list"],
@@ -504,11 +504,11 @@ def items_documentes(publics):
     par_suffixe = {}
     for item in publics:
         par_suffixe.setdefault("::".join(item.split("::")[-2:]), []).append(item)
-    # Un **réexport** ne fait qu'enlever des segments : `ops::mesh::triangulation`
+    # A **re-export** only removes segments: `ops::mesh::triangulation`
     # réexporte `…::triangulation::cdt::delaunay_2d` sous
-    # `…::triangulation::delaunay_2d`. Le chemin public est donc une
-    # sous-suite du chemin que rustdoc donne au doctest. C'est plus étroit
-    # qu'une comparaison du seul dernier segment, qui confondrait les `new`.
+    # `…::triangulation::delaunay_2d`. The public path is therefore a
+    # subsequence of the path rustdoc gives the doctest. That is narrower
+    # than comparing the last segment alone, which would confuse the `new`s.
     par_dernier = {}
     for item in publics:
         par_dernier.setdefault(item.split("::")[-1], []).append(item)
@@ -519,9 +519,9 @@ def items_documentes(publics):
 
     documentes, ambigus = set(), []
     for m in re.finditer(r"^\S+ - (\S+) \(line \d+\): test$", sortie, re.M):
-        # rustdoc nomme le doctest d'un `impl` paramétré avec ses paramètres —
-        # `CellGeom<'a>::det_j_w` — là où la page du type s'appelle `CellGeom`.
-        # Sans cette normalisation, un item documenté restait au registre.
+        # rustdoc names the doctest of a parameterized `impl` with its
+        # parameters — `CellGeom<'a>::det_j_w` — where the type's page is
+        # called `CellGeom`. Without this normalization, a documented item
         chemin = re.sub(r"<[^>]*>", "", m.group(1))
         if chemin in publics:
             documentes.add(chemin)
@@ -556,20 +556,20 @@ def check_doctests(ratchet=False):
 
     if ratchet:
         LEDGER.write_text(
-            "# Items publics sans exemple exécutable — registre du cliquet.\n"
-            "# Il ne peut que RÉTRÉCIR : un item public nouveau porte son exemple\n"
+            "# Public items without an executable example — ratchet ledger.\n"
+            "# It can only SHRINK: a new public item carries its example\n"
             "# (CONVENTIONS.md, règle 2), et un item documenté sort d'ici.\n"
             "# Régénérer : python script/doc_lint.py --ratchet\n"
             + "".join(f"{n}\n" for n in sorted(sans_exemple))
         )
         print(
-            f"registre réécrit : {len(sans_exemple)} items sans exemple, sur {len(publics)}"
+            f"ledger rewritten: {len(sans_exemple)} items without an example, out of {len(publics)}"
         )
         return []
 
     if not LEDGER.exists():
         return [
-            f"{LEDGER.name} absent — le créer avec `python script/doc_lint.py --ratchet`"
+            f"{LEDGER.name} missing — create it with `python script/doc_lint.py --ratchet`"
         ]
     connus = {
         l.strip()
@@ -579,32 +579,32 @@ def check_doctests(ratchet=False):
     erreurs = []
     for item in sorted(sans_exemple - connus):
         erreurs.append(
-            f"{item} : item public sans exemple exécutable dans sa documentation "
-            "(CONVENTIONS.md, règle 2). Ajouter un doctest — `ignore` est proscrit."
+            f"{item}: public item without an executable example in its documentation "
+            "(CONVENTIONS.md, rule 2). Add a doctest — `ignore` is forbidden."
         )
     for item in sorted(connus & documentes):
         erreurs.append(
             f"{item} : porte désormais un exemple — le retirer de "
-            f"script/{LEDGER.name} (le registre ne doit garder que la dette réelle)."
+            f"script/{LEDGER.name} (the ledger must keep only the real debt)."
         )
     for item in sorted(connus - publics):
         erreurs.append(
-            f"{item} : n'est plus un item public — le retirer de script/{LEDGER.name}."
+            f"{item}: no longer a public item — remove it from script/{LEDGER.name}."
         )
     return erreurs
 
 
-# ── 5. L'API Python est-elle citée par un exemple exécuté ? ─────────────────
+# ── 5. Is the Python API cited by an executed example? ──────────────────────
 
 
 def api_python():
-    """La surface publique du module installé, en trois familles.
+    """The installed module's public surface, in three families.
 
-    Dédoublonnée par **identité** : une classe est atteignable comme
-    `pyrucast.Coords` et comme `pyrucast.coords.Coords`. Les méthodes qui
-    **reprennent le nom d'un opérateur** sont écartées — ce sont les
-    délégations (`mesh.skin()` pour `pyrucast.mesh.skin(mesh)`), exemptées
-    côté Rust pour la même raison : la cible porte l'exemple.
+    Deduplicated by **identity**: a class is reachable as `pyrucast.Coords`
+    and as `pyrucast.coords.Coords`. Methods that **take an operator's name**
+    are ruled out — they are the delegations (`mesh.skin()` for
+    `pyrucast.mesh.skin(mesh)`), exempted on the Rust side for the same
+    reason: the target carries the example.
     """
     import pyrucast
 
@@ -623,7 +623,7 @@ def api_python():
             obj = getattr(mod, nom)
             if inspect.isclass(obj):
                 classes.setdefault(id(obj), (nom, obj))
-            # Préférer le module de façade au module d'extension compilé.
+            # Prefer the façade module to the compiled extension module.
             elif callable(obj) and (id(obj) not in libres or court != "_pyrucast"):
                 libres[id(obj)] = f"{prefixe}.{nom}"
 
@@ -639,10 +639,10 @@ def api_python():
 
 
 def noms_cites():
-    """Tout identifiant et tout attribut qu'écrivent les exemples du book.
+    """Every identifier and attribute the book's examples write.
 
-    Lecture par AST plutôt que par expression rationnelle : un nom en
-    commentaire ou dans une chaîne ne compte pas.
+    Read by AST rather than by regular expression: a name in a comment or in
+    a string does not count.
     """
     vus = set()
     for fichier in sorted(EXEMPLES_PY.glob("test_doc_*.py")):
@@ -655,20 +655,20 @@ def noms_cites():
 
 
 def check_api_python(ratchet=False):
-    """Cliquet de citation : toute entrée publique Python paraît dans un
-    exemple exécuté du book.
+    """Citation ratchet: every public Python entry appears in an executed
+    example of the book.
 
-    **Ce que cela prouve, et ce que cela ne prouve pas.** La granularité est le
-    *nom*, non l'appel : `.get(` cité une fois vaut pour les `get` de tous les
-    conteneurs. C'est assumé — ces méthodes-là sont la grammaire commune des
-    agrégats, et une citation couvre bien la notion. Ce que le garde-fou
-    garantit est plus étroit que le cliquet Rust et suffit à ce qu'on lui
-    demande : **aucune entrée publique n'est absente des exemples**, et une
-    entrée nouvelle ne peut pas y entrer sans être montrée.
+    **What this proves, and what it does not.** The granularity is the
+    *name*, not the call: `.get(` cited once holds for the `get` of every
+    container. That is assumed — those methods are the common grammar of the
+    aggregates, and one citation does cover the notion. What the guard
+    guarantees is narrower than the Rust ratchet and enough for what is asked
+    of it: **no public entry is missing from the examples**, and a new entry
+    cannot get in without being shown.
 
-    Une classe compte comme citée dès qu'une de ses méthodes l'est : le Python
+    A class counts as cited as soon as one of its methods is: the Python of a
     idiomatique écrit `mesh.unit()`, jamais `SubMesh(...)`, et exiger le nom
-    d'un `Sub*` reviendrait à réclamer une tournure que personne n'écrit.
+    `Sub*` would amount to demanding a turn of phrase nobody writes.
     """
     try:
         fonctions, classes, methodes = api_python()
@@ -684,8 +684,8 @@ def check_api_python(ratchet=False):
 
     if ratchet:
         LEDGER_PY.write_text(
-            "# Entrées publiques Python qu'aucun exemple du book ne cite.\n"
-            "# Registre du cliquet : il ne peut que RÉTRÉCIR.\n"
+            "# Public Python entries no example of the book cites.\n"
+            "# Ratchet ledger: it can only SHRINK.\n"
             "# Régénérer : python script/doc_lint.py --ratchet-python\n"
             + "".join(f"{n}\n" for n in sorted(absents)),
             encoding="utf-8",
@@ -703,30 +703,30 @@ def check_api_python(ratchet=False):
     erreurs = []
     for nom in sorted(absents - connus):
         erreurs.append(
-            f"{nom} : entrée publique Python qu'aucun exemple du book ne cite "
-            f"(CONVENTIONS.md, règle 2). L'ajouter à un `tests/python/test_doc_*.py`, "
-            f"d'où la page qui la présente le tirera."
+            f"{nom}: public Python entry no example of the book cites "
+            f"(CONVENTIONS.md, rule 2). Add it to a `tests/python/test_doc_*.py`, "
+            f"from which the page presenting it will pull it."
         )
     for nom in sorted(connus - absents):
         erreurs.append(
             f"{nom} : désormais cité — le retirer de script/python_coverage.txt "
-            f"(le registre ne doit garder que la dette réelle)."
+            f"(the ledger must keep only the real debt)."
         )
     return erreurs
 
 
 def methodes_de(nom_classe, methodes):
-    """Les noms de méthodes propres à `nom_classe`."""
+    """The method names proper to `nom_classe`."""
     return {m for m, classes in methodes.items() if nom_classe in classes}
 
 
 # ── Point d'entrée ──────────────────────────────────────────────────────────
 
 VERIFICATIONS = {
-    "includes": ("résolution des includes du book", check_includes),
-    "fences": ("aucune page ne possède de code", check_fences),
+    "includes": ("resolution of the book's includes", check_includes),
+    "fences": ("no page owns code", check_fences),
     "symboles": ("symboles cités en prose", check_symboles),
-    "doctests": ("cliquet de couverture des doctests", check_doctests),
+    "doctests": ("doctest coverage ratchet", check_doctests),
     "api-python": ("cliquet de citation de l'API Python", check_api_python),
 }
 

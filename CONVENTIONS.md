@@ -1,783 +1,757 @@
-# Conventions — API, documentation et tests
+# Conventions — API, documentation and tests
 
-Ce document fige les règles qu'on ne veut plus trancher au cas par cas.
+This document settles the rules we no longer want to arbitrate case by case.
 
-**Première partie, l'API.** Une seule règle pour décider si une opération est
-une méthode inhérente d'un conteneur ou une fonction libre des modules `ops/`,
-et une seule règle pour projeter cette décision vers l'API Python. L'objectif :
-ne plus jamais trancher « méthode ou fonction ? » à la main. La réponse doit
-tomber de l'arbre de décision ci-dessous, et la forme Python doit se déduire
-mécaniquement de la forme Rust.
+**First part, the API.** A single rule to decide whether an operation is an
+inherent method of a container or a free function of the `ops/` modules, and a
+single rule to project that decision onto the Python API. The goal: never again
+decide "method or function?" by hand. The answer must fall out of the decision
+tree below, and the Python form must be derived mechanically from the Rust form.
 
-**Seconde partie, la documentation et les tests** (« Documentation et tests »,
-en fin de document). Quel type d'exemple vit où, ce que chaque type de test
-prouve, et **qui le vérifie**. La narration et les tables de décision sont dans
-le book, page [Documentation et tests](book/src/developper/documentation-et-tests.md) ;
-ici ne figurent que les règles.
+**Second part, documentation and tests** ("Documentation and tests", at the end
+of the document). Which kind of example lives where, what each kind of test
+proves, and **who checks it**. The narrative and the decision tables are in the
+book, page [Documentation and tests](book/src/developper/documentation-et-tests.md);
+only the rules appear here.
 
-## Vocabulaire
+## Vocabulary
 
-- **Conteneur** : un type de `containers/` (`Mesh`, `SubMesh`, `NodeField`,
-  `ElementField`, `Matrix`, `Model`, `FiniteElementSpace`, …). On les
-  qualifie de *lourds* par opposition aux scalaires, noms de composantes,
-  `NodeId`, slices `&[f64]`, etc.
-- **Opérateur** : une fonction qui consomme un ou plusieurs conteneurs et
-  produit un nouveau conteneur (ou une donnée dérivée). Les opérateurs
-  vivent dans `ops/`, rangés **par conteneur produit** — `coords`,
-  `element_field`, `export`, `field`, `geom`, `matrix`, `measure`, `mesh`,
-  `node_field`, `solver` ; voir « Où vit une fonction libre » plus bas et
-  `ops/mod.rs`.
+- **Container**: a type from `containers/` (`Mesh`, `SubMesh`, `NodeField`,
+  `ElementField`, `Matrix`, `Model`, `FiniteElementSpace`, …). We call them
+  *heavy* as opposed to scalars, component names, `NodeId`, `&[f64]` slices,
+  etc.
+- **Operator**: a function that consumes one or more containers and produces a
+  new container (or a derived piece of data). Operators live in `ops/`, filed
+  **by produced container** — `coords`, `element_field`, `export`, `field`,
+  `geom`, `matrix`, `measure`, `mesh`, `node_field`, `solver`; see "Where a free
+  function lives" below and `ops/mod.rs`.
 
-## Règle Rust : méthode vs fonction libre
+## Rust rule: method vs free function
 
-Une opération est une **méthode inhérente** si, et seulement si, les trois
-conditions tiennent :
+An operation is an **inherent method** if, and only if, all three conditions
+hold:
 
-1. il existe **un** conteneur qui est le `self` évident ;
-2. l'opération lit/écrit *essentiellement* ce conteneur — les autres
-   arguments sont des scalaires, des noms de composantes, des `NodeId`,
-   des slices `&[f64]`, … (jamais un second conteneur lourd traité en
-   pair) ;
-3. c'est l'un de :
-   - un **accesseur** (`node_count`, `components`, `get`, …) ;
-   - une **mutation qui préserve l'invariant** du conteneur (`set`,
-     `add_cell`, `add_to_component`, …) ;
-   - une **vue dérivée bon marché** de ce seul conteneur
-     (`to_poi1_submesh` = le support du field vu comme POI1).
+1. there is **one** container that is the obvious `self`;
+2. the operation *essentially* reads/writes that container — the other
+   arguments are scalars, component names, `NodeId`s, `&[f64]` slices, …
+   (never a second heavy container treated as a peer);
+3. it is one of:
+   - an **accessor** (`node_count`, `components`, `get`, …);
+   - a **mutation that preserves the container's invariant** (`set`,
+     `add_cell`, `add_to_component`, …);
+   - a **cheap derived view** of that single container
+     (`to_poi1_submesh` = the field's support seen as POI1).
 
-Sinon, c'est une **fonction libre dans `ops/<thème>`**.
+Otherwise, it is a **free function in `ops/<theme>`**.
 
-### Départage des cas limites
+### Settling the borderline cases
 
-> **Deux conteneurs lourds entrent-ils comme pairs ?**
-> — Oui → fonction libre (`ops::node_field::restrict(field, mesh)`).
-> — Non, ça ne lit que `self` (+ petits args) → méthode.
+> **Do two heavy containers come in as peers?**
+> — Yes → free function (`ops::node_field::restrict(field, mesh)`).
+> — No, it only reads `self` (+ small args) → method.
 
-Et un repère de cohérence : si une opération mono-conteneur appartient à
-une **famille** déjà installée dans `ops/` (les mailleurs, les assembleurs),
-elle rejoint sa famille même si elle pourrait techniquement être une méthode.
-Une famille d'opérateurs ne se scinde pas entre `ops/` et les `impl` de
-conteneur.
+And a consistency landmark: if a single-container operation belongs to a
+**family** already installed in `ops/` (the meshers, the assemblers), it joins
+its family even if it could technically be a method. A family of operators is
+never split between `ops/` and the container `impl`s.
 
-### Exceptions assumées
+### Accepted exceptions
 
-- **Surcharges d'opérateurs** (`Add`, `Sub`, `Mul`, `Index`, …) : toujours
-  des `impl` de trait sur le conteneur, jamais des fonctions `ops::`. C'est
-  la forme idiomatique dans les deux langages. L'arithmétique field+scalaire
-  et field+field passe par là (`a + b`), pas par une `ops::field::add`.
-- **Constructeurs nommés** (`from_poi1`, `lagrange1`, `with_choices`,
-  `block`) : fonctions associées / `classmethod`. Elles fabriquent
-  *leur propre* type → elles restent sur le type. Quand ce type est un
-  **agrégat** (`Mesh`, `FiniteElementSpace`, `Model`, `ElementField`), le
-  constructeur vit au niveau du **parent** et renvoie un parent — voir
-  « Agrégats : un ou plusieurs, de manière transparente » ci-dessous.
-  **Limite de l'exception : un catalogue n'est pas un constructeur.** Un type
-  qui en accumule des dizaines les rend visibles sur chacune de ses instances
-  — en Python une `classmethod` s'atteint aussi depuis un objet, et
-  `m.heat_conduction(fes)` s'exécute en jetant `m` en silence. Passé le
-  pluriel, la famille se range comme toute famille d'opérateurs, dans le
-  module du conteneur produit : les physiques — 22 fonctions Rust, 28 entrées
-  Python (les lois se déplient) — sont `ops::model::*` / `pyrucast.model.*`,
-  pas des `Model::*`. Un type garde un ou deux constructeurs nommés, pas un
-  catalogue.
+- **Operator overloads** (`Add`, `Sub`, `Mul`, `Index`, …): always trait
+  `impl`s on the container, never `ops::` functions. That is the idiomatic form
+  in both languages. field+scalar and field+field arithmetic goes through them
+  (`a + b`), not through an `ops::field::add`.
+- **Named constructors** (`from_poi1`, `lagrange1`, `with_choices`, `block`):
+  associated functions / `classmethod`s. They build *their own* type → they
+  stay on the type. When that type is an **aggregate** (`Mesh`,
+  `FiniteElementSpace`, `Model`, `ElementField`), the constructor lives at the
+  **parent** level and returns a parent — see "Aggregates: one or several,
+  transparently" below.
+  **The limit of the exception: a catalogue is not a constructor.** A type that
+  piles up dozens of them makes them visible on every one of its instances — in
+  Python a `classmethod` can also be reached from an object, and
+  `m.heat_conduction(fes)` runs while silently throwing `m` away. Past the
+  plural, the family is filed like any other family of operators, in the module
+  of the produced container: the physics — 22 Rust functions, 28 Python entries
+  (the laws unfold) — are `ops::model::*` / `pyrucast.model.*`, not `Model::*`.
+  A type keeps one or two named constructors, not a catalogue.
 
-## Où vit une fonction libre : le conteneur produit
+## Where a free function lives: the produced container
 
-**Un module d'`ops/` rassemble les opérateurs qui produisent le même
-conteneur, et porte son nom.** Une opération se range par sa **sortie**,
-jamais par son entrée : `gradient(field, fespace)` produit un
-`ElementField`, donc il vit dans `ops::element_field`, à côté de
-`deformation` et `interp_to_gauss` — pas dans `mesh` ni dans `node_field`.
+**A module of `ops/` gathers the operators that produce the same container, and
+bears its name.** An operation is filed by its **output**, never by its input:
+`gradient(field, fespace)` produces an `ElementField`, so it lives in
+`ops::element_field`, next to `deformation` and `interp_to_gauss` — not in
+`mesh` nor in `node_field`.
 
-| module | produit |
+| module | produces |
 |---|---|
-| `ops::mesh` | un `Mesh` |
-| `ops::node_field` | un `NodeField` |
-| `ops::element_field` | un `ElementField` |
-| `ops::matrix` | une `Matrix` |
-| `ops::coords` | écrit dans le magasin |
+| `ops::mesh` | a `Mesh` |
+| `ops::node_field` | a `NodeField` |
+| `ops::element_field` | an `ElementField` |
+| `ops::matrix` | a `Matrix` |
+| `ops::coords` | writes into the store |
 
-Les opérateurs qui ne produisent **aucun** conteneur échappent à la règle par
-construction ; on les range par activité : `ops::measure` (réductions à un
-nombre), `ops::geom` (requêtes géométriques), `ops::export` (effets de bord).
+Operators that produce **no** container escape the rule by construction; they
+are filed by activity: `ops::measure` (reductions to a number), `ops::geom`
+(geometric queries), `ops::export` (side effects).
 
-Un troisième cas existe : l'opérateur **générique**, dont le produit est un
-conteneur — toujours — mais **pas un conteneur déterminé**. `abs` rend un
-`NodeField` ou un `ElementField` selon ce qu'on lui donne : la règle ne
-désigne donc pas *un* module. Attention à ne pas confondre avec deux fonctions
-monomorphes de même famille (`mask_nodes` / `mask_cells`), qui ont chacune un
-produit déterminé et se rangent normalement. Ces opérateurs polymorphes se rangent par **domaine** :
-`ops::field` (masque de bande, filtrage et renommage de composantes, maths
-élément par élément). Ils restent des fonctions libres à part entière, avec
-leur méthode sur chacune des quatre saveurs de champ.
+A third case exists: the **generic** operator, whose product is a container —
+always — but **not a determined container**. `abs` returns a `NodeField` or an
+`ElementField` depending on what it is given: the rule therefore designates no
+*single* module. Careful not to confuse this with two monomorphic functions of
+the same family (`mask_nodes` / `mask_cells`), which each have a determined
+product and are filed normally. These polymorphic operators are filed by
+**domain**: `ops::field` (band masking, component filtering and renaming,
+element-by-element maths). They remain full-fledged free functions, with their
+method on each of the four field flavours.
 
-### L'exception unique et nommée : `solver`
+### The single, named exception: `solver`
 
-`ops::solver` produit un `NodeField` et devrait rejoindre `ops::node_field`.
-Il garde son nom parce que **plusieurs familles distinctes produisent un
-champ nodal** — dérivation, assemblage, résolution — et que seule la
-résolution se cherche par son propre nom. C'est le seul module nommé d'après
-une activité tout en produisant un conteneur, et il doit le rester.
+`ops::solver` produces a `NodeField` and should join `ops::node_field`. It keeps
+its name because **several distinct families produce a nodal field** —
+differentiation, assembly, solving — and only solving is looked up by its own
+name. It is the only module named after an activity while producing a
+container, and it must stay that way.
 
-### Corollaire : pas de qualificatif dans le nom d'une fonction
+### Corollary: no qualifier in a function's name
 
-Un module ne contient **jamais** deux opérateurs qui ne diffèrent que par le
-conteneur sur lequel ils portent. Si le cas se présente, le qualificatif
-appartient au **nom du module**, pas au nom de la fonction, et le module doit
-être scindé. C'est ce qui donne trois fusions homonymes et sans ambiguïté —
-`mesh::consolidate`, `node_field::consolidate`, `element_field::consolidate` —
-au lieu de trois fonctions suffixées au même endroit. De même `coords::set`
-face à `node_field::positions` qui lit.
+A module **never** contains two operators that differ only by the container
+they bear on. If that case arises, the qualifier belongs to the **module's
+name**, not the function's name, and the module must be split. That is what
+gives three homonymous, unambiguous merges — `mesh::consolidate`,
+`node_field::consolidate`, `element_field::consolidate` — instead of three
+suffixed functions in the same place. Likewise `coords::set` facing
+`node_field::positions`, which reads.
 
-### Une limite de R3, à connaître
+### A limit of R3, worth knowing
 
-R3 dit que le qualificatif d'une fonction doit passer dans le nom du module.
-Le remède ne s'applique que si le qualificatif distingue la **sortie** : c'est
-le cas des trois `consolidate`, qui produisent trois conteneurs différents.
+R3 says that a function's qualifier must move into the module's name. The
+remedy only applies if the qualifier distinguishes the **output**: that is the
+case for the three `consolidate`s, which produce three different containers.
 
-`select_nodes` et `select_cells` sont hors de portée : elles produisent toutes
-deux un `Mesh` et vivent donc toutes deux dans `ops::mesh`, leur qualificatif
-distinguant l'**entrée**. On ne peut pas le déplacer dans le nom du module,
-puisque le module est fixé par la sortie. Le suffixe reste donc légitime, et
-c'est côté Python que l'ambiguïté disparaît — une seule fonction `select` qui
-répartit selon le type reçu. Même situation pour `integral` /
-`integral_element`.
+`select_nodes` and `select_cells` are out of reach: both produce a `Mesh` and
+therefore both live in `ops::mesh`, their qualifier distinguishing the
+**input**. It cannot be moved into the module's name, since the module is fixed
+by the output. The suffix therefore remains legitimate, and it is on the Python
+side that the ambiguity disappears — a single `select` function that dispatches
+on the type it receives. Same situation for `integral` / `integral_element`.
 
-### Ce qui ne se construit pas
+### What is not built
 
-Rien dans `ops/` ne produit un `FiniteElementSpace` ni une `Evolution`, et
-ce n'est pas un oubli : ces conteneurs se **déclarent** par constructeur nommé
-sur le type lui-même, ils ne se fabriquent pas par transformation.
+Nothing in `ops/` produces a `FiniteElementSpace` or an `Evolution`, and that is
+not an oversight: these containers are **declared** by a named constructor on
+the type itself, they are not manufactured by transformation.
 
-Le `Model` a quitté cette compagnie le 2026-08-25. Ses déclarations de
-physique forment un **catalogue** — 28 entrées, et il grossit à chaque
-physique ajoutée — ce qui est le travail d'un module, pas la surface d'un
-type : elles vivent dans `ops::model` (`pyrucast.model.heat_conduction(fes)`),
-rangées par produit comme tout le reste. Déclarer plutôt que calculer ne
-suffit donc pas à rester sur le type ; encore faut-il que la famille tienne
-en un ou deux noms.
+`Model` left that company on 2026-08-25. Its physics declarations form a
+**catalogue** — 28 entries, and it grows with every physics added — which is a
+module's job, not a type's surface: they live in `ops::model`
+(`pyrucast.model.heat_conduction(fes)`), filed by product like everything else.
+Declaring rather than computing is therefore not enough to stay on the type; the
+family also has to fit in one or two names.
 
-## Le verbe exposé aussi en méthode
+## The verb also exposed as a method
 
-Une fonction libre garde sa **forme canonique** — c'est elle qui est
-documentée et qui définit l'opération. Elle est **en plus** exposée comme
-méthode de son premier argument si, et seulement si, les **trois** conditions
-tiennent :
+A free function keeps its **canonical form** — it is the one that is documented
+and that defines the operation. It is **additionally** exposed as a method of
+its first argument if, and only if, all **three** conditions hold:
 
-1. **le premier argument est le sujet** — l'objet qu'on transforme, pas un
-   paramètre ni un support ;
-2. **le retour est un conteneur** — sinon il n'y a rien à composer, et
-   `f.integral(comp, fes) -> float` n'apporte rien sur `integral(f, comp, fes)` ;
-3. **l'opération a un sens pour toute instance du type.** C'est la condition
-   qui coûte le plus et qu'on oublie le plus vite : une méthode *promet*, elle
-   apparaît dans l'auto-complétion de chaque objet du type. `u.deformation(fes)`
-   apparaîtrait sur tous les champs nodaux alors qu'elle exige des composantes
-   `u_x`/`u_y`/`u_z` ; `t.thermal_strain(...)` sur tous les champs par éléments
-   alors qu'elle exige une température. Ces opérations restent fonctions libres
-   seules.
+1. **the first argument is the subject** — the object being transformed, not a
+   parameter nor a support;
+2. **the return is a container** — otherwise there is nothing to compose, and
+   `f.integral(comp, fes) -> float` brings nothing over `integral(f, comp, fes)`;
+3. **the operation makes sense for every instance of the type.** This is the
+   condition that costs the most and is forgotten the fastest: a method
+   *promises*, it appears in the autocompletion of every object of the type.
+   `u.deformation(fes)` would appear on every nodal field although it requires
+   `u_x`/`u_y`/`u_z` components; `t.thermal_strain(...)` on every element field
+   although it requires a temperature. These operations remain free functions
+   only.
 
-La ligne de partage de la condition 3 : une **précondition structurelle** est
-admise (`triangulate_surface` veut un contour fermé, `divergence` veut autant de
-composantes que d'axes — vérifié par comptage, jamais par nom), une exigence de
-**sens porté par les noms de composantes** ne l'est pas (`sigma_xx`, `u_x`,
-« une température »).
+The dividing line of condition 3: a **structural precondition** is admitted
+(`triangulate_surface` wants a closed contour, `divergence` wants as many
+components as axes — checked by counting, never by name), a requirement of
+**meaning carried by component names** is not (`sigma_xx`, `u_x`, "a
+temperature").
 
-**Comment tester la condition 3 sans se tromper** : lire la méthode avec un
-receveur *quelconque*, pas avec l'exemple bien nommé.
-`stresses.internal_forces(model)` sonne juste — mais c'est le nom de la
-variable qui fait le travail. `field.internal_forces()` révèle que le *type*
-ne promet rien : n'importe quel champ par éléments porterait la méthode, alors
-qu'elle exige la contrainte de Voigt. Comparer avec `field.sqrt()` ou
-`field.mask(ge=0.0)`, qui gardent leur sens sur n'importe quel champ.
+**How to test condition 3 without getting it wrong**: read the method with an
+*arbitrary* receiver, not with the well-named example.
+`stresses.internal_forces(model)` sounds right — but it is the variable's name
+that does the work. `field.internal_forces()` reveals that the *type* promises
+nothing: any element field would carry the method, although it requires the
+Voigt stress. Compare with `field.sqrt()` or `field.mask(ge=0.0)`, which keep
+their meaning on any field.
 
-Deux conséquences pratiques :
+Two practical consequences:
 
-- **Un ordre d'arguments qui ne met pas le sujet en tête est un défaut à
-  corriger, pas une raison de renoncer à la méthode.** C'est ce qui a fait
-  passer `internal_forces(model, stresses)` à `(stresses, model)` et
-  `solve_eliminate(model, matrix, rhs)` à `(matrix, model, rhs)`.
-- **Une opération symétrique n'a pas de méthode** : `a.merge(b)` suggérerait
-  que l'ordre compte. `merge` est l'alias nommé de `a | b` — l'opérateur donne
-  déjà la forme symétrique, il suffit.
+- **An argument order that does not put the subject first is a defect to fix,
+  not a reason to give up the method.** That is what moved
+  `internal_forces(model, stresses)` to `(stresses, model)` and
+  `solve_eliminate(model, matrix, rhs)` to `(matrix, model, rhs)`.
+- **A symmetric operation has no method**: `a.merge(b)` would suggest that
+  order matters. `merge` is the named alias of `a | b` — the operator already
+  gives the symmetric form, and that is enough.
 
-**La méthode ne redocumente pas — mais elle doit quand même *montrer* la
-documentation.** Côté Rust, son `/// Voir [`mesh::skin`](fn@crate::ops::mesh::skin)`
-est un lien : rustdoc met le lecteur à un clic de la doc complète. Côté Python,
-le stub `.pyi` n'a aucun mécanisme de lien, et un pointeur « Voir … » y reste du
-texte mort — c'est tout ce que l'IDE affiche au survol.
+**The method does not re-document — but it must still *show* the
+documentation.** On the Rust side, its `/// See [`mesh::skin`](fn@crate::ops::mesh::skin)`
+is a link: rustdoc puts the reader one click from the full documentation. On the
+Python side, the `.pyi` stub has no link mechanism at all, and a "See …" pointer
+stays dead text there — that is all the IDE shows on hover.
 
-**Côté Python, la méthode n'est donc plus écrite : elle est dérivée.**
-`#[py_op(method_on = PyMesh)]`, posé sur la fonction libre, en tire le receveur,
-recopie les arguments suivants, ampute la `#[pyo3(signature = …)]` de son entrée
-de tête, et **recopie la documentation en littéraux** — c'est cette recopie qui
-la fait paraître en entier dans `help()` comme dans le stub. L'attribut se pose
-**au-dessus** des autres, sans quoi il ne verrait plus la signature qu'il doit
-réécrire, et prend `name = "…"` quand le nom change entre les deux formes
-(section suivante). Il hérite aussi des `#[allow(…)]` de la fonction : une
-dérogation de lint qui vaut pour elle vaut pour sa méthode, qui porte les mêmes
-arguments.
+**On the Python side, the method is therefore no longer written: it is
+derived.** `#[py_op(method_on = PyMesh)]`, placed on the free function, extracts
+the receiver from it, copies the following arguments, amputates the
+`#[pyo3(signature = …)]` of its leading entry, and **copies the documentation as
+literals** — it is that copy that makes it appear in full in `help()` as in the
+stub. The attribute goes **above** the others, otherwise it would no longer see
+the signature it has to rewrite, and takes `name = "…"` when the name changes
+between the two forms (next section). It also inherits the function's
+`#[allow(…)]`: a lint waiver that holds for it holds for its method, which
+carries the same arguments.
 
-Deux cas seulement restent écrits à la main, et chacun pour une raison qui se
-dit en une ligne : un **receveur qui n'est pas un emprunt** (`merge_nodes` rend
-l'objet lui-même, d'où `Py<Self>`), et une **méthode sans fonction libre**,
-forme canonique à part entière.
+Only two cases remain hand-written, and each for a reason that fits in one line:
+a **receiver that is not a borrow** (`merge_nodes` returns the object itself,
+hence `Py<Self>`), and a **method without a free function**, a canonical form in
+its own right.
 
-L'**opérateur polymorphe** (`select`, `mask`) n'en est plus un. Sa méthode ne
-doit pas renvoyer à la fonction libre, qui rend `Any` : le receveur fixe la
-saveur, donc le type produit. La fonction libre dispatche alors vers **une
-fonction par saveur**, au sujet `PyRef<…>` et au retour précis, et c'est sur
-celles-ci que se pose `#[py_op]`. Chacune porte **sa** documentation, écrite
-pour ce seul receveur — un sous-champ n'a pas de zones à évoquer. Ces fonctions
-de saveur ne sont pas enregistrées dans le module : la fonction libre reste le
-seul point d'entrée, et `#[pyfunction]` n'y sert qu'à rendre valide la
-`#[pyo3(signature = …)]` que l'attribut recopie. Posé sur un sujet `Bound`,
-l'attribut refuse avec ce mode d'emploi, plutôt que de produire une méthode
-qui rendrait `Any`.
+The **polymorphic operator** (`select`, `mask`) is no longer one of them. Its
+method must not point back to the free function, which returns `Any`: the
+receiver fixes the flavour, hence the produced type. The free function then
+dispatches to **one function per flavour**, with a `PyRef<…>` subject and a
+precise return, and it is on those that `#[py_op]` is placed. Each carries **its
+own** documentation, written for that single receiver — a sub-field has no zones
+to mention. These flavour functions are not registered in the module: the free
+function remains the only entry point, and `#[pyfunction]` only serves there to
+make valid the `#[pyo3(signature = …)]` that the attribute copies. Placed on a
+`Bound` subject, the attribute refuses with these instructions, rather than
+producing a method that would return `Any`.
 
-### Le nom peut changer entre les deux formes
+### The name may change between the two forms
 
-Le nom complet est toujours « qualificatif + verbe » ; ce qui change, c'est où
-se loge le qualificatif. La fonction libre le reçoit de son **module**, la
-méthode n'en a pas et doit donc le **porter** :
+The full name is always "qualifier + verb"; what changes is where the qualifier
+sits. The free function receives it from its **module**, the method has none and
+must therefore **carry** it:
 
-| fonction libre | méthode |
+| free function | method |
 |---|---|
 | `matrix::stiffness(model, materials)` | `model.stiffness_matrix(materials)` |
 | `matrix::mass(model, materials)` | `model.mass_matrix(materials)` |
 | `matrix::tangent(...)` | `model.tangent_matrix(...)` |
 | `matrix::geometric(...)` | `model.geometric_matrix(...)` |
 
-Quand la sortie est du type du sujet, il n'y a rien à qualifier et le nom ne
-bouge pas : `mesh::consolidate(m)` et `m.consolidate()`.
+When the output is of the subject's type, there is nothing to qualify and the
+name does not move: `mesh::consolidate(m)` and `m.consolidate()`.
 
-## Règle Rust → Python : miroir 1:1
+## Rust → Python rule: 1:1 mirror
 
-- fonction libre `ops::<thème>::f` → fonction **top-level** Python
-  `pyrucast.f(...)` ;
-- méthode Rust `Type::m` → méthode Python `obj.m(...)` ;
-- surcharge d'opérateur Rust → dunder Python (`__add__`, `__getitem__`, …) ;
-- constructeur nommé Rust → `classmethod` Python.
+- free function `ops::<theme>::f` → **top-level** Python function
+  `pyrucast.f(...)`;
+- Rust method `Type::m` → Python method `obj.m(...)`;
+- Rust operator overload → Python dunder (`__add__`, `__getitem__`, …);
+- Rust named constructor → Python `classmethod`.
 
-Aucune op n'a le droit d'être une fonction d'un côté et une méthode de
-l'autre, ni de changer de sémantique entre les deux langages. Le wrapper
-`py/` ne **redessine** pas l'API ; il peut seulement la **restreindre** —
-voir l'exception ci-dessous.
+No op is allowed to be a function on one side and a method on the other, nor to
+change semantics between the two languages. The `py/` wrapper does not
+**redesign** the API; it can only **restrict** it — see the exception below.
 
-### Exception assumée : Rust bas niveau, Python curé
+### Accepted exception: low-level Rust, curated Python
 
-Une seule asymétrie est tolérée entre les deux surfaces : **Python peut
-masquer les constructeurs directs de sous-objets `Sub*`** que Rust, lui,
-expose en `pub`.
+A single asymmetry is tolerated between the two surfaces: **Python may hide the
+direct constructors of `Sub*` sub-objects** that Rust, for its part, exposes as
+`pub`.
 
-- **Côté Rust (couche bas niveau).** `SubMesh::new`, `SubElementField::new`,
-  `SubMatrix::new`, `SubModel::heat_conduction` / `dirichlet`, … restent
-  `pub`. La couche qui écrit les mailleurs, les assembleurs et les
-  constructeurs parent *doit* pouvoir fabriquer des `Sub*` et les placer
-  derrière un `Handle` ; le contrôle total est le rôle de l'API Rust.
-- **Côté Python (surface curée).** Les `Sub*` sont des **vues** obtenues par
-  indexation du parent (`parent[i]`) ; ils ne se **construisent pas**
-  directement. On construit au niveau parent et on compose par `|` (union,
-  voir « Agrégats : un ou plusieurs » ci-dessous). La coercition parent→sub
-  unitaire (`Aggregate::unit`) est l'autre face de cette restriction : là où
-  une op a besoin d'un seul sous-objet, on lui passe un parent unitaire.
+- **Rust side (low-level layer).** `SubMesh::new`, `SubElementField::new`,
+  `SubMatrix::new`, `SubModel::heat_conduction` / `dirichlet`, … stay `pub`.
+  The layer that writes the meshers, the assemblers and the parent constructors
+  *must* be able to build `Sub*`s and place them behind a `Handle`; total
+  control is the role of the Rust API.
+- **Python side (curated surface).** `Sub*`s are **views** obtained by indexing
+  the parent (`parent[i]`); they are **not constructed** directly. One builds at
+  the parent level and composes with `|` (union, see "Aggregates: one or
+  several" below). The unitary parent→sub coercion (`Aggregate::unit`) is the
+  other face of that restriction: where an op needs a single sub-object, it is
+  handed a unitary parent.
 
-C'est une **restriction de surface**, pas un redesign : Python n'invente
-aucune op, n'en renomme aucune, n'en change pas la sémantique ; il **n'expose
-pas** certains constructeurs. Tout ce qui est exposé des deux côtés reste un
-miroir 1:1. Si une nouvelle op apparaît, elle suit la règle 1:1 par défaut ;
-masquer un constructeur `Sub*` est le **seul** écart permis, et il doit rester
-limité à ce cas.
+This is a **surface restriction**, not a redesign: Python invents no op, renames
+none, changes no semantics; it simply **does not expose** certain constructors.
+Everything exposed on both sides remains a 1:1 mirror. If a new op appears, it
+follows the 1:1 rule by default; hiding a `Sub*` constructor is the **only**
+deviation allowed, and it must stay limited to that case.
 
-### L'autre sens : une op que Rust ne *peut pas* porter
+### The other direction: an op that Rust *cannot* carry
 
-`pyrucast.mesh.from_gmsh` est la seule fonction libre à n'exister que côté
-Python. Ce n'est pas un choix de surface : elle lit le modèle d'une session
-**gmsh** vivante, donc elle exige un interpréteur CPython portant le module
-`gmsh`. Rust ne peut pas l'avoir — un `cargo test` en Rust pur ne lie même pas
-libpython.
+`pyrucast.mesh.from_gmsh` is the only free function that exists on the Python
+side alone. It is not a surface choice: it reads the model of a live **gmsh**
+session, so it requires a CPython interpreter carrying the `gmsh` module. Rust
+cannot have it — a pure-Rust `cargo test` does not even link libpython.
 
-La dérogation reste étroite parce que la fonction **n'invente aucune
-opération** : elle va chercher les tableaux du modèle courant et les passe à
-`ops::mesh::from_gmsh_arrays`, l'opérateur Rust, qui, lui, est un miroir strict
-et porte tout le travail. Le critère à retenir pour un futur cas : une fonction
-Python-seule ne se justifie que si son *entrée* n'existe pas hors de
-l'interpréteur, et elle doit déléguer son algorithme à un opérateur Rust.
-Elle s'inscrit alors dans le `PYTHON_ONLY` de
-`tests/python/test_mirror_completeness.py`, avec sa raison.
+The waiver stays narrow because the function **invents no operation**: it
+fetches the current model's arrays and passes them to
+`ops::mesh::from_gmsh_arrays`, the Rust operator, which is a strict mirror and
+carries all the work. The criterion to remember for a future case: a
+Python-only function is justified only if its *input* does not exist outside the
+interpreter, and it must delegate its algorithm to a Rust operator. It then goes
+into the `PYTHON_ONLY` of `tests/python/test_mirror_completeness.py`, with its
+reason.
 
-Le style visé côté Python est celui de **numpy / scipy** (et l'héritage
-**cast3m**) : des opérateurs **nommés** (`pyrucast.mesh.to_poi1(mesh)`,
-`pyrucast.matrix.stiffness(model, mat)`) plutôt que des chaînes de
-méthodes, et des méthodes réservées aux accesseurs, mutations et vues
-dérivées.
+The style aimed for on the Python side is that of **numpy / scipy** (and the
+**cast3m** heritage): **named** operators (`pyrucast.mesh.to_poi1(mesh)`,
+`pyrucast.matrix.stiffness(model, mat)`) rather than method chains, and methods
+reserved for accessors, mutations and derived views.
 
-### Le module de production est reflété par un sous-module Python
+### The production module is reflected by a Python sub-module
 
-Le rangement par conteneur produit organise le code Rust
-(`src/ops/<module>/`) **et** l'API Python : une fonction libre
-`ops::<module>::f` est exposée comme `pyrucast.<module>.f`
-(`pyrucast.mesh.to_poi1`, `pyrucast.node_field.positions`,
-`pyrucast.matrix.stiffness`, `pyrucast.solver.solve`, …). Les conteneurs
-(`containers::…`) et les atomes (`atoms::…`) restent des classes au top-level
-(`pyrucast.Coords`, `pyrucast.Mesh`, `pyrucast.Node`, …). Le miroir est
-**sans exception** : aucune fonction libre ne vit au top-level Python.
+Filing by produced container organises the Rust code (`src/ops/<module>/`)
+**and** the Python API: a free function `ops::<module>::f` is exposed as
+`pyrucast.<module>.f` (`pyrucast.mesh.to_poi1`,
+`pyrucast.node_field.positions`, `pyrucast.matrix.stiffness`,
+`pyrucast.solver.solve`, …). Containers (`containers::…`) and atoms
+(`atoms::…`) remain top-level classes (`pyrucast.Coords`, `pyrucast.Mesh`,
+`pyrucast.Node`, …). The mirror is **without exception**: no free function lives
+at the Python top level.
 
-L'extension compilée `_pyrucast` est en revanche **plate** : deux opérateurs
-homonymes dans deux modules (les trois `consolidate`, `coords::set`) y portent
-un `#[pyo3(name = "…")]` distinct, et la couche Python pure les ré-exporte
-sous leur vrai nom dans le bon sous-module. C'est un détail d'implémentation
-du namespace privé, pas une entorse au miroir.
+The compiled `_pyrucast` extension, on the other hand, is **flat**: two
+homonymous operators in two modules (the three `consolidate`s, `coords::set`)
+carry a distinct `#[pyo3(name = "…")]` there, and the pure Python layer
+re-exports them under their real name in the right sub-module. That is an
+implementation detail of the private namespace, not a breach of the mirror.
 
-C'est le passage au *layout mixte* maturin (dossier `python/pyrucast/`,
-extension privée `_pyrucast` + couche Python pure) qui débloque ce rangement :
-chaque module est un vrai fichier `.py` ré-exportant, de façon typée, les
-symboles de l'extension plate. Un seul stub `_pyrucast/__init__.pyi` reste
-généré pour l'extension ; les sous-modules n'étant que de la ré-exportation,
-les types les suivent sans stub dédié.
+It is the move to the maturin *mixed layout* (`python/pyrucast/` folder, private
+`_pyrucast` extension + pure Python layer) that unlocks this filing: each module
+is a real `.py` file re-exporting, in a typed way, the symbols of the flat
+extension. A single `_pyrucast/__init__.pyi` stub is still generated for the
+extension; since the sub-modules are only re-exports, the types follow them
+without a dedicated stub.
 
-### Les fichiers wrappers reflètent l'arborescence Rust
+### The wrapper files mirror the Rust tree
 
-Le namespace Python reste plat (ci-dessus), mais les **fichiers** de la
-couche FFI suivent le même découpage que Rust — `containers/` (data) vs
-`ops/` (algos) :
+The Python namespace stays flat (above), but the **files** of the FFI layer
+follow the same split as Rust — `containers/` (data) vs `ops/` (algorithms):
 
-- **wrappers de type** → `src/py/<type>.rs`, en miroir de
-  `src/containers/<type>` ; n'y vivent que des `#[pyclass]` + `#[pymethods]`
-  (méthodes, vues, dunders, `classmethod` constructeurs du type) ;
-- **wrappers d'opération** → `src/py/ops/<famille>.rs`, en miroir de
-  `src/ops/<famille>/` ; n'y vivent que des `#[pyfunction]` libres.
+- **type wrappers** → `src/py/<type>.rs`, mirroring `src/containers/<type>`;
+  only `#[pyclass]` + `#[pymethods]` live there (methods, views, dunders,
+  `classmethod` constructors of the type);
+- **operation wrappers** → `src/py/ops/<family>.rs`, mirroring
+  `src/ops/<family>/`; only free `#[pyfunction]`s live there.
 
-  **Exception, pour `model` seul** : le wrapper d'une physique de forme
-  courante n'est pas écrit, il est **généré** par `physics_operator!` dans le
-  fichier de la physique, à partir de la même déclaration que l'opérateur Rust.
-  `src/py/ops/model.rs` ne garde que les formes que la macro ne couvre pas. La
-  raison est celle du coût d'extension : un auteur de physique écrit de la
-  physique, pas de la plomberie — et une face Python écrite à la main est une
-  face de plus à ne pas oublier.
+  **Exception, for `model` alone**: the wrapper of a physics of common shape is
+  not written, it is **generated** by `physics_operator!` in the physics' file,
+  from the same declaration as the Rust operator. `src/py/ops/model.rs` keeps
+  only the shapes the macro does not cover. The reason is the cost of
+  extension: a physics author writes physics, not plumbing — and a hand-written
+  Python face is one more face to not forget.
 
-C'est un **repère de navigation**, pas un changement de surface : depuis un
-wrapper on retrouve l'impl Rust par parité de chemin —
-`py/ops/mesh.rs` ↔ `ops/mesh/`, et `line` ↔ `ops/mesh/line.rs`.
-Corollaire : une fonction libre se range par sa **famille `ops`** (cf. table
-de projection et cas tranchés ci-dessous), jamais par son type d'entrée ni
-de sortie.
+This is a **navigation landmark**, not a change of surface: from a wrapper one
+finds the Rust impl by path parity — `py/ops/mesh.rs` ↔ `ops/mesh/`, and `line`
+↔ `ops/mesh/line.rs`. Corollary: a free function is filed by its **`ops`
+family** (cf. the projection table and the explicitly settled cases below),
+never by its input or output type.
 
-## Agrégats : un ou plusieurs, de manière transparente
+## Aggregates: one or several, transparently
 
-Les conteneurs `Mesh`, `FiniteElementSpace`, `Model` et `ElementField` sont
-des **agrégats** : chacun est un `Vec<Handle<Sub>>` (voir `aggregate.rs`).
-Le but de l'agrégat est de manipuler **1 ou plusieurs** sous-objets d'un
-geste, de façon transparente. Pour que ce soit *réellement* transparent à
-l'usage, l'utilisateur ne doit jamais avoir à construire un sous-objet puis
-à l'attacher à la main, ni à « plonger » dans l'agrégat avec `parent[0]`
-pour le cas courant (un seul sous-objet).
+The containers `Mesh`, `FiniteElementSpace`, `Model` and `ElementField` are
+**aggregates**: each is a `Vec<Handle<Sub>>` (see `aggregate.rs`). The purpose
+of the aggregate is to handle **1 or several** sub-objects in one gesture,
+transparently. For that to be *really* transparent in use, the user must never
+have to build a sub-object and then attach it by hand, nor to "dive" into the
+aggregate with `parent[0]` for the common case (a single sub-object).
 
-D'où **une seule règle** :
+Hence **a single rule**:
 
-> **Les constructeurs nommés vivent au niveau du parent et renvoient un
-> parent ; on compose des parents avec `|` (union — Rust : `union`) ; le
-> `Sub*` est une vue indexée, jamais un objet qu'on construit-puis-attache.**
+> **Named constructors live at the parent level and return a parent; parents are
+> composed with `|` (union — Rust: `union`); the `Sub*` is an indexed view,
+> never an object one builds-then-attaches.**
 
-Trois conséquences mécaniques :
+Three mechanical consequences:
 
-1. **Construire = un parent prêt à l'emploi.** Un constructeur nommé qui
-   produit un agrégat renvoie le parent, pas le sous-objet. Quand il a
-   besoin d'un support, il consomme le **parent** correspondant et balaie
-   ses sous-objets : un support unitaire → agrégat unitaire, un support à N
-   zones → agrégat à N zones. C'est *là* qu'est la transparence « 1 ou
-   plusieurs ». Précédents déjà en place : `FiniteElementSpace(mesh)`
-   fabrique un sous-espace par sous-maillage ; `Mesh(config, element_type)`
-   crée un maillage à un sous-maillage. Cible : `model::heat_conduction(&fes)`
-   crée une zone par sous-espace.
+1. **Building = a ready-to-use parent.** A named constructor that produces an
+   aggregate returns the parent, not the sub-object. When it needs a support, it
+   consumes the corresponding **parent** and sweeps its sub-objects: a unitary
+   support → unitary aggregate, an N-zone support → N-zone aggregate. *That* is
+   where the "1 or several" transparency lies. Precedents already in place:
+   `FiniteElementSpace(mesh)` builds one sub-space per sub-mesh;
+   `Mesh(config, element_type)` creates a mesh with one sub-mesh. Target:
+   `model::heat_conduction(&fes)` creates one zone per sub-space.
 
-2. **Composer = union (`|` Python, `union` Rust), jamais `add_sub` à la
-   main.** Pour assembler des physiques / zones hétérogènes, on unit des
-   parents : Python `model.heat_conduction(fes) | model.dirichlet(...)`,
-   Rust `model.union(&dirichlet)?`. L'union clone les `Handle` (bump de
-   refcount, pas de copie profonde) et **déduplique par handle**, donc les
-   sous-objets sont **partagés** entre parents. `add_sub` (une zone) et
-   `add_subs` (toutes les zones d'un autre agrégat, concaténées sans
-   déduplication) restent des primitifs bas niveau (et le chemin interne des
-   constructeurs), pas l'API d'usage.
+2. **Composing = union (`|` in Python, `union` in Rust), never `add_sub` by
+   hand.** To assemble heterogeneous physics / zones, one unions parents:
+   Python `model.heat_conduction(fes) | model.dirichlet(...)`, Rust
+   `model.union(&dirichlet)?`. The union clones the `Handle`s (refcount bump, no
+   deep copy) and **deduplicates by handle**, so sub-objects are **shared**
+   between parents. `add_sub` (one zone) and `add_subs` (all the zones of
+   another aggregate, concatenated without deduplication) remain low-level
+   primitives (and the internal path of the constructors), not the API for
+   everyday use.
 
-3. **Le `Sub*` est une vue, pas un point de construction (surface Python).**
-   On y accède par indexation (`parent[i]`), exactement comme
-   `submesh[j] → Cell` et `cell[k] → Node` sont déjà des vues. Le `Sub*`
-   garde son identité propre (partage de `Handle`, comptage de références),
-   mais il sort du chemin de construction **côté Python** : les constructeurs
-   `Sub*` n'y sont pas exposés (c'est l'« Exception assumée : Rust bas
-   niveau, Python curé » ci-dessus). **Côté Rust**, `SubMesh::new` & co.
-   restent `pub` — la couche bas niveau en a besoin.
+3. **The `Sub*` is a view, not a construction point (Python surface).** It is
+   reached by indexing (`parent[i]`), exactly as `submesh[j] → Cell` and
+   `cell[k] → Node` are already views. The `Sub*` keeps its own identity
+   (`Handle` sharing, reference counting), but it leaves the construction path
+   **on the Python side**: the `Sub*` constructors are not exposed there (that
+   is the "Accepted exception: low-level Rust, curated Python" above). **On the
+   Rust side**, `SubMesh::new` & co. stay `pub` — the low-level layer needs
+   them.
 
-   **Cas unitaire : `.unit()`, pas de re-codage au parent.** Pour atteindre
-   une méthode du sous-objet quand l'agrégat est unitaire, on **n'expose
-   pas** la méthode du `Sub` sur le parent (zéro re-codage) : on expose
-   `.unit()` — la **vue de l'unique sous-objet**, erreur claire si l'agrégat
-   n'est pas exactement unitaire — et on écrit `parent.unit().méthode(...)`
+   **Unitary case: `.unit()`, no re-coding at the parent.** To reach a method of
+   the sub-object when the aggregate is unitary, we **do not expose** the `Sub`
+   method on the parent (zero re-coding): we expose `.unit()` — the **view of
+   the single sub-object**, a clear error if the aggregate is not exactly
+   unitary — and we write `parent.unit().method(...)`
    (`mesh.unit().add_cell(...)`, `ef.unit().set_uniform(...)`,
-   `K.unit().add_entry(...)`). C'est plus honnête que `parent[0]` (qui prend
-   silencieusement le premier de plusieurs) et garde l'utilisateur conscient
-   qu'il manipule un agrégat unitaire. Attention à ne **pas** confondre avec
-   les méthodes parent qui *agrègent réellement* — somme/union/liste/global
-   (`Mesh::cell_count`, `Model::dual_vars`, `Matrix::n_rows`, …) : celles-là
-   ne sont pas des délégations et restent au parent. Côté Rust, la couche bas
-   niveau garde par commodité ses quelques délégations (`Mesh::add_cell`).
+   `K.unit().add_entry(...)`). It is more honest than `parent[0]` (which
+   silently takes the first of several) and keeps the user aware that they are
+   handling a unitary aggregate. Careful **not** to confuse it with the parent
+   methods that *really aggregate* — sum/union/list/global (`Mesh::cell_count`,
+   `Model::dual_vars`, `Matrix::n_rows`, …): those are not delegations and stay
+   at the parent. On the Rust side, the low-level layer keeps its few
+   delegations for convenience (`Mesh::add_cell`).
 
-**Coercition aux frontières.** Là où une opération exige *vraiment* un seul
-sous-objet (p. ex. le support d'un `NodeField`, ou `Matrix.block`), elle
-accepte le **parent** et déballe son unique sous-objet via `Aggregate::unit`
-(erreur explicite si l'agrégat n'est pas unitaire). On ne demande jamais à
-l'utilisateur de fournir le `Sub*` lui-même.
+**Coercion at the boundaries.** Where an operation *really* requires a single
+sub-object (e.g. the support of a `NodeField`, or `Matrix.block`), it accepts
+the **parent** and unwraps its single sub-object via `Aggregate::unit` (explicit
+error if the aggregate is not unitary). The user is never asked to supply the
+`Sub*` itself.
 
-Ce qui est **projeté mécaniquement** vers Python (miroir 1:1) : le
-constructeur nommé du parent (Rust `FiniteElementSpace::lagrange1` →
-`classmethod` Python), l'union (`union` → `__or__`), l'indexation →
-`__getitem__`. La seule
-asymétrie est la **non-exposition** des constructeurs `Sub*` côté Python (et
-la coercition parent→sub unitaire qui l'accompagne) — l'exception décrite
-plus haut. La règle s'applique uniformément aux quatre agrégats et a vocation
-à être portée par les macros `impl_aggregate!` / `impl_aggregate_pymethods!`.
+What is **projected mechanically** onto Python (1:1 mirror): the parent's named
+constructor (Rust `FiniteElementSpace::lagrange1` → Python `classmethod`), the
+union (`union` → `__or__`), indexing → `__getitem__`. The only asymmetry is the
+**non-exposure** of the `Sub*` constructors on the Python side (and the unitary
+parent→sub coercion that accompanies it) — the exception described above. The
+rule applies uniformly to the four aggregates and is meant to be carried by the
+`impl_aggregate!` / `impl_aggregate_pymethods!` macros.
 
-## Une macro se justifie par son nombre d'expansions
+## A macro is justified by its number of expansions
 
-Écrire une macro coûte plus qu'écrire la méthode qu'elle engendre : elle ne se
-lit pas comme du Rust, ses erreurs pointent dans l'expansion, et voir le code
-réel demande `cargo expand`. Ce coût est fixe ; ce qu'il achète croît avec le
-nombre d'expansions. **Sous quelques expansions, on écrit les méthodes.**
+Writing a macro costs more than writing the method it generates: it does not
+read like Rust, its errors point into the expansion, and seeing the real code
+requires `cargo expand`. That cost is fixed; what it buys grows with the number
+of expansions. **Below a handful of expansions, we write the methods.**
 
-L'ordre de grandeur retenu est **quatre**. `impl_field_transform_pymethod!` est expansé onze
-fois par famille et rembourse largement ; `min`, `sum`, `components`,
-`__pow__` ou `__richcmp__`, engendrés une ou deux fois, sont écrits à la main
-dans le module de leur classe.
+The order of magnitude adopted is **four**. `impl_field_transform_pymethod!` is
+expanded eleven times per family and amply pays for itself; `min`, `sum`,
+`components`, `__pow__` or `__richcmp__`, generated once or twice, are
+hand-written in their class's module.
 
-**Ce qu'une méthode écrite partage se met dans une fonction, pas dans une
-macro.** Les quatre `__richcmp__` des champs appellent tous
-`py::field_slots::band_of` : la sémantique — quelle bande de valeurs dit une
-comparaison — vit à un seul endroit, en Rust ordinaire, et se trouve en
-cherchant son nom.
+**What a hand-written method shares goes into a function, not into a macro.**
+The four `__richcmp__`s of the fields all call `py::field_slots::band_of`: the
+semantics — which band of values a comparison states — lives in a single place,
+in ordinary Rust, and is found by searching for its name.
 
-**Une macro par forme engendrée, et son nom dit l'item produit.** Regrouper
-plusieurs formes sous un même nom, chacune reconnue à son mot-clé, ne mutualise
-rien : les règles d'une `macro_rules!` ne partagent aucune ligne, et le lecteur
-doit apprendre un vocabulaire pour choisir. Deux familles de conteneurs se
-traitent de même — `impl_field_transform_pymethod!` et
-`impl_subfield_transform_pymethod!` plutôt qu'un paramètre de famille, pour que
-chaque corps nomme son trait et son accès en clair.
+**One macro per generated shape, and its name says the item produced.** Grouping
+several shapes under the same name, each recognised by its keyword, shares
+nothing: the rules of a `macro_rules!` share not one line, and the reader has to
+learn a vocabulary in order to choose. Two container families are treated the
+same way — `impl_field_transform_pymethod!` and
+`impl_subfield_transform_pymethod!` rather than a family parameter, so that each
+body names its trait and its access in plain sight.
 
-Le nom suit trois règles, dans cet ordre :
+The name follows three rules, in this order:
 
-1. **Il nomme ce qui est produit, pas ce qu'on passe.** Une macro lie *toute*
-   fonction de la forme attendue ; l'inventaire du jour n'est pas une propriété
-   d'elle. `impl_field_transform_pymethod!` et non `..._math!` — la méthode
-   engendrée transforme un champ en champ de même saveur, que la fonction passée
-   soit `sqrt` ou `normalize`. Même piège sur l'arité : la fonction liée est
-   unaire, la méthode produite ne prend **aucun** argument.
-2. **Il nomme l'espèce Python produite**, puisque le dépôt a un côté Rust et un
-   binding : `pymethod` pour une méthode ordinaire, `pyslot` pour un slot,
-   `pyfunction` pour une fonction libre. `mutator` seul désignerait aussi bien
-   `Field::add_to_component`, qui est du Rust.
-3. **Il porte le préfixe de ce qu'il fait à la déclaration** : `impl_` quand il
-   ajoute des méthodes à un type déjà déclaré, `define_` quand il crée un item
-   neuf (`define_polymorphic_pyfunction!` engendre une fonction qui n'existait
-   pas).
+1. **It names what is produced, not what is passed in.** A macro binds *any*
+   function of the expected shape; today's inventory is not a property of it.
+   `impl_field_transform_pymethod!` and not `..._math!` — the generated method
+   transforms a field into a field of the same flavour, whether the function
+   passed in is `sqrt` or `normalize`. Same trap with arity: the bound function
+   is unary, the produced method takes **no** argument.
+2. **It names the Python species produced**, since the repository has a Rust
+   side and a binding: `pymethod` for an ordinary method, `pyslot` for a slot,
+   `pyfunction` for a free function. `mutator` alone would designate
+   `Field::add_to_component` just as well, which is Rust.
+3. **It carries the prefix of what it does to the declaration**: `impl_` when it
+   adds methods to an already declared type, `define_` when it creates a fresh
+   item (`define_polymorphic_pyfunction!` generates a function that did not
+   exist).
 
-Deux à trois mots, comme dans l'écosystème (`vec!`, `bitflags!`,
-`wrap_pyfunction!`) : un nom de macro se relit à chaque appel, et `generate_`
-est de toute façon redondant avec le `!`.
+Two to three words, as in the ecosystem (`vec!`, `bitflags!`,
+`wrap_pyfunction!`): a macro name is re-read at every call, and `generate_` is
+redundant with the `!` anyway.
 
-## Le sens d'une macro : nommer ses types, ou les recevoir
+## The direction of a macro: naming its types, or receiving them
 
-Une macro qui sert plusieurs types peut les **nommer elle-même** et boucler
-dessus, ou les **recevoir en argument**, un appel par type. Le départage n'est
-pas affaire de goût : il suit le sens de la dépendance.
+A macro that serves several types can **name them itself** and loop over them,
+or **receive them as an argument**, one call per type. The decision is not a
+matter of taste: it follows the direction of the dependency.
 
-**En aval** — la macro vit dans un module qui importe déjà les types servis.
-Elle les nomme, et prend la **liste** de ceux qu'elle sert :
+**Downstream** — the macro lives in a module that already imports the types
+served. It names them, and takes the **list** of those it serves:
 `impl_field_mutator_pymethod! { /// … [PyNodeField, PyElementField], add_to_component }`,
-la doc en `///` en tête d'appel. Un appel par famille au lieu de quatre appels,
-et surtout la documentation écrite **une seule fois** — un type par appel la
-ferait recopier autant de fois qu'il y a de saveurs. C'est la forme des macros
-de `src/py/field_macros.rs`.
+the `///` doc at the head of the call. One call per family instead of four
+calls, and above all the documentation written **only once** — one type per call
+would have it copied as many times as there are flavours. That is the shape of
+the macros in `src/py/field_macros.rs`.
 
-**En amont** — la macro vit dans le module qui définit le trait ou la machinerie
-(`containers/field.rs`, `aggregate.rs`, `models/mod.rs`). Elle **reçoit** son
-type, et chaque module l'appelle pour ce qu'il implémente. Lui faire nommer
-`NodeField` ou `PySubMesh` inverserait la dépendance — un conteneur ne connaît
-pas ses implémenteurs — et retirerait à chaque module la maîtrise de ce qu'il
-implémente.
+**Upstream** — the macro lives in the module that defines the trait or the
+machinery (`containers/field.rs`, `aggregate.rs`, `models/mod.rs`). It
+**receives** its type, and each module calls it for what it implements. Having
+it name `NodeField` or `PySubMesh` would invert the dependency — a container
+does not know its implementers — and would take from each module the control of
+what it implements.
 
-**L'exception des slots.** Un slot (`__add__`, `__pow__`, `__richcmp__`,
-`__len__`, `__repr__`, …) engendre chez pyo3 un trampoline `unsafe fn` qui en
-appelle un autre. L'édition 2024 ne couvre plus implicitement ce corps :
-`unsafe_op_in_unsafe_fn` se déclenche dès que l'`impl` vit hors du module
-déclarant le `#[pyclass]`. Une macro à slots garde donc la forme liste, mais est
-**appelée depuis le module du `pyclass`**, avec une liste d'un seul type. Un
-slot dont le stub déclare les noms CPython à la main (`__ge__`/`__gt__`/`__le__`
-/`__lt__` pour `__richcmp__`) ne doit en outre **pas** être décoré de
-`gen_stub_pymethods`, sans quoi il serait compté deux fois dans le `.pyi`.
+**The exception of slots.** A slot (`__add__`, `__pow__`, `__richcmp__`,
+`__len__`, `__repr__`, …) generates in pyo3 an `unsafe fn` trampoline that calls
+another one. Edition 2024 no longer implicitly covers that body:
+`unsafe_op_in_unsafe_fn` fires as soon as the `impl` lives outside the module
+declaring the `#[pyclass]`. A slot macro therefore keeps the list shape, but is
+**called from the `pyclass`'s module**, with a list of a single type. A slot
+whose stub declares the CPython names by hand (`__ge__`/`__gt__`/`__le__`
+/`__lt__` for `__richcmp__`) must furthermore **not** be decorated with
+`gen_stub_pymethods`, otherwise it would be counted twice in the `.pyi`.
 
-## Trois niveaux d'affichage
+## Three display levels
 
-Tout objet expose trois niveaux d'affichage, en couches, tous reliés à Python.
-Chaque niveau a un rôle distinct et **ne déborde jamais** sur le suivant :
+Every object exposes three display levels, in layers, all wired to Python. Each
+level has a distinct role and **never spills over** into the next:
 
-| Niveau | Rust | Python | Rôle | Borne |
+| Level | Rust | Python | Role | Bound |
 |---|---|---|---|---|
-| résumé | `Display` | `__str__` | une ligne : identité + dimensions clés | O(1), jamais de contenu |
-| structure | `Debug` | `__repr__` | compteurs, dimensions, noms, handles, métadonnées (`{:#?}` indenté) | borné, jamais de contenu en masse |
-| contenu | `dump::Dump` | `dump(precision=3, max_rows=20, max_cols=12)` | contenu complet : grilles de matrices, tables de valeurs, connectivité | borné par `DumpOptions` (élision `… (N de plus)`) |
+| summary | `Display` | `__str__` | one line: identity + key dimensions | O(1), never any content |
+| structure | `Debug` | `__repr__` | counters, dimensions, names, handles, metadata (`{:#?}` indented) | bounded, never bulk content |
+| content | `dump::Dump` | `dump(precision=3, max_rows=20, max_cols=12)` | full content: matrix grids, value tables, connectivity | bounded by `DumpOptions` (elision `… (N more)`) |
 
-Règles :
+Rules:
 
-- **Gradation** : chaque niveau dit **au moins** ce que dit le précédent. Un
-  `repr` plus pauvre que son `str`, ou un `dump` qui tait une métadonnée du
-  `repr`, inverse la hiérarchie et se corrige. Elle est tenue **à la main**,
-  champ par champ — aucun test ne la garde, c'est le prix de `Debug`
-  idiomatiques (`debug_struct`, `debug_map`) plutôt que construits en couches.
-- **L'identité est celle du handle, et c'est l'agrégat qui la montre.** Un
-  sous-objet ne connaît pas le handle qui le porte ; seul son détenteur le
-  peut. Un agrégat nomme donc ses zones aux trois niveaux — `[#7f3a2c, …]`
-  dans le résumé (élidé au-delà de trois, pour rester borné), `{<SubMesh
-  #7f3a2c>: …}` dans la structure, `── [0] <SubMesh #7f3a2c> ──` dans le
-  contenu. Un sous-objet affiché seul n'a pas d'identifiant, en Rust comme en
-  Python.
-- **Résumé et structure ne verrouillent pas.** Le `Display` d'un `Handle` s'en
-  interdit délibérément — il peut être formaté alors qu'un write guard est tenu,
-  et lire provoquerait un interblocage — et la même prudence vaut pour les vues
-  (`Cell`, `Element`) : leurs `Display` et `Debug` ne montrent que le handle
-  porteur et l'indice. Le type d'élément, la connectivité et les positions
-  demandent un guard, donc vivent dans `dump`, appelé en connaissance de cause.
-  `{:?}` s'écrit dans les messages d'erreur, parfois en tenant le verrou en cause.
-- `Display`/`Debug` ne déversent **jamais** le contenu en masse (valeurs,
-  connectivité, grille). Un `repr` reste borné quelle que soit la taille de
-  l'objet.
-- `dump()` **imprime directement au terminal** et ne renvoie rien (`()` en
-  Rust, `None` en Python). Côté Python l'impression passe par le `print` de
-  Python (respecte `sys.stdout`, redirections, capture des tests). Le cœur
-  `Dump::render(&self, opts) -> String` produit la chaîne (composition des
-  agrégats) ; il n'est pas exposé à Python.
-- Les matrices se dumpent en **grille dense labellisée** : les DOF `(node, var)`
-  étiquettent directement lignes et colonnes.
-- Les agrégats génériques (`Mesh`, `FiniteElementSpace`, `Model`,
-  `ElementField`) dumpent le résumé puis le `dump` indenté de chaque
-  sous-objet ; `Matrix` dumpe une seule grille globale.
+- **Gradation**: each level says **at least** what the previous one says. A
+  `repr` poorer than its `str`, or a `dump` that omits a metadata item of the
+  `repr`, inverts the hierarchy and is fixed. It is held **by hand**, field by
+  field — no test guards it, that is the price of idiomatic `Debug`s
+  (`debug_struct`, `debug_map`) rather than ones built in layers.
+- **Identity is that of the handle, and it is the aggregate that shows it.** A
+  sub-object does not know the handle that carries it; only its holder can. An
+  aggregate therefore names its zones at all three levels — `[#7f3a2c, …]` in
+  the summary (elided beyond three, to stay bounded), `{<SubMesh #7f3a2c>: …}`
+  in the structure, `── [0] <SubMesh #7f3a2c> ──` in the content. A sub-object
+  displayed alone has no identifier, in Rust as in Python.
+- **Summary and structure do not lock.** The `Display` of a `Handle`
+  deliberately forbids itself from doing so — it may be formatted while a write
+  guard is held, and reading would cause a deadlock — and the same caution holds
+  for the views (`Cell`, `Element`): their `Display` and `Debug` show only the
+  carrying handle and the index. The element type, the connectivity and the
+  positions require a guard, so they live in `dump`, called knowingly. `{:?}` is
+  written in error messages, sometimes while holding the very lock at fault.
+- `Display`/`Debug` **never** dump bulk content (values, connectivity, grid). A
+  `repr` stays bounded whatever the size of the object.
+- `dump()` **prints directly to the terminal** and returns nothing (`()` in
+  Rust, `None` in Python). On the Python side the printing goes through Python's
+  `print` (respects `sys.stdout`, redirections, test capture). The core
+  `Dump::render(&self, opts) -> String` produces the string (composition of
+  aggregates); it is not exposed to Python.
+- Matrices are dumped as a **labelled dense grid**: the `(node, var)` DOFs label
+  rows and columns directly.
+- Generic aggregates (`Mesh`, `FiniteElementSpace`, `Model`, `ElementField`)
+  dump the summary then the indented `dump` of each sub-object; `Matrix` dumps a
+  single global grid.
 
-Côté implémentation : trait + helpers partagés dans `src/dump.rs` (chaque type
-implémente `render`, `dump` est fourni par défaut) ; macro
-`impl_aggregate_dump!` pour les agrégats génériques ; `impl_dump_pymethod!`
-pour le câblage Python des wrappers non-agrégats.
+On the implementation side: trait + shared helpers in `src/dump.rs` (each type
+implements `render`, `dump` is provided by default); macro
+`impl_aggregate_dump!` for the generic aggregates; `impl_dump_pymethod!` for the
+Python wiring of the non-aggregate wrappers.
 
-## Table de projection (état cible)
+## Projection table (target state)
 
-Côté Python, les fonctions vivent dans le **sous-module du conteneur
-produit** (`pyrucast.<module>.f(...)`) — voir la note sur les sous-modules
-plus haut, sans exception.
+On the Python side, functions live in the **sub-module of the produced
+container** (`pyrucast.<module>.f(...)`) — see the note on sub-modules above,
+without exception.
 
-| Opération | Rust | Python |
+| Operation | Rust | Python |
 |---|---|---|
-| accesseur / mutation mono-conteneur | méthode | méthode |
-| vue dérivée d'un seul conteneur | méthode | méthode |
-| transformation mesh→mesh | `ops::mesh::*` | `pyrucast.mesh.to_poi1`, `pyrucast.mesh.consolidate`, … |
-| production d'un champ nodal | `ops::node_field::*` | `pyrucast.node_field.positions`, `pyrucast.node_field.restrict`, `pyrucast.node_field.merge` |
-| production d'un champ par éléments | `ops::element_field::*` | `pyrucast.element_field.gradient`, `pyrucast.element_field.material_field` |
-| réduction à un nombre | `ops::measure::*` | `pyrucast.measure.integral`, `pyrucast.measure.xty` |
-| écriture dans le magasin | `ops::coords::*` | `pyrucast.coords.set`, `pyrucast.coords.displace` |
-| champ → **même** champ (polymorphe) | `ops::field::*` | `pyrucast.field.mask`, `pyrucast.field.sqrt`, `pyrucast.field.filter_components` |
-| écriture d'un format externe | `ops::export::*` | `pyrucast.export.export_vtk` |
-| déclaration d'une physique | `ops::model::*` | `pyrucast.model.heat_conduction`, `pyrucast.model.dirichlet` |
-| assemblage `Model` → `Matrix` | `ops::matrix::*` | `pyrucast.matrix.stiffness`, `pyrucast.matrix.mass` |
-| résolution `A·x = b` | `ops::solver::*` | `pyrucast.solver.solve` |
-| arithmétique (`+ - * /`, indexation) | `impl` d'opérateur | dunder |
-| constructeur nommé | fn associée | `classmethod` |
-| verbe éligible aux trois conditions | fonction libre **et** méthode | idem — voir « Le verbe exposé aussi en méthode » |
+| single-container accessor / mutation | method | method |
+| derived view of a single container | method | method |
+| mesh→mesh transformation | `ops::mesh::*` | `pyrucast.mesh.to_poi1`, `pyrucast.mesh.consolidate`, … |
+| production of a nodal field | `ops::node_field::*` | `pyrucast.node_field.positions`, `pyrucast.node_field.restrict`, `pyrucast.node_field.merge` |
+| production of an element field | `ops::element_field::*` | `pyrucast.element_field.gradient`, `pyrucast.element_field.material_field` |
+| reduction to a number | `ops::measure::*` | `pyrucast.measure.integral`, `pyrucast.measure.xty` |
+| writing into the store | `ops::coords::*` | `pyrucast.coords.set`, `pyrucast.coords.displace` |
+| field → **same** field (polymorphic) | `ops::field::*` | `pyrucast.field.mask`, `pyrucast.field.sqrt`, `pyrucast.field.filter_components` |
+| writing an external format | `ops::export::*` | `pyrucast.export.export_vtk` |
+| declaration of a physics | `ops::model::*` | `pyrucast.model.heat_conduction`, `pyrucast.model.dirichlet` |
+| assembly `Model` → `Matrix` | `ops::matrix::*` | `pyrucast.matrix.stiffness`, `pyrucast.matrix.mass` |
+| solving `A·x = b` | `ops::solver::*` | `pyrucast.solver.solve` |
+| arithmetic (`+ - * /`, indexing) | operator `impl` | dunder |
+| named constructor | associated fn | `classmethod` |
+| verb eligible under the three conditions | free function **and** method | same — see "The verb also exposed as a method" |
 
-`ops::geom` n'apparaît pas : ses deux fonctions (`locate_points`,
-`project_points`) sont les primitives internes de `model.embedded` et
-`model.contact`, et ne sont pas exposées à Python. C'est la seule dérogation
-de module entier, enregistrée dans `tests/python/test_mirror_completeness.py`.
+`ops::geom` does not appear: its two functions (`locate_points`,
+`project_points`) are the internal primitives of `model.embedded` and
+`model.contact`, and are not exposed to Python. It is the only whole-module
+waiver, recorded in `tests/python/test_mirror_completeness.py`.
 
-## Cas tranchés explicitement
+## Explicitly settled cases
 
-- `restrict(field, mesh)` → **`ops::node_field`** (field + mesh en pairs ;
-  produit un champ nodal).
-- `merge(a, b)` → **`ops::node_field`** (deux fields en pairs) ; alias nommé de
-  l'union `a | b` (`Aggregate::union`), fusion non arithmétique.
-- addition field+field → **opérateur `+`** (arithmétique de valeurs, pas la
-  composition de zones), pas une `ops::field::add`. Les opérateurs `+ - * /`
-  (zone à zone **et** agrégat à agrégat) combinent **par `(support, composante)`**
-  en union/passthrough (composante ou support d'un seul côté = valeur brute
-  inchangée) ; les opérandes n'ont pas besoin du même jeu de composantes ni de
-  la même décomposition. Primitives : `SubField::merge_components` (zone) /
-  `Field::merge_field` (agrégat), `Field::merge_subfield` (maj ciblée d'une zone).
-  Là où un écart de composantes doit être une erreur (interpolation `Evolution`),
-  `SubField::check_same_components` garde `merge_components` en amont.
-- `stiffness(model, mat)`, `mass(model)` → **`ops::matrix`** (famille
-  assembleur ; `mass` suit `stiffness`, elles ne se séparent pas).
-- `consolidate(mesh)`, `to_poi1(mesh)` → **`ops::mesh`** (mono-conteneur,
-  mais elles produisent un `Mesh` et appartiennent à la famille des
-  mailleurs).
-- `select(field, ge=…)` → **`ops::mesh`** : elle part d'un champ mais rend un
-  `Mesh`, et on se range par la sortie. Sa jumelle `mask`, qui réécrit les
-  valeurs sans changer la structure, rend un champ de la sorte reçue et
-  reste donc dans `ops::field`.
-- `material_field(model, …)` → **`ops::element_field`** (produit un
-  `ElementField`). L'ancien module `build`, qui ne désignait aucune famille,
-  disparaît.
-- `flux`, `internal_forces` → **`ops::node_field`** : ce sont des
-  assemblages, mais leur résultat est un vecteur, pas un opérateur. La
-  machinerie qu'ils partagent avec `ops::matrix` (`ops::coloring`,
-  `ops::scatter`) vit à la racine d'`ops` — ce ne sont pas des opérateurs.
-- `mul_dense(self, x: &[f64])` → **méthode** (`x` est un slice, pas un
-  conteneur lourd : produit matrice-vecteur mono-conteneur).
-- `support_submesh` / `support_mesh` sur `NodeField` → **méthodes** (vue du
-  support d'un seul field). Renommées depuis `to_poi1_submesh` /
-  `to_poi1_mesh` pour ne pas se confondre avec l'opérateur
-  `ops::mesh::to_poi1(mesh)`.
-- `coords()` est réservé au **retour au conteneur** : sur `Mesh`, `SubMesh`,
-  `NodeField`, `Matrix` et `Node`, il rend le `Coords` porté. Les *valeurs*
-  s'appellent donc **position** partout : `position()` / `set_position(…)`
-  sur `Node` comme sur `Coords`, et `node_field::positions(mesh)` pour le
-  champ qui les lit toutes. Les anciens noms — `coord()` sur un nœud,
-  `coordinates` pour l'opérateur — plaçaient sur un même objet deux méthodes
-  sans argument que rien ne départageait (`mesh.coords()` face à
-  `mesh.coordinates()`), l'une rendant le conteneur, l'autre les valeurs.
+- `restrict(field, mesh)` → **`ops::node_field`** (field + mesh as peers;
+  produces a nodal field).
+- `merge(a, b)` → **`ops::node_field`** (two fields as peers); named alias of
+  the union `a | b` (`Aggregate::union`), a non-arithmetic merge.
+- field+field addition → **operator `+`** (arithmetic of values, not the
+  composition of zones), not an `ops::field::add`. The `+ - * /` operators (zone
+  to zone **and** aggregate to aggregate) combine **by `(support, component)`**
+  in union/passthrough (a component or support on one side only = raw value
+  unchanged); the operands need neither the same set of components nor the same
+  decomposition. Primitives: `SubField::merge_components` (zone) /
+  `Field::merge_field` (aggregate), `Field::merge_subfield` (targeted update of
+  one zone). Where a component mismatch must be an error (`Evolution`
+  interpolation), `SubField::check_same_components` guards `merge_components`
+  upstream.
+- `stiffness(model, mat)`, `mass(model)` → **`ops::matrix`** (assembler family;
+  `mass` follows `stiffness`, they do not get separated).
+- `consolidate(mesh)`, `to_poi1(mesh)` → **`ops::mesh`** (single-container, but
+  they produce a `Mesh` and belong to the mesher family).
+- `select(field, ge=…)` → **`ops::mesh`**: it starts from a field but returns a
+  `Mesh`, and one files by the output. Its twin `mask`, which rewrites the
+  values without changing the structure, returns a field of the kind received
+  and therefore stays in `ops::field`.
+- `material_field(model, …)` → **`ops::element_field`** (produces an
+  `ElementField`). The old `build` module, which designated no family,
+  disappears.
+- `flux`, `internal_forces` → **`ops::node_field`**: these are assemblies, but
+  their result is a vector, not an operator. The machinery they share with
+  `ops::matrix` (`ops::coloring`, `ops::scatter`) lives at the root of `ops` —
+  those are not operators.
+- `mul_dense(self, x: &[f64])` → **method** (`x` is a slice, not a heavy
+  container: a single-container matrix-vector product).
+- `support_submesh` / `support_mesh` on `NodeField` → **methods** (view of the
+  support of a single field). Renamed from `to_poi1_submesh` / `to_poi1_mesh` so
+  as not to be confused with the operator `ops::mesh::to_poi1(mesh)`.
+- `coords()` is reserved for the **return to the container**: on `Mesh`,
+  `SubMesh`, `NodeField`, `Matrix` and `Node`, it returns the `Coords` carried.
+  The *values* are therefore called **position** everywhere: `position()` /
+  `set_position(…)` on `Node` as on `Coords`, and `node_field::positions(mesh)`
+  for the field that reads them all. The old names — `coord()` on a node,
+  `coordinates` for the operator — put on the same object two argument-less
+  methods that nothing told apart (`mesh.coords()` facing
+  `mesh.coordinates()`), one returning the container, the other the values.
 
 ---
 
-# Documentation et tests
+# Documentation and tests
 
-La narration, les tables de décision et le pourquoi sont dans le book, page
-**[Documentation et tests](book/src/developper/documentation-et-tests.md)**.
-Ci-dessous, les règles seules.
+The narrative, the decision tables and the why are in the book, page
+**[Documentation and tests](book/src/developper/documentation-et-tests.md)**.
+Below, the rules alone.
 
-## Les quatre règles
+## The four rules
 
-1. **Aucune page du book ne possède de code, sans exception.** Toute clôture
-   ` ```rust ` ou ` ```python ` d'une page contient un `{{#include}}` pointant
-   une source que la CI exécute. Un exemple recopié à la main dans une page est
-   du code que rien ne vérifie ; il pourrit sans bruit.
+1. **No page of the book owns any code, without exception.** Every ` ```rust `
+   or ` ```python ` fence on a page contains a `{{#include}}` pointing at a
+   source that CI runs. An example copied by hand into a page is code that
+   nothing checks; it rots silently.
 
-   **Ce qui n'est pas du code se balise ` ```text `** : une signature annotée
-   de `/* … */`, une énumération abrégée par `// … une ligne par physique`, un
-   pseudo-code `f(...)`. Ce n'est pas une dérogation, c'est un constat — la
-   coloration syntaxique mentirait, et le lecteur doit voir tout de suite qu'il
-   ne peut pas copier ce bloc. Il n'y a donc plus de « page d'esquisses » : la
-   nature se juge **bloc par bloc**, jamais page par page.
+   **What is not code is tagged ` ```text `**: a signature annotated with
+   `/* … */`, an enumeration abridged by `// … one line per physics`, a
+   pseudo-code `f(...)`. This is not a waiver, it is an observation — syntax
+   highlighting would lie, and the reader must see straight away that they
+   cannot copy that block. There is therefore no longer a "sketch page": the
+   nature is judged **block by block**, never page by page.
 
-   Corollaire souvent oublié : une déclaration Rust recopiée dans une page
-   (`pub struct Handle<T>`, `pub trait Cancel`) **est du code**. Elle existe
-   dans `src/`, elle s'ancre et elle s'inclut.
+   An often forgotten corollary: a Rust declaration copied into a page
+   (`pub struct Handle<T>`, `pub trait Cancel`) **is code**. It exists in
+   `src/`, it gets anchored and it gets included.
 
-2. **Tout item de l'API publique porte un exemple exécutable** dans sa
-   documentation (`///`). C'est le point 3 de la *Definition of Done*.
-   `ignore` est **proscrit** dans un doctest : c'est le marqueur qui ne vérifie
-   rien, et c'est exactement ce qui a désarmé le book 73 fois. Quand l'exemple
-   ne peut pas tourner, `no_run` (il compile, il ne s'exécute pas) ou
-   `compile_fail` (on documente ce que le typage interdit). Les lignes de
-   montage se cachent avec `# `, elles restent compilées.
+2. **Every public API item carries an executable example** in its documentation
+   (`///`). That is point 3 of the *Definition of Done*. `ignore` is
+   **forbidden** in a doctest: it is the marker that checks nothing, and that is
+   exactly what disarmed the book 73 times. When the example cannot run,
+   `no_run` (it compiles, it does not execute) or `compile_fail` (we document
+   what the type system forbids). The setup lines are hidden with `# `, they
+   stay compiled.
 
-3. **Un exemple vit là où il est exécuté**, jamais recopié. Où, en fonction de
-   ce qu'il illustre :
+3. **An example lives where it is executed**, never copied. Where, depending on
+   what it illustrates:
 
-   | l'exemple illustre… | il vit… | le book le montre par… |
+   | the example illustrates… | it lives… | the book shows it via… |
    |---|---|---|
-   | un item de l'API Rust | un doctest sur l'item | rien — il est dans la rustdoc |
-   | une chaîne Rust complète | `tests/<sujet>.rs`, ancré | `{{#include ../../tests/<sujet>.rs:ancre}}` |
-   | une chaîne Python complète | `examples/<sujet>.py` | `{{#include}}`, entier ou ancré |
-   | un parcours pédagogique | `formation/<sujet>.py`, ancré | `{{#include …:ancre}}` |
-   | l'usage d'un opérateur en Python | `tests/python/test_doc_<famille>.py`, ancré | `{{#include …:ancre}}` |
-   | ce qui n'est **pas du code** | la page elle-même | ` ```text `, sans coloration |
+   | a Rust API item | a doctest on the item | nothing — it is in the rustdoc |
+   | a complete Rust chain | `tests/<subject>.rs`, anchored | `{{#include ../../tests/<subject>.rs:anchor}}` |
+   | a complete Python chain | `examples/<subject>.py` | `{{#include}}`, whole or anchored |
+   | a teaching walkthrough | `formation/<subject>.py`, anchored | `{{#include …:anchor}}` |
+   | the use of an operator in Python | `tests/python/test_doc_<family>.py`, anchored | `{{#include …:anchor}}` |
+   | what is **not code** | the page itself | ` ```text `, without highlighting |
 
-   **Une méthode de pure délégation ne porte pas d'exemple.** Elle n'a aucune
-   logique : elle appelle la fonction libre, receveur compris. C'est cette
-   dernière la forme canonique, c'est elle qui est documentée — leur réclamer
-   un exemple dupliquerait le sien, et donnerait un second texte à maintenir
-   pour rien.
+   **A pure-delegation method carries no example.** It has no logic at all: it
+   calls the free function, receiver included. The latter is the canonical form,
+   it is the one that is documented — demanding an example of them would
+   duplicate its own, and would give a second text to maintain for nothing.
 
-   On les reconnaît à leur **marqueur** : toute leur documentation tient en un
-   « voir [`module::verbe`] ». C'est ce marqueur qui fait foi, pas
-   l'emplacement — ces blocs vivent dans `src/ops/**/methods.rs`, mais aussi au
-   bas de `src/ops/matrix.rs`, et certains naissent d'une macro sur `impl $T`.
-   Le cliquet les écarte du dénominateur sur ce critère.
+   They are recognised by their **marker**: their entire documentation fits in a
+   "see [`module::verb`]". It is that marker that counts, not the location —
+   these blocks live in `src/ops/**/methods.rs`, but also at the bottom of
+   `src/ops/matrix.rs`, and some are born of a macro on `impl $T`. The ratchet
+   excludes them from the denominator on that criterion.
 
-   **La surface Python répond à la même règle, à une granularité plus lâche.**
-   Ses docstrings sont écrites dans les `///` de `src/py/`, et le module est
-   compilé : un doctest par item y coûterait un collecteur maison, le
-   `DocTestFinder` de la bibliothèque standard ne descendant pas dans les
-   fonctions d'un module d'extension. Ce qu'on exige donc est qu'une entrée
-   publique soit **citée** par un exemple exécuté du book — un
-   `tests/python/test_doc_*.py`, lu par AST pour qu'un nom en commentaire ou
-   dans une chaîne ne compte pas.
+   **The Python surface answers to the same rule, at a looser granularity.** Its
+   docstrings are written in the `///` of `src/py/`, and the module is compiled:
+   one doctest per item would cost a home-made collector there, since the
+   standard library's `DocTestFinder` does not descend into the functions of an
+   extension module. What is required instead is that a public entry be **cited**
+   by an executed example of the book — a `tests/python/test_doc_*.py`, read by
+   AST so that a name in a comment or in a string does not count.
 
-   La garantie est plus étroite que celle du cliquet Rust, et il faut le dire :
-   la granularité est le *nom*, non l'appel, de sorte qu'un `.get(` cité une
-   fois vaut pour les `get` de tous les conteneurs. Elle suffit à ce qu'on lui
-   demande — **aucune entrée publique n'est absente des exemples**, et une
-   entrée nouvelle ne peut pas arriver sans être montrée. Une classe compte
-   comme citée dès qu'une de ses méthodes l'est : le Python idiomatique écrit
-   `mesh.unit()`, jamais `SubMesh(...)`.
+   The guarantee is narrower than that of the Rust ratchet, and that must be
+   said: the granularity is the *name*, not the call, so that a `.get(` cited
+   once holds for the `get`s of every container. It suffices for what is asked
+   of it — **no public entry is absent from the examples**, and a new entry
+   cannot arrive without being shown. A class counts as cited as soon as one of
+   its methods is: idiomatic Python writes `mesh.unit()`, never `SubMesh(...)`.
 
-   Le préfixe `test_` n'est pas décoratif : `pytest` ne collecte que
-   `test_*.py`. Un fichier de sources d'exemples nommé autrement est inclus
-   dans le book et **exécuté par personne** — exactement ce que la règle
-   cherche à empêcher.
+   The `test_` prefix is not decorative: `pytest` only collects `test_*.py`. A
+   file of example sources named otherwise is included in the book and
+   **executed by nobody** — exactly what the rule seeks to prevent.
 
-   **Le code ancré vit au niveau module, pas dans une fonction de test.**
-   mdbook n'enlève pas l'indentation d'un extrait inclus : ancré dans une
-   fonction, il s'afficherait décalé de quatre espaces, ce qu'aucun
-   utilisateur n'écrirait. Au niveau module le fichier se lit d'ailleurs dans
-   l'ordre de la page, les variables coulant d'une ancre à la suivante.
+   **Anchored code lives at module level, not inside a test function.** mdbook
+   does not strip the indentation of an included excerpt: anchored inside a
+   function, it would show up shifted by four spaces, which no user would write.
+   At module level the file also reads in the order of the page, the variables
+   flowing from one anchor to the next.
 
-   Deux conséquences. pytest exécute le fichier à la **collecte** : un exemple
-   qui casse est une erreur de collecte — traceback complet et code de retour
-   non nul —, d'où `--continue-on-collection-errors` dans `pyproject.toml`. Et
-   les **fixtures ne sont pas disponibles** : un extrait qui écrit des fichiers
-   sous un nom court bascule lui-même dans un dossier temporaire, et **rend le
-   répertoire courant à la fin** du module. Omettre la restitution déplacerait
-   tous les fichiers de test collectés ensuite.
+   Two consequences. pytest executes the file at **collection**: an example that
+   breaks is a collection error — full traceback and non-zero return code —
+   hence `--continue-on-collection-errors` in `pyproject.toml`. And the
+   **fixtures are not available**: an excerpt that writes files under a short
+   name moves itself into a temporary folder, and **gives the current directory
+   back at the end** of the module. Omitting the restitution would displace all
+   the test files collected afterwards.
 
-   Corollaire : **doctest et bloc du book ne se confondent pas.** Le doctest
-   sert le lecteur de la rustdoc — référence d'API, item par item ; le bloc du
-   book sert le lecteur du chapitre — récit, chaîne complète. Deux publics,
-   deux sources, et on ne cherche pas à les unifier.
+   Corollary: **a doctest and a book block are not the same thing.** The doctest
+   serves the rustdoc reader — API reference, item by item; the book block
+   serves the chapter's reader — narrative, complete chain. Two audiences, two
+   sources, and we do not try to unify them.
 
-4. **Un garde-fou n'est installé qu'une fois cassé volontairement**, au moins
-   une fois, **code de retour vérifié** — pas seulement l'affichage. Un pas de
-   vérification qui passe au vert sans rien regarder coûte plus cher que son
-   absence : il se lit comme de la couverture. Trois cas mesurés dans ce dépôt
-   au 2026-08-18 : `mdbook test` teste zéro bloc ; une ancre `{{#include}}`
-   inexistante rend un bloc **vide** avec un code de retour **0** et aucun
-   message ; un fichier inclus absent ne fait qu'un `[ERROR]` dans le log, code
-   de retour **0** lui aussi.
+4. **A guard is only installed once it has been deliberately broken**, at least
+   once, **return code checked** — not just the display. A verification step
+   that goes green without looking at anything costs more than its absence: it
+   reads as coverage. Three cases measured in this repository as of 2026-08-18:
+   `mdbook test` tests zero blocks; a non-existent `{{#include}}` anchor returns
+   an **empty** block with a return code of **0** and no message; a missing
+   included file only produces an `[ERROR]` in the log, return code **0** as
+   well.
 
-## Ce que chaque test prouve
+## What each test proves
 
-| type | où | ce qu'il prouve |
+| kind | where | what it proves |
 |---|---|---|
-| test unitaire | `#[cfg(test)] mod tests` dans `src/**.rs` | le comportement d'une unité, publique ou privée |
-| doctest | `///` et `//!` dans `src/**.rs` | que l'exemple documentant un item compile et tourne |
-| test d'intégration | `tests/*.rs` | une chaîne complète vue de l'extérieur du crate |
-| test Python | `tests/python/*.py` | la surface pyo3 et le comportement côté Python |
-| garde-fou | `tests/python/test_method_exposure.py`, `test_mirror_completeness.py` | une **invariante d'API**, pas un comportement |
-| exemple | `examples/*.py` | une chaîne utilisateur de bout en bout |
-| script de formation | `formation/*.py` | un parcours pédagogique complet |
-| banc | `benches/*.rs` | une **performance**, jamais une correction |
+| unit test | `#[cfg(test)] mod tests` in `src/**.rs` | the behaviour of a unit, public or private |
+| doctest | `///` and `//!` in `src/**.rs` | that the example documenting an item compiles and runs |
+| integration test | `tests/*.rs` | a complete chain seen from outside the crate |
+| Python test | `tests/python/*.py` | the pyo3 surface and the behaviour on the Python side |
+| guard | `tests/python/test_method_exposure.py`, `test_mirror_completeness.py` | an **API invariant**, not a behaviour |
+| example | `examples/*.py` | an end-to-end user chain |
+| training script | `formation/*.py` | a complete teaching walkthrough |
+| bench | `benches/*.rs` | a **performance**, never a correctness |
 
-Un banc ne remplace jamais un test : il mesure, il n'affirme rien. Il ne tourne
-pas en CI.
+A bench never replaces a test: it measures, it asserts nothing. It does not run
+in CI.
 
-## Choix du mécanisme d'inclusion
+## Choice of inclusion mechanism
 
-`{{#include}}` si cargo (ou pytest, ou `run_examples`) compile déjà le fichier —
-la vérification a lieu à la source, mdbook ne fait que l'afficher.
-`{{#rustdoc_include}}` n'a d'intérêt que pour un fichier que *rien d'autre* ne
-compile : il passe le fichier entier à rustdoc en n'affichant que l'ancre. Il
-n'y en a aucun dans ce dépôt aujourd'hui, et il n'y a pas de raison d'en créer.
+`{{#include}}` if cargo (or pytest, or `run_examples`) already compiles the
+file — the verification happens at the source, mdbook only displays it.
+`{{#rustdoc_include}}` is only of interest for a file that *nothing else*
+compiles: it passes the whole file to rustdoc while displaying only the anchor.
+There is none in this repository today, and there is no reason to create one.
 
-## Une dérogation porte une raison
+## A waiver carries a reason
 
-Toute page d'esquisses, tout item sans exemple, toute exclusion d'un garde-fou
-vit dans un **dictionnaire nom → raison**, accompagné d'un test d'hygiène qui
-échoue si l'entrée devient périmée. C'est le motif déjà en place dans
-`tests/python/test_method_exposure.py` et `test_mirror_completeness.py` ; il
-n'en est pas créé d'autre.
+Every sketch page, every item without an example, every exclusion from a guard
+lives in a **name → reason dictionary**, accompanied by a hygiene test that
+fails if the entry becomes stale. That is the pattern already in place in
+`tests/python/test_method_exposure.py` and `test_mirror_completeness.py`; no
+other is created.

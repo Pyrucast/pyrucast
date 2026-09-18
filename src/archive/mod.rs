@@ -107,9 +107,9 @@ const FORMAT: u32 = 1;
 /// # let mesh = Mesh::from_submesh(sm);
 /// # let chemin = std::env::temp_dir()
 /// #     .join(format!("pyrucast_doc_{}_arc.pyr", std::process::id()));
-/// // Ce qu'un objet doit savoir faire pour entrer dans une archive : se
-/// // nommer d'un nom stable tant que le numéro de format ne change pas.
-/// // Toutes les briques partageables l'implémentent.
+/// // What an object must be able to do to enter an archive: name itself with
+/// // a name that stays stable as long as the format number does not change.
+/// // Every shareable building block implements it.
 /// archive::save(&chemin, &[("maillage", &mesh as &dyn ArchiveRoot)])?;
 /// assert_eq!(archive::load(&chemin)?["maillage"].type_name(), "Mesh");
 /// # let _ = std::fs::remove_file(&chemin);
@@ -149,9 +149,9 @@ pub trait Archivable: Portable + Any + Send + Sync {
 /// # let chemin = std::env::temp_dir()
 /// #     .join(format!("pyrucast_doc_{}_val.pyr", std::process::id()));
 /// # use pyrucast::archive::{Root, Value};
-/// // Les valeurs simples qu'une archive porte à côté des conteneurs :
-/// // scalaires et listes, de quoi ranger un jeu de paramètres avec le
-/// // maillage qu'il décrit.
+/// // The plain values an archive carries alongside the containers: scalars
+/// // and lists, enough to store a set of parameters with the mesh it
+/// // describes.
 /// archive::save(&chemin, &[("pas", &0.25_f64 as &dyn ArchiveRoot),
 ///                          ("noms", &vec!["a".to_string()] as &dyn ArchiveRoot)])?;
 /// let objets = archive::load(&chemin)?;
@@ -196,9 +196,9 @@ pub enum Value {
 /// # let mesh = Mesh::from_submesh(sm);
 /// # let chemin = std::env::temp_dir()
 /// #     .join(format!("pyrucast_doc_{}_root.pyr", std::process::id()));
-/// // Ce qu'une archive sait porter à sa racine : les conteneurs, plus les
-/// // valeurs simples. `type_name` nomme ce qu'on a trouvé — c'est lui que
-/// // citent les messages d'un accesseur typé mal choisi.
+/// // What an archive can carry at its root: the containers, plus the plain
+/// // values. `type_name` names what was found — it is what the messages of a
+/// // badly chosen typed accessor quote.
 /// archive::save(&chemin, &[("maillage", &mesh as &dyn ArchiveRoot)])?;
 /// let objets = archive::load(&chemin)?;
 /// assert_eq!(objets["maillage"].type_name(), "Mesh");
@@ -243,9 +243,9 @@ impl Root {
     /// # let mesh = Mesh::from_submesh(sm);
     /// # let chemin = std::env::temp_dir()
     /// #     .join(format!("pyrucast_doc_{}_tn.pyr", std::process::id()));
-    /// // Ce qu'une archive sait porter à sa racine : les conteneurs, plus les
-    /// // valeurs simples. `type_name` nomme ce qu'on a trouvé — c'est lui que
-    /// // citent les messages d'un accesseur typé mal choisi.
+    /// // What an archive can carry at its root: the containers, plus the plain
+    /// // values. `type_name` names what was found — it is what the messages of
+    /// // a badly chosen typed accessor quote.
     /// archive::save(&chemin, &[("maillage", &mesh as &dyn ArchiveRoot)])?;
     /// let objets = archive::load(&chemin)?;
     /// assert_eq!(objets["maillage"].type_name(), "Mesh");
@@ -326,8 +326,8 @@ impl std::fmt::Debug for Root {
 /// #     .join(format!("pyrucast_doc_{}_objets.pyr", std::process::id()));
 /// # archive::save(&chemin, &[("maillage", &mesh as &dyn ArchiveRoot)]).unwrap();
 /// # let objets = archive::load(&chemin).unwrap();
-/// // Le `Deref` vers `BTreeMap` donne `keys`, `len` et l'itération — triés,
-/// // ce qui est aussi ce qui rend une archive reproductible octet pour octet.
+/// // The `Deref` to `BTreeMap` gives `keys`, `len` and iteration — sorted,
+/// // which is also what makes an archive reproducible byte for byte.
 /// assert_eq!(objets.len(), 1);
 /// assert_eq!(objets.keys().collect::<Vec<_>>(), vec!["maillage"]);
 /// # let _ = std::fs::remove_file(&chemin);
@@ -364,8 +364,8 @@ impl Objects {
     /// #     .join(format!("pyrucast_doc_{}_inner.pyr", std::process::id()));
     /// # archive::save(&chemin, &[("maillage", &mesh as &dyn ArchiveRoot)]).unwrap();
     /// # let objets = archive::load(&chemin).unwrap();
-    /// // Parcourir chaque entrée une fois, quel que soit son type — ce que fait
-    /// // la liaison Python pour remplir son dictionnaire.
+    /// // Walking each entry once, whatever its type — what the Python binding
+    /// // does to fill its dictionary.
     /// for (nom, racine) in objets.into_inner() {
     ///     assert_eq!((nom.as_str(), racine.type_name()), ("maillage", "Mesh"));
     /// }
@@ -415,8 +415,8 @@ macro_rules! accessors {
                 /// archive::save(&chemin, &[("maillage", &mesh as &dyn ArchiveRoot)])?;
                 /// let mut objets = archive::load(&chemin)?;
                 ///
-                /// // Chaque accesseur est **typé** : demander le mauvais type
-                /// // échoue en nommant ce qui a été trouvé à la place.
+                /// // Every accessor is **typed**: asking for the wrong type
+                /// // fails, naming what was found instead.
                 /// assert_eq!(objets.mesh("maillage")?.len(), 1);
                 /// assert!(objets.int("maillage").is_err());
                 /// assert!(objets.mesh("absent").is_err());
@@ -471,8 +471,8 @@ macro_rules! take_accessors {
                 /// archive::save(&chemin, &[("maillage", &mesh as &dyn ArchiveRoot)])?;
                 /// let mut objets = archive::load(&chemin)?;
                 ///
-                /// // Chaque accesseur est **typé** : demander le mauvais type
-                /// // échoue en nommant ce qui a été trouvé à la place.
+                /// // Every accessor is **typed**: asking for the wrong type
+                /// // fails, naming what was found instead.
                 /// assert_eq!(objets.mesh("maillage")?.len(), 1);
                 /// assert!(objets.int("maillage").is_err());
                 /// assert!(objets.mesh("absent").is_err());
@@ -528,8 +528,8 @@ macro_rules! value_accessors {
                 /// archive::save(&chemin, &[("maillage", &mesh as &dyn ArchiveRoot)])?;
                 /// let mut objets = archive::load(&chemin)?;
                 ///
-                /// // Chaque accesseur est **typé** : demander le mauvais type
-                /// // échoue en nommant ce qui a été trouvé à la place.
+                /// // Every accessor is **typed**: asking for the wrong type
+                /// // fails, naming what was found instead.
                 /// assert_eq!(objets.mesh("maillage")?.len(), 1);
                 /// assert!(objets.int("maillage").is_err());
                 /// assert!(objets.mesh("absent").is_err());
@@ -593,9 +593,9 @@ pub enum Entry {
 /// # let mesh = Mesh::from_submesh(sm);
 /// # let chemin = std::env::temp_dir()
 /// #     .join(format!("pyrucast_doc_{}_root2.pyr", std::process::id()));
-/// // Ce qu'on peut nommer **à la racine** d'une archive : un conteneur,
-/// // ou une valeur simple. C'est l'objet du `&dyn ArchiveRoot` que
-/// // `save` réclame.
+/// // What can be named **at the root** of an archive: a container, or a
+/// // plain value. That is the point of the `&dyn ArchiveRoot` that `save`
+/// // calls for.
 /// let racines: Vec<(&str, &dyn ArchiveRoot)> =
 ///     vec![("maillage", &mesh), ("pas", &0.25_f64)];
 /// archive::save(&chemin, &racines)?;
@@ -706,14 +706,14 @@ struct Body {
 /// # let mesh = Mesh::from_submesh(sm);
 /// # let chemin = std::env::temp_dir()
 /// #     .join(format!("pyrucast_doc_{}_save.pyr", std::process::id()));
-/// // Les objets **partagés** par plusieurs racines sont écrits une seule
-/// // fois : c'est là que se tient la garantie de non-duplication. Deux
-/// // sauvegardes des mêmes objets produisent les mêmes octets.
+/// // Objects **shared** by several roots are written once only: that is
+/// // where the non-duplication guarantee stands. Two saves of the same
+/// // objects produce the same bytes.
 /// archive::save(&chemin, &[("maillage", &mesh as &dyn ArchiveRoot)])?;
 /// let a = std::fs::read(&chemin)?;
 /// archive::save(&chemin, &[("maillage", &mesh as &dyn ArchiveRoot)])?;
 /// assert_eq!(a, std::fs::read(&chemin)?);
-/// // Un nom donné deux fois est une erreur.
+/// // A name given twice is an error.
 /// assert!(archive::save(&chemin,
 ///     &[("m", &mesh as &dyn ArchiveRoot), ("m", &mesh)]).is_err());
 /// # let _ = std::fs::remove_file(&chemin);
@@ -774,15 +774,15 @@ pub fn save<P: AsRef<Path>>(path: P, roots: &[(&str, &dyn ArchiveRoot)]) -> Resu
 /// # let mesh = Mesh::from_submesh(sm);
 /// # let chemin = std::env::temp_dir()
 /// #     .join(format!("pyrucast_doc_{}_load.pyr", std::process::id()));
-/// // Ce qui revient est **neuf** : rien de ce qui vit déjà dans la session
-/// // n'est touché.
+/// // What comes back is **fresh**: nothing already living in the session is
+/// // touched.
 /// archive::save(&chemin, &[("maillage", &mesh as &dyn ArchiveRoot)])?;
 /// let mut objets = archive::load(&chemin)?;
 /// let relu = objets.mesh("maillage")?;
 /// # use pyrucast::handle::Handle as H;
 /// assert!(!H::same_object(&relu.get(0)?, &mesh.get(0)?));
 /// assert_eq!(relu.cell_count(), mesh.cell_count());
-/// // Un fichier qui n'est pas une archive est refusé sur sa signature.
+/// // A file that is not an archive is refused on its signature.
 /// std::fs::write(&chemin, b"pas une archive")?;
 /// assert!(archive::load(&chemin).is_err());
 /// # let _ = std::fs::remove_file(&chemin);

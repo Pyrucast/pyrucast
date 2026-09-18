@@ -1,41 +1,41 @@
-"""Orchestration thermo-mécanique **pas-à-pas** (Python pur au-dessus de pyrucast).
+"""**Step-by-step** thermo-mechanical orchestration (pure Python above pyrucast).
 
-Couche haut niveau assemblée uniquement à partir des opérateurs déjà exposés par
-l'extension : aucune boucle n'est écrite en Rust. Couplage **faible, sens unique**
-thermo→méca et thermique **stationnaire par pas** (la librairie n'a pas de terme
-transitoire) — la dépendance au temps vient des charges / matériaux interpolés.
+A high-level layer assembled solely from the operators the extension already
+exposes: no loop is written in Rust. **Weak, one-way** thermal→mechanical
+coupling, and **steady-state per step** thermics (the library has no transient
+term) — time dependence comes from the interpolated loads / materials.
 
 Trois fonctions :
 
-* :func:`step_by_step` — mise en donnée (découpe du modèle par physique) puis boucle
-  sur les instants ; à chaque pas appelle :func:`thermal_step` puis
-  :func:`mechanical_step`, et complète le dictionnaire d'entrée avec les résultats.
-* :func:`thermal_step` — une résolution thermique stationnaire ``K_th·T = charges``.
+* :func:`step_by_step` — setup (splitting the model per physics) then a loop
+  over the instants; at each step it calls :func:`thermal_step` then
+  :func:`mechanical_step`, and fills the input dictionary with the results.
+* :func:`thermal_step` — one steady thermal solve ``K_th·T = loads``.
 * :func:`mechanical_step` — résolution **non linéaire** (Newton modifié préconditionné
-  par la rigidité élastique, **accéléré par Anderson**) de la mécanique, la
-  température du pas entrant comme déformation thermique ``ε_th``.
+  by the elastic stiffness, **Anderson accelerated**) of the mechanics, the
+  step's temperature entering as thermal strain ``ε_th``.
 
-Le chargement et les matériaux sont chacun **un seul champ unioné** : ``loads`` porte à
-la fois les composantes thermiques (``q`` / ``imposed_T``) et mécaniques (``f_*`` /
+Loading and materials are each **a single unioned field**: ``loads`` carries
+both the thermal components (``q`` / ``imposed_T``) and the mechanical ones
 ``imposed_u``) ; ``materials`` porte ``k``/``h`` (thermique) et ``E``/``nu``/``alpha``
-(mécanique). Chaque étape ne lit que ce dont elle a besoin : ``solve`` n'échantillonne
-le second membre qu'aux DDL de sa matrice et ignore les composantes surnuméraires.
+(``f_*`` / …). Each step reads only what it needs: ``solve`` samples the
+right-hand side only at its matrix's DOFs and ignores the extra components.
 """
 
 from . import _pyrucast as pc
 
 __all__ = ["step_by_step", "thermal_step", "mechanical_step"]
 
-# Profondeur d'historique d'Anderson par défaut (nombre de couples (u, g) gardés).
+# Default Anderson history depth (number of (u, g) pairs kept).
 _ANDERSON_DEPTH = 3
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Découpe du modèle par physique
+# Splitting the model per physics
 # ─────────────────────────────────────────────────────────────────────────────
 def _constrained_variable(sub):
-    """Variable contrainte par un sous-modèle de Lagrange (Dirichlet) : le primal
-    d'une contrainte est ``lambda_<var>`` — on renvoie ``<var>`` (ou ``None``)."""
+    """Variable constrained by a Lagrange sub-model (Dirichlet): a constraint's
+    primal is ``lambda_<var>`` — we return ``<var>`` (or ``None``)."""
     for name in sub.primal_vars():
         if name.startswith("lambda_"):
             return name[len("lambda_") :]
@@ -43,10 +43,10 @@ def _constrained_variable(sub):
 
 
 def _split_model(model):
-    """Sépare ``model`` en (thermique, mécanique). ``Model.filter`` partage les
-    handles (pas de copie), donc les zones matériau / fespace coïncident avec le
-    modèle complet. Les contraintes (exclues par ``filter`` des physiques) sont
-    ré-unionées à la physique dont elles contraignent une variable primale."""
+    """Splits ``model`` into (thermal, mechanical). ``Model.filter`` shares the
+    handles (no copy), so the material / fespace zones coincide with the full
+    model. The constraints (excluded from the physics by ``filter``) are
+    unioned back into the physics whose primal variable they constrain."""
     thermal = model.filter("thermal")
     mechanical = model.filter("mechanical")
     thermal_vars = set(thermal.primal_vars())
@@ -61,27 +61,27 @@ def _split_model(model):
         elif var in mechanical_vars:
             mechanical = mechanical | sub
         else:
-            # Contrainte non rattachable (variable inconnue des deux physiques) :
-            # défaut mécanique — le cas thermo-mécanique usuel n'y tombe pas.
+            # Unattachable constraint (variable unknown to both physics):
+            # mechanical by default — the usual case never falls here.
             mechanical = mechanical | sub
     return thermal, mechanical
 
 
 def _interpolate(spec, t):
-    """Valeur d'un champ éventuellement tabulé dans le temps : ``spec.interpolate(t)``
-    si ``spec`` est une ``Evolution``, sinon ``spec`` tel quel (champ constant)."""
+    """Value of a field possibly tabulated in time: ``spec.interpolate(t)`` if
+    ``spec`` is an ``Evolution``, else ``spec`` as is (constant field)."""
     if isinstance(spec, pc.Evolution):
         return spec.interpolate(t)
     return spec
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Petit solveur dense pour les équations normales d'Anderson (m ≤ 3)
+# Small dense solver for Anderson's normal equations (m ≤ 3)
 # ─────────────────────────────────────────────────────────────────────────────
 def _solve_small_spd(a, b):
     """Résout un petit système dense **symétrique** ``A x = b`` (``m ≤ 3``) par
-    élimination de Gauss à pivot partiel. Renvoie ``None`` si ``A`` est singulière
-    (pivot ~ 0) — l'appelant retombe alors sur le Newton pur."""
+    Gauss elimination with partial pivoting. Returns ``None`` if ``A`` is
+    singular (pivot ~ 0) — the caller then falls back on plain Newton."""
     n = len(b)
     a = [row[:] for row in a]
     b = b[:]
@@ -109,11 +109,11 @@ def _solve_small_spd(a, b):
 
 
 def _anderson_correction(u, g, history, free_mesh):
-    """Correction d'Anderson ``Σⱼ γⱼ (ΔUⱼ + ΔGⱼ)`` à soustraire au pas de Newton pur
-    ``u + g`` : ``u_acc = u + g − correction``. Les ``γ`` résolvent le moindre-carré
-    ``min ‖g − Σⱼ γⱼ ΔGⱼ‖²`` sur les DDL libres via les équations normales
-    ``(ΔGᵀΔG) γ = ΔGᵀg`` régularisées (Tikhonov). ``None`` si l'historique est vide
-    ou si le petit système dégénère. Tout passe par les opérateurs de champ."""
+    """Anderson correction ``Σⱼ γⱼ (ΔUⱼ + ΔGⱼ)`` to subtract from the plain
+    Newton step ``u + g``: ``u_acc = u + g − correction``. The ``γ`` solve the
+    least squares ``min ‖g − Σⱼ γⱼ ΔGⱼ‖²`` on the free DOFs through the normal
+    equations ``(ΔGᵀΔG) γ = ΔGᵀg``, regularized (Tikhonov). ``None`` if the
+    history is empty or the small system degenerates. All through field operators."""
     m = len(history)
     if m == 0:
         return None
@@ -155,12 +155,12 @@ def _anderson_correction(u, g, history, free_mesh):
 # Étape thermique (stationnaire)
 # ─────────────────────────────────────────────────────────────────────────────
 def thermal_step(thermal_model, materials, loads):
-    """Une résolution thermique **stationnaire** : assemble ``K_th`` (conduction +
+    """One **steady** thermal solve: assembles ``K_th`` (conduction +
     éventuel terme de film de convection) et résout ``K_th·T = loads``.
 
-    ``loads`` est le champ de charges unioné : ``solve`` n'y lit que les lignes
-    thermiques (``q`` en source de Neumann, ``imposed_T`` pour un Dirichlet de
-    température) et ignore les composantes mécaniques. Renvoie le ``NodeField``
+    ``loads`` is the unioned load field: ``solve`` reads only the thermal rows
+    there (``q`` as a Neumann source, ``imposed_T`` for a temperature
+    Dirichlet) and ignores the mechanical components. Returns the ``NodeField``
     solution (température ``T`` + multiplicateurs éventuels)."""
     k = pc.stiffness(thermal_model, materials)
     return pc.solve(k, loads)
@@ -188,19 +188,19 @@ def mechanical_step(
     reference=0.0,
     stiffness_matrix=None,
 ):
-    """Résout la mécanique non linéaire du pas et renvoie ``(u, out, info)``.
+    """Solves the step's nonlinear mechanics and returns ``(u, out, info)``.
 
-    Newton **modifié** : l'opérateur d'itération est la rigidité **élastique** ``k``
-    (assemblée une fois par pas, factorisation mise en cache par ``solve``) ;
-    l'itération ``u ← u + k⁻¹ r(u)`` est un point fixe préconditionné, **accéléré par
+    **Modified** Newton: the iteration operator is the **elastic** stiffness
+    ``k`` (assembled once per step, factorization cached by ``solve``); the
+    iteration ``u ← u + k⁻¹ r(u)`` is a preconditioned fixed point,
     Anderson** (historique ``m = anderson_depth``, garde-fou de descente).
 
-    Le couplage thermique est **faible, sens unique** : la température ``temperature``
-    du pas donne la déformation thermique ``ε_th`` (via ``thermal_strain``), retirée
+    The thermal coupling is **weak and one-way**: the step's ``temperature``
+    gives the thermal strain ``ε_th`` (through ``thermal_strain``), removed
     de la déformation totale avant l'intégration de la loi de comportement. L'état
-    interne du pas précédent (``state_prev``, ``None`` au premier pas) est passé comme
+    internal state of the previous step (``state_prev``, ``None`` at the first
     ``prev`` — prédicteur incrémental ``σ(A) + C:Δε``. ``out`` (contraintes + VAR + ε)
-    convergé est renvoyé pour servir de ``prev`` au pas suivant.
+    step) is passed as ``prev`` for the next step.
     """
     k = (
         stiffness_matrix
@@ -209,9 +209,9 @@ def mechanical_step(
     )
     support = free_mesh if free_mesh is not None else mesh
 
-    # Déformation thermique du pas (champ aux points de Gauss). ``thermal_strain``
-    # prend une température **aux points de Gauss** : on passe le champ nodal par
-    # ``interp_to_gauss`` (restreint au maillage pour ne garder que « T »).
+    # The step's thermal strain (a field at the Gauss points).
+    # ``thermal_strain`` takes a temperature **at the Gauss points**: the nodal
+    # field goes through ``interp_to_gauss`` (restricted to the mesh to keep "T").
     eps_th = None
     if temperature is not None:
         t_gauss = pc.interp_to_gauss(pc.restrict(temperature, mesh), fespace)
@@ -234,12 +234,12 @@ def mechanical_step(
     n_anderson = 0
     last_out = None
     res_norm = float("inf")
-    # Échelle de référence du critère de Newton : le **maximum courant** du résidu
-    # initial des pas (déséquilibre de charge, thermique et/ou externe). La prendre
-    # globale — et non le résidu initial du *pas* — évite qu'un pas déjà à
-    # l'équilibre (charge inchangée) impose une tolérance sous le plancher de
-    # round-off du solveur ; c'est aussi robuste pour une charge purement thermique
-    # (contrainte nulle, aucune échelle d'effort propre au pas).
+    # Reference scale of the Newton criterion: the **running maximum** of the
+    # steps' initial residual (load imbalance, thermal and/or external). Taking
+    # it global — rather than the *step's* initial residual — keeps a step
+    # already at equilibrium (unchanged load) from imposing a tolerance below
+    # the solver's round-off floor; it is also robust for a purely thermal load
+    # (zero stress, no force scale of its own for the step).
     ref = reference
     tol = None
 
@@ -253,7 +253,7 @@ def mechanical_step(
             break
 
         # Direction résidu g = k⁻¹ r (k élastique, factorisation cachée), reprojetée
-        # sur le support / les composantes de u.
+        # on u's support / components.
         g = pc.restrict_like(pc.solve(k, residual), u)
         u_snapshot = u + 0.0  # copie indépendante avant de bouger
         pure_step = u + g
@@ -289,27 +289,27 @@ def mechanical_step(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Boucle pas-à-pas
+# Step-by-step loop
 # ─────────────────────────────────────────────────────────────────────────────
 def step_by_step(data):
-    """Calcule une suite de pas de temps thermo-mécaniques et **complète** ``data``.
+    """Computes a series of thermo-mechanical time steps and **fills** ``data``.
 
-    ``data`` est un dictionnaire :
+    ``data`` is a dictionary:
 
-    ``times``      liste des instants (``list[float]``).
+    ``times``      list of instants (``list[float]``).
     ``model``      ``Model`` complet (thermique + mécanique + Dirichlet). La fespace
-                   et le maillage en sont **déduits** (``Model.fespace()`` /
-                   ``FiniteElementSpace.mesh()``) — inutile de les fournir.
-    ``loads``      ``NodeField`` ou ``Evolution`` unioné (``q``/``imposed_T`` + ``f_*``/``imposed_u``).
-    ``materials``  ``ElementField`` ou ``Evolution`` unioné (``k``/``h`` + ``E``/``nu``/``alpha``).
-    ``t_ref``      (opt.) température de référence pour ``ε_th`` (défaut ``0.0``).
-    ``free_mesh``  (opt.) ``Mesh`` des DDL libres pour la norme de résidu (recommandé
+                   and the mesh are **deduced** from it (``Model.fespace()`` /
+                   ``FiniteElementSpace.mesh()``) — no need to supply them.
+    ``loads``      unioned ``NodeField`` or ``Evolution`` (``q``/``imposed_T`` + ``f_*``/``imposed_u``).
+    ``materials``  unioned ``ElementField`` or ``Evolution`` (``k``/``h`` + ``E``/``nu``/``alpha``).
+    ``t_ref``      (opt.) reference temperature for ``ε_th`` (default ``0.0``).
+    ``free_mesh``  (opt.) ``Mesh`` of the free DOFs for the residual norm (advised
                    en présence de Dirichlet ; défaut : maillage mécanique complet).
-    ``anderson_depth`` / ``max_newton`` / ``tol_rel`` — (opt.) réglages du solveur méca.
+    ``anderson_depth`` / ``max_newton`` / ``tol_rel`` — (opt.) mechanical solver settings.
 
-    En retour, ``data["results"]`` est une liste (un élément par instant) de dicts
+    On return, ``data["results"]`` is a list (one item per instant) of dicts
     ``{"time", "temperature", "displacement", "state", "mech_iters",
-    "mech_anderson", "converged"}``. ``data`` (le même objet) est renvoyé.
+    "mech_anderson", "converged"}``. ``data`` (the same object) is returned.
     """
     model = data["model"]
     times = list(data["times"])
@@ -324,32 +324,34 @@ def step_by_step(data):
 
     thermal_model, mechanical_model = _split_model(model)
     has_thermal = len(thermal_model) > 0
-    # Domaine mécanique seul (sans les contraintes) : `primal_vars` d'un modèle
-    # avec Dirichlet inclut les multiplicateurs `lambda_*` que `deformation`
-    # refuse. Fespace et maillage sont déduits de ce domaine.
+    # The mechanical domain alone (without the constraints): `primal_vars` of a
+    # model with Dirichlet includes the `lambda_*` multipliers that
+    # `deformation` refuses. Fespace and mesh are deduced from this domain.
     mechanical_domain = model.filter("mechanical")
     displacement_vars = mechanical_domain.primal_vars()
     has_mechanical = len(displacement_vars) > 0
 
-    # Fespace / maillage déduits du modèle (aucun argument séparé requis).
+    # Fespace / mesh deduced from the model (no separate argument required).
     if has_mechanical:
         fespace = mechanical_domain.fespace()
         mesh = fespace.mesh()
-        u = pc.NodeField(mesh, displacement_vars)  # déplacement cumulé, nul au départ
+        u = pc.NodeField(
+            mesh, displacement_vars
+        )  # cumulative displacement, zero at first
     else:
         fespace = mesh = u = None
     state_prev = None
-    reference = 0.0  # échelle de résidu (max courant), partagée entre les pas
+    reference = 0.0  # residual scale (running max), shared across the steps
 
     results = []
     prev_t = times[0] if times else 0.0
     for i, t in enumerate(times):
         dt = t - prev_t
-        # `material_field` produit une zone par sous-modèle : thermique et
-        # mécanique bâtis sur la même fespace laissent deux zones (composantes
-        # disjointes) côte à côte. Pas besoin de les fusionner — les opérateurs
-        # (`stiffness`, `integrate_behavior`, `thermal_strain`) résolvent leur
-        # zone matière par les composantes qu'ils requièrent.
+        # `material_field` produces one zone per sub-model: thermal and
+        # mechanical built on the same fespace leave two zones (disjoint
+        # components) side by side. No need to merge them — the operators
+        # (`stiffness`, `integrate_behavior`, `thermal_strain`) resolve their
+        # material zone through the components they require.
         materials_t = _interpolate(materials_spec, t)
         loads_t = _interpolate(loads_spec, t)
 

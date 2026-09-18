@@ -1,71 +1,71 @@
-# Archive — pression suiveuse (`follower_pressure`)
+# Archive — follower pressure (`follower_pressure`)
 
-**Retirée du code le 2026-08-30**, sur la branche `noyaux-paralleles`.
+**Removed from the code on 2026-08-30**, on the `noyaux-paralleles` branch.
 
-## Pourquoi
+## Why
 
-`follower_pressure` était la seule physique à ne produire **aucune** matrice :
-son `contributions` renvoyait `Vec::new()` et son `stiffness_layout` déclarait
-`symmetric: false` uniquement pour que `build_internal_forces` y trouve son
-support et ses fespaces. Deux mensonges de modélisation — elle disait « j'ai un
-bloc de raideur » pour obtenir « la géométrie sur laquelle j'intègre mes forces ».
+`follower_pressure` was the only physics to produce **no** matrix at all: its
+`contributions` returned `Vec::new()` and its `stiffness_layout` declared
+`symmetric: false` solely so that `build_internal_forces` would find its support
+and its fespaces there. Two modelling lies — it said "I have a stiffness block"
+in order to obtain "the geometry over which I integrate my forces".
 
-Le trait `Domain` classe les sous-modèles par **le type de matrice qu'ils
-produisent**. Garder la pression suiveuse aurait obligé à scinder `Domain` en
-deux traits pour ce seul membre. Elle sort donc, le temps de lui rendre une place
-juste — vraisemblablement une capacité « charge » distincte de `Domain`, avec sa
-propre déclaration de géométrie d'intégration plutôt qu'un `stiffness_layout`
-emprunté.
+The `Domain` trait classifies sub-models by **the kind of matrix they produce**.
+Keeping the follower pressure would have forced `Domain` to be split into two
+traits for that single member. It therefore goes out, until it can be given a
+fair place — most likely a "load" capacity distinct from `Domain`, with its own
+declaration of integration geometry rather than a borrowed `stiffness_layout`.
 
-Rien n'était cassé : les tests passaient, la physique était juste. C'est son
-rangement dans la hiérarchie des traits qui ne l'était pas.
+Nothing was broken: the tests passed, the physics was correct. It was its filing
+in the trait hierarchy that was not.
 
-## Ce qu'il faudra refaire pour la remettre
+## What will have to be redone to put it back
 
-Chaque point ci-dessous a été défait ; les remettre, dans cet ordre, restaure la
-physique. Les numéros de ligne sont ceux d'avant le retrait, donnés comme repère.
+Every point below was undone; putting them back, in this order, restores the
+physics. The line numbers are those from before the removal, given as a
+landmark.
 
-### Code Rust
+### Rust code
 
-| Fichier | Ce qu'il y avait |
+| File | What was there |
 |---|---|
-| `src/models/follower_pressure.rs` | le module entier (ci-dessous) |
+| `src/models/follower_pressure.rs` | the whole module (below) |
 | `src/models/mod.rs:53` | `pub mod follower_pressure;` |
-| `src/lib.rs:124` | `models::follower_pressure::follower_pressure_py::follower_pressure,` dans l'enregistrement pyo3 |
+| `src/lib.rs:124` | `models::follower_pressure::follower_pressure_py::follower_pressure,` in the pyo3 registration |
 | `src/ops/model/mod.rs:75` | `pub use crate::models::follower_pressure::follower_pressure;` |
-| `src/ops/model/mod.rs:12` | la mention dans l'inventaire en tête de module |
-| `src/containers/model.rs:133` | `follower_pressure` dans la liste d'imports |
-| `src/containers/model.rs:250` | la variante `SubModel::FollowerPressure(follower_pressure::FollowerPressure)` |
-| `src/containers/model.rs:309` | le bras `SubModel::FollowerPressure(p) => p,` de `as_kind` |
-| `src/containers/model.rs:753-788` | le constructeur `SubModel::follower_pressure` et son doctest |
-| `tests/follower_pressure.rs` | le test d'intégration (ci-dessous) |
+| `src/ops/model/mod.rs:12` | the mention in the inventory at the head of the module |
+| `src/containers/model.rs:133` | `follower_pressure` in the import list |
+| `src/containers/model.rs:250` | the variant `SubModel::FollowerPressure(follower_pressure::FollowerPressure)` |
+| `src/containers/model.rs:309` | the arm `SubModel::FollowerPressure(p) => p,` of `as_kind` |
+| `src/containers/model.rs:753-788` | the `SubModel::follower_pressure` constructor and its doctest |
+| `tests/follower_pressure.rs` | the integration test (below) |
 
-`CellGeom::tangents` et `CellGeom::normal_from_tangents`
-(`src/models/kernel.rs`) ont été **conservées** : ce sont leurs seuls appelants
-hors de `kernel.rs` qui disparaissaient, et la pression suiveuse en a besoin au
-retour. Leur documentation invoque toujours « a follower load » comme motivation.
+`CellGeom::tangents` and `CellGeom::normal_from_tangents`
+(`src/models/kernel.rs`) were **kept**: what disappeared was their only callers
+outside `kernel.rs`, and the follower pressure needs them when it comes back.
+Their documentation still invokes "a follower load" as the motivation.
 
 ### Python
 
-| Fichier | Ce qu'il y avait |
+| File | What was there |
 |---|---|
 | `python/pyrucast/model.py:33` | `follower_pressure as follower_pressure,` |
-| `python/pyrucast/model.py:64` | `"follower_pressure",` dans `__all__` |
-| `python/pyrucast/_pyrucast/__init__.pyi:63,3242` | l'entrée d'`__all__` et le stub de la fonction |
-| `tests/python/test_doc_mecanique.py:258-267` | la section `pression_suiveuse` (ci-dessous) |
+| `python/pyrucast/model.py:64` | `"follower_pressure",` in `__all__` |
+| `python/pyrucast/_pyrucast/__init__.pyi:63,3242` | the `__all__` entry and the function's stub |
+| `tests/python/test_doc_mecanique.py:258-267` | the `pression_suiveuse` section (below) |
 
-### Book et tables de correspondance
+### Book and correspondence tables
 
-| Fichier | Ce qu'il y avait |
+| File | What was there |
 |---|---|
 | `book/src/SUMMARY.md:34` | `    - [Pression suiveuse](mecanique/pression-suiveuse.md)` |
-| `book/src/mecanique.md:18` | l'entrée de la liste des pages mécanique |
-| `book/src/mecanique/pression-suiveuse.md` | la page entière (ci-dessous) |
-| `book/src/physiques.md:48,90,117,175` | l'entrée de la liste, la ligne du tableau des physiques et deux mentions en prose |
-| `book/src/model.md:115,153` | la ligne du tableau des opérateurs et l'entrée de la liste `Mechanical` |
-| `book/src/correspondance-rust-python.md:244` | la ligne de correspondance |
-| `book/src/operateurs.md:18` | la mention dans l'énumération `ops::model` |
-| `modèle_castem.csv:256` | la colonne « Équivalent pyrucast » de `CHARGEMENT;PRESSION`, ramenée à `—` |
+| `book/src/mecanique.md:18` | the entry in the list of mechanics pages |
+| `book/src/mecanique/pression-suiveuse.md` | the whole page (below) |
+| `book/src/physiques.md:48,90,117,175` | the list entry, the row of the physics table and two mentions in the prose |
+| `book/src/model.md:115,153` | the row of the operator table and the entry in the `Mechanical` list |
+| `book/src/correspondance-rust-python.md:244` | the correspondence row |
+| `book/src/operateurs.md:18` | the mention in the `ops::model` enumeration |
+| `modèle_castem.csv:256` | the "Équivalent pyrucast" column of `CHARGEMENT;PRESSION`, brought back to `—` |
 
 ---
 
@@ -185,7 +185,7 @@ const AXES: [&str; 3] = ["x", "y", "z"];
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # use pyrucast::models::follower_pressure;
-/// // La pression appliquée, fournie au moment de l'assemblage.
+/// // The applied pressure, supplied at assembly time.
 /// assert_eq!(follower_pressure::MATERIAL_COMPONENT, "p");
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -217,7 +217,7 @@ fn traction_names(space_dim: usize) -> Vec<String> {
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # use pyrucast::models::follower_pressure::{self, FollowerPressure};
-/// // Une pression qui tourne avec la surface : une seule constante.
+/// // A pressure that turns with the surface: a single constant.
 /// let f = FollowerPressure::new(zone.clone())?;
 /// assert_eq!(f.material_components(),
 ///            vec![follower_pressure::MATERIAL_COMPONENT.to_string()]);
@@ -253,7 +253,7 @@ impl FollowerPressure {
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # use pyrucast::models::follower_pressure::{self, FollowerPressure};
-    /// // Une pression qui tourne avec la surface : une seule constante.
+    /// // A pressure that turns with the surface: a single constant.
     /// let f = FollowerPressure::new(zone.clone())?;
     /// assert_eq!(f.material_components(),
     ///            vec![follower_pressure::MATERIAL_COMPONENT.to_string()]);
@@ -520,7 +520,7 @@ crate::physics_operator! {
 //! one a follower load that only rotates its direction, forgetting the area
 //! change, gets wrong.
 //!
-//! Single source for the « pression suiveuse » example of the mechanics book
+//! Single source for the "pression suiveuse" example of the mechanics book
 //! chapter; runs under `cargo test`.
 
 // ANCHOR: example
@@ -606,7 +606,7 @@ fn a_volumetric_subspace_is_rejected() -> Result<()> {
 }
 
 /// Reversing the winding reverses the normal, hence the load. The orientation of
-/// the boundary mesh is the user's statement of which side is « outside », and
+/// the boundary mesh is the user's statement of which side is "outside", and
 /// nothing else can supply it.
 #[test]
 fn reversing_the_winding_reverses_the_load() -> Result<()> {
@@ -666,7 +666,7 @@ impl Edge {
     /// This is the follower pipeline end to end: the displacement is
     /// differentiated on the surface, the behaviour turns that into a traction,
     /// and the internal forces integrate it. Calling it again with another
-    /// displacement is what « the load follows » means.
+    /// displacement is what "the load follows" means.
     fn load(&self, u: impl Fn(f64, f64) -> (f64, f64)) -> Result<(f64, f64)> {
         let sm = Handle::new(SubMesh::poi1_from_nodes(&self.nodes)?);
         let mut field = SubNodeField::from_poi1(&sm, vec!["u_x".to_string(), "u_y".to_string()])?;
@@ -705,7 +705,7 @@ bord = pyrucast.FiniteElementSpace(maillage_de_bord)
 charge = pyrucast.model.follower_pressure(bord)
 materials = pyrucast.element_field.material_field(charge, [("p", 1.0e5)])
 
-# À chaque itération : la direction se recalcule depuis le déplacement courant.
+# At every iteration: the direction is recomputed from the current displacement.
 gradient = pyrucast.element_field.gradient(u, bord)
 traction = pyrucast.element_field.integrate_behavior(charge, gradient, materials)
 f = pyrucast.node_field.internal_forces(traction, charge)
@@ -715,69 +715,69 @@ f = pyrucast.node_field.internal_forces(traction, charge)
 ## `book/src/mecanique/pression-suiveuse.md`
 
 ````markdown
-# Pression suiveuse
+# Follower pressure
 
 ## Introduction
 
-Une pression est toujours **normale à la surface** sur laquelle elle s'exerce.
-Quand le corps se déforme, cette surface bouge et bascule : la direction de la
-charge bouge avec elle. C'est une charge **suiveuse**.
+A pressure is always **normal to the surface** it acts on. When the body
+deforms, that surface moves and tilts: the direction of the load moves with it.
+It is a **follower** load.
 
-L'ignorer n'est exact qu'en petits déplacements. Sur une membrane qui se gonfle,
-une coque qui flambe, une aube qui tourne, la différence n'est pas un détail :
-c'est elle qui décide de la charge critique.
+Ignoring it is exact only in small displacements. On an inflating membrane, a
+buckling shell, a rotating blade, the difference is not a detail: it is what
+decides the critical load.
 
 \\[
 \mathbf t = -p\\,\mathbf n(u),
 \\]
 
-\\( \mathbf n(u) \\) étant la normale de la surface **déformée**.
+with \\( \mathbf n(u) \\) the normal of the **deformed** surface.
 
-Les degrés de liberté sont ceux de la mécanique — déplacement `u_x, u_y(, u_z)`,
-force nodale `f_x, …` — et le modèle vit sur un maillage de **bord** : SEG2 en
-2-D, TRI3/QUA4 en 3-D.
+The degrees of freedom are those of mechanics — displacement `u_x, u_y(, u_z)`,
+nodal force `f_x, …` — and the model lives on a **boundary** mesh: SEG2 in 2-D,
+TRI3/QUA4 in 3-D.
 
-## Pourquoi c'est un modèle et pas un chargement
+## Why it is a model and not a load
 
-Une charge morte se construit une fois avec
-[`flux`](../operateurs/champs.md) et ne se regarde plus. Une pression suiveuse ne
-le peut pas : sa direction dépend du déplacement courant, donc elle doit être
-**recalculée à chaque évaluation du résidu**. C'est exactement ce que fait une
-physique — elle intègre un comportement et contribue aux forces internes — donc
-c'en est une :
+A dead load is built once with
+[`flux`](../operateurs/champs.md) and never looked at again. A follower pressure
+cannot be: its direction depends on the current displacement, so it has to be
+**recomputed at every residual evaluation**. That is exactly what a physics does
+— it integrates a behaviour and contributes to the internal forces — so it is
+one:
 
 ```text
 u  ──gradient──▶  ∇_s u  ──integrate_behavior──▶  t(u)  ──internal_forces──▶  f(u)
 ```
 
-C'est dans l'intégration du comportement que la direction se rafraîchit. Rien
-d'autre dans la chaîne ne change, et la boucle de Newton reste pilotée depuis
-Python comme les autres non-linéarités.
+It is in the behaviour integration that the direction is refreshed. Nothing else
+in the chain changes, and the Newton loop stays driven from Python like the other
+non-linearities.
 
-## Équations continues résolues
+## Continuous equations solved
 
-Le travail virtuel de la pression sur la configuration **déformée** :
+The virtual work of the pressure on the **deformed** configuration:
 
 \\[
 \delta W = -\int_{\gamma} p\\, \mathbf{n}\cdot\delta\mathbf{u}\\; da
 \\]
 
-où \\(\gamma\\) et \\(\mathbf{n}\\) sont la surface et la normale *actuelles*.
-Tout le travail consiste à ramener cette intégrale sur la configuration de
-référence, ce qui demande à la fois la **rotation** de la normale et le
-**changement d'aire**.
+where \\(\gamma\\) and \\(\mathbf{n}\\) are the *current* surface and normal. All
+the work consists in bringing that integral back onto the reference
+configuration, which requires both the **rotation** of the normal and the
+**area change**.
 
-## Forme discrétisée — par les tangentes déformées
+## Discretised form — through the deformed tangents
 
-Les deux viennent des tangentes de la surface. Si \\(a_k = \partial x/\partial
-\xi_k\\) sont les tangentes de référence, les tangentes déformées sont
+Both come from the tangents of the surface. If \\(a_k = \partial x/\partial
+\xi_k\\) are the reference tangents, the deformed tangents are
 
 \\[
 \bar{a}_k = a_k + \frac{\partial u}{\partial \xi_k} = a_k + (\nabla_s u)\cdot a_k
 \\]
 
-et la normale multipliée par le rapport d'aires est leur produit vectoriel (leur
-rotation de −90° en 2-D), divisé par celui de référence :
+and the normal multiplied by the area ratio is their cross product (their −90°
+turn in 2-D), divided by the reference one:
 
 \\[
 \mathbf t = -p\\;\frac{\bar a_1 \times \bar a_2}{\lVert a_1 \times a_2 \rVert}
@@ -787,87 +787,86 @@ rotation de −90° en 2-D), divisé par celui de référence :
 \quad \text{(2-D)},
 \\]
 
-les forces s'en déduisant par la mesure de **référence**, comme n'importe quelle
-force interne :
+the forces following from it through the **reference** measure, like any internal
+force:
 
 \\[
 f_i = \int_{\Gamma_0} N_i\\,\mathbf t\\; d\Gamma_0 .
 \\]
 
-Garder la traction **référentielle** est ce qui permet à l'intégrale des forces
-internes d'utiliser la mesure de référence habituelle : la formulation reste
-totalement lagrangienne, et sans déplacement elle redonne exactement `t = −p·N`.
+Keeping the traction **referential** is what lets the internal-force integral use
+the usual reference measure: the formulation stays total-Lagrangian, and with no
+displacement it gives back `t = −p·N` exactly.
 
-### Pourquoi pas Nanson
+### Why not Nanson
 
-\\(n\\,da = \det(F)\\,F^{-T}N\\,dA\\) est la route classique, et c'est la
-**mauvaise** ici. Sur une variété, le gradient tangentiel n'a aucune composante
-selon la normale : \\(I + \nabla_s u\\) n'est donc pas un gradient de
-transformation. Un quart de tour de la surface envoie son déterminant à zéro et
-la formule explose sur une rotation parfaitement ordinaire. Les tangentes, elles,
-ne dégénèrent jamais ainsi — elles tournent avec la surface. C'est sur elles
-qu'une charge surfacique doit être bâtie.
+\\(n\\,da = \det(F)\\,F^{-T}N\\,dA\\) is the classical route, and it is the
+**wrong** one here. On a manifold, the tangential gradient has no component along
+the normal: \\(I + \nabla_s u\\) is therefore not a deformation gradient. A
+quarter-turn of the surface sends its determinant to zero and the formula blows
+up on a perfectly ordinary rotation. The tangents, for their part, never
+degenerate that way — they turn with the surface. It is on them that a surface
+load must be built.
 
-C'est le genre d'écueil qu'un test attrape et qu'une relecture laisse passer :
-la rotation à 90° est dans la suite de tests pour cette raison.
+This is the kind of pitfall a test catches and a re-reading lets through: the 90°
+rotation is in the test suite for that reason.
 
-## Variables et matériau
+## Variables and material
 
 | | |
 |---|---|
-| primales | `u_x, u_y(, u_z)` |
-| duales | `f_x, f_y(, f_z)` |
-| matériau | `p` (la pression) |
-| entrée du comportement | `grad_u_x_x`, … (le gradient surfacique de `u`) |
-| sortie du comportement | `t_x, t_y(, t_z)` (la traction référentielle) |
+| primal | `u_x, u_y(, u_z)` |
+| dual | `f_x, f_y(, f_z)` |
+| material | `p` (the pressure) |
+| behaviour input | `grad_u_x_x`, … (the surface gradient of `u`) |
+| behaviour output | `t_x, t_y(, t_z)` (the referential traction) |
 | nature | `Mechanical` |
 
-### L'orientation est l'affaire du maillage
+### Orientation is the mesh's business
 
-La normale suit le **sens de parcours** du maillage de bord. Un `p` positif
-pousse *contre* elle — compression — donc un bord orienté vers l'extérieur donne
-le signe habituel.
+The normal follows the **winding** of the boundary mesh. A positive `p` pushes
+*against* it — compression — so a boundary oriented outwards gives the usual
+sign.
 
-C'est le seul endroit où l'orientation d'un maillage de bord compte. Par
-contraste, la [convection](../thermique.md#convection-de-surface-robin--film) et
-le [rayonnement](../thermique.md#rayonnement-à-linfini-stefan-boltzmann) y sont
-aveugles : leur direction est déjà consommée en écrivant `q·n`, et la mesure
-`det_j_w` est une magnitude invariante.
+This is the only place where the orientation of a boundary mesh matters. By
+contrast, [convection](../thermique.md#convection-de-surface-robin--film) and
+[radiation](../thermique.md#rayonnement-à-linfini-stefan-boltzmann) are blind to
+it: their direction is already consumed in writing `q·n`, and the `det_j_w`
+measure is an invariant magnitude.
 
-## Ce qu'elle contribue
+## What it contributes
 
-Des forces internes, et rien d'autre. Elle déclare un `stiffness_layout` — c'est
-de là que la dispersion des forces internes est pilotée — mais ses
-`contributions()` sont **vides** pour tous les genres de matrice. La raideur de
-suivi \\(\partial f/\partial u\\) (non symétrique) n'est pas implémentée : une
-boucle de Newton converge sans elle, plus lentement.
+Internal forces, and nothing else. It declares a `stiffness_layout` — that is
+what the scatter of the internal forces is driven from — but its
+`contributions()` are **empty** for every matrix kind. The load-correction
+stiffness \\(\partial f/\partial u\\) (non-symmetric) is not implemented: a
+Newton loop converges without it, more slowly.
 
-## Mise en donnée (Rust, testé)
+## Setting it up (Rust, tested)
 
 ```rust,ignore
 {{#include ../../../tests/follower_pressure.rs:example}}
 ```
 
-## Exemple Python
+## Python example
 
 ```python
 {{#include ../../../tests/python/test_doc_mecanique.py:pression_suiveuse}}
 ```
 
-## Compléments
+## Further notes
 
-**Ce que ça vaut comme vérification.** Une charge suiveuse ne se contrôle pas en
-comparant une valeur à une formule une fois : elle se contrôle en vérifiant
-qu'elle **bouge** comme la surface. Trois régimes l'épinglent :
+**What it is worth as a verification.** A follower load is not checked by
+comparing a value against a formula once: it is checked by verifying that it
+**moves** the way the surface does. Three regimes pin it down:
 
-| déplacement | charge attendue |
+| displacement | expected load |
 |---|---|
-| aucun | `(−p, 0)` — exactement la charge morte |
-| rotation rigide de `θ` | `(−p cosθ, −p sinθ)` — même module, tournée de `θ` |
-| étirement `λ` le long du bord | `(−pλ, 0)` — l'aire déformée a grandi |
+| none | `(−p, 0)` — the dead load exactly |
+| rigid rotation by `θ` | `(−p cosθ, −p sinθ)` — same magnitude, turned by `θ` |
+| stretch `λ` along the edge | `(−pλ, 0)` — the deformed area has grown |
 
-Le deuxième est ce qu'une charge non suiveuse rate ; le troisième est ce que
-rate une charge suiveuse qui se contenterait de tourner sa direction en oubliant
-le changement d'aire.
+The second is what a non-follower load gets wrong; the third is what a follower
+load that merely turned its direction, forgetting the area change, gets wrong.
 ````
 

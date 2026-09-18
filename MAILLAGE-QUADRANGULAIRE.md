@@ -1,195 +1,193 @@
-# Maillage quadrangulaire — état de l'art et pistes
+# Quadrilateral meshing — state of the art and leads
 
-Note de travail, **non arbitrée**. Elle dit où se situent les mailleurs
-quadrangulaires de pyrucast dans la littérature, ce qui les sépare de l'état de
-l'art, et les six pistes identifiées — avec, pour chacune, ce qui a été mesuré.
+A working note, **unsettled**. It says where pyrucast's quadrilateral meshers
+stand in the literature, what separates them from the state of the art, and the
+six leads identified — with, for each, what has been measured.
 
-État arrêté au **24 août 2026**. Compagnon de [ROADMAP.md](ROADMAP.md), section
-*Qualité de maillage*.
+Status as of **24 August 2026**. A companion to [ROADMAP.md](ROADMAP.md),
+section *Mesh quality*.
 
-La **piste 7** a été ouverte et fermée le 24 août : elle est implémentée, et
-c'est le seul point de cette note qui ne soit plus une piste.
+**Lead 7** was opened and closed on 24 August: it is implemented, and it is the
+only point of this note that is no longer a lead.
 
 ---
 
-## 1. D'où vient cette note
+## 1. Where this note comes from
 
-Une boîte crénelée à treize plaques, maillée par `pave_surface` et par
-`grid_surface`, a servi de cas d'étude. Elle a fait sortir quatre défauts, tous
-corrigés :
+A crenellated box with thirteen plates, meshed by `pave_surface` and by
+`grid_surface`, served as a case study. It brought out four defects, all fixed:
 
-| commit | défaut |
+| commit | defect |
 |---|---|
-| `6bf4f6f` | une grille de voisinage plate allouait 4 Gio et tuait le processus |
-| `e53785a` | la couture d'un anneau plat laissait une fissure, ouverte en trou par le lissage |
-| `41594a9` | une couture n'emportait pas les triangles, et pouvait poser une corde sur le contour |
-| `3c78950` | la pile LIFO des boucles écrasait la première rangée d'un contour |
-| `946677c`, `51afb9f` | deux gestes de nettoyage : paires de triangles plats, et nœud partagé par un triangle et deux quadrangles |
+| `6bf4f6f` | a flat neighbourhood grid allocated 4 GiB and killed the process |
+| `e53785a` | the seam of a flat ring left a crack, opened into a hole by the smoothing |
+| `41594a9` | a seam did not carry the triangles along, and could lay a chord on the contour |
+| `3c78950` | the LIFO stack of the loops crushed the first row of a contour |
+| `946677c`, `51afb9f` | two cleanup gestures: pairs of flat triangles, and a node shared by one triangle and two quadrangles |
 
-Après quoi, sur ce cas : **pire maille 0,451**, 3 mailles sous 0,5 sur 10 120,
-zéro trou. Ce qui reste est structurel, d'où cette note.
+After which, on that case: **worst cell 0.451**, 3 cells below 0.5 out of
+10,120, zero holes. What remains is structural, hence this note.
 
 ---
 
-## 2. Les cinq lignées de la littérature
+## 2. The five lineages of the literature
 
-### 2.1 Le pavage direct — la lignée de `pave_surface`
+### 2.1 Direct paving — the lineage of `pave_surface`
 
 Blacker & Stephenson, *Paving: a new approach to automated quadrilateral mesh
-generation*, IJNME **32**:811–847 (1991). Un front qui avance en rangées, avec
-couture, déblocage et fermeture.
+generation*, IJNME **32**:811–847 (1991). A front that advances in rows, with
+seaming, unsticking and closure.
 
-Toujours travaillée : *[An improved Q-Morph algorithm for quad-dominant hybrid
+Still being worked on: *[An improved Q-Morph algorithm for quad-dominant hybrid
 mesh generation with advanced front propagation and topology
 optimization](https://link.springer.com/article/10.1007/s00366-025-02196-y)*,
-*Engineering with Computers* **41**:4255–4275 (2025), enrichit les types de
-front pour les concavités et ajoute une optimisation topologique par **gabarits
-prédéfinis, remaillage de cavités et élimination des paires de triangles** —
-c'est-à-dire exactement les gestes ajoutés dans `946677c` et `51afb9f`.
+*Engineering with Computers* **41**:4255–4275 (2025), enriches the front types
+for concavities and adds a topological optimisation through **predefined
+templates, cavity remeshing and elimination of triangle pairs** — that is,
+exactly the gestures added in `946677c` and `51afb9f`.
 
-### 2.2 L'indirect frontal — Q-Morph
+### 2.2 Indirect advancing front — Q-Morph
 
 Owen, Staten, Canann & Saigal, *[Q-Morph: an indirect approach to advancing
 front quad
 meshing](https://onlinelibrary.wiley.com/doi/abs/10.1002/(SICI)1097-0207(19990330)44:9%3C1317::AID-NME532%3E3.0.CO;2-N)*,
-IJNME **44**:1317–1340 (1999). Trianguler d'abord, puis transformer les
-triangles dans un ordre dicté par un front.
+IJNME **44**:1317–1340 (1999). Triangulate first, then transform the triangles
+in an order dictated by a front.
 
-**Dépassé** par la lignée suivante dès 2012 : à ne pas écrire aujourd'hui.
+**Superseded** by the next lineage as early as 2012: not to be written today.
 
-### 2.3 L'indirect optimal — Blossom
+### 2.3 Indirect optimal — Blossom
 
 Remacle, Lambrechts, Seny, Marchandise, Johnen & Geuzaine, *[Blossom-Quad: a
 non-uniform quadrilateral mesh generator using a minimum-cost perfect-matching
 algorithm](https://onlinelibrary.wiley.com/doi/10.1002/nme.3279)*, IJNME
 **89**:1102–1119 (2012).
 
-Le graphe a un sommet par triangle, une arête par paire adjacente, pondérée par
-la qualité du quadrangle que la paire ferait. On y résout le **couplage parfait
-de coût minimal** (algorithme d'Edmonds), en temps polynomial et **exactement** :
-aucune passe locale ne peut faire mieux, et si le compte de triangles est pair
-et le couplage parfait existe, il ne reste aucun triangle.
+The graph has one vertex per triangle, one edge per adjacent pair, weighted by
+the quality of the quadrangle the pair would make. On it one solves the
+**minimum-cost perfect matching** (Edmonds' algorithm), in polynomial time and
+**exactly**: no local pass can do better, and if the triangle count is even and a
+perfect matching exists, no triangle is left.
 
-Complété par le mailleur triangulaire fait pour ça : Remacle et al., *[A frontal
+Completed by the triangular mesher made for it: Remacle et al., *[A frontal
 Delaunay quad mesh generator using the L∞
-norm](https://onlinelibrary.wiley.com/doi/10.1002/nme.4458)*, IJNME (2013), qui
-produit des triangles **presque rectangles** — la norme L∞ est ce qui fait que
-les paires donnent des carrés.
+norm](https://onlinelibrary.wiley.com/doi/10.1002/nme.4458)*, IJNME (2013), which
+produces **almost right-angled** triangles — the L∞ norm is what makes the pairs
+give squares.
 
-### 2.4 Champs de directions et paramétrisation — la ligne dominante
+### 2.4 Direction fields and parametrisation — the dominant line
 
-On ne construit pas des mailles, on construit un **champ**, et le maillage en
-tombe. Un champ de croix (directions à symétrie d'ordre 4) porte des
-**singularités** qui sont exactement les futurs sommets irréguliers, et
-Poincaré–Hopf impose la somme de leurs indices : **le nombre d'irréguliers n'est
-pas négociable, seule leur position l'est.**
+One does not build cells, one builds a **field**, and the mesh falls out of it. A
+cross field (directions with order-4 symmetry) carries **singularities** that are
+exactly the future irregular vertices, and Poincaré–Hopf imposes the sum of their
+indices: **the number of irregulars is not negotiable, only their position is.**
 
-Points d'entrée obligés — les deux revues :
+Mandatory entry points — the two surveys:
 
 - Bommes, Lévy, Pietroni, Puppo, Silva, Tarini & Zorin, *[Quad-Mesh Generation
   and Processing: A Survey](https://onlinelibrary.wiley.com/doi/abs/10.1111/cgf.12014)*,
-  CGF **32**:51–76 (2013) ;
+  CGF **32**:51–76 (2013);
 - Campen, *Partitioning Surfaces into Quadrilateral Patches: A Survey*, CGF
   **36**:567–588 (2017).
 
-Jalons : QuadCover (Kälberer et al., 2007), *Mixed-Integer Quadrangulation*
+Milestones: QuadCover (Kälberer et al., 2007), *Mixed-Integer Quadrangulation*
 (Bommes et al., 2009), *[Globally optimal direction
 fields](https://dl.acm.org/doi/10.1145/2461912.2462005)* (Knöppel et al., 2013),
 *[Integrable PolyVector fields](https://dl.acm.org/doi/10.1145/2766906)*
 (Diamanti et al., 2015).
 
-La **quantification** — passer d'un champ continu à un maillage à arêtes
-entières : *Quantized global parametrization* (Campen et al., 2015), *Quad
-layouts via constrained T-mesh quantization* (Lyon et al., 2021),
-*Min-deviation-flow in bi-directed graphs for T-mesh quantization* (Heistermann
-et al., 2023). Et la théorie : *Which cross fields can be quadrangulated?* (Shen
-et al., 2022) — tous les champs ne le sont pas.
+**Quantization** — going from a continuous field to a mesh with integer edges:
+*Quantized global parametrization* (Campen et al., 2015), *Quad layouts via
+constrained T-mesh quantization* (Lyon et al., 2021), *Min-deviation-flow in
+bi-directed graphs for T-mesh quantization* (Heistermann et al., 2023). And the
+theory: *Which cross fields can be quadrangulated?* (Shen et al., 2022) — not all
+fields can be.
 
-Le côté rapide et pragmatique : *[Instant Field-Aligned
+The fast, pragmatic side: *[Instant Field-Aligned
 Meshes](https://dl.acm.org/doi/10.1145/2816795.2818078)* (Jakob, Tarini, Panozzo
-& Sorkine-Hornung, SIGGRAPH Asia 2015) — lissage local conjoint d'un champ
-d'orientation et d'un champ de position, sans optimisation globale, donc
-linéaire et interactif.
+& Sorkine-Hornung, SIGGRAPH Asia 2015) — joint local smoothing of an orientation
+field and a position field, without global optimisation, hence linear and
+interactive.
 
-Le plus récent et le plus pertinent ici : Couplet, Chemin, Bommes & Chien,
+The most recent and the most relevant here: Couplet, Chemin, Bommes & Chien,
 *[Surface Quadrilateral Meshing from Integrable Odeco
-Fields](https://arxiv.org/abs/2604.03889)* et *Size-controlled quadrilateral
-meshing using integrable odeco fields*, SGP 2026 — la **carte de tailles** faite
-proprement, par champs de repères intégrables à contraintes d'alignement **et de
-taille**.
+Fields](https://arxiv.org/abs/2604.03889)* and *Size-controlled quadrilateral
+meshing using integrable odeco fields*, SGP 2026 — the **size map** done
+properly, through integrable frame fields with alignment **and size**
+constraints.
 
-### 2.5 L'école de la grille — la lignée de `grid_surface`
+### 2.5 The grid school — the lineage of `grid_surface`
 
 Liang & Zhang, *[Guaranteed-quality all-quadrilateral mesh generation with
 feature
 preservation](https://www.sciencedirect.com/science/article/abs/pii/S0045782510000836)*,
-CMAME (2010), et *Hexagon-based all-quadrilateral mesh generation with
+CMAME (2010), and *Hexagon-based all-quadrilateral mesh generation with
 guaranteed angle bounds*, CMAME (2011).
 
-Quadtree gouverné par la courbure, **gabarits 2-raffinement sans nœud pendant**,
-puis une **zone tampon** de deux couches créée en retirant les éléments près du
-bord. Garantie dure : **tous les angles dans [45°, 135°]**.
+A quadtree governed by curvature, **2-refinement templates without hanging
+nodes**, then a two-layer **buffer zone** created by removing the elements near
+the boundary. Hard guarantee: **all angles within [45°, 135°]**.
 
-C'est structurellement `grid_surface` (cœur en grille + bande frontale), à deux
-différences près : eux graduent par quadtree — ce que `grid_surface` a essayé
-puis retiré — et surtout ils **prouvent** une borne d'angle au lieu de la
-mesurer. Plus récent : *[Boundary constrained quadrilateral mesh generation
-based on domain decomposition and
+That is structurally `grid_surface` (grid core + front band), with two
+differences: they grade by quadtree — which `grid_surface` tried and then
+dropped — and above all they **prove** an angle bound instead of measuring it.
+More recent: *[Boundary constrained quadrilateral mesh generation based on domain
+decomposition and
 templates](https://www.sciencedirect.com/science/article/abs/pii/S004579492400004X)*,
 *Computers & Structures* (2024).
 
-### 2.6 La vague neuronale (2024–2026) — à situer
+### 2.6 The neural wave (2024–2026) — to be placed
 
 *Learning Direction Fields for Quad Mesh Generation* (Dielen et al., 2021),
-*[NeurCross](https://dl.acm.org/doi/10.1145/3731159)* (ACM TOG 2025), puis les
-autorégressifs — *[QuadGPT](https://arxiv.org/html/2509.21420v1)*, QuadLink,
-TopGen (2026). Ils visent la rétopologie « game-ready », **pas le calcul** :
-aucune garantie de validité ni de respect exact du contour. Bibliographie
-vivante : [quad-meshing-survey](https://github.com/Bigger-and-Stronger/quad-meshing-survey).
+*[NeurCross](https://dl.acm.org/doi/10.1145/3731159)* (ACM TOG 2025), then the
+autoregressive ones — *[QuadGPT](https://arxiv.org/html/2509.21420v1)*, QuadLink,
+TopGen (2026). They aim at "game-ready" retopology, **not at computation**: no
+guarantee of validity nor of exact respect of the contour. A living
+bibliography: [quad-meshing-survey](https://github.com/Bigger-and-Stronger/quad-meshing-survey).
 
 ---
 
-## 3. La carte : pyrucast ↔ littérature
+## 3. The map: pyrucast ↔ literature
 
-| ce que fait pyrucast | l'état de l'art correspondant | l'écart |
+| what pyrucast does | the corresponding state of the art | the gap |
 |---|---|---|
-| `pave_surface` | Paving 1991, + Q-Morph amélioré 2025 | **à jour sur cette branche** : les trois gestes de l'article 2025 sont ceux de `946677c` / `51afb9f` |
-| `grid_surface`, `grid_surface2` | Liang & Zhang 2010–2011 | même architecture (cœur + tampon) ; la **garantie d'angle** en moins |
-| `merge_triangles` (glouton : fusion + regroupement) | Blossom-Quad 2012 | **une génération de retard sur un problème identique** |
-| `cleanup` (doublets, valences, étoiles à trois mailles) | CleanUp 1997 ; QuadQS : cavités + motifs guidés par les singularités | **à jour sur le geste de base** (piste 7) ; reste qu'on répare à l'aveugle, quand eux savent **où** un irrégulier a le droit d'être |
-| taille : un scalaire par domaine | odeco intégrables, SGP 2026 | absent |
-| — | champ de croix, quantification, layout | absent, et c'est la colonne vertébrale du reste |
+| `pave_surface` | Paving 1991, + improved Q-Morph 2025 | **up to date on that branch**: the three gestures of the 2025 paper are those of `946677c` / `51afb9f` |
+| `grid_surface`, `grid_surface2` | Liang & Zhang 2010–2011 | same architecture (core + buffer); the **angle guarantee** missing |
+| `merge_triangles` (greedy: merging + grouping) | Blossom-Quad 2012 | **one generation behind on an identical problem** |
+| `cleanup` (doublets, valences, three-cell stars) | CleanUp 1997; QuadQS: cavities + patterns guided by the singularities | **up to date on the basic gesture** (lead 7); it remains that we repair blindly, while they know **where** an irregular is allowed to be |
+| size: one scalar per domain | integrable odeco, SGP 2026 | absent |
+| — | cross field, quantization, layout | absent, and it is the backbone of the rest |
 
-Gmsh est la synthèse de tout cela : Reberol, Georgiadis & Geuzaine,
+Gmsh is the synthesis of all of it: Reberol, Georgiadis & Geuzaine,
 *[Quasi-structured quadrilateral meshing in
-Gmsh](https://arxiv.org/abs/2103.04652)* (2021) — champ de croix + carte de
-tailles → insertion frontale → recombinaison Blossom → **subdivision par les
-milieux** (tout-quadrangle garanti) → remaillage topologique gardant les
-irréguliers qui correspondent à une singularité du champ, chaque opération
-annulée si la qualité baisse.
+Gmsh](https://arxiv.org/abs/2103.04652)* (2021) — cross field + size map →
+frontal insertion → Blossom recombination → **midpoint subdivision**
+(all-quadrangle guaranteed) → topological remeshing keeping the irregulars that
+correspond to a singularity of the field, each operation undone if the quality
+drops.
 
 ---
 
-## 4. Les six pistes
+## 4. The six leads
 
-### Piste 1 — Le couplage optimal dans `merge_triangles`
+### Lead 1 — Optimal matching in `merge_triangles`
 
-Remplacer la passe gloutonne (fusion, puis regroupement en hexagone) par le
-**couplage parfait de coût minimal** de Blossom-Quad.
+Replace the greedy pass (merging, then grouping into a hexagon) with
+Blossom-Quad's **minimum-cost perfect matching**.
 
-- *Mesuré* : sur un cadre crénelé, `triangulate_surface` en QUA4 laisse
-  **147 triangles sur 588 mailles**, pire maille 0,000 (0,331 après
-  `regularize` + `cleanup`). Un couplage exact en laisserait zéro ou un.
-- *Réserve* : l'implémentation de référence (Blossom V, Kolmogorov) est sous
-  licence recherche, **incompatible MPL-2.0**. Il faut écrire Edmonds ou trouver
-  une caisse permissive.
-- *Verdict* : **le meilleur rapport gain/effort de la liste.** Problème connu,
-  solution exacte publiée, périmètre borné à un opérateur.
+- *Measured*: on a crenellated frame, `triangulate_surface` in QUA4 leaves
+  **147 triangles out of 588 cells**, worst cell 0.000 (0.331 after `regularize`
+  + `cleanup`). An exact matching would leave zero or one.
+- *Reservation*: the reference implementation (Blossom V, Kolmogorov) is under a
+  research licence, **incompatible with MPL-2.0**. Edmonds has to be written, or
+  a permissive crate found.
+- *Verdict*: **the best gain/effort ratio of the list.** A known problem, an
+  exact published solution, a scope bounded to one operator.
 
-### Piste 2 — La discipline de parité, hors `all_quad`
+### Lead 2 — The parity discipline, outside `all_quad`
 
-Les deux endroits qui décident d'un écart de découpe imposent déjà « les deux
-moitiés restent paires », mais **seulement sous `all_quad`** :
+The two places that decide on a split gap already impose "both halves stay even",
+but **only under `all_quad`**:
 
 ```rust
 // unstick
@@ -198,197 +196,191 @@ if gap < 3 || n - gap < 3 || (all_quad && gap.is_multiple_of(2)) { continue; }
 if all_quad && gap % 2 == 1 { continue; }
 ```
 
-Or les 65 triangles de la boîte viennent **tous** de la fermeture d'un petit
-anneau (49 d'un anneau à 3 nœuds), et la parité d'un anneau se décide dans les
-**découpes**, pas dans les rangées.
+Yet the 65 triangles of the box **all** come from the closure of a small ring (49
+from a 3-node ring), and a ring's parity is decided in the **splits**, not in the
+rows.
 
-- *Mesuré*, discipline activée seule (sans exiger le zéro triangle) :
+- *Measured*, with the discipline enabled alone (without requiring zero
+  triangles):
 
-  | | actuel | parité active |
+  | | current | parity on |
   |---|---:|---:|
-  | boîte, pave `round` `along` | 65 tri, pire 0,451, 5ᵉ c. 0,551 | **27** tri, 0,423, 0,451 |
-  | boîte, pave `round` `none` | 133 tri, 0,257 | **75**, **0,343** |
-  | boîte, `grid_surface` | 65 tri, 5ᵉ c. 0,476 | **9** tri, 5ᵉ c. **0,550** |
+  | box, pave `round` `along` | 65 tri, worst 0.451, 5th pct. 0.551 | **27** tri, 0.423, 0.451 |
+  | box, pave `round` `none` | 133 tri, 0.257 | **75**, **0.343** |
+  | box, `grid_surface` | 65 tri, 5th pct. 0.476 | **9** tri, 5th pct. **0.550** |
 
-- *Point ouvert* : coûte +1 263 mailles sur la configuration `round` + `along`
-  et y fait redescendre le 5ᵉ centile de 0,551 à 0,451. Comprendre pourquoi là
-  et pas ailleurs.
-- *Verdict* : **une journée, les chiffres sont déjà là.**
+- *Open point*: it costs +1,263 cells on the `round` + `along` configuration and
+  brings the 5th percentile there back down from 0.551 to 0.451. To understand
+  why there and not elsewhere.
+- *Verdict*: **one day, the figures are already there.**
 
-### Piste 3 — La subdivision par les milieux
+### Lead 3 — Midpoint subdivision
 
-Filet tout-quadrangle inconditionnel : chaque triangle donne trois quadrangles,
-chaque quadrangle quatre. ×4 mailles, taille divisée par deux, zéro triangle,
-**et jamais un refus de contour**. C'est ce que fait gmsh dans QuadQS avant le
-remaillage topologique.
+An unconditional all-quadrangle safety net: each triangle gives three
+quadrangles, each quadrangle four. ×4 cells, size halved, zero triangles, **and
+never a contour refusal**. That is what gmsh does in QuadQS before the
+topological remeshing.
 
-- *Motivation directe* : `all_quad=True` **refuse** aujourd'hui un contour de
-  parité impaire (« the outer boundary loop has 1151 segments — an odd
-  number »). La boîte de l'étude n'y a donc pas droit.
-- *Verdict* : quelques dizaines de lignes, aucun risque, mais un compromis de
-  densité que l'appelant doit choisir.
+- *Direct motivation*: `all_quad=True` today **refuses** a contour of odd parity
+  ("the outer boundary loop has 1151 segments — an odd number"). The box of the
+  study is therefore not entitled to it.
+- *Verdict*: a few dozen lines, no risk, but a density trade-off that the caller
+  must choose.
 
-### Piste 4 — Une carte de tailles
+### Lead 4 — A size map
 
-La taille visée est un **scalaire par domaine**. Les mailleurs de l'état de
-l'art acceptent un champ de tailles avec limite de gradient ; `grid_surface`
-prend bien ses lignes sur le contour, mais l'appelant ne peut pas dicter une
-densité variable.
+The target size is **one scalar per domain**. The state-of-the-art meshers accept
+a size field with a gradient limit; `grid_surface` does take its lines from the
+contour, but the caller cannot dictate a variable density.
 
-- *Verdict* : **le seul point de la liste que les utilisateurs verraient
-  directement.** Une semaine environ pour une version scalaire interpolée sur un
-  maillage de fond ; la version « propre » demande la piste 6.
+- *Verdict*: **the only point of the list that users would see directly.** About
+  one week for a scalar version interpolated on a background mesh; the "clean"
+  version requires lead 6.
 
-### Piste 5 — L'atterrissage sur un front vivant (`aim_at_live`)
+### Lead 5 — Landing on a live front (`aim_at_live`)
 
-`aim_at_frozen` raccourcit déjà l'avance pour **poser** une rangée sur un cœur
-en grille. Rien d'équivalent n'existe entre deux fronts vivants : ils se
-percutent.
+`aim_at_frozen` already shortens the advance in order to **lay** a row on a grid
+core. Nothing equivalent exists between two live fronts: they collide.
 
-- *Verdict* : **l'intérêt a fondu.** C'était la réponse à l'écrasement du front,
-  réglé autrement par `3c78950` et `51afb9f` — il ne reste que 3 mailles sous
-  0,5 sur 10 120. À garder en réserve, pas en priorité.
+- *Verdict*: **the interest has melted away.** It was the answer to the crushing
+  of the front, settled otherwise by `3c78950` and `51afb9f` — only 3 cells below
+  0.5 out of 10,120 remain. To keep in reserve, not as a priority.
 
-### Piste 6 — Le champ de croix
+### Lead 6 — The cross field
 
-Le vrai saut, et la condition des autres : il dit **où** un sommet irrégulier a
-le droit d'être, il porte la carte de tailles, et il ouvre le layout.
+The real leap, and the condition of the others: it says **where** an irregular
+vertex is allowed to be, it carries the size map, and it opens the layout.
 
-- *Verdict* : **un projet**, et le seul de la liste qui demande de la théorie
-  autant que du code. C'est ce qui séparerait pyrucast de l'état de l'art plutôt
-  que de l'état de l'art de 1991.
+- *Verdict*: **a project**, and the only one of the list that demands theory as
+  much as code. It is what would separate pyrucast from the state of the art
+  rather than from the state of the art of 1991.
 
-### Piste 7 — L'effondrement des étoiles pauvres — **FAITE**
+### Lead 7 — Collapsing the poor stars — **DONE**
 
-Un nœud intérieur qui n'a que **trois** mailles autour de lui peut être
-abandonné, et une maille avec lui. Kinney, *[CleanUp: Improving Quadrilateral
-Finite Element Meshes](https://people.eecs.berkeley.edu/~jrs/meshpapers/Kinney.pdf)*,
-4ᵉ IMR (1997), cas `3-4+34+000` : « *all three quads around the center node are
-deleted and a fill_2 is used to fill the hole. Four irregular nodes are replaced
-with zero irregular nodes.* »
+An interior node that has only **three** cells around it can be given up, and one
+cell with it. Kinney, *[CleanUp: Improving Quadrilateral Finite Element
+Meshes](https://people.eecs.berkeley.edu/~jrs/meshpapers/Kinney.pdf)*, 4th IMR
+(1997), case `3-4+34+000`: "*all three quads around the center node are deleted
+and a fill_2 is used to fill the hole. Four irregular nodes are replaced with
+zero irregular nodes.*"
 
-`cleanup` en avait **un** des quatre cas, écrit comme un cas particulier
-(« pentagone », deux quadrangles et un triangle). L'identité qui les unifie :
-autour d'un nœud portant \( q \) quadrangles et \( t \) triangles, chaque
-quadrangle pose deux arêtes qui ne le touchent pas et chaque triangle une, donc
-l'étoile est bordée par un polygone à \( n = 2q + t \) côtés ; et une
-décomposition d'un \( n \)-gone sans nœud intérieur vérifie
-\( 2q' + t' = n - 2 \). Avec \( q + t = 3 \), la redécoupe existe toujours,
-et toujours avec une maille de moins.
+`cleanup` had **one** of the four cases, written as a special case ("pentagon",
+two quadrangles and one triangle). The identity that unifies them: around a node
+carrying \( q \) quadrangles and \( t \) triangles, each quadrangle lays two
+edges that do not touch it and each triangle one, so the star is bordered by a
+polygon with \( n = 2q + t \) sides; and a decomposition of an \( n \)-gon
+without an interior node satisfies \( 2q' + t' = n - 2 \). With \( q + t = 3 \),
+the re-split always exists, and always with one cell fewer.
 
-| \( q, t \) | bord | avant | après | mailles |
+| \( q, t \) | border | before | after | cells |
 |---|---|---|---|---|
-| 3, 0 | hexagone | 3 quadrangles | 2 quadrangles | 3 → 2 |
-| 2, 1 | pentagone | 2 quadrangles, 1 triangle | 1 de chaque | 3 → 2 |
+| 3, 0 | hexagon | 3 quadrangles | 2 quadrangles | 3 → 2 |
+| 2, 1 | pentagon | 2 quadrangles, 1 triangle | 1 of each | 3 → 2 |
 | 1, 2 | quadrangle | 1 quadrangle, 2 triangles | 1 quadrangle | 3 → 1 |
 | 0, 3 | triangle | 3 triangles | 1 triangle | 3 → 1 |
 
-**Le point qui a coûté trois essais** : le geste ne peut pas être jugé sur
-place. Il *supprime* un nœud, donc l'anneau restant est mécaniquement étiré
-jusqu'à ce que quelque chose le relâche — ce qui arrive toujours, les paveurs
-lissant après chaque rangée. Mesurée sur-le-champ, la redécoupe paraît presque
-toujours moins bonne que l'étoile qu'elle remplace : le plancher de qualité de
-`switch_diagonals` (70 %), appliqué tel quel, supprimait **53 gestes utiles sur
-61**. Or `switch_diagonals` peut se le permettre — il ne déplace aucun nœud,
-donc ce qu'il mesure est définitif.
+**The point that cost three attempts**: the gesture cannot be judged on the spot.
+It *removes* a node, so the remaining ring is mechanically stretched until
+something releases it — which always happens, since the pavers smooth after every
+row. Measured on the spot, the re-split almost always looks worse than the star
+it replaces: the quality floor of `switch_diagonals` (70%), applied as is,
+removed **53 useful gestures out of 61**. Yet `switch_diagonals` can afford it —
+it moves no node, so what it measures is final.
 
-L'ordre retenu, qui est celui de gmsh : appliquer, **relaxer l'anneau**,
-mesurer, défaire entièrement si la pire maille du voisinage a baissé. Trois
-détails s'y sont révélés décisifs, chacun par une mesure :
+The order adopted, which is gmsh's: apply, **relax the ring**, measure, undo
+entirely if the worst cell of the neighbourhood has dropped. Three details proved
+decisive there, each through a measurement:
 
-- la relaxation doit être **gardée** avec le geste. Juger sur des positions
-  qu'on rejette ensuite, c'est mesurer un maillage que personne ne reçoit ;
-- la relaxation d'essai doit porter **la même garde que le vrai lisseur** (pas
-  de pas qui retourne une maille). Un laplacien nu marche, près d'un coin
-  concave, vers un point que le lisseur monotone n'atteindra jamais, et fait
-  accepter le geste sur une promesse qui ne sera pas tenue : la maison tombait
-  à **0,055** de pire maille ;
-- un **pré-filtre** garde l'entrée : rien n'est tenté si le geste n'apporte
-  ni valence ni forme. Le verdict après relaxation juge le *voisinage*, donc
-  localement, et ne voit pas qu'une maille médiocre ailleurs vient de devenir
-  la pire du maillage. Sans lui on gagne treize irréguliers et on perd la
-  garantie de non-régression sur la pire maille — l'échange est mauvais, une
-  pire maille qui recule casse un calcul.
+- the relaxation must be **kept** with the gesture. Judging on positions that are
+  then rejected is measuring a mesh that nobody receives;
+- the trial relaxation must carry **the same guard as the real smoother** (no
+  step that flips a cell). A bare Laplacian walks, near a concave corner, towards
+  a point the monotone smoother will never reach, and makes the gesture accepted
+  on a promise that will not be kept: the house fell to **0.055** of worst cell;
+- a **pre-filter** guards the entry: nothing is attempted if the gesture brings
+  neither valence nor shape. The verdict after relaxation judges the
+  *neighbourhood*, so locally, and does not see that a mediocre cell elsewhere has
+  just become the worst of the mesh. Without it one gains thirteen irregulars and
+  loses the non-regression guarantee on the worst cell — a bad trade, a worst
+  cell that goes backwards breaks a computation.
 
-**La paire 3-3, ajoutée ensuite.** Deux nœuds intérieurs de valence 3 reliés
-par une arête sont hors de portée du geste ci-dessus : abandonner l'un seul
-échange un irrégulier contre deux, et le pré-filtre le refuse. Ensemble ils ne
-portent que **quatre** quadrangles — leurs étoiles se recouvrent sur les deux
-mailles de l'arête commune — bordés par un **hexagone** dans les vingt-sept cas
-trouvés sur la boîte, sans exception. Deux nœuds et deux mailles partent d'un
-coup, pour un gain de valence de +2, jusqu'à +4 quand l'anneau porte un 5.
-Examinée **avant** le nœud seul, faute de quoi celui-ci prend l'un des deux et
-la paire n'a jamais sa chance.
+**The 3-3 pair, added afterwards.** Two interior nodes of valence 3 joined by an
+edge are out of reach of the gesture above: giving up only one trades one
+irregular for two, and the pre-filter refuses it. Together they carry only
+**four** quadrangles — their stars overlap on the two cells of the shared edge —
+bordered by a **hexagon** in all twenty-seven cases found on the box, without
+exception. Two nodes and two cells go at once, for a valence gain of +2, up to +4
+when the ring carries a 5. Examined **before** the lone node, failing which the
+latter takes one of the two and the pair never gets its chance.
 
-Étendue ensuite aux paires **3-4**, dont l'étoile porte cinq mailles bordées
-par un **heptagone**, recoupé en deux quadrangles et un triangle — celui qui
-était déjà là, la parité interdisant d'en créer un.
+Extended afterwards to the **3-4** pairs, whose star carries five cells bordered
+by a **heptagon**, re-split into two quadrangles and one triangle — the one that
+was already there, parity forbidding the creation of one.
 
 | | `grid_surface` | `pave_surface` |
 |---|---:|---:|
-| irréguliers | 185 → 164 → **104** | 739 → **703** → 708 |
-| erreur de valence | 194 → 164 → **104** | 754 → **718** → 714 |
-| valence 3 internes | 58 → 46 → **16** | 329 → **311** → 312 |
-| 1ᵉʳ centile | 0,706 → 0,714 → **0,824** | 0,625 → 0,633 → **0,641** |
-| pire maille | 0,461 → 0,461 → 0,437 | 0,141 → **0,284** → 0,284 |
+| irregulars | 185 → 164 → **104** | 739 → **703** → 708 |
+| valence error | 194 → 164 → **104** | 754 → **718** → 714 |
+| interior valence 3 | 58 → 46 → **16** | 329 → **311** → 312 |
+| 1st percentile | 0.706 → 0.714 → **0.824** | 0.625 → 0.633 → **0.641** |
+| worst cell | 0.461 → 0.461 → 0.437 | 0.141 → **0.284** → 0.284 |
 
-*(colonnes : avant la paire, paire 3-3, puis 3-4.)* Sur `grid_surface`, deux
-paires 3-3 détectées font tomber douze nœuds de valence 3 et non quatre : un
-effondrement en débloque d'autres par cascade. Le cas 3-4 en enlève trente de
-plus, au prix de 0,019 sur la pire maille — arbitrage assumé, le premier
-centile gagnant 0,11 dans le même mouvement.
+*(columns: before the pair, 3-3 pair, then 3-4.)* On `grid_surface`, two 3-3
+pairs detected bring down twelve valence-3 nodes and not four: one collapse
+unblocks others in cascade. The 3-4 case removes thirty more, at the price of
+0.019 on the worst cell — an accepted trade-off, the first percentile gaining
+0.11 in the same move.
 
-*Mesuré*, sortie brute des paveurs, avant → après :
+*Measured*, raw output of the pavers, before → after:
 
-| | mailles | pire | 1ᵉʳ c. | 5ᵉ c. | irréguliers | erreur de valence |
+| | cells | worst | 1st pct. | 5th pct. | irregulars | valence error |
 |---|---:|---:|---:|---:|---:|---:|
-| boîte, `grid_surface` | 11 749 → **11 523** | 0,456 → **0,461** | 0,572 → **0,706** | 0,760 → **0,844** | 568 → **185** | 724 → **194** |
-| cercle, `grid_surface` | 1 260 → **1 236** | 0,288 → **0,366** | | | | |
-| maison, `grid_surface` | 470 → **460** | 0,420 → 0,420 | | | | |
-| carré arrondi, `grid` | 441 → **424** | 0,244 → **0,340** | | | | |
-| carré arrondi, `grid2` | 415 → **409** | 0,400 → 0,371 | | | | |
+| box, `grid_surface` | 11,749 → **11,523** | 0.456 → **0.461** | 0.572 → **0.706** | 0.760 → **0.844** | 568 → **185** | 724 → **194** |
+| circle, `grid_surface` | 1,260 → **1,236** | 0.288 → **0.366** | | | | |
+| house, `grid_surface` | 470 → **460** | 0.420 → 0.420 | | | | |
+| rounded square, `grid` | 441 → **424** | 0.244 → **0.340** | | | | |
+| rounded square, `grid2` | 415 → **409** | 0.400 → 0.371 | | | | |
 
-Sur la boîte, les **274** nœuds intérieurs de valence 3 étaient *tous* entourés
-de trois quadrangles — le seul cas que `cleanup` ne savait pas traiter. Il en
-reste 58, et c'est le plancher : Poincaré–Hopf fixe le nombre d'irréguliers,
-seule leur position est négociable (§ 2.4).
+On the box, the **274** interior valence-3 nodes were *all* surrounded by three
+quadrangles — the only case `cleanup` did not know how to handle. 58 remain, and
+that is the floor: Poincaré–Hopf fixes the number of irregulars, only their
+position is negotiable (§ 2.4).
 
-Le seul retrait est le carré arrondi en `grid_surface2`, 0,400 → 0,371.
+The only regression is the rounded square in `grid_surface2`, 0.400 → 0.371.
 
-**Un bug indépendant, trouvé au passage.** Les mesures de qualité sont signées,
-et une maille lue en sens horaire compte négatif — ce qui se lit comme
-*retournée*. Un maillage entièrement horaire n'a pourtant rien d'anormal : un
-paveur rend le sens du contour qu'on lui a donné, si bien qu'un domaine maillé
-depuis un contour extérieur inversé sort horaire. Lu tel quel, **les trois
-opérateurs `improve` refusaient silencieusement de le toucher** : `regularize`
-ne déplaçait aucun nœud (déplacement maximal mesuré : `0.0`), `cleanup` ne
-trouvait rien, et `merge_triangles` laissait les 74 triangles de la boîte à 74
-— contre 64 une fois le maillage retourné. Corrigé dans `Surface::read`, qui
-normalise le sens à la lecture et le restitue à la sortie.
+**An independent bug, found along the way.** The quality measures are signed, and
+a cell read clockwise counts as negative — which reads as *flipped*. Yet an
+entirely clockwise mesh is in no way abnormal: a paver returns the orientation of
+the contour it was given, so that a domain meshed from a reversed outer contour
+comes out clockwise. Read as is, **the three `improve` operators silently refused
+to touch it**: `regularize` moved no node (maximum displacement measured: `0.0`),
+`cleanup` found nothing, and `merge_triangles` left the box's 74 triangles at 74
+— against 64 once the mesh was flipped. Fixed in `Surface::read`, which
+normalises the orientation on reading and restores it on output.
 
 ---
 
-## 5. Ce qui a été essayé et écarté
+## 5. What was tried and set aside
 
-À ne pas refaire sans raison nouvelle. Tous ces essais ont été mesurés puis
-retirés du dépôt.
+Not to be done again without a new reason. All these attempts were measured then
+removed from the repository.
 
-| essai | résultat |
+| attempt | result |
 |---|---|
-| Abandonner la rangée dès qu'**un** nœud passe sous le plancher de détente (seuils 0,5 / 0,35 / 0,25 / 0,15) | une maille à jacobien **0,000** apparaît à chaque seuil, y compris sur le cercle en grille |
-| Démotion en fin de rangée d'un nœud qui ne peut plus avancer | gain net sur l'anguleux (carré 20×20 : 600 → 544 mailles, pire 0,541 → 0,778) mais **maison 0,491 → 0,147** et **cercle en grille 5ᵉ c. 0,796 → 0,608** |
-| Parcours **FIFO** complet des boucles | ta boîte gagne, mais **`grid_surface` + `along` : pire 0,312 → 0,047** |
-| Parcours FIFO **pour toutes** les boucles, y compris sous cœur en grille | `grid_surface` sur une plaque à trou rond **ne termine plus** (> 4 min contre 0,05 s) |
-| Forcer un front pair à **chaque** rangée | 65 triangles → **685**, pire maille 0,000 |
-| Idem, restreint aux dernières rangées avant fermeture (seuils 8 / 12 / 20 / 40) | aucun gain ; à 12, `grid_surface` refait des trous |
-| Plancher de qualité **immédiat** sur l'effondrement d'une étoile (70 %, celui de `switch_diagonals`) | 53 gestes utiles sur 61 supprimés. Le geste retire un nœud : il ne se juge qu'après relaxation (piste 7) |
-| Relaxation d'essai **rendue** après le verdict | mesure un maillage que personne ne reçoit : carré arrondi `grid2` 0,468 en essai, 0,331 livré |
-| Relaxation d'essai en **laplacien nu**, sans garde de validité | promet une position que le lisseur monotone n'atteint pas : maison `grid_surface` pire maille **0,055** |
-| Effondrement **sans pré-filtre** : le verdict après relaxation pour seule condition | gagne sur tout ce qu'on visait — boîte 185 → **162** irréguliers, 58 → **45** nœuds de valence 3, 11 523 → 11 506 mailles, et `pave_surface` en profite aussi (maison 620 → 595) — mais la pire maille **recule sous le point de départ** : boîte 0,461 → 0,436 pour 0,456 au départ, maison `grid_surface` 0,420 → **0,346**. Le verdict est local et ne voit pas qu'une maille médiocre ailleurs est devenue la pire du maillage. Rendre le verdict global est un autre chantier |
-| Refuser la couture qui poserait une corde sur le contour | règle bien les trous, mais sur une bande crénelée le front se replie et **l'appel échoue** — perdre le maillage pour éviter une fissure d'aire nulle est un mauvais échange. Remplacé par la recouture de `41594a9` |
+| Abandoning the row as soon as **one** node falls below the relaxation floor (thresholds 0.5 / 0.35 / 0.25 / 0.15) | a cell with Jacobian **0.000** appears at every threshold, including on the circle in grid mode |
+| End-of-row demotion of a node that can no longer advance | a net gain on the angular shapes (20×20 square: 600 → 544 cells, worst 0.541 → 0.778) but **house 0.491 → 0.147** and **circle in grid mode 5th pct. 0.796 → 0.608** |
+| Full **FIFO** traversal of the loops | your box gains, but **`grid_surface` + `along`: worst 0.312 → 0.047** |
+| FIFO traversal **for all** the loops, including under a grid core | `grid_surface` on a plate with a round hole **no longer terminates** (> 4 min against 0.05 s) |
+| Forcing an even front at **every** row | 65 triangles → **685**, worst cell 0.000 |
+| Same, restricted to the last rows before closure (thresholds 8 / 12 / 20 / 40) | no gain; at 12, `grid_surface` makes holes again |
+| An **immediate** quality floor on the collapse of a star (70%, that of `switch_diagonals`) | 53 useful gestures out of 61 removed. The gesture removes a node: it can only be judged after relaxation (lead 7) |
+| Trial relaxation **given back** after the verdict | measures a mesh that nobody receives: rounded square `grid2` 0.468 in the trial, 0.331 delivered |
+| Trial relaxation as a **bare Laplacian**, without a validity guard | promises a position the monotone smoother does not reach: house `grid_surface` worst cell **0.055** |
+| Collapse **without a pre-filter**: the verdict after relaxation as the only condition | gains on everything we were aiming at — box 185 → **162** irregulars, 58 → **45** valence-3 nodes, 11,523 → 11,506 cells, and `pave_surface` benefits too (house 620 → 595) — but the worst cell **goes back below the starting point**: box 0.461 → 0.436 for 0.456 at the start, house `grid_surface` 0.420 → **0.346**. The verdict is local and does not see that a mediocre cell elsewhere has become the worst of the mesh. Making the verdict global is another project |
+| Refusing the seam that would lay a chord on the contour | it does settle the holes, but on a crenellated strip the front folds back and **the call fails** — losing the mesh to avoid a zero-area crack is a bad trade. Replaced by the re-seaming of `41594a9` |
 
-Un point de méthode qui a servi plusieurs fois : **la relaxation du front et
-l'ordre de parcours gagnent sur les formes anguleuses et perdent sur les
-courbes.** Tout réglage global de ces deux leviers se paie quelque part ; c'est
-pourquoi la relaxation est devenue un choix de l'appelant (`relax`) plutôt qu'un
-réglage imposé.
+One methodological point that has served several times: **front relaxation and
+traversal order gain on the angular shapes and lose on the curved ones.** Any
+global setting of these two levers is paid for somewhere; that is why the
+relaxation became a choice of the caller (`relax`) rather than an imposed
+setting.

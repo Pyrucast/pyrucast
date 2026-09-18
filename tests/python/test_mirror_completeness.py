@@ -1,21 +1,21 @@
-"""Garde-fou du miroir Rust → Python.
+"""Guard rail of the Rust → Python mirror.
 
-`CONVENTIONS.md` § « Règle Rust → Python : miroir 1:1 » : toute fonction libre
-d'`ops` est exposée à Python, sous le même nom, dans le sous-module du même
-module Rust. La seule asymétrie tolérée est la **non-exposition des
-constructeurs `Sub*`**.
+`CONVENTIONS.md` § "Rust → Python rule: a 1:1 mirror": every free function of
+`ops` is exposed to Python, under the same name, in the sub-module of the same
+Rust module. The only tolerated asymmetry is the **non-exposure of the `Sub*`
+constructors**.
 
-Ce test lit la **surface publique** de chaque module d'`ops` — les `pub use`
-et les `pub fn` de son fichier racine, la liste que le développeur tient déjà
-pour Rust — et vérifie que chaque nom se retrouve dans le sous-module Python
-correspondant. C'est le trou par lequel
-`ops::element_field::beam_deformation` est restée sans binding : le garde-fou
-des méthodes (`test_method_exposure.py`) lit le **stub**, donc il ne peut pas
-voir une fonction qui n'y est pas. Les deux tests sont complémentaires — l'un
-garde la projection Rust → Python, l'autre la projection fonction → méthode.
+This test reads the **public surface** of each module of `ops` — the `pub use`
+and the `pub fn` of its root file, the list the developer already keeps for
+Rust — and checks that each name is found again in the matching Python
+sub-module. That is the hole through which
+`ops::element_field::beam_deformation` was left without a binding: the guard
+rail of the methods (`test_method_exposure.py`) reads the **stub**, so it cannot
+see a function that is not in it. The two tests are complementary — one guards
+the Rust → Python projection, the other the function → method projection.
 
-Une fonction volontairement non exposée s'écrit dans `RUST_ONLY`, avec sa
-raison.
+A function deliberately left unexposed is written down in `RUST_ONLY`, with its
+reason.
 """
 
 import pathlib
@@ -26,77 +26,78 @@ import pyrucast
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 OPS = ROOT / "src" / "ops"
 
-# Modules Rust dont les fonctions n'ont pas (encore) de sous-module Python.
+# Rust modules whose functions have no Python sub-module (yet).
 NO_PYTHON_MODULE = {
-    # Exception assumée : `locate_points` et `project_points` sont les
-    # primitives géométriques sous `model.embedded` et `model.contact`.
-    # L'utilisateur Python obtient leur résultat sous forme de contrainte
-    # assemblable, ce qui est le niveau utile ; les exposer suppose de décider
-    # comment traduire `Location` et `Projection`, ce qui reste à trancher.
-    "geom": "primitives internes des contraintes embedded / contact",
+    # An accepted exception: `locate_points` and `project_points` are the
+    # geometric primitives beneath `model.embedded` and `model.contact`. The
+    # Python user gets their result as an assemblable constraint, which is the
+    # useful level; exposing them means deciding how to translate `Location` and
+    # `Projection`, which is still to be settled.
+    "geom": "internal primitives of the embedded / contact constraints",
 }
 
-# Fonctions Rust délibérément non exposées, avec la raison.
+# Rust functions deliberately left unexposed, with the reason.
 RUST_ONLY = {
-    # Variantes `*_cancellable` : côté Python, l'interruption est branchée dans
-    # le wrapper de la fonction nominale, pas exposée comme une fonction à part.
-    "grid_surface_cancellable": "l'interruption est câblée dans le wrapper nominal",
-    "grid_surface2_cancellable": "l'interruption est câblée dans le wrapper nominal",
-    "pave_surface_cancellable": "l'interruption est câblée dans le wrapper nominal",
-    "pave_volume_cancellable": "l'interruption est câblée dans le wrapper nominal",
-    "triangulate_surface_cancellable": "l'interruption est câblée dans le wrapper nominal",
-    "triangulate_volume_cancellable": "l'interruption est câblée dans le wrapper nominal",
-    # Détails d'implémentation partagés, pas des opérateurs.
-    "check_unique_component_per_support": "garde interne de la fusion, pas un opérateur",
-    "assemble_kind": "moteur commun des assembleurs, pas une opération d'usage",
-    "select_sub_cells": "les vues `Sub*` passent par le dispatch de `select`",
-    "select_sub_nodes": "les vues `Sub*` passent par le dispatch de `select`",
-    "mask_sub": "les vues `Sub*` passent par le dispatch de `mask`",
-    # Les six écritures VTK typées sont derrière l'unique `export.export_vtk`,
-    # qui choisit selon ce qu'on lui passe (maillage, champ nodal, champ par
-    # éléments) et selon la présence d'un chemin.
-    "write_vtk_mesh": "dispatch dans `export.export_vtk`",
-    "write_vtk_node_field": "dispatch dans `export.export_vtk`",
-    "write_vtk_element_field": "dispatch dans `export.export_vtk`",
-    "vtk_mesh_string": "variante « vers une chaîne », non exposée",
-    "vtk_node_field_string": "variante « vers une chaîne », non exposée",
-    "vtk_element_field_string": "variante « vers une chaîne », non exposée",
-    # Les variantes `*_with_symmetry` / `*_with_law` de `ops::model` : Rust passe
-    # une enum (`MaterialSymmetry`, `PlasticLaw`, `DamageLaw`), Python n'expose
-    # pas ces enums. Le pli est différent des deux côtés — un mot-clé `symmetry=`
-    # pour la symétrie, une fonction par loi pour les lois (voir PYTHON_ONLY) —
-    # mais aucune opération ne manque.
-    "heat_conduction_with_symmetry": "replié dans `model.heat_conduction(fes, symmetry=…)`",
-    "fick_with_symmetry": "replié dans `model.fick(fes, espèce, symmetry=…)`",
-    "elasticity_with_symmetry": "replié dans `model.elasticity(fes, model, symmetry=…)`",
-    "plasticity_with_law": "déplié en une fonction Python par loi (`drucker_prager`, `creep_norton`…)",
-    "damage_with_law": "déplié en une fonction Python par loi (`damage_tc`, `gurson`…)",
-    "select_cells": "dispatch par type dans `mesh.select`",
-    "select_nodes": "dispatch par type dans `mesh.select`",
-    "integral_element": "dispatch par type dans `measure.integral`",
-    "consolidate": "exposé sous le nom court dans son sous-module Python",
-    "set": "exposé sous le nom court dans `pyrucast.coords`",
-    "solve": "exposé par variante (`solve`, `solve_eliminate`, `solve_unilateral`)",
-    "Band": "type de valeur, transporté par les arguments `ge`/`gt`/`le`/`lt`",
-    "FluxDensity": "type de valeur, transporté par l'argument `density`",
-    "Location": "type de retour de `geom`, non exposé",
-    "Projection": "type de retour de `geom`, non exposé",
-    # `nearest_node` a quitté `ops::geom` : ce n'est pas un opérateur mais une
-    # méthode de `Mesh`, des deux côtés (mono-conteneur, vue dérivée).
+    # The `*_cancellable` variants: on the Python side, interruption is wired
+    # into the wrapper of the nominal function, not exposed as a function of
+    # its own.
+    "grid_surface_cancellable": "interruption is wired into the nominal wrapper",
+    "grid_surface2_cancellable": "interruption is wired into the nominal wrapper",
+    "pave_surface_cancellable": "interruption is wired into the nominal wrapper",
+    "pave_volume_cancellable": "interruption is wired into the nominal wrapper",
+    "triangulate_surface_cancellable": "interruption is wired into the nominal wrapper",
+    "triangulate_volume_cancellable": "interruption is wired into the nominal wrapper",
+    # Shared implementation details, not operators.
+    "check_unique_component_per_support": "internal guard of the merge, not an operator",
+    "assemble_kind": "common engine of the assemblers, not an operation of use",
+    "select_sub_cells": "the `Sub*` views go through the dispatch of `select`",
+    "select_sub_nodes": "the `Sub*` views go through the dispatch of `select`",
+    "mask_sub": "the `Sub*` views go through the dispatch of `mask`",
+    # The six typed VTK writers sit behind the single `export.export_vtk`, which
+    # chooses according to what it is handed (mesh, nodal field, element field)
+    # and according to the presence of a path.
+    "write_vtk_mesh": "dispatched inside `export.export_vtk`",
+    "write_vtk_node_field": "dispatched inside `export.export_vtk`",
+    "write_vtk_element_field": "dispatched inside `export.export_vtk`",
+    "vtk_mesh_string": '"to a string" variant, not exposed',
+    "vtk_node_field_string": '"to a string" variant, not exposed',
+    "vtk_element_field_string": '"to a string" variant, not exposed',
+    # The `*_with_symmetry` / `*_with_law` variants of `ops::model`: Rust passes
+    # an enum (`MaterialSymmetry`, `PlasticLaw`, `DamageLaw`), Python does not
+    # expose those enums. The fold differs on each side — a `symmetry=` keyword
+    # for the symmetry, one function per law for the laws (see PYTHON_ONLY) —
+    # but no operation is missing.
+    "heat_conduction_with_symmetry": "folded into `model.heat_conduction(fes, symmetry=…)`",
+    "fick_with_symmetry": "folded into `model.fick(fes, species, symmetry=…)`",
+    "elasticity_with_symmetry": "folded into `model.elasticity(fes, model, symmetry=…)`",
+    "plasticity_with_law": "unfolded into one Python function per law (`drucker_prager`, `creep_norton`…)",
+    "damage_with_law": "unfolded into one Python function per law (`damage_tc`, `gurson`…)",
+    "select_cells": "dispatched by type inside `mesh.select`",
+    "select_nodes": "dispatched by type inside `mesh.select`",
+    "integral_element": "dispatched by type inside `measure.integral`",
+    "consolidate": "exposed under the short name in its own Python sub-module",
+    "set": "exposed under the short name in `pyrucast.coords`",
+    "solve": "exposed per variant (`solve`, `solve_eliminate`, `solve_unilateral`)",
+    "Band": "value type, carried by the `ge`/`gt`/`le`/`lt` arguments",
+    "FluxDensity": "value type, carried by the `density` argument",
+    "Location": "return type of `geom`, not exposed",
+    "Projection": "return type of `geom`, not exposed",
+    # `nearest_node` has left `ops::geom`: it is not an operator but a method of
+    # `Mesh`, on both sides (single container, derived view).
 }
 
 
-# `solver` est le seul module dont les points d'entrée vivent dans les
-# sous-modules (un `solve` par back-end) sans être ré-exportés à la racine : le
-# balayage ci-dessous ne peut pas les voir, on les nomme donc explicitement.
+# `solver` is the only module whose entry points live in the sub-modules (one
+# `solve` per back-end) without being re-exported at the root: the sweep below
+# cannot see them, so they are named explicitly.
 SOLVER_ENTRY_POINTS = ["solve", "solve_eliminate", "solve_unilateral"]
 
 
 def module_roots():
-    """Le fichier racine de chaque module d'`ops` — dossier ou fichier seul.
+    """The root file of each module of `ops` — a directory or a lone file.
 
-    Les deux formes existent (`ops/mesh/mod.rs` et `ops/matrix.rs`) : les
-    oublier, c'est rendre le garde-fou aveugle à un module entier.
+    Both forms exist (`ops/mesh/mod.rs` and `ops/matrix.rs`): forgetting them
+    means blinding the guard rail to a whole module.
     """
     for d in sorted(OPS.iterdir()):
         if d.is_dir():
@@ -106,22 +107,22 @@ def module_roots():
 
 
 def rust_exports():
-    """(module, nom) de la surface publique de chaque module d'`ops`.
+    """(module, name) of the public surface of each module of `ops`.
 
-    Deux sources, parce que les deux sont utilisées dans le dépôt : les
-    ré-exports `pub use sous_module::…` et les `pub fn` déclarées directement
-    dans le fichier racine du module.
+    Two sources, because both are used in the repository: the `pub use
+    sub_module::…` re-exports and the `pub fn` declared directly in the root
+    file of the module.
     """
     for module, root in module_roots():
         text = root.read_text()
-        # `pub use sous_module::{a, b};` — éventuellement sur plusieurs lignes,
-        # ce que rustfmt fait dès que la liste dépasse la largeur. Un balayage
-        # ligne à ligne les rate en silence : c'est ainsi que toute la famille
-        # `points_*` est restée invisible à ce test.
-        # `pub use sous_module::…` mais aussi `pub use crate::chemin::…` : un
-        # opérateur peut être défini ailleurs et seulement ré-exporté ici, ce
-        # qu'un chemin à un seul segment ne couvrait pas — le garde-fou perdait
-        # alors l'opérateur **en silence**.
+        # `pub use sub_module::{a, b};` — possibly spread over several lines,
+        # which rustfmt does as soon as the list exceeds the width. A line-by-line
+        # sweep misses those silently: that is how the whole `points_*` family
+        # stayed invisible to this test.
+        # `pub use sub_module::…` but also `pub use crate::path::…`: an operator
+        # may be defined elsewhere and only re-exported here, which a
+        # single-segment path did not cover — the guard rail then lost the
+        # operator **silently**.
         for m in re.finditer(r"pub use (?:\w+::)+(?:\{(.*?)\}|(\w+));", text, re.S):
             names = m.group(1) or m.group(2)
             for name in (n.strip() for n in names.split(",")):
@@ -141,54 +142,54 @@ def test_every_rust_operator_has_a_python_binding():
             continue
         py_module = getattr(pyrucast, module, None)
         if py_module is None:
-            missing.append(f"pyrucast.{module} — le sous-module n'existe pas")
+            missing.append(f"pyrucast.{module} — the sub-module does not exist")
         elif not hasattr(py_module, name):
             missing.append(f"pyrucast.{module}.{name}  (← ops::{module}::{name})")
-    assert not missing, "opérateurs Rust sans binding Python :\n  " + "\n  ".join(
+    assert not missing, "Rust operators without a Python binding:\n  " + "\n  ".join(
         missing
     )
 
 
 def test_rust_only_entries_are_documented_and_real():
-    """Une dérogation doit porter une raison et viser un nom qui existe."""
+    """An exemption must carry a reason and point at a name that exists."""
     names = {name for _, name in rust_exports()}
     for fn, reason in RUST_ONLY.items():
-        assert reason.strip(), f"{fn} : dérogation sans raison écrite"
+        assert reason.strip(), f"{fn}: exemption with no written reason"
     stale = [fn for fn in RUST_ONLY if fn not in names and fn[0].islower()]
-    assert not stale, f"dérogations périmées, ces fonctions n'existent plus : {stale}"
+    assert not stale, f"stale exemptions, these functions no longer exist: {stale}"
 
 
-# Fonctions Python sans fonction libre Rust homonyme, avec la raison. Le sens
-# Rust → Python ne suffit pas : `filter_components` et `rename_component` sont
-# restées longtemps en fonction libre Python alors que Rust n'avait que la
-# méthode — l'asymétrie que la convention interdit, invisible au balayage
-# ci-dessus. Les deux ont depuis été retirées.
+# Python functions with no Rust free function of the same name, with the reason.
+# The Rust → Python direction is not enough: `filter_components` and
+# `rename_component` stayed for a long time as Python free functions while Rust
+# only had the method — the very asymmetry the convention forbids, invisible to
+# the sweep above. Both have since been removed.
 PYTHON_ONLY = {
-    "mask_node": "nom plat de `node_field.mask` (namespace `_pyrucast` plat)",
-    "mask_element": "nom plat de `element_field.mask`",
-    "consolidate_mesh": "nom plat de `mesh.consolidate`",
-    "consolidate_node": "nom plat de `node_field.consolidate`",
-    "consolidate_element": "nom plat de `element_field.consolidate`",
-    "set_positions": "nom plat de `coords.set`",
-    "select": "dispatch par type sur `mesh::select_nodes` / `select_cells`",
-    "integral": "dispatch par type sur `measure::integral` / `integral_element`",
-    "integrate_behavior": "nom qualifié de `element_field::behavior::integrate`",
-    "solve_eliminate": "nom qualifié de `solver::eliminate::solve`",
-    "solve_unilateral": "nom qualifié de `solver::unilateral::solve`",
-    "export_vtk": "nom qualifié de `export::vtk::write`",
-    "xtx": "primitive du trait `Field`, exposée en opérateur de réduction",
-    "xty": "primitive du trait `Field`, exposée en opérateur de réduction",
-    # La seule entrée qui ne soit pas un simple renommage : `from_gmsh` a besoin
-    # d'un interpréteur CPython vivant portant le module `gmsh`, ce que Rust ne
-    # peut pas avoir. Elle n'invente d'ailleurs aucune opération — elle va
-    # chercher les tableaux du modèle courant et les passe à l'opérateur Rust
-    # `mesh::from_gmsh_arrays`, qui, lui, est un miroir strict.
-    "from_gmsh": "lit le modèle gmsh vivant : exige l'interpréteur, donc sans jumeau Rust",
+    "mask_node": "flat name of `node_field.mask` (flat `_pyrucast` namespace)",
+    "mask_element": "flat name of `element_field.mask`",
+    "consolidate_mesh": "flat name of `mesh.consolidate`",
+    "consolidate_node": "flat name of `node_field.consolidate`",
+    "consolidate_element": "flat name of `element_field.consolidate`",
+    "set_positions": "flat name of `coords.set`",
+    "select": "dispatched by type onto `mesh::select_nodes` / `select_cells`",
+    "integral": "dispatched by type onto `measure::integral` / `integral_element`",
+    "integrate_behavior": "qualified name of `element_field::behavior::integrate`",
+    "solve_eliminate": "qualified name of `solver::eliminate::solve`",
+    "solve_unilateral": "qualified name of `solver::unilateral::solve`",
+    "export_vtk": "qualified name of `export::vtk::write`",
+    "xtx": "primitive of the `Field` trait, exposed as a reduction operator",
+    "xty": "primitive of the `Field` trait, exposed as a reduction operator",
+    # The only entry that is not a plain renaming: `from_gmsh` needs a live
+    # CPython interpreter carrying the `gmsh` module, which Rust cannot have. It
+    # invents no operation either — it fetches the arrays of the current model
+    # and passes them to the Rust operator `mesh::from_gmsh_arrays`, which is
+    # itself a strict mirror.
+    "from_gmsh": "reads the live gmsh model: requires the interpreter, hence no Rust twin",
 }
 
 
 def python_free_functions():
-    """(module, nom) des fonctions libres exposées par les sous-modules Python."""
+    """(module, name) of the free functions exposed by the Python sub-modules."""
     for module, _ in module_roots():
         py_module = getattr(pyrucast, module, None)
         if py_module is None:
@@ -198,10 +199,10 @@ def python_free_functions():
 
 
 def test_every_python_function_has_a_rust_operator():
-    """Le miroir dans l'autre sens : pas de fonction Python sans opérateur Rust.
+    """The mirror the other way round: no Python function without a Rust operator.
 
-    C'est le sens que le premier balayage ne couvre pas, et par lequel
-    `filter_components` / `rename_component` ont survécu en double forme.
+    That is the direction the first sweep does not cover, and through which
+    `filter_components` / `rename_component` survived in a double form.
     """
     rust = {name for _, name in rust_exports()}
     orphans = [
@@ -210,34 +211,34 @@ def test_every_python_function_has_a_rust_operator():
         if name not in rust and name not in PYTHON_ONLY
     ]
     assert not orphans, (
-        "fonctions Python sans fonction libre Rust — soit l'opérateur manque "
-        "côté Rust, soit c'est une méthode déguisée en fonction :\n  "
-        + "\n  ".join(orphans)
+        "Python functions with no Rust free function — either the operator is "
+        "missing on the Rust side, or this is a method disguised as a "
+        "function:\n  " + "\n  ".join(orphans)
     )
 
 
 def test_python_only_entries_are_documented_and_real():
-    """Une dérogation doit porter une raison **et** rester nécessaire.
+    """An exemption must carry a reason **and** remain necessary.
 
-    La seconde moitié manquait : onze entrées ont survécu à l'apparition de
-    leur jumelle Rust sans que rien ne le signale. Une dérogation périmée est
-    un raisonnement qu'on croit encore valable.
+    The second half was missing: eleven entries survived the appearance of their
+    Rust twin without anything flagging it. A stale exemption is a piece of
+    reasoning one still believes to be valid.
     """
-    # Trois noms existent des deux côtés sans que la dérogation soit périmée :
-    # la fonction Python y répartit sur **plusieurs** fonctions Rust, dont une
-    # porte le même nom. Le nom coïncide, l'opération non.
+    # Three names exist on both sides without the exemption being stale: there
+    # the Python function spreads over **several** Rust functions, one of which
+    # carries the same name. The name coincides, the operation does not.
     dispatchers = {"integral", "solve_eliminate", "solve_unilateral"}
     rust = {name for _, name in rust_exports()}
     for fn, reason in PYTHON_ONLY.items():
-        assert reason.strip(), f"{fn} : dérogation sans raison écrite"
+        assert reason.strip(), f"{fn}: exemption with no written reason"
         if fn in dispatchers:
             continue
         assert fn not in rust, (
-            f"{fn} : dérogation périmée — Rust expose désormais ce nom, "
-            "la retirer de PYTHON_ONLY"
+            f"{fn}: stale exemption — Rust now exposes this name, "
+            "remove it from PYTHON_ONLY"
         )
 
 
 def test_beam_deformation_is_reachable():
-    """Régression nommée : c'est la fonction qui a motivé ce test."""
+    """A named regression: this is the function that motivated this test."""
     assert hasattr(pyrucast.element_field, "beam_deformation")

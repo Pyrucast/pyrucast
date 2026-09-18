@@ -1,13 +1,13 @@
-"""Opérateurs polymorphes entre sortes de champ — miroir de ``ops::field``.
+"""Operators polymorphic over field kinds — mirror of ``ops::field``.
 
-Les opérateurs **génériques** : ceux dont le produit est un conteneur, mais pas
-un conteneur déterminé — il dépend de l'argument. Les fonctions scalaires
-élément par élément (abs, sqrt, exp, trigonométrie…) et le produit scalaire
-point-à-point ``psca``.
+The **generic** operators: those whose product is a container, but not a
+determined one — it depends on the argument. The element-wise scalar functions
+(abs, sqrt, exp, trigonometry…) and the point-by-point scalar product
+``psca``.
 
-Le masque de bande n'est plus ici : ``mask`` a un produit déterminé, c'est deux
-fonctions, et elles vivent dans ``node_field`` et ``element_field``. Le
-filtrage et le renommage de composantes non plus : ce sont des méthodes du
+The band mask is no longer here: ``mask`` has a determined product, it is two
+functions, and they live in ``node_field`` and ``element_field``. Component
+filtering and renaming are gone too: they are methods of the
 champ (``f.filter_components([...])``, ``f.rename_component(a, b)``).
 """
 

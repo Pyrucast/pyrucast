@@ -1,9 +1,9 @@
-"""Opérateurs produisant un champ aux nœuds — miroir de ``ops::node_field``.
+"""Operators producing a field at the nodes — mirror of ``ops::node_field``.
 
-Dérivations (coordonnées d'un maillage, divergence d'un champ par éléments,
-restriction, fusion) et assemblage nodal (flux imposé, et les deux côtés du
-bilan `Σ f_int = Σ f_ext` dont l'écart est le résidu). La
-résolution produit elle aussi un champ nodal, mais garde son module :
+Derivations (a mesh's coordinates, the divergence of a field by elements,
+restriction, merging) and nodal assembly (imposed flux, and both sides of the
+balance `Σ f_int = Σ f_ext` whose gap is the residual). Solving
+also produces a nodal field, but keeps its own module:
 ``pyrucast.solver``.
 """
 

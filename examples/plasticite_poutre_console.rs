@@ -1,46 +1,46 @@
-//! Poutre console élasto-plastique — Newton « maison » au-dessus des briques
-//! pyrucast (exemple Rust, pensé pour le bench de parallélisme).
+//! Elasto-plastic cantilever beam — a hand-rolled Newton loop on top of the
+//! pyrucast building blocks (Rust example, written for the parallelism bench).
 //!
-//! Physique
-//! --------
-//! Continuum 2-D en contraintes planes, petites déformations. Plasticité de
-//! von Mises parfaite (retour radial J2, sans écrouissage) : la contrainte
-//! équivalente est plafonnée à `sigma_y`. Poutre encastrée à gauche
-//! (`u_x = u_y = 0`), cisaillée vers le bas sur la face droite. On monte la
-//! charge par incréments ; au-delà de la première plastification, une zone
-//! plastique se développe près de l'encastrement et la flèche s'écarte de la
-//! réponse linéaire.
+//! Physics
+//! -------
+//! 2-D plane-stress continuum, small strains. Perfect von Mises plasticity
+//! (J2 radial return, no hardening): the equivalent stress is capped at
+//! `sigma_y`. Beam clamped at the left end (`u_x = u_y = 0`), sheared
+//! downwards on the right face. The load is raised by increments; beyond
+//! first yield a plastic zone develops near the clamped end and the
+//! deflection departs from the linear response.
 //!
-//! Rôle de pyrucast vs. rôle de l'exemple
-//! --------------------------------------
-//! **pyrucast** ne connaît PAS Newton. Il fournit les opérateurs ponctuels :
+//! What pyrucast does vs. what the example does
+//! --------------------------------------------
+//! **pyrucast** knows NOTHING about Newton. It provides the pointwise
+//! operators:
 //!
-//! - [`stiffness`] : la rigidité **élastique** `K` (opérateur d'itération) ;
-//! - [`deformation`] : la déformation `ε = ½(∇u + ∇uᵀ)` aux points de Gauss ;
-//! - [`integrate`] (Cast3m `COMP`) : la loi de comportement au point — ici le
-//!   retour radial, qui rend `σ` et l'état plastique mis à jour
-//!   (`VAR0` → `VAR1`) ;
-//! - [`internal_forces`] (Cast3m `BSIG`) : les forces internes `∫ Bᵀ σ dΩ` ;
-//! - [`solve`] : la résolution linéaire (LU creux faer, factorisation en cache) ;
-//! - l'**arithmétique de champs** (`+ - * /`) et [`restrict_like`] (reprojection
-//!   d'un champ sur le support/composantes d'un autre), qui remplacent toute
-//!   boucle nodale : `residual = &f_ext - &f_int`, `u = (&u + &δu_reprojeté)?` ;
-//! - une [`Evolution`] à valeur champ pour l'**histoire de chargement** :
-//!   la charge de chaque pas est interpolée au pseudo-temps ([`Evolution::interpolate`]).
+//! - [`stiffness`]: the **elastic** stiffness `K` (iteration operator);
+//! - [`deformation`]: the strain `ε = ½(∇u + ∇uᵀ)` at the Gauss points;
+//! - [`integrate`] (Cast3m `COMP`): the behaviour law at the point — here the
+//!   radial return, which yields `σ` and the updated plastic state
+//!   (`VAR0` → `VAR1`);
+//! - [`internal_forces`] (Cast3m `BSIG`): the internal forces `∫ Bᵀ σ dΩ`;
+//! - [`solve`]: the linear solve (faer sparse LU, cached factorisation);
+//! - **field arithmetic** (`+ - * /`) and [`restrict_like`] (reprojection of a
+//!   field onto the support/components of another), which replace every nodal
+//!   loop: `residual = &f_ext - &f_int`, `u = (&u + &δu_reprojected)?`;
+//! - an [`Evolution`] with field values for the **loading history**: the load
+//!   of each step is interpolated at the pseudo-time ([`Evolution::interpolate`]).
 //!
-//! **L'exemple** assemble sa propre boucle de Newton avec ces briques :
-//! résidu `r = F_ext − F_int`, incrément `δu = K⁻¹ r`, `u ← u + δu`, et le
-//! portage de l'état interne d'un pas de charge au suivant. C'est un **Newton
-//! modifié** (opérateur constant = `K` élastique) : `K` est assemblé et
-//! factorisé une seule fois, chaque itération ne refait qu'une descente/remontée
-//! (cache de factorisation de [`solve`]). Aucune boucle sur les nœuds : tout le
-//! bilan passe par les opérateurs de champ et les primitives de la librairie.
+//! **The example** assembles its own Newton loop out of those blocks:
+//! residual `r = F_ext − F_int`, increment `δu = K⁻¹ r`, `u ← u + δu`, and the
+//! carry-over of the internal state from one load step to the next. This is a
+//! **modified Newton** (constant operator = elastic `K`): `K` is assembled and
+//! factorised once, each iteration only redoes a forward/back substitution
+//! ([`solve`]'s factorisation cache). No loop over the nodes: the whole balance
+//! goes through the field operators and the library primitives.
 //!
-//! Bench de parallélisme
-//! ---------------------
-//! Les boucles chaudes parallélisées (assemblage, `deformation`, `integrate`,
-//! `internal_forces`) sont réévaluées à chaque itération de Newton. Fais varier
-//! la taille du maillage et le nombre de threads :
+//! Parallelism bench
+//! -----------------
+//! The parallelised hot loops (assembly, `deformation`, `integrate`,
+//! `internal_forces`) are re-evaluated at every Newton iteration. Vary the mesh
+//! size and the thread count:
 //!
 //! ```text
 //! RAYON_NUM_THREADS=1 PYRUCAST_NX=200 PYRUCAST_NY=40 \
@@ -49,9 +49,9 @@
 //!     cargo run --release --example plasticite_poutre_console
 //! ```
 //!
-//! Variables d'environnement : `PYRUCAST_NX`, `PYRUCAST_NY` (mailles en long /
-//! en hauteur), `PYRUCAST_NSTEPS` (pas de charge), `PYRUCAST_PMAX` (charge
-//! finale, effort tranchant au bout).
+//! Environment variables: `PYRUCAST_NX`, `PYRUCAST_NY` (cells along the length /
+//! through the height), `PYRUCAST_NSTEPS` (load steps), `PYRUCAST_PMAX` (final
+//! load, shear force at the tip).
 
 use pyrucast::aggregate::Aggregate;
 use pyrucast::atoms::Band;
@@ -95,23 +95,23 @@ fn env_f64(key: &str, default: f64) -> f64 {
 }
 
 fn main() -> Result<()> {
-    // ── Paramètres (matériau acier, géométrie, chargement) ──────────────────
+    // ── Parameters (steel material, geometry, loading) ──────────────────────
     let (young, nu, sigma_y) = (210_000.0_f64, 0.3_f64, 250.0_f64);
     let (length, height) = (10.0_f64, 1.0_f64);
     let nx = env_usize("PYRUCAST_NX", 40);
     let ny = env_usize("PYRUCAST_NY", 8);
     let nsteps = env_usize("PYRUCAST_NSTEPS", 10);
-    let p_max = env_f64("PYRUCAST_PMAX", 5.0); // effort tranchant final au bout
+    let p_max = env_f64("PYRUCAST_PMAX", 5.0); // final shear force at the tip
 
     println!(
-        "Poutre console plastique : {nx}×{ny} QUA4  (L={length}, H={height}), \
+        "Plastic cantilever beam: {nx}×{ny} QUA4  (L={length}, H={height}), \
          E={young}, ν={nu}, σy={sigma_y}"
     );
-    println!("Chargement : 0 → {p_max} en {nsteps} pas (Newton modifié, K élastique)\n");
+    println!("Loading: 0 → {p_max} in {nsteps} steps (modified Newton, elastic K)\n");
 
-    // ── Maillage : grille de nœuds (j en hauteur, i en long), cellules QUA4 ──
+    // ── Mesh: grid of nodes (j through the height, i along the length), QUA4 cells ──
     println!(
-        "▸ Maillage : {} nœuds, {} cellules QUA4…",
+        "▸ Mesh: {} nodes, {} QUA4 cells…",
         (nx + 1) * (ny + 1),
         nx * ny
     );
@@ -124,12 +124,12 @@ fn main() -> Result<()> {
     let right_edge = line(&pt_c, &pt_d, ny, ElementType::SEG2)?;
     let mesh = sweep(&left_edge, &right_edge, nx, ElementType::QUA4)?;
 
-    // grid[j][i] : nœud à (x = i·L/nx, y = j·H/ny).
+    // grid[j][i]: node at (x = i·L/nx, y = j·H/ny).
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
 
-    // Ensembles de nœuds utiles : bord gauche (encastré), bout (mi-hauteur), et
-    // un maillage POI1 des nœuds LIBRES (hors encastrement) — support cible pour
-    // mesurer la norme du résidu sur les seuls DDL libres (`restrict` + `xtx`).
+    // Useful node sets: left edge (clamped), tip (mid-height), and a POI1 mesh of
+    // the FREE nodes (outside the clamped end) — target support for measuring the
+    // residual norm on the free DOFs only (`restrict` + `xtx`).
     let tip_id = &mesh.nearest_node(&[length, height / 2.])?;
     let coords_field = positions(&mesh, Some(vec!["X".into()]))?;
     let free_mesh = select_nodes(
@@ -140,8 +140,8 @@ fn main() -> Result<()> {
     let imposed_mesh = to_poi1(&left_edge)?;
     let multiplier = translate(&imposed_mesh, &[0., 0.])?;
 
-    // ── Modèle : plasticité (contraintes planes) + encastrement (Dirichlet) ──
-    println!("▸ Modèle : plasticité J2 (contraintes planes) + encastrement…");
+    // ── Model: plasticity (plane stress) + clamped end (Dirichlet) ──────────
+    println!("▸ Model: J2 plasticity (plane stress) + clamped end…");
     let mut model = model::plasticity_perfect(&fes, Kinematics::PlaneStress)?;
 
     model = model.union(&model::dirichlet(
@@ -159,8 +159,8 @@ fn main() -> Result<()> {
         Default::default(),
     )?)?;
 
-    // La charge de référence est un terme du modèle : elle le rejoint, sa
-    // densité rejoint le matériau.
+    // The reference load is a term of the model: it joins the model, and its
+    // density joins the material.
     let right_fes = FiniteElementSpace::lagrange1(&right_edge)?;
     let model = model.union(&pyrucast::ops::model::flux(
         &right_fes,
@@ -177,25 +177,26 @@ fn main() -> Result<()> {
         ],
     )?;
 
-    // Rigidité ÉLASTIQUE : opérateur d'itération du Newton modifié. Assemblée
-    // une fois ; `solve` met la factorisation en cache et la réutilise à chaque
-    // descente/remontée.
-    println!("▸ Assemblage de la rigidité élastique K…");
+    // ELASTIC stiffness: iteration operator of the modified Newton. Assembled
+    // once; `solve` caches the factorisation and reuses it at every
+    // forward/back substitution.
+    println!("▸ Assembling the elastic stiffness K…");
     let k = stiffness(&model, &materials)?;
 
-    // ── Charge de référence : cisaillement unitaire (densité −1) sur la face
-    //    droite, réparti en efforts nodaux cohérents (∫ densité·N dΓ, op `flux`).
-    println!("▸ Charge de référence + histoire de chargement…");
-    // `external_forces` rend un agrégat ; l'histoire de chargement se tabule
-    // zone par zone.
+    // ── Reference load: unit shear (density −1) on the right face, spread into
+    //    consistent nodal forces (∫ density·N dΓ, `flux` op). ─────────────────
+    println!("▸ Reference load + loading history…");
+    // `external_forces` returns an aggregate; the loading history is tabulated
+    // zone by zone.
     let load_unit = external_forces(&model, &materials)?.get(0)?.read().clone();
 
-    // ── Histoire de chargement : une Evolution à valeur CHAMP, tabulée en
-    //    pseudo-temps t ∈ [0, 1]. Deux keyframes du champ d'effort nodal — nul en
-    //    t=0, complet (`p_max · charge_unitaire`) en t=1 — sur le MÊME support
-    //    (dérivés du même sous-champ, condition de l'interpolation). La charge de
-    //    chaque pas est lue par interpolation linéaire, `load_evo.interpolate(t)`.
-    //    Une histoire non linéaire n'ajouterait que des keyframes. ──────────────
+    // ── Loading history: an Evolution with FIELD values, tabulated against the
+    //    pseudo-time t ∈ [0, 1]. Two keyframes of the nodal force field — zero at
+    //    t=0, complete (`p_max · unit_load`) at t=1 — on the SAME support (both
+    //    derived from the same sub-field, a condition of the interpolation). The
+    //    load of each step is read by linear interpolation,
+    //    `load_evo.interpolate(t)`. A non-linear history would only add
+    //    keyframes. ─────────────────────────────────────────────────────────────
     let zero_frame = load_unit.map_all(|_| 0.0);
     let full_frame = load_unit.map_all(|v| v * p_max);
     let load_curve = SubEvolution::new(
@@ -208,61 +209,62 @@ fn main() -> Result<()> {
     let mut load_evo = Evolution::default();
     load_evo.add_sub(Handle::new(load_curve))?;
 
-    // ── État de la simulation (persistant entre les pas) ────────────────────
-    // Déplacement cumulé u (u_x, u_y sur tous les nœuds), initialement nul.
+    // ── Simulation state (persistent across the steps) ──────────────────────
+    // Accumulated displacement u (u_x, u_y on every node), initially zero.
     let mut u = NodeField::new(&mesh, vec!["u_x".into(), "u_y".into()])?;
-    // État convergé du pas précédent (VAR0 = `prev`) : `None` au premier pas —
-    // A est alors la configuration de référence (σ(A)=0, ε(A)=0).
+    // Converged state of the previous step (VAR0 = `prev`): `None` at the first
+    // step — A is then the reference configuration (σ(A)=0, ε(A)=0).
     let mut state: Option<ElementField> = None;
 
-    // ── Boucle sur les pas de charge ────────────────────────────────────────
-    // Newton modifié (opérateur = K élastique) : convergence linéaire, donc
-    // lente sur la branche plastique. On plafonne haut les itérations et on
-    // vise un résidu relatif de 1e-6 (largement suffisant ici).
+    // ── Loop over the load steps ────────────────────────────────────────────
+    // Modified Newton (operator = elastic K): linear convergence, hence slow on
+    // the plastic branch. Iterations are capped high and we aim at a relative
+    // residual of 1e-6 (largely enough here).
     let max_newton = 200;
-    println!("▸ Résolution : {nsteps} pas de charge (Newton modifié)\n");
+    println!("▸ Solving: {nsteps} load steps (modified Newton)\n");
     println!(
         "{:>4} {:>8} {:>6} {:>14} {:>14} {:>8}",
-        "pas", "P", "iter", "flèche u_y", "p_max", "n_plast"
+        "step", "P", "iter", "deflection u_y", "p_max", "n_plast"
     );
 
     let mut prev_defl = 0.0_f64;
     let mut any_plasticity = false;
 
     for step in 1..=nsteps {
-        // Pseudo-temps du pas ∈ ]0, 1] ; la charge externe en découle par
-        // interpolation de l'Evolution (champ d'effort nodal du pas).
+        // Pseudo-time of the step ∈ ]0, 1]; the external load follows from it by
+        // interpolation of the Evolution (nodal force field of the step).
         let t = step as f64 / nsteps as f64;
-        let load_p = p_max * t; // cisaillement nominal au bout (pour l'affichage)
+        let load_p = p_max * t; // nominal shear at the tip (for the display)
         let Interpolated::Node(load_scaled) = load_evo.interpolate(t, None)? else {
-            unreachable!("évolution à valeur nodale")
+            unreachable!("evolution with nodal values")
         };
-        // Norme de la charge du pas (échelle relative du résidu) : xᵀx du champ.
+        // Norm of the step load (relative scale of the residual): xᵀx of the field.
         let ext_norm = load_scaled.xtx().sqrt();
         let tol = 1e-6 * ext_norm + 1e-12;
 
-        // Newton modifié : itère jusqu'à résidu (forces déséquilibrées aux DDL
-        // libres) négligeable. `last_state` retient la sortie de comportement
-        // convergée, source du nouveau VAR0.
+        // Modified Newton: iterate until the residual (out-of-balance forces at
+        // the free DOFs) is negligible. `last_state` keeps the converged
+        // behaviour output, source of the new VAR0.
         let mut iters = 0;
         let mut last_state: Option<ElementField> = None;
         let mut res_norm = f64::INFINITY;
 
         for _ in 0..max_newton {
-            // ε(u) = ε(B), état de A dans `prev` → σ, VAR1 (COMP), montage A→B.
+            // ε(u) = ε(B), state of A in `prev` → σ, VAR1 (COMP), A→B rise.
             let strain = deformation(&u, &fes)?;
             let out = integrate(&model, &strain, state.as_ref(), &materials, None)?;
-            // Forces internes F_int = ∫ Bᵀ σ dΩ (BSIG).
+            // Internal forces F_int = ∫ Bᵀ σ dΩ (BSIG).
             let f_int = internal_forces(&model, &out, &u, &materials)?;
 
-            // Résidu r = F_ext − F_int et sa norme sur les DDL **libres**, sans
-            // aucune boucle nodale — tout par les opérateurs et primitives :
-            // - `f_ext` = charge externe du pas (`load_scaled`, déjà à l'échelle
-            //   sur `f_y`) reprojetée sur le support ET les composantes de `f_int`
-            //   (`restrict_like`) : composantes `f_x` (=0) et `f_y` ;
-            // - `residual = f_ext − f_int` via l'opérateur `-` ;
-            // - la norme se lit sur les seuls nœuds libres : `residual` `restrict`é
-            //   à `free_mesh` puis `xtx` (les nœuds encastrés portent la réaction).
+            // Residual r = F_ext − F_int and its norm on the **free** DOFs, with
+            // no nodal loop at all — everything through the operators and the
+            // primitives:
+            // - `f_ext` = external load of the step (`load_scaled`, already
+            //   scaled on `f_y`) reprojected onto the support AND the components
+            //   of `f_int` (`restrict_like`): components `f_x` (=0) and `f_y`;
+            // - `residual = f_ext − f_int` through the `-` operator;
+            // - the norm is read on the free nodes only: `residual` `restrict`ed
+            //   to `free_mesh` then `xtx` (the clamped nodes carry the reaction).
             let f_ext = restrict_like(&load_scaled, &f_int)?;
             let residual = (f_ext - f_int)?;
             res_norm = restrict(&residual, &free_mesh)?.xtx().sqrt();
@@ -271,25 +273,26 @@ fn main() -> Result<()> {
             if res_norm <= tol {
                 break;
             }
-            // δu = K⁻¹ r (K élastique, cache de factorisation). δu porte les DDL
-            // primaux ET duaux (multiplicateurs de Lagrange). Son support coïncide
-            // déjà avec celui de u (même compagnon POI1 caché de `to_poi1`, partagé
-            // par `solve` et `NodeField::new(&mesh)`) ; `restrict_like` ne sert donc
-            // qu'à **filtrer les composantes duales** — sinon `u + δu` recopierait
-            // les multiplicateurs dans u par union. Puis u ← u + δu par `+`.
+            // δu = K⁻¹ r (elastic K, factorisation cache). δu carries the primal
+            // AND the dual DOFs (Lagrange multipliers). Its support already
+            // coincides with that of u (same hidden POI1 companion from
+            // `to_poi1`, shared by `solve` and `NodeField::new(&mesh)`); so
+            // `restrict_like` only serves to **filter out the dual components** —
+            // otherwise `u + δu` would copy the multipliers into u by union.
+            // Then u ← u + δu through `+`.
             let du = solve(&k, &residual)?;
             u = (&u + &restrict_like(&du, &u)?)?;
             iters += 1;
         }
         let converged = res_norm <= tol;
 
-        // Commit de l'état : `prev` ← VAR1. La sortie de comportement convergée
-        // porte l'état complet de B (σ(B), ε_p(B), p(B), ε(B)) et devient le
-        // `prev` (état de A) du pas suivant. La loi lit ses entrées par nom, donc
-        // les composantes surnuméraires sont ignorées.
-        let committed = last_state.take().expect("au moins une itération");
+        // State commit: `prev` ← VAR1. The converged behaviour output carries the
+        // complete state of B (σ(B), ε_p(B), p(B), ε(B)) and becomes the `prev`
+        // (state of A) of the next step. The law reads its inputs by name, so the
+        // extra components are ignored.
+        let committed = last_state.take().expect("at least one iteration");
 
-        // Diagnostics du pas.
+        // Diagnostics of the step.
         let (p_max_val, n_plastic) = plastic_diagnostics(&committed)?;
         state = Some(committed);
         let defl = u.value(tip_id.id(), "u_y")?;
@@ -297,42 +300,40 @@ fn main() -> Result<()> {
         let flag = if converged {
             ""
         } else {
-            "  (résidu résiduel)"
+            "  (residual left over)"
         };
         println!(
             "{step:>4} {load_p:>8.3} {iters:>6} {defl:>14.6e} {p_max_val:>14.6e} {n_plastic:>8}{flag}"
         );
 
-        // La flèche croît (en valeur absolue, vers le bas) avec la charge.
+        // The deflection grows (in absolute value, downwards) with the load.
         assert!(
             defl.abs() >= prev_defl.abs() - 1e-9,
-            "flèche non monotone au pas {step}"
+            "non-monotonic deflection at step {step}"
         );
         prev_defl = defl;
     }
 
-    // Au-delà de la première plastification, une zone plastique doit apparaître.
-    // (Bornes élastiques : première plastification vers P ≈ σy·I/(c·L).)
+    // Beyond first yield, a plastic zone must appear.
+    // (Elastic bounds: first yield around P ≈ σy·I/(c·L).)
     let p_first_yield = sigma_y * (height * height / 6.0) / length;
     if p_max > p_first_yield {
         assert!(
             any_plasticity,
-            "P_max={p_max} dépasse la première plastification (≈{p_first_yield:.2}) \
-             mais aucun point plastique n'a été détecté"
+            "P_max={p_max} exceeds first yield (≈{p_first_yield:.2}) \
+             but no plastic point was detected"
         );
-        println!(
-            "\nOK : plastification développée (P_max={p_max} > P_élastique≈{p_first_yield:.2})."
-        );
+        println!("\nOK: plasticity developed (P_max={p_max} > P_elastic≈{p_first_yield:.2}).");
     } else {
-        println!("\nOK : réponse restée élastique (P_max={p_max} ≤ ≈{p_first_yield:.2}).");
+        println!("\nOK: the response stayed elastic (P_max={p_max} ≤ ≈{p_first_yield:.2}).");
     }
     Ok(())
 }
 
-/// `(p_max, nombre de points de Gauss plastifiés)` de l'état courant
-/// (`p > 0` marque un point plastique). Sans boucle : `p_max` par [`Field::max`],
-/// le comptage en masquant la composante `p` en 0/1 (bande « > 1e-12 ») puis en
-/// la sommant ([`Field::sum`]).
+/// `(p_max, number of yielded Gauss points)` of the current state (`p > 0`
+/// marks a plastic point). Without a loop: `p_max` through [`Field::max`], the
+/// count by masking the `p` component into 0/1 (band "> 1e-12") then summing it
+/// ([`Field::sum`]).
 fn plastic_diagnostics(state: &ElementField) -> Result<(f64, usize)> {
     let p_max = Field::max(state, Some("p"))?;
     let band = Band::new(None, Some(1e-12), None, None)?;

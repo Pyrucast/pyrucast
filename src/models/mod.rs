@@ -25,8 +25,8 @@
 //! 5. raccord: `pub use` in [`crate::ops::model`], and the registration in the
 //!    (flat) `#[pymodule]` of `lib.rs`.
 //!
-//! Everything else is generic. See the book chapter *« Ajouter une
-//! physique »* for the full walkthrough.
+//! Everything else is generic. See the book chapter *"Ajouter une physique"*
+//! for the full walkthrough.
 
 use crate::aggregate::Aggregate;
 use crate::atoms::NodeId;
@@ -98,14 +98,14 @@ pub use kernel::CellGeom;
 /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
 /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
-/// // Quatre natures de matrice, et **une seule** machinerie : un noyau par
-/// // élément diffère, le reste est partagé. Une physique sans terme pour
-/// // une nature n'y contribue rien.
+/// // Four matrix kinds and **one single** machinery: the per-element kernel
+/// // differs, everything else is shared. A physics with no term for a kind
+/// // contributes nothing to it.
 /// assert_eq!(MatrixKind::COUNT, 4);
 /// assert_eq!(MatrixKind::Stiffness.index(), 0);
 /// assert!(volume.as_kind().matrix_layout(MatrixKind::Stiffness).is_some());
-/// // Une contrainte n'a pas de disposition matricielle : elle passe par
-/// // `contributions`, non par un noyau d'élément.
+/// // A constraint has no matrix layout: it goes through `contributions`, not
+/// // through an element kernel.
 /// assert!(appui.as_kind().matrix_layout(MatrixKind::Stiffness).is_none());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -147,14 +147,14 @@ impl MatrixKind {
     /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
-    /// // Quatre natures de matrice, et **une seule** machinerie : un noyau par
-    /// // élément diffère, le reste est partagé. Une physique sans terme pour
-    /// // une nature n'y contribue rien.
+    /// // Four matrix kinds and **one single** machinery: the per-element kernel
+    /// // differs, everything else is shared. A physics with no term for a kind
+    /// // contributes nothing to it.
     /// assert_eq!(MatrixKind::COUNT, 4);
     /// assert_eq!(MatrixKind::Stiffness.index(), 0);
     /// assert!(volume.as_kind().matrix_layout(MatrixKind::Stiffness).is_some());
-    /// // Une contrainte n'a pas de disposition matricielle : elle passe par
-    /// // `contributions`, non par un noyau d'élément.
+    /// // A constraint has no matrix layout: it goes through `contributions`, not
+    /// // through an element kernel.
     /// assert!(appui.as_kind().matrix_layout(MatrixKind::Stiffness).is_none());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -184,7 +184,7 @@ impl MatrixKind {
     /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
-    /// // L'index sert de rang dans le cache de motifs, un par nature.
+    /// // The index serves as the rank in the pattern cache, one per kind.
     /// assert!(MatrixKind::Stiffness.index() < MatrixKind::COUNT);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -205,8 +205,8 @@ impl MatrixKind {
 /// ```
 /// # use pyrucast::models::TangentSource;
 /// # use pyrucast::models::plasticity::law::PlasticLaw;
-/// // Deux lois seulement ont une forme fermée ; les autres dérivent le retour
-/// // radial par différences centrées — douze retours par point de Gauss.
+/// // Only two laws have a closed form; the others derive the radial return by
+/// // central differences — twelve return maps per Gauss point.
 /// assert_eq!(PlasticLaw::Perfect.tangent_source(), TangentSource::Analytic);
 /// assert_eq!(PlasticLaw::Gurson.tangent_source(), TangentSource::Numerical);
 /// ```
@@ -253,9 +253,9 @@ pub enum TangentSource {
 /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
 /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
-/// // La déclaration **structurelle** d'une physique de volume : de quoi
-/// // bâtir un bloc *calculé* et le verser droit dans le CSR global. Chaque
-/// // champ reflète un argument d'`assemble_block`.
+/// // The **structural** declaration of a volumetric physics: enough to build
+/// // a *computed* block and pour it straight into the global CSR. Each field
+/// // mirrors one argument of `assemble_block`.
 /// let l = volume.as_kind().matrix_layout(MatrixKind::Stiffness).unwrap();
 /// assert_eq!(l.dual_vars, vec!["q".to_string()]);
 /// assert_eq!(l.primal_vars, vec!["T".to_string()]);
@@ -316,13 +316,13 @@ pub struct MatrixLayout {
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
 /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
 /// # use pyrucast::models::Contribution;
-/// // Le discriminant qui met sur une seule voie une contrainte, une
-/// // physique de volume et un couplage : c'est la variante qui décide, non
-/// // un `match` par type dans l'assembleur.
+/// // The discriminant that puts a constraint, a volumetric physics and a
+/// // coupling on one single path: the variant decides, not a per-type
+/// // `match` in the assembler.
 /// let c = appui.as_kind().contributions(MatrixKind::Stiffness, None)?;
 /// assert!(!c.is_empty());
-/// // Un appui apporte des blocs **littéraux** ; une physique de volume,
-/// // une recette calculée.
+/// // A support brings **literal** blocks; a volumetric physics, a computed
+/// // recipe.
 /// assert!(matches!(c[0], Contribution::Literal(_)));
 /// assert!(matches!(
 ///     volume.as_kind().contributions(MatrixKind::Stiffness, None)?[0],
@@ -379,8 +379,8 @@ pub enum Contribution {
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let volume = SubModel::heat_conduction(zone).unwrap();
-/// // Une physique qui intègre une loi déclare une recette calculée, sur son
-/// // propre layout — jamais le champ, que l'opérateur produira.
+/// // A physics that integrates a law declares a computed recipe, on its own
+/// // layout — never the field, which the operator will produce.
 /// let declare = volume.as_kind().internal_force_contribution();
 /// assert!(matches!(declare[..], [ResidualContribution::Computed(_)]));
 /// ```
@@ -437,12 +437,11 @@ pub enum ResidualContribution {
 /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
 /// # use pyrucast::containers::matrix::DofOrdering;
 /// # use pyrucast::models::CouplingLayout;
-/// // Ce qu'une loi d'**interface** décrit : des sous-espaces de ligne *et*
-/// // de colonne, sur deux maillages en vis-à-vis, là où un
-/// // [`MatrixLayout`] tient sur un seul support. La conformité est
-/// // vérifiée à la construction du bloc, et **signalée** plutôt
-/// // qu'approximée : une interface qui ne correspond pas est un problème
-/// // de maillage.
+/// // What an **interface** law describes: row *and* column subspaces, on
+/// // two facing meshes, where a [`MatrixLayout`] holds on a single
+/// // support. Conformity is checked when the block is built, and
+/// // **reported** rather than approximated: an interface that does not
+/// // match is a meshing problem.
 /// let l = CouplingLayout {
 ///     fespaces: vec![zone.clone()],
 ///     col_fespaces: vec![zone.clone()],
@@ -474,15 +473,15 @@ pub struct CouplingLayout {
 // ANCHOR_END: coupling_layout
 
 /// The **nature** of a physics — its coarse classification, orthogonal to the
-/// `Domain` / `Constraint` capability axis. It answers « quel champ de physique »
-/// where the capability seams answer « domaine ou contrainte ».
+/// `Domain` / `Constraint` capability axis. It answers "which field of physics"
+/// where the capability seams answer "domain or constraint".
 ///
 /// A physics declares a **set** of natures (usually one): a plain physics is
 /// single-natured, a coupled physics (e.g. a future thermo-mechanical element)
 /// spans several, and a block that belongs to none is left **untagged** (an empty
-/// set — the « rien » case for hand-built / other matrices). [`Other`](Self::Other)
+/// set — the "nothing" case for hand-built / other matrices). [`Other`](Self::Other)
 /// is the explicit odd-one-out nature, for a block one *wants* classified as
-/// « autre » rather than merely untagged.
+/// "other" rather than merely untagged.
 ///
 /// A single nature is fully determined by the
 /// [`SubModel`](crate::containers::model::SubModel) variant, so
@@ -495,11 +494,11 @@ pub struct CouplingLayout {
 ///
 /// ```
 /// # use pyrucast::models::Physics;
-/// // La nature d'un sous-modèle voyage avec chaque bloc assemblé : c'est
-/// // elle que `Model::filter` et `Matrix::filter` lisent.
+/// // A sub-model's nature travels with every assembled block: it is what
+/// // `Model::filter` and `Matrix::filter` read.
 /// assert_eq!(Physics::ALL.len(), 6);
-/// // Diffusion et thermique sont **distinctes** malgré leur laplacien
-/// // commun : un problème couplé doit pouvoir choisir l'une sans l'autre.
+/// // Diffusion and thermal are **distinct** despite their common Laplacian:
+/// // a coupled problem must be able to select one without the other.
 /// assert_ne!(Physics::Diffusion, Physics::Thermal);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -510,7 +509,7 @@ pub enum Physics {
     Thermal,
     /// A Lagrange constraint — Dirichlet, MPC, embedded, contact.
     Constraint,
-    /// « Autre / rien » — a nature for a block that fits none of the above but is
+    /// "Other / nothing" — a nature for a block that fits none of the above but is
     /// still explicitly classified (as opposed to simply untagged).
     Other,
     /// Mass transport — Fickian diffusion and its interface laws. Distinct from
@@ -532,7 +531,7 @@ impl Physics {
     /// ```
     /// # use pyrucast::models::Physics;
     /// # use pyrucast::named::Named;
-    /// // Réciproque exacte de `from_name`, pour les six natures.
+    /// // Exact inverse of `from_name`, for the six natures.
     /// assert!(Physics::ALL.iter().all(|p| Physics::from_name(p.name()) == Some(*p)));
     /// ```
     pub fn name(self) -> &'static str {
@@ -552,8 +551,8 @@ impl Physics {
     ///
     /// ```
     /// # use pyrucast::models::Physics;
-    /// // L'unique source de la liste citée par les messages de `filter` : une
-    /// // nature ne peut pas être ajoutée sans que les messages suivent.
+    /// // The single source of the list quoted by the `filter` messages: a
+    /// // nature cannot be added without the messages following.
     /// assert!(Physics::ALL.contains(&Physics::Radiation));
     /// ```
     pub const ALL: [Physics; 6] = [
@@ -613,15 +612,15 @@ impl std::fmt::Display for Physics {
 /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
 /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
-/// // Le contrat de base, avec des défauts partout où c'est possible : une
-/// // physique n'écrit que ce qui lui est propre. C'est par lui que passe
-/// // **toute** la couche modèle, `as_kind` étant l'unique `match`.
+/// // The base contract, with defaults wherever possible: a physics writes
+/// // only what is its own. **All** of the model layer goes through it,
+/// // `as_kind` being the single `match`.
 /// let k = volume.as_kind();
 /// assert_eq!(k.primal_vars(), vec!["T".to_string()]);
-/// assert!(k.as_domain().is_some());   // une physique de volume
+/// assert!(k.as_domain().is_some());   // a volumetric physics
 /// assert!(k.as_constraint().is_none());
-/// // Et réciproquement pour un appui : c'est un fait de **compilation**,
-/// // non une erreur d'exécution.
+/// // And the other way round for a support: it is a **compile-time** fact,
+/// // not a run-time error.
 /// assert!(appui.as_kind().as_domain().is_none());
 /// assert!(appui.as_kind().as_constraint().is_some());
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -698,9 +697,9 @@ pub trait SubModelKind: Sync {
                 self.label()
             ))
         })?;
-        // Le genre et ses entrées sont **appariés par construction** : le
-        // désaccord ne peut venir que d'une recette bâtie à la main, et il se
-        // nomme ici plutôt que dans chaque noyau.
+        // The kind and its inputs are **paired by construction**: a mismatch can
+        // only come from a hand-built recipe, and it is named here rather than
+        // in every kernel.
         match (kind, inputs) {
             (MatrixKind::Stiffness, _) => domain.element_matrix(geoms, material, lay, ke),
             (MatrixKind::Mass, _) => domain.element_mass(geoms, material, lay, ke),
@@ -955,8 +954,8 @@ pub trait SubModelKind: Sync {
     /// # let conduction = pyrucast::ops::model::heat_conduction(&fes)?;
     /// # let bord = SubModel::boundary_transfer(
     /// #     zone.clone(), &conduction, vec![("T".into(), "q".into())])?;
-    /// // Un transfert de bord lit la primale aux points, pas un état : sa
-    /// // valeur y est celle du champ, interpolée.
+    /// // A boundary transfer reads the primal at the points, not a state: its
+    /// // value there is the field's, interpolated.
     /// let lu = bord.as_kind().residual_input(&zone, &u)?;
     /// assert_eq!(lu.read().components(), &["T".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -1016,8 +1015,8 @@ pub trait SubModelKind: Sync {
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
     /// # let volume = SubModel::heat_conduction(zone).unwrap();
-    /// // Une physique de volume déclare son intégrale ; un appui déclare ses
-    /// // relations, dont l'opérateur tire la réaction.
+    /// // A volumetric physics declares its integral; a support declares its
+    /// // relations, from which the operator draws the reaction.
     /// assert!(matches!(volume.as_kind().internal_force_contribution()[..],
     ///                  [ResidualContribution::Computed(_)]));
     /// assert!(matches!(appui.as_kind().internal_force_contribution()[..],
@@ -1077,7 +1076,7 @@ pub trait SubModelKind: Sync {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let volume = SubModel::heat_conduction(zone).unwrap();
-    /// // La conduction ne répond qu'à `u` : rien à droite du signe égal.
+    /// // Conduction only responds to `u`: nothing on the right of the equals sign.
     /// assert!(volume.as_kind().external_force_contribution().is_empty());
     /// ```
     fn external_force_contribution(&self) -> Vec<ResidualContribution> {
@@ -1128,8 +1127,8 @@ pub trait SubModelKind: Sync {
 /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
 /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
-/// // La capacité **contrainte** : des relations, chacune avec son nœud
-/// // multiplicateur et la composante où son second membre s'écrit.
+/// // The **constraint** capability: relations, each with its multiplier node
+/// // and the component its right-hand side is written into.
 /// let c = appui.as_kind().as_constraint().unwrap();
 /// let r = c.relations()?;
 /// assert_eq!(r.len(), 1);
@@ -1178,9 +1177,9 @@ pub trait Constraint {
 /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
 /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
-/// // Un terme de relation : un nœud, sa variable, et le dual de la
-/// // physique visée — c'est ce dernier qui accroche la contrainte à la
-/// // physique qu'elle contraint.
+/// // One relation term: a node, its variable, and the dual of the targeted
+/// // physics — the latter is what hooks the constraint onto the physics it
+/// // constrains.
 /// let r = appui.as_kind().as_constraint().unwrap().relations()?;
 /// assert_eq!(r[0].terms[0].node, n[0].id());
 /// assert_eq!(r[0].terms[0].variable, "T");
@@ -1231,8 +1230,8 @@ pub struct ConstraintTerm {
 /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
 /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
-/// // Égalité, ou inégalité — ce qui fait passer la contrainte du solveur
-/// // direct à l'ensemble actif.
+/// // Equality, or inequality — what moves the constraint from the direct
+/// // solver to the active set.
 /// assert_eq!(RelationSense::parse(None)?, RelationSense::Equality);
 /// assert_eq!(RelationSense::parse(Some(">="))?, RelationSense::GreaterEqual);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -1275,8 +1274,8 @@ impl RelationSense {
     /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
     /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
     /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
-    /// // L'**unique** endroit où la forme en chaîne est interprétée : les
-    /// // constructeurs Rust de confort et les liaisons Python y passent tous.
+    /// // The **single** place the string form is interpreted: the Rust
+    /// // convenience constructors and the Python bindings all go through it.
     /// assert_eq!(RelationSense::parse(None)?, RelationSense::Equality);
     /// assert_eq!(RelationSense::parse(Some("<="))?, RelationSense::LessEqual);
     /// assert!(RelationSense::parse(Some("≠")).is_err());
@@ -1332,8 +1331,8 @@ impl std::fmt::Display for RelationSense {
 /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
 /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
-/// // Une relation : son multiplicateur, la composante où son `g` s'écrit,
-/// // et ses termes. C'est la couture partagée par toutes les contraintes.
+/// // One relation: its multiplier, the component its `g` is written into,
+/// // and its terms. It is the seam shared by every constraint.
 /// let r = appui.as_kind().as_constraint().unwrap().relations()?;
 /// assert_eq!(r[0].imposed_value, "imposed_T");
 /// assert_eq!(r[0].multiplier_node, mult.node(0, 0, 0)?.id());
@@ -1431,8 +1430,8 @@ pub(crate) fn constraint_block_pair(
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
 /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
 /// # use pyrucast::models::owned_components;
-/// // Le raccourci que toute physique emploie pour rendre son contrat
-/// // matériau sans le retaper.
+/// // The shortcut every physics uses to hand back its material contract
+/// // without retyping it.
 /// assert_eq!(owned_components(&["E", "nu"]),
 ///            vec!["E".to_string(), "nu".to_string()]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -1457,8 +1456,8 @@ pub fn owned_components(names: &[&str]) -> Vec<String> {
 /// of silently feeding a permuted tensor to the law.
 /// ```
 /// # use pyrucast::models::ZoneLayout;
-/// // Une table dit où lire, pas quoi lire : la physique déclare son ordre
-/// // canonique, la zone le traduit en positions.
+/// // A table says where to read, not what to read: the physics declares its
+/// // canonical order, the zone translates it into positions.
 /// let lay = ZoneLayout {
 ///     deformation: vec![2, 0, 1],
 ///     state: Vec::new(),
@@ -1466,7 +1465,7 @@ pub fn owned_components(names: &[&str]) -> Vec<String> {
 ///     optional_material: Vec::new(),
 /// };
 /// let ligne = [10.0, 20.0, 30.0];
-/// // La première composante de la convention est en troisième position.
+/// // The convention's first component sits in third position.
 /// assert_eq!(ligne[lay.deformation[0] as usize], 30.0);
 /// ```
 pub struct ZoneLayout {
@@ -1495,15 +1494,15 @@ pub struct ZoneLayout {
 ///
 /// ```
 /// # use pyrucast::models::ElementLayout;
-/// // Une table dit où lire. La physique déclare son ordre canonique
-/// // (`material_components`, `element_state_reads`), la zone le traduit.
+/// // A table says where to read. The physics declares its canonical order
+/// // (`material_components`, `element_state_reads`), the zone translates it.
 /// let lay = ElementLayout {
 ///     material: vec![1, 0],
 ///     optional_material: Vec::new(),
 ///     state: Vec::new(),
 /// };
 /// let ligne = [0.3, 210_000.0];
-/// // `E` est déclaré en premier, mais rangé en second dans ce champ-là.
+/// // `E` is declared first, but stored second in that particular field.
 /// assert_eq!(ligne[lay.material[0] as usize], 210_000.0);
 /// ```
 pub struct ElementLayout {
@@ -1530,7 +1529,7 @@ pub struct ElementLayout {
 ///
 /// ```
 /// # use pyrucast::models::KernelState;
-/// // Ce qu'une raideur reçoit : rien de plus que son matériau.
+/// // What a stiffness receives: nothing more than its material.
 /// let inputs = KernelState::MaterialOnly;
 /// assert!(matches!(inputs, KernelState::MaterialOnly));
 /// ```
@@ -1597,8 +1596,8 @@ pub enum KernelState<'a> {
 /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
 /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
-/// // Matière et comportement sont **une seule** capacité : le matériau
-/// // paramètre la loi de comportement, il n'a pas de sens sans elle.
+/// // Matter and behaviour are **one single** capability: the material
+/// // parameterises the constitutive law, it has no meaning without it.
 /// let d = volume.as_kind().as_domain().unwrap();
 /// assert_eq!(d.material_components(), vec!["k".to_string()]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -1820,8 +1819,8 @@ pub trait Domain: Sync {
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
 /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
 /// # let volume = SubModel::heat_conduction(zone).unwrap();
-/// // La conduction intègre **et** a une loi ; un appui ne fait ni l'un ni
-/// // l'autre. C'est un fait de compilation, non une erreur d'exécution.
+/// // Conduction integrates **and** has a law; a support does neither. It is
+/// // a compile-time fact, not a run-time error.
 /// assert!(volume.as_kind().as_domain().is_some());
 /// assert!(volume.as_kind().as_behavior().is_some());
 /// assert!(appui.as_kind().as_domain().is_none());
@@ -1916,7 +1915,7 @@ pub trait Behavior: Domain {
     ///
     /// It exists so that `prev` is **always** a real field. The alternative —
     /// an `Option` threaded down to the Gauss point — made every physics ask
-    /// « is there a state yet? » some tens of millions of times per solve, to
+    /// "is there a state yet?" some tens of millions of times per solve, to
     /// answer the same thing every time; and it is a question about the *step*,
     /// not about the point. The field has to be allocated for the step's output
     /// anyway, so materializing it costs one buffer that was already coming.
@@ -2090,19 +2089,19 @@ pub trait Behavior: Domain {
 /// ```
 /// # use pyrucast::ops::model;
 /// # use pyrucast::named::Named;
-/// // L'opérateur produit est une fonction libre ordinaire.
+/// // The operator produced is an ordinary free function.
 /// assert_eq!(pyrucast::atoms::ElementType::from_name("SEG2").is_some(), true);
 /// ```
 #[macro_export]
 macro_rules! physics_operator {
 
-    // ── Alias : une façade nommée par-dessus un opérateur générique ─────────
+    // ── Alias: a named facade over a generic operator ───────────────────────
     //
-    // Les lois d'écoulement et d'endommagement sont des **attributs** d'une
-    // physique unique (cf. `models::plasticity::law`), pas des physiques de plus. Elles
-    // se lisent pourtant mieux nommées au site d'appel — `drucker_prager(fes,
-    // m)` plutôt que `plasticity_with_law(fes, m, PlasticLaw::DruckerPrager)`.
-    // La façade ne duplique rien : elle transmet à l'opérateur générique.
+    // Flow and damage laws are **attributes** of one single physics (cf.
+    // `models::plasticity::law`), not extra physics. They nonetheless read better
+    // named at the call site — `drucker_prager(fes, m)` rather than
+    // `plasticity_with_law(fes, m, PlasticLaw::DruckerPrager)`. The facade
+    // duplicates nothing: it forwards to the generic operator.
     (
         $(#[$rust_doc:meta])*
         pub fn $name:ident(fes $(, $arg:ident : $ty:ty)* $(,)?) = $target:path, $fixed:expr;
@@ -2136,13 +2135,13 @@ macro_rules! physics_operator {
             }
         } }
     };
-    // ── Physique portant sur un modèle cible ────────────────────────────────
+    // ── Physics bearing on a target model ───────────────────────────────────
     //
-    // Une charge n'introduit aucune inconnue : elle écrit dans la ligne duale
-    // d'une **autre** physique. Elle a donc besoin du modèle qu'elle charge —
-    // pour y vérifier que la ligne existe et pour en hériter la nature, que le
-    // nom de la ligne ne suffit pas à trancher. Le fespace reste en tête : il
-    // est ce qu'on balaie, et la cible n'est qu'un argument de plus.
+    // A load introduces no unknown: it writes into the dual row of **another**
+    // physics. It therefore needs the model it loads — to check there that the
+    // row exists and to inherit its nature, which the row name alone is not
+    // enough to settle. The fespace stays first: it is what one sweeps, and
+    // the target is only one more argument.
     (
         $(#[$rust_doc:meta])*
         pub fn $name:ident(fes, target $(, $arg:ident : $ty:ty)* $(,)?) via $sub:path;
@@ -2189,9 +2188,9 @@ macro_rules! physics_operator {
             fes: &$crate::containers::finite_element_space::FiniteElementSpace,
             $($arg: $ty,)*
         ) -> $crate::error::Result<$crate::containers::model::Model> {
-            // Un argument non-`Copy` (`Vec<(String, String)>`) serait déplacé
-            // à la première zone : la fermeture est `FnMut`, elle en voit
-            // plusieurs. On clone donc, ce qui ne coûte rien sur les énumérés.
+            // A non-`Copy` argument (`Vec<(String, String)>`) would be moved at
+            // the first zone: the closure is `FnMut`, it sees several. So we
+            // clone, which costs nothing on the enums.
             #[allow(clippy::clone_on_copy)]
             $crate::ops::model::spanning(fes, |zone| $sub(zone $(, $arg.clone())*))
         }
@@ -2200,8 +2199,8 @@ macro_rules! physics_operator {
         ::paste::paste! {
         /// The Python face of this physics — generated, never hand-written.
         pub mod [<$name _py>] {
-            // Les types des arguments sont écrits dans la portée du fichier de
-            // la physique ; une physique sans argument n'en importe aucun.
+            // The argument types are written in the scope of the physics' own
+            // file; a physics without arguments imports none.
             #[allow(unused_imports)]
             use super::*;
 

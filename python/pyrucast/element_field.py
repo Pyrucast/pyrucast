@@ -1,8 +1,8 @@
-"""Opérateurs produisant un champ aux points de Gauss — miroir de
+"""Operators producing a field at the Gauss points — mirror of
 ``ops::element_field``.
 
-Cinématique (gradient, déformation et ses variantes structurales,
-interpolation aux points de Gauss, dilatation thermique), données matériau,
+Kinematics (gradient, strain and its structural variants, interpolation to the
+Gauss points, thermal expansion), material data,
 et intégration de la loi de comportement.
 """
 

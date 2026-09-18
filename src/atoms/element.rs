@@ -58,8 +58,8 @@ use crate::handle::Handle;
 /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let el = Element::new(zone.clone(), 0).unwrap();
-/// // Une vue sur **une** maille de la zone : elle donne accès aux formes,
-/// // au jacobien et à B sans jamais matérialiser de tableau par maille.
+/// // A view on **one** cell of the zone: it gives access to the shapes, the
+/// // Jacobian and B without ever materializing a per-cell array.
 /// for el in fes.elements(0)? {
 ///     assert!((el.det_jacobian(0)? - 4.0).abs() < 1e-12);
 /// }
@@ -89,7 +89,7 @@ impl Element {
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let el = Element::new(zone.clone(), 0).unwrap();
-    /// // Une vue légère : elle ne copie rien, elle tient la zone par son handle.
+    /// // A light view: it copies nothing, it holds the zone by its handle.
     /// let el = Element::new(zone.clone(), 0)?;
     /// assert_eq!(el.index(), 0);
     /// assert!(Element::new(zone.clone(), 7).is_err());
@@ -122,7 +122,7 @@ impl Element {
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let el = Element::new(zone.clone(), 0).unwrap();
-    /// assert_eq!(el.index(), 0); // rang de la maille dans sa zone
+    /// assert_eq!(el.index(), 0); // the cell's rank in its zone
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn index(&self) -> usize {
@@ -147,7 +147,7 @@ impl Element {
     /// # let zone = fes.get(0).unwrap();
     /// # let el = Element::new(zone.clone(), 0).unwrap();
     /// # use pyrucast::handle::Handle as H;
-    /// assert!(H::same_object(&el.fespace(), &zone)); // partagé, pas copié
+    /// assert!(H::same_object(&el.fespace(), &zone)); // shared, not copied
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn fespace(&self) -> Handle<SubFiniteElementSpace> {
@@ -171,7 +171,7 @@ impl Element {
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let el = Element::new(zone.clone(), 0).unwrap();
-    /// // La maille géométrique sous-jacente — la connectivité, sans les
+    /// // The underlying geometric cell — the connectivity, without the
     /// // fonctions de forme.
     /// assert_eq!(el.cell()?.node_ids().len(), 3);
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -248,8 +248,8 @@ impl Element {
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let el = Element::new(zone.clone(), 0).unwrap();
-    /// // Un triangle est de dimension 2 dans son élément de référence ; il
-    /// // pourrait vivre dans un espace 3-D (coque) sans que cela change.
+    /// // A triangle has dimension 2 in its reference element; it could live in a
+    /// // 3-D space (a shell) without that changing.
     /// assert_eq!(el.ref_dim()?, 2);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -349,7 +349,7 @@ impl Element {
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let el = Element::new(zone.clone(), 0).unwrap();
-    /// // Les poids somment à l'aire de référence — 1/2 pour un triangle.
+    /// // The weights sum to the reference area — 1/2 for a triangle.
     /// let total: f64 = (0..el.gauss_count()).map(|g| el.gauss_weight(g).unwrap()).sum();
     /// assert!((total - 0.5).abs() < 1e-12);
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -401,7 +401,7 @@ impl Element {
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let el = Element::new(zone.clone(), 0).unwrap();
-    /// assert_eq!(el.dn_at_g(0)?.len(), 3 * 2); // ∂N_i/∂ξ_k à plat
+    /// assert_eq!(el.dn_at_g(0)?.len(), 3 * 2); // ∂N_i/∂ξ_k, flattened
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn dn_at_g(&self, g: usize) -> Result<Vec<f64>> {
@@ -427,7 +427,7 @@ impl Element {
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let el = Element::new(zone.clone(), 0).unwrap();
-    /// // Le triangle (0,0), (2,0), (0,2) : J = 2·I, à plat en ligne-major.
+    /// // The triangle (0,0), (2,0), (0,2): J = 2·I, flattened row-major.
     /// assert_eq!(el.jacobian(0)?, vec![2.0, 0.0, 0.0, 2.0]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -452,7 +452,7 @@ impl Element {
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let el = Element::new(zone.clone(), 0).unwrap();
-    /// // |J| = 4 en tout point : le mapping est affine.
+    /// // |J| = 4 at every point: the mapping is affine.
     /// assert!((el.det_jacobian(0)? - 4.0).abs() < 1e-12);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -478,7 +478,7 @@ impl Element {
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let el = Element::new(zone.clone(), 0).unwrap();
-    /// // La matrice B, calculée à la volée. Ses lignes somment au vecteur nul :
+    /// // The B matrix, computed on the fly. Its rows sum to the null vector:
     /// // la partition de l'unité, dérivée.
     /// let b = el.dn_dx(0)?;
     /// assert!((b[0] + b[2] + b[4]).abs() < 1e-12);
@@ -489,12 +489,12 @@ impl Element {
     }
 }
 
-/// Structure, **sans verrou** : l'espace EF porteur et l'indice.
+/// Structure, **without a lock**: the carrying FE space and the index.
 ///
-/// Le type d'élément demanderait de lire le sous-espace, donc de prendre un
-/// guard — ce qu'un affichage de diagnostic ne doit pas faire : `{:?}` s'écrit
-/// dans un message d'erreur ou une trace, parfois en tenant précisément le
-/// verrou en cause. Ces informations vivent dans `dump`, appelé en connaissance
+/// The element type would require reading the subspace, hence taking a guard —
+/// which a diagnostic display must not do: `{:?}` is written in an error
+/// message or a trace, sometimes while holding precisely the lock at fault.
+/// That information lives in `dump`, called knowingly.
 /// de cause.
 impl fmt::Debug for Element {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -505,12 +505,12 @@ impl fmt::Debug for Element {
     }
 }
 
-/// Résumé, **sans verrou** : `Element #0 @ <SubFiniteElementSpace #ea6020>`.
+/// Summary, **without a lock**: `Element #0 @ <SubFiniteElementSpace #ea6020>`.
 ///
-/// Le type d'élément exigeait d'aller le lire dans le sous-espace. Un `Element`
-/// n'est qu'une vue — un handle et un indice — et son affichage court ne doit
-/// pas pouvoir bloquer : le handle s'imprime sans toucher à l'objet, par choix
-/// délibéré (voir `Handle`), et cette prudence vaut aussi pour ses vues.
+/// The element type would have to be read from the subspace. An `Element` is
+/// only a view — a handle and an index — and its short display must not be
+/// able to block: the handle prints without touching the object, by deliberate
+/// choice (see `Handle`), and that caution holds for its views too.
 impl fmt::Display for Element {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Element #{} @ {}", self.idx, self.fespace)
@@ -548,8 +548,8 @@ impl crate::dump::Dump for Element {
 /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let el = Element::new(zone.clone(), 0).unwrap();
-/// // Ce que rend `FiniteElementSpace::elements` : un parcours de la zone,
-/// // maille par maille, sans allocation par élément.
+/// // What `FiniteElementSpace::elements` returns: a walk over the zone, cell
+/// // by cell, without a per-element allocation.
 /// let els: Vec<_> = fes.elements(0)?.collect();
 /// assert_eq!(els.len(), 1);
 /// # Ok::<(), pyrucast::PyrucastError>(())

@@ -52,9 +52,9 @@ use serde::{Deserialize, Serialize};
 ///
 /// ```
 /// # use pyrucast::models::beam::{self, BeamModel};
-/// // La configuration se **lit sur la géométrie** : la dimension de
-/// // l'espace décide du nombre de DDL par nœud.
-/// assert_eq!(BeamModel::Planar1d.dofs_per_node(), 2); // flèche, rotation
+/// // The configuration is **read off the geometry**: the dimension of the
+/// // space decides the number of DOFs per node.
+/// assert_eq!(BeamModel::Planar1d.dofs_per_node(), 2); // deflection, rotation
 /// assert_eq!(BeamModel::Frame2d.dofs_per_node(), 3);
 /// assert_eq!(BeamModel::Frame3d.dofs_per_node(), 6);
 /// ```
@@ -106,8 +106,8 @@ impl BeamModel {
     ///
     /// ```
     /// # use pyrucast::models::beam::{self, BeamModel};
-    /// // Une poutre plane porte flèche et rotation ; un portique spatial y
-    /// // ajoute l'axial, la torsion et la seconde flexion.
+    /// // A planar beam carries deflection and rotation; a spatial frame adds
+    /// // the axial, the torsion and the second bending.
     /// assert_eq!(BeamModel::Planar1d.primal().len(), 2);
     /// assert_eq!(BeamModel::Frame3d.primal().len(), 6);
     /// ```
@@ -123,7 +123,7 @@ impl BeamModel {
     ///
     /// ```
     /// # use pyrucast::models::beam::{self, BeamModel};
-    /// // Autant de duales que de primales, appariées **par position**.
+    /// // As many duals as primals, paired **by position**.
     /// assert_eq!(BeamModel::Frame2d.dual().len(), BeamModel::Frame2d.primal().len());
     /// ```
     pub fn dual(self) -> &'static [&'static str] {
@@ -144,8 +144,8 @@ impl BeamModel {
     /// ```
     /// # use pyrucast::models::beam::{self, BeamModel};
     /// assert_eq!(BeamModel::Planar1d.strains(), &["kappa", "gamma"]);
-    /// // Les efforts de section leur sont **appariés par position** : la
-    /// // théorie qui n'a pas de cisaillement s'arrête simplement plus tôt.
+    /// // The section forces are **paired with them by position**: the theory
+    /// // that has no shear simply stops earlier.
     /// assert_eq!(BeamModel::Frame2d.strains()[0], "eps");
     /// assert_eq!(BeamModel::Frame3d.strains().len(), 6);
     /// ```
@@ -182,16 +182,16 @@ impl std::fmt::Display for BeamModel {
 ///
 /// ```
 /// # use pyrucast::models::beam::{self, BeamModel};
-/// // `gas = None` retire la souplesse de cisaillement et redonne la
-/// // matrice d'Euler-Bernoulli — une seule dérivation pour les deux
-/// // théories. Ses termes classiques : 12EI/L³ et 4EI/L.
+/// // `gas = None` removes the shear flexibility and gives back the
+/// // Euler-Bernoulli matrix — a single derivation for both theories. Its
+/// // classic terms: 12EI/L³ and 4EI/L.
 /// let k = beam::bending_4x4(2.0, None, 1.0);
 /// assert!((k[0][0] - 24.0).abs() < 1e-9);
 /// assert!((k[1][1] - 8.0).abs() < 1e-9);
-/// // Elle est singulière : une **translation d'ensemble** — les DDL étant
-/// // [w_A, θ_A, w_B, θ_B], le mode (1, 0, 1, 0) — n'engendre aucune force.
+/// // It is singular: a **whole-body translation** — the DOFs being
+/// // [w_A, θ_A, w_B, θ_B], the mode (1, 0, 1, 0) — generates no force.
 /// assert!((k[0][0] + k[0][2]).abs() < 1e-9);
-/// // Avec cisaillement, elle s'assouplit.
+/// // With shear, it softens.
 /// assert!(beam::bending_4x4(2.0, Some(1.0), 1.0)[0][0] < k[0][0]);
 /// ```
 pub fn bending_4x4(ei: f64, gas: Option<f64>, l: f64) -> [[f64; 4]; 4] {
@@ -269,11 +269,11 @@ const GAUSS_01: [(f64, f64); 4] = [
 ///
 /// ```
 /// # use pyrucast::models::beam::{self, BeamModel};
-/// // Intégrée avec les **mêmes** fonctions de forme que la raideur, à
-/// // quatre points de Gauss : la quadrature est exacte et rien n'est
-/// // retranscrit à la main.
+/// // Integrated with the **same** shape functions as the stiffness, at four
+/// // Gauss points: the quadrature is exact and nothing is transcribed by
+/// // hand.
 /// let m = beam::mass_4x4(3.0, 0.0, 1.0, None, 2.0);
-/// // La somme des termes de translation redonne la masse totale ρA·L.
+/// // The sum of the translation terms gives back the total mass ρA·L.
 /// let masse: f64 = [0usize, 2].iter()
 ///     .flat_map(|&i| [0usize, 2].iter().map(move |&j| (i, j)))
 ///     .map(|(i, j)| m[i][j]).sum();
@@ -316,16 +316,16 @@ pub fn mass_4x4(rho_a: f64, rho_i: f64, ei: f64, gas: Option<f64>, l: f64) -> [[
 ///
 /// ```
 /// # use pyrucast::models::beam::{self, BeamModel};
-/// // Une rotation d'ensemble ne déforme rien : ni courbure, ni distorsion.
+/// // A whole-body rotation strains nothing: neither curvature nor distortion.
 /// let (k, g) = beam::section_strains(0.0, 2.0, &[0.0, 0.5, 1.0, 0.5], 0.5);
 /// assert!(k.abs() < 1e-12 && g.abs() < 1e-12);
-/// // La distorsion γ est **constante** le long de la travée — un effort
-/// // tranchant constant sur une travée non chargée.
+/// // The distortion γ is **constant** along the span — a constant shear force
+/// // on an unloaded span.
 /// let d = [0.0, 0.0, 1.0, 0.0];
 /// let a = beam::section_strains(0.5, 2.0, &d, 0.1).1;
 /// let b = beam::section_strains(0.5, 2.0, &d, 0.9).1;
 /// assert!((a - b).abs() < 1e-12);
-/// // La courbure, elle, varie : c'est ce que `M' = V` exige.
+/// // The curvature, on the other hand, varies: that is what `M' = V` demands.
 /// assert!((beam::section_strains(0.5, 2.0, &d, 0.1).0
 ///          - beam::section_strains(0.5, 2.0, &d, 0.9).0).abs() > 1e-9);
 /// ```
@@ -348,15 +348,15 @@ pub fn section_strains(phi: f64, l: f64, d: &[f64; 4], xi: f64) -> (f64, f64) {
 ///
 /// ```
 /// # use pyrucast::models::beam::{self, BeamModel};
-/// // Les déformations sont `B · d` : l'une des deux écritures est la même
-/// // que l'autre, et c'est celle-ci que la transposée réclame.
+/// // The strains are `B · d`: either writing is the same as the other, and
+/// // this is the one the transpose calls for.
 /// let d = [0.1, -0.2, 0.5, 0.3];
 /// let b = beam::bending_b(0.7, 2.0, 0.3);
 /// let (kappa, gamma) = beam::section_strains(0.7, 2.0, &d, 0.3);
 /// assert!(((0..4).map(|i| b[0][i] * d[i]).sum::<f64>() - kappa).abs() < 1e-15);
 /// assert!(((0..4).map(|i| b[1][i] * d[i]).sum::<f64>() - gamma).abs() < 1e-15);
-/// // Sans souplesse de cisaillement la ligne de distorsion est **nulle**,
-/// // ce qui est l'énoncé même d'Euler-Bernoulli.
+/// // Without shear flexibility the distortion row is **zero**, which is the
+/// // very statement of Euler-Bernoulli.
 /// assert!(beam::bending_b(0.0, 2.0, 0.3)[1].iter().all(|v| v.abs() < 1e-15));
 /// ```
 pub fn bending_b(phi: f64, l: f64, xi: f64) -> [[f64; 4]; 2] {
@@ -390,10 +390,10 @@ pub fn bending_b(phi: f64, l: f64, xi: f64) -> [[f64; 4]; 2] {
 ///
 /// ```
 /// # use pyrucast::models::beam::{self, BeamModel};
-/// // Φ = 12EI/(G·A_s·L²), le rapport dont dépend tout l'élément.
-/// assert_eq!(beam::phi(1.0, None, 2.0), 0.0); // pas de souplesse de cisaillement
+/// // Φ = 12EI/(G·A_s·L²), the ratio the whole element depends on.
+/// assert_eq!(beam::phi(1.0, None, 2.0), 0.0); // no shear flexibility
 /// assert!((beam::phi(1.0, Some(3.0), 2.0) - 1.0).abs() < 1e-12);
-/// // Il s'efface quand la poutre s'allonge : la théorie mince est la limite.
+/// // It fades as the beam lengthens: the thin theory is the limit.
 /// assert!(beam::phi(1.0, Some(3.0), 100.0) < 1e-3);
 /// ```
 pub fn phi(ei: f64, gas: Option<f64>, l: f64) -> f64 {
@@ -416,8 +416,8 @@ pub fn phi(ei: f64, gas: Option<f64>, l: f64) -> f64 {
 ///
 /// ```
 /// # use pyrucast::models::beam::{self, BeamModel};
-/// // Six lignes sur douze colonnes : la taille du portique spatial, celle
-/// // qui contient les deux autres.
+/// // Six rows by twelve columns: the size of the spatial frame, the one that
+/// // contains the other two.
 /// let b: beam::BeamB = [[0.0; 12]; 6];
 /// assert_eq!(b.len(), BeamModel::Frame3d.strains().len());
 /// assert_eq!(b[0].len(), 2 * BeamModel::Frame3d.dofs_per_node());
@@ -445,15 +445,15 @@ pub type BeamB = [[f64; 12]; 6];
 ///
 /// ```
 /// # use pyrucast::models::beam::{self, BeamModel};
-/// // `B · d` **est** ce que `section_strains` calcule : la configuration
-/// // 1-D n'est rien d'autre que le bloc de flexion.
+/// // `B · d` **is** what `section_strains` computes: the 1-D configuration is
+/// // nothing but the bending block.
 /// let mut b: beam::BeamB = [[0.0; 12]; 6];
 /// beam::b_into(BeamModel::Planar1d, &[0.0], &[2.0], [0.8, 0.0], 0.3, &mut b);
 /// let d = [0.1, -0.2, 0.5, 0.3];
 /// let (kappa, _) = beam::section_strains(0.8, 2.0, &d, 0.3);
 /// assert!(((0..4).map(|i| b[0][i] * d[i]).sum::<f64>() - kappa).abs() < 1e-15);
-/// // Un mouvement de **corps rigide** ne déforme rien : le portique plan
-/// // translaté en bloc ne s'allonge, ne fléchit ni ne distord.
+/// // A **rigid-body** motion strains nothing: the planar frame translated as
+/// // a block neither stretches, bends nor distorts.
 /// beam::b_into(BeamModel::Frame2d, &[0.0, 0.0], &[3.0, 4.0], [0.5, 0.0], 0.4, &mut b);
 /// let t = [1.0, 2.0, 0.0, 1.0, 2.0, 0.0];
 /// for row in &b[..3] {
@@ -567,13 +567,13 @@ pub(crate) fn internal_force_into(
 ) {
     let n_dof = 2 * model.dofs_per_node();
     let (xa, xb) = (geom.node_coord(0), geom.node_coord(1));
-    // Le tampon vit hors de la boucle des points de Gauss, comme partout
-    // ailleurs : `b_into` réécrit tout le bloc qu'il occupe.
+    // The buffer lives outside the Gauss-point loop, as everywhere else:
+    // `b_into` rewrites the whole block it occupies.
     let mut b: BeamB = [[0.0; 12]; 6];
     for g in 0..geom.n_gauss {
         let row = stress.row(geom.cell, g);
-        // Absent, `Φ` vaut zéro — et cette absence *est* l'énoncé qu'il n'y a
-        // pas de souplesse au cisaillement, non un repli.
+        // Absent, `Φ` is zero — and that absence *is* the statement that there
+        // is no shear flexibility, not a fallback.
         let mut phi = [0.0_f64; 2];
         for (plane, &slot) in shear.iter().enumerate() {
             phi[plane] = row[slot as usize];

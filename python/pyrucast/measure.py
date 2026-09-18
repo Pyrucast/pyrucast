@@ -1,6 +1,6 @@
 """Mesures — miroir de ``ops::measure`` (Rust).
 
-Les opérateurs qui rendent un nombre et non un conteneur : intégrale sur un
+The operators returning a number rather than a container: integral over a
 espace éléments finis, normes et produits scalaires globaux.
 """
 

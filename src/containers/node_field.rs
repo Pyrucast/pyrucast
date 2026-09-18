@@ -96,13 +96,13 @@ use std::ops::{Index, IndexMut};
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
-/// // Les valeurs aux **nœuds** d'un support POI1 : une zone de champ.
+/// // The values at the **nodes** of a POI1 support: one field zone.
 /// let support = mesh::poi1_from_nodes(&n)?;
 /// let mut f = SubNodeField::from_poi1(&support.get(0)?, vec!["T".into()])?;
 /// f.set_value(n[0].id(), "T", 20.0)?;
 /// assert_eq!(f.node_count(), 3);
 /// assert_eq!(f.value(n[0].id(), "T")?, 20.0);
-/// // Un nœud hors support est une erreur, non un zéro.
+/// // A node outside the support is an error, not a zero.
 /// # let dehors = Node::create_in(coords.clone(), &[9.0, 9.0])?;
 /// assert!(f.value(dehors.id(), "T").is_err());
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -143,7 +143,7 @@ impl SubNodeField {
     /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
     /// # let poi1 = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut u = SubNodeField::from_poi1(&poi1, vec!["UX".into(), "UY".into()]).unwrap();
-    /// // Le support doit être un POI1 : un nœud par cellule, l'ordre fait foi.
+    /// // The support must be a POI1: one node per cell, the order is authoritative.
     /// assert_eq!(u.node_count(), 2);
     /// ```
     pub fn from_poi1(submesh: &Handle<SubMesh>, components: Vec<String>) -> Result<Self> {
@@ -206,9 +206,9 @@ impl SubNodeField {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # use pyrucast::handle::Handle as H;
-    /// // Sur un TRI3, le champ se pose sur le **compagnon POI1 canonique** du
-    /// // sous-maillage, matérialisé une fois et partagé : deux champs bâtis
-    /// // ainsi s'apparient sous `same_support`.
+    /// // On a TRI3, the field settles on the sub-mesh's **canonical POI1
+    /// // companion**, materialised once and shared: two fields built that way
+    /// // match under `same_support`.
     /// let zone = maillage.get(0)?;
     /// let a = SubNodeField::from_support(&zone, vec!["T".into()])?;
     /// let b = SubNodeField::from_support(&zone, vec!["q".into()])?;
@@ -308,7 +308,7 @@ impl SubNodeField {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// let f = SubNodeField::from_support(&maillage.get(0)?, vec!["T".into()])?;
-    /// // Toujours un POI1 : c'est le nuage de nœuds qui porte les valeurs.
+    /// // Always a POI1: it is the node cloud that carries the values.
     /// assert_eq!(f.support().read().element_type(), ElementType::POI1);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -330,8 +330,8 @@ impl SubNodeField {
     /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
     /// # let poi1 = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut u = SubNodeField::from_poi1(&poi1, vec!["UX".into(), "UY".into()]).unwrap();
-    /// // Accès par **indices** : position dans le support, position dans les
-    /// // composantes. La forme rapide, celle des boucles d'assemblage.
+    /// // Access by **indices**: position in the support, position in the
+    /// // components. The fast form, the one of the assembly loops.
     /// u.set(0, 1, 2.5).unwrap();
     /// assert_eq!(u.get(0, 1).unwrap(), 2.5);
     /// ```
@@ -378,8 +378,8 @@ impl SubNodeField {
     /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
     /// # let poi1 = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut u = SubNodeField::from_poi1(&poi1, vec!["UX".into(), "UY".into()]).unwrap();
-    /// // Même chose, mais le nœud est désigné par son id — une recherche de
-    /// // plus, à éviter dans une boucle serrée.
+    /// // Same thing, but the node is designated by its id — one lookup more,
+    /// // to be avoided in a tight loop.
     /// u.set_by_node(a.id(), 0, 1.0).unwrap();
     /// assert_eq!(u.get_by_node(a.id(), 0).unwrap(), 1.0);
     /// ```
@@ -437,10 +437,10 @@ impl SubNodeField {
     /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
     /// # let poi1 = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut u = SubNodeField::from_poi1(&poi1, vec!["UX".into(), "UY".into()]).unwrap();
-    /// // La position d'un nœud dans le support, dans l'ordre du POI1.
+    /// // A node's position in the support, in the POI1 order.
     /// assert_eq!(u.index_of(a.id()), Some(0));
     /// assert_eq!(u.index_of(b.id()), Some(1));
-    /// // Un nœud étranger au support : None, pas une erreur.
+    /// // A node foreign to the support: None, not an error.
     /// let ailleurs = Node::create_in(coords.clone(), &[9.0, 9.0]).unwrap();
     /// assert_eq!(u.index_of(ailleurs.id()), None);
     /// ```
@@ -468,8 +468,8 @@ impl SubNodeField {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
-    /// // La recherche O(1) **sans reprendre le verrou** : pour une boucle
-    /// // serrée qui résout beaucoup d'identifiants sous un seul guard.
+    /// // The O(1) lookup **without retaking the lock**: for a tight loop
+    /// // resolving many identifiers under a single guard.
     /// let f = SubNodeField::from_support(&maillage.get(0)?, vec!["T".into()])?;
     /// let support = f.support();
     /// let guard = support.read();
@@ -537,7 +537,7 @@ impl SubNodeField {
     /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
     /// # let poi1 = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut u = SubNodeField::from_poi1(&poi1, vec!["UX".into(), "UY".into()]).unwrap();
-    /// // Le support vu comme agrégat — la cible de projection d'un autre champ.
+    /// // The support seen as an aggregate — another field's projection target.
     /// assert_eq!(u.support_mesh().unwrap().cell_count(), 2);
     /// ```
     pub fn support_mesh(&self) -> Result<Mesh> {
@@ -561,7 +561,7 @@ impl SubNodeField {
     /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
     /// # let poi1 = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut u = SubNodeField::from_poi1(&poi1, vec!["UX".into(), "UY".into()]).unwrap();
-    /// // Toutes les composantes d'un nœud, contiguës en mémoire.
+    /// // All of a node's components, contiguous in memory.
     /// u.set(0, 0, 1.0).unwrap();
     /// u.set(0, 1, 2.0).unwrap();
     /// assert_eq!(u.node_values(0).unwrap(), &[1.0, 2.0]);
@@ -644,7 +644,7 @@ impl SubNodeField {
     /// # let mut u = SubNodeField::from_poi1(&poi1, vec!["UX".into(), "UY".into()]).unwrap();
     /// u.set_value(b.id(), "UX", -0.5).unwrap();
     /// assert_eq!(u.value(b.id(), "UX").unwrap(), -0.5);
-    /// // Une composante inconnue est une erreur, pas un silence.
+    /// // An unknown component is an error, not a silence.
     /// assert!(u.set_value(b.id(), "UZ", 0.0).is_err());
     /// ```
     pub fn set_value(&mut self, nid: NodeId, component: &str, value: f64) -> Result<()> {
@@ -660,7 +660,7 @@ impl SubNodeField {
     // Scalar per-component operations (`add_to_component`, …) come from
     // the [`crate::containers::field::SubField`] trait.
 
-    // ── Réduction sur maillage ──────────────────────────────────────────────
+    // ── Reduction on a mesh ─────────────────────────────────────────────────
 
     /// Restrict this field to the nodes of `mesh`.
     ///
@@ -746,8 +746,8 @@ impl crate::dump::Dump for SubNodeField {
                 row
             })
             .collect();
-        // Le support, que le `Display` ne nomme pas : sans lui le niveau
-        // « contenu » en dirait moins que le niveau « structure ».
+        // The support, which `Display` does not name: without it the "content"
+        // level would say less than the "structure" level.
         format!(
             "{self}\n  support: {}\n{}",
             self.support,
@@ -808,10 +808,10 @@ impl Clone for SubNodeField {
 
 crate::impl_subfield_scalar_ops!(SubNodeField);
 
-// ─── Opérateurs field OP field (même support) ───────────────────────────────
+// ─── field OP field operators (same support) ────────────────────────────────
 //
-// `&a + &b` (et `a + b`) délèguent à `SubField::merge_components` (union des
-// composantes avec passthrough) ; faillible (même support exigé) ⇒ sortie
+// `&a + &b` (and `a + b`) delegate to `SubField::merge_components` (union of
+// the components with passthrough); fallible (same support required) ⇒ output
 // `Result<SubNodeField>`.
 
 crate::impl_subfield_field_ops!(SubNodeField);
@@ -847,8 +847,8 @@ crate::impl_subfield_field_ops!(SubNodeField);
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
-/// // L'agrégat : une zone par support. Deux physiques posées sur des
-/// // régions différentes cohabitent donc dans un seul champ.
+/// // The aggregate: one zone per support. Two physics laid on different
+/// // regions therefore cohabit in a single field.
 /// let support = mesh::poi1_from_nodes(&n)?;
 /// let f = NodeField::from_submesh(&support.get(0)?, vec!["T".into()])?;
 /// assert_eq!(f.len(), 1);
@@ -886,11 +886,11 @@ crate::impl_aggregate!(NodeField, SubNodeField, subfield, "subfield(s)", {
 });
 crate::impl_aggregate_dump!(NodeField);
 
-// ─── Opérateurs NodeField OP {NodeField, f64} ───────────────────────────────
+// ─── NodeField OP {NodeField, f64} operators ────────────────────────────────
 //
-// `&a + &b` (zone par zone, même décomposition) via `Field::merge_field` ;
-// `&a + 2.0` (diffusion scalaire) via `Field::combine_scalar`. Faillibles
-// (lecture dans le store, appariement des zones) ⇒ sortie `Result<NodeField>`.
+// `&a + &b` (zone by zone, same decomposition) via `Field::merge_field`;
+// `&a + 2.0` (scalar broadcast) via `Field::combine_scalar`. Fallible (reading
+// in the store, matching the zones) ⇒ output `Result<NodeField>`.
 
 crate::impl_field_ops!(NodeField);
 
@@ -924,7 +924,7 @@ impl NodeField {
     /// # let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
     /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap();
-    /// // Une zone par sous-maillage du support ; toutes les valeurs à zéro.
+    /// // One zone per sub-mesh of the support; all values at zero.
     /// let u = NodeField::new(&support, vec!["UX".into(), "UY".into()]).unwrap();
     /// assert_eq!(u.len(), support.len());
     /// assert_eq!(u.value(a.id(), "UX").unwrap(), 0.0);
@@ -958,8 +958,8 @@ impl NodeField {
     /// # let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
     /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap();
-    /// // Composantes **par zone** : le cas multiphysique, une liste par
-    /// // sous-maillage du support.
+    /// // Components **per zone**: the multiphysics case, one list per sub-mesh
+    /// // of the support.
     /// let deux = mesh::poi1_from_nodes(&[a.clone()]).unwrap()
     ///     .union(&mesh::poi1_from_nodes(&[b.clone()]).unwrap()).unwrap();
     /// # use pyrucast::containers::field::Field;
@@ -1000,7 +1000,7 @@ impl NodeField {
     /// # let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
     /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap();
-    /// // Depuis une **zone** plutôt qu'un agrégat : le champ n'en aura qu'une.
+    /// // From a **zone** rather than an aggregate: the field will have just one.
     /// let u = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
     /// assert_eq!(u.len(), 1);
     /// ```
@@ -1026,7 +1026,7 @@ impl NodeField {
     /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap();
     /// # use pyrucast::containers::node_field::SubNodeField;
-    /// // Remonter une zone en agrégat — ce qu'attendent les opérateurs.
+    /// // Lifting a zone into an aggregate — what the operators expect.
     /// let zone = SubNodeField::from_poi1(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
     /// assert_eq!(NodeField::from_sub(zone).len(), 1);
     /// ```
@@ -1076,7 +1076,7 @@ impl NodeField {
     /// let u = NodeField::new(&support, vec!["T".into()]).unwrap();
     /// u.get(0).unwrap().write().set_value(a.id(), "T", 20.0).unwrap();
     /// assert_eq!(u.value(a.id(), "T").unwrap(), 20.0);
-    /// // Un nœud du support jamais écrit vaut zéro.
+    /// // A support node that was never written is zero.
     /// assert_eq!(u.value(b.id(), "T").unwrap(), 0.0);
     /// ```
     pub fn value(&self, nid: NodeId, component: &str) -> Result<f64> {
@@ -1103,7 +1103,7 @@ impl NodeField {
     /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap();
     /// let u = NodeField::new(&support, vec!["T".into()]).unwrap();
-    /// // La variante qui distingue « absent du support » de « vaut zéro ».
+    /// // The variant that tells "absent from the support" from "is zero".
     /// assert_eq!(u.value_opt(a.id(), "T"), Some(0.0));
     /// let ailleurs = Node::create_in(coords.clone(), &[9.0, 9.0]).unwrap();
     /// assert_eq!(u.value_opt(ailleurs.id(), "T"), None);
@@ -1136,7 +1136,7 @@ impl NodeField {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap();
     /// let u = NodeField::new(&support, vec!["T".into()]).unwrap();
     /// u.get(0).unwrap().write().set_value(b.id(), "T", 1.5).unwrap();
-    /// // Lecture par lot, dans l'ordre demandé.
+    /// // Batch read, in the requested order.
     /// assert_eq!(u.values_at(&[a.id(), b.id()], "T").unwrap(), vec![0.0, 1.5]);
     /// ```
     pub fn values_at(&self, nodes: &[NodeId], component: &str) -> Result<Vec<f64>> {
@@ -1235,8 +1235,8 @@ impl NodeField {
     /// # let b = Node::create_in(coords.clone(), &[1.0, 0.0]).unwrap();
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap();
     /// let u = NodeField::new(&support, vec!["T".into()]).unwrap();
-    /// // Cohérence aux interfaces : un nœud partagé par deux zones doit y
-    /// // porter la même valeur pour chaque composante commune.
+    /// // Consistency at the interfaces: a node shared by two zones must carry
+    /// // the same value in both for every common component.
     /// u.check().unwrap();
     /// ```
     pub fn check(&self) -> Result<()> {
@@ -1344,8 +1344,8 @@ impl NodeField {
     /// let support = mesh::poi1_from_nodes(&n)?;
     /// let f = NodeField::from_submesh(&support.get(0)?, vec!["T".into()])?;
     /// f.get(0)?.write().set_value(n[1].id(), "T", 50.0)?;
-    /// // Dans l'ordre demandé. Un DDL qu'aucune zone ne définit lit **zéro** —
-    /// // le neutre naturel d'un second membre.
+    /// // In the requested order. A DOF no zone defines reads **zero** — the
+    /// // natural neutral of a right-hand side.
     /// let v = f.gather(&[(n[1].id(), "T".into()), (n[0].id(), "q".into())])?;
     /// assert_eq!(v, vec![50.0, 0.0]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -1386,11 +1386,11 @@ impl NodeField {
     /// # z.set_value(n[0].id(), "T", 10.0)?;
     /// # z.set_value(n[1].id(), "T", 50.0)?;
     /// # let f = NodeField::from_sub(z);
-    /// // Les mêmes valeurs que `gather`, sans une `String` par DDL.
+    /// // The same values as `gather`, without a `String` per DOF.
     /// let noms = vec!["T".to_string()];
     /// let cles = vec![dof_key(n[0].id(), 0), dof_key(n[1].id(), 0)];
     /// assert_eq!(f.gather_keys(&cles, &noms)?, vec![10.0, 50.0]);
-    /// // Un DDL qu'aucune zone ne définit vaut zéro, comme partout ailleurs.
+    /// // A DOF no zone defines is zero, as everywhere else.
     /// assert_eq!(f.gather_keys(&[dof_key(n[0].id(), 1)], &["absente".into()])?, vec![0.0]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -1435,8 +1435,8 @@ impl NodeField {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
-    /// // La réciproque de `gather` : ensemble, elles font le pont entre le
-    /// // champ abstrait et les vecteurs plats de l'algèbre linéaire.
+    /// // The inverse of `gather`: together they bridge the abstract field and
+    /// // the flat vectors of linear algebra.
     /// let dofs = vec![(n[0].id(), "T".to_string()), (n[1].id(), "T".to_string())];
     /// let f = NodeField::from_dof_values(coords.clone(), &dofs, &[10.0, 50.0])?;
     /// assert_eq!(f.gather(&dofs)?, vec![10.0, 50.0]);
@@ -2062,7 +2062,7 @@ mod tests {
         assert!(NodeField::new(&mesh, vec!["T".into(), "T".into()]).is_err());
     }
 
-    // ── Scalaires sur composante ──────────────────────────────────────────────
+    // ── Scalars on a component ────────────────────────────────────────────────
 
     #[test]
     fn component_scalar_ops() {
@@ -2117,7 +2117,7 @@ mod tests {
         assert_eq!(coords.read().refcount(nodes[0].id()), 2);
     }
 
-    // ── Opérateurs +,-,*,/ avec f64 ─────────────────────────────────────────
+    // ── +,-,*,/ operators with f64 ──────────────────────────────────────────
 
     #[test]
     fn operator_add_f64() {
@@ -2143,7 +2143,7 @@ mod tests {
         assert_eq!((f * 4.0 / 2.0).get(0, 0).unwrap(), 24.0);
     }
 
-    // ── Support : le champ ne porte aucun nœud ──────────────────────────────
+    // ── Support: the field carries no node ──────────────────────────────────
 
     /// Two triangles sharing an edge, in a one-zone mesh.
     fn two_triangles() -> (Handle<Coords>, Vec<Node>, Handle<SubMesh>) {
@@ -2169,12 +2169,12 @@ mod tests {
         assert!(f.support().read().is_sealed(), "c'est le compagnon POI1");
         assert_eq!(f.node_count(), 3);
 
-        // Un second champ sur la même zone retombe sur le même support.
+        // A second field on the same zone falls back on the same support.
         let g = SubNodeField::from_support(&zone, vec!["q".into()]).unwrap();
         assert!(Handle::same_object(&f.support(), &g.support()));
         assert!(f.same_support(&g));
 
-        // Les identifiants sont lus dans le support, pas recopiés.
+        // The identifiers are read in the support, not copied over.
         let support = f.support();
         let support = support.read();
         assert_eq!(f.nodes_with(&support), &[n[0].id(), n[1].id(), n[2].id()]);
@@ -2187,18 +2187,18 @@ mod tests {
         let mut avant = SubNodeField::from_support(&zone, vec!["T".into()]).unwrap();
         avant.set_value(n[0].id(), "T", 20.0).unwrap();
 
-        // Le maillage n'étant pas scellé, il peut encore grandir.
+        // The mesh not being sealed, it can still grow.
         zone.write()
             .add_cell(&[n[1].id(), n[3].id(), n[2].id()])
             .unwrap();
         let apres = SubNodeField::from_support(&zone, vec!["T".into()]).unwrap();
 
-        // Support neuf : les deux champs ne s'apparient plus…
+        // A fresh support: the two fields no longer match…
         assert!(!avant.same_support(&apres));
         assert_eq!(apres.node_count(), 4);
         assert!((&avant + &apres).is_err());
 
-        // …mais l'ancien n'est pas invalidé : il vit sur l'ancien nuage.
+        // …but the old one is not invalidated: it lives on the old cloud.
         assert_eq!(avant.node_count(), 3);
         assert_eq!(avant.value(n[0].id(), "T").unwrap(), 20.0);
         assert!(avant.value(n[3].id(), "T").is_err());

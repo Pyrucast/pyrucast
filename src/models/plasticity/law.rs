@@ -72,8 +72,8 @@ use serde::{Deserialize, Serialize};
 ///
 /// ```
 /// # use pyrucast::models::plasticity::law;
-/// // L'ordre interne de l'état : les hors-diagonaux sont des déformations
-/// // **tensorielles** ε_ij, non les doubles de l'ingénieur.
+/// // The state's internal order: the off-diagonals are **tensor** strains
+/// // ε_ij, not the engineer's doubles.
 /// assert_eq!(law::TENSOR_SUFFIXES, ["xx", "yy", "zz", "yz", "xz", "xy"]);
 /// ```
 pub const TENSOR_SUFFIXES: [&str; 6] = ["xx", "yy", "zz", "yz", "xz", "xy"];
@@ -86,8 +86,8 @@ pub const TENSOR_SUFFIXES: [&str; 6] = ["xx", "yy", "zz", "yz", "xz", "xy"];
 /// into an array, not allocated.
 /// ```
 /// # use pyrucast::models::plasticity::law::{PlasticLaw, MAX_INTERNAL_VARS};
-/// // Elle borne l'état interne de toutes les lois — la plus fournie est la
-/// // viscoplasticité de Chaboche endommageable.
+/// // It bounds the internal state of every law — the richest is damageable
+/// // Chaboche viscoplasticity.
 /// assert!(PlasticLaw::ALL
 ///     .iter()
 ///     .all(|l| l.internal_names().len() <= MAX_INTERNAL_VARS));
@@ -126,9 +126,9 @@ pub const MAX_INTERNAL_VARS: usize = 8;
 /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
 /// #                         vars: &[] };
-/// // Une loi déclare **elle-même** le matériau qu'elle exige et l'état
-/// // qu'elle porte : c'est ce qui permet d'en ajouter une sans toucher
-/// // au reste.
+/// // A law declares **by itself** the material it requires and the state it
+/// // carries: that is what makes it possible to add one without touching
+/// // anything else.
 /// assert!(PlasticLaw::Perfect.material_components().contains(&"sigma_y"));
 /// assert!(PlasticLaw::Perfect.internal_names().is_empty());
 /// assert_eq!(PlasticLaw::Gurson.internal_names(), vec!["porosity".to_string()]);
@@ -173,7 +173,7 @@ pub enum PlasticLaw {
 /// family, because the structure is what fixes its signature — a trial stress in,
 /// a [`PlasticStep`] out. That is also why
 /// [`ViscoplasticLemaitreChaboche`](PlasticLaw::ViscoplasticLemaitreChaboche),
-/// physically « viscoplasticity + ductile damage », lives here rather than with
+/// physically "viscoplasticity + ductile damage", lives here rather than with
 /// the damage laws: it is return-map-shaped. Its siblings are
 /// [`StatelessLawKind`](crate::models::elasticity::law::StatelessLawKind)
 /// (`σ = f(ε)`, no state) and
@@ -225,8 +225,8 @@ pub(crate) trait ReturnMapLawKind: Sync {
     /// This is how a law states that its rest state is **not** the zero state:
     /// Gurson's porosity starts at `f_0`, and a material that begins as a
     /// perfect solid never damages. The initial state is built once, before the
-    /// first step, so the law never has to tell « no state yet » from « state
-    /// that is zero » at a Gauss point.
+    /// first step, so the law never has to tell "no state yet" from "state
+    /// that is zero" at a Gauss point.
     fn initial_internal_sources(&self) -> &'static [&'static str] {
         &[]
     }
@@ -426,7 +426,7 @@ impl PlasticLaw {
     /// ```
     /// # use pyrucast::models::TangentSource;
     /// # use pyrucast::models::plasticity::law::PlasticLaw;
-    /// // Von Mises a sa forme fermée ; Drucker-Prager est dérivé numériquement.
+    /// // Von Mises has its closed form; Drucker-Prager is derived numerically.
     /// assert_eq!(PlasticLaw::Isotropic.tangent_source(), TangentSource::Analytic);
     /// assert_eq!(PlasticLaw::DruckerPrager.tangent_source(), TangentSource::Numerical);
     /// ```
@@ -480,7 +480,7 @@ impl PlasticLaw {
     /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
     /// #                         vars: &[] };
     /// # use pyrucast::named::Named;
-    /// // Réciproque exacte de `from_name`, pour les dix lois.
+    /// // Exact inverse of `from_name`, for the ten laws.
     /// assert!(PlasticLaw::ALL.iter()
     ///     .all(|l| PlasticLaw::from_name(l.name()) == Some(*l)));
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -528,7 +528,7 @@ impl PlasticLaw {
     /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
     /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
     /// #                         vars: &[] };
-    /// // La liste exhaustive, dont se servent la surface Python et les messages.
+    /// // The exhaustive list, used by the Python surface and the messages.
     /// assert_eq!(PlasticLaw::ALL.len(), 10);
     /// assert!(PlasticLaw::ALL.contains(&PlasticLaw::Perfect));
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -573,7 +573,7 @@ impl PlasticLaw {
     /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
     /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
     /// #                         vars: &[] };
-    /// // Perfect : un seuil constant. Isotropic : plus le module d'écrouissage.
+    /// // Perfect: a constant threshold. Isotropic: plus the hardening modulus.
     /// assert!(PlasticLaw::Perfect.material_components().contains(&"sigma_y"));
     /// assert!(PlasticLaw::Isotropic.material_components().contains(&"H"));
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -612,9 +612,9 @@ impl PlasticLaw {
     /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
     /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
     /// #                         vars: &[] };
-    /// // Ce que la loi porte **au-delà** de ε_p et p — rien pour la plupart.
+    /// // What the law carries **beyond** ε_p and p — nothing for most of them.
     /// assert!(PlasticLaw::Perfect.internal_names().is_empty());
-    /// // La porosité **est** l'état d'une loi de métal poreux.
+    /// // Porosity **is** the state of a porous-metal law.
     /// assert_eq!(PlasticLaw::Gurson.internal_names(), vec!["porosity".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -650,8 +650,8 @@ impl PlasticLaw {
     /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
     /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
     /// #                         vars: &[] };
-    /// // Une loi visqueuse exige l'incrément de temps ; intégrer sans lui,
-    /// // comme si la loi était instantanée, serait faux en silence.
+    /// // A viscous law requires the time increment; integrating without it,
+    /// // as if the law were instantaneous, would be silently wrong.
     /// assert!(!PlasticLaw::Perfect.is_viscous());
     /// assert!(PlasticLaw::CreepNorton.is_viscous());
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -690,20 +690,20 @@ impl PlasticLaw {
     /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
     /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
     /// #                         vars: &[] };
-    /// // Sous le seuil, la contrainte d'essai passe telle quelle.
+    /// // Below the threshold, the trial stress passes through unchanged.
     /// let sous = [100.0, 0.0, 0.0, 0.0, 0.0, 0.0];
     /// let pas = PlasticLaw::Perfect.return_map(&sous, &repos, &mat, None)?;
     /// assert_eq!(pas.sigma, sous);
     /// assert_eq!(pas.p, 0.0);
     ///
-    /// // Au-dessus, elle est **projetée** sur la surface de charge : von Mises
-    /// // sans écrouissage ramène exactement q à σ_y, et p devient non nul.
+    /// // Above it, it is **projected** onto the yield surface: von Mises
+    /// // without hardening brings q exactly back to σ_y, and p becomes non-zero.
     /// let au_dessus = [400.0, 0.0, 0.0, 0.0, 0.0, 0.0];
     /// let pas = PlasticLaw::Perfect.return_map(&au_dessus, &repos, &mat, None)?;
     /// assert!((tensor::von_mises_stress(&pas.sigma) - 250.0).abs() < 1e-6);
     /// assert!(pas.p > 0.0);
     ///
-    /// // Une loi visqueuse sans `dt` est refusée plutôt qu'approximée.
+    /// // A viscous law without `dt` is refused rather than approximated.
     /// assert!(PlasticLaw::CreepNorton.return_map(&sous, &repos, &mat, None).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -769,14 +769,14 @@ impl std::fmt::Display for PlasticLaw {
 /// # let materiau = SubElementField::from_uniform_per_component(
 /// #     fes.get(0)?, vec!["E".into(), "nu".into(), "sigma_y".into()],
 /// #     &[210_000.0, 0.3, 250.0])?;
-/// // Les constantes élastiques sont **pré-calculées** — toute loi en a
-/// // besoin — le reste se cherche par nom, de sorte qu'ajouter une loi
-/// // n'ajoute aucune plomberie ici.
+/// // The elastic constants are **pre-computed** — every law needs them —
+/// // the rest is looked up by name, so that adding a law adds no plumbing
+/// // here.
 /// # let idx_mat: Vec<u32> = (0..materiau.point_values(0, 0).unwrap().len() as u32).collect();
 /// # let opt_mat = [pyrucast::containers::field::ABSENT_COMPONENT; 8];
 /// let m = MatParams::new(materiau.point_values(0, 0)?, &idx_mat, &opt_mat);
 /// assert_eq!((m.lambda, m.mu), elastic::lame(210_000.0, 0.3));
-/// assert_eq!(m.get(2), 250.0); // σ_y, troisième du contrat
+/// assert_eq!(m.get(2), 250.0); // σ_y, third of the contract
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub struct MatParams<'a> {
@@ -818,12 +818,12 @@ impl<'a> MatParams<'a> {
     /// # let materiau = SubElementField::from_uniform_per_component(
     /// #     fes.get(0)?, vec!["E".into(), "nu".into(), "sigma_y".into()],
     /// #     &[210_000.0, 0.3, 250.0])?;
-    /// // La résolution a lieu **une fois par zone** ; le noyau, lui, indexe.
+    /// // Resolution happens **once per zone**; the kernel itself indexes.
     /// let idx = materiau.resolve_components(
     ///     PlasticLaw::Perfect.material_components(), "material")?;
     /// let m = MatParams::new(materiau.point_values(0, 0)?, &idx, &[]);
     /// assert_eq!((m.lambda, m.mu), elastic::lame(210_000.0, 0.3));
-    /// assert_eq!(m.get(2), 250.0); // σ_y, troisième du contrat
+    /// assert_eq!(m.get(2), 250.0); // σ_y, third of the contract
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(row: &'a [f64], idx: &'a [u32], opt_idx: &'a [u32]) -> Self {
@@ -859,7 +859,7 @@ impl<'a> MatParams<'a> {
     /// let idx = materiau.resolve_components(
     ///     PlasticLaw::Perfect.material_components(), "material")?;
     /// let m = MatParams::new(materiau.point_values(0, 0)?, &idx, &[]);
-    /// // Le contrat de la loi est `["E", "nu", "sigma_y"]`.
+    /// // The law's contract is `["E", "nu", "sigma_y"]`.
     /// assert_eq!(m.get(2), 250.0);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -933,7 +933,7 @@ impl<'a> MatParams<'a> {
     /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
     /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
     /// #                         vars: &[] };
-    /// // K = λ + 2μ/3 — ce dont a besoin toute loi sensible à la pression.
+    /// // K = λ + 2μ/3 — what every pressure-sensitive law needs.
     /// assert!((mat.bulk() - (mat.lambda + 2.0 * mat.mu / 3.0)).abs() < 1e-9);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -971,9 +971,9 @@ impl<'a> MatParams<'a> {
 /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
 /// #                         vars: &[] };
-/// // L'état au début du pas A : c'est de là que part chaque intégration.
+/// // The state at the start of step A: every integration starts from there.
 /// assert_eq!(repos.p, 0.0);
-/// assert_eq!(repos.var(0), 0.0); // aucune variable interne portée
+/// assert_eq!(repos.var(0), 0.0); // no internal variable carried
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Clone, Default)]
@@ -1025,8 +1025,8 @@ impl PrevState<'_> {
     /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
     /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
     /// #                         vars: &[] };
-    /// // Rend `0` plutôt que d'échouer quand l'état ne porte pas la variable —
-    /// // ce qui est le cas au premier pas, où A est la configuration de départ.
+    /// // Returns `0` rather than failing when the state does not carry the
+    /// // variable — which is the case at the first step, where A is the start.
     /// assert_eq!(repos.var(0), 0.0);
     /// let avec = PrevState { vars: &[0.02], ..repos };
     /// assert_eq!(avec.var(0), 0.02);
@@ -1063,8 +1063,8 @@ impl PrevState<'_> {
 /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
 /// #                         vars: &[] };
-/// // Ce qu'une loi rend en fin de pas B : contrainte, déformation
-/// // plastique, plasticité cumulée, et ses variables internes.
+/// // What a law returns at the end of step B: stress, plastic strain,
+/// // cumulated plasticity, and its internal variables.
 /// let trial = [100.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 /// let pas = PlasticStep::elastic(&trial, &repos);
 /// assert_eq!(pas.sigma, trial);
@@ -1112,7 +1112,7 @@ impl PlasticStep {
     /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
     /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
     /// #                         vars: &[] };
-    /// // Un pas **élastique** : la contrainte d'essai tient, rien n'évolue.
+    /// // An **elastic** step: the trial stress holds, nothing evolves.
     /// let trial = [100.0, 0.0, 0.0, 0.0, 0.0, 0.0];
     /// let pas = PlasticStep::elastic(&trial, &repos);
     /// assert_eq!((pas.sigma, pas.eps_p, pas.p), (trial, repos.eps_p, repos.p));
@@ -1131,7 +1131,7 @@ impl PlasticStep {
     ///
     /// ```
     /// # use pyrucast::models::plasticity::law::PlasticStep;
-    /// // Deux variables internes, et rien d'alloué pour les porter.
+    /// // Two internal variables, and nothing allocated to carry them.
     /// let pas = PlasticStep::new([0.0; 6], [0.0; 6], 0.0, &[0.3, 1.5]);
     /// assert_eq!(pas.internal(), &[0.3, 1.5]);
     /// ```
@@ -1151,7 +1151,7 @@ impl PlasticStep {
     ///
     /// ```
     /// # use pyrucast::models::plasticity::law::PlasticStep;
-    /// // Une loi sans variable interne en rend une tranche vide, non un `Vec`.
+    /// // A law with no internal variable returns an empty slice, not a `Vec`.
     /// let pas = PlasticStep::new([0.0; 6], [0.0; 6], 0.0, &[]);
     /// assert!(pas.internal().is_empty());
     /// ```
@@ -1192,12 +1192,12 @@ impl PlasticStep {
 /// # let mat = MatParams::new(materiau.point_values(0, 0).unwrap(), &idx_mat, &opt_mat);
 /// # let repos = PrevState { eps: [0.0; 6], sigma: [0.0; 6], eps_p: [0.0; 6], p: 0.0,
 /// #                         vars: &[] };
-/// // σ_trial = σ(A) + C:Δε — la forme qui porte σ(A) explicitement, celle
-/// // qu'une loi en grandes déformations reprend telle quelle.
+/// // σ_trial = σ(A) + C:Δε — the form that carries σ(A) explicitly, the one
+/// // a finite-strain law takes over as is.
 /// let eps_b = [1e-3, 0.0, 0.0, 0.0, 0.0, 0.0];
 /// let trial = law::elastic_predictor(&eps_b, &repos, mat.lambda, mat.mu);
 /// assert!(trial[0] > 0.0);
-/// // Partant du repos, elle coïncide avec C:ε.
+/// // Starting from rest, it coincides with C:ε.
 /// let direct = elastic::elastic_stress(&eps_b, mat.lambda, mat.mu);
 /// assert!((trial[0] - direct[0]).abs() < 1e-9);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -1218,8 +1218,8 @@ pub fn elastic_predictor(eps_b: &[f64; 6], prev: &PrevState, lambda: f64, mu: f6
 /// ```
 /// # use pyrucast::models::plasticity::law;
 /// # use pyrucast::models::plasticity::law::PlasticLaw;
-/// // Un garde-fou qui nomme la loi **et** la constante fautive ; il rend la
-/// // valeur, pour s'enchaîner à la lecture du matériau.
+/// // A guard that names the law **and** the offending constant; it returns
+/// // the value, to chain onto the material read.
 /// let l = PlasticLaw::Perfect;
 /// assert_eq!(law::require_positive(l, "sigma_y", 250.0)?, 250.0);
 /// assert!(law::require_positive(l, "sigma_y", 0.0).is_err());

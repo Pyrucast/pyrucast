@@ -1,60 +1,60 @@
-//! Poutre console élasto-plastique — **variante instrumentée** de
-//! [`plasticite_poutre_console_anderson`] pour l'évaluation de performance.
+//! Elasto-plastic cantilever beam — **instrumented variant** of
+//! [`plasticite_poutre_console_anderson`] for performance evaluation.
 //!
-//! Physique, maillage, opérateurs et boucle non linéaire **identiques** à
-//! l'exemple Anderson (gelé comme référence) : ce fichier n'en diffère que par
-//! des compteurs de temps `AtomicU64` autour de chaque sous-opérateur de la
-//! boucle chaude. À la fin, il imprime un **profil des temps cumulés** ventilant
-//! le coût entre `deformation`, la fusion `strain | state`, la loi de
-//! comportement, les forces internes, le résidu, le solve et l'accélération
-//! d'Anderson. Le budget de la boucle est fermé (poste « non attribué » ≈ 0).
+//! Physics, mesh, operators and non-linear loop **identical** to the Anderson
+//! example (frozen as the reference): this file differs from it only by
+//! `AtomicU64` timing counters around each sub-operator of the hot loop. At the
+//! end, it prints a **profile of the cumulated times**, breaking the cost down
+//! between `deformation`, the `strain | state` merge, the behaviour law, the
+//! internal forces, the residual, the solve and the Anderson acceleration. The
+//! budget of the loop is closed ("unaccounted" entry ≈ 0).
 //!
-//! Se lance comme l'exemple d'origine (`PYRUCAST_NX`, `PYRUCAST_NY`,
-//! `PYRUCAST_NSTEPS`, `PYRUCAST_PMAX`). Pour le profil d'échantillonnage
-//! complémentaire (samply + `addr2line`), voir `examples/profil_anderson.sh`.
+//! Runs like the original example (`PYRUCAST_NX`, `PYRUCAST_NY`,
+//! `PYRUCAST_NSTEPS`, `PYRUCAST_PMAX`). For the complementary sampling profile
+//! (samply + `addr2line`), see `examples/profil_anderson.sh`.
 //!
-//! Physique
-//! --------
-//! Continuum 2-D en contraintes planes, petites déformations. Plasticité de
-//! von Mises parfaite (retour radial J2, sans écrouissage) : la contrainte
-//! équivalente est plafonnée à `sigma_y`. Poutre encastrée à gauche
-//! (`u_x = u_y = 0`), cisaillée vers le bas sur la face droite. On monte la
-//! charge par incréments.
+//! Physics
+//! -------
+//! 2-D plane-stress continuum, small strains. Perfect von Mises plasticity
+//! (J2 radial return, no hardening): the equivalent stress is capped at
+//! `sigma_y`. Beam clamped at the left end (`u_x = u_y = 0`), sheared
+//! downwards on the right face. The load is raised by increments.
 //!
-//! Newton modifié = point fixe préconditionné
-//! ------------------------------------------
-//! Comme dans l'exemple d'origine, l'opérateur d'itération est la rigidité
-//! **élastique** `K` (assemblée + factorisée une fois, cache de `solve`).
-//! L'itération `u ← u + K⁻¹r(u)` est un **point fixe préconditionné** : la
-//! « direction résidu » `g(u) = K⁻¹ r(u)` s'annule à convergence — c'est le
-//! résidu naturel du point fixe, et il est **déjà calculé** à chaque itération
-//! (`du = solve(&k, &residual)`).
+//! Modified Newton = preconditioned fixed point
+//! --------------------------------------------
+//! As in the original example, the iteration operator is the **elastic**
+//! stiffness `K` (assembled + factorised once, `solve`'s cache). The iteration
+//! `u ← u + K⁻¹r(u)` is a **preconditioned fixed point**: the "residual
+//! direction" `g(u) = K⁻¹ r(u)` vanishes at convergence — it is the natural
+//! residual of the fixed point, and it is **already computed** at every
+//! iteration (`du = solve(&k, &residual)`).
 //!
-//! Le prix de l'opérateur constant est une convergence seulement **linéaire**
-//! sur la branche plastique (beaucoup d'itérations). L'accélération d'Anderson
-//! exploite l'historique des `m = 3` derniers couples `(u, g)` pour extrapoler
-//! un pas bien meilleur, **sans réévaluer la loi de comportement** : le petit
-//! moindre-carré ne manipule que des produits scalaires de champs déjà en main.
+//! The price of the constant operator is a merely **linear** convergence on
+//! the plastic branch (many iterations). Anderson acceleration exploits the
+//! history of the last `m = 3` pairs `(u, g)` to extrapolate a much better
+//! step, **without re-evaluating the behaviour law**: the small least-squares
+//! problem only handles dot products of fields already in hand.
 //!
-//! Accélération d'Anderson (m = 3)
-//! -------------------------------
-//! À l'itération `k`, avec l'historique des `m ≤ 3` derniers `(uᵢ, gᵢ)` (le
-//! plus récent en tête) :
+//! Anderson acceleration (m = 3)
+//! -----------------------------
+//! At iteration `k`, with the history of the last `m ≤ 3` pairs `(uᵢ, gᵢ)`
+//! (most recent first):
 //!
-//! 1. Différences `ΔGⱼ = g_{k-j+1} − g_{k-j}`, `ΔUⱼ = u_{k-j+1} − u_{k-j}`.
-//! 2. Moindre-carré `min_γ ‖g_k − Σⱼ γⱼ ΔGⱼ‖²` → système normal `(ΔGᵀΔG) γ =
-//!    ΔGᵀg_k`, dont toutes les entrées sont des produits scalaires **sur les
-//!    DDL libres** (mêmes DDL que la norme du résidu), régularisé façon Tikhonov.
-//! 3. Petit solve dense `m×m` (m ≤ 3, élimination de Gauss).
-//! 4. Pas extrapolé `u_acc = u_k + g_k − Σⱼ γⱼ (ΔUⱼ + ΔGⱼ)`.
+//! 1. Differences `ΔGⱼ = g_{k-j+1} − g_{k-j}`, `ΔUⱼ = u_{k-j+1} − u_{k-j}`.
+//! 2. Least squares `min_γ ‖g_k − Σⱼ γⱼ ΔGⱼ‖²` → normal system `(ΔGᵀΔG) γ =
+//!    ΔGᵀg_k`, whose entries are all dot products **over the free DOFs** (the
+//!    same DOFs as the residual norm), Tikhonov-regularised.
+//! 3. Small dense `m×m` solve (m ≤ 3, Gaussian elimination).
+//! 4. Extrapolated step `u_acc = u_k + g_k − Σⱼ γⱼ (ΔUⱼ + ΔGⱼ)`.
 //!
-//! Garde-fou de descente : on évalue le résidu du candidat d'Anderson **et**
-//! celui du pas de Newton pur `u_k + g_k`, et on **retient le meilleur des
-//! deux**. Anderson ne peut donc jamais dégrader la convergence par rapport au
-//! Newton modifié d'origine ; s'il est rejeté, on vide l'historique.
+//! Descent safeguard: the residual of the Anderson candidate **and** that of
+//! the pure modified-Newton step `u_k + g_k` are both evaluated, and the
+//! **better of the two** is kept. Anderson can therefore never degrade the
+//! convergence relative to the original modified Newton; if it is rejected,
+//! the history is cleared.
 
-// Les parenthèses `|| (&u + &g)` sont nécessaires : sans elles, `|| &u + &g`
-// se parse comme `(|| &u) + &g` (E0369). On tait donc le lint pour ce fichier.
+// The parentheses in `|| (&u + &g)` are necessary: without them, `|| &u + &g`
+// parses as `(|| &u) + &g` (E0369). The lint is therefore silenced for this file.
 #![allow(unused_parens)]
 
 use pyrucast::aggregate::Aggregate;
@@ -85,10 +85,10 @@ use pyrucast::ops::node_field::{positions, restrict, restrict_like};
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
 
-/// Profondeur de l'historique d'Anderson (nombre de couples `(u, g)` gardés).
+/// Depth of the Anderson history (number of `(u, g)` pairs kept).
 const ANDERSON_DEPTH: usize = 3;
 
-// ── Profiling: cumul de temps par sous-opérateur (ns), thread-safe ──────────
+// ── Profiling: cumulated time per sub-operator (ns), thread-safe ───────────
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
@@ -98,9 +98,9 @@ static T_FINT: AtomicU64 = AtomicU64::new(0);
 static T_RESIDUAL: AtomicU64 = AtomicU64::new(0);
 static T_SOLVE: AtomicU64 = AtomicU64::new(0);
 static T_ANDERSON: AtomicU64 = AtomicU64::new(0);
-static T_FIELDOPS: AtomicU64 = AtomicU64::new(0); // restrict_like, map_all, +/- de champs
+static T_FIELDOPS: AtomicU64 = AtomicU64::new(0); // restrict_like, map_all, +/- on fields
 static T_DIAG: AtomicU64 = AtomicU64::new(0); // plastic_diagnostics
-static T_RESID_WALL: AtomicU64 = AtomicU64::new(0); // residual_at bout à bout
+static T_RESID_WALL: AtomicU64 = AtomicU64::new(0); // residual_at end to end
 static N_RESID_EVAL: AtomicU64 = AtomicU64::new(0);
 
 fn tic<T>(acc: &AtomicU64, f: impl FnOnce() -> T) -> T {
@@ -125,25 +125,23 @@ fn env_f64(key: &str, default: f64) -> f64 {
 }
 
 fn main() -> Result<()> {
-    // ── Paramètres (matériau acier, géométrie, chargement) ──────────────────
+    // ── Parameters (steel material, geometry, loading) ──────────────────────
     let (young, nu, sigma_y) = (210_000.0_f64, 0.3_f64, 250.0_f64);
     let (length, height) = (10.0_f64, 1.0_f64);
     let nx = env_usize("PYRUCAST_NX", 40);
     let ny = env_usize("PYRUCAST_NY", 8);
     let nsteps = env_usize("PYRUCAST_NSTEPS", 10);
-    let p_max = env_f64("PYRUCAST_PMAX", 5.0); // effort tranchant final au bout
+    let p_max = env_f64("PYRUCAST_PMAX", 5.0); // final shear force at the tip
 
     println!(
-        "Poutre console plastique (Anderson m={ANDERSON_DEPTH}) : {nx}×{ny} QUA4  \
+        "Plastic cantilever beam (Anderson m={ANDERSON_DEPTH}): {nx}×{ny} QUA4  \
          (L={length}, H={height}), E={young}, ν={nu}, σy={sigma_y}"
     );
-    println!(
-        "Chargement : 0 → {p_max} en {nsteps} pas (Newton modifié + accélération d'Anderson)\n"
-    );
+    println!("Loading: 0 → {p_max} in {nsteps} steps (modified Newton + Anderson acceleration)\n");
 
-    // ── Maillage : grille de nœuds (j en hauteur, i en long), cellules QUA4 ──
+    // ── Mesh: grid of nodes (j through the height, i along the length), QUA4 cells ──
     println!(
-        "▸ Maillage : {} nœuds, {} cellules QUA4…",
+        "▸ Mesh: {} nodes, {} QUA4 cells…",
         (nx + 1) * (ny + 1),
         nx * ny
     );
@@ -159,10 +157,10 @@ fn main() -> Result<()> {
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
     let t_mesh = t_mesh0.elapsed();
 
-    // Ensembles de nœuds utiles : bout (mi-hauteur), et un maillage POI1 des
-    // nœuds LIBRES (hors encastrement) — support cible pour mesurer la norme du
-    // résidu sur les seuls DDL libres (`restrict` + `xtx`). Les nœuds libres sont
-    // ceux de coordonnée X strictement positive (bande sur le champ `positions`).
+    // Useful node sets: tip (mid-height), and a POI1 mesh of the FREE nodes
+    // (outside the clamped end) — target support for measuring the residual norm
+    // on the free DOFs only (`restrict` + `xtx`). The free nodes are those with a
+    // strictly positive X coordinate (band on the `positions` field).
     let tip = &mesh.nearest_node(&[length, height / 2.])?;
     let coords_field = positions(&mesh, Some(vec!["X".into()]))?;
     let free_mesh = select_nodes(
@@ -171,8 +169,8 @@ fn main() -> Result<()> {
         None,
     )?;
 
-    // ── Modèle : plasticité (contraintes planes) + encastrement (Dirichlet) ──
-    println!("▸ Modèle : plasticité J2 (contraintes planes) + encastrement…");
+    // ── Model: plasticity (plane stress) + clamped end (Dirichlet) ──────────
+    println!("▸ Model: J2 plasticity (plane stress) + clamped end…");
     let mut model = model::plasticity_perfect(&fes, Kinematics::PlaneStress)?;
     let imposed_mesh = to_poi1(&left_edge)?;
     let multiplier = translate(&imposed_mesh, &[0., 0.])?;
@@ -191,8 +189,8 @@ fn main() -> Result<()> {
         Default::default(),
     )?)?;
 
-    // La charge de référence est un terme du modèle : elle le rejoint, sa
-    // densité rejoint le matériau.
+    // The reference load is a term of the model: it joins the model, and its
+    // density joins the material.
     let right_fes = FiniteElementSpace::lagrange1(&right_edge)?;
     let model = model.union(&pyrucast::ops::model::flux(
         &right_fes,
@@ -209,24 +207,24 @@ fn main() -> Result<()> {
         ],
     )?;
 
-    // Rigidité ÉLASTIQUE : opérateur d'itération du Newton modifié. Assemblée
-    // une fois ; `solve` met la factorisation en cache et la réutilise à chaque
-    // descente/remontée.
-    println!("▸ Assemblage de la rigidité élastique K…");
+    // ELASTIC stiffness: iteration operator of the modified Newton. Assembled
+    // once; `solve` caches the factorisation and reuses it at every
+    // forward/back substitution.
+    println!("▸ Assembling the elastic stiffness K…");
     let t_k0 = Instant::now();
     let k = stiffness(&model, &materials)?;
     let t_k = t_k0.elapsed();
 
-    // ── Charge de référence : cisaillement unitaire (densité −1) sur la face
-    //    droite, réparti en efforts nodaux cohérents (∫ densité·N dΓ, op `flux`).
-    println!("▸ Charge de référence + histoire de chargement…");
-    // `external_forces` rend un agrégat ; l'histoire de chargement se tabule
-    // zone par zone.
+    // ── Reference load: unit shear (density −1) on the right face, spread into
+    //    consistent nodal forces (∫ density·N dΓ, `flux` op). ─────────────────
+    println!("▸ Reference load + loading history…");
+    // `external_forces` returns an aggregate; the loading history is tabulated
+    // zone by zone.
     let load_unit = external_forces(&model, &materials)?.get(0)?.read().clone();
 
-    // ── Histoire de chargement : une Evolution à valeur CHAMP, tabulée en
-    //    pseudo-temps t ∈ [0, 1]. Deux keyframes du champ d'effort nodal — nul en
-    //    t=0, complet (`p_max · charge_unitaire`) en t=1 — sur le MÊME support.
+    // ── Loading history: an Evolution with FIELD values, tabulated against the
+    //    pseudo-time t ∈ [0, 1]. Two keyframes of the nodal force field — zero at
+    //    t=0, complete (`p_max · unit_load`) at t=1 — on the SAME support. ─────
     let zero_frame = load_unit.map_all(|_| 0.0);
     let full_frame = load_unit.map_all(|v| v * p_max);
     let load_curve = SubEvolution::new(
@@ -239,18 +237,18 @@ fn main() -> Result<()> {
     let mut load_evo = Evolution::default();
     load_evo.add_sub(Handle::new(load_curve))?;
 
-    // ── État de la simulation (persistant entre les pas) ────────────────────
-    // Déplacement cumulé u (u_x, u_y sur tous les nœuds), initialement nul.
+    // ── Simulation state (persistent across the steps) ──────────────────────
+    // Accumulated displacement u (u_x, u_y on every node), initially zero.
     let mut u = NodeField::new(&mesh, vec!["u_x".into(), "u_y".into()])?;
-    // État convergé du pas précédent (VAR0 = `prev`) : `None` au premier pas.
+    // Converged state of the previous step (VAR0 = `prev`): `None` at the first step.
     let mut state: Option<ElementField> = None;
 
-    // ── Boucle sur les pas de charge ────────────────────────────────────────
+    // ── Loop over the load steps ────────────────────────────────────────────
     let max_newton = 200;
-    println!("▸ Résolution : {nsteps} pas de charge (Newton modifié + Anderson)\n");
+    println!("▸ Solving: {nsteps} load steps (modified Newton + Anderson)\n");
     println!(
         "{:>4} {:>8} {:>6} {:>6} {:>14} {:>14} {:>8}",
-        "pas", "P", "iter", "andrs", "flèche u_y", "p_max", "n_plast"
+        "step", "P", "iter", "andrs", "deflection u_y", "p_max", "n_plast"
     );
 
     let mut prev_defl = 0.0_f64;
@@ -258,42 +256,42 @@ fn main() -> Result<()> {
 
     let t_loop0 = Instant::now();
     for step in 1..=nsteps {
-        // Pseudo-temps du pas ∈ ]0, 1] ; la charge externe en découle par
-        // interpolation de l'Evolution (champ d'effort nodal du pas).
+        // Pseudo-time of the step ∈ ]0, 1]; the external load follows from it by
+        // interpolation of the Evolution (nodal force field of the step).
         let t = step as f64 / nsteps as f64;
-        let load_p = p_max * t; // cisaillement nominal au bout (pour l'affichage)
+        let load_p = p_max * t; // nominal shear at the tip (for the display)
         let Interpolated::Node(load_scaled) = load_evo.interpolate(t, None)? else {
-            unreachable!("évolution à valeur nodale")
+            unreachable!("evolution with nodal values")
         };
-        // Norme de la charge du pas (échelle relative du résidu) : xᵀx du champ.
+        // Norm of the step load (relative scale of the residual): xᵀx of the field.
         let ext_norm = load_scaled.xtx().sqrt();
         let tol = 1e-6 * ext_norm + 1e-12;
 
-        // Newton modifié + Anderson : itère jusqu'à résidu (forces déséquilibrées
-        // aux DDL libres) négligeable. `last_state` retient la sortie de
-        // comportement convergée, source du nouveau VAR0.
+        // Modified Newton + Anderson: iterate until the residual (out-of-balance
+        // forces at the free DOFs) is negligible. `last_state` keeps the
+        // converged behaviour output, source of the new VAR0.
         let mut iters = 0;
-        let mut n_anderson = 0; // combien de pas ont réellement été accélérés
+        let mut n_anderson = 0; // how many steps were actually accelerated
         let mut last_state: Option<ElementField>;
         let mut res_norm;
 
-        // Historique d'Anderson : couples (u, g=K⁻¹r) du pas courant, le plus
-        // récent en tête. Vidé au début de chaque pas de charge.
+        // Anderson history: pairs (u, g=K⁻¹r) of the current step, most recent
+        // first. Cleared at the beginning of each load step.
         let mut history: Vec<(NodeField, NodeField)> = Vec::with_capacity(ANDERSON_DEPTH + 1);
 
-        // Résidu (et forces internes convergées) à un déplacement d'essai `u` :
-        // ε(u) → COMP → BSIG → r = F_ext − F_int, plus la norme sur les DDL libres.
-        // Aucune boucle nodale (opérateurs de champ uniquement).
+        // Residual (and converged internal forces) at a trial displacement `u`:
+        // ε(u) → COMP → BSIG → r = F_ext − F_int, plus the norm on the free DOFs.
+        // No nodal loop (field operators only).
         let residual_at = |u: &NodeField| -> Result<(NodeField, f64, ElementField)> {
             tic(&T_RESID_WALL, || {
                 N_RESID_EVAL.fetch_add(1, Ordering::Relaxed);
                 let strain = tic(&T_DEFORM, || deformation(u, &fes))?;
-                // Comportement A→B : ε(B) direct, état de A dans `prev`.
+                // Behaviour A→B: ε(B) directly, state of A in `prev`.
                 let out = tic(&T_BEHAVIOR, || {
                     integrate(&model, &strain, state.as_ref(), &materials, None)
                 })?;
                 let f_int = tic(&T_FINT, || internal_forces(&model, &out, u, &materials))?;
-                // Résidu r = F_ext − F_int et sa norme sur les DDL libres.
+                // Residual r = F_ext − F_int and its norm on the free DOFs.
                 let (residual, free_res) = tic(&T_RESIDUAL, || -> Result<_> {
                     let f_ext = restrict_like(&load_scaled, &f_int)?;
                     let residual = (&f_ext - &f_int)?;
@@ -305,7 +303,7 @@ fn main() -> Result<()> {
         };
 
         loop {
-            // Résidu au déplacement courant (= point fixe `g = K⁻¹r`).
+            // Residual at the current displacement (= fixed point `g = K⁻¹r`).
             let (residual, cur_res, out) = residual_at(&u)?;
             res_norm = cur_res;
             last_state = Some(out);
@@ -314,24 +312,25 @@ fn main() -> Result<()> {
                 break;
             }
 
-            // Direction résidu g = K⁻¹ r (K élastique, cache de factorisation). Le
-            // support de δu coïncide déjà avec celui de u (même compagnon POI1 caché
-            // de `to_poi1`) ; `restrict_like` ne filtre que les composantes duales
-            // (multiplicateurs) — sinon elles se recopieraient dans u par union.
+            // Residual direction g = K⁻¹ r (elastic K, factorisation cache). The
+            // support of δu already coincides with that of u (same hidden POI1
+            // companion from `to_poi1`); `restrict_like` only filters out the dual
+            // components (multipliers) — otherwise they would be copied into u by
+            // union.
             let du = tic(&T_SOLVE, || solve(&k, &residual))?;
             let g = tic(&T_FIELDOPS, || restrict_like(&du, &u))?;
 
-            // Snapshot du couple (u, g) courant AVANT de bouger — source des
-            // différences d'Anderson au tour suivant. `map_all(|v| v)` = copie
-            // profonde de l'agrégat (NodeField n'est pas Clone au niveau agrégat).
+            // Snapshot of the current (u, g) pair BEFORE moving — source of the
+            // Anderson differences at the next round. `map_all(|v| v)` = deep copy
+            // of the aggregate (NodeField is not Clone at the aggregate level).
             let u_snapshot = tic(&T_FIELDOPS, || u.map_all(|v| v))?;
-            let pure_step = tic(&T_FIELDOPS, || (&u + &g))?; // pas de Newton modifié
+            let pure_step = tic(&T_FIELDOPS, || (&u + &g))?; // modified Newton step
 
-            // Candidat Anderson (si l'historique porte au moins un couple) :
-            // extrapolation sur les m derniers (u, g). Garde-fou de descente : on
-            // ne le retient que s'il réduit **strictement** le résidu courant
-            // `cur_res` — sinon on prend le pas pur, dont le résidu sera évalué
-            // gratuitement en tête du tour suivant (pas d'évaluation gâchée).
+            // Anderson candidate (if the history carries at least one pair):
+            // extrapolation over the last m (u, g). Descent safeguard: it is kept
+            // only if it **strictly** reduces the current residual `cur_res` —
+            // otherwise the pure step is taken, whose residual will be evaluated
+            // for free at the top of the next round (no wasted evaluation).
             let mut chose_anderson = false;
             let mut next_u = None;
             if !history.is_empty()
@@ -346,9 +345,9 @@ fn main() -> Result<()> {
                 }
             }
 
-            // Historique : si Anderson a été retenu, on empile et tronque à la
-            // profondeur ; sinon on repart proprement (historique vidé) pour ne
-            // pas traîner des directions qui n'aident pas.
+            // History: if Anderson was kept, push and truncate to the depth;
+            // otherwise start over cleanly (history cleared) so as not to drag
+            // along directions that do not help.
             if chose_anderson {
                 n_anderson += 1;
                 history.insert(0, (u_snapshot, g));
@@ -362,13 +361,11 @@ fn main() -> Result<()> {
         }
         let converged = res_norm <= tol;
 
-        // Commit de l'état : `prev` ← VAR1. La sortie convergée porte l'état
-        // complet de B et devient le `prev` (état de A) du pas suivant.
-        let committed = last_state
-            .take()
-            .expect("au moins une évaluation de résidu");
+        // State commit: `prev` ← VAR1. The converged output carries the complete
+        // state of B and becomes the `prev` (state of A) of the next step.
+        let committed = last_state.take().expect("at least one residual evaluation");
 
-        // Diagnostics du pas.
+        // Diagnostics of the step.
         let (p_max_val, n_plastic) = tic(&T_DIAG, || plastic_diagnostics(&committed))?;
         state = Some(committed);
         let defl = u.value(tip.id(), "u_y")?;
@@ -376,23 +373,23 @@ fn main() -> Result<()> {
         let flag = if converged {
             ""
         } else {
-            "  (résidu résiduel)"
+            "  (residual left over)"
         };
         println!(
             "{step:>4} {load_p:>8.3} {iters:>6} {n_anderson:>6} \
              {defl:>14.6e} {p_max_val:>14.6e} {n_plastic:>8}{flag}"
         );
 
-        // La flèche croît (en valeur absolue, vers le bas) avec la charge.
+        // The deflection grows (in absolute value, downwards) with the load.
         assert!(
             defl.abs() >= prev_defl.abs() - 1e-9,
-            "flèche non monotone au pas {step}"
+            "non-monotonic deflection at step {step}"
         );
         prev_defl = defl;
     }
     let t_loop = t_loop0.elapsed();
 
-    // ── Rapport de profiling ────────────────────────────────────────────────
+    // ── Profiling report ────────────────────────────────────────────────────
     let ms = |ns: u64| ns as f64 / 1e6;
     let n_eval = N_RESID_EVAL.load(Ordering::Relaxed);
     let deform = T_DEFORM.load(Ordering::Relaxed);
@@ -408,26 +405,26 @@ fn main() -> Result<()> {
     let resid_inner_gap = resid_wall.saturating_sub(resid_total);
     let accounted = resid_wall + slv + andr + fops + diag;
     let unaccounted = (t_loop.as_nanos() as u64).saturating_sub(accounted);
-    println!("\n──────── Profil (temps cumulés) ────────");
+    println!("\n──────── Profile (cumulated times) ────────");
     println!(
-        "  maillage + fes        : {:>9.1} ms",
+        "  mesh + fes            : {:>9.1} ms",
         ms(t_mesh.as_nanos() as u64)
     );
     println!(
-        "  assemblage K          : {:>9.1} ms",
+        "  assembly of K         : {:>9.1} ms",
         ms(t_k.as_nanos() as u64)
     );
     println!(
-        "  boucle de résolution  : {:>9.1} ms",
+        "  solution loop         : {:>9.1} ms",
         ms(t_loop.as_nanos() as u64)
     );
-    println!("  ── dont, dans la boucle :");
+    println!("  ── of which, inside the loop:");
     println!(
         "     residual_at (×{n_eval:>4})  : {:>9.1} ms wall",
         ms(resid_wall)
     );
     println!(
-        "        └ deform {:.0} + comport {:.0} + f_int {:.0} + résidu {:.0} + gap interne {:.0}",
+        "        └ deform {:.0} + behaviour {:.0} + f_int {:.0} + residual {:.0} + inner gap {:.0}",
         ms(deform),
         ms(behav),
         ms(fint),
@@ -437,42 +434,41 @@ fn main() -> Result<()> {
     println!("     solve K⁻¹r           : {:>9.1} ms", ms(slv));
     println!("     anderson_step        : {:>9.1} ms", ms(andr));
     println!("     field ops (restrict/copy/±): {:>4.1} ms", ms(fops));
-    println!("     diagnostics plastiques: {:>8.1} ms", ms(diag));
-    println!("     non attribué          : {:>9.1} ms", ms(unaccounted));
+    println!("     plastic diagnostics   : {:>9.1} ms", ms(diag));
+    println!("     unaccounted           : {:>9.1} ms", ms(unaccounted));
     println!("────────────────────────────────────────");
 
-    // Au-delà de la première plastification, une zone plastique doit apparaître.
+    // Beyond first yield, a plastic zone must appear.
     let p_first_yield = sigma_y * (height * height / 6.0) / length;
     if p_max > p_first_yield {
         assert!(
             any_plasticity,
-            "P_max={p_max} dépasse la première plastification (≈{p_first_yield:.2}) \
-             mais aucun point plastique n'a été détecté"
+            "P_max={p_max} exceeds first yield (≈{p_first_yield:.2}) \
+             but no plastic point was detected"
         );
-        println!(
-            "\nOK : plastification développée (P_max={p_max} > P_élastique≈{p_first_yield:.2})."
-        );
+        println!("\nOK: plasticity developed (P_max={p_max} > P_elastic≈{p_first_yield:.2}).");
     } else {
-        println!("\nOK : réponse restée élastique (P_max={p_max} ≤ ≈{p_first_yield:.2}).");
+        println!("\nOK: the response stayed elastic (P_max={p_max} ≤ ≈{p_first_yield:.2}).");
     }
     Ok(())
 }
 
-/// Pas d'accélération d'Anderson : à partir du déplacement courant `u`, de sa
-/// direction résidu `g = K⁻¹r(u)`, et de l'historique des `m ≤ 3` derniers
-/// couples `(uᵢ, gᵢ)` (le plus récent en tête), calcule la **correction**
-/// `Σⱼ γⱼ (ΔUⱼ + ΔGⱼ)` à soustraire au pas de Newton pur `u + g` :
+/// Anderson acceleration step: from the current displacement `u`, its residual
+/// direction `g = K⁻¹r(u)`, and the history of the last `m ≤ 3` pairs
+/// `(uᵢ, gᵢ)` (most recent first), computes the **correction**
+/// `Σⱼ γⱼ (ΔUⱼ + ΔGⱼ)` to subtract from the pure Newton step `u + g`:
 ///
 /// `u_acc = u + g − Σⱼ γⱼ (ΔUⱼ + ΔGⱼ)`.
 ///
-/// Les `γ` résolvent le moindre-carré `min ‖g − Σⱼ γⱼ ΔGⱼ‖²` sur les DDL
-/// **libres** (`free_mesh`), via les équations normales `(ΔGᵀΔG) γ = ΔGᵀg`
-/// régularisées (Tikhonov). Retourne `None` si l'historique est vide ou si le
-/// petit système dégénère (l'appelant retombe alors sur le Newton pur).
+/// The `γ` solve the least-squares problem `min ‖g − Σⱼ γⱼ ΔGⱼ‖²` over the
+/// **free** DOFs (`free_mesh`), through the regularised (Tikhonov) normal
+/// equations `(ΔGᵀΔG) γ = ΔGᵀg`. Returns `None` if the history is empty or if
+/// the small system degenerates (the caller then falls back on the pure
+/// Newton step).
 ///
-/// Tout passe par les opérateurs de champ (`-`, `dot_field`, `restrict`) : les
-/// produits scalaires sont les seules réductions, aucune évaluation de la loi
-/// de comportement.
+/// Everything goes through the field operators (`-`, `dot_field`, `restrict`):
+/// the dot products are the only reductions, and the behaviour law is never
+/// evaluated.
 fn anderson_step(
     u: &NodeField,
     g: &NodeField,
@@ -484,9 +480,9 @@ fn anderson_step(
         return Ok(None);
     }
 
-    // Différences ΔUⱼ = u_{présent} − u_{historique}, ΔGⱼ = g − g_{historique}.
-    // (Convention équivalente aux différences successives à un signe global près,
-    // absorbé par γ ; ici on prend les différences vers l'itéré courant.)
+    // Differences ΔUⱼ = u_{present} − u_{history}, ΔGⱼ = g − g_{history}.
+    // (A convention equivalent to successive differences up to a global sign,
+    // absorbed by γ; here the differences are taken towards the current iterate.)
     let mut du_diffs: Vec<NodeField> = Vec::with_capacity(m);
     let mut dg_diffs: Vec<NodeField> = Vec::with_capacity(m);
     for (u_hist, g_hist) in history {
@@ -494,14 +490,14 @@ fn anderson_step(
         dg_diffs.push((g - g_hist)?);
     }
 
-    // ΔG restreints aux DDL libres (support des produits scalaires du résidu).
+    // ΔG restricted to the free DOFs (support of the residual dot products).
     let dg_free: Vec<NodeField> = dg_diffs
         .iter()
         .map(|d| restrict(d, free_mesh))
         .collect::<Result<_>>()?;
     let g_free = restrict(g, free_mesh)?;
 
-    // Équations normales (ΔGᵀΔG) γ = ΔGᵀg (petit système m×m symétrique).
+    // Normal equations (ΔGᵀΔG) γ = ΔGᵀg (small symmetric m×m system).
     let mut a = vec![vec![0.0_f64; m]; m];
     let mut b = vec![0.0_f64; m];
     let mut trace = 0.0;
@@ -515,9 +511,9 @@ fn anderson_step(
         b[i] = dg_free[i].dot_field(&g_free)?;
     }
     if trace <= 0.0 {
-        return Ok(None); // directions dégénérées
+        return Ok(None); // degenerate directions
     }
-    // Régularisation de Tikhonov : + λ·(trace/m) sur la diagonale.
+    // Tikhonov regularisation: + λ·(trace/m) on the diagonal.
     let lambda = 1e-10 * trace / m as f64;
     for (i, row) in a.iter_mut().enumerate() {
         row[i] += lambda;
@@ -527,7 +523,7 @@ fn anderson_step(
         return Ok(None);
     };
 
-    // Correction Σⱼ γⱼ (ΔUⱼ + ΔGⱼ), assemblée par opérateurs de champ.
+    // Correction Σⱼ γⱼ (ΔUⱼ + ΔGⱼ), assembled through the field operators.
     let mut corr: Option<NodeField> = None;
     for (j, gj) in gamma.iter().enumerate() {
         let term = (&(&du_diffs[j] + &dg_diffs[j])? * *gj)?;
@@ -539,13 +535,13 @@ fn anderson_step(
     Ok(corr)
 }
 
-/// Résout un petit système dense **symétrique** `A x = b` (`m ≤ 3`) par
-/// élimination de Gauss avec pivot partiel. Renvoie `None` si `A` est
-/// singulière (pivot ~ 0) — l'appelant retombe alors sur le Newton pur.
+/// Solves a small dense **symmetric** system `A x = b` (`m ≤ 3`) by Gaussian
+/// elimination with partial pivoting. Returns `None` if `A` is singular
+/// (pivot ~ 0) — the caller then falls back on the pure Newton step.
 fn solve_small_spd(mut a: Vec<Vec<f64>>, mut b: Vec<f64>) -> Option<Vec<f64>> {
     let n = b.len();
     for col in 0..n {
-        // Pivot partiel.
+        // Partial pivoting.
         let mut pivot = col;
         for r in (col + 1)..n {
             if a[r][col].abs() > a[pivot][col].abs() {
@@ -557,7 +553,7 @@ fn solve_small_spd(mut a: Vec<Vec<f64>>, mut b: Vec<f64>) -> Option<Vec<f64>> {
         }
         a.swap(col, pivot);
         b.swap(col, pivot);
-        // Élimination (copie de la ligne pivot pour éviter le double emprunt).
+        // Elimination (the pivot row is copied to avoid the double borrow).
         let pivot_row = a[col].clone();
         let b_pivot = b[col];
         for r in (col + 1)..n {
@@ -568,7 +564,7 @@ fn solve_small_spd(mut a: Vec<Vec<f64>>, mut b: Vec<f64>) -> Option<Vec<f64>> {
             b[r] -= factor * b_pivot;
         }
     }
-    // Remontée.
+    // Back substitution.
     let mut x = vec![0.0; n];
     for i in (0..n).rev() {
         let mut s = b[i];
@@ -580,8 +576,8 @@ fn solve_small_spd(mut a: Vec<Vec<f64>>, mut b: Vec<f64>) -> Option<Vec<f64>> {
     Some(x)
 }
 
-/// `(p_max, nombre de points de Gauss plastifiés)` de l'état courant
-/// (`p > 0` marque un point plastique).
+/// `(p_max, number of yielded Gauss points)` of the current state (`p > 0`
+/// marks a plastic point).
 fn plastic_diagnostics(state: &ElementField) -> Result<(f64, usize)> {
     let p_max = Field::max(state, Some("p"))?;
     let band = Band::new(None, Some(1e-12), None, None)?;

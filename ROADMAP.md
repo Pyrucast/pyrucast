@@ -1,390 +1,387 @@
-# pyrucast — Feuille de route
+# pyrucast — Roadmap
 
-Ce document dit **où en est le projet** et **ce qui pourrait venir ensuite**. La
-première partie est un état des lieux daté ; la seconde est une liste de pistes
-**non arbitrées** — elles seront précisées, ordonnées ou abandonnées plus tard.
+This document says **where the project stands** and **what could come next**. The
+first part is a dated status report; the second is a list of **unsettled** leads
+— they will be refined, ordered or dropped later.
 
-État arrêté au **5 août 2026** (v0.2.1).
+Status as of **5 August 2026** (v0.2.1).
 
-## Philosophie
+## Philosophy
 
-- Librairie élément fini : cœur Rust + API Python, inspirée des principes de cast3m.
-- Code **simple, maintenable, éditable par un humain non expert**.
-- Dépendances externes réduites au strict nécessaire — **accord explicite requis avant tout ajout**.
+- Finite element library: Rust core + Python API, inspired by the principles of cast3m.
+- **Simple, maintainable code, editable by a non-expert human**.
+- External dependencies kept to the strict minimum — **explicit agreement required before any addition**.
 
-## Décisions d'architecture verrouillées
+## Locked architecture decisions
 
-| Sujet | Décision |
+| Topic | Decision |
 |---|---|
-| Mémoire | Les objets vivent derrière un `Handle<T>` — une enveloppe d'un champ sur `Arc<RwLock<T>>` : comptage de références par l'`Arc`, un verrou par objet, guards possédés. Pas de registre global, pas d'objet `Session` à passer ; le handle *est* l'adresse de l'objet. |
-| Séparation des couches | `containers/` (structures) ⊥ `ops/` (opérateurs) ⊥ `py/` (binding). Un module d'`ops/` porte le nom du **conteneur qu'il produit**. Les règles complètes sont dans `CONVENTIONS.md`. |
-| Primitives géométriques | `nalgebra` (vecteurs et matrices de petite taille — géométrie, maillage, visualisation), `nalgebra-sparse` pour le stockage creux. |
-| Algèbre linéaire (solveur) | **LU creuse directe `faer`**, multithreadée, avec cache de factorisation sur la `Matrix` (*factoriser une fois, résoudre souvent*). `SolveMethod` est le point d'extension pour un autre back-end. |
-| Sérialisation | `serde` + `bincode` via un trait `Portable` **unique**, contrat d'octets de la sauvegarde/relecture fichier. |
-| Parallélisme | `rayon`, **toujours actif**, porté *au-dessus* des noyaux de physique : un noyau ne voit ni rayon, ni un handle, ni un verrou. |
-| Binding Python | `pyo3` + `maturin`, *mixed layout* : extension plate privée `_pyrucast` + couche Python pure qui la range en sous-modules. |
-| Documentation | `mdbook` (théorie + doctests) + rustdoc, publiés sur GitHub Pages. |
-| Algorithmes non-linéaires / transitoires | **Orchestrés en Python**, pas en Rust (voir plus bas). |
-| Méthode | Largeur d'abord : toutes les structures + bindings + doc/tests avant le numérique lourd. |
+| Memory | Objects live behind a `Handle<T>` — a one-field wrapper over `Arc<RwLock<T>>`: reference counting by the `Arc`, one lock per object, owned guards. No global registry, no `Session` object to pass around; the handle *is* the object's address. |
+| Layer separation | `containers/` (structures) ⊥ `ops/` (operators) ⊥ `py/` (binding). A module of `ops/` bears the name of the **container it produces**. The full rules are in `CONVENTIONS.md`. |
+| Geometric primitives | `nalgebra` (small vectors and matrices — geometry, meshing, visualisation), `nalgebra-sparse` for sparse storage. |
+| Linear algebra (solver) | **Direct sparse LU from `faer`**, multithreaded, with a factorisation cache on the `Matrix` (*factorise once, solve often*). `SolveMethod` is the extension point for another back-end. |
+| Serialisation | `serde` + `bincode` through a **single** `Portable` trait, the byte contract of file save/reload. |
+| Parallelism | `rayon`, **always on**, carried *above* the physics kernels: a kernel sees neither rayon, nor a handle, nor a lock. |
+| Python binding | `pyo3` + `maturin`, *mixed layout*: private flat `_pyrucast` extension + pure Python layer that files it into sub-modules. |
+| Documentation | `mdbook` (theory + doctests) + rustdoc, published on GitHub Pages. |
+| Non-linear / transient algorithms | **Orchestrated in Python**, not in Rust (see below). |
+| Method | Breadth first: all the structures + bindings + doc/tests before the heavy numerics. |
 
-Trois décisions ont été **révisées en cours de route**, et le sont ici
-définitivement : le solveur n'est pas une implémentation maison derrière un
-trait `LinearSolver` (c'est `faer`) ; il n'y a pas d'objet `Session` à passer ;
-et le store central lui-même a été retiré — slab, générations, compteur maison
-et swap disque doublaient tous ce que l'`Arc` fait déjà, et le swap ne libérait
-rien. Voir [book/src/memory-model.md](book/src/memory-model.md).
+Three decisions were **revised along the way**, and are settled here for good:
+the solver is not a home-made implementation behind a `LinearSolver` trait (it is
+`faer`); there is no `Session` object to pass around; and the central store
+itself was removed — slab, generations, home-made counter and disk swap all
+duplicated what the `Arc` already does, and the swap freed nothing. See
+[book/src/memory-model.md](book/src/memory-model.md).
 
-### Dépendances approuvées (socle figé)
+### Approved dependencies (frozen base)
 
-Toujours liées : `serde`, `bincode`, `nalgebra`, `nalgebra-sparse`, `faer` (LU creux du solveur), `rayon` (parallélisme), `parking_lot` (verrous des objets), `paste` (macros d'agrégat). Optionnelles, derrière une feature : `pyo3`, `pyo3-stub-gen`, et la visualisation `plotters`, `winit`, `softbuffer`. Outillage : `maturin`, `mdbook`, `ruff`, `criterion`. Tout autre ajout = nouvelle demande explicite.
+Always linked: `serde`, `bincode`, `nalgebra`, `nalgebra-sparse`, `faer` (the solver's sparse LU), `rayon` (parallelism), `parking_lot` (the objects' locks), `paste` (aggregate macros). Optional, behind a feature: `pyo3`, `pyo3-stub-gen`, and the visualisation ones `plotters`, `winit`, `softbuffer`. Tooling: `maturin`, `mdbook`, `ruff`, `criterion`. Any other addition = a new explicit request.
 
-### Definition of Done par objet
+### Definition of Done per object
 
-1. Struct Rust adressable par `Handle<T>`
-2. `Debug` (structurel) + `Display` (résumé façon listing cast3m)
-3. Tests unitaires Rust + doctests sur tout l'API public
-4. Binding PyO3 : `__repr__` → `Debug`, `__str__` → `Display`
-5. Tests Python (pytest)
-6. Chapitre mdbook (théorie + API)
+1. Rust struct addressable by `Handle<T>`
+2. `Debug` (structural) + `Display` (cast3m-style listing summary)
+3. Rust unit tests + doctests on the whole public API
+4. PyO3 binding: `__repr__` → `Debug`, `__str__` → `Display`
+5. Python tests (pytest)
+6. mdbook chapter (theory + API)
 
-Un objet n'est terminé que si ces 6 points sont verts.
+An object is only finished once these 6 points are green.
 
 ---
 
-# Ce qui est fait et disponible
+# What is done and available
 
-En chiffres : **82 600 lignes de Rust**, 1 046 tests unitaires Rust (+ 20
-fichiers de tests d'intégration), 447 tests Python, 27 doctests, 75 pages de
-book, 26 exemples, 6 scripts de formation, **100 fonctions exposées en Python**.
+In figures: **82,600 lines of Rust**, 1,046 Rust unit tests (+ 20 integration
+test files), 447 Python tests, 27 doctests, 75 book pages, 26 examples, 6
+training scripts, **100 functions exposed in Python**.
 
-## Socle mémoire
+## Memory base
 
-`Handle<T>` = `Arc<RwLock<T>>` : comptage par l'`Arc`, `read`/`write`
-infaillibles, identité par `same_object`. Refcount **à deux niveaux** — les
-objets d'un côté, les nœuds d'une `Coords` de l'autre, avec `gc()`. Verrou par
-objet, guards possédés permettant la lecture **en place**.
-`compact()` rend la mémoire de queue.
+`Handle<T>` = `Arc<RwLock<T>>`: counting by the `Arc`, infallible `read`/`write`,
+identity through `same_object`. **Two-level** refcount — the objects on one side,
+the nodes of a `Coords` on the other, with `gc()`. One lock per object, owned
+guards allowing reading **in place**. `compact()` gives back the tail memory.
 
-## Conteneurs et atomes
+## Containers and atoms
 
-Les **sept agrégats** — `Mesh`, `FiniteElementSpace`, `NodeField`,
-`ElementField`, `Model`, `Matrix`, `Evolution` — chacun avec sa vue `Sub*`,
-`len` / `[i]` / `|`. Plus `Coords` (le magasin de coordonnées, jeux multiples,
-repère axisymétrique) et les atomes : `Node`, `Cell`, `Element`, `ElementType`,
+The **seven aggregates** — `Mesh`, `FiniteElementSpace`, `NodeField`,
+`ElementField`, `Model`, `Matrix`, `Evolution` — each with its `Sub*` view,
+`len` / `[i]` / `|`. Plus `Coords` (the coordinate store, multiple sets,
+axisymmetric frame) and the atoms: `Node`, `Cell`, `Element`, `ElementType`,
 `Point*` / `Vector*`, `Band`, `RgbColor`.
 
-## Éléments finis — 16 types
+## Finite elements — 16 types
 
-`POI1` ; linéaires `SEG2`, `TRI3`, `QUA4`, `TET4`, `PYRA5`, `PENTA6`, `HEX8`
-(Lagrange-1) ; quadratiques `SEG3`, `TRI6`, `QUA8`, `QUA9`, `TET10`, `PENTA15`,
-`HEX20`, `HEX27` (Lagrange-2, sérendipité ou complets). Fonctions de forme et
-dérivées, jacobien y compris le cas *manifold*, quadratures `Gauss` et
-`Reduced` — plus la quadrature conique Gauss × Jacobi de la pyramide.
-Axisymétrie portée par `Coords` et intégrée dans la seule mesure `det_j_w`.
+`POI1`; linear `SEG2`, `TRI3`, `QUA4`, `TET4`, `PYRA5`, `PENTA6`, `HEX8`
+(Lagrange-1); quadratic `SEG3`, `TRI6`, `QUA8`, `QUA9`, `TET10`, `PENTA15`,
+`HEX20`, `HEX27` (Lagrange-2, serendipity or complete). Shape functions and
+derivatives, Jacobian including the *manifold* case, `Gauss` and `Reduced`
+quadratures — plus the pyramid's conical Gauss × Jacobi quadrature. Axisymmetry
+carried by `Coords` and integrated into the single `det_j_w` measure.
 
-Chaque type tient dans **un fichier** `atoms/element_kind/<nom>.rs` implémentant
-le trait `ElementKind` — nœuds de référence, facettes, arêtes, domaine,
-interpolation, quadrature, codes VTK/gmsh, familles. Un unique `match`,
-`ElementType::as_kind()`, relie l'énum au comportement, sur le modèle de
-`SubModel::as_kind()` côté physiques : ajouter un élément coûte un fichier et
-deux variantes, et aucun consommateur générique ne change.
+Each type fits in **one file** `atoms/element_kind/<name>.rs` implementing the
+`ElementKind` trait — reference nodes, facets, edges, domain, interpolation,
+quadrature, VTK/gmsh codes, families. A single `match`,
+`ElementType::as_kind()`, connects the enum to the behaviour, on the model of
+`SubModel::as_kind()` on the physics side: adding an element costs one file and
+two variants, and no generic consumer changes.
 
-## Physiques — 16 sous-modèles
+## Physics — 16 sub-models
 
-Thermique : `HeatConduction`, `BoundaryTransfer` (échange de surface avec une
-ambiante — film thermique, transfert de masse, ou fondation élastique selon les
-composantes qu'on lui donne),
-`Radiation` (rayonnement à l'infini `σε(T⁴ − T_∞⁴)` : rigidité linéarisée autour
-de `T_∞`, résidu exact, tangente cohérente validée par différences finies ;
-première physique à déclarer **deux** natures, `[Thermal, Radiation]`).
-Diffusion : `Fick` (concentration `c` / flux `j`, nature `Diffusion` propre),
-`InterfaceTransfer` (échange `h(a₁ − a₂)` entre deux maillages coïncidents mais
-numérotés séparément ; comme `BoundaryTransfer`, il prend ses grandeurs
-transférées en argument — thermique, diffusion, ou joint collé de raideur finie
-— et les deux partagent leur noyau dans `models::transfer`).
-Mécanique : `Truss`, `Elasticity` (contraintes/déformations planes,
-axisymétrique, 3-D), `Plasticity` (la **loi d'écoulement en attribut** : von Mises parfaite ou à
-écrouissage isotrope, Drucker-Prager non associé avec traitement du sommet,
-Ottosen à quatre paramètres intégrée par plan sécant ; puis les lois
-**dépendantes du temps** — fluages de Norton, Lemaitre et Blackburn,
-viscoplasticité de Chaboche et sa variante endommageable de Lemaitre-Chaboche,
-qui erronent en l'absence de `dt` ; tangentes toutes confrontées à une différence
-finie des forces internes), `Damage` (**loi en attribut** elle aussi : Mazars scalaire, Damage TC à deux
-variables — la seule qui rende sa raideur à une fissure qui se referme — et
-SiC/SiC orthotrope, dont les directions d'endommagement sont le repère de
-tissage réutilisé de l'orthotropie élastique), `Timoshenko`,
-`Frame` (portique 2-D), `Frame3d`, `Bernoulli` (poutre sans cisaillement
-transverse, 1-D / plan / spatial, exacte aux nœuds par interpolation d'Hermite),
-`Shell` (**formulation en attribut** : Reissner-Mindlin à cisaillement
-sous-intégré contre le blocage, ou Kirchhoff discret DKT/DKQ qui n'a aucun
-cisaillement à bloquer ; six DDL par nœud, vrillage lié à la rotation de
-membrane, membrane et vrillage partagés par les deux). Contraintes : `Dirichlet`, `Mpc`,
-`Embedded` (baignage), `Contact` (nœud-surface, unilatéral).
-Dilatation thermique non couplée (`thermal_strain`, `alpha` en composante
-matériau facultative — acceptée par l'élasticité, la plasticité et
-l'endommagement : la dilatation est retranchée avant que la loi mécanique ne voie
-quoi que ce soit, donc rien n'interdisait qu'un matériau qui se dilate plastifie).
+Thermal: `HeatConduction`, `BoundaryTransfer` (surface exchange with an ambient
+medium — thermal film, mass transfer, or elastic foundation depending on the
+components it is given),
+`Radiation` (radiation to infinity `σε(T⁴ − T_∞⁴)`: stiffness linearised around
+`T_∞`, exact residual, consistent tangent validated by finite differences; the
+first physics to declare **two** natures, `[Thermal, Radiation]`).
+Diffusion: `Fick` (concentration `c` / flux `j`, its own `Diffusion` nature),
+`InterfaceTransfer` (exchange `h(a₁ − a₂)` between two coincident but separately
+numbered meshes; like `BoundaryTransfer`, it takes the quantities it transfers as
+an argument — thermal, diffusion, or a bonded joint of finite stiffness — and
+both share their kernel in `models::transfer`).
+Mechanics: `Truss`, `Elasticity` (plane stress/strain, axisymmetric, 3-D),
+`Plasticity` (the **flow law as an attribute**: perfect von Mises or with
+isotropic hardening, non-associated Drucker-Prager with apex handling,
+four-parameter Ottosen integrated by secant plane; then the **time-dependent**
+laws — Norton, Lemaitre and Blackburn creeps, Chaboche viscoplasticity and its
+damaging Lemaitre-Chaboche variant, which error out in the absence of `dt`;
+tangents all confronted with a finite difference of the internal forces),
+`Damage` (**law as an attribute** too: scalar Mazars, two-variable Damage TC —
+the only one that gives its stiffness back to a crack that closes again — and
+orthotropic SiC/SiC, whose damage directions are the weaving frame reused from
+elastic orthotropy), `Timoshenko`,
+`Frame` (2-D frame), `Frame3d`, `Bernoulli` (beam without transverse shear, 1-D
+/ plane / spatial, exact at the nodes through Hermite interpolation),
+`Shell` (**formulation as an attribute**: Reissner-Mindlin with under-integrated
+shear against locking, or discrete Kirchhoff DKT/DKQ which has no shear to lock;
+six DOF per node, drilling tied to the membrane rotation, membrane and drilling
+shared by both). Constraints: `Dirichlet`, `Mpc`, `Embedded` (immersion),
+`Contact` (node-surface, unilateral).
+Uncoupled thermal expansion (`thermal_strain`, `alpha` as an optional material
+component — accepted by elasticity, plasticity and damage: the expansion is
+subtracted before the mechanical law sees anything at all, so nothing forbade a
+material that expands from yielding).
 
-**Symétrie matériau** (`MaterialSymmetry`, `src/models/symmetry.rs`) : axe
-orthogonal à l'hypothèse cinématique, partagé par `Elasticity`,
-`HeatConduction` et `Fick` — isotrope (défaut, inchangé), orthotrope,
-anisotrope. Le repère d'orthotropie est donné par des **vecteurs** portés par le
-champ matériau (`V1X/V1Y`, plus `V1Z` et `V2*` en 3-D), comme
-`MATE 'DIRECTION' V1 V2` de Cast3M. La rotation du tenseur d'élasticité passe
-par l'ordre 4 plutôt que par une matrice de Bond, ce qui supprime toute
-convention d'indices ; l'isotropie court-circuite ce chemin et garde ses nombres
-exacts.
+**Material symmetry** (`MaterialSymmetry`, `src/models/symmetry.rs`): an axis
+orthogonal to the kinematic assumption, shared by `Elasticity`,
+`HeatConduction` and `Fick` — isotropic (default, unchanged), orthotropic,
+anisotropic. The orthotropy frame is given by **vectors** carried by the material
+field (`V1X/V1Y`, plus `V1Z` and `V2*` in 3-D), like Cast3M's
+`MATE 'DIRECTION' V1 V2`. The rotation of the elasticity tensor goes through
+order 4 rather than through a Bond matrix, which removes any index convention;
+isotropy short-circuits that path and keeps its exact numbers.
 
-Le coût d'ajout d'une physique est **O(1) fichier** : une struct + un
-`impl SubModelKind`, deux lignes de câblage.
+The cost of adding a physics is **O(1) file**: a struct + an
+`impl SubModelKind`, two lines of wiring.
 
-`FollowerPressure` (charge dont la direction tourne avec la surface, bâtie sur
-les tangentes déformées et non sur Nanson — `I + ∇_s u` n'est pas un gradient de
-transformation sur une variété) est **retirée temporairement** : seule physique
-sans matrice, elle empruntait un `stiffness_layout` pour déclarer sa géométrie
-d'intégration. Code et points de réintégration dans
-[`archive/pression-suiveuse.md`](archive/pression-suiveuse.md) ; à remettre avec
-une capacité « charge » distincte de `Domain`.
+`FollowerPressure` (a load whose direction turns with the surface, built on the
+deformed tangents and not on Nanson — `I + ∇_s u` is not a deformation gradient
+on a manifold) is **temporarily removed**: the only physics without a matrix, it
+borrowed a `stiffness_layout` to declare its integration geometry. Code and
+re-integration points in
+[`archive/pression-suiveuse.md`](archive/pression-suiveuse.md); to be put back
+with a "load" capacity distinct from `Domain`.
 
-## Assemblage
+## Assembly
 
-Trois formes de contribution (`Contribution`) : `Computed` (intégrée à la volée
-et dispersée dans le CSR), `Literal` (valeurs déjà remplies — Dirichlet, MPC) et
-`Coupling` (bloc **inter-maillages**, lignes sur un maillage et colonnes sur un
-autre ; son scatter est séquentiel, un coloriage sur une seule connectivité ne
-prouvant plus la disjonction).
+Three forms of contribution (`Contribution`): `Computed` (integrated on the fly
+and scattered into the CSR), `Literal` (values already filled in — Dirichlet,
+MPC) and `Coupling` (an **inter-mesh** block, rows on one mesh and columns on
+another; its scatter is sequential, since a colouring over a single connectivity
+no longer proves disjointness).
 
-Quatre genres de matrice derrière une machinerie unique (`MatrixKind`) :
-raideur / conductivité, masse / capacité, raideur géométrique, tangente
-cohérente — plus `lump`. Motif creux mémoïsé **par genre** sur le `Model`,
-matrices élémentaires calculées en parallèle et dispersées dans le CSR par
-**coloration des cellules**, sans matérialiser de COO. Éléments
-multi-quadrature (Timoshenko) sur le même chemin. Forces internes `∫ Bᵀσ`
-(Cast3M `BSIG`) et divergence par le même driver de scatter nodal.
+Four matrix kinds behind a single machinery (`MatrixKind`): stiffness /
+conductivity, mass / capacity, geometric stiffness, consistent tangent — plus
+`lump`. Sparsity pattern memoised **per kind** on the `Model`, element matrices
+computed in parallel and scattered into the CSR by **cell colouring**, without
+materialising any COO. Multi-quadrature elements (Timoshenko) on the same path.
+Internal forces `∫ Bᵀσ` (Cast3M `BSIG`) and divergence through the same nodal
+scatter driver.
 
-## Solveur
+## Solver
 
-LU creuse directe (`faer`), factorisation mise en cache sur la `Matrix`.
-Trois voies : **Lagrange** (`solve`, système augmenté), **élimination /
-condensation** (`solve_eliminate`), **active-set unilatéral**
-(`solve_unilateral`). Sortie sur supports de blocs (handles POI1 réutilisés,
-champs soustractibles).
+Direct sparse LU (`faer`), factorisation cached on the `Matrix`. Three routes:
+**Lagrange** (`solve`, augmented system), **elimination / condensation**
+(`solve_eliminate`), **unilateral active-set** (`solve_unilateral`). Output on
+block supports (reused POI1 handles, subtractable fields).
 
-## Maillage
+## Meshing
 
-Primitives : `line`, `circle`, `arc`, `transfinite`, `points`.
-Balayages : `sweep`, `extrude` (TRI3 → PENTA6, QUA4 → HEX8), `revolve`,
+Primitives: `line`, `circle`, `arc`, `transfinite`, `points`.
+Sweeps: `sweep`, `extrude` (TRI3 → PENTA6, QUA4 → HEX8), `revolve`,
 `sweep_solid`.
-Mailleurs libres : `triangulate_surface` (Delaunay contraint + Ruppert, trous
-compris, TRI3/QUA4, contours 2-D et 3-D planaires) et `triangulate_volume`
-(prédicats exacts, enveloppe gelée, récupération, raffinement et lissage
-anti-*slivers*).
-Mailleurs frontaux : `pave_surface` (quadrangles) et `pave_volume` (couche
-limite HEX8 + raccord PYRA5 + cœur TET4).
-Topologie et transformations : `skin`, `border`, `orient`, `consolidate`,
+Free meshers: `triangulate_surface` (constrained Delaunay + Ruppert, holes
+included, TRI3/QUA4, 2-D and planar 3-D contours) and `triangulate_volume`
+(exact predicates, frozen hull, recovery, refinement and anti-*sliver*
+smoothing).
+Advancing-front meshers: `pave_surface` (quadrangles) and `pave_volume` (HEX8
+boundary layer + PYRA5 junction + TET4 core).
+Topology and transformations: `skin`, `border`, `orient`, `consolidate`,
 `merge_nodes`, `to_quadratic`, `convert`, `to_poi1`, `translate`, `rotate`,
-symétries, sélections géométriques (sphère, plan, cylindre, cône, tore, ligne).
-Entrées/sorties : lecture **gmsh** (MSH 2.2 et 4.1, ASCII et binaire), import
-**gmsh en mémoire** depuis une session vivante (sans fichier, sans copie des
-tableaux), export **VTK**.
+symmetries, geometric selections (sphere, plane, cylinder, cone, torus, line).
+Input/output: **gmsh** reading (MSH 2.2 and 4.1, ASCII and binary), **in-memory
+gmsh** import from a live session (no file, no copy of the arrays), **VTK**
+export.
 
-## Champs et opérateurs
+## Fields and operators
 
-Cinématique (`gradient`, `deformation`, `beam_deformation`,
-`frame_deformation`), comportement (`behavior`), matériaux
-(`material_field`, `interp_to_gauss`), positions, `restrict`, `flux`,
-`divergence`, `internal_forces`, masques et arithmétique de champ,
-réductions (`integral`, `xtx`, `xty`), requêtes géométriques
-(`locate_points`, `project_points`, `contact_gaps`), `Evolution` (valeur
-tabulée interpolée). 168 fonctions libres dans `ops/`.
+Kinematics (`gradient`, `deformation`, `beam_deformation`,
+`frame_deformation`), behaviour (`behavior`), materials (`material_field`,
+`interp_to_gauss`), positions, `restrict`, `flux`, `divergence`,
+`internal_forces`, field masks and arithmetic, reductions (`integral`, `xtx`,
+`xty`), geometric queries (`locate_points`, `project_points`, `contact_gaps`),
+`Evolution` (tabulated interpolated value). 168 free functions in `ops/`.
 
-## Parallélisme
+## Parallelism
 
-`rayon` toujours actif, politique de grain centralisée
-(`parallel::MIN_PARALLEL_LEN`). Drivers `models::kernel` au-dessus de noyaux
-purs et séquentiels ; zéro-copie par guards tenus pendant toute la région
-parallèle. Déterminisme **bit-à-bit** pour les opérateurs write-once et les
-réductions ; déterminisme par coloration (non bit-à-bit) pour l'assemblage et
-les scatters nodaux ; le solveur fait exception (back-end faer).
+`rayon` always on, centralised grain policy (`parallel::MIN_PARALLEL_LEN`).
+`models::kernel` drivers above pure, sequential kernels; zero-copy through
+guards held for the whole parallel region. **Bit-for-bit** determinism for the
+write-once operators and the reductions; determinism through colouring (not
+bit-for-bit) for the assembly and the nodal scatters; the solver is the
+exception (faer back-end).
 
-## API Python
+## Python API
 
-*Mixed layout* : extension plate privée `_pyrucast`, rangée par la couche
-Python pure en sous-modules nommés d'après le conteneur produit
-(`pyrucast.mesh`, `pyrucast.element_field`, `pyrucast.matrix`, …), les
-conteneurs et atomes restant au top-level. Stub `.pyi` versionné.
-Interruption coopérative (`Ctrl+C`) via le trait `Cancel`.
-Orchestration non-linéaire en Python pur : `pyrucast.thermomechanics`
-(pas-à-pas thermo→méca), Newton modifié accéléré par Anderson dans les
-exemples.
+*Mixed layout*: private flat `_pyrucast` extension, filed by the pure Python
+layer into sub-modules named after the produced container (`pyrucast.mesh`,
+`pyrucast.element_field`, `pyrucast.matrix`, …), the containers and atoms
+staying at the top level. Versioned `.pyi` stub.
+Cooperative interruption (`Ctrl+C`) through the `Cancel` trait.
+Non-linear orchestration in pure Python: `pyrucast.thermomechanics`
+(step-by-step thermal→mechanical), modified Newton accelerated by Anderson in
+the examples.
 
 ## Visualisation
 
-Rendu CPU `plotters` (PNG/SVG) et fenêtre interactive `winit`/`softbuffer` :
-maillages, champs coloriés **par élément** (jamais moyennés entre éléments),
-rendu interpolé par subdivision, courbes, axes, gizmo.
+CPU rendering with `plotters` (PNG/SVG) and an interactive `winit`/`softbuffer`
+window: meshes, fields coloured **per element** (never averaged between
+elements), interpolated rendering by subdivision, curves, axes, gizmo.
 
-## Outillage
+## Tooling
 
-`script/check_all.sh` (la passe complète, à brancher en CI) et les cinq blocs
-qu'il enchaîne (`check_format`, `check_rust`, `check_python`, `check_examples`,
-`check_doc`), lançables isolément ; `build.sh` / `dev.sh`, `run_examples.sh`,
-`set_new_version.sh`, `scaling.sh`. Chacun a son équivalent PowerShell. CI GitHub Actions : publication du book et de la rustdoc sur
-Pages, release multi-OS (Linux, Windows, macOS).
+`script/check_all.sh` (the full pass, to be wired into CI) and the five blocks it
+chains (`check_format`, `check_rust`, `check_python`, `check_examples`,
+`check_doc`), runnable in isolation; `build.sh` / `dev.sh`, `run_examples.sh`,
+`set_new_version.sh`, `scaling.sh`. Each has its PowerShell equivalent. GitHub
+Actions CI: publication of the book and the rustdoc on Pages, multi-OS release
+(Linux, Windows, macOS).
 
 ---
 
-# Pistes futures
+# Future leads
 
-Rien de ce qui suit n'est arbitré : ni l'ordre, ni le périmètre, ni même le
-fait de le faire. Ces points sont ceux que l'état des lieux a fait apparaître
-comme **manquants**, à préciser plus tard.
+Nothing that follows is settled: neither the order, nor the scope, nor even the
+fact of doing it. These points are the ones the status report showed up as
+**missing**, to be refined later.
 
-## Transitoire et intégration en temps
+## Transient analysis and time integration
 
-Le manque fonctionnel le plus visible. La masse et le *lumping* existent ; ce
-qui manque est le **pilotage** : schéma d'intégration en temps (θ-méthode,
-Newmark), et la couche Python qui l'orchestre — l'équivalent d'un `PASAPAS`.
-S'y rattache l'**advection** (`ADVE`), seule brique Cast3M encore absente côté
-matrices.
+The most visible functional gap. The mass and the *lumping* exist; what is
+missing is the **driving**: a time integration scheme (θ-method, Newmark), and
+the Python layer that orchestrates it — the equivalent of a `PASAPAS`. Related to
+it is **advection** (`ADVE`), the only Cast3M brick still absent on the matrix
+side.
 
-## Solveur et performance
+## Solver and performance
 
-- **Renumérotation** — `Coords` porte déjà une permutation optionnelle séparant
-  l'ordre solveur de l'identité, mais personne ne la calcule : une réduction de
-  bande/profil (type Cuthill–McKee) reste à écrire, avec l'invariance des
-  résultats en test.
-- **Méthodes itératives** et **factorisation de Cholesky** pour les matrices
-  symétriques — le drapeau de symétrie existe déjà sur la `Matrix`, et
-  `SolveMethod` est le point d'extension prévu.
-- **Passe performance** sur gros maillage, avec les benchs (`benches/parallel.rs`,
-  `benches/geom.rs`, `script/scaling.sh`) comme instrument.
-- **Allocateur global** — voir ci-dessous.
+- **Renumbering** — `Coords` already carries an optional permutation separating
+  the solver order from the identity, but nobody computes it: a bandwidth/profile
+  reduction (Cuthill–McKee style) remains to be written, with the invariance of
+  the results as a test.
+- **Iterative methods** and **Cholesky factorisation** for symmetric matrices —
+  the symmetry flag already exists on the `Matrix`, and `SolveMethod` is the
+  planned extension point.
+- **A performance pass** on a large mesh, with the benches (`benches/parallel.rs`,
+  `benches/geom.rs`, `script/scaling.sh`) as the instrument.
+- **A global allocator** — see below.
 
-### Allocateur global : reprendre les défauts de page des gros champs
+### Global allocator: taking back the page faults of the large fields
 
-**Le problème.** Un opérateur qui produit un champ rend un conteneur **neuf**.
-Sur un maillage sérieux, ce conteneur est énorme : `behavior::integrate` sur
-3,61 M de QUA4 en axisymétrique rend 462 Mo (4 points de Gauss × 4 composantes
-× 8 octets). Au-delà de son seuil, glibc sert un tel bloc par `mmap` et le rend
-par `munmap` au `Drop`. La mémoire revient donc au noyau à chaque appel, et
-l'appel suivant la **refault page par page** : 112 812 pages de 4 Ko, une par
-page, une fois par appel.
+**The problem.** An operator that produces a field returns a **fresh** container.
+On a serious mesh, that container is enormous: `behavior::integrate` on 3.61 M
+QUA4 in axisymmetry returns 462 MB (4 Gauss points × 4 components × 8 bytes).
+Past its threshold, glibc serves such a block by `mmap` and gives it back by
+`munmap` at `Drop`. The memory therefore returns to the kernel at every call, and
+the next call **refaults it page by page**: 112,812 pages of 4 KB, one at a time,
+once per call.
 
-Mesuré (`perf stat`, grille 1900×1900) : **11,9 M de défauts de page** pour une
-centaine d'appels — exactement le compte théorique, donc ni fuite ni gaspillage,
-simplement le tarif d'allouer un demi-gigaoctet neuf. Chaque défaut coûte
-**1,07 µs** (entrée noyau, allocation d'une page, remise à zéro de 4 Ko, mise à
-jour de la table), soit **120 ms par appel, ~15 % d'un appel de 819 ms**. La
-bande passante effective tombe à 560 Mo/s : l'opération n'est pas limitée par le
-débit mémoire mais par la latence de remise en service des pages.
+Measured (`perf stat`, 1900×1900 grid): **11.9 M page faults** for about a
+hundred calls — exactly the theoretical count, so neither a leak nor waste,
+simply the price of allocating a fresh half-gigabyte. Each fault costs
+**1.07 µs** (kernel entry, allocation of a page, zeroing of 4 KB, table update),
+that is **120 ms per call, ~15% of an 819 ms call**. The effective bandwidth
+falls to 560 MB/s: the operation is limited not by memory throughput but by the
+latency of putting the pages back into service.
 
-Ça ne concerne pas que les benchs : une boucle de Newton ou un transitoire
-rappelle `integrate` à chaque itération, et paie donc à chaque itération.
+This does not only concern the benches: a Newton loop or a transient calls
+`integrate` again at every iteration, and therefore pays at every iteration.
 
-**La solution.** Remplacer l'allocateur global par un allocateur à arènes
-(`mimalloc` ou `jemalloc`), en une ligne dans `lib.rs` :
+**The solution.** Replace the global allocator with an arena allocator
+(`mimalloc` or `jemalloc`), in one line in `lib.rs`:
 
 ```rust
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 ```
 
-**Pourquoi ça aide.** Un allocateur à arènes **conserve** les blocs libérés au
-lieu de les rendre au noyau, et les recycle au tour suivant. Les pages restent
-donc mappées : on ne les faulte qu'au premier appel. Vérifié en relevant
-`MALLOC_MMAP_THRESHOLD_`, qui produit le même effet sur glibc — **11,9 M → 402 k
-défauts, soit 30×**, à nombre d'instructions rigoureusement constant (3,506 G vs
-3,511 G). C'est bien du temps noyau supprimé, pas du calcul déplacé.
+**Why it helps.** An arena allocator **keeps** the freed blocks instead of
+returning them to the kernel, and recycles them on the next round. The pages
+therefore stay mapped: we only fault them on the first call. Verified by raising
+`MALLOC_MMAP_THRESHOLD_`, which produces the same effect on glibc — **11.9 M →
+402 k faults, that is 30×**, at a rigorously constant instruction count (3.506 G
+vs 3.511 G). That really is kernel time removed, not computation moved around.
 
-L'intérêt dépasse `integrate` : l'assemblage et les matrices allouent bien plus
-gros, et profiteraient du même recyclage. C'est aussi portable macOS et Windows,
-là où le réglage `mallopt` équivalent ne vaudrait que pour glibc.
+The benefit goes beyond `integrate`: the assembly and the matrices allocate much
+bigger, and would benefit from the same recycling. It is also portable to macOS
+and Windows, where the equivalent `mallopt` setting would only hold for glibc.
 
-**Ce qu'il en coûte.** Une dépendance de plus au socle, et une empreinte
-résidente plus haute puisque les arènes sont conservées. À mesurer avant/après
-sur `benches/` **et** sur la RSS, pas seulement sur le temps.
+**What it costs.** One more dependency in the base, and a higher resident
+footprint since the arenas are kept. To be measured before/after on `benches/`
+**and** on the RSS, not only on the time.
 
-**L'alternative, plus profonde.** Une forme `integrate_into(&mut champ, …)` qui
-réutilise le champ du tour précédent supprimerait l'allocation elle-même, pas
-seulement ses défauts. Mais elle élargit le seam `Domain::integrate_behavior`,
-alors que le contrat veut qu'un auteur de physique n'écrive que
-`integrate_point` — chantier de conception à part entière.
+**The deeper alternative.** An `integrate_into(&mut field, …)` form reusing the
+field of the previous round would remove the allocation itself, not only its
+faults. But it widens the `Domain::integrate_behavior` seam, whereas the contract
+wants a physics author to write only `integrate_point` — a design project in its
+own right.
 
-## Sauvegarde et reprise
+## Save and restore
 
-**Faite.** `save` / `load` écrivent un graphe d'objets sous des identifiants
-locaux au fichier et le relisent en préservant le partage — deux champs portés
-par le même support restent, après relecture, deux champs portés par un seul
-support. Racines nommées, dictionnaire à l'aller comme au retour, la relecture
-ajoute sans rien remplacer, les compteurs sont recomptés depuis zéro, l'en-tête
-est versionné et une version inconnue est refusée. Voir
+**Done.** `save` / `load` write an object graph under file-local identifiers and
+read it back preserving the sharing — two fields carried by the same support
+remain, after reading back, two fields carried by a single support. Named roots,
+a dictionary on the way out as on the way in, reading back adds without replacing
+anything, the counters are recounted from zero, the header is versioned and an
+unknown version is refused. See
 [book/src/sauvegarde.md](book/src/sauvegarde.md).
 
-Deux suites possibles, aucune engagée :
+Two possible follow-ups, neither committed:
 
-- **la lecture partielle** — sortir un objet d'un très gros fichier sans tout
-  charger. Elle coûte un index en tête de fichier (identifiant → position), au
-  prix de la boucle avant unique qui fait la simplicité de la relecture. La
-  version de format laisse la porte ouverte.
-- **un export d'échange** (HDF5 ou autre), à ne pas confondre avec ce format :
-  HDF5 n'a aucune notion d'identité d'objet ni de référence partagée, la partie
-  difficile serait à réécrire par-dessus, et il coûterait une dépendance C au
-  socle. Il se justifiera pour ses propres mérites — publier des résultats — et
-  comme opérateur séparé.
+- **partial reading** — extracting one object from a very large file without
+  loading everything. It costs an index at the head of the file (identifier →
+  position), at the price of the single forward loop that makes reading back
+  simple. The format version leaves the door open.
+- **an interchange export** (HDF5 or another), not to be confused with this
+  format: HDF5 has no notion of object identity nor of shared reference, the hard
+  part would have to be rewritten on top of it, and it would cost a C dependency
+  in the base. It will justify itself on its own merits — publishing results —
+  and as a separate operator.
 
-## Qualité de maillage
+## Mesh quality
 
-Le domaine le plus avancé du code, et le moins planifié. Le point ouvert est
-documenté dans `triangulate_volume.rs` : la **récupération d'arêtes** de
-l'enveloppe est inachevée — une arête bloquée reste tributaire des bascules,
-sinon de `allow_surface_nodes`. S'y ajoutent les mesures de qualité et leur
-suivi dans le temps.
+The most advanced area of the code, and the least planned. The open point is
+documented in `triangulate_volume.rs`: the **edge recovery** of the hull is
+unfinished — a blocked edge remains dependent on flips, failing that on
+`allow_surface_nodes`. Added to that are the quality measures and their tracking
+over time.
 
-Côté **quadrangles**, l'état de l'art, la place qu'y tiennent `pave_surface`,
-`grid_surface` et `merge_triangles`, et six pistes chiffrées sont dans
-[MAILLAGE-QUADRANGULAIRE.md](MAILLAGE-QUADRANGULAIRE.md) — avec la liste de ce
-qui a été essayé puis écarté, à ne pas refaire.
+On the **quadrangle** side, the state of the art, the place `pave_surface`,
+`grid_surface` and `merge_triangles` hold in it, and six quantified leads are in
+[MAILLAGE-QUADRANGULAIRE.md](MAILLAGE-QUADRANGULAIRE.md) — with the list of what
+was tried and then set aside, not to be done again.
 
-## Évolutions mémoire (conditionnelles)
+## Memory evolutions (conditional)
 
-Le modèle est volontairement minimal : un `Arc<RwLock<T>>` par objet, un
-compteur par nœud dans `Coords`. Deux extensions sont identifiées, chacune
-**déclenchée par une mesure**, pas par anticipation.
+The model is deliberately minimal: one `Arc<RwLock<T>>` per object, one counter
+per node in `Coords`. Two extensions are identified, each **triggered by a
+measurement**, not by anticipation.
 
-1. **Énumérer les objets vivants** — un listing façon cast3m, ou une sauvegarde
-   de session entière. Coûte un `Vec<Weak<_>>` par type inscrit dans
-   `Handle::new`, l'entonnoir de création unique qui existe pour cela.
-   *Déclencheur* : une commande utilisateur qui en a besoin.
-2. **Simplifier le contrat de `Node`** — mode cast3m pur, où seul un maillage
-   maintient un nœud vivant. Supprime d'un coup le compteur par nœud *et* la
-   logique d'annulation d'`add_cell`. *Déclencheur* : constater que les `Node`
-   isolés servent peu en pratique. Détails dans
+1. **Enumerating the live objects** — a cast3m-style listing, or a save of a
+   whole session. Costs a `Vec<Weak<_>>` per type registered in `Handle::new`,
+   the single creation funnel that exists for that purpose.
+   *Trigger*: a user command that needs it.
+2. **Simplifying the `Node` contract** — a pure cast3m mode, where only a mesh
+   keeps a node alive. Removes at a stroke the per-node counter *and* the
+   cancellation logic of `add_cell`. *Trigger*: observing that isolated `Node`s
+   are of little practical use. Details in
    [book/src/memory-model.md](book/src/memory-model.md).
 
 ---
 
-# Annexe — algorithmes non-linéaires et transitoires : orchestration Python
+# Appendix — non-linear and transient algorithms: Python orchestration
 
-Les schémas non-linéaires (boucle de **Newton**) et l'**intégration en temps**
-ne sont **pas** codés en Rust : ils sont **pilotés côté Python**, par des
-fonctions qui composent les opérateurs du cœur.
+The non-linear schemes (**Newton** loop) and the **time integration** are **not**
+coded in Rust: they are **driven on the Python side**, by functions that compose
+the core's operators.
 
-C'est le modèle de **Cast3M**, où ces algorithmes ne sont pas des opérateurs
-natifs mais des **procédures GIBIANE** (`PASAPAS`, `UNPAS`, `TRANSNON`…)
-enchaînant les opérateurs de base (`RIGI`, `KTAN`, `BSIG`, `RESO`, `COMP`,
-`EXCO`…). Ici, le langage d'orchestration est **Python** au lieu de GIBIANE :
+This is the **Cast3M** model, where these algorithms are not native operators but
+**GIBIANE procedures** (`PASAPAS`, `UNPAS`, `TRANSNON`…) chaining the basic
+operators (`RIGI`, `KTAN`, `BSIG`, `RESO`, `COMP`, `EXCO`…). Here, the
+orchestration language is **Python** instead of GIBIANE:
 
-- **le cœur Rust fournit les briques** — assemblage (`stiffness`, `mass`,
-  `geometric`, `tangent`), résolution linéaire (`solve`, `solve_eliminate`,
-  `solve_unilateral`), intégration du comportement (`behavior`), forces
-  internes (`internal_forces`), opérations de champ ;
-- **Python assemble l'algorithme** — boucle de Newton (résidu, tangente,
-  incrément, test de convergence) et schéma en temps sont des fonctions Python
-  appelant ces briques.
+- **the Rust core supplies the bricks** — assembly (`stiffness`, `mass`,
+  `geometric`, `tangent`), linear solving (`solve`, `solve_eliminate`,
+  `solve_unilateral`), behaviour integration (`behavior`), internal forces
+  (`internal_forces`), field operations;
+- **Python assembles the algorithm** — the Newton loop (residual, tangent,
+  increment, convergence test) and the time scheme are Python functions calling
+  those bricks.
 
-C'est déjà le cas en pratique : `pyrucast.thermomechanics` déroule un
-pas-à-pas thermo→mécanique, et les exemples déroulent un Newton modifié
-accéléré par Anderson. Un équivalent de `pasapas` / `unpas` / `transnon` sera
-donc une **bibliothèque Python** livrée avec le binding, pas un opérateur Rust
-(cf. la colonne « Équivalent pyrucast » de `opérateur_castem.csv`).
+That is already the case in practice: `pyrucast.thermomechanics` runs a
+step-by-step thermal→mechanical scheme, and the examples run a modified Newton
+accelerated by Anderson. An equivalent of `pasapas` / `unpas` / `transnon` will
+therefore be a **Python library** shipped with the binding, not a Rust operator
+(cf. the "Équivalent pyrucast" column of `opérateur_castem.csv`).

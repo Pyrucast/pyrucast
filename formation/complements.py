@@ -1,9 +1,9 @@
 """Formation débutant — 6. Compléments : éléments structuraux + export.
 
 Barre en traction (élément `SEG2`, `model.truss`) — l'équivalent pyrucast
-des éléments `BARR`/`POUT` de Cast3M évoqués dans les compléments de la
-formation. Le résultat est comparé à la solution analytique puis exporté
-au format VTK (lisible par ParaView), l'équivalent du `SORT 'VTK'` de
+of Cast3M's `BARR`/`POUT` elements mentioned in the training's complements.
+The result is compared with the analytical solution then exported to VTK
+(readable by ParaView), the equivalent of Cast3M's `SORT 'VTK'`.
 Cast3M.
 
 Lancement ::
@@ -37,7 +37,7 @@ def main() -> None:
     modele = pc.model.truss(fes)
     modele = modele | encastrement(modele, n0, "u_x")
     modele = modele | encastrement(modele, n0, "u_y")
-    modele = modele | encastrement(modele, n1, "u_y")  # pas de raideur transversale
+    modele = modele | encastrement(modele, n1, "u_y")  # no transverse stiffness
 
     materiaux = pc.element_field.material_field(modele, [("E", E), ("A", A)])
 
@@ -58,7 +58,7 @@ def main() -> None:
     u_propre = pc.node_field.restrict_like(solution, pc.NodeField(mesh, ["u_x", "u_y"]))
     chemin = os.path.join(tempfile.gettempdir(), "barre.vtk")
     pc.export.export_vtk(mesh, chemin, u_propre)
-    print(f"Champ de déplacement exporté (VTK, lisible par ParaView) : {chemin}")
+    print(f"Displacement field exported (VTK, readable by ParaView): {chemin}")
     # ANCHOR_END: export
 
 

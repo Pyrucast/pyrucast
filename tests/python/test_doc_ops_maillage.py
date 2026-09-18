@@ -1,13 +1,13 @@
-"""Source des exemples de `book/src/operateurs/maillage.md`.
+"""Source of the examples in `book/src/operateurs/maillage.md`.
 
-Chaque bloc de la page vient d'ici par `{{#include …:ancre}}`. Le montage vit hors des ancres. Voir
+Every block of the page comes from here through `{{#include …:anchor}}`. The scaffolding lives outside the anchors. See
 `book/src/developper/documentation-et-tests.md`.
 
-**Le code vit au niveau module, pas dans des fonctions de test** : mdbook
-n'enlève pas l'indentation d'un extrait inclus, si bien qu'un bloc ancré dans
-une fonction s'afficherait décalé de quatre espaces. pytest exécute donc ce
-fichier à la **collecte** ; un exemple qui casse est une erreur de collecte, au
-traceback complet et au code de retour non nul.
+**The code lives at module level, not inside test functions**: mdbook does not
+strip the indentation of an included excerpt, so a block anchored inside a
+function would show up shifted by four spaces. pytest therefore runs this file
+at **collection** time; an example that breaks is a collection error, with a
+full traceback and a non-zero return code.
 """
 
 import math
@@ -19,7 +19,7 @@ import pyrucast
 
 
 def _contour_rectangle_3d(largeur=2.0, hauteur=1.0, n=4):
-    """Le même contour, mais dans un `Coords` 3-D : l'extrusion vers +z l'exige."""
+    """The same contour, but in a 3-D `Coords`: the extrusion towards +z requires it."""
     c = pyrucast.Coords(3)
     coins = [
         c.add_node(list(p) + [0.0])
@@ -33,7 +33,7 @@ def _contour_rectangle_3d(largeur=2.0, hauteur=1.0, n=4):
 
 
 def _contour_rectangle(largeur=2.0, hauteur=1.0, n=4):
-    """Un contour SEG2 fermé, orienté CCW."""
+    """A closed SEG2 contour, oriented CCW."""
     c = pyrucast.Coords(2)
     coins = [
         c.add_node(list(p))
@@ -46,10 +46,10 @@ def _contour_rectangle(largeur=2.0, hauteur=1.0, n=4):
     return c, pyrucast.mesh.consolidate(contour)
 
 
-# ── Ligne, extrusion, ordre quadratique ─────────────────────────────────────
+# ── Line, extrusion, quadratic order ────────────────────────────────────────
 
 
-# ── line et extrude ────────────────────────────────────────
+# ── line and extrude ───────────────────────────────────────
 
 # ANCHOR: line
 import pyrucast
@@ -58,15 +58,15 @@ c = pyrucast.Coords(dim=2)
 a = c.add_node([0.0, 0.0])
 b = c.add_node([4.0, 0.0])
 
-# Ligne de 4 SEG2 entre a et b (3 nœuds intermédiaires créés).
+# A line of 4 SEG2 between a and b (3 intermediate nodes created).
 line = pyrucast.mesh.line(a, b, 4)
 print(line)  # Mesh: 1 submesh(es), 4 cell(s) total
 
-# Extrusion en QUA4 sur 2 couches selon +y.
+# Extrusion into QUA4 over 2 layers along +y.
 surf = pyrucast.mesh.extrude(line, [0.0, 1.0], 2)
 print(surf.element_types())  # ['QUA4']
 
-# Ligne quadratique : SEG3 (nœud de milieu d'arête par élément).
+# Quadratic line: SEG3 (one mid-edge node per element).
 line3 = pyrucast.mesh.line(a, b, 4, "SEG3")
 print(line3.element_types())  # ['SEG3']
 # ANCHOR_END: line
@@ -74,10 +74,10 @@ assert line.cell_count() == 4
 assert surf.element_types() == ["QUA4"]
 assert line3.element_types() == ["SEG3"]
 
-# ── Balayage entre deux maillages ───────────────────────────────────────────
+# ── Sweep between two meshes ────────────────────────────────────────────────
 
 
-# ── sweep variantes ────────────────────────────────────────
+# ── sweep variants ─────────────────────────────────────────
 
 c = pyrucast.Coords(2)
 a0, a1 = c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0])
@@ -85,7 +85,7 @@ b0, b1 = c.add_node([0.0, 1.0]), c.add_node([1.0, 1.0])
 mesh_a = pyrucast.mesh.line(a0, a1, 2)
 mesh_b = pyrucast.mesh.line(b0, b1, 2)
 # ANCHOR: sweep
-tri = pyrucast.mesh.sweep(mesh_a, mesh_b, 2, "TRI3")  # 2× plus de cellules que QUA4
+tri = pyrucast.mesh.sweep(mesh_a, mesh_b, 2, "TRI3")  # 2× more cells than QUA4
 qua8 = pyrucast.mesh.sweep(mesh_a, mesh_b, 2, "QUA8")
 qua9 = pyrucast.mesh.sweep(mesh_a, mesh_b, 2, "QUA9")
 tri6 = pyrucast.mesh.sweep(mesh_a, mesh_b, 2, "TRI6")
@@ -95,7 +95,7 @@ assert qua8.element_types() == ["QUA8"]
 assert qua9.element_types() == ["QUA9"]
 assert tri6.element_types() == ["TRI6"]
 
-# ── Maillage transfini (DALL) ───────────────────────────────────────────────
+# ── Transfinite mesh (DALL) ─────────────────────────────────────────────────
 
 
 # ── transfinite ────────────────────────────────────────────
@@ -107,10 +107,10 @@ p1 = c.add_node([2.0, 0.0])
 p2 = c.add_node([2.0, 1.0])
 p3 = c.add_node([0.0, 1.0])
 
-side1 = pyrucast.mesh.line(p0, p1, 4)  # bas,   4 éléments
-side2 = pyrucast.mesh.line(p1, p2, 2)  # droite, 2 éléments
-side3 = pyrucast.mesh.line(p2, p3, 4)  # haut,  4 éléments (= side1)
-side4 = pyrucast.mesh.line(p3, p0, 2)  # gauche, 2 éléments (= side2)
+side1 = pyrucast.mesh.line(p0, p1, 4)  # bottom, 4 elements
+side2 = pyrucast.mesh.line(p1, p2, 2)  # right,  2 elements
+side3 = pyrucast.mesh.line(p2, p3, 4)  # top,    4 elements (= side1)
+side4 = pyrucast.mesh.line(p3, p0, 2)  # left,   2 elements (= side2)
 
 surf = pyrucast.mesh.transfinite(side1, side2, side3, side4)
 print(surf.element_types(), surf.cell_count())  # ['QUA4'] 8
@@ -118,7 +118,7 @@ print(surf.element_types(), surf.cell_count())  # ['QUA4'] 8
 assert surf.element_types() == ["QUA4"]
 assert surf.cell_count() == 8
 
-# ── Transformations : translation, rotation, symétrie ───────────────────────
+# ── Transformations: translation, rotation, symmetry ────────────────────────
 
 
 def _face_et_copies():
@@ -127,7 +127,7 @@ def _face_et_copies():
 
     import pyrucast
 
-    # Une face TRI3 (un seul triangle) dans le plan z = 0.
+    # A TRI3 face (a single triangle) in the z = 0 plane.
     c = pyrucast.Coords(dim=3)
     face = pyrucast.Mesh(c, "TRI3")
     face.unit().add_cell(
@@ -138,15 +138,15 @@ def _face_et_copies():
         ]
     )
 
-    # Copie translatée de 5 selon +z (nœuds neufs ; `face` reste intacte).
+    # Copy translated by 5 along +z (new nodes; `face` is left intact).
     haut = pyrucast.mesh.translate(face, [0.0, 0.0, 5.0])
 
-    # Copie tournée de 30° autour de l'axe z passant par l'origine.
+    # Copy rotated by 30° about the z axis through the origin.
     tournee = pyrucast.mesh.rotate(face, math.pi / 6, [0.0, 0.0, 0.0], [0.0, 0.0, 1.0])
 
-    # Copie symétrique dans le plan y = 0, donné par trois de ses points : la
-    # moitié manquante d'une pièce maillée sur son demi-modèle (cellules remises
-    # à l'endroit).
+    # Mirror copy in the y = 0 plane, given by three of its points: the missing
+    # half of a part meshed on its half-model (cells put back the right way
+    # round).
     autre_moitie = pyrucast.mesh.symmetry_plane(
         face, [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]
     )
@@ -161,16 +161,16 @@ for m in (haut, tournee, autre_moitie):
     assert m.element_types() == ["TRI3"]
     assert m.cell_count() == 1
 
-# ── copie ──────────────────────────────────────────────────
+# ── copy ───────────────────────────────────────────────────
 
 face, _, _, _ = _face_et_copies()
 # ANCHOR: copie
-# Une copie sur ses **propres** nœuds, aux mêmes endroits : les deux maillages
-# ne se déplacent plus ensemble.
+# A copy on its **own** nodes, at the same places: the two meshes no longer
+# move together.
 jumelle = pyrucast.mesh.copy(face, new_nodes=True)
 
-# Un calque : même connectivité, **mêmes** nœuds. Il est descellé, donc de
-# nouveau modifiable même si `face` a déjà servi à un calcul.
+# A tracing: same connectivity, **same** nodes. It is unsealed, hence editable
+# again even if `face` has already been used in a computation.
 calque = face.copy(new_nodes=False)
 # ANCHOR_END: copie
 assert jumelle.node(0, 0, 0).id != face.node(0, 0, 0).id
@@ -182,13 +182,13 @@ assert calque.cell_count() == face.cell_count()
 
 face, _, tournee, _ = _face_et_copies()
 # ANCHOR: sweep_solid
-# `face` et `tournee` : la face TRI3 ci-dessus et sa copie tournée de 30°.
+# `face` and `tournee`: the TRI3 face above and its copy rotated by 30°.
 solide = pyrucast.mesh.sweep_solid(face, tournee, 1)
 print(solide.element_types())  # ['PENTA6']
 # ANCHOR_END: sweep_solid
 assert solide.element_types() == ["PENTA6"]
 
-# ── Révolution ──────────────────────────────────────────────────────────────
+# ── Revolution ──────────────────────────────────────────────────────────────
 
 
 # ── revolve ────────────────────────────────────────────────
@@ -202,13 +202,13 @@ c = pyrucast.Coords(dim=2)
 a = c.add_node([1.0, 0.0])
 b = c.add_node([2.0, 0.0])
 
-# Une couronne complète : le segment radial [1, 2] tourné d'un tour en
-# 32 secteurs de QUA4 — refermée, sans couture.
+# A complete annulus: the radial segment [1, 2] revolved a full turn into
+# 32 QUA4 sectors — closed back on itself, with no seam.
 rayon = pyrucast.mesh.line(a, b, 4)
 couronne = pyrucast.mesh.revolve(rayon, 2 * math.pi, 32, [0.0, 0.0])
 print(couronne.element_types(), couronne.cell_count())  # ['QUA4'] 128
 
-# En 3D : un quart de tube, la section QUA4 balayée autour de l'axe z.
+# In 3D: a quarter of a tube, the QUA4 section swept about the z axis.
 c3 = pyrucast.Coords(dim=3)
 section = pyrucast.Mesh(c3, "QUA4")
 section.unit().add_cell(
@@ -225,15 +225,15 @@ print(quart.element_types())  # ['HEX8']
 assert couronne.cell_count() == 128
 assert quart.element_types() == ["HEX8"]
 
-# ── Montée en ordre, changement de type ─────────────────────────────────────
+# ── Order raising, type change ──────────────────────────────────────────────
 
 
 # ── to quadratic ───────────────────────────────────────────
 
 _, contour = _contour_rectangle()
 # ANCHOR: to_quadratic
-lin = pyrucast.mesh.triangulate_surface(contour, "TRI3", 1.0)  # maillage TRI3
-quad = pyrucast.mesh.to_quadratic(lin)  # copie TRI6
+lin = pyrucast.mesh.triangulate_surface(contour, "TRI3", 1.0)  # TRI3 mesh
+quad = pyrucast.mesh.to_quadratic(lin)  # TRI6 copy
 print(quad.element_types())  # ['TRI6']
 
 fes = pyrucast.FiniteElementSpace(quad, interpolation="LAGRANGE2")
@@ -243,7 +243,7 @@ assert len(fes) == 1
 
 
 def _solide_penta6():
-    """Un pavé : carré 3-D triangulé, extrudé selon +z."""
+    """A block: a triangulated 3-D square, extruded along +z."""
     c = pyrucast.Coords(3)
     coins = [c.add_node(p) for p in [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]]]
     contour = pyrucast.Mesh(c, "SEG2")
@@ -261,23 +261,23 @@ volume = pyrucast.mesh.extrude(
     1,
 )
 # ANCHOR: convert
-faces = pyrucast.mesh.skin(volume)  # peau en QUA4
+faces = pyrucast.mesh.skin(volume)  # QUA4 skin
 faces = pyrucast.mesh.convert(faces, "TRI3")  # QUA4 → TRI3
 print(faces.element_types())  # ['TRI3']
 # ANCHOR_END: convert
 assert set(faces.element_types()) == {"TRI3"}
 
-# ── Triangulation d'une surface trouée ──────────────────────────────────────
+# ── Triangulation of a surface with a hole ──────────────────────────────────
 
 
-# ── triangulate surface avec trou ──────────────────────────
+# ── triangulate surface with a hole ────────────────────────
 
 # ANCHOR: triangulate_surface
 import pyrucast
 
 c = pyrucast.Coords(dim=2)
 
-# Contour extérieur : carré 4×4 (CCW).
+# Outer contour: 4×4 square (CCW).
 outer = pyrucast.Mesh(c, "SEG2")
 outer_nodes = [
     c.add_node(list(p)) for p in [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)]
@@ -285,7 +285,7 @@ outer_nodes = [
 for i in range(4):
     outer.unit().add_cell([outer_nodes[i], outer_nodes[(i + 1) % 4]])
 
-# Trou : carré 2×2 centré, orienté CW.
+# Hole: centred 2×2 square, oriented CW.
 hole = pyrucast.Mesh(c, "SEG2")
 hole_nodes = [
     c.add_node(list(p)) for p in [(1.0, 1.0), (1.0, 3.0), (3.0, 3.0), (3.0, 1.0)]
@@ -293,21 +293,21 @@ hole_nodes = [
 for i in range(4):
     hole.unit().add_cell([hole_nodes[i], hole_nodes[(i + 1) % 4]])
 
-# Composer les deux contours par l'union | (jamais +).
+# Compose the two contours through the union | (never +).
 combined = outer | hole
 
-# Maillage TRI3 de taille ~0.5 (aire = 16 - 4 = 12).
+# TRI3 mesh of size ~0.5 (area = 16 - 4 = 12).
 tri = pyrucast.mesh.triangulate_surface(combined, "TRI3", size=0.5)
 print(tri.element_types(), tri.cell_count())
 
-# Variante quad-dominante.
+# Quad-dominant variant.
 quad = pyrucast.mesh.triangulate_surface(combined, "QUA4", size=0.5)
-print(quad.element_types())  # ['QUA4', 'TRI3'] en général
+print(quad.element_types())  # ['QUA4', 'TRI3'] in general
 # ANCHOR_END: triangulate_surface
 assert tri.cell_count() > 0
 assert set(quad.element_types()) <= {"QUA4", "TRI3"}
 
-# ── Grille orientée sur le contour ──────────────────────────────────────────
+# ── Grid oriented on the contour ────────────────────────────────────────────
 
 
 # ── grid surface ───────────────────────────────────────────
@@ -315,11 +315,11 @@ assert set(quad.element_types()) <= {"QUA4", "TRI3"}
 # ANCHOR: grid_surface
 import pyrucast as pc
 
-H = 0.02  # taille visée
+H = 0.02  # target size
 coords = pc.Coords(2)
 
-# Un L. Chaque côté est coupé en un nombre entier de mailles de H, donc
-# tous ses nœuds tombent sur les lignes que la grille tirera des angles.
+# An L shape. Each side is cut into a whole number of cells of size H, so all
+# its nodes fall on the lines the grid will draw from the corners.
 angles = [(0.0, 0.0), (0.6, 0.0), (0.6, 0.2), (0.3, 0.2), (0.3, 0.4), (0.0, 0.4)]
 noeuds = [coords.add_node(list(p)) for p in angles]
 
@@ -332,15 +332,15 @@ for i, a in enumerate(angles):
 contour = pc.mesh.consolidate(contour)
 
 maillage = pc.mesh.grid_surface(contour, "QUA4", size=H)
-print(maillage.element_types())  # ['QUA4'] — aucun triangle
-print(maillage.cell_count())  # 450 : la grille exacte du L
+print(maillage.element_types())  # ['QUA4'] — not a single triangle
+print(maillage.cell_count())  # 450: the exact grid of the L shape
 # ANCHOR_END: grid_surface
 assert maillage.element_types() == ["QUA4"]
 assert maillage.cell_count() == 450
 
 
 def _contour_en_L(H=0.02):
-    """Le L de la grille : chaque côté coupé en un nombre entier de mailles."""
+    """The L shape of the grid: each side cut into a whole number of cells."""
     coords = pyrucast.Coords(2)
     angles = [(0.0, 0.0), (0.6, 0.0), (0.6, 0.2), (0.3, 0.2), (0.3, 0.4), (0.0, 0.4)]
     noeuds = [coords.add_node(list(p)) for p in angles]
@@ -359,12 +359,12 @@ contour, H = _contour_en_L()
 pc = pyrucast
 # ANCHOR: grid_surface2
 maillage = pc.mesh.grid_surface2(contour, "QUA4", size=H)
-# ou, en méthode :
+# or, as a method:
 maillage = contour.grid_surface2("QUA4", size=H)
 # ANCHOR_END: grid_surface2
 assert maillage.cell_count() > 0
 
-# ── Bord et peau ────────────────────────────────────────────────────────────
+# ── Border and skin ─────────────────────────────────────────────────────────
 
 
 # ── border ─────────────────────────────────────────────────
@@ -379,7 +379,7 @@ disc = pyrucast.mesh.triangulate_surface(
 )
 
 bord = pyrucast.mesh.border(disc)
-print(len(bord))  # 1  (domaine simplement connexe)
+print(len(bord))  # 1  (simply connected domain)
 print(bord.element_types())  # ['SEG2']
 print(bord.cell_counts())  # [16]
 # ANCHOR_END: border
@@ -392,7 +392,7 @@ _, contour_carre = _contour_rectangle(2.0, 2.0, 4)
 # ANCHOR: border_angle
 carre = pyrucast.mesh.triangulate_surface(contour_carre, "TRI3", 0.5)
 aretes = pyrucast.mesh.border(carre, angle_deg=45.0)
-print(len(aretes))  # 4  (les quatre côtés, arêtes ouvertes)
+print(len(aretes))  # 4  (the four sides, open edges)
 # ANCHOR_END: border_angle
 assert len(aretes) == 4
 
@@ -401,7 +401,7 @@ assert len(aretes) == 4
 # ANCHOR: skin
 import pyrucast
 
-# Un pavé PENTA6 : carré triangulé, extrudé selon +z.
+# A PENTA6 block: a triangulated square, extruded along +z.
 c = pyrucast.Coords(dim=3)
 coins = [c.add_node(p) for p in [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]]]
 contour = pyrucast.Mesh(c, "SEG2")
@@ -411,35 +411,35 @@ surf = pyrucast.mesh.triangulate_surface(contour, "TRI3", 0.34)
 solide = pyrucast.mesh.extrude(surf, [0.0, 0.0, 1.0], 3)  # TRI3 -> PENTA6
 
 peau = pyrucast.mesh.skin(solide)
-print(len(peau))  # 6  (deux chapeaux + quatre flancs)
+print(len(peau))  # 6  (two caps + four sides)
 print(peau.element_types())  # ['TRI3', 'TRI3', 'QUA4', 'QUA4', 'QUA4', 'QUA4']
 # ANCHOR_END: skin
 assert len(peau) == 6
 
-# ── Orientation, chaînage ───────────────────────────────────────────────────
+# ── Orientation, chaining ───────────────────────────────────────────────────
 
 
-# ── orient et invert ───────────────────────────────────────
+# ── orient and invert ──────────────────────────────────────
 
 _, contour = _contour_rectangle()
 # ANCHOR: orient
 import pyrucast
 
-# Une plaque trouée : contour extérieur + bord du trou, orientations quelconques.
+# A plate with a hole: outer contour + hole border, arbitrary orientations.
 surf = pyrucast.mesh.triangulate_surface(contour, "TRI3")
 
-propre = pyrucast.mesh.orient(surf)  # toutes les mailles cohérentes
-trou_dedans = pyrucast.mesh.invert(propre)  # sens inversé (intérieur/extérieur)
+propre = pyrucast.mesh.orient(surf)  # every cell made consistent
+trou_dedans = pyrucast.mesh.invert(propre)  # reversed sense (inside/outside)
 # ANCHOR_END: orient
 assert propre.cell_count() == surf.cell_count()
 assert trou_dedans.cell_count() == surf.cell_count()
 
 
 def _surface_triangulee(taille=0.5):
-    """Une surface TRI3 prête à l'emploi, sans nommer `pyrucast` chez l'appelant.
+    """A ready-to-use TRI3 surface, without naming `pyrucast` in the caller.
 
-    Un `import pyrucast` dans une ancre en fait une variable **locale** de la
-    fonction de test : toute utilisation du module avant l'ancre échouerait.
+    An `import pyrucast` inside an anchor makes it a **local** variable of the test
+    function: any use of the module before the anchor would fail.
     """
     _, contour = _contour_rectangle()
     return pyrucast.mesh.triangulate_surface(contour, "TRI3", taille)
@@ -451,17 +451,17 @@ surf = _surface_triangulee()
 # ANCHOR: chain
 import pyrucast
 
-# Un contour tiré d'une surface : les segments sont là, mais en vrac.
+# A contour drawn from a surface: the segments are there, but in no order.
 bord = pyrucast.mesh.border(surf)
-suite = pyrucast.mesh.chain(bord)  # ou bord.chain()
+suite = pyrucast.mesh.chain(bord)  # or bord.chain()
 
-# La connectivité se lit maintenant nœud à nœud le long de la courbe.
+# The connectivity now reads node by node along the curve.
 for maille in suite[0]:
     print([n.id for n in maille])
 # ANCHOR_END: chain
 assert suite.cell_count() == bord.cell_count()
 
-# ── Sélections ──────────────────────────────────────────────────────────────
+# ── Selections ──────────────────────────────────────────────────────────────
 
 
 # ── elements on ────────────────────────────────────────────
@@ -473,38 +473,38 @@ c = pyrucast.Coords(dim=2)
 nodes = [c.add_node(p) for p in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (2.0, 0.0)]]
 
 mesh = pyrucast.Mesh(c, "TRI3")
-mesh.unit().add_cell([nodes[0], nodes[1], nodes[2]])  # cellule 0
-mesh.unit().add_cell([nodes[1], nodes[3], nodes[2]])  # cellule 1
+mesh.unit().add_cell([nodes[0], nodes[1], nodes[2]])  # cell 0
+mesh.unit().add_cell([nodes[1], nodes[3], nodes[2]])  # cell 1
 
-# Points = {0, 1, 2} : seule la cellule 0 a tous ses nœuds dedans.
+# Points = {0, 1, 2}: only cell 0 has all of its nodes in there.
 pts = pyrucast.mesh.poi1_from_nodes([nodes[0], nodes[1], nodes[2]])
 
 strict = pyrucast.mesh.elements_on(mesh, pts, strict=True)
-print(strict.cell_count())  # 1  (cellule 0)
+print(strict.cell_count())  # 1  (cell 0)
 
 loose = pyrucast.mesh.elements_on(mesh, pts, strict=False)
-print(loose.cell_count())  # 2  (les deux touchent un nœud de pts)
+print(loose.cell_count())  # 2  (both touch a node of pts)
 # ANCHOR_END: elements_on
 assert strict.cell_count() == 1
 assert loose.cell_count() == 2
 
-# ── selections geometriques ────────────────────────────────
+# ── geometric selections ───────────────────────────────────
 
 _, contour = _contour_rectangle(2.0, 2.0, 8)
 # ANCHOR: selections
 import pyrucast
 
-# Une plaque carrée maillée en TRI3.
+# A square plate meshed in TRI3.
 plaque = pyrucast.mesh.triangulate_surface(contour, "TRI3", size=0.1)
 
-# Le bord gauche (x = 0) : le plan de normale +x passant par l'origine.
+# The left edge (x = 0): the plane of normal +x through the origin.
 gauche = pyrucast.mesh.points_on_plane(plaque, [0.0, 0.0], [1.0, 0.0])
 
-# Les nœuds du congé : dans le disque de rayon 0.2 autour du coin rentrant.
+# The nodes of the fillet: inside the disc of radius 0.2 around the re-entrant corner.
 conge = pyrucast.mesh.points_in_sphere(plaque, [1.0, 1.0], 0.2)
 
-# La sélection sert directement de support imposé à un Dirichlet — le nuage
-# POI1 est ce que `model.dirichlet` attend (cf. Contraintes / Dirichlet).
+# The selection serves directly as the imposed support of a Dirichlet — the
+# POI1 cloud is what `model.dirichlet` expects (cf. Constraints / Dirichlet).
 mecanique = pyrucast.model.elasticity(
     pyrucast.FiniteElementSpace(plaque), "plane_stress"
 )
@@ -512,14 +512,14 @@ blocage = pyrucast.model.dirichlet(
     mecanique, "u_x", gauche, pyrucast.mesh.barycenter(gauche)
 )
 
-# La sortie POI1 est un maillage ordinaire : elle se rebranche sur les autres
-# opérateurs, ici pour remonter aux éléments portés par la sélection.
+# The POI1 output is an ordinary mesh: it plugs back into the other operators,
+# here to go back up to the elements carried by the selection.
 bande = pyrucast.mesh.elements_on(plaque, conge, strict=True)
 # ANCHOR_END: selections
 assert gauche.cell_count() > 0
 assert len(blocage) == 1
 
-# ── Soudure de nœuds colocalisés ────────────────────────────────────────────
+# ── Welding of colocated nodes ──────────────────────────────────────────────
 
 
 # ── merge nodes ────────────────────────────────────────────
@@ -527,19 +527,19 @@ assert len(blocage) == 1
 # ANCHOR: merge_nodes
 import pyrucast
 
-# Un maillage dont l'interface porte des nœuds colocalisés mais distincts
-# (deux SEG2 qui se touchent par un bout dupliqué).
+# A mesh whose interface carries colocated but distinct nodes (two SEG2 that
+# touch through a duplicated end).
 c = pyrucast.Coords(dim=2)
 a = c.add_node([0.0, 0.0])
 b = c.add_node([1.0, 0.0])
-b2 = c.add_node([1.0, 0.0])  # superposé à b, mais nœud distinct
+b2 = c.add_node([1.0, 0.0])  # on top of b, but a distinct node
 d = c.add_node([2.0, 0.0])
 
 mesh = pyrucast.Mesh(c, "SEG2")
 mesh.unit().add_cell([a, b])
 mesh.unit().add_cell([b2, d])
 
-joined = pyrucast.mesh.merge_nodes(mesh, 1e-6)  # b2 est soudé sur b
+joined = pyrucast.mesh.merge_nodes(mesh, 1e-6)  # b2 is welded onto b
 # ANCHOR_END: merge_nodes
 assert joined.cell_count() == 2
 
@@ -550,20 +550,20 @@ a, b = c.add_node([0.0, 0.0]), c.add_node([1.0, 0.0])
 b2, d = c.add_node([1.0, 0.0]), c.add_node([2.0, 0.0])
 # ANCHOR: merge_in_place
 gauche = pyrucast.mesh.line(a, b, 4)
-droite = pyrucast.mesh.line(b2, d, 4)  # b2 colocalisé avec b, mais distinct
+droite = pyrucast.mesh.line(b2, d, 4)  # b2 colocated with b, but distinct
 
 pyrucast.mesh.merge_nodes(gauche | droite, 1e-6, in_place=True)
 
-# Les deux morceaux partagent maintenant réellement le nœud d'interface.
+# The two pieces now really share the interface node.
 assert droite.node(0, 0, 0).id == b.id
 # ANCHOR_END: merge_in_place
 
 
-# ── Sélections sur des surfaces courbes ─────────────────────────────────────
+# ── Selections on curved surfaces ───────────────────────────────────────────
 
 
 def _tube_3d():
-    """Un tube : section QUA4 tournée d'un tour autour de l'axe z."""
+    """A tube: a QUA4 section revolved a full turn about the z axis."""
     c = pyrucast.Coords(3)
     section = pyrucast.Mesh(c, "QUA4")
     section.unit().add_cell(
@@ -583,24 +583,24 @@ tube = _tube_3d()
 piece = tube
 
 # ANCHOR: selections_courbes
-# L'alésage d'un tube : la surface latérale du cylindre de rayon intérieur.
+# The bore of a tube: the lateral surface of the cylinder of inner radius.
 alesage = pyrucast.mesh.points_on_cylinder(tube, [0.0, 0.0, 0.0], [0.0, 0.0, 10.0], 5.0)
 
-# Un chanfrein conique (rayon 8 en z = 0, sommet fictif en z = 8).
+# A conical chamfer (radius 8 at z = 0, fictitious apex at z = 8).
 chanfrein = pyrucast.mesh.points_on_cone(piece, [0.0, 0.0, 0.0], [0.0, 0.0, 8.0], 8.0)
 
-# La matière autour d'une gorge torique de rayon 1 sur un cercle de rayon 5.
+# The material around a toroidal groove of radius 1 on a circle of radius 5.
 gorge = pyrucast.mesh.points_in_torus(piece, [0.0, 0.0, 3.0], [0.0, 0.0, 1.0], 5.0, 1.0)
 # ANCHOR_END: selections_courbes
 
 assert alesage.cell_count() > 0
 
 
-# ── Tétraédrisation d'un volume ─────────────────────────────────────────────
+# ── Tetrahedralisation of a volume ──────────────────────────────────────────
 
 solide_penta6 = _solide_penta6()
-# `skin` rend déjà des normales **sortantes** : pas d'`invert` ici, il les
-# ferait rentrer et le mailleur refuserait l'enveloppe.
+# `skin` already returns **outward** normals: no `invert` here, it would turn
+# them inwards and the mesher would reject the envelope.
 enveloppe = pyrucast.mesh.convert(pyrucast.mesh.skin(solide_penta6), "TRI3")
 
 # ANCHOR: triangulate_volume
@@ -621,20 +621,20 @@ solide = pyrucast.mesh.triangulate_volume(peau, allow_surface_nodes=True)
 solide = pyrucast.mesh.triangulate_volume(peau, allow_surface_nodes=True)
 if solide.element_types() == ["TET4", "POI1"]:
     ajoutes = solide.cell_counts()[1]
-    print(f"{ajoutes} nœud(s) posé(s) sur la peau")
+    print(f"{ajoutes} node(s) laid on the skin")
 # ANCHOR_END: surface_nodes_compte
 
 assert solide.cell_count() > 0
 
 
-# ── Pavage quadrangulaire, puis extrusion en hexaèdres ──────────────────────
+# ── Quadrangular paving, then extrusion into hexahedra ──────────────────────
 
 
 def _contour_plaque_trouee(h=0.05):
-    """Contour extérieur CCW + cercle-trou CW, chaque boucle à nombre pair de
-    segments — condition pour que `all_quad` puisse aboutir."""
-    # `Coords` 3-D dès le départ : l'extrusion vers +z du bloc ci-dessous
-    # exige une direction à trois composantes, donc des nœuds à trois.
+    """CCW outer contour + CW hole circle, each loop with an even number of
+    segments — the condition for `all_quad` to be able to succeed."""
+    # A 3-D `Coords` from the start: the extrusion towards +z of the block below
+    # requires a three-component direction, hence three-component nodes.
     c = pyrucast.Coords(3)
     coins = [
         c.add_node(list(p) + [0.0])
@@ -646,9 +646,9 @@ def _contour_plaque_trouee(h=0.05):
         exterieur = seg if exterieur is None else exterieur | seg
     centre = c.add_node([0.2, 0.2, 0.0])
     trou = pyrucast.mesh.invert(pyrucast.mesh.circle(centre, [0.0, 0.0, 1.0], 0.08, 12))
-    # Chaque boucle est consolidée **séparément** : les fondre toutes les deux
-    # en un seul sous-maillage produirait un nœud répété, et `pave_surface`
-    # exige que chaque sous-maillage de bord soit une boucle simple.
+    # Each loop is consolidated **separately**: melting both into a single
+    # sub-mesh would produce a repeated node, and `pave_surface` requires each
+    # border sub-mesh to be a simple loop.
     return pyrucast.mesh.consolidate(exterieur) | pyrucast.mesh.consolidate(trou)
 
 
@@ -657,12 +657,12 @@ contour = _contour_plaque_trouee()
 # ANCHOR: pave_surface
 import pyrucast as pc
 
-# … contour extérieur CCW et cercle-trou CW, consolidés en une boucle chacun.
-# Chaque boucle du contour a un nombre pair de segments, donc all_quad passe.
+# … CCW outer contour and CW hole circle, each consolidated into one loop.
+# Each loop of the contour has an even number of segments, so all_quad works.
 plaque = pc.mesh.pave_surface(contour, "QUA4", size=0.05, all_quad=True)
 print(plaque.element_types())  # ['QUA4']
 
-# Le solide prismatique vient alors gratuitement, et en hexaèdres purs.
+# The prismatic solid then comes for free, and in pure hexahedra.
 volume = pc.mesh.extrude(plaque, [0, 0, 0.02], 2)
 print(volume.element_types())  # ['HEX8']
 # ANCHOR_END: pave_surface
@@ -671,11 +671,11 @@ assert plaque.element_types() == ["QUA4"]
 assert volume.element_types() == ["HEX8"]
 
 
-# ── Couche limite hexaédrique sur un cœur tétraédrique ──────────────────────
+# ── Hexahedral boundary layer over a tetrahedral core ───────────────────────
 
 
 def _boite_hex(n=3):
-    """La peau d'une boîte n³ d'hexaèdres : coque QUA4 fermée, normales sortantes."""
+    """The skin of an n³ box of hexahedra: closed QUA4 shell, outward normals."""
     coords = pyrucast.Coords(3)
     a = coords.add_node([0.0, 0.0, 0.0])
     b = coords.add_node([1.0, 0.0, 0.0])
@@ -696,7 +696,7 @@ solide = _boite_hex()
 # ANCHOR: pave_volume
 import pyrucast as pc
 
-peau = pc.mesh.skin(solide)  # QUA4, normales sortantes
+peau = pc.mesh.skin(solide)  # QUA4, outward normals
 maille = pc.mesh.pave_volume(peau, layers=1, thickness=0.15, size=0.4)
 print(dict(zip(maille.element_types(), maille.cell_counts())))
 # {'HEX8': 54, 'PYRA5': 54, 'TET4': 408}
@@ -705,7 +705,7 @@ print(dict(zip(maille.element_types(), maille.cell_counts())))
 assert dict(zip(maille.element_types(), maille.cell_counts()))["HEX8"] == 54
 
 
-# ── Tétraédriser une peau donnée ────────────────────────────────────────────
+# ── Tetrahedralising a given skin ───────────────────────────────────────────
 
 solide_penta6 = _solide_penta6()
 
@@ -717,11 +717,11 @@ volume = pyrucast.mesh.triangulate_volume(peau, size=0.3)
 assert volume.element_types()[0] == "TET4"
 
 
-# ── Lecture d'un fichier gmsh ───────────────────────────────────────────────
+# ── Reading a gmsh file ─────────────────────────────────────────────────────
 
-# Le fichier de l'exemple est écrit dans un dossier jetable, et le module y
-# bascule le temps de l'extrait : celui-ci garde donc le nom court `piece.msh`
-# qu'un utilisateur écrirait. Le répertoire courant est rendu ensuite.
+# The file of the example is written into a throw-away directory, and the
+# module switches into it for the duration of the excerpt: the latter therefore
+# keeps the short name `piece.msh` a user would write. The working directory is
 _MSH = textwrap.dedent(
     """\
     $MeshFormat
@@ -757,10 +757,10 @@ import pyrucast
 
 coords = pyrucast.Coords(dim=2)
 regions = pyrucast.mesh.read_gmsh(coords, "piece.msh")
-# {'plate': Mesh<…>, 'bottom': Mesh<…>, …}  — ordre du fichier préservé
+# {'plate': Mesh<…>, 'bottom': Mesh<…>, …}  — order of the file preserved
 
 plate = regions["plate"]
-print(plate.element_types())  # p.ex. ['TRI3']
+print(plate.element_types())  # e.g. ['TRI3']
 print(plate.cell_count())
 # ANCHOR_END: read_gmsh
 
@@ -771,20 +771,20 @@ os.chdir(_CWD)
 
 
 # ANCHOR: from_gmsh_arrays
-# Le même carré, mais tel que gmsh le tend en mémoire : les tags des nœuds,
-# leurs trois coordonnées chacun, puis un bloc par type d'élément dont la
-# connectivité est à plat.
+# The same square, but as gmsh hands it over in memory: the tags of the nodes,
+# their three coordinates each, then one block per element type whose
+# connectivity is flattened.
 tags = [1, 2, 3, 4]
 xyz = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0]
 blocs = [
-    (1, [1, 2], ["bottom"]),  # code 1 : SEG2
-    (2, [1, 2, 3, 1, 3, 4], ["plate"]),  # code 2 : TRI3
+    (1, [1, 2], ["bottom"]),  # code 1: SEG2
+    (2, [1, 2, 3, 1, 3, 4], ["plate"]),  # code 2: TRI3
 ]
 
 coords = pyrucast.Coords(dim=2)
 regions = pyrucast.mesh.from_gmsh_arrays(coords, tags, xyz, blocs)
 print(regions["plate"].element_types())  # ['TRI3']
-print(coords.node_count())  # 4 — un seul Coords pour les deux groupes
+print(coords.node_count())  # 4 — a single Coords for both groups
 # ANCHOR_END: from_gmsh_arrays
 
 assert regions["plate"].element_types() == ["TRI3"]

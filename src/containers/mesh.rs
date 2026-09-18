@@ -69,8 +69,8 @@ use std::sync::OnceLock;
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-/// // Une zone homogène : un type d'élément, un repère, une connectivité
-/// // à plat. Elle se fige dès qu'un consommateur la capture.
+/// // A homogeneous zone: one element type, one frame, a flat connectivity.
+/// // It freezes as soon as a consumer captures it.
 /// assert_eq!(sm.element_type(), ElementType::TRI3);
 /// assert_eq!(sm.cell_count(), 1);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -133,7 +133,7 @@ impl SubMesh {
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// // Une zone est **homogène** : un seul type d'élément, un seul repère.
+    /// // A zone is **homogeneous**: a single element type, a single frame.
     /// let mut z = SubMesh::new(coords.clone(), ElementType::SEG2);
     /// z.add_cell(&[n[0].id(), n[1].id()])?;
     /// assert_eq!(z.cell_count(), 1);
@@ -177,7 +177,7 @@ impl SubMesh {
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]]
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// // Deux triangles posés d'un seul coup, connectivité à plat.
+    /// // Two triangles laid down in one go, flat connectivity.
     /// let ids: Vec<_> = n.iter().map(|x| x.id()).collect();
     /// let sm = SubMesh::from_connectivity(
     ///     coords.clone(),
@@ -185,9 +185,9 @@ impl SubMesh {
     ///     vec![ids[0], ids[1], ids[2], ids[1], ids[3], ids[2]],
     /// )?;
     /// assert_eq!(sm.cell_count(), 2);
-    /// // Une unité par occurrence : le nœud 2 sert deux fois, plus son `Node`.
+    /// // One unit per occurrence: node 2 serves twice, plus its `Node`.
     /// assert_eq!(coords.read().refcount(ids[2]), 3);
-    /// // Une longueur qui ne tombe pas juste sur le type d'élément est refusée.
+    /// // A length that does not divide evenly by the element type is refused.
     /// assert!(SubMesh::from_connectivity(coords.clone(), ElementType::TRI3, vec![ids[0]]).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -260,8 +260,8 @@ impl SubMesh {
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// // `NodeId → rang`, sur les nœuds **distincts**, en ordre de première
-    /// // apparition : c'est ce qui donne aux champs leur adressage.
+    /// // `NodeId → rank`, over the **distinct** nodes, in order of first
+    /// // appearance: that is what gives the fields their addressing.
     /// sm.seal();
     /// assert_eq!(sm.node_index()[&n[1].id()], 1);
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -312,7 +312,7 @@ impl SubMesh {
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// // Sceller à la main : la connectivité gèle, et pour de bon.
+    /// // Sealing by hand: the connectivity freezes, and for good.
     /// sm.seal();
     /// assert!(sm.is_sealed());
     /// assert!(sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).is_err());
@@ -337,7 +337,7 @@ impl SubMesh {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # use pyrucast::atoms::RgbColor;
-    /// // Une couleur d'affichage, sans effet numérique.
+    /// // A display colour, with no numerical effect.
     /// sm.set_face_color(RgbColor::new(220, 60, 60));
     /// assert_eq!(sm.face_color().r, 220);
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -385,7 +385,7 @@ impl SubMesh {
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
     /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// // Raccourci du cas unitaire : ajoute dans la zone unique.
+    /// // Shortcut of the single-zone case: adds into the one zone.
     /// assert_eq!(mesh.cell_count(), 1);
     /// ```
     pub fn add_cell(&mut self, nodes: &[NodeId]) -> Result<usize> {
@@ -445,8 +445,8 @@ impl SubMesh {
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// // La variante qui **prend** la propriété au lieu de l'acquérir : pour
-    /// // un nœud tout juste créé, dont le compteur vaut déjà 1.
+    /// // The variant that **takes** ownership instead of acquiring it: for a
+    /// // freshly created node, whose counter is already 1.
     /// let id = coords.write().add_node(&[2.0, 2.0])?;
     /// let mut poi = SubMesh::new(coords.clone(), ElementType::POI1);
     /// poi.add_cell_taking(&[id])?;
@@ -503,8 +503,8 @@ impl SubMesh {
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// // L'échappatoire au sceau : une copie indépendante, jamais scellée,
-    /// // partageant les **mêmes** nœuds (leurs compteurs seuls montent).
+    /// // The way out of the seal: an independent copy, never sealed, sharing
+    /// // the **same** nodes (only their counters go up).
     /// sm.seal();
     /// let mut copie = sm.duplicate()?;
     /// assert!(!copie.is_sealed());
@@ -566,8 +566,8 @@ impl SubMesh {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # use std::collections::HashMap;
-    /// // Réécrire **à quel nœud** une maille se réfère — les positions ne
-    /// // bougent pas. Refusé sur une zone scellée : sa numérotation est tenue.
+    /// // Rewriting **which node** a cell refers to — the positions do not
+    /// // move. Refused on a sealed zone: its numbering is held.
     /// let autre = Node::create_in(coords.clone(), &[5.0, 5.0])?;
     /// let map = HashMap::from([(n[2].id(), autre.id())]);
     /// assert_eq!(sm.remap_nodes(&map)?, 1);
@@ -694,7 +694,7 @@ impl SubMesh {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # use pyrucast::handle::Handle as H;
-    /// assert!(H::same_object(&sm.coords(), &coords)); // partagé, pas copié
+    /// assert!(H::same_object(&sm.coords(), &coords)); // shared, not copied
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn coords(&self) -> Handle<Coords> {
@@ -722,11 +722,11 @@ impl SubMesh {
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// // Un nuage de points : une maille POI1 par nœud, dans l'ordre donné.
-    /// // La forme canonique est l'opérateur `ops::mesh::poi1_from_nodes`.
+    /// // A point cloud: one POI1 cell per node, in the given order. The
+    /// // canonical form is the `ops::mesh::poi1_from_nodes` operator.
     /// let nuage = SubMesh::poi1_from_nodes(&n)?;
     /// assert_eq!(nuage.cell_count(), 3);
-    /// assert!(SubMesh::poi1_from_nodes(&[]).is_err()); // aucun repère où s'attacher
+    /// assert!(SubMesh::poi1_from_nodes(&[]).is_err()); // no frame to attach to
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn poi1_from_nodes(nodes: &[Node]) -> Result<SubMesh> {
@@ -758,7 +758,7 @@ impl SubMesh {
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// // La forme basse quand on tient déjà les identifiants et le repère.
+    /// // The low form when one already holds the identifiers and the frame.
     /// let ids: Vec<_> = n.iter().map(|x| x.id()).collect();
     /// let nuage = SubMesh::poi1_from_node_ids(coords.clone(), &ids)?;
     /// assert_eq!(nuage.element_type(), ElementType::POI1);
@@ -892,15 +892,15 @@ impl SubMesh {
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
 /// # use pyrucast::containers::mesh::seal;
-/// // Sceller par la fonction libre plutôt que par la méthode : elle prend
-/// // le verrou d'écriture **seulement si nécessaire**, ce qui lui permet
-/// // de sceller un support qu'un lecteur tient déjà — un `view` de champ.
+/// // Sealing through the free function rather than the method: it takes the
+/// // write lock **only if needed**, which lets it seal a support a reader
+/// // already holds — a field's `view`.
 /// let zone = maillage.get(0)?;
 /// assert!(!zone.read().is_sealed());
 /// seal(&zone);
 /// assert!(zone.read().is_sealed());
-/// // Idempotent, et sans écriture la seconde fois : le guard de lecture
-/// // ci-dessous coexiste, là où un verrou d'écriture s'interbloquerait.
+/// // Idempotent, and without a write the second time: the read guard below
+/// // coexists, where a write lock would deadlock.
 /// let lecteur = zone.read();
 /// seal(&zone);
 /// assert!(lecteur.is_sealed());
@@ -967,10 +967,10 @@ impl crate::dump::Dump for SubMesh {
         } else {
             Vec::new()
         };
-        // Les métadonnées que le `Display` ne dit pas, avant le contenu : sans
-        // elles le niveau « contenu » en apprendrait **moins** que le niveau
-        // « structure » (`CONVENTIONS.md` § « Trois niveaux d'affichage »).
-        // `sealed` en particulier explique pourquoi un `add_cell` échouera.
+        // The metadata `Display` does not say, before the content: without it
+        // the "content" level would tell **less** than the "structure" level
+        // (`CONVENTIONS.md` § "Trois niveaux d'affichage"). `sealed` in
+        // particular explains why an `add_cell` will fail.
         format!(
             "{self}\n  coords: {}, face_color: {:?}, sealed: {}\n{}",
             self.coords,
@@ -1002,9 +1002,9 @@ impl crate::dump::Dump for SubMesh {
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
-/// // L'agrégat de zones : chacune homogène, l'ensemble ne l'étant pas.
-/// // C'est ce qui permet à un maillage de mêler triangles et quadrangles
-/// // sans que rien, en aval, ait à s'en soucier.
+/// // The aggregate of zones: each homogeneous, the whole not being so. That
+/// // is what lets a mesh mix triangles and quadrangles without anything
+/// // downstream having to care.
 /// assert_eq!(maillage.len(), 1);
 /// assert_eq!(maillage.cell_count(), 1);
 /// assert_eq!(maillage.element_types()?, vec![ElementType::TRI3]);
@@ -1058,8 +1058,8 @@ impl Node {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
-    /// // Le même `|` que celui des agrégats, appliqué à deux nœuds : un
-    /// // maillage POI1 unitaire, qu'on fait ensuite croître nœud par nœud.
+    /// // The same `|` as the aggregates', applied to two nodes: a one-zone
+    /// // POI1 mesh, which one then grows node by node.
     /// let deux = n[0].union(&n[1])?;
     /// assert_eq!(deux.cell_count(), 2);
     /// assert_eq!(deux.element_types()?, vec![ElementType::POI1]);
@@ -1085,8 +1085,8 @@ impl Mesh {
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// // L'opérande gauche doit être un **nuage POI1 unitaire** : c'est une
-    /// // union de points, pas l'ajout d'un point à un maillage quelconque.
+    /// // The left operand must be a **one-zone POI1 cloud**: this is a union
+    /// // of points, not the addition of a point to an arbitrary mesh.
     /// let nuage = pyrucast::ops::mesh::poi1_from_nodes(&[n[0].clone()]).unwrap();
     /// let deux_points = nuage.union_node(&n[1]).unwrap();
     /// assert_eq!(deux_points.cell_count(), 2);
@@ -1147,7 +1147,7 @@ impl Mesh {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
     /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # use pyrucast::handle::Handle as H;
-    /// // Le maillage ne porte pas la `Coords` : il la retrouve par ses zones.
+    /// // The mesh does not carry the `Coords`: it finds it through its zones.
     /// assert!(H::same_object(&mesh.coords().unwrap(), &coords));
     /// ```
     pub fn coords(&self) -> Result<Handle<Coords>> {
@@ -1169,7 +1169,7 @@ impl Mesh {
     /// # use pyrucast::handle::Handle;
     /// # let coords = Handle::new(Coords::new(2).unwrap());
     /// # use pyrucast::aggregate::Aggregate;
-    /// // Le raccourci du cas à une seule zone.
+    /// // The shortcut of the single-zone case.
     /// let mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::TRI3));
     /// assert_eq!(mesh.len(), 1);
     /// ```
@@ -1232,8 +1232,8 @@ impl Mesh {
     /// # let seg = { let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
     /// #     sm.add_cell(&[n[0].id(), n[1].id()]).unwrap(); Handle::new(sm) };
     /// # mesh.add_sub(seg).unwrap();
-    /// // Une couleur pour toutes les zones, sans boucle — et le maillage
-    /// // revient, pour enchaîner.
+    /// // One colour for every zone, without a loop — and the mesh comes back,
+    /// // to chain on.
     /// let rouge = RgbColor::new(220, 60, 60);
     /// assert_eq!(mesh.set_face_color(rouge).cell_count(), 2);
     /// assert!(mesh.iter().all(|z| z.read().face_color() == rouge));
@@ -1265,8 +1265,9 @@ impl Mesh {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
-    /// // Le raccourci du cas **unitaire** : il ajoute dans la zone unique, et
-    /// // refuse dès qu'il y en a plusieurs — l'ambiguïté serait silencieuse.
+    /// // The shortcut of the **single-zone** case: it adds into the one zone,
+    /// // and refuses as soon as there are several — the ambiguity would be
+    /// // silent.
     /// let mut m = maillage;
     /// m.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
     /// assert_eq!(m.cell_count(), 2);
@@ -1311,7 +1312,7 @@ impl Mesh {
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
     /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// assert_eq!(mesh.cell_counts().unwrap(), vec![1]); // une entrée par zone
+    /// assert_eq!(mesh.cell_counts().unwrap(), vec![1]); // one entry per zone
     /// ```
     pub fn cell_counts(&self) -> Result<Vec<usize>> {
         self.iter().map(|sm| Ok(sm.read().cell_count())).collect()
@@ -1339,7 +1340,7 @@ impl Mesh {
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
     /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// // Le nœud le plus proche d'un point quelconque, distance euclidienne.
+    /// // The node nearest to an arbitrary point, Euclidean distance.
     /// let proche = mesh.nearest_node(&[0.9, 0.1]).unwrap();
     /// assert_eq!(proche.position().unwrap(), vec![1.0, 0.0]);
     /// ```
@@ -2139,7 +2140,7 @@ mod nearest_node_tests {
             Handle::new(sm)
         };
         mesh.add_sub(seg).unwrap();
-        // Le sceau gèle la connectivité, pas la façon de la dessiner.
+        // The seal freezes the connectivity, not the way it is drawn.
         crate::containers::finite_element_space::FiniteElementSpace::lagrange1(&mesh).unwrap();
         assert!(mesh.get(0).unwrap().read().is_sealed());
 
@@ -2148,7 +2149,7 @@ mod nearest_node_tests {
 
         assert_eq!(retour.len(), 2);
         for i in 0..2 {
-            // Les mêmes zones, pas des copies : le maillage rendu est celui-ci.
+            // The same zones, not copies: the mesh returned is this one.
             assert!(retour.get(i).unwrap().same_object(&mesh.get(i).unwrap()));
             assert_eq!(mesh.get(i).unwrap().read().face_color(), rouge);
         }

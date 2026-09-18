@@ -92,8 +92,8 @@ use std::sync::OnceLock;
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
-/// // Une zone du maillage, augmentée d'une interpolation et d'une
-/// // quadrature : c'est là que vivent formes, poids et jacobien.
+/// // A zone of the mesh, augmented with an interpolation and a quadrature:
+/// // that is where shapes, weights and Jacobian live.
 /// let z = SubFiniteElementSpace::new(
 ///     maillage.get(0)?, Interpolation::Lagrange1, QuadratureRule::Gauss)?;
 /// assert_eq!(z.element_type(), ElementType::TRI3);
@@ -175,7 +175,7 @@ impl SubFiniteElementSpace {
     /// let z = SubFiniteElementSpace::new(
     ///     maillage.get(0)?, Interpolation::Lagrange1, QuadratureRule::Gauss)?;
     /// assert_eq!(z.nodes_per_cell()?, 3);
-    /// // Un POI1 n'a pas d'élément de référence sur quoi intégrer : refusé.
+    /// // A POI1 has no reference element to integrate on: refused.
     /// # let mut p = SubMesh::new(coords.clone(), ElementType::POI1);
     /// # p.add_cell(&[n[0].id()])?;
     /// assert!(SubFiniteElementSpace::new(
@@ -303,14 +303,14 @@ impl SubFiniteElementSpace {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
-    /// // Le coloriage est fourni par l'appelant — la couche conteneur reste
-    /// // libre de toute dépendance à l'assemblage — et calculé **au plus une
-    /// // fois** par sous-espace.
+    /// // The colouring is supplied by the caller — the container layer stays
+    /// // free of any dependency on assembly — and computed **at most once**
+    /// // per subspace.
     /// let fes = FiniteElementSpace::lagrange1(&maillage)?;
     /// let z = fes.get(0)?;
     /// let z = z.read();
     /// assert_eq!(z.coloring(|| vec![vec![0]]), &[vec![0]]);
-    /// // Le second appel rend le premier résultat : la fermeture ne tourne pas.
+    /// // The second call returns the first result: the closure does not run.
     /// assert_eq!(z.coloring(|| unreachable!()), &[vec![0]]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -338,7 +338,7 @@ impl SubFiniteElementSpace {
     /// # let sub = fes.get(0).unwrap();
     /// # let s = sub.read();
     /// # use pyrucast::handle::Handle as H;
-    /// // L'espace EF ne copie pas le maillage : il le tient par son handle.
+    /// // The FE space does not copy the mesh: it holds it by its handle.
     /// assert!(H::same_object(&s.submesh(), &mesh.get(0).unwrap()));
     /// ```
     pub fn submesh(&self) -> Handle<SubMesh> {
@@ -455,7 +455,7 @@ impl SubFiniteElementSpace {
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
     /// # let sub = fes.get(0).unwrap();
     /// # let s = sub.read();
-    /// // Dimension de l'élément **de référence** : 2 pour un triangle…
+    /// // Dimension of the **reference** element: 2 for a triangle…
     /// assert_eq!(s.ref_dim().unwrap(), 2);
     /// ```
     pub fn ref_dim(&self) -> Result<usize> {
@@ -479,8 +479,8 @@ impl SubFiniteElementSpace {
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
     /// # let sub = fes.get(0).unwrap();
     /// # let s = sub.read();
-    /// // …et dimension de l'espace où il est plongé. Les deux diffèrent pour
-    /// // une coque ou une poutre.
+    /// // …and dimension of the space it is embedded in. The two differ for a
+    /// // shell or a beam.
     /// assert_eq!(s.space_dim(), 2);
     /// ```
     pub fn space_dim(&self) -> usize {
@@ -577,7 +577,7 @@ impl SubFiniteElementSpace {
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
     /// # let sub = fes.get(0).unwrap();
     /// # let s = sub.read();
-    /// assert_eq!(s.gauss_count(), 3); // Gauss sur un TRI3
+    /// assert_eq!(s.gauss_count(), 3); // Gauss on a TRI3
     /// ```
     pub fn gauss_count(&self) -> usize {
         self.gauss_w.len()
@@ -602,7 +602,7 @@ impl SubFiniteElementSpace {
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
     /// # let sub = fes.get(0).unwrap();
     /// # let s = sub.read();
-    /// // Coordonnées du point de Gauss dans l'élément de référence.
+    /// // Coordinates of the Gauss point in the reference element.
     /// assert_eq!(s.gauss_xi(0).unwrap().len(), s.ref_dim().unwrap());
     /// ```
     pub fn gauss_xi(&self, g: usize) -> Result<&[f64]> {
@@ -628,7 +628,7 @@ impl SubFiniteElementSpace {
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
     /// # let sub = fes.get(0).unwrap();
     /// # let s = sub.read();
-    /// // Les poids somment à l'aire de référence — 1/2 pour un triangle.
+    /// // The weights sum to the reference area — 1/2 for a triangle.
     /// let total: f64 = (0..s.gauss_count()).map(|g| s.gauss_weight(g).unwrap()).sum();
     /// assert!((total - 0.5).abs() < 1e-12);
     /// ```
@@ -660,7 +660,7 @@ impl SubFiniteElementSpace {
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
     /// # let sub = fes.get(0).unwrap();
     /// # let s = sub.read();
-    /// // Partition de l'unité : les N_i somment à 1 en tout point.
+    /// // Partition of unity: the N_i sum to 1 at every point.
     /// let n_i = s.n_at_g(0).unwrap();
     /// assert!((n_i.iter().sum::<f64>() - 1.0).abs() < 1e-12);
     /// ```
@@ -690,7 +690,7 @@ impl SubFiniteElementSpace {
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
     /// # let sub = fes.get(0).unwrap();
     /// # let s = sub.read();
-    /// // ∂N_i/∂ξ_k à plat : nodes_per_cell × ref_dim.
+    /// // ∂N_i/∂ξ_k flat: nodes_per_cell × ref_dim.
     /// assert_eq!(s.dn_at_g(0).unwrap().len(), 3 * 2);
     /// ```
     pub fn dn_at_g(&self, g: usize) -> Result<&[f64]> {
@@ -746,9 +746,9 @@ impl SubFiniteElementSpace {
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
     /// # let sub = fes.get(0).unwrap();
     /// # let s = sub.read();
-    /// // Le nombre de fonctions de forme **du champ** — il diffère du nombre
-    /// // de nœuds pour une interpolation d'Hermite, où chaque nœud porte une
-    /// // valeur et une pente.
+    /// // The number of shape functions **of the field** — it differs from the
+    /// // node count for a Hermite interpolation, where each node carries a
+    /// // value and a slope.
     /// assert_eq!(s.shape_count().unwrap(), 3);
     /// ```
     pub fn shape_count(&self) -> Result<usize> {
@@ -772,8 +772,8 @@ impl SubFiniteElementSpace {
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
     /// # let sub = fes.get(0).unwrap();
     /// # let s = sub.read();
-    /// // Les formes du **champ**, distinctes de celles de la géométrie dès que
-    /// // l'élément est sous- ou sur-paramétrique.
+    /// // The **field**'s shapes, distinct from the geometry's as soon as the
+    /// // element is sub- or super-parametric.
     /// assert_eq!(s.field_n_at_g(0).unwrap().len(), s.shape_count().unwrap());
     /// ```
     pub fn field_n_at_g(&self, g: usize) -> Result<&[f64]> {
@@ -802,8 +802,8 @@ impl SubFiniteElementSpace {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
-    /// // Les dérivées des formes **du champ** — celles de la géométrie dès que
-    /// // l'élément est isoparamétrique, distinctes sinon.
+    /// // The derivatives of the **field**'s shapes — the geometry's as soon as
+    /// // the element is isoparametric, distinct otherwise.
     /// let fes = FiniteElementSpace::lagrange1(&maillage)?;
     /// let z = fes.get(0)?;
     /// let z = z.read();
@@ -840,11 +840,11 @@ impl SubFiniteElementSpace {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
     /// # sm.add_cell(&[n[0].id(), n[1].id()])?;
     /// # let maillage = Mesh::from_submesh(sm);
-    /// // Seules les familles C¹ tabulent des dérivées secondes : c'est ce que
-    /// // demande une équation d'ordre quatre, celle de la poutre.
+    /// // Only the C¹ families tabulate second derivatives: that is what a
+    /// // fourth-order equation, the beam's, demands.
     /// let hermite = FiniteElementSpace::new(&maillage, Interpolation::Hermite3)?;
     /// assert!(hermite.get(0)?.read().field_d2n_at_g(0).is_ok());
-    /// // Une base de Lagrange n'en a pas — et le dit.
+    /// // A Lagrange basis has none — and says so.
     /// let lagrange = FiniteElementSpace::lagrange1(&maillage)?;
     /// assert!(lagrange.get(0)?.read().field_d2n_at_g(0).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -886,7 +886,7 @@ impl SubFiniteElementSpace {
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
     /// # let sub = fes.get(0).unwrap();
     /// # let s = sub.read();
-    /// // Le triangle (0,0), (2,0), (0,2) : J = 2·I, à plat en ligne-major.
+    /// // The triangle (0,0), (2,0), (0,2): J = 2·I, flat in row-major.
     /// assert_eq!(s.jacobian(0, 0).unwrap(), vec![2.0, 0.0, 0.0, 2.0]);
     /// ```
     pub fn jacobian(&self, cell_idx: usize, g: usize) -> Result<Vec<f64>> {
@@ -963,10 +963,10 @@ impl SubFiniteElementSpace {
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
     /// # let sub = fes.get(0).unwrap();
     /// # let s = sub.read();
-    /// // ∂N_i/∂x_a — la matrice B de l'assemblage, calculée à la volée.
+    /// // ∂N_i/∂x_a — the assembly's B matrix, computed on the fly.
     /// let b = s.dn_dx(0, 0).unwrap();
     /// assert_eq!(b.len(), 3 * 2);
-    /// // Les gradients somment au vecteur nul : la partition de l'unité dérivée.
+    /// // The gradients sum to the null vector: the derived partition of unity.
     /// assert!((b[0] + b[2] + b[4]).abs() < 1e-12);
     /// ```
     pub fn dn_dx(&self, cell_idx: usize, g: usize) -> Result<Vec<f64>> {
@@ -1063,8 +1063,9 @@ impl crate::dump::Dump for SubFiniteElementSpace {
                 row
             })
             .collect();
-        // Le maillage porteur et la dimension d'espace, que le `Display` tait :
-        // sans eux le niveau « contenu » en dirait moins que la structure.
+        // The carrying mesh and the space dimension, which `Display` keeps
+        // silent: without them the "content" level would say less than the
+        // structure.
         format!(
             "{self}\n  submesh: {}, space_dim: {}\n{}",
             self.submesh,
@@ -1097,8 +1098,8 @@ impl crate::dump::Dump for SubFiniteElementSpace {
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
-/// // L'agrégat : un sous-espace par zone du maillage, chacun avec son
-/// // interpolation et sa quadrature.
+/// // The aggregate: one subspace per mesh zone, each with its interpolation
+/// // and its quadrature.
 /// let fes = FiniteElementSpace::lagrange1(&maillage)?;
 /// assert_eq!(fes.len(), maillage.len());
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -1137,8 +1138,8 @@ impl FiniteElementSpace {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
-    /// // Un couple (interpolation, quadrature) **par zone** : c'est ce qui
-    /// // permet à un même maillage de porter des formulations différentes.
+    /// // One (interpolation, quadrature) pair **per zone**: that is what lets
+    /// // one mesh carry different formulations.
     /// let fes = FiniteElementSpace::with(
     ///     &maillage, &[(Interpolation::Lagrange1, QuadratureRule::Gauss)])?;
     /// assert_eq!(fes.get(0)?.read().interpolation(), Interpolation::Lagrange1);
@@ -1183,7 +1184,7 @@ impl FiniteElementSpace {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
-    /// // La même interpolation partout, quadrature de Gauss par défaut.
+    /// // The same interpolation everywhere, Gauss quadrature by default.
     /// let fes = FiniteElementSpace::new(&maillage, Interpolation::Lagrange1)?;
     /// assert_eq!(fes.get(0)?.read().quadrature(), QuadratureRule::Gauss);
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -1237,7 +1238,7 @@ impl FiniteElementSpace {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// let fes = FiniteElementSpace::lagrange1(&maillage)?;
-    /// // Une vue sur une maille précise, repérée par (zone, rang).
+    /// // A view on one precise cell, located by (zone, rank).
     /// assert!((fes.element(0, 0)?.det_jacobian(0)? - 4.0).abs() < 1e-12);
     /// assert!(fes.element(0, 7).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -1263,7 +1264,7 @@ impl FiniteElementSpace {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// let fes = FiniteElementSpace::lagrange1(&maillage)?;
-    /// // Le parcours d'une zone, sans allocation par élément.
+    /// // The sweep of one zone, without a per-element allocation.
     /// assert_eq!(fes.elements(0)?.count(), 1);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -1292,8 +1293,8 @@ impl FiniteElementSpace {
     /// # let maillage = Mesh::from_submesh(sm);
     /// # use pyrucast::handle::Handle as H;
     /// let fes = FiniteElementSpace::lagrange1(&maillage)?;
-    /// // Le maillage est **reconstruit**, mais ses zones sont partagées : rien
-    /// // n'est copié, et l'identité des supports est préservée.
+    /// // The mesh is **rebuilt**, but its zones are shared: nothing is copied,
+    /// // and the identity of the supports is preserved.
     /// assert!(H::same_object(&fes.mesh()?.get(0)?, &maillage.get(0)?));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```

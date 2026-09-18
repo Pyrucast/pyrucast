@@ -1,14 +1,14 @@
-"""Opérateurs produisant un maillage — miroir de ``ops::mesh`` (Rust).
+"""Operators producing a mesh — mirror of ``ops::mesh`` (Rust).
 
-Mailleurs (ligne, cercle, arc, transfini, pavage, triangulation), balayages
-et transformations, extraction de peau et de bord, sélections géométriques,
-lecture gmsh. Tout ce qui rend un ``Mesh`` est ici, quelle que soit l'entrée
-— y compris ``select``, qui extrait le support d'un champ.
+Meshers (line, circle, arc, transfinite, paving, triangulation), sweeps and
+transformations, skin and border extraction, geometric selections, gmsh
+reading. Everything that returns a ``Mesh`` is here, whatever the input —
+including ``select``, which extracts a field's support.
 
-``from_gmsh`` est la seule fonction de ce module écrite en Python : elle a
-besoin d'un interpréteur portant le module ``gmsh``, ce que Rust ne peut pas
-avoir. Elle se contente d'aller chercher les tableaux du modèle gmsh courant
-et de les passer à ``from_gmsh_arrays``, qui est, lui, l'opérateur Rust.
+``from_gmsh`` is the only function of this module written in Python: it needs
+an interpreter carrying the ``gmsh`` module, which Rust cannot have. It
+merely fetches the arrays of the current gmsh model and hands them to
+``from_gmsh_arrays``, which is the Rust operator proper.
 """
 
 from ._pyrucast import (
@@ -122,39 +122,39 @@ __all__ = [
 ]
 
 
-# ── Récupération du modèle gmsh courant ─────────────────────────────────────
-# Nom de repli des mailles sans groupe physique. Doit rester celui du lecteur
-# de fichier (`UNGROUPED`, src/ops/mesh/gmsh.rs) : les deux voies rendent le
-# même dictionnaire pour le même maillage, ce nom compris.
+# ── Fetching the current gmsh model ─────────────────────────────────────────
+# Fallback name for cells without a physical group. It must stay the file
+# reader's own (`UNGROUPED`, src/ops/mesh/gmsh.rs): both paths return the same
+# dictionary for the same mesh, that name included.
 _UNGROUPED = "<ungrouped>"
 
 
 def _import_gmsh():
-    """Le module ``gmsh``, ou une erreur qui dit quoi faire."""
+    """The ``gmsh`` module, or an error saying what to do."""
     try:
         import gmsh
-    except ImportError as e:  # pragma: no cover - dépend de l'environnement
+    except ImportError as e:  # pragma: no cover - depends on the environment
         raise ImportError(
-            "pyrucast.mesh.from_gmsh a besoin du module gmsh : pip install gmsh"
+            "pyrucast.mesh.from_gmsh needs the gmsh module: pip install gmsh"
         ) from e
     if not gmsh.isInitialized():
-        # Sans cette garde on ne verrait rien : gmsh écrit « Gmsh has not been
-        # initialized » sur sa sortie d'erreur et rend des tableaux vides,
-        # sans lever. On rendrait un dictionnaire vide sans dire pourquoi.
+        # Without this guard nothing would show: gmsh writes "Gmsh has not
+        # been initialized" on its error output and returns empty arrays,
+        # without raising. We would return an empty dict without saying why.
         raise RuntimeError(
-            "gmsh n'est pas initialisé : appelez gmsh.initialize() et maillez "
-            "avant de récupérer le maillage"
+            "gmsh is not initialized: call gmsh.initialize() and mesh "
+            "before fetching the mesh"
         )
     return gmsh
 
 
 def _group_names(gmsh, dim):
-    """``(dim, entité) -> [noms de groupes physiques]``.
+    """``(dim, entity) -> [physical group names]``.
 
-    Une entité peut porter plusieurs groupes ; on accumule les noms avant
-    d'émettre quoi que ce soit, pour ne résoudre les nœuds d'un bloc qu'une
-    fois. Un groupe sans nom prend ``physical <tag>``, comme le lecteur de
-    fichier.
+    An entity may carry several groups; the names are accumulated before
+    emitting anything, so that a block's nodes are resolved only once. A group
+    without a name takes ``physical <tag>``, like the file reader.
+
     """
     names = {}
     for gdim, gtag in gmsh.model.getPhysicalGroups(dim):
@@ -165,39 +165,39 @@ def _group_names(gmsh, dim):
 
 
 def from_gmsh(coords, *, dim=-1, tag=-1):
-    """Récupère le maillage du modèle gmsh courant, un ``Mesh`` par groupe nommé.
+    """Fetches the current gmsh model's mesh, one ``Mesh`` per named group.
 
-    À appeler une fois le maillage terminé côté gmsh — pyrucast lit, il ne
-    pilote pas : la géométrie et le maillage restent l'affaire de gmsh.
+    To be called once meshing is done on the gmsh side — pyrucast reads, it
+    does not drive: geometry and meshing remain gmsh's business.
 
-    Rend le même ``dict[str, Mesh]`` que :func:`read_gmsh`, avec les mêmes
-    règles : les nœuds atterrissent dans le ``coords`` fourni, dont la dimension
-    décide combien des trois coordonnées de gmsh sont gardées (un ``Coords``
-    2-D aplatit sur ``xy``) ; tous les maillages rendus partagent ce ``Coords``,
-    donc un nœud entre deux groupes est *le même* des deux côtés ; une zone par
-    type d'élément dans chaque groupe ; les mailles sans groupe physique sous
-    la clé ``"<ungrouped>"``. Un modèle sans aucun groupe physique rend donc
-    tout son maillage sous cette seule clé.
+    Returns the same ``dict[str, Mesh]`` as :func:`read_gmsh`, under the same
+    rules: nodes land in the supplied ``coords``, whose dimension decides how
+    many of gmsh's three coordinates are kept (a 2-D ``Coords`` flattens onto
+    ``xy``); every returned mesh shares that ``Coords``, so a node between two
+    groups is *the same* on both sides; one zone per element type in each
+    group; cells without a physical group under the key ``"<ungrouped>"``. A
+    model with no physical group at all therefore returns its whole mesh under
+    that single key.
 
-    Les surfaces et les points nommés dans gmsh (``addPhysicalGroup(..., name=)``)
-    deviennent les clés du dictionnaire. gmsh maille ses entités ponctuelles,
-    donc un point nommé arrive comme un ``Mesh`` POI1, prêt à porter une
-    condition aux limites.
+    Surfaces and points named in gmsh (``addPhysicalGroup(..., name=)``) become
+    the dictionary's keys. gmsh meshes its point entities, so a named point
+    arrives as a POI1 ``Mesh``, ready to carry a boundary condition.
 
-    ``dim`` restreint l'import à une dimension (``-1``, le défaut : toutes), et
-    ``tag`` à cette seule entité de dimension ``dim``. La table des nœuds est
-    lue en entier quoi qu'il arrive — une maille de surface s'appuie sur des
-    nœuds classés sur ses courbes de bord —, et seuls les nœuds effectivement
-    référencés sont matérialisés.
 
-    Les tableaux de gmsh sont des **vues** sur sa propre mémoire, et pyrucast
-    les lit par le protocole tampon : rien n'est copié jusqu'à la construction
-    du maillage. On peut donc appeler ``gmsh.finalize()`` juste après — pyrucast
-    possède alors ses données.
+    ``dim`` restricts the import to one dimension (``-1``, the default: all),
+    and ``tag`` to that single entity of dimension ``dim``. The node table is
+    read in full whatever happens — a surface cell leans on nodes classified
+    on its border curves — and only the nodes actually referenced are
+    materialized.
+
+    gmsh's arrays are **views** on its own memory, and pyrucast reads them
+    through the buffer protocol: nothing is copied until the mesh is built. So
+    ``gmsh.finalize()`` may be called right after — pyrucast then owns its data.
+
     """
     gmsh = _import_gmsh()
     if tag >= 0 and dim < 0:
-        raise ValueError("tag ne se donne qu'avec une dimension : précisez dim")
+        raise ValueError("tag is only given with a dimension: specify dim")
 
     node_tags, node_coords, _ = gmsh.model.mesh.getNodes()
     named = _group_names(gmsh, dim)

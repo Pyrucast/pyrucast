@@ -93,8 +93,8 @@ use serde::{Deserialize, Serialize};
 ///
 /// ```
 /// # use pyrucast::models::interface_transfer;
-/// // Une interface conforme a ses nœuds confondus : la tolérance ne rattrape
-/// // que l'arrondi, pas un décalage de maillage.
+/// // A conforming interface has its nodes coincident: the tolerance catches
+/// // rounding only, not a mesh offset.
 /// assert_eq!(interface_transfer::DEFAULT_TOL, 1e-9);
 /// ```
 pub const DEFAULT_TOL: f64 = 1e-9;
@@ -118,8 +118,8 @@ pub const DEFAULT_TOL: f64 = 1e-9;
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// // Deux bords **conformes** — ici le même, ce qui suffit à montrer le
-/// // contrat ; en pratique deux faces en vis-à-vis.
+/// // Two **conforming** borders — here the same one, which is enough to show
+/// // the contract; in practice two facing sides.
 /// let conduction = model::heat_conduction(&fes)?;
 /// let i = InterfaceTransfer::new(
 ///     zone.clone(), zone, &conduction, vec![("T".into(), "q".into())], DEFAULT_TOL)?;
@@ -170,12 +170,12 @@ impl InterfaceTransfer {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// let diffusion = model::fick(&fes, "H2")?;
-    /// // Un revêtement sur la diffusion : la nature vient du modèle de Fick.
+    /// // A coating on diffusion: the kind comes from the Fick model.
     /// let i = InterfaceTransfer::new(
     ///     zone.clone(), zone.clone(), &diffusion,
     ///     vec![("c_H2".into(), "j_H2".into())], DEFAULT_TOL)?;
     /// assert_eq!(i.physics(), &[Physics::Diffusion]);
-    /// // La cible n'assemble pas la température : refusé plutôt que couplé à rien.
+    /// // The target does not assemble temperature: refused rather than coupled to nothing.
     /// assert!(InterfaceTransfer::new(
     ///     zone.clone(), zone, &diffusion, vec![("T".into(), "q".into())], DEFAULT_TOL)
     ///     .is_err());
@@ -221,7 +221,7 @@ impl InterfaceTransfer {
     }
 
     /// The layout of an off-diagonal block, rows on one side, columns on the other.
-    /// Une interpolation de la primale aux points d'un côté.
+    /// One interpolation of the primal at one side's points.
     fn interp_side(
         fes: &Handle<SubFiniteElementSpace>,
         solution: &crate::containers::node_field::NodeField,
@@ -298,12 +298,12 @@ impl SubModelKind for InterfaceTransfer {
     /// Internal fluxes `q_i = ∫ N_i · flux dΓ` — weighted by `N`, not by `Bᵀ`,
     /// exactly as for convection: the interface integrand is a flux **density**,
     /// not a gradient-conjugate quantity.
-    /// Deux termes, un par côté : `∫ h·(a₁−a₂)·N` sur A et son opposé sur B.
+    /// Two terms, one per side: `∫ h·(a₁−a₂)·N` on A and its opposite on B.
     ///
-    /// L'intégrale d'une différence est la différence des intégrales, et
-    /// chacune se disperse sur **un** espace, le sien. Ce qui est couplé, c'est
-    /// la matrice — lignes sur A, colonnes sur B — pas le vecteur : un résidu
-    /// ne produit qu'un nombre par nœud.
+    /// The integral of a difference is the difference of the integrals, and each
+    /// scatters onto **one** space, its own. What is coupled is the matrix — rows
+    /// on A, columns on B — not the vector: a residual produces only one number
+    /// per node.
     fn internal_force_contribution(&self) -> Vec<crate::models::ResidualContribution> {
         [
             (&self.side_a, &self.support_a),
@@ -323,11 +323,11 @@ impl SubModelKind for InterfaceTransfer {
         .collect()
     }
 
-    /// Le saut `a₁ − a₂` aux points, vu du côté `fespace` : positif sur A,
-    /// négatif sur B. Les deux côtés étant **conformes** — même type d'élément,
-    /// même nombre de mailles, la maille `i` de l'un face à la maille `i` de
-    /// l'autre —, les deux interpolations s'alignent indice pour indice et le
-    /// saut est une soustraction, pas une projection.
+    /// The jump `a₁ − a₂` at the points, seen from the `fespace` side: positive on
+    /// A, negative on B. Both sides being **conforming** — same element type, same
+    /// cell count, cell `i` of one facing cell `i` of the other — the two
+    /// interpolations align index for index and the jump is a subtraction, not a
+    /// projection.
     fn residual_input(
         &self,
         fespace: &Handle<SubFiniteElementSpace>,
@@ -342,19 +342,19 @@ impl SubModelKind for InterfaceTransfer {
         let mut out = SubElementField::new(fespace.clone(), noms)?;
         {
             let (p, m) = (plus.read(), moins.read());
-            // Les deux champs interpolés portent **toutes** les composantes de
-            // la solution, dans son ordre ; le saut n'en porte qu'une par
-            // primale. Les indices se résolvent donc par nom, une fois pour la
-            // zone, jamais par position — sitôt que la solution transporte un
-            // multiplicateur ou une seconde physique, les deux dispositions
+            // Both interpolated fields carry **every** component of the solution, in its
+            // order; the jump carries only one per primal. Indices are therefore
+            // resolved by name, once for the zone, never by position — as soon as the
+            // solution carries a multiplier or a second physics, the two layouts
+            // diverge.
             // divergent.
             let primales: Vec<&str> = self.components.iter().map(|(v, _)| v.as_str()).collect();
             let ip = p.resolve_components(&primales, "solution")?;
             let im = m.resolve_components(&primales, "solution")?;
             let np = p.component_count();
             let nm = m.component_count();
-            // Les deux côtés sont conformes par construction ; on le prouve
-            // une fois ici plutôt que de laisser l'indexation le découvrir.
+            // Both sides are conforming by construction; we prove it once here rather
+            // than let the indexing find out.
             let lignes = p.cell_count() * p.gauss_count();
             if m.cell_count() * m.gauss_count() != lignes {
                 return Err(PyrucastError::Message(format!(
@@ -375,14 +375,14 @@ impl SubModelKind for InterfaceTransfer {
         Ok(Handle::new(out))
     }
 
-    /// Le **saut**, pas un flux : ce que le terme lit au point est
-    /// `a₁ − a₂`, et c'est lui qu'il multiplie par le coefficient.
+    /// The **jump**, not a flux: what the term reads at the point is `a₁ − a₂`,
+    /// and that is what it multiplies by the coefficient.
     fn internal_force_reads(&self) -> Vec<String> {
         self.components.iter().map(|(p, _)| jump_name(p)).collect()
     }
 
-    /// `q_i = ∫ h·(a₁−a₂)·N_i dΓ` du côté considéré — le coefficient qui a
-    /// bâti `∫h NᵀN` appliqué au saut, sans passer par une loi.
+    /// `q_i = ∫ h·(a₁−a₂)·N_i dΓ` on the side considered — the coefficient that
+    /// built `∫h NᵀN`, applied to the jump, without going through a law.
     fn internal_force_element(
         &self,
         geoms: &[CellGeom],

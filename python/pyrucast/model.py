@@ -1,19 +1,19 @@
 """Opérateurs produisant un modèle — miroir de ``ops::model`` (Rust).
 
-Les **déclarations de physique** : conduction, diffusion, rayonnement,
+The **physics declarations**: conduction, diffusion, radiation,
 transferts, élasticité, plasticité, endommagement, éléments structuraux
 (barre, poutre, coque) et contraintes (Dirichlet, MPC, baignage, contact).
 
-Chaque opérateur consomme le **support parent** — un ``FiniteElementSpace``,
-ou les maillages que relie une contrainte — et rend un ``Model`` qui le couvre
-en entier : un sous-modèle par sous-espace. Un support à une zone donne le cas
-unitaire, un support à N zones donne N zones. On compose des physiques
-hétérogènes avec ``|`` :
+Every operator consumes the **parent support** — a ``FiniteElementSpace``, or
+the meshes a constraint relates — and returns a ``Model`` covering it in full:
+one sub-model per subspace. A one-zone support gives the unit case, an N-zone
+support gives N zones. Heterogeneous physics are composed with ``|``:
+
 
     modele = model.heat_conduction(fes) | model.dirichlet(...)
 
-Aucun n'est exposé en méthode : leur premier argument est le support que le
-modèle recouvre, pas un sujet qu'on transforme.
+None is exposed as a method: their first argument is the support the model
+covers, not a subject being transformed.
 """
 
 from ._pyrucast import (

@@ -75,14 +75,14 @@ const DUAL: [&str; 6] = ["f_x", "f_y", "f_z", "m_x", "m_y", "m_z"];
 /// Required material: the elastic constants and the thickness.
 const MATERIAL_COMPONENTS: &[&str] = &["E", "nu", "h"];
 
-/// La largeur maximale d'une coque : quatre nœuds (QUA4) à six DDL. `Shell::new`
-/// refuse tout autre élément que TRI3 ou QUA4, donc la borne est acquise à la
-/// construction — et tous les tampons d'un noyau tiennent sur la **pile**.
+/// A shell's maximum width: four nodes (QUA4) at six DOFs. `Shell::new` refuses
+/// any element other than TRI3 or QUA4, so the bound is acquired at build time
+/// — and all of a kernel's buffers fit on the **stack**.
 pub(crate) const MAX_SHELL_DOFS: usize = 24;
 
-/// Une matrice de coque, `MAX_SHELL_DOFS²` à plat.
+/// A shell matrix, `MAX_SHELL_DOFS²` flat.
 pub(crate) type ShellMatrix = [f64; MAX_SHELL_DOFS * MAX_SHELL_DOFS];
-/// Les dérivées locales aux nœuds d'une coque.
+/// A shell's local derivatives at the nodes.
 pub(crate) type ShellNodes2 = [[f64; 2]; 4];
 
 /// A shell's generalised strain-displacement matrix, on the stack.
@@ -129,9 +129,9 @@ const BEHAVIOR_NO_SHEAR: usize = SHEAR_ROW;
 ///
 /// ```
 /// # use pyrucast::models::shell::{self, ShellModel};
-/// // Reissner-Mindlin porte le cisaillement transverse comme DDL propre ;
-/// // Kirchhoff discret l'annule en des points choisis, ce qui rend la
-/// // limite mince exacte et supprime tout blocage.
+/// // Reissner-Mindlin carries transverse shear as a DOF of its own; discrete
+/// // Kirchhoff cancels it at chosen points, which makes the thin limit exact
+/// // and removes any locking.
 /// assert!(ShellModel::Thick.has_transverse_shear());
 /// assert!(!ShellModel::Kirchhoff.has_transverse_shear());
 /// ```
@@ -172,8 +172,8 @@ impl ShellModel {
     ///
     /// ```
     /// # use pyrucast::models::shell::{self, ShellModel};
-    /// // C'est ce qui décide s'il faut une **seconde** quadrature, réduite,
-    /// // pour intégrer le cisaillement sans bloquer.
+    /// // This is what decides whether a **second**, reduced quadrature is
+    /// // needed to integrate the shear without locking.
     /// assert!(ShellModel::Thick.has_transverse_shear());
     /// assert!(!ShellModel::Kirchhoff.has_transverse_shear());
     /// ```
@@ -202,8 +202,8 @@ impl ShellModel {
     /// ```
     /// # use pyrucast::models::shell::{self, ShellModel};
     /// assert_eq!(ShellModel::Thick.strains().len(), 9);
-    /// // Kirchhoff discret n'a pas de cisaillement transverse : sa liste
-    /// // s'arrête là où la quadrature réduite commençait.
+    /// // Discrete Kirchhoff has no transverse shear: its list stops where the
+    /// // reduced quadrature used to begin.
     /// assert_eq!(ShellModel::Kirchhoff.strains().len(), 7);
     /// assert_eq!(ShellModel::Kirchhoff.strains()[6], "drill");
     /// ```
@@ -241,8 +241,8 @@ impl std::fmt::Display for ShellModel {
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # use pyrucast::models::shell::{Shell, ShellModel};
-/// // Une coque vit sur une surface plongée en 3-D et porte l'épaisseur
-/// // dans son matériau.
+/// // A shell lives on a surface embedded in 3-D and carries the thickness in
+/// // its material.
 /// let s = Shell::new(zone.clone(), ShellModel::Thick)?;
 /// assert!(s.material_components().contains(&"h".to_string()));
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -281,8 +281,8 @@ impl Shell {
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # use pyrucast::models::shell::{Shell, ShellModel};
-    /// // Une coque vit sur une surface plongée en 3-D et porte l'épaisseur
-    /// // dans son matériau.
+    /// // A shell lives on a surface embedded in 3-D and carries the thickness
+    /// // in its material.
     /// let s = Shell::new(zone.clone(), ShellModel::Thick)?;
     /// assert!(s.material_components().contains(&"h".to_string()));
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -406,8 +406,8 @@ impl SubModelKind for Shell {
         let side = 6 * n;
         let frame = local_frame(full)?;
         let setup = bending_setup(self.model, full, &frame)?;
-        // Les forces s'accumulent dans le repère **local**, celui où `B` est
-        // écrit ; la rotation vers les axes globaux vient à la fin, une fois.
+        // The forces accumulate in the **local** frame, the one `B` is written
+        // in; the rotation to the global axes comes at the end, once.
         let mut b: ShellB = [[0.0; MAX_SHELL_DOFS]; SHELL_STRAINS];
         let mut local = [0.0_f64; MAX_SHELL_DOFS];
         for g in 0..full.n_gauss {
@@ -434,8 +434,8 @@ impl SubModelKind for Shell {
                 }
             }
         }
-        // `Tᵀ f_loc` : la transposée de la rotation qu'ont subie les DDL, par
-        // triplet — translations puis rotations de chaque nœud.
+        // `Tᵀ f_loc`: the transpose of the rotation the DOFs underwent, triplet
+        // by triplet — translations then rotations of each node.
         for blk in 0..(side / 3) {
             let o = blk * 3;
             for i in 0..3 {
@@ -552,8 +552,8 @@ impl Behavior for Shell {
             out[i] = (0..3).map(|j| dm[i][j] * eps[j]).sum();
             out[3 + i] = (0..3).map(|j| db[i][j] * kappa[j]).sum();
         }
-        // Le moment de vrillage : `α·G·h·(θ_z − ω_z)`, la loi d'une contrainte
-        // dont la déformation est un seul nombre.
+        // The drilling moment: `α·G·h·(θ_z − ω_z)`, the law of a stress whose
+        // strain is a single number.
         out[DRILL_ROW] = drilling_law(e, nu, h) * d(DRILL_ROW);
         if self.model.has_transverse_shear() {
             // `k_s` overrides the 5/6 of a homogeneous rectangular section; which
@@ -607,13 +607,13 @@ impl Behavior for Shell {
 /// #                    "m_x".to_string(), "m_y".to_string(), "m_z".to_string()],
 /// #               vec!["u_x".to_string(), "u_y".to_string(), "u_z".to_string(),
 /// #                    "r_x".to_string(), "r_y".to_string(), "r_z".to_string()]);
-/// // Un triade orthonormée `[e₁, e₂, n]`, bâtie sur les **nœuds** — la
-/// // première arête et la normale de la facette — non sur un point de
-/// // Gauss : les DDL qu'elle fait tourner sont un jeu par élément.
+/// // An orthonormal triad `[e₁, e₂, n]`, built on the **nodes** — the first
+/// // edge and the facet normal — not on a Gauss point: the DOFs it rotates
+/// // are one set per element.
 /// reduce_cells(&zone, |geom| {
 ///     let f = shell::local_frame(geom)?;
-///     assert!((f[0][0] - 1.0).abs() < 1e-12); // e₁ suit la première arête
-///     assert!((f[2][2] - 1.0).abs() < 1e-12); // n est la normale, ici +z
+///     assert!((f[0][0] - 1.0).abs() < 1e-12); // e₁ follows the first edge
+///     assert!((f[2][2] - 1.0).abs() < 1e-12); // n is the normal, here +z
 ///     let dot: f64 = (0..3).map(|k| f[0][k] * f[1][k]).sum();
 ///     assert!(dot.abs() < 1e-12);
 ///     Ok(0.0)
@@ -621,7 +621,7 @@ impl Behavior for Shell {
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn local_frame(geom: &CellGeom) -> Result<[[f64; 3]; 3]> {
-    // Trois emprunts immuables coexistent : rien à recopier.
+    // Three immutable borrows coexist: nothing to copy over.
     let (p0, p1, p2) = (geom.node_coord(0), geom.node_coord(1), geom.node_coord(2));
     let a: [f64; 3] = std::array::from_fn(|i| p1[i] - p0[i]);
     let b: [f64; 3] = std::array::from_fn(|i| p2[i] - p0[i]);
@@ -704,7 +704,7 @@ pub(crate) fn local_coords_into(geom: &CellGeom, frame: &[[f64; 3]; 3], out: &mu
 /// several decades — which is what one wants from a regularisation.
 const DRILLING_WEIGHT: f64 = 1e-3;
 
-/// The drilling modulus `α·G·h` — the « law » of a constraint whose strain is a
+/// The drilling modulus `α·G·h` — the "law" of a constraint whose strain is a
 /// single number.
 ///
 /// It sits beside [`thick::membrane_law`] and the rest because it is one of
@@ -987,7 +987,7 @@ mod tests {
     use crate::handle::Handle;
     use crate::models::kernel::reduce_cells;
 
-    /// Le triangle unité dans le plan `z = 0` — la facette la plus simple.
+    /// The unit triangle in the `z = 0` plane — the simplest facet.
     fn facette() -> Handle<SubFiniteElementSpace> {
         let coords = Handle::new(Coords::new(3).unwrap());
         let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
@@ -1002,8 +1002,8 @@ mod tests {
             .unwrap()
     }
 
-    /// `local += Bᵀ D B · w` : avec `B = I` sur trois colonnes et `D = I`, on
-    /// retrouve `w` sur la diagonale.
+    /// `local += Bᵀ D B · w`: with `B = I` on three columns and `D = I`, `w` is
+    /// found back on the diagonal.
     #[test]
     fn accumulate_is_b_transpose_d_b() {
         let mut local: ShellMatrix = [0.0; MAX_SHELL_DOFS * MAX_SHELL_DOFS];
@@ -1028,9 +1028,9 @@ mod tests {
         assert_eq!(ke[0], 5.0);
     }
 
-    /// Le gradient tangentiel est **déjà** dans le plan : le projeter sur
-    /// `e₁`, `e₂` suffit — ni inverse, ni second jacobien. Et la partition de
-    /// l'unité dérivée fait que les gradients somment à zéro.
+    /// The tangential gradient is **already** in the plane: projecting it onto
+    /// `e₁`, `e₂` is enough — no inverse, no second Jacobian. And the derived
+    /// partition of unity makes the gradients sum to zero.
     #[test]
     fn local_derivatives_sum_to_zero() {
         reduce_cells(&facette(), |geom| {
@@ -1043,8 +1043,8 @@ mod tests {
         .unwrap();
     }
 
-    /// Le premier nœud est l'origine, la première arête l'axe `x` : une facette
-    /// plane tient en deux nombres par nœud.
+    /// The first node is the origin, the first edge the `x` axis: a flat facet
+    /// fits in two numbers per node.
     #[test]
     fn local_coords_put_the_first_edge_on_x() {
         reduce_cells(&facette(), |geom| {
@@ -1058,26 +1058,25 @@ mod tests {
         .unwrap();
     }
 
-    /// Chaque bloc de lignes de `B` lit **ses** degrés de liberté : la membrane
-    /// les translations dans le plan, la flexion les rotations de fibre, le
-    /// vrillage la rotation autour de la normale. La flèche hors plan
-    /// n'apparaît dans aucun des trois — elle est au cisaillement, intégré
-    /// ailleurs.
+    /// Each row block of `B` reads **its** degrees of freedom: the membrane the
+    /// in-plane translations, the bending the fibre rotations, the drilling the
+    /// rotation about the normal. The out-of-plane deflection appears in none of
+    /// the three — it belongs to the shear, integrated elsewhere.
     #[test]
     fn each_block_of_b_reads_its_own_degrees_of_freedom() {
         reduce_cells(&facette(), |geom| {
             let f = local_frame(geom)?;
             let mut b: ShellB = [[0.0; MAX_SHELL_DOFS]; SHELL_STRAINS];
             b_into(geom, &f, &BendingSetup::Direct, 0, &mut b)?;
-            // Membrane : `u` du premier nœud, jamais sa flèche `w`.
+            // Membrane: the first node's `u`, never its deflection `w`.
             assert!(b[MEMBRANE_ROW][0] != 0.0);
             assert_eq!(b[MEMBRANE_ROW][2], 0.0);
-            // Flexion : les rotations de fibre, jamais les translations.
+            // Bending: the fibre rotations, never the translations.
             assert!(b[BENDING_ROW + 2][3] != 0.0 || b[BENDING_ROW + 2][4] != 0.0);
             assert_eq!(b[BENDING_ROW][0], 0.0);
-            // Vrillage : `θ_z` vaut la fonction de forme, et une rotation
-            // **d'ensemble** autour de la normale ne coûte rien — c'est ce
-            // qu'une pénalité diagonale aurait manqué.
+            // Drilling: `θ_z` equals the shape function, and a **whole-body**
+            // rotation about the normal costs nothing — which is what a
+            // diagonal penalty would have missed.
             assert!(b[DRILL_ROW][5] != 0.0);
             let rigide: f64 = (0..geom.n_nodes).map(|i| b[DRILL_ROW][6 * i + 5]).sum();
             assert!((rigide - 1.0).abs() < 1e-12); // partition de l'unité
@@ -1086,8 +1085,8 @@ mod tests {
         .unwrap();
     }
 
-    /// Les lignes de cisaillement, elles, lisent la flèche — et c'est le point
-    /// réduit qui les porte.
+    /// The shear rows, on the other hand, read the deflection — and it is the
+    /// reduced point that carries them.
     #[test]
     fn the_shear_rows_read_the_deflection() {
         reduce_cells(&facette(), |geom| {

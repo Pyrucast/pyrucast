@@ -74,14 +74,14 @@ use std::collections::HashSet;
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::ops::mesh::points;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
-/// # // Quatre nœuds : l'origine, puis un sur chaque axe à distance 1.
+/// # // Four nodes: the origin, then one on each axis at distance 1.
 /// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
 /// # for i in 1..4 { sm.add_cell(&[n[0].id(), n[i].id()]).unwrap(); }
 /// # let maillage = Mesh::from_submesh(sm);
-/// // La boule **fermée**, élargie de la tolérance : les quatre nœuds y sont.
-/// // Le résultat est un maillage POI1 : une maille par nœud retenu.
+/// // The **closed** ball, widened by the tolerance: all four nodes are in it.
+/// // The result is a POI1 mesh: one cell per retained node.
 /// let dedans = points::points_in_sphere(&maillage, &[0.0, 0.0, 0.0], 1.0, None)?;
 /// assert_eq!(dedans.cell_count(), 4);
 /// // Rayon nul : l'origine seule.
@@ -123,13 +123,13 @@ pub fn points_in_sphere(
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::ops::mesh::points;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
-/// # // Quatre nœuds : l'origine, puis un sur chaque axe à distance 1.
+/// # // Four nodes: the origin, then one on each axis at distance 1.
 /// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
 /// # for i in 1..4 { sm.add_cell(&[n[0].id(), n[i].id()]).unwrap(); }
 /// # let maillage = Mesh::from_submesh(sm);
-/// // La **surface** seule : les trois nœuds à distance 1, pas l'origine.
+/// // The **surface** alone: the three nodes at distance 1, not the origin.
 /// let dessus = points::points_on_sphere(&maillage, &[0.0, 0.0, 0.0], 1.0, None)?;
 /// assert_eq!(dessus.cell_count(), 3);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -175,7 +175,7 @@ pub fn points_on_sphere(
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::ops::mesh::points;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
-/// # // Quatre nœuds : l'origine, puis un sur chaque axe à distance 1.
+/// # // Four nodes: the origin, then one on each axis at distance 1.
 /// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
@@ -223,13 +223,13 @@ pub fn points_on_plane(
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::ops::mesh::points;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
-/// # // Quatre nœuds : l'origine, puis un sur chaque axe à distance 1.
+/// # // Four nodes: the origin, then one on each axis at distance 1.
 /// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
 /// # for i in 1..4 { sm.add_cell(&[n[0].id(), n[i].id()]).unwrap(); }
 /// # let maillage = Mesh::from_submesh(sm);
-/// // Le demi-espace **du côté opposé à la normale**, plan compris.
+/// // The half-space **on the side opposite the normal**, plane included.
 /// let dessous = points::points_below_plane(
 ///     &maillage, &[0.0, 0.0, 0.0], &[0.0, 0.0, 1.0], None)?;
 /// assert_eq!(dessous.cell_count(), 3); // z ≤ 0
@@ -274,13 +274,13 @@ pub fn points_below_plane(
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::ops::mesh::points;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
-/// # // Quatre nœuds : l'origine, puis un sur chaque axe à distance 1.
+/// # // Four nodes: the origin, then one on each axis at distance 1.
 /// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
 /// # for i in 1..4 { sm.add_cell(&[n[0].id(), n[i].id()]).unwrap(); }
 /// # let maillage = Mesh::from_submesh(sm);
-/// // L'axe des x, **droite entière** et non segment : l'origine et (1,0,0).
+/// // The x axis, a **whole line** and not a segment: the origin and (1,0,0).
 /// let axe = points::points_on_line(&maillage, &[0.0, 0.0, 0.0], &[1.0, 0.0, 0.0], None)?;
 /// assert_eq!(axe.cell_count(), 2);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -321,14 +321,14 @@ pub fn points_on_line(mesh: &Mesh, a: &[f64], b: &[f64], tol: Option<f64>) -> Re
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::ops::mesh::points;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
-/// # // Quatre nœuds : l'origine, puis un sur chaque axe à distance 1.
+/// # // Four nodes: the origin, then one on each axis at distance 1.
 /// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
 /// # for i in 1..4 { sm.add_cell(&[n[0].id(), n[i].id()]).unwrap(); }
 /// # let maillage = Mesh::from_submesh(sm);
-/// // Un cylindre autour de l'axe z, de l'origine à (0,0,1), rayon 0,5 :
-/// // il tient les deux nœuds de l'axe, pas ceux à distance 1.
+/// // A cylinder about the z axis, from the origin to (0,0,1), radius 0.5:
+/// // it holds the two nodes on the axis, not those at distance 1.
 /// let cyl = points::points_in_cylinder(
 ///     &maillage, &[0.0, 0.0, 0.0], &[0.0, 0.0, 1.0], 0.5, None)?;
 /// assert_eq!(cyl.cell_count(), 2);
@@ -377,14 +377,14 @@ pub fn points_in_cylinder(
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::ops::mesh::points;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
-/// # // Quatre nœuds : l'origine, puis un sur chaque axe à distance 1.
+/// # // Four nodes: the origin, then one on each axis at distance 1.
 /// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
 /// # for i in 1..4 { sm.add_cell(&[n[0].id(), n[i].id()]).unwrap(); }
 /// # let maillage = Mesh::from_submesh(sm);
-/// // La **paroi** seule : à rayon 1 autour de l'axe z, les nœuds (1,0,0)
-/// // et (0,1,0) — encore faut-il qu'ils soient entre les deux bases.
+/// // The **wall** alone: at radius 1 about the z axis, the nodes (1,0,0) and
+/// // (0,1,0) — provided they lie between the two bases.
 /// let paroi = points::points_on_cylinder(
 ///     &maillage, &[0.0, 0.0, 0.0], &[0.0, 0.0, 1.0], 1.0, None)?;
 /// assert_eq!(paroi.cell_count(), 2);
@@ -437,17 +437,17 @@ pub fn points_on_cylinder(
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::ops::mesh::points;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
-/// # // Quatre nœuds : l'origine, puis un sur chaque axe à distance 1.
+/// # // Four nodes: the origin, then one on each axis at distance 1.
 /// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
 /// # for i in 1..4 { sm.add_cell(&[n[0].id(), n[i].id()]).unwrap(); }
 /// # let maillage = Mesh::from_submesh(sm);
-/// // Un tronc de cône : deux rayons, donc aussi bien le cône plein que le
-/// // cylindre (rayons égaux) ou la pointe (rayon final nul).
+/// // A truncated cone: two radii, hence the full cone as well as the
+/// // cylinder (equal radii) or the tip (final radius zero).
 /// let cone = points::points_in_cone(
 ///     &maillage, &[0.0, 0.0, 0.0], &[0.0, 0.0, 1.0], 1.0, 0.0, None)?;
-/// // Les trois nœuds du plan z = 0 (dans le disque de base) **et** la pointe.
+/// // The three nodes of the z = 0 plane (inside the base disc) **and** the tip.
 /// assert_eq!(cone.cell_count(), 4);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -495,7 +495,7 @@ pub fn points_in_cone(
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::ops::mesh::points;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
-/// # // Quatre nœuds : l'origine, puis un sur chaque axe à distance 1.
+/// # // Four nodes: the origin, then one on each axis at distance 1.
 /// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
@@ -503,7 +503,7 @@ pub fn points_in_cone(
 /// # let maillage = Mesh::from_submesh(sm);
 /// let paroi = points::points_on_cone(
 ///     &maillage, &[0.0, 0.0, 0.0], &[0.0, 0.0, 1.0], 1.0, 0.0, None)?;
-/// // La nappe seule : le cercle de base et l'apex, pas le centre du disque.
+/// // The sheet alone: the base circle and the apex, not the disc's centre.
 /// assert_eq!(paroi.cell_count(), 3);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -563,14 +563,14 @@ pub fn points_on_cone(
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::ops::mesh::points;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
-/// # // Quatre nœuds : l'origine, puis un sur chaque axe à distance 1.
+/// # // Four nodes: the origin, then one on each axis at distance 1.
 /// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
 /// # for i in 1..4 { sm.add_cell(&[n[0].id(), n[i].id()]).unwrap(); }
 /// # let maillage = Mesh::from_submesh(sm);
-/// // Un tore d'axe z, rayon majeur 1, rayon mineur 0,25 : il attrape les
-/// // deux nœuds du plan z = 0 qui sont à distance 1 de l'axe.
+/// // A torus about the z axis, major radius 1, minor radius 0.25: it catches
+/// // the two nodes of the z = 0 plane that are at distance 1 from the axis.
 /// let tore = points::points_in_torus(
 ///     &maillage, &[0.0, 0.0, 0.0], &[0.0, 0.0, 1.0], 1.0, 0.25, None)?;
 /// assert_eq!(tore.cell_count(), 2);
@@ -615,13 +615,13 @@ pub fn points_in_torus(
 /// # use pyrucast::handle::Handle;
 /// # use pyrucast::ops::mesh::points;
 /// # let coords = Handle::new(Coords::new(3).unwrap());
-/// # // Quatre nœuds : l'origine, puis un sur chaque axe à distance 1.
+/// # // Four nodes: the origin, then one on each axis at distance 1.
 /// # let n: Vec<Node> = [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
 /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
 /// # for i in 1..4 { sm.add_cell(&[n[0].id(), n[i].id()]).unwrap(); }
 /// # let maillage = Mesh::from_submesh(sm);
-/// // La **surface** du tore : les mêmes nœuds, qui sont pile dessus.
+/// // The torus's **surface**: the same nodes, which sit exactly on it.
 /// let surface = points::points_on_torus(
 ///     &maillage, &[0.0, 0.0, 0.0], &[0.0, 0.0, 1.0], 1.0, 0.0, None)?;
 /// assert_eq!(surface.cell_count(), 2);

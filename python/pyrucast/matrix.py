@@ -1,10 +1,10 @@
-"""Opérateurs produisant une matrice — miroir de ``ops::matrix`` (Rust).
+"""Operators producing a matrix — mirror of ``ops::matrix`` (Rust).
 
-Les assembleurs proprement dits : rigidité, masse/capacité, rigidité
+The assemblers proper: stiffness, mass/capacity, geometric
 géométrique, tangente cohérente, concentration diagonale.
 
-La (ré)assemblage d'une matrice depuis ses seuls blocs n'est pas ici : elle
-mute un unique conteneur en préservant son invariant, c'est donc une méthode
+(Re)assembling a matrix from its blocks alone is not here: it mutates a single
+container while preserving its invariant, hence a method
 — ``matrix.assemble()``, voisine de ``matrix.finalize()``.
 """
 

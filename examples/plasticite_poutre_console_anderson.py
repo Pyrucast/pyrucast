@@ -1,58 +1,60 @@
-"""Poutre console élasto-plastique — Newton modifié **accéléré par
-l'accélération d'Anderson (m = 3)** au-dessus de pyrucast.
+"""Elasto-plastic cantilever beam — modified Newton **accelerated by Anderson
+acceleration (m = 3)** on top of pyrucast.
 
-Version Python de `examples/plasticite_poutre_console_anderson.rs` (mêmes briques,
-même algorithme). Variante de `plasticite_poutre_console.py` : même physique, même
-maillage, mêmes opérateurs pyrucast. Seule la boucle non linéaire change — on garde
-l'original **gelé** comme référence pour comparer les résultats (les flèches et la
-plasticité doivent coïncider ; seul le nombre d'itérations doit chuter).
+Python version of `examples/plasticite_poutre_console_anderson.rs` (same building
+blocks, same algorithm). A variant of `plasticite_poutre_console.py`: same
+physics, same mesh, same pyrucast operators. Only the non-linear loop changes —
+the original is kept **frozen** as the reference to compare results against (the
+deflections and the plasticity must coincide; only the iteration count should
+drop).
 
-Newton modifié = point fixe préconditionné
-------------------------------------------
-Comme dans l'exemple d'origine, l'opérateur d'itération est la rigidité
-**élastique** `K` (assemblée + factorisée une fois, cache de `solve`). L'itération
-`u ← u + K⁻¹r(u)` est un **point fixe préconditionné** : la « direction résidu »
-`g(u) = K⁻¹ r(u)` s'annule à convergence — c'est le résidu naturel du point fixe,
-**déjà calculé** à chaque itération (`du = solve(k, residual)`).
+Modified Newton = preconditioned fixed point
+--------------------------------------------
+As in the original example, the iteration operator is the **elastic** stiffness
+`K` (assembled + factorised once, `solve`'s cache). The iteration
+`u ← u + K⁻¹r(u)` is a **preconditioned fixed point**: the "residual direction"
+`g(u) = K⁻¹ r(u)` vanishes at convergence — it is the natural residual of the
+fixed point, **already computed** at every iteration (`du = solve(k, residual)`).
 
-Le prix de l'opérateur constant est une convergence seulement **linéaire** sur la
-branche plastique (beaucoup d'itérations). L'accélération d'Anderson exploite
-l'historique des `m = 3` derniers couples `(u, g)` pour extrapoler un pas bien
-meilleur, **sans réévaluer la loi de comportement** : le petit moindre-carré ne
-manipule que des produits scalaires de champs déjà en main.
+The price of the constant operator is a merely **linear** convergence on the
+plastic branch (many iterations). Anderson acceleration exploits the history of
+the last `m = 3` pairs `(u, g)` to extrapolate a much better step, **without
+re-evaluating the behaviour law**: the small least-squares problem only handles
+dot products of fields already in hand.
 
-Accélération d'Anderson (m = 3)
--------------------------------
-À l'itération `k`, avec l'historique des `m ≤ 3` derniers `(uᵢ, gᵢ)` (le plus
-récent en tête) :
+Anderson acceleration (m = 3)
+-----------------------------
+At iteration `k`, with the history of the last `m ≤ 3` pairs `(uᵢ, gᵢ)` (most
+recent first):
 
-1. Différences `ΔGⱼ = g − g_hist`, `ΔUⱼ = u − u_hist`.
-2. Moindre-carré `min_γ ‖g − Σⱼ γⱼ ΔGⱼ‖²` → équations normales `(ΔGᵀΔG) γ =
-   ΔGᵀg`, dont toutes les entrées sont des produits scalaires **sur les DDL
-   libres** (mêmes DDL que la norme du résidu), régularisées façon Tikhonov.
-3. Petit solve dense `m×m` (m ≤ 3, élimination de Gauss).
-4. Pas extrapolé `u_acc = u + g − Σⱼ γⱼ (ΔUⱼ + ΔGⱼ)`.
+1. Differences `ΔGⱼ = g − g_hist`, `ΔUⱼ = u − u_hist`.
+2. Least squares `min_γ ‖g − Σⱼ γⱼ ΔGⱼ‖²` → normal equations `(ΔGᵀΔG) γ =
+   ΔGᵀg`, whose entries are all dot products **over the free DOFs** (the same
+   DOFs as the residual norm), Tikhonov-regularised.
+3. Small dense `m×m` solve (m ≤ 3, Gaussian elimination).
+4. Extrapolated step `u_acc = u + g − Σⱼ γⱼ (ΔUⱼ + ΔGⱼ)`.
 
-Garde-fou de descente : on évalue le résidu du candidat d'Anderson et on ne le
-retient que s'il réduit **strictement** le résidu courant ; sinon on prend le pas
-de Newton pur `u + g` (dont le résidu sera évalué gratuitement au tour suivant) et
-on vide l'historique. Anderson ne peut donc jamais dégrader la convergence.
+Descent safeguard: the residual of the Anderson candidate is evaluated and the
+candidate is kept only if it **strictly** reduces the current residual;
+otherwise the pure Newton step `u + g` is taken (whose residual will be
+evaluated for free at the next round) and the history is cleared. Anderson can
+therefore never degrade the convergence.
 
-Lancement ::
+Run with ::
 
     maturin develop --release
     python examples/plasticite_poutre_console_anderson.py
 
-Variables d'environnement : `PYRUCAST_NX`, `PYRUCAST_NY` (mailles en long /
-hauteur), `PYRUCAST_NSTEPS` (pas de charge), `PYRUCAST_PMAX` (charge finale).
+Environment variables: `PYRUCAST_NX`, `PYRUCAST_NY` (cells along the length /
+through the height), `PYRUCAST_NSTEPS` (load steps), `PYRUCAST_PMAX` (final load).
 """
 
 import os
 
 import pyrucast
 
-# Composantes de l'état interne plastique portées d'un pas au suivant (VAR) :
-# déformation plastique 3-D (tenseur, 6) + déformation plastique cumulée `p`.
+# Components of the plastic internal state carried from one step to the next
+# (VAR): 3-D plastic strain (tensor, 6) + cumulated plastic strain `p`.
 STATE_COMPONENTS = [
     "eps_p_xx",
     "eps_p_yy",
@@ -63,12 +65,12 @@ STATE_COMPONENTS = [
     "p",
 ]
 
-# Profondeur de l'historique d'Anderson (nombre de couples `(u, g)` gardés).
+# Depth of the Anderson history (number of `(u, g)` pairs kept).
 ANDERSON_DEPTH = 3
 
 
 def _plastic_diagnostics(state):
-    """(p_max, nombre de points de Gauss plastifiés) — `p > 0` marque un point."""
+    """(p_max, number of yielded Gauss points) — `p > 0` marks a point."""
     p_max = state.max("p")
     masked = state.mask(gt=1e-12, components=["p"])
     n_plastic = round(masked.sum("p"))
@@ -76,14 +78,14 @@ def _plastic_diagnostics(state):
 
 
 def _solve_small_spd(a, b):
-    """Résout un petit système dense **symétrique** `A x = b` (`m ≤ 3`) par
-    élimination de Gauss avec pivot partiel. Renvoie `None` si `A` est singulière
-    (pivot ~ 0) — l'appelant retombe alors sur le Newton pur."""
+    """Solves a small dense **symmetric** system `A x = b` (`m ≤ 3`) by Gaussian
+    elimination with partial pivoting. Returns `None` if `A` is singular
+    (pivot ~ 0) — the caller then falls back on the pure Newton step."""
     n = len(b)
     a = [row[:] for row in a]
     b = b[:]
     for col in range(n):
-        # Pivot partiel.
+        # Partial pivoting.
         pivot = col
         for r in range(col + 1, n):
             if abs(a[r][col]) > abs(a[pivot][col]):
@@ -92,13 +94,13 @@ def _solve_small_spd(a, b):
             return None
         a[col], a[pivot] = a[pivot], a[col]
         b[col], b[pivot] = b[pivot], b[col]
-        # Élimination.
+        # Elimination.
         for r in range(col + 1, n):
             factor = a[r][col] / a[col][col]
             for cc in range(col, n):
                 a[r][cc] -= factor * a[col][cc]
             b[r] -= factor * b[col]
-    # Remontée.
+    # Back substitution.
     x = [0.0] * n
     for i in range(n - 1, -1, -1):
         s = b[i]
@@ -109,29 +111,30 @@ def _solve_small_spd(a, b):
 
 
 def _anderson_step(u, g, history, free_mesh):
-    """Correction d'Anderson `Σⱼ γⱼ (ΔUⱼ + ΔGⱼ)` à soustraire au pas de Newton pur
-    `u + g` : `u_acc = u + g − Σⱼ γⱼ (ΔUⱼ + ΔGⱼ)`.
+    """Anderson correction `Σⱼ γⱼ (ΔUⱼ + ΔGⱼ)` to subtract from the pure Newton
+    step `u + g`: `u_acc = u + g − Σⱼ γⱼ (ΔUⱼ + ΔGⱼ)`.
 
-    Les `γ` résolvent le moindre-carré `min ‖g − Σⱼ γⱼ ΔGⱼ‖²` sur les DDL
-    **libres** (`free_mesh`), via les équations normales `(ΔGᵀΔG) γ = ΔGᵀg`
-    régularisées (Tikhonov). Retourne `None` si l'historique est vide ou si le
-    petit système dégénère (l'appelant retombe alors sur le Newton pur).
+    The `γ` solve the least-squares problem `min ‖g − Σⱼ γⱼ ΔGⱼ‖²` over the
+    **free** DOFs (`free_mesh`), through the regularised (Tikhonov) normal
+    equations `(ΔGᵀΔG) γ = ΔGᵀg`. Returns `None` if the history is empty or if
+    the small system degenerates (the caller then falls back on the pure Newton
+    step).
 
-    Tout passe par les opérateurs de champ (`-`, `xty`, `restrict`) : les produits
-    scalaires sont les seules réductions, aucune évaluation de la loi."""
+    Everything goes through the field operators (`-`, `xty`, `restrict`): the dot
+    products are the only reductions, and the law is never evaluated."""
     m = len(history)
     if m == 0:
         return None
 
-    # Différences ΔUⱼ = u − u_hist, ΔGⱼ = g − g_hist (vers l'itéré courant).
+    # Differences ΔUⱼ = u − u_hist, ΔGⱼ = g − g_hist (towards the current iterate).
     du_diffs = [u - u_hist for (u_hist, _) in history]
     dg_diffs = [g - g_hist for (_, g_hist) in history]
 
-    # ΔG restreints aux DDL libres (support des produits scalaires du résidu).
+    # ΔG restricted to the free DOFs (support of the residual dot products).
     dg_free = [pyrucast.node_field.restrict(d, free_mesh) for d in dg_diffs]
     g_free = pyrucast.node_field.restrict(g, free_mesh)
 
-    # Équations normales (ΔGᵀΔG) γ = ΔGᵀg (petit système m×m symétrique).
+    # Normal equations (ΔGᵀΔG) γ = ΔGᵀg (small symmetric m×m system).
     a = [[0.0] * m for _ in range(m)]
     b = [0.0] * m
     trace = 0.0
@@ -143,8 +146,8 @@ def _anderson_step(u, g, history, free_mesh):
         trace += a[i][i]
         b[i] = pyrucast.measure.xty(dg_free[i], g_free)
     if trace <= 0.0:
-        return None  # directions dégénérées
-    # Régularisation de Tikhonov : + λ·(trace/m) sur la diagonale.
+        return None  # degenerate directions
+    # Tikhonov regularisation: + λ·(trace/m) on the diagonal.
     lam = 1e-10 * trace / m
     for i in range(m):
         a[i][i] += lam
@@ -153,7 +156,7 @@ def _anderson_step(u, g, history, free_mesh):
     if gamma is None:
         return None
 
-    # Correction Σⱼ γⱼ (ΔUⱼ + ΔGⱼ), assemblée par opérateurs de champ.
+    # Correction Σⱼ γⱼ (ΔUⱼ + ΔGⱼ), assembled through the field operators.
     corr = None
     for j, gj in enumerate(gamma):
         term = (du_diffs[j] + dg_diffs[j]) * gj
@@ -162,7 +165,7 @@ def _anderson_step(u, g, history, free_mesh):
 
 
 def main():
-    # ── Paramètres (matériau acier, géométrie, chargement) ──────────────────
+    # ── Parameters (steel material, geometry, loading) ──────────────────────
     young, nu, sigma_y = 210_000.0, 0.3, 250.0
     length, height = 10.0, 1.0
     nx = int(os.environ.get("PYRUCAST_NX", 24))
@@ -171,15 +174,15 @@ def main():
     p_max_load = float(os.environ.get("PYRUCAST_PMAX", 5.0))
 
     print(
-        f"Poutre console plastique (Anderson m={ANDERSON_DEPTH}) : {nx}×{ny} QUA4  "
+        f"Plastic cantilever beam (Anderson m={ANDERSON_DEPTH}): {nx}×{ny} QUA4  "
         f"(L={length}, H={height}), E={young}, ν={nu}, σy={sigma_y}"
     )
     print(
-        f"Chargement : 0 → {p_max_load} en {nsteps} pas "
-        f"(Newton modifié + accélération d'Anderson)\n"
+        f"Loading: 0 → {p_max_load} in {nsteps} steps "
+        f"(modified Newton + Anderson acceleration)\n"
     )
 
-    # ── Maillage : bords SEG2 gauche/droit puis balayage en QUA4 ────────────
+    # ── Mesh: left/right SEG2 edges, then a sweep into QUA4 ─────────────────
     c = pyrucast.Coords(2)
     pt_a = c.add_node([0.0, 0.0])
     pt_b = c.add_node([0.0, height])
@@ -190,19 +193,19 @@ def main():
     mesh = pyrucast.mesh.sweep(left_edge, right_edge, nx)
     fes = pyrucast.FiniteElementSpace(mesh)
 
-    # Nœud du bout (mi-hauteur) et maillage POI1 des nœuds LIBRES (X > 0).
+    # Tip node (mid-height) and POI1 mesh of the FREE nodes (X > 0).
     tip = mesh.nearest_node([length, height / 2.0])
     coords_field = pyrucast.node_field.positions(mesh, ["X"])
     free_mesh = pyrucast.mesh.select(coords_field, ge=length / nx / 2.0)
 
-    # ── Modèle : plasticité (contraintes planes) + encastrement (Dirichlet) ──
+    # ── Model: plasticity (plane stress) + clamped end (Dirichlet) ──────────
     model = pyrucast.model.plasticity_perfect(fes, "plane_stress")
     imposed_mesh = pyrucast.mesh.to_poi1(left_edge)
     multiplier = pyrucast.mesh.translate(imposed_mesh, [0.0, 0.0])
     model = model | pyrucast.model.dirichlet(model, "u_x", imposed_mesh, multiplier)
     model = model | pyrucast.model.dirichlet(model, "u_y", imposed_mesh, multiplier)
-    # ── Charge de référence : cisaillement unitaire (densité −1) sur la face
-    #    droite, en efforts nodaux cohérents. Terme du modèle. ────────────────
+    # ── Reference load: unit shear (density −1) on the right face, as
+    #    consistent nodal forces. A term of the model. ────────────────────────
     right_fes = pyrucast.FiniteElementSpace(right_edge)
     model = model | pyrucast.model.flux(right_fes, model, "f_y")
 
@@ -212,47 +215,49 @@ def main():
     )
     load_unit = pyrucast.node_field.external_forces(model, materials)
 
-    # Rigidité ÉLASTIQUE : opérateur d'itération du Newton modifié. Assemblée une
-    # fois ; `solve` met la factorisation en cache et la réutilise.
+    # ELASTIC stiffness: iteration operator of the modified Newton. Assembled
+    # once; `solve` caches the factorisation and reuses it.
     k = pyrucast.matrix.stiffness(model, materials)
 
-    # ── Histoire de chargement : Evolution à valeur CHAMP (t ∈ [0, 1]) ───────
+    # ── Loading history: an Evolution with FIELD values (t ∈ [0, 1]) ────────
     zero_frame = load_unit * 0.0
     full_frame = load_unit * p_max_load
     load_evo = pyrucast.Evolution(
         [(0.0, zero_frame), (1.0, full_frame)], out_of_range="clamp"
     )
 
-    # ── État de la simulation (persistant entre les pas) ────────────────────
-    u = pyrucast.NodeField(mesh, ["u_x", "u_y"])  # déplacement cumulé, nul au départ
-    # L'état au repos : `None` au premier pas, où A est la configuration de
-    # référence. L'opérateur le matérialise lui-même, avec **toutes** les
-    # composantes que la loi relit ensuite — σ(A), ε(A), l'état interne — là où
-    # une liste écrite à la main en oublie.
+    # ── Simulation state (persistent across the steps) ──────────────────────
+    u = pyrucast.NodeField(
+        mesh, ["u_x", "u_y"]
+    )  # accumulated displacement, zero at first
+    # The state at rest: `None` at the first step, where A is the reference
+    # configuration. The operator materialises it itself, with **every** component
+    # the law reads back afterwards — σ(A), ε(A), the internal state — where a
+    # hand-written list forgets some.
     state = None
 
-    # ── Boucle sur les pas de charge ────────────────────────────────────────
+    # ── Loop over the load steps ────────────────────────────────────────────
     max_newton = 200
     print(
-        f"{'pas':>4} {'P':>8} {'iter':>6} {'andrs':>6} "
-        f"{'flèche u_y':>14} {'p_max':>14} {'n_plast':>8}"
+        f"{'step':>4} {'P':>8} {'iter':>6} {'andrs':>6} "
+        f"{'deflection u_y':>14} {'p_max':>14} {'n_plast':>8}"
     )
 
     prev_defl = 0.0
     any_plasticity = False
 
     for step in range(1, nsteps + 1):
-        # Pseudo-temps du pas ∈ ]0, 1] ; la charge externe en découle par
-        # interpolation de l'Evolution (champ d'effort nodal du pas).
+        # Pseudo-time of the step ∈ ]0, 1]; the external load follows from it by
+        # interpolation of the Evolution (nodal force field of the step).
         t = step / nsteps
-        load_p = p_max_load * t  # cisaillement nominal au bout (pour l'affichage)
+        load_p = p_max_load * t  # nominal shear at the tip (for the display)
         load_scaled = load_evo.interpolate(t)
-        # Norme de la charge du pas (échelle relative du résidu) : xᵀx du champ.
+        # Norm of the step load (relative scale of the residual): xᵀx of the field.
         ext_norm = pyrucast.measure.xtx(load_scaled) ** 0.5
         tol = 1e-6 * ext_norm + 1e-12
 
-        # Résidu (et sortie de comportement) à un déplacement d'essai `u` :
-        # ε(u) → COMP → BSIG → r = F_ext − F_int, plus la norme sur les DDL libres.
+        # Residual (and behaviour output) at a trial displacement `u`:
+        # ε(u) → COMP → BSIG → r = F_ext − F_int, plus the norm on the free DOFs.
         def residual_at(u):
             strain = pyrucast.element_field.deformation(u, fes)
             out = pyrucast.element_field.integrate_behavior(
@@ -268,37 +273,38 @@ def main():
             return residual, free_res, out
 
         iters = 0
-        n_anderson = 0  # combien de pas ont réellement été accélérés
+        n_anderson = 0  # how many steps were actually accelerated
         last_out = None
         res_norm = float("inf")
 
-        # Historique d'Anderson : couples (u, g=K⁻¹r) du pas courant, le plus
-        # récent en tête. Vidé au début de chaque pas de charge.
+        # Anderson history: pairs (u, g=K⁻¹r) of the current step, most recent
+        # first. Cleared at the beginning of each load step.
         history = []
 
         while True:
-            # Résidu au déplacement courant (= point fixe `g = K⁻¹r`).
+            # Residual at the current displacement (= fixed point `g = K⁻¹r`).
             residual, res_norm, out = residual_at(u)
             last_out = out
 
             if res_norm <= tol or iters >= max_newton:
                 break
 
-            # Direction résidu g = K⁻¹ r (K élastique, cache de factorisation). Le
-            # support de δu coïncide déjà avec celui de u (même compagnon POI1 caché
-            # de `to_poi1`) ; `restrict_like` ne filtre que les composantes duales
-            # (multiplicateurs) — sinon elles se recopieraient dans u par union.
+            # Residual direction g = K⁻¹ r (elastic K, factorisation cache). The
+            # support of δu already coincides with that of u (same hidden POI1
+            # companion from `to_poi1`); `restrict_like` only filters out the dual
+            # components (multipliers) — otherwise they would be copied into u by
+            # union.
             du = pyrucast.solver.solve(k, residual)
             g = pyrucast.node_field.restrict_like(du, u)
 
-            # Snapshot du couple (u, g) courant AVANT de bouger (`u + 0.0` = copie
-            # indépendante) — source des différences d'Anderson au tour suivant.
+            # Snapshot of the current (u, g) pair BEFORE moving (`u + 0.0` = an
+            # independent copy) — source of the Anderson differences next round.
             u_snapshot = u + 0.0
-            pure_step = u + g  # pas de Newton modifié (référence)
+            pure_step = u + g  # modified Newton step (reference)
 
-            # Candidat Anderson (si l'historique porte au moins un couple) :
-            # extrapolation sur les m derniers (u, g). Garde-fou de descente : on
-            # ne le retient que s'il réduit **strictement** le résidu courant.
+            # Anderson candidate (if the history carries at least one pair):
+            # extrapolation over the last m (u, g). Descent safeguard: it is kept
+            # only if it **strictly** reduces the current residual.
             chose_anderson = False
             next_u = None
             if history:
@@ -310,8 +316,8 @@ def main():
                         next_u = u_acc
                         chose_anderson = True
 
-            # Historique : si Anderson a été retenu, on empile et tronque à la
-            # profondeur ; sinon on repart proprement (historique vidé).
+            # History: if Anderson was kept, push and truncate to the depth;
+            # otherwise start over cleanly (history cleared).
             if chose_anderson:
                 n_anderson += 1
                 history.insert(0, (u_snapshot, g))
@@ -323,37 +329,39 @@ def main():
 
         converged = res_norm <= tol
 
-        # Commit de l'état : VAR0 ← VAR1 (sortie de comportement convergée ; la loi
-        # lit ses entrées par nom, les composantes surnuméraires sont ignorées).
+        # State commit: VAR0 ← VAR1 (converged behaviour output; the law reads its
+        # inputs by name, so the extra components are ignored).
         state = last_out
 
-        # Diagnostics du pas.
+        # Diagnostics of the step.
         p_max_val, n_plastic = _plastic_diagnostics(state)
         defl = u.value(tip, "u_y")
         any_plasticity = any_plasticity or n_plastic > 0
-        flag = "" if converged else "  (résidu résiduel)"
+        flag = "" if converged else "  (residual left over)"
         print(
             f"{step:>4} {load_p:>8.3f} {iters:>6} {n_anderson:>6} "
             f"{defl:>14.6e} {p_max_val:>14.6e} {n_plastic:>8}{flag}"
         )
 
-        # La flèche croît (en valeur absolue, vers le bas) avec la charge.
-        assert abs(defl) >= abs(prev_defl) - 1e-9, f"flèche non monotone au pas {step}"
+        # The deflection grows (in absolute value, downwards) with the load.
+        assert abs(defl) >= abs(prev_defl) - 1e-9, (
+            f"non-monotonic deflection at step {step}"
+        )
         prev_defl = defl
 
-    # Au-delà de la première plastification, une zone plastique doit apparaître.
+    # Beyond first yield, a plastic zone must appear.
     p_first_yield = sigma_y * (height * height / 6.0) / length
     if p_max_load > p_first_yield:
         assert any_plasticity, (
-            f"P_max={p_max_load} dépasse la première plastification "
-            f"(≈{p_first_yield:.2f}) mais aucun point plastique détecté"
+            f"P_max={p_max_load} exceeds first yield "
+            f"(≈{p_first_yield:.2f}) but no plastic point was detected"
         )
         print(
-            f"\nOK : plastification développée (P_max={p_max_load} > P_élastique≈{p_first_yield:.2f})."
+            f"\nOK: plasticity developed (P_max={p_max_load} > P_elastic≈{p_first_yield:.2f})."
         )
     else:
         print(
-            f"\nOK : réponse restée élastique (P_max={p_max_load} ≤ ≈{p_first_yield:.2f})."
+            f"\nOK: the response stayed elastic (P_max={p_max_load} ≤ ≈{p_first_yield:.2f})."
         )
 
 

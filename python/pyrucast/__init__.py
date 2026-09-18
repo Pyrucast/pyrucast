@@ -1,26 +1,26 @@
-"""pyrucast — librairie éléments finis en Rust, exposée à Python.
+"""pyrucast — a finite element library in Rust, exposed to Python.
 
-Package *mixed Rust/Python*. L'extension compilée est le sous-module privé
-`_pyrucast` (tous les `#[pyclass]`/`#[pyfunction]`). L'API publique est
-**rangée par thème**, en miroir de l'organisation Rust :
+A *mixed Rust/Python* package. The compiled extension is the private submodule
+`_pyrucast` (every `#[pyclass]`/`#[pyfunction]`). The public API is **laid out
+by theme**, mirroring the Rust organization:
 
-- les **conteneurs** (`containers::…`) restent des classes au top-level :
+- the **containers** (`containers::…`) stay top-level classes:
   `pyrucast.Coords`, `pyrucast.Mesh`, `pyrucast.Model`, … ;
-- les **verbes** (`ops::<module>::f`) vivent dans le sous-module portant le
-  nom du conteneur qu'ils **produisent** : `pyrucast.mesh.triangulate_surface`,
+- the **verbs** (`ops::<module>::f`) live in the submodule bearing the name of
+  the container they **produce**: `pyrucast.mesh.triangulate_surface`,
   `pyrucast.element_field.gradient`, `pyrucast.matrix.stiffness`,
   `pyrucast.node_field.divergence`, `pyrucast.model.heat_conduction`.
-  Ceux qui ne produisent aucun conteneur sont rangés par activité :
+  Those producing no container are laid out by activity:
   `pyrucast.measure.integral`,
-  `pyrucast.export.export_vtk`. `pyrucast.solver.solve` est l'exception
-  unique et assumée — il produit un champ nodal mais se cherche par son nom ;
-- `pyrucast.save` / `pyrucast.load` restent au top-level : ils ne produisent
-  aucun conteneur déterminé, mais un dictionnaire de ce qu'on leur a donné ;
-- la couche Python pure de plus haut niveau vit dans ses propres sous-modules
+  `pyrucast.export.export_vtk`. `pyrucast.solver.solve` is the single, assumed
+  exception — it produces a nodal field but is looked up by its name;
+- `pyrucast.save` / `pyrucast.load` stay top-level: they produce no determined
+  container, but a dictionary of what they were given;
+- the higher-level pure Python layer lives in its own submodules
   (`pyrucast.thermomechanics`).
 """
 
-# ── Conteneurs (nouns) : classes au top-level, même nom que la struct Rust ──
+# ── Containers (nouns): top-level classes, same name as the Rust struct ─────
 from ._pyrucast import (
     Cell as Cell,
     Coords as Coords,
@@ -50,7 +50,7 @@ from ._pyrucast import (
 
 from ._pyrucast import __doc__, __features__, __version__  # noqa: F401
 
-# ── Verbes rangés par thème (miroir de `src/ops/*`) ─────────────────────────
+# ── Verbs laid out by theme (mirror of `src/ops/*`) ─────────────────────────
 from . import (
     coords as coords,
     element_field as element_field,
@@ -64,7 +64,7 @@ from . import (
     solver as solver,
 )
 
-# ── Couche Python pure de plus haut niveau ──────────────────────────────────
+# ── The higher-level pure Python layer ──────────────────────────────────────
 from . import thermomechanics as thermomechanics
 
 __all__ = [

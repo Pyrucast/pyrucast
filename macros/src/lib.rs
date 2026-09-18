@@ -1,27 +1,27 @@
-//! Macros procédurales de pyrucast.
+//! pyrucast's procedural macros.
 //!
-//! Une seule : [`py_op`], qui dérive d'une fonction libre exposée à Python la
-//! **méthode** de son sujet (`CONVENTIONS.md`, § « Le verbe exposé aussi en
-//! méthode »).
+//! Only one: [`py_op`], which derives from a free function exposed to Python
+//! the **method** of its subject (`CONVENTIONS.md`, § "Le verbe exposé aussi
+//! en méthode").
 //!
-//! Pourquoi une macro procédurale et pas une `macro_rules!` : il faut *lire*
-//! une signature déjà écrite pour en retirer le premier paramètre, et
-//! transformer `#[pyo3(signature = (mesh, angle_deg=None))]` en la même liste
-//! privée de sa première entrée. Une `macro_rules!` ne voit que les jetons
-//! qu'on lui passe et ne sait pas ouvrir un fragment capturé ; une macro
-//! procédurale reçoit l'item entier et le décompose.
+//! Why a procedural macro rather than a `macro_rules!`: one must *read* an
+//! already written signature to strip its first parameter, and turn
+//! `#[pyo3(signature = (mesh, angle_deg=None))]` into the same list minus its
+//! first entry. A `macro_rules!` sees only the tokens handed to it and cannot
+//! open a captured fragment; a procedural macro receives the whole item and
+//! takes it apart.
 
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2, TokenTree};
 use quote::quote;
 use syn::{parse_macro_input, FnArg, ItemFn, LitStr, Meta};
 
-/// Expose une fonction libre `#[pyfunction]` **aussi** comme méthode de son
-/// premier argument, sans réécrire ni sa signature ni sa documentation.
+/// Exposes a free `#[pyfunction]` **also** as a method of its first argument,
+/// without rewriting either its signature or its documentation.
 ///
-/// L'attribut se pose **au-dessus** de tous les autres : les macros d'attribut
-/// s'appliquent de l'extérieur vers l'intérieur, et celle-ci doit encore voir
-/// `#[pyfunction]` et `#[pyo3(signature = …)]` attachés à l'item.
+/// The attribute goes **above** all the others: attribute macros apply from
+/// the outside in, and this one must still see `#[pyfunction]` and
+/// `#[pyo3(signature = …)]` attached to the item.
 ///
 /// ```ignore
 /// #[py_op(method_on = PyMesh)]
@@ -33,13 +33,13 @@ use syn::{parse_macro_input, FnArg, ItemFn, LitStr, Meta};
 /// }
 /// ```
 ///
-/// La fonction est réémise **inchangée**, suivie de :
+/// The function is re-emitted **unchanged**, followed by:
 ///
 /// ```ignore
 /// #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 /// #[pymethods]
 /// impl PyMesh {
-///     // …la documentation de la fonction, recopiée en littéraux…
+///     // …the function's documentation, copied over as literals…
 ///     #[pyo3(signature = (angle_deg=None))]
 ///     fn skin(slf: PyRef<'_, Self>, angle_deg: Option<f64>) -> PyResult<PyMesh> {
 ///         self::skin(slf, angle_deg)
@@ -47,14 +47,14 @@ use syn::{parse_macro_input, FnArg, ItemFn, LitStr, Meta};
 /// }
 /// ```
 ///
-/// Recopier la documentation, plutôt que d'y renvoyer, est tout l'intérêt :
-/// elle atteint ainsi `__doc__` **et** le stub `.pyi` que lisent les IDE, alors
-/// qu'un pointeur « Voir … » y resterait du texte mort.
+/// Copying the documentation, rather than pointing at it, is the whole point:
+/// it thereby reaches `__doc__` **and** the `.pyi` stub the IDEs read, where
+/// a "See …" pointer would stay dead text.
 ///
-/// Paramètres : `method_on = PyType` (obligatoire), et `name = "autre_nom"`
-/// quand la méthode ne porte pas le nom de la fonction — le qualificatif que le
-/// module donnait à la fonction libre doit parfois passer dans le nom de la
-/// méthode (`matrix::stiffness` → `stiffness_matrix`).
+/// Parameters: `method_on = PyType` (required), and `name = "other_name"` when
+/// the method does not bear the function's name — the qualifier the module
+/// gave the free function must sometimes move into the method's name
+/// (`matrix::stiffness` → `stiffness_matrix`).
 #[proc_macro_attribute]
 pub fn py_op(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut method_on: Option<syn::Ident> = None;
@@ -67,40 +67,40 @@ pub fn py_op(attr: TokenStream, item: TokenStream) -> TokenStream {
             rename = Some(meta.value()?.parse()?);
             Ok(())
         } else {
-            Err(meta.error("`py_op` accepte `method_on = PyType` et `name = \"…\"`"))
+            Err(meta.error("`py_op` accepts `method_on = PyType` and `name = \"…\"`"))
         }
     });
     parse_macro_input!(attr with parser);
 
     let func = parse_macro_input!(item as ItemFn);
     let Some(method_on) = method_on else {
-        return error("`py_op` exige `method_on = PyType`, le type qui portera la méthode");
+        return error("`py_op` requires `method_on = PyType`, the type that will carry the method");
     };
 
-    // Le sujet est le premier paramètre ; les suivants sont recopiés tels
-    // quels, noms compris — c'est précisément ce qu'une `macro_rules!` ne
-    // saurait pas faire d'une signature déjà écrite.
+    // The subject is the first parameter; the following ones are copied as they
+    // are, names included — precisely what a `macro_rules!` could not do from an
+    // already written signature.
     //
-    // Sauf qu'un jeton `Python` peut le précéder : pyo3 le fournit à la
-    // fonction sans qu'il figure dans la signature Python. Le sujet est alors
-    // le second paramètre, et l'appel devra remettre le `py` en tête.
+    // Except that a `Python` token may precede it: pyo3 supplies it to the
+    // function without it appearing in the Python signature. The subject is then
+    // the second parameter, and the call will have to put the `py` back in front.
     let mut inputs = func.sig.inputs.iter();
     let Some(first) = inputs.next() else {
-        return error("`py_op` sur une fonction sans argument : il n'y a pas de sujet");
+        return error("`py_op` on a function without arguments: there is no subject");
     };
     let (py_param, subject) = if type_mentions(first, "Python") {
         match inputs.next() {
             Some(subject) => (Some(first), subject),
-            None => return error("`py_op` : après le `py: Python`, il manque le sujet"),
+            None => return error("`py_op`: after the `py: Python`, the subject is missing"),
         }
     } else {
         (None, first)
     };
     if type_mentions(subject, "Bound") {
         return error(
-            "`py_op` ne convient pas à un sujet polymorphe : la méthode rendrait `Any` \
-             là où son receveur fixe le type. Extraire une fonction par saveur, au \
-             sujet `PyRef<…>`, et poser l'attribut sur chacune (modèle : \
+            "`py_op` does not suit a polymorphic subject: the method would return `Any` \
+             where its receiver fixes the type. Extract one function per flavour, with a \
+             `PyRef<…>` subject, and place the attribute on each of them (model: \
              `py::ops::node_field::mask`)",
         );
     }
@@ -113,9 +113,9 @@ pub fn py_op(attr: TokenStream, item: TokenStream) -> TokenStream {
         })
         .collect();
 
-    // Ordre des paramètres de la méthode : le receveur, puis le `py` s'il y en
-    // a un, puis le reste — c'est la forme qu'imposent les méthodes déjà
-    // écrites à la main. L'appel, lui, rétablit l'ordre de la fonction libre.
+    // Order of the method's parameters: the receiver, then the `py` if there is
+    // one, then the rest — the shape the hand-written methods impose. The call
+    // itself restores the free function's order.
     let py_pat = py_param.and_then(|arg| match arg {
         FnArg::Typed(pat) => Some(&pat.pat),
         FnArg::Receiver(_) => None,
@@ -132,16 +132,16 @@ pub fn py_op(attr: TokenStream, item: TokenStream) -> TokenStream {
     call_args.push(quote! { slf });
     call_args.extend(forwarded.iter().map(|pat| quote! { #pat }));
 
-    // La méthode hérite de ce que porte la fonction : sa documentation, et ses
-    // dérogations de lint. `solver::solve_unilateral` en donne la preuve par
-    // l'exemple — neuf arguments, un `#[allow(clippy::too_many_arguments)]`
-    // assumé sur la fonction, et une méthode qui en compte tout autant, le
-    // receveur remplaçant le sujet. Sans cette recopie, la dérogation
-    // s'arrêtait à la fonction et le lint frappait un code que personne
-    // n'avait écrit.
+    // The method inherits what the function carries: its documentation, and its
+    // lint waivers. `solver::solve_unilateral` proves it by example — nine
+    // arguments, an `#[allow(clippy::too_many_arguments)]` assumed on the
+    // function, and a method with just as many, the receiver replacing the
+    // subject. Without this copying, the waiver stopped at the function and the
+    // lint struck code nobody had written.
     //
-    // `allow` seulement, jamais `expect` : un `expect` dont le lint ne se
-    // déclenche pas sur la méthode deviendrait lui-même un avertissement.
+    //
+    // `allow` only, never `expect`: an `expect` whose lint does not fire on the
+    // method would itself become a warning.
     let herites: Vec<_> = func
         .attrs
         .iter()
@@ -171,10 +171,10 @@ pub fn py_op(attr: TokenStream, item: TokenStream) -> TokenStream {
     .into()
 }
 
-/// L'attribut `#[pyo3(signature = (…))]` de la fonction, privé de sa première
-/// entrée — le sujet, que la méthode reçoit par son receveur. `None` quand la
-/// fonction n'en porte pas : tous ses arguments sont alors obligatoires, et la
-/// méthode n'a rien à déclarer non plus.
+/// The function's `#[pyo3(signature = (…))]` attribute, minus its first entry
+/// — the subject, which the method receives through its receiver. `None` when
+/// the function carries none: all its arguments are then required, and the
+/// method has nothing to declare either.
 fn signature_without_subject(func: &ItemFn) -> Option<TokenStream2> {
     let list = func.attrs.iter().find_map(|attr| {
         if !attr.path().is_ident("pyo3") {
@@ -197,12 +197,12 @@ fn signature_without_subject(func: &ItemFn) -> Option<TokenStream2> {
     Some(quote! { #[pyo3(signature = (#rest))] })
 }
 
-/// Tout ce qui suit la première virgule de premier niveau. Les entrées d'une
-/// signature pyo3 sont hétérogènes (`mesh`, `angle_deg=None`, `*`, `**kwargs`),
-/// donc on coupe sur la virgule plutôt que d'essayer de les analyser.
+/// Everything after the first top-level comma. The entries of a pyo3
+/// signature are heterogeneous (`mesh`, `angle_deg=None`, `*`, `**kwargs`),
+/// so we cut on the comma rather than try to parse them.
 fn drop_first_entry(tokens: TokenStream2) -> TokenStream2 {
     let mut iter = tokens.into_iter().skip_while(|tree| !is_comma(tree));
-    iter.next(); // la virgule elle-même
+    iter.next(); // the comma itself
     iter.collect()
 }
 
@@ -210,8 +210,8 @@ fn is_comma(tree: &TokenTree) -> bool {
     matches!(tree, TokenTree::Punct(p) if p.as_char() == ',')
 }
 
-/// Le type de ce paramètre nomme-t-il `ident` ? Lecture par jetons : le type
-/// s'écrit `Python<'_>`, `PyRef<PyMesh>`, `&Bound<'_, PyAny>`…
+/// Does this parameter's type name `ident`? Read by tokens: the type is
+/// written `Python<'_>`, `PyRef<PyMesh>`, `&Bound<'_, PyAny>`…
 fn type_mentions(arg: &FnArg, ident: &str) -> bool {
     let FnArg::Typed(pat) = arg else {
         return false;
@@ -236,17 +236,17 @@ mod tests {
         assert_eq!(reste.to_string(), quote! { angle_deg = None }.to_string());
     }
 
-    /// Une fonction dont le sujet est le seul argument (`consolidate`,
-    /// `orient`…) : la méthode n'a plus rien à déclarer.
+    /// A function whose subject is its only argument (`consolidate`, `orient`…):
+    /// the method then has nothing left to declare.
     #[test]
     fn un_sujet_seul_ne_laisse_rien() {
         assert!(drop_first_entry(quote! { mesh }).is_empty());
     }
 
-    /// Le cas qui justifie ce test : une virgule **imbriquée** vit dans un
-    /// groupe, donc hors du niveau où l'on cherche le séparateur. Couper
-    /// dessus amputerait la signature au mauvais endroit — et le code
-    /// compilerait quand même, en livrant une API Python fausse.
+    /// The case this test exists for: a **nested** comma lives inside a group,
+    /// hence outside the level where the separator is looked for. Cutting on it
+    /// would sever the signature at the wrong place — and the code would still
+    /// compile, shipping a wrong Python API.
     #[test]
     fn une_virgule_imbriquee_ne_coupe_pas() {
         let reste = drop_first_entry(quote! { mesh, kinds = (1, 2), tol = None });

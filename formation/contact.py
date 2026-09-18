@@ -1,19 +1,19 @@
 """Formation débutant — 5. Contact (unilatéral, nœud-surface).
 
-Patch-test classique : deux blocs élastiques empilés selon `y`, séparés par
-un jeu initial `G0`. Une pression sur le bloc du haut ferme le contact et
-transmet une contrainte uniforme à travers l'interface — l'équivalent
-pyrucast du contact nœud-surface de Cast3M (section 10 de la formation),
-piloté ici directement par le solveur actif-set `solve_unilateral` plutôt
-que par `step_by_step` (qui ne sait pas encore composer thermique,
-plasticité et contact dans une même table).
+A classic patch test: two elastic blocks stacked along `y`, separated by an
+initial gap `G0`. A pressure on the upper block closes the contact and
+transmits a uniform stress across the interface — the pyrucast equivalent of
+Cast3M's node-to-surface contact (section 10 of the training), driven here
+straight by the active-set solver `solve_unilateral` rather than by
+`step_by_step` (which cannot yet compose thermics, plasticity and contact in
+a single table).
 
 Lancement ::
 
     maturin develop --release
     python formation/contact.py
 
-    # Pour régénérer la figure du livre (book/src/formation/img/) :
+    # To regenerate the book figure (book/src/formation/img/):
     # PYRUCAST_FORMATION_IMG_DIR=book/src/formation/img python formation/contact.py
 """
 
@@ -24,8 +24,8 @@ import pyrucast as pc
 
 E = 100.0
 S = 5.0  # pression appliquée
-G0 = 0.01  # jeu initial entre les deux blocs
-N = 2  # grille N×N de QUA4 par bloc
+G0 = 0.01  # initial gap between the two blocks
+N = 2  # N×N grid of QUA4 per block
 
 
 def idx(i, j):
@@ -34,8 +34,8 @@ def idx(i, j):
 
 def bloc(coords: pc.Coords, y0: float):
     """Bloc `[0,1] × [y0, y0+1]`, grille N×N de QUA4 — mailleurs dédiés
-    (`line` pour les bords bas/haut, `sweep` entre les deux, comme
-    dans `formation/maillage.py`). Renvoie `(mesh, grille)`, `grille[idx(i,j)]`
+    (`line` for the bottom/top edges, `sweep` between them, as in
+    `formation/maillage.py`). Returns `(mesh, grille)`, `grille[idx(i,j)]`
     étant le nœud `(i,j)` (`i` : abscisse, `j` : ordonnée)."""
     bas = pc.mesh.line(coords.add_node([0.0, y0]), coords.add_node([1.0, y0]), N)
     haut = pc.mesh.line(
@@ -61,9 +61,9 @@ def clamp(target, nodes, var):
 
 
 def bord_horizontal(mesh: pc.Mesh, y: float) -> pc.Mesh:
-    """Extrait, parmi les segments de bord de `mesh` (`pyrucast.mesh.border`,
-    l'équivalent Cast3M `CONTOUR`), ceux d'ordonnée `y` — un bord existant du
-    maillage, pas une ligne recréée à côté (`line` fabriquerait de
+    """Extracts, among `mesh`'s border segments (`pyrucast.mesh.border`, the
+    Cast3M `CONTOUR` equivalent), those at ordinate `y` — an existing edge of
+    the mesh, not a line rebuilt beside it (`line` would make
     nouveaux nœuds, disjoints de `mesh`)."""
     frontiere = pc.mesh.border(mesh)
     ordonnee = pc.node_field.positions(frontiere, ["Y"])
@@ -79,10 +79,10 @@ def main() -> None:
     mesh = mesh_bas | mesh_haut
     fes = pc.FiniteElementSpace(mesh)
 
-    # Maître : bord haut du bloc bas (`contour` oriente déjà la frontière en
-    # sens trigonométrique, donc ce bord court naturellement de droite à
-    # gauche — la normale associée pointe vers +y). Esclave : nœuds du bord
-    # bas du bloc haut.
+    # Master: top edge of the lower block (`contour` already orients the
+    # boundary counter-clockwise, so this edge naturally runs right to left —
+    # the associated normal points towards +y). Slave: nodes of the upper
+    # block's bottom edge.
     maitre = bord_horizontal(mesh_bas, 1.0)
     esclave = pc.mesh.poi1_from_nodes([haut[idx(i, 0)] for i in range(N + 1)])
 
@@ -107,8 +107,8 @@ def main() -> None:
     )
     traction = pc.node_field.external_forces(modele, materiaux)
 
-    # `contact_gaps()` fournit le second membre du contact — l'équivalent
-    # Cast3M de la préparation du problème unilatéral avant RESO.
+    # `contact_gaps()` supplies the contact's right-hand side — the Cast3M
+    # equivalent of preparing the unilateral problem before RESO.
     second_membre = traction | modele.contact_gaps()
     # ANCHOR_END: chargement_contact
 
@@ -136,7 +136,7 @@ def main() -> None:
     maillage_mult.plot(
         save=chemin, field=solution, component="lambda_contact", cmap="viridis"
     )
-    print(f"Réaction de contact (λ) écrite dans {chemin}")
+    print(f"Contact reaction (λ) written to {chemin}")
 
 
 if __name__ == "__main__":

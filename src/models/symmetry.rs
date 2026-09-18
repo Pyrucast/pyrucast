@@ -79,8 +79,8 @@ use serde::{Deserialize, Serialize};
 /// #     fes.get(0).unwrap(),
 /// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
 /// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
-/// // Un axe porté par la physique existante, pas trois physiques dupliquées :
-/// // c'est le **matériau** qui est isotrope, orthotrope ou anisotrope.
+/// // One axis carried by the existing physics, not three duplicated physics:
+/// // it is the **material** that is isotropic, orthotropic or anisotropic.
 /// assert!(!MaterialSymmetry::Isotropic.has_frame());
 /// assert!(MaterialSymmetry::Orthotropic.has_frame());
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -123,7 +123,7 @@ impl MaterialSymmetry {
     /// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
     /// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
     /// assert_eq!(MaterialSymmetry::Anisotropic.name(), "anisotropic");
-    /// // Réciproque exacte de `from_name`, et la casse ne compte pas.
+    /// // The exact inverse of `from_name`, and case does not matter.
     /// assert_eq!(MaterialSymmetry::from_name(MaterialSymmetry::Anisotropic.name()),
     ///            Some(MaterialSymmetry::Anisotropic));
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -159,7 +159,7 @@ impl MaterialSymmetry {
     /// #     fes.get(0).unwrap(),
     /// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
     /// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
-    /// // Un repère matériau n'a de sens que s'il y a une direction privilégiée.
+    /// // A material frame only makes sense if there is a preferred direction.
     /// assert!(!MaterialSymmetry::Isotropic.has_frame());
     /// assert!(MaterialSymmetry::Anisotropic.has_frame());
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -209,7 +209,7 @@ impl std::fmt::Display for MaterialSymmetry {
 /// #     fes.get(0).unwrap(),
 /// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
 /// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
-/// // En 2-D, le premier axe suffit : le second est sa normale dans le plan.
+/// // In 2-D the first axis is enough: the second is its in-plane normal.
 /// assert_eq!(symmetry::FRAME_2D, ["V1X", "V1Y"]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -237,7 +237,7 @@ pub const FRAME_2D: [&str; 2] = ["V1X", "V1Y"];
 /// #     fes.get(0).unwrap(),
 /// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
 /// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
-/// // En 3-D, deux axes ; le troisième est V1 × V2.
+/// // In 3-D, two axes; the third is V1 × V2.
 /// assert_eq!(symmetry::FRAME_3D.len(), 6);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -267,7 +267,7 @@ pub const FRAME_3D: [&str; 6] = ["V1X", "V1Y", "V1Z", "V2X", "V2Y", "V2Z"];
 /// #     fes.get(0).unwrap(),
 /// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
 /// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
-/// // Ce que le champ matériau doit porter **en plus** des constantes.
+/// // What the material field must carry **on top of** the constants.
 /// assert!(symmetry::frame_components(MaterialSymmetry::Isotropic, 3).is_empty());
 /// assert_eq!(symmetry::frame_components(MaterialSymmetry::Orthotropic, 2).len(), 2);
 /// assert_eq!(symmetry::frame_components(MaterialSymmetry::Orthotropic, 3).len(), 6);
@@ -315,13 +315,13 @@ pub fn frame_components(symmetry: MaterialSymmetry, space_dim: usize) -> &'stati
 /// #     fes.get(0).unwrap(),
 /// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
 /// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
-/// // R mène des axes **matériau** aux axes globaux : ses colonnes sont les
+/// // R takes the **material** axes to the global ones: its columns are the
 /// // axes matériau vus globalement. Ici V1 = (0, 1) : un quart de tour. Le
-/// // repère ferme le contrat, donc il commence ici à la position 3.
+/// // frame closes the contract, so it starts here at position 3.
 /// let ligne = mat.point_values(0, 0)?.to_vec();
 /// let r = symmetry::frame_rotation(|k| ligne[k], 3, 2)?;
 /// assert!((r[(0, 0)] - 0.0).abs() < 1e-12 && (r[(1, 0)] - 1.0).abs() < 1e-12);
-/// // Un repère dégénéré est refusé plutôt que silencieusement absurde.
+/// // A degenerate frame is refused rather than silently absurd.
 /// mat.set_uniform("V1Y", 0.0)?;
 /// let nul = mat.point_values(0, 0)?.to_vec();
 /// assert!(symmetry::frame_rotation(|k| nul[k], 3, 2).is_err());
@@ -467,11 +467,11 @@ fn rotate_tensor(c: &Tensor4, r: &Matrix3<f64>) -> Tensor4 {
 /// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
 /// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
 /// # use nalgebra::Matrix3;
-/// // Une rotation identité ne change rien…
+/// // An identity rotation changes nothing…
 /// let d = symmetry::orthotropic_from_constants(
 ///     [210e3, 10e3, 10e3], [0.3, 0.3, 0.3], [5e3, 5e3, 5e3])?;
 /// assert_eq!(symmetry::rotate_voigt(&d, &Matrix3::identity()), d);
-/// // …un quart de tour échange les deux premières directions.
+/// // …a quarter turn swaps the first two directions.
 /// let ligne = mat.point_values(0, 0)?.to_vec();
 /// let r = symmetry::frame_rotation(|k| ligne[k], 3, 2)?;
 /// let dr = symmetry::rotate_voigt(&d, &r);
@@ -507,7 +507,7 @@ pub fn rotate_voigt(d: &[[f64; 6]; 6], r: &Matrix3<f64>) -> [[f64; 6]; 6] {
 /// #     fes.get(0).unwrap(),
 /// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
 /// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
-/// // Neuf constantes dans les axes matériau : trois modules, trois
+/// // Nine constants in the material axes: three moduli, three
 /// // coefficients de Poisson, trois modules de cisaillement.
 /// assert_eq!(symmetry::ORTHOTROPIC_ELASTIC[0], "E_1");
 /// assert_eq!(symmetry::ORTHOTROPIC_ELASTIC.len(), 9);
@@ -542,7 +542,7 @@ pub const ORTHOTROPIC_ELASTIC: [&str; 9] = [
 /// #     fes.get(0).unwrap(),
 /// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
 /// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
-/// // Les 21 constantes indépendantes, sur le triangle supérieur de Voigt.
+/// // The 21 independent constants, on Voigt's upper triangle.
 /// assert_eq!(symmetry::ANISOTROPIC_ELASTIC[0], "C_11");
 /// assert_eq!(symmetry::ANISOTROPIC_ELASTIC.len(), 21);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -590,13 +590,13 @@ fn orthotropic_stiffness(v: impl Fn(usize) -> f64) -> Result<[[f64; 6]; 6]> {
 /// #     fes.get(0).unwrap(),
 /// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
 /// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
-/// // Le cœur arithmétique, exerçable sans champ matériau. Un matériau
+/// // The arithmetic core, exercisable without a material field. A material
 /// // orthotrope dégénéré en isotrope redonne la matrice isotrope.
 /// let d = symmetry::orthotropic_from_constants(
 ///     [210e3, 210e3, 210e3], [0.3, 0.3, 0.3], [80769.0, 80769.0, 80769.0])?;
 /// assert!((d[0][0] - d[1][1]).abs() < 1e-6);
 /// assert!((d[0][1] - d[0][2]).abs() < 1e-6);
-/// // Un module nul ou négatif est refusé ; la souplesse doit par ailleurs
+/// // A null or negative modulus is refused; the compliance must further
 /// // rester inversible.
 /// assert!(symmetry::orthotropic_from_constants(
 ///     [0.0, 210e3, 210e3], [0.3, 0.3, 0.3], [80769.0, 80769.0, 80769.0]).is_err());
@@ -691,8 +691,8 @@ fn anisotropic_stiffness(v: impl Fn(usize) -> f64) -> [[f64; 6]; 6] {
 /// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
 /// # let iso = SubElementField::from_uniform_per_component(
 /// #     fes.get(0)?, vec!["E".into(), "nu".into()], &[210e3, 0.3])?;
-/// // L'unique porte d'entrée des noyaux mécaniques. L'isotropie
-/// // court-circuite vers les formes closes, donc rien ne bouge pour elle.
+/// // The single entry door of the mechanical kernels. Isotropy
+/// // short-circuits to the closed forms, so nothing changes for it.
 /// let d = symmetry::elastic_constitutive(
 ///     &iso, 0, MaterialSymmetry::Isotropic, Kinematics::PlaneStress, 2)?;
 /// assert_eq!(d.len(), 3);
@@ -736,7 +736,7 @@ pub fn elastic_constitutive(
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
-/// // Un matériau rangé à l'envers : la table absorbe l'écart d'ordre.
+/// // A material laid out the other way round: the table absorbs the order gap.
 /// let mat = SubElementField::from_uniform_per_component(
 ///     fes.get(0)?, vec!["nu".into(), "E".into()], &[0.3, 210_000.0])?;
 /// let idx = mat.resolve_components(&["E", "nu"], "material")?;
@@ -809,14 +809,14 @@ pub fn elastic_constitutive_into(
 /// #     fes.get(0).unwrap(),
 /// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
 /// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
-/// // La réduction tient à la **cinématique**, pas à la loi qui a produit
-/// // la 6×6 — d'où son partage avec les tangentes non linéaires.
+/// // The reduction hinges on the **kinematics**, not on the law that produced
+/// // the 6×6 — hence it being shared with the nonlinear tangents.
 /// let d = symmetry::orthotropic_from_constants(
 ///     [210e3, 210e3, 210e3], [0.3, 0.3, 0.3], [80769.0, 80769.0, 80769.0])?;
 /// assert_eq!(symmetry::reduce_to_model(&d, Kinematics::PlaneStrain).len(), 3);
 /// assert_eq!(symmetry::reduce_to_model(&d, Kinematics::Full3D).len(), 6);
-/// // Contraintes planes : condensation statique sur ε_zz, donc σ_zz = 0 —
-/// // le terme (0,0) y est plus **petit** qu'en déformations planes.
+/// // Plane stress: static condensation on ε_zz, hence σ_zz = 0 — the (0,0)
+/// // term is **smaller** there than in plane strain.
 /// let cp = symmetry::reduce_to_model(&d, Kinematics::PlaneStress);
 /// let dp = symmetry::reduce_to_model(&d, Kinematics::PlaneStrain);
 /// assert!(cp[0][0] < dp[0][0]);
@@ -838,7 +838,7 @@ pub fn reduce_to_model(d3: &[[f64; 6]; 6], kinematics: Kinematics) -> Vec<Vec<f6
 /// ```
 /// # use pyrucast::models::symmetry;
 /// # use pyrucast::models::tensor::Kinematics;
-/// // La même réduction que `reduce_to_model`, sur la pile.
+/// // The same reduction as `reduce_to_model`, on the stack.
 /// let d3 = symmetry::orthotropic_from_constants(
 ///     [210e3, 210e3, 210e3], [0.3, 0.3, 0.3], [80_769.0, 80_769.0, 80_769.0])?;
 /// let mut d = [[0.0_f64; 6]; 6];
@@ -921,7 +921,7 @@ pub fn reduce_to_model_into(
 /// #     fes.get(0).unwrap(),
 /// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
 /// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
-/// // Le préfixe est celui de la physique : `k` pour la chaleur, `D` pour Fick.
+/// // The prefix is the physics': `k` for heat, `D` for Fick.
 /// assert_eq!(symmetry::orthotropic_scalar("k"),
 ///            ["k_1".to_string(), "k_2".to_string(), "k_3".to_string()]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -958,7 +958,7 @@ pub fn orthotropic_scalar(prefix: &str) -> [String; 3] {
 /// #     fes.get(0).unwrap(),
 /// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
 /// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
-/// // Les six composantes du triangle supérieur d'un tenseur symétrique.
+/// // The six components of a symmetric tensor's upper triangle.
 /// assert_eq!(symmetry::anisotropic_scalar("D")[0], "D_11");
 /// assert_eq!(symmetry::anisotropic_scalar("D").len(), 6);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -1005,7 +1005,7 @@ pub fn anisotropic_scalar(prefix: &str) -> [String; 6] {
 /// #     vec!["k_1".into(), "k_2".into(), "k_3".into(), "V1X".into(), "V1Y".into()],
 /// #     &[9.0, 1.0, 1.0, 0.0, 1.0]).unwrap();
 /// // Orthotrope, axes tournés d'un quart de tour : la conductivité forte
-/// // (k_1 = 9) se retrouve **sur y**, pas sur x.
+/// // (k_1 = 9) ends up **on y**, not on x.
 /// let k = symmetry::transport_tensor(
 ///     &mat, 0, 0, MaterialSymmetry::Orthotropic, 2, "k")?;
 /// assert!((k[(1, 1)] - 9.0).abs() < 1e-12);
@@ -1050,8 +1050,8 @@ pub fn transport_tensor(
 ///
 /// ```
 /// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
-/// // Un champ matériau rangé à l'envers : la table absorbe l'écart d'ordre,
-/// // et le noyau n'a plus un seul nom à comparer.
+/// // A material field laid out the other way round: the table absorbs the
+/// // order gap, and the kernel has not a single name left to compare.
 /// let ligne = [0.0, 1.5];
 /// let k3 = symmetry::transport_tensor_by(
 ///     &ligne, &ligne, &[1], MaterialSymmetry::Isotropic, 2)?;
@@ -1088,7 +1088,7 @@ pub fn transport_tensor_by(
 /// The form a constitutive kernel calls: no name, no allocation.
 /// ```
 /// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
-/// // Isotrope : une seule constante, et le tenseur est diagonal.
+/// // Isotropic: one constant only, and the tensor is diagonal.
 /// let k3 = symmetry::transport_tensor_from(|_| 1.5, MaterialSymmetry::Isotropic, 2)?;
 /// assert_eq!(k3[(0, 0)], 1.5);
 /// assert_eq!(k3[(0, 1)], 0.0);

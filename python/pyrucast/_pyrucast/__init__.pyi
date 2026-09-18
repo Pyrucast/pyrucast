@@ -4527,7 +4527,7 @@ def mazars(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
 
 def merge(a: NodeField, b: NodeField) -> NodeField:
     r"""
-    Merge two node fields « au plus juste »: structural union of their
+    Merge two node fields as tightly as possible: structural union of their
     zones, consolidated — zones sharing a component set are fused, the
     others stay separate (nothing is densified).
     

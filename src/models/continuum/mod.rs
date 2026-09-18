@@ -83,11 +83,11 @@ fn check_continuum_dimensions(label: &str, space_dim: usize, ref_dim: usize) -> 
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
-/// // La modélisation, indépendamment de toute loi : c'est elle qui nomme
-/// // les déformations que le noyau lira.
+/// // The modelling, independently of any law: it is what names the strains
+/// // the kernel will read.
 /// let c = Continuum::new(fes.get(0)?, Kinematics::PlaneStress, "Elasticity")?;
 /// assert_eq!(c.strain_reads(), ["eps_xx", "eps_yy", "eps_xy"]);
-/// // Et c'est elle qui refuse une cinématique impossible dans cet espace.
+/// // And it is what refuses a kinematics impossible in that space.
 /// assert!(Continuum::new(fes.get(0)?, Kinematics::Full3D, "Elasticity").is_err());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -130,8 +130,8 @@ impl Continuum {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
     /// # let c = Continuum::new(fes.get(0)?, Kinematics::PlaneStress, "Elasticity")?;
-    /// // Le `label` n'est là que pour se nommer quand une des trois
-    /// // cohérences est violée — ici la cinématique et l'espace.
+    /// // The `label` is only there to name itself when one of the three
+    /// // consistencies is violated — here the kinematics and the space.
     /// match Continuum::new(fes.get(0)?, Kinematics::Full3D, "Elasticity") {
     ///     Err(e) => assert!(format!("{e}").starts_with("Elasticity:")),
     ///     Ok(_) => panic!("une cinématique 3-D dans un espace 2-D est refusée"),
@@ -207,8 +207,8 @@ impl Continuum {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
     /// # let c = Continuum::new(fes.get(0)?, Kinematics::PlaneStress, "Elasticity")?;
-    /// // Le sous-espace rendu est celui qu'on lui a donné : une poignée,
-    /// // clonée, non un nouveau sous-espace.
+    /// // The subspace returned is the one it was given: a handle, cloned, not
+    /// // a new subspace.
     /// assert_eq!(c.fespace().read().cell_count(), 1);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -234,7 +234,7 @@ impl Continuum {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
     /// # let c = Continuum::new(fes.get(0)?, Kinematics::PlaneStress, "Elasticity")?;
-    /// // Le support POI1 porte les nœuds uniques du sous-espace.
+    /// // The POI1 support carries the subspace's unique nodes.
     /// assert_eq!(c.support().read().cell_count(), 3);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -366,11 +366,11 @@ impl Continuum {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
     /// let c = Continuum::new(fes.get(0)?, Kinematics::PlaneStress, "Elasticity")?;
-    /// // Une raideur ne lit aucun état ; la raideur géométrique lit la contrainte.
+    /// // A stiffness reads no state; the geometric stiffness reads the stress.
     /// assert!(c.element_state_reads(MatrixKind::Stiffness).is_empty());
     /// assert_eq!(c.element_state_reads(MatrixKind::Geometric),
     ///            ["sigma_xx", "sigma_xy", "sigma_yy"]);
-    /// // La tangente non plus : elle est évaluée au point, pas relue.
+    /// // Nor does the tangent: it is evaluated at the point, not re-read.
     /// assert!(c.element_state_reads(MatrixKind::Tangent).is_empty());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -385,9 +385,9 @@ impl Continuum {
                 }
                 names
             }
-            // A stiffness, a mass and — depuis que la tangente est évaluée au
-            // point plutôt que relue d'un champ — une tangente ne lisent que le
-            // matériau.
+            // A stiffness, a mass and — since the tangent is evaluated at the
+            // point rather than re-read from a field — a tangent read nothing
+            // but the material.
             MatrixKind::Stiffness | MatrixKind::Mass | MatrixKind::Tangent => Vec::new(),
         }
     }
@@ -427,13 +427,13 @@ impl Continuum {
     /// #     zone.clone(), vec!["E".into(), "nu".into()], &[210_000.0, 0.3])?);
     /// # use pyrucast::models::ElementLayout;
     /// let c = Continuum::new(zone.clone(), Kinematics::PlaneStress, "Elasticity")?;
-    /// // Le noyau d'élément, tel que le pilote l'appelle. La matrice de
-    /// // raideur d'un solide libre est **singulière** : ses lignes somment à
-    /// // zéro, un mouvement de corps rigide n'engendrant aucune force.
+    /// // The element kernel, as the driver calls it. The stiffness matrix of
+    /// // a free solid is **singular**: its rows sum to zero, a rigid-body
+    /// // motion generating no force.
     /// //
-    /// // `E` puis `nu` : le champ est rangé dans l'ordre du contrat, donc la
-    /// // table est l'identité. Un vrai assemblage la ferait résoudre par
-    /// // `Domain::element_layout`, qui accepte n'importe quel ordre.
+    /// // `E` then `nu`: the field is stored in the contract's order, so the
+    /// // table is the identity. A real assembly would have it resolved by
+    /// // `Domain::element_layout`, which accepts any order.
     /// let lay = ElementLayout { material: vec![0, 1], optional_material: vec![], state: vec![] };
     /// let (duals, primals) = vars();
     /// let bloc = assemble_block(
@@ -469,9 +469,9 @@ impl Continuum {
             space_dim,
             &mut d,
         )?;
-        // Les trois tampons vivent **hors** de la boucle : un point de Gauss ne
-        // doit rien allouer, et `B` comme `D·B` sont de taille fixe une fois la
-        // maille connue.
+        // The three buffers live **outside** the loop: a Gauss point must
+        // allocate nothing, and both `B` and `D·B` are of fixed size once the
+        // cell is known.
         let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
         let mut b: VoigtRows = [[0.0; MAX_CELL_DOFS]; 6];
         let mut db: VoigtRows = [[0.0; MAX_CELL_DOFS]; 6];
@@ -550,15 +550,15 @@ impl Continuum {
     /// # use pyrucast::models::ElementLayout;
     /// # use pyrucast::containers::field::ABSENT_COMPONENT;
     /// # let c = Continuum::new(zone.clone(), Kinematics::PlaneStress, "Elasticity")?;
-    /// // La masse ne lit que `rho`, deuxième composante **facultative** du
-    /// // contrat du continuum (`["alpha", "rho"]`) : `alpha` est absente ici.
+    /// // Mass reads only `rho`, the second **optional** component of the
+    /// // continuum's contract (`["alpha", "rho"]`): `alpha` is absent here.
     /// let lay = ElementLayout {
     ///     material: vec![],
     ///     optional_material: vec![ABSENT_COMPONENT, 0],
     ///     state: vec![],
     /// };
-    /// // La masse totale se retrouve dans la somme des entrées, une fois par
-    /// // direction : ρ × aire × space_dim.
+    /// // The total mass is found in the sum of the entries, once per
+    /// // direction: ρ × area × space_dim.
     /// let (duals, primals) = vars();
     /// let bloc = assemble_block(
     ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
@@ -640,29 +640,29 @@ impl Continuum {
     /// #     zone.clone(),
     /// #     vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_xy".into()],
     /// #     &[100.0, 0.0, 0.0])?);
-    /// # // La raideur géométrique ne lit aucun matériau ; l'assembleur en veut
-    /// # // un, on lui en donne un qui ne sert à rien plutôt qu'une Option.
+    /// # // The geometric stiffness reads no material; the assembler wants one,
+    /// # // so it is given a useless one rather than an Option.
     /// # let bidon = Handle::new(SubElementField::from_uniform_per_component(
     /// #     zone.clone(), vec!["E".into(), "nu".into()], &[210_000.0, 0.3])?);
     /// # use pyrucast::models::ElementLayout;
     /// # let c = Continuum::new(zone.clone(), Kinematics::PlaneStress, "Elasticity")?;
-    /// // La convention lit `[σ_xx, σ_xy, σ_yy]` ; le champ ci-dessus est rangé
-    /// // `[σ_xx, σ_yy, σ_xy]`. C'est tout ce que la table absorbe.
+    /// // The convention reads `[σ_xx, σ_xy, σ_yy]`; the field above is stored
+    /// // as `[σ_xx, σ_yy, σ_xy]`. That is all the table absorbs.
     /// let lay = ElementLayout {
     ///     material: vec![],
     ///     optional_material: vec![],
     ///     state: vec![0, 2, 1],
     /// };
-    /// // La raideur **géométrique**, celle du flambement : elle vient de l'état
-    /// // de contrainte, non du matériau. Sous traction elle est définie
-    /// // positive ; c'est son signe qui décide de la charge critique.
+    /// // The **geometric** stiffness, the one of buckling: it comes from the
+    /// // stress state, not from the material. Under tension it is positive
+    /// // definite; its sign is what decides the critical load.
     /// let (duals, primals) = vars();
     /// let bloc = assemble_block(
     ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
     ///     DofOrdering::NodesThenVars, true, &bidon, Some(&etat),
     ///     |geoms, _m, s, ke| c.element_geometric(&geoms[0], s.unwrap(), &lay, ke),
     /// )?;
-    /// // Elle est singulière elle aussi : les modes rigides n'y coûtent rien.
+    /// // It too is singular: the rigid modes cost nothing in it.
     /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
     /// assert!(total.abs() < 1e-9);
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -721,19 +721,19 @@ impl Continuum {
         Ok(())
     }
 
-    /// La délégation complète : `∫ Bᵀ D B` d'une maille, où `D` vient du
-    /// `tangent_point` de `domain`. C'est tout ce qu'une physique du continuum a
-    /// à écrire pour son `element_tangent` — une ligne.
+    /// The full delegation: `∫ Bᵀ D B` of one cell, where `D` comes from
+    /// `domain`'s `tangent_point`. That is all a continuum physics has to write
+    /// for its `element_tangent` — one line.
     ///
-    /// Générique sur `D`, donc monomorphisé : le `tangent_point` appelé à chaque
-    /// point de Gauss est un appel **statique**.
+    /// Generic over `D`, hence monomorphised: the `tangent_point` called at
+    /// every Gauss point is a **static** call.
     #[allow(clippy::too_many_arguments)]
-    /// La délégation complète : `∫ Bᵀ D B` d'une maille, où `D` vient du
-    /// `tangent_point` de `domain`. C'est tout ce qu'une physique du continuum a
-    /// à écrire pour son `element_tangent` — une ligne.
+    /// The full delegation: `∫ Bᵀ D B` of one cell, where `D` comes from
+    /// `domain`'s `tangent_point`. That is all a continuum physics has to write
+    /// for its `element_tangent` — one line.
     ///
-    /// Générique sur `D`, donc monomorphisé : le `tangent_point` appelé à chaque
-    /// point de Gauss est un appel **statique**.
+    /// Generic over `D`, hence monomorphised: the `tangent_point` called at
+    /// every Gauss point is a **static** call.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -756,9 +756,9 @@ impl Continuum {
     /// #     &modele, &[("E", 210_000.0), ("nu", 0.3)])?;
     /// # let eps = ElementField::new(
     /// #     &fes, vec!["eps_xx".into(), "eps_yy".into(), "eps_xy".into()])?;
-    /// // Bout en bout : la tangente d'une loi linéaire **est** sa raideur, et
-    /// // elle l'atteint par la voie commune — sans qu'aucun champ de modules
-    /// // n'ait été matérialisé pour l'y porter.
+    /// // End to end: the tangent of a linear law **is** its stiffness, and it
+    /// // reaches it by the common path — without any field of moduli having
+    /// // been materialised to carry it there.
     /// let kt = matrix::tangent(&modele, &materiaux, &eps, None, None)?;
     /// let k = matrix::stiffness(&modele, &materiaux)?;
     /// assert_eq!(kt.dense()?, k.dense()?);
@@ -807,7 +807,7 @@ impl Continuum {
         let space_dim = geom.space_dim;
         let dofs = space_dim * n_nodes;
         let v = voigt_size(space_dim, self.kinematics);
-        // Mêmes tampons de pile que `element_stiffness`, hors de la boucle.
+        // Same stack buffers as `element_stiffness`, outside the loop.
         let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
         let mut b: VoigtRows = [[0.0; MAX_CELL_DOFS]; 6];
         let mut db: VoigtRows = [[0.0; MAX_CELL_DOFS]; 6];
@@ -827,9 +827,9 @@ impl Continuum {
                 hoop,
                 &mut b,
             );
-            // Le fournisseur écrit `D` dans le tampon de l'appelant. Il est
-            // **générique**, jamais un `&dyn Fn` : un appel virtuel par point de
-            // Gauss se voit, et ce noyau en fait un par point.
+            // The provider writes `D` into the caller's buffer. It is
+            // **generic**, never a `&dyn Fn`: one virtual call per Gauss point
+            // shows, and this kernel makes one per point.
             d_at(g, &mut d)?;
             // DB = D·B (voigt × dofs), then Kᵉ += Bᵀ (DB) · |J| w.
             for r in 0..v {

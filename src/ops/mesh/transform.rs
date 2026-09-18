@@ -155,7 +155,7 @@ pub(super) fn map_coords(
 /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
 /// # let barre = Mesh::from_submesh(sm);
 /// # let ou = |m: &Mesh, i| m.node(0, 0, i).unwrap().position().unwrap();
-/// // Des nœuds **neufs**, aux positions décalées : l'original ne bouge pas.
+/// // **Fresh** nodes, at shifted positions: the original does not move.
 /// let deplacee = mesh::translate(&barre, &[0.0, 2.0, 0.0])?;
 /// assert_eq!(ou(&deplacee, 0), vec![0.0, 2.0, 0.0]);
 /// assert_eq!(ou(&barre, 0), vec![0.0, 0.0, 0.0]);
@@ -323,9 +323,9 @@ fn unit(v: &[f64], name: &str, op: &str) -> Result<Vec<f64>> {
 /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
 /// # let barre = Mesh::from_submesh(sm);
 /// # let ou = |m: &Mesh, i| m.node(0, 0, i).unwrap().position().unwrap();
-/// // Chaque point passe de l'autre côté du centre. La transformation est de
-/// // déterminant −1, donc la connectivité est **réinversée** pour garder une
-/// // orientation directe : l'image de (1, 0, 0) est en position locale 0.
+/// // Every point moves to the other side of the centre. The transformation
+/// // has determinant −1, so the connectivity is **re-inverted** to keep a
+/// // direct orientation: the image of (1, 0, 0) is at local position 0.
 /// let image = mesh::symmetry_point(&barre, &[0.0, 0.0, 0.0])?;
 /// assert_eq!(ou(&image, 0), vec![-1.0, 0.0, 0.0]);
 /// assert_eq!(ou(&image, 1), vec![0.0, 0.0, 0.0]);
@@ -369,8 +369,8 @@ pub fn symmetry_point(mesh: &Mesh, center: &[f64]) -> Result<Mesh> {
 /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
 /// # let barre = Mesh::from_submesh(sm);
 /// # let ou = |m: &Mesh, i| m.node(0, 0, i).unwrap().position().unwrap();
-/// // Symétrie **axiale** autour de l'axe des x : un point sur cet axe ne
-/// // bouge pas.
+/// // **Axial** symmetry about the x axis: a point on that axis does not
+/// // move.
 /// # let hors_axe = Node::create_in(coords.clone(), &[0.5, 1.0, 0.0])?;
 /// # let mut s2 = SubMesh::new(coords.clone(), ElementType::SEG2);
 /// # s2.add_cell(&[n[0].id(), hors_axe.id()])?;
@@ -378,9 +378,9 @@ pub fn symmetry_point(mesh: &Mesh, center: &[f64]) -> Result<Mesh> {
 /// let image = mesh::symmetry_line(&coude, &[0.0, 0.0, 0.0], &[1.0, 0.0, 0.0])?;
 /// assert_eq!(ou(&image, 0), vec![0.0, 0.0, 0.0]);
 /// assert_eq!(ou(&image, 1), vec![0.5, -1.0, 0.0]);
-/// // En 3-D une symétrie axiale est une **rotation** d'un demi-tour : son
-/// // déterminant vaut +1, donc la connectivité est laissée telle quelle —
-/// // contrairement à `symmetry_point` et `symmetry_plane`.
+/// // In 3-D an axial symmetry is a half-turn **rotation**: its determinant is
+/// // +1, so the connectivity is left as it is — unlike `symmetry_point` and
+/// // `symmetry_plane`.
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn symmetry_line(mesh: &Mesh, a: &[f64], b: &[f64]) -> Result<Mesh> {
@@ -436,13 +436,13 @@ pub fn symmetry_line(mesh: &Mesh, a: &[f64], b: &[f64]) -> Result<Mesh> {
 /// # sm.add_cell(&[n[0].id(), n[1].id()]).unwrap();
 /// # let barre = Mesh::from_submesh(sm);
 /// # let ou = |m: &Mesh, i| m.node(0, 0, i).unwrap().position().unwrap();
-/// // Le plan est donné par **trois points**, non par une normale.
+/// // The plane is given by **three points**, not by a normal.
 /// # let hors_plan = Node::create_in(coords.clone(), &[0.5, 0.0, 1.0])?;
 /// # let mut s2 = SubMesh::new(coords.clone(), ElementType::SEG2);
 /// # s2.add_cell(&[n[0].id(), hors_plan.id()])?;
 /// # let oblique = Mesh::from_submesh(s2);
-/// // Le plan z = 0 : seule la troisième coordonnée change de signe. Comme
-/// // pour `symmetry_point`, la connectivité est réinversée — l'image du
+/// // The z = 0 plane: only the third coordinate changes sign. As for
+/// // `symmetry_point`, the connectivity is re-inverted — the image of the
 /// // second nœud arrive en position locale 0.
 /// let image = mesh::symmetry_plane(
 ///     &oblique, &[0.0, 0.0, 0.0], &[1.0, 0.0, 0.0], &[0.0, 1.0, 0.0])?;
