@@ -356,7 +356,7 @@ impl Factorization {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(matrix: &Matrix) -> Result<Self> {
-        let vars = matrix.dof_vars()?;
+        let vars = matrix.dof_vars();
         let row_keys = matrix.row_dof_keys()?;
         let n_cols = matrix.col_dof_keys()?.len();
         if row_keys.len() != n_cols {

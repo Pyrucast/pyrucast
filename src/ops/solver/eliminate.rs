@@ -464,7 +464,7 @@ fn build_condensation(model: &Model, matrix: &Matrix) -> Result<Condensation> {
 
     // ── Partition the matrix DOFs: multiplier nodes vs physics ─────────
     let mult_nodes: HashSet<NodeId> = relations.iter().map(|(r, _)| r.multiplier_node).collect();
-    let vars = matrix.dof_vars()?;
+    let vars = matrix.dof_vars();
     let slot_of: HashMap<&str, u32> = vars
         .iter()
         .enumerate()

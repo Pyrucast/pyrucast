@@ -578,7 +578,7 @@ pub fn tangent(
 /// ```
 pub fn lump(m: &Matrix) -> Result<Matrix> {
     let (offsets, _, values) = m.csr_arrays()?;
-    let vars = m.dof_vars()?;
+    let vars = m.dof_vars();
     let row_keys = m.row_dof_keys()?;
     let col_keys = m.col_dof_keys()?;
     let n = row_keys.len();
@@ -910,7 +910,7 @@ mod tests {
         let pattern = crate::ops::scatter::build_pattern(&k).unwrap();
         let unscaled = crate::ops::scatter::scatter_serial(&k, &pattern).unwrap();
 
-        let scaled = (&k * 3.0).unwrap();
+        let scaled = &k * 3.0;
         let pattern_scaled = crate::ops::scatter::build_pattern(&scaled).unwrap();
         let scaled_values = crate::ops::scatter::scatter_serial(&scaled, &pattern_scaled).unwrap();
 
@@ -954,7 +954,7 @@ mod tests {
     fn scaled_stiffness_matches_scaled_literal_reference() {
         let (model, materials) = chain_heat_with_dirichlet(6);
         let k = stiffness(&model, &materials).unwrap();
-        let mut scaled = (&k * 2.5).unwrap();
+        let mut scaled = &k * 2.5;
         assert!(
             scaled.finalize().is_err(),
             "finalize must still refuse a computed block after scaling"

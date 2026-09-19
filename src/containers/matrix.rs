@@ -3161,7 +3161,7 @@ impl Matrix {
     /// assert_eq!(lignes[0].1, "q");
     /// ```
     pub fn row_dofs(&self) -> Result<Vec<NamedDof>> {
-        let vars = self.dof_vars()?;
+        let vars = self.dof_vars();
         Ok(Self::name_dofs(&self.row_dof_keys()?, &vars))
     }
 
@@ -3192,7 +3192,7 @@ impl Matrix {
     /// assert_eq!(k.col_dofs().unwrap()[0].1, "T");
     /// ```
     pub fn col_dofs(&self) -> Result<Vec<NamedDof>> {
-        let vars = self.dof_vars()?;
+        let vars = self.dof_vars();
         Ok(Self::name_dofs(&self.col_dof_keys()?, &vars))
     }
 
@@ -3221,18 +3221,18 @@ impl Matrix {
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // The compact form and the named form say the same thing: names are
     /// // live in the table, the key carries only their index.
-    /// let noms = k.dof_vars()?;
+    /// let noms = k.dof_vars();
     /// let cles = k.row_dof_keys()?;
     /// let nommes = k.row_dofs()?;
     /// assert_eq!(dof_node(cles[0]), nommes[0].0);
     /// assert_eq!(noms[dof_var(cles[0]) as usize], nommes[0].1);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn dof_vars(&self) -> Result<std::sync::Arc<Vec<String>>> {
+    pub fn dof_vars(&self) -> std::sync::Arc<Vec<String>> {
         if let Some(a) = &self.assembled {
-            return Ok(a.vars.clone());
+            return a.vars.clone();
         }
-        Ok(std::sync::Arc::new(self.field_names()))
+        std::sync::Arc::new(self.field_names())
     }
 
     /// Row DOFs as packed [`DofKey`]s, in CSR row order — the numbering the
@@ -3262,7 +3262,7 @@ impl Matrix {
     /// // dual name in the table — not the name itself.
     /// let cles = k.row_dof_keys()?;
     /// assert_eq!(dof_node(cles[0]), a.id());
-    /// assert_eq!(k.dof_vars()?[dof_var(cles[0]) as usize], "q");
+    /// assert_eq!(k.dof_vars()[dof_var(cles[0]) as usize], "q");
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn row_dof_keys(&self) -> Result<Vec<DofKey>> {
@@ -3299,7 +3299,7 @@ impl Matrix {
     /// // Same shape on the column side, over the **primal** variables.
     /// let cles = k.col_dof_keys()?;
     /// assert_eq!(dof_node(cles[0]), a.id());
-    /// assert_eq!(k.dof_vars()?[dof_var(cles[0]) as usize], "T");
+    /// assert_eq!(k.dof_vars()[dof_var(cles[0]) as usize], "T");
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn col_dof_keys(&self) -> Result<Vec<DofKey>> {
@@ -4241,13 +4241,14 @@ impl Matrix {
     /// [`Aggregate::subset`]), so scaling in place would silently rescale every
     /// other `Matrix` aliasing the same block. Like [`filter`](Self::filter), the
     /// result is **not assembled**.
-    fn map_blocks(&self, f: impl Fn(SubMatrix) -> SubMatrix) -> Result<Matrix> {
+    fn map_blocks(&self, f: impl Fn(SubMatrix) -> SubMatrix) -> Matrix {
         let mut out = Matrix::empty();
         for h in self {
             let scaled = f((*h.read()).clone());
-            out.add_sub(Handle::new(scaled))?;
+            out.push(Handle::new(scaled));
         }
-        Ok(out)
+        out.post_push();
+        out
     }
 }
 
@@ -4270,35 +4271,36 @@ impl std::ops::Mul<&NodeField> for Matrix {
 // ─── Matrix scalar operators ────────────────────────────────────────────────
 //
 // `&matrix * s` / `&matrix / s` — a fresh `Matrix` whose blocks are scaled
-// clones of `self`'s (see `map_blocks`). Fallible (store reads), like the
-// crate's other `Matrix` operators. No `Matrix + Matrix`: the assembler already
-// sums contributions landing on the same global `(row, col)`
-// ([`Matrix::assemble`]), so `M/dt + K` is `(&(&m / dt)? | &k)?`
-// followed by `sys.assemble()` — see `book/src/matrix.md`.
+// clones of `self`'s (see `map_blocks`). **Infallible**: cloning a block and
+// appending it cannot fail, `Matrix` being the one aggregate that declares no
+// `check_push`. No `Matrix + Matrix`: the assembler already sums contributions
+// landing on the same global `(row, col)` ([`Matrix::assemble`]), so `M/dt + K`
+// is `(&m / dt).union(&k)?` followed by `sys.assemble()` — see
+// `book/src/matrix.md`.
 
 impl std::ops::Mul<f64> for &Matrix {
-    type Output = Result<Matrix>;
+    type Output = Matrix;
     fn mul(self, rhs: f64) -> Self::Output {
         self.map_blocks(|b| b * rhs)
     }
 }
 
 impl std::ops::Mul<f64> for Matrix {
-    type Output = Result<Matrix>;
+    type Output = Matrix;
     fn mul(self, rhs: f64) -> Self::Output {
         (&self).mul(rhs)
     }
 }
 
 impl std::ops::Div<f64> for &Matrix {
-    type Output = Result<Matrix>;
+    type Output = Matrix;
     fn div(self, rhs: f64) -> Self::Output {
         self.map_blocks(|b| b / rhs)
     }
 }
 
 impl std::ops::Div<f64> for Matrix {
-    type Output = Result<Matrix>;
+    type Output = Matrix;
     fn div(self, rhs: f64) -> Self::Output {
         (&self).div(rhs)
     }
@@ -4973,7 +4975,7 @@ mod tests {
         let mut orig = Matrix::empty();
         orig.add_sub(Handle::new(blk)).unwrap();
 
-        let scaled = (&orig * 10.0).unwrap();
+        let scaled = &orig * 10.0;
 
         // A new store slot per block — no aliasing with the source's blocks.
         let orig_h = orig.iter().next().unwrap();
@@ -4987,7 +4989,7 @@ mod tests {
         assert_eq!(scaled.get(b, "q", b, "T"), 30.0);
 
         // `/` divides the factor, chaining from the already-scaled matrix.
-        let halved = (&scaled / 2.0).unwrap();
+        let halved = &scaled / 2.0;
         assert_eq!(halved.get(a, "q", a, "T"), 10.0);
         assert_eq!(
             scaled.get(a, "q", a, "T"),
@@ -5049,7 +5051,7 @@ mod tests {
         m.add_sub(Handle::new(m_blk)).unwrap();
 
         let dt = 0.5;
-        let m_dt = (&m / dt).unwrap(); // factor = 1/0.5 = 2 ⇒ diag(8, 8)
+        let m_dt = &m / dt; // factor = 1/0.5 = 2 ⇒ diag(8, 8)
 
         let mut sys = m_dt.union(&k).unwrap();
         sys.assemble().unwrap();

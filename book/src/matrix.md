@@ -98,6 +98,10 @@ en place risquerait de rescaler silencieusement toute autre `Matrix` référenç
 même bloc. Comme pour `filter`, le résultat n'est **pas assemblé** — `finalize()` ou
 `m.assemble()` avant de résoudre.
 
+Ces deux opérateurs sont **infaillibles** : ils rendent une `Matrix`, pas un
+`Result<Matrix>`. Cloner un bloc et l'ajouter ne peut pas échouer, `Matrix` étant le
+seul agrégat qui ne déclare aucun `check_push`.
+
 ```rust,ignore
 {{#include ../../tests/doc_matrix.rs:facteur}}
 ```

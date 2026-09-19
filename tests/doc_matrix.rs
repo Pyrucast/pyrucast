@@ -81,9 +81,9 @@ fn diviser_une_matrice_ne_reecrit_aucune_valeur() -> Result<()> {
     let a = m.row_mesh()?.node(0, 0, 0)?.id();
     let dt = 0.1;
 
-    let mut m_dt = (&m / dt)?; // facteur = 1/dt sur chaque bloc, aucune valeur réécrite
-                               // A **computed** block's factor materializes only at assembly: without this
-                               // `assemble`, reading back would return zeros.
+    let mut m_dt = &m / dt; // facteur = 1/dt sur chaque bloc, aucune valeur réécrite
+                            // A **computed** block's factor materializes only at assembly: without this
+                            // `assemble`, reading back would return zeros.
     m_dt.assemble()?;
     assert_eq!(m.get(a, "q", a, "T"), m_dt.get(a, "q", a, "T") * dt); // m inchangée
     Ok(())
@@ -100,7 +100,7 @@ fn composer_deux_matrices_puis_resoudre() -> Result<()> {
 
     // Composition : `union` côté Rust — le `|` de la surface Python n'a pas
     // d'équivalent en surcharge d'opérateur ici.
-    let mut sys = (&m / dt)?.union(&k)?;
+    let mut sys = (&m / dt).union(&k)?;
     sys.assemble()?; // requis dès qu'un bloc calculé est présent
     let u = solver::lu::solve(&sys, &rhs)?;
 

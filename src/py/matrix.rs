@@ -324,7 +324,7 @@ impl PyMatrix {
     /// `factor` (lazy). Not finalized; see `__mul__`.
     fn __truediv__(&self, rhs: f64) -> PyResult<PyMatrix> {
         Ok(PyMatrix {
-            inner: (&self.inner / rhs)?,
+            inner: &self.inner / rhs,
         })
     }
 
@@ -357,7 +357,7 @@ impl PyMatrix {
             return Ok(Py::new(py, PyNodeField { inner })?.into_any());
         }
         let s: f64 = rhs.extract()?;
-        let inner = (&self.inner * s)?;
+        let inner = &self.inner * s;
         Ok(Py::new(py, PyMatrix { inner })?.into_any())
     }
 }
