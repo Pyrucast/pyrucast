@@ -25,6 +25,12 @@ Une `Matrix` est un **agrégat de blocs** `SubMatrix`, et un bloc est de l'un de
 
 Un bloc calculé garde son lien vers sa physique **via la recette** ; la `Matrix`, elle, reste un simple sac de blocs et **ne référence pas le `Model`**.
 
+### Le bloc ne recopie pas sa liste de nœuds
+
+Un bloc est posé sur deux supports POI1 (lignes et colonnes, souvent le même objet) et **n'en garde aucune copie** : il lit leur connectivité en place à chaque accès, conformément à la règle [Zéro-copie](developper/parallelisme.md). C'est sûr parce que les deux supports sont **scellés** à la construction du bloc — leur connectivité ne peut plus changer, donc la numérotation ne peut pas dériver. Le `NodeId → position` passe par la table que le support porte déjà (`SubMesh::node_index`), partagée avec tous ses autres consommateurs au lieu d'être refaite par bloc.
+
+Corollaire à connaître si l'on monte un bloc à la main : les nœuds d'un support doivent être **distincts**, ce que produit `to_poi1`. Un nœud répété n'est pas rejeté, mais il adresse la mauvaise ligne — la table du support donne un rang dédoublonné, qui s'écarte de la position dès la première répétition.
+
 ### Étiquette de nature physique (`physics`)
 
 Chaque bloc porte en plus un **ensemble de natures** `Vec<Physics>` (`Mechanical`,

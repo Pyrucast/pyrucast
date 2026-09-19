@@ -6,7 +6,10 @@
 //!   construction time via two POI1 [`SubMesh`] handles (row/col node
 //!   sets), two variable-name lists (dual / primal), and a
 //!   [`DofOrdering`] that maps `(node_local_idx, var_idx)` to a flat
-//!   matrix-row or -column index.  The actual non-zeros are stored in a
+//!   matrix-row or -column index.  The node sets are **read from the
+//!   supports**, never copied into the block: the supports are sealed, so
+//!   the numbering cannot drift (see `book/src/developper/parallelisme.md`
+//!   § Zéro-copie).  The actual non-zeros are stored in a
 //!   [`nalgebra_sparse::CooMatrix`]; [`SubMatrix::add_entry`] appends
 //!   triplets that accumulate on `get` / densification.
 //! - [`Matrix`] — aggregate of [`SubMatrix`] blocks (one
@@ -81,7 +84,7 @@ use crate::containers::model::SubModel;
 use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
-use crate::handle::Handle;
+use crate::handle::{Handle, ReadGuard};
 use crate::models::{MatrixKind, Physics};
 use crate::parallel::*;
 use nalgebra::{DMatrix, DVector};
@@ -314,9 +317,14 @@ pub enum KernelInputs {
 /// sub-meshes and variable-name lists.
 ///
 /// The **row DOF** at matrix index `i` is
-/// `(row_nodes[node_local], dual_vars[var_idx])` where
+/// `(row_support.connectivity()[node_local], dual_vars[var_idx])` where
 /// `(node_local, var_idx) = ordering.from_index(i, n_row_nodes, n_dual_vars)`.
-/// Columns are symmetric with `col_nodes` and `primal_vars`.
+/// Columns are symmetric with `col_support` and `primal_vars`. The block keeps
+/// **no node list of its own**: it reads its supports in place, which is sound
+/// because both are sealed at construction. Their nodes must be **distinct** —
+/// the shape `to_poi1` produces — since `node_local` is looked up through
+/// [`SubMesh::node_index`], a rank that only matches the position without
+/// repeats.
 /// The recipe a **computed** [`SubMatrix`] carries *instead of* stored values:
 /// how to evaluate its contribution on the fly. The global assembler drives the
 /// sub-model's [`element_matrix`](crate::models::Domain::element_matrix) kernel
@@ -439,14 +447,6 @@ pub struct SubMatrix {
     row_support: Handle<SubMesh>,
     /// POI1 mesh: cell `k` holds the k-th col-support node.
     col_support: Handle<SubMesh>,
-    /// Snapshot of `row_support` connectivity (one NodeId per cell).
-    /// **Never archived**: taken again from the (sealed) support by `on_load`.
-    #[serde(skip)]
-    row_nodes: Vec<NodeId>,
-    /// Snapshot of `col_support` connectivity (one NodeId per cell).
-    /// **Never archived**: same as `row_nodes`.
-    #[serde(skip)]
-    col_nodes: Vec<NodeId>,
     /// Row variable names (dual variables).
     dual_vars: Vec<String>,
     /// Column variable names (primal variables).
@@ -481,21 +481,22 @@ pub struct SubMatrix {
     /// those applies the factor itself.
     #[serde(default = "default_factor")]
     factor: f64,
-    /// `NodeId → local position` for O(1) `add_entry`, derived from
-    /// `row_nodes` / `col_nodes`. Not serialized; built lazily on first use
-    /// (the support is fixed at construction).
-    #[serde(skip)]
-    row_index: HashMap<NodeId, u32>,
-    #[serde(skip)]
-    col_index: HashMap<NodeId, u32>,
 }
 
 impl SubMatrix {
     /// Build a new block.
     ///
     /// `row_support` / `col_support` must be POI1 sub-meshes whose cells
-    /// define the row/col node sequence. `dual_vars` / `primal_vars` are
-    /// the row/column variable names; they must be non-empty.
+    /// define the row/col node sequence, and whose nodes are **distinct** —
+    /// what `to_poi1` produces, and what every physics hands over. A repeated
+    /// node is not rejected but addresses the wrong row: the block looks
+    /// `node_local` up through [`SubMesh::node_index`], a deduplicated rank
+    /// that parts from the flat position as soon as a node appears twice.
+    /// `dual_vars` / `primal_vars` are the row/column variable names; they must
+    /// be non-empty.
+    ///
+    /// Both supports are sealed here: the block reads their connectivity in
+    /// place ever after, it keeps no copy.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -527,18 +528,15 @@ impl SubMatrix {
         ordering: DofOrdering,
         symmetric: bool,
     ) -> Result<Self> {
-        let row_nodes: Vec<NodeId> = row_support.read().connectivity().to_vec();
-        let col_nodes: Vec<NodeId> = col_support.read().connectivity().to_vec();
-        // The block's row/col numbering snapshots these supports; freeze them.
+        // The block's row/col numbering *is* these supports' connectivity, read
+        // in place on every access rather than copied; freeze them so it holds.
         crate::containers::mesh::seal(&row_support);
         crate::containers::mesh::seal(&col_support);
-        let nrows = row_nodes.len() * dual_vars.len();
-        let ncols = col_nodes.len() * primal_vars.len();
+        let nrows = row_support.read().connectivity().len() * dual_vars.len();
+        let ncols = col_support.read().connectivity().len() * primal_vars.len();
         Ok(Self {
             row_support,
             col_support,
-            row_nodes,
-            col_nodes,
             dual_vars,
             primal_vars,
             ordering,
@@ -547,8 +545,6 @@ impl SubMatrix {
             recipe: None,
             physics: Vec::new(),
             factor: 1.0,
-            row_index: HashMap::new(),
-            col_index: HashMap::new(),
         })
     }
 
@@ -607,18 +603,15 @@ impl SubMatrix {
         symmetric: bool,
         recipe: ComputedRecipe,
     ) -> Result<Self> {
-        let row_nodes: Vec<NodeId> = row_support.read().connectivity().to_vec();
-        let col_nodes: Vec<NodeId> = col_support.read().connectivity().to_vec();
-        // The block's row/col numbering snapshots these supports; freeze them.
+        // The block's row/col numbering *is* these supports' connectivity, read
+        // in place on every access rather than copied; freeze them so it holds.
         crate::containers::mesh::seal(&row_support);
         crate::containers::mesh::seal(&col_support);
-        let nrows = row_nodes.len() * dual_vars.len();
-        let ncols = col_nodes.len() * primal_vars.len();
+        let nrows = row_support.read().connectivity().len() * dual_vars.len();
+        let ncols = col_support.read().connectivity().len() * primal_vars.len();
         Ok(Self {
             row_support,
             col_support,
-            row_nodes,
-            col_nodes,
             dual_vars,
             primal_vars,
             ordering,
@@ -627,8 +620,6 @@ impl SubMatrix {
             recipe: Some(recipe),
             physics: Vec::new(),
             factor: 1.0,
-            row_index: HashMap::new(),
-            col_index: HashMap::new(),
         })
     }
 
@@ -690,13 +681,12 @@ impl SubMatrix {
         symmetric: bool,
         coo: CooMatrix<f64>,
     ) -> Result<Self> {
-        let row_nodes: Vec<NodeId> = row_support.read().connectivity().to_vec();
-        let col_nodes: Vec<NodeId> = col_support.read().connectivity().to_vec();
-        // The block's row/col numbering snapshots these supports; freeze them.
+        // The block's row/col numbering *is* these supports' connectivity, read
+        // in place on every access rather than copied; freeze them so it holds.
         crate::containers::mesh::seal(&row_support);
         crate::containers::mesh::seal(&col_support);
-        let nrows = row_nodes.len() * dual_vars.len();
-        let ncols = col_nodes.len() * primal_vars.len();
+        let nrows = row_support.read().connectivity().len() * dual_vars.len();
+        let ncols = col_support.read().connectivity().len() * primal_vars.len();
         if coo.nrows() != nrows || coo.ncols() != ncols {
             return Err(PyrucastError::Message(format!(
                 "from_coo: COO is {}×{} but the support/vars imply {}×{}",
@@ -709,8 +699,6 @@ impl SubMatrix {
         Ok(Self {
             row_support,
             col_support,
-            row_nodes,
-            col_nodes,
             dual_vars,
             primal_vars,
             ordering,
@@ -719,8 +707,6 @@ impl SubMatrix {
             recipe: None,
             physics: Vec::new(),
             factor: 1.0,
-            row_index: HashMap::new(),
-            col_index: HashMap::new(),
         })
     }
 
@@ -1205,12 +1191,19 @@ impl SubMatrix {
     /// assert_eq!(lignes[0], (a.id(), "q".to_string()));
     /// ```
     pub fn row_dofs(&self) -> Vec<(NodeId, String)> {
-        let n_nodes = self.row_nodes.len();
+        self.row_dofs_with(&self.row_support.read())
+    }
+
+    /// [`row_dofs`](Self::row_dofs) reading a support guard the caller already
+    /// holds — the zero-copy form (see `book/src/developper/parallelisme.md`).
+    pub(crate) fn row_dofs_with(&self, row_support: &SubMesh) -> Vec<(NodeId, String)> {
+        let nodes = row_support.connectivity();
+        let n_nodes = nodes.len();
         let n_vars = self.dual_vars.len();
         (0..self.coo.nrows())
             .map(|i| {
                 let (nl, vi) = self.ordering.from_index(i, n_nodes, n_vars);
-                (self.row_nodes[nl], self.dual_vars[vi].clone())
+                (nodes[nl], self.dual_vars[vi].clone())
             })
             .collect()
     }
@@ -1239,12 +1232,19 @@ impl SubMatrix {
     /// assert_eq!(bloc.col_dofs()[0], (a.id(), "T".to_string()));
     /// ```
     pub fn col_dofs(&self) -> Vec<(NodeId, String)> {
-        let n_nodes = self.col_nodes.len();
+        self.col_dofs_with(&self.col_support.read())
+    }
+
+    /// [`col_dofs`](Self::col_dofs) reading a support guard the caller already
+    /// holds.
+    pub(crate) fn col_dofs_with(&self, col_support: &SubMesh) -> Vec<(NodeId, String)> {
+        let nodes = col_support.connectivity();
+        let n_nodes = nodes.len();
         let n_vars = self.primal_vars.len();
         (0..self.coo.ncols())
             .map(|i| {
                 let (nl, vi) = self.ordering.from_index(i, n_nodes, n_vars);
-                (self.col_nodes[nl], self.primal_vars[vi].clone())
+                (nodes[nl], self.primal_vars[vi].clone())
             })
             .collect()
     }
@@ -1256,9 +1256,19 @@ impl SubMatrix {
     /// ([`Matrix::dof_vars`]); it is resolved **once per block**, so no DOF ever
     /// touches a string.
     pub(crate) fn row_dof_keys(&self, slot_of: &HashMap<String, u32>) -> Result<Vec<DofKey>> {
+        self.row_dof_keys_with(&self.row_support.read(), slot_of)
+    }
+
+    /// [`row_dof_keys`](Self::row_dof_keys) reading a support guard the caller
+    /// already holds — the zero-copy form (see `book/src/developper/parallelisme.md`).
+    pub(crate) fn row_dof_keys_with(
+        &self,
+        row_support: &SubMesh,
+        slot_of: &HashMap<String, u32>,
+    ) -> Result<Vec<DofKey>> {
         let slots = self.var_slots(&self.dual_vars, slot_of)?;
         Ok(Self::keys(
-            &self.row_nodes,
+            row_support.connectivity(),
             &slots,
             self.ordering,
             self.coo.nrows(),
@@ -1268,9 +1278,19 @@ impl SubMatrix {
     /// Column DOFs as packed [`DofKey`]s — the column twin of
     /// [`row_dof_keys`](Self::row_dof_keys).
     pub(crate) fn col_dof_keys(&self, slot_of: &HashMap<String, u32>) -> Result<Vec<DofKey>> {
+        self.col_dof_keys_with(&self.col_support.read(), slot_of)
+    }
+
+    /// [`col_dof_keys`](Self::col_dof_keys) reading a support guard the caller
+    /// already holds.
+    pub(crate) fn col_dof_keys_with(
+        &self,
+        col_support: &SubMesh,
+        slot_of: &HashMap<String, u32>,
+    ) -> Result<Vec<DofKey>> {
         let slots = self.var_slots(&self.primal_vars, slot_of)?;
         Ok(Self::keys(
-            &self.col_nodes,
+            col_support.connectivity(),
             &slots,
             self.ordering,
             self.coo.ncols(),
@@ -1361,18 +1381,22 @@ impl SubMatrix {
                     .into(),
             ));
         }
-        let n_rn = self.row_nodes.len();
+        // The supports' own `NodeId → position` tables, borrowed in place. Rows
+        // and columns usually share one handle, so ask that lock only once.
+        let (row_g, col_g) = self.support_guards();
+        let row_support: &SubMesh = &row_g;
+        let col_support: &SubMesh = col_g.as_deref().unwrap_or(&row_g);
+
+        let n_rn = row_support.connectivity().len();
         let n_dv = self.dual_vars.len();
-        let n_cn = self.col_nodes.len();
+        let n_cn = col_support.connectivity().len();
         let n_pv = self.primal_vars.len();
 
-        // O(1) node → local position (maps built lazily; support is fixed).
-        self.ensure_node_indices();
-        let rnl = *self.row_index.get(&row_node).ok_or_else(|| {
+        let rnl = *row_support.node_index().get(&row_node).ok_or_else(|| {
             PyrucastError::Message(format!(
                 "add_entry: row node {row_node:?} not in row_support"
             ))
-        })? as usize;
+        })?;
         let rvi = self
             .dual_vars
             .iter()
@@ -1380,11 +1404,11 @@ impl SubMatrix {
             .ok_or_else(|| {
                 PyrucastError::Message(format!("add_entry: row var '{row_var}' not in dual_vars"))
             })?;
-        let cnl = *self.col_index.get(&col_node).ok_or_else(|| {
+        let cnl = *col_support.node_index().get(&col_node).ok_or_else(|| {
             PyrucastError::Message(format!(
                 "add_entry: col node {col_node:?} not in col_support"
             ))
-        })? as usize;
+        })?;
         let cvi = self
             .primal_vars
             .iter()
@@ -1395,26 +1419,10 @@ impl SubMatrix {
 
         let ri = self.ordering.to_index(rnl, rvi, n_rn, n_dv);
         let ci = self.ordering.to_index(cnl, cvi, n_cn, n_pv);
+        drop(col_g);
+        drop(row_g);
         self.coo.push(ri, ci, value);
         Ok(())
-    }
-
-    /// Build the `NodeId → local position` maps from the support node lists, on
-    /// first use (idempotent). First occurrence wins, matching the previous
-    /// `position` lookup.
-    fn ensure_node_indices(&mut self) {
-        if self.row_index.is_empty() && !self.row_nodes.is_empty() {
-            self.row_index.reserve(self.row_nodes.len());
-            for (i, &n) in self.row_nodes.iter().enumerate() {
-                self.row_index.entry(n).or_insert(i as u32);
-            }
-        }
-        if self.col_index.is_empty() && !self.col_nodes.is_empty() {
-            self.col_index.reserve(self.col_nodes.len());
-            for (i, &n) in self.col_nodes.iter().enumerate() {
-                self.col_index.entry(n).or_insert(i as u32);
-            }
-        }
     }
 
     /// COO entries in **local** index form `(row, col, value)` — the block's own
@@ -1552,21 +1560,60 @@ impl SubMatrix {
     /// assert_eq!(bloc.get(a.id(), "q", a.id(), "absente"), 0.0);
     /// ```
     pub fn get(&self, row_node: NodeId, row_var: &str, col_node: NodeId, col_var: &str) -> f64 {
-        let n_rn = self.row_nodes.len();
+        let (row_g, col_g) = self.support_guards();
+        self.get_with(
+            &row_g,
+            col_g.as_deref().unwrap_or(&row_g),
+            row_node,
+            row_var,
+            col_node,
+            col_var,
+        )
+    }
+
+    /// Read guards on both supports, taking a **single** one when rows and
+    /// columns share the handle — the square case every physics produces.
+    /// Asking the same `RwLock` twice in one thread is what this avoids.
+    fn support_guards(&self) -> (ReadGuard<SubMesh>, Option<ReadGuard<SubMesh>>) {
+        let row = self.row_support.read();
+        let col = if self.col_support.same_object(&self.row_support) {
+            None
+        } else {
+            Some(self.col_support.read())
+        };
+        (row, col)
+    }
+
+    /// [`get`](Self::get) reading support guards the caller already holds — the
+    /// zero-copy form (see `book/src/developper/parallelisme.md`). Pass the same
+    /// reference twice when the block is square on one support.
+    pub(crate) fn get_with(
+        &self,
+        row_support: &SubMesh,
+        col_support: &SubMesh,
+        row_node: NodeId,
+        row_var: &str,
+        col_node: NodeId,
+        col_var: &str,
+    ) -> f64 {
+        let n_rn = row_support.connectivity().len();
         let n_dv = self.dual_vars.len();
-        let n_cn = self.col_nodes.len();
+        let n_cn = col_support.connectivity().len();
         let n_pv = self.primal_vars.len();
 
-        let rnl = match self.row_nodes.iter().position(|&n| n == row_node) {
-            Some(i) => i,
+        // `node_index` is the support's own `NodeId → position` table, built
+        // once and shared by every consumer — first occurrence wins, as the
+        // linear `position` scan this replaces did.
+        let rnl = match row_support.node_index().get(&row_node) {
+            Some(&i) => i,
             None => return 0.0,
         };
         let rvi = match self.dual_vars.iter().position(|v| v == row_var) {
             Some(i) => i,
             None => return 0.0,
         };
-        let cnl = match self.col_nodes.iter().position(|&n| n == col_node) {
-            Some(i) => i,
+        let cnl = match col_support.node_index().get(&col_node) {
+            Some(&i) => i,
             None => return 0.0,
         };
         let cvi = match self.primal_vars.iter().position(|v| v == col_var) {
@@ -1615,9 +1662,22 @@ impl SubMatrix {
     /// assert_eq!(bloc.iter_entries()[0].4, 2.0);
     /// ```
     pub fn iter_entries(&self) -> Vec<MatrixEntry> {
-        let n_rn = self.row_nodes.len();
+        let (row_g, col_g) = self.support_guards();
+        self.iter_entries_with(&row_g, col_g.as_deref().unwrap_or(&row_g))
+    }
+
+    /// [`iter_entries`](Self::iter_entries) reading support guards the caller
+    /// already holds. Pass the same reference twice for a square block.
+    pub(crate) fn iter_entries_with(
+        &self,
+        row_support: &SubMesh,
+        col_support: &SubMesh,
+    ) -> Vec<MatrixEntry> {
+        let row_nodes = row_support.connectivity();
+        let col_nodes = col_support.connectivity();
+        let n_rn = row_nodes.len();
         let n_dv = self.dual_vars.len();
-        let n_cn = self.col_nodes.len();
+        let n_cn = col_nodes.len();
         let n_pv = self.primal_vars.len();
 
         self.coo
@@ -1629,9 +1689,9 @@ impl SubMatrix {
                 let (rnl, rvi) = self.ordering.from_index(ri, n_rn, n_dv);
                 let (cnl, cvi) = self.ordering.from_index(ci, n_cn, n_pv);
                 (
-                    self.row_nodes[rnl],
+                    row_nodes[rnl],
                     self.dual_vars[rvi].clone(),
-                    self.col_nodes[cnl],
+                    col_nodes[cnl],
                     self.primal_vars[cvi].clone(),
                     v * self.factor,
                 )
@@ -2939,9 +2999,13 @@ impl Matrix {
         let (mut total, mut max_node) = (0usize, 0u32);
         for h in self {
             let sub = h.read();
-            let nodes = if row { &sub.row_nodes } else { &sub.col_nodes };
+            let support = if row {
+                sub.row_support().read()
+            } else {
+                sub.col_support().read()
+            };
             total += if row { sub.n_rows() } else { sub.n_cols() };
-            for n in nodes {
+            for n in support.connectivity() {
                 max_node = max_node.max(n.0);
             }
         }
@@ -2951,9 +3015,9 @@ impl Matrix {
         for h in self {
             let sub = h.read();
             let keys = if row {
-                sub.row_dof_keys(&slot_of)?
+                sub.row_dof_keys_with(&sub.row_support().read(), &slot_of)?
             } else {
-                sub.col_dof_keys(&slot_of)?
+                sub.col_dof_keys_with(&sub.col_support().read(), &slot_of)?
             };
             for k in keys {
                 if seen.insert(k) {
@@ -4047,19 +4111,18 @@ impl Matrix {
             .collect();
 
         // Group the blocks by support slot; union their variables per group.
-        // Same slot ⇒ same sealed POI1 ⇒ same node list, snapshot it once.
+        // Same slot ⇒ same sealed POI1 ⇒ same node list, read from the support.
         struct Group {
             support: Handle<SubMesh>,
-            nodes: Vec<NodeId>,
             vars: Vec<String>,
         }
         let mut groups: Vec<Group> = Vec::new();
         for h in self {
             let s = h.read();
-            let (support, nodes, vars) = if rows {
-                (s.row_support.clone(), &s.row_nodes, s.dual_vars())
+            let (support, vars) = if rows {
+                (s.row_support().clone(), s.dual_vars())
             } else {
-                (s.col_support.clone(), &s.col_nodes, s.primal_vars())
+                (s.col_support().clone(), s.primal_vars())
             };
             match groups.iter_mut().find(|g| g.support.same_object(&support)) {
                 Some(g) => {
@@ -4071,19 +4134,18 @@ impl Matrix {
                 }
                 None => groups.push(Group {
                     support,
-                    nodes: nodes.clone(),
                     vars: vars.to_vec(),
                 }),
             }
         }
 
         // One zone per group, on the block's own support handle. The field's
-        // row order is the support's cell order — exactly `group.nodes` (both
-        // snapshot the same sealed connectivity) — so values are written
-        // positionally, no per-node lookup.
+        // row order is the support's cell order, which is the very connectivity
+        // read below, so values are written positionally, no per-node lookup.
         let mut out = NodeField::default();
         for g in &groups {
             use crate::containers::field::SubField;
+            // Before the guard: `from_poi1` seals, which reads this same handle.
             let mut sub = SubNodeField::from_poi1(&g.support, g.vars.clone())?;
             let ncomp = g.vars.len();
             let vals = sub.values_mut();
@@ -4093,7 +4155,8 @@ impl Matrix {
                 .iter()
                 .map(|v| slot_of.get(v.as_str()).copied())
                 .collect();
-            for (ni, nid) in g.nodes.iter().enumerate() {
+            let support = g.support.read();
+            for (ni, nid) in support.connectivity().iter().enumerate() {
                 for (ci, slot) in slots.iter().enumerate() {
                     let Some(slot) = slot else { continue };
                     if let Some(&gi) = index.get(&dof_key(*nid, *slot)) {
@@ -4101,6 +4164,7 @@ impl Matrix {
                     }
                 }
             }
+            drop(support);
             out.add_sub(Handle::new(sub))?;
         }
         Ok(out)
@@ -4298,13 +4362,8 @@ impl crate::dump::Dump for Matrix {
 
 impl crate::archive::Archivable for SubMatrix {
     const TAG: &'static str = "SubMatrix";
-
-    /// Take both node lists from the (sealed) supports again. The lazy
-    /// `NodeId → position` maps rebuild themselves on first use.
-    fn on_load(&mut self) {
-        self.row_nodes = self.row_support.read().connectivity().to_vec();
-        self.col_nodes = self.col_support.read().connectivity().to_vec();
-    }
+    // No `on_load`: the block keeps no node list of its own — it reads its
+    // supports, which the archive restores with it.
 }
 
 impl crate::archive::Archivable for Matrix {
@@ -4332,6 +4391,61 @@ mod tests {
             sm.add_cell(&[node.id()]).unwrap();
         }
         (coords, nodes, Handle::new(sm))
+    }
+
+    /// Build a POI1 SubMesh whose connectivity **repeats** its first node:
+    /// cells are `[a, b, a, c, …]`. Returns `(coords, nodes, support_handle)`,
+    /// where `nodes` holds the distinct nodes in first-appearance order.
+    fn make_poi1_repeated(n: usize) -> (Handle<Coords>, Vec<Node>, Handle<SubMesh>) {
+        let coords = Handle::new(Coords::new(1).unwrap());
+        let nodes: Vec<Node> = (0..n)
+            .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
+            .collect();
+        let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+        sm.add_cell(&[nodes[0].id()]).unwrap();
+        for node in &nodes[1..] {
+            sm.add_cell(&[node.id()]).unwrap();
+            sm.add_cell(&[nodes[0].id()]).unwrap();
+        }
+        (coords, nodes, Handle::new(sm))
+    }
+
+    /// Why a block's support must have **distinct** nodes.
+    ///
+    /// The block reads its numbering straight from the support: row `i` is
+    /// `(connectivity()[node_local], dual_vars[var])`, and `add_entry` / `get`
+    /// find `node_local` through [`SubMesh::node_index`]. The two only agree
+    /// when no node repeats — `node_index` stores a **dedup-compacted rank**,
+    /// the connectivity a **flat position**.
+    ///
+    /// Every support in practice comes from `to_poi1`, which deduplicates, so
+    /// the two coincide. This test pins both halves so the requirement cannot
+    /// be forgotten: it is documented on the constructors, never validated.
+    #[test]
+    fn node_index_is_the_flat_position_only_on_a_deduplicated_support() {
+        // Distinct nodes: rank and position coincide, for every node.
+        let (_c, nodes, sup) = make_poi1(4);
+        let guard = sup.read();
+        for (position, nid) in guard.connectivity().iter().enumerate() {
+            assert_eq!(
+                guard.node_index()[nid],
+                position,
+                "deduplicated support: rank and position must agree on {nid:?}"
+            );
+        }
+        assert_eq!(guard.node_index().len(), nodes.len());
+        drop(guard);
+
+        // Repeated node: they part company, and the gap is not benign — the
+        // compacted rank names a row the flat position does not own.
+        let (_c2, nodes2, sup2) = make_poi1_repeated(3);
+        let guard2 = sup2.read();
+        // Connectivity is [a, b, a, c, a]: `b` agrees at 1, `c` does not —
+        // position 3 in the connectivity, rank 2 once deduplicated.
+        assert_eq!(guard2.connectivity().len(), 5);
+        assert_eq!(guard2.node_index()[&nodes2[1].id()], 1);
+        assert_eq!(guard2.connectivity()[3], nodes2[2].id());
+        assert_eq!(guard2.node_index()[&nodes2[2].id()], 2);
     }
 
     // ── SubMatrix tests ─────────────────────────────────────────────────────
