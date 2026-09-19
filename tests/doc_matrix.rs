@@ -131,7 +131,7 @@ fn les_entrees_vivent_dans_un_bloc() -> Result<()> {
         vec!["T".into()], // variables primales → colonnes
         DofOrdering::NodesThenVars,
         true, // symétrique
-    )?;
+    );
 
     // A simple 2-node model (a segment):
     //   K = [[ 2, -1], [-1,  2]]
@@ -182,7 +182,7 @@ fn un_bloc_de_lagrange_est_rectangulaire() -> Result<()> {
         vec!["T".into()],
         DofOrdering::NodesThenVars,
         false,
-    )?;
+    );
     block.add_entry(m0.id(), "T", a.id(), "T", 1.0)?;
     block.add_entry(m1.id(), "T", b.id(), "T", 1.0)?;
 

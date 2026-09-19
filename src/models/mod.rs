@@ -1387,7 +1387,7 @@ pub(crate) fn constraint_block_pair(
         vec![variable.to_string()],
         DofOrdering::NodesThenVars,
         false,
-    )?;
+    );
     // Cᵀ block: rows = constrained × target_dual, cols = multiplier × multiplier.
     let mut ct = SubMatrix::new(
         constrained_sm.clone(),
@@ -1396,7 +1396,7 @@ pub(crate) fn constraint_block_pair(
         vec![multiplier.to_string()],
         DofOrdering::NodesThenVars,
         false,
-    )?;
+    );
     for (cons, mult) in cons_nodes.iter().zip(mult_nodes.iter()) {
         c.add_entry(*mult, imposed_value, *cons, variable, coefficient)?;
         ct.add_entry(*cons, target_dual, *mult, multiplier, coefficient)?;

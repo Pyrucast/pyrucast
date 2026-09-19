@@ -708,8 +708,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             false,
-        )
-        .unwrap();
+        );
         block.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
         let mut m = Matrix::empty();
         m.add_sub(Handle::new(block)).unwrap();

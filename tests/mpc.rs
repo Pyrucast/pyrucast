@@ -618,7 +618,7 @@ fn elimination_condensation_cached_then_invalidated() -> Result<()> {
         vec!["T".into()],
         DofOrdering::NodesThenVars,
         false,
-    )?;
+    );
     block.add_entry(b.id(), "q", b.id(), "T", 4.0)?;
     k.add_sub(Handle::new(block))?;
     assert!(k.cached_factorization::<Condensation>().is_none());

@@ -473,7 +473,7 @@ impl SubModelKind for Embedded {
                 vec![comp.variable.clone()],
                 DofOrdering::NodesThenVars,
                 false,
-            )?;
+            );
             // Cᵀ: rows (constrained, target_dual), cols (multiplier, multiplier).
             let mut ct = SubMatrix::new(
                 support_sm.clone(),
@@ -482,7 +482,7 @@ impl SubModelKind for Embedded {
                 vec![comp.multiplier.clone()],
                 DofOrdering::NodesThenVars,
                 false,
-            )?;
+            );
             for r in 0..n {
                 let m = self.multiplier_node(r)?;
                 let p = self.immersed_node(r)?;

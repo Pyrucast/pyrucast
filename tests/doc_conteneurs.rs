@@ -252,7 +252,7 @@ fn ajouter_un_bloc_invalide_l_assemblage() -> Result<()> {
         vec!["T".into()],
         DofOrdering::NodesThenVars,
         true,
-    )?;
+    );
 
     let mut k = matrix::stiffness(&model, &materials)?;
     k.add_sub(Handle::new(bloc_supplementaire))?; // invalide l'état assemblé

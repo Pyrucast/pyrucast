@@ -476,7 +476,7 @@ impl SubModelKind for Contact {
             variables,
             DofOrdering::NodesThenVars,
             false,
-        )?;
+        );
         // Cᵀ: rows (support, every dual), cols (multiplier, multiplier).
         let mut ct = SubMatrix::new(
             support_sm,
@@ -485,7 +485,7 @@ impl SubModelKind for Contact {
             vec![self.multiplier.clone()],
             DofOrdering::NodesThenVars,
             false,
-        )?;
+        );
         for (r, p) in self.pairings.iter().enumerate() {
             let m = self.multiplier_node(r)?;
             let s = self.slave_node(r)?;

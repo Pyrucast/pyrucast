@@ -202,8 +202,7 @@ impl PyMatrix {
         };
         let row = submesh_handle(row_support)?;
         let col = submesh_handle(col_support)?;
-        let sub = SubMatrix::new(row, col, dual_vars, primal_vars, ord, symmetric)
-            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        let sub = SubMatrix::new(row, col, dual_vars, primal_vars, ord, symmetric);
         let mut m = Matrix::empty();
         m.add_sub(Handle::new(sub))?;
         Ok(Self { inner: m })

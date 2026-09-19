@@ -347,7 +347,7 @@ fn build_contribution(
                 layout.ordering,
                 layout.symmetric,
                 recipe,
-            )?]
+            )]
         }
         // An inter-mesh block: same computed path, but rows and columns on
         // different supports. Never symmetric on its own — only the four blocks
@@ -369,7 +369,7 @@ fn build_contribution(
                 layout.ordering,
                 false,
                 recipe,
-            )?]
+            )]
         }
         Contribution::Literal(blocks) => blocks,
     };
@@ -1087,8 +1087,7 @@ mod tests {
             vec!["T".into()],
             crate::containers::matrix::DofOrdering::NodesThenVars,
             true,
-        )
-        .unwrap();
+        );
         blk.add_entry(a.id(), "q", a.id(), "T", 10.0).unwrap();
         k.add_sub(Handle::new(blk)).unwrap();
 
@@ -1135,7 +1134,6 @@ mod tests {
                             col_fespaces: Vec::new(),
                         },
                     )
-                    .unwrap()
                 })
             };
             if let Some(block) = built {

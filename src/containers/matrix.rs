@@ -62,7 +62,7 @@
 //!     support.clone(), support.clone(),
 //!     vec!["q".into()], vec!["T".into()],
 //!     DofOrdering::NodesThenVars, true,
-//! ).unwrap();
+//! );
 //! k.add_entry(a.id(), "q", a.id(), "T",  2.0).unwrap();
 //! k.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
 //! k.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -115,7 +115,7 @@ use std::fmt;
 /// # let bloc = || {
 /// #     let mut z = SubMatrix::new(
 /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-/// #         DofOrdering::NodesThenVars, true).unwrap();
+/// #         DofOrdering::NodesThenVars, true);
 /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
 /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
 /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -156,7 +156,7 @@ pub type MatrixEntry = (NodeId, String, NodeId, String, f64);
 /// # let bloc = || {
 /// #     let mut z = SubMatrix::new(
 /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-/// #         DofOrdering::NodesThenVars, true).unwrap();
+/// #         DofOrdering::NodesThenVars, true);
 /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
 /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
 /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -203,7 +203,7 @@ impl DofOrdering {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true).unwrap();
+    /// #         DofOrdering::NodesThenVars, true);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -250,7 +250,7 @@ impl DofOrdering {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true).unwrap();
+    /// #         DofOrdering::NodesThenVars, true);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -367,7 +367,7 @@ pub enum KernelInputs {
 /// };
 /// let z = SubMatrix::computed(
 ///     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-///     DofOrdering::NodesThenVars, true, recette)?;
+///     DofOrdering::NodesThenVars, true, recette);
 /// assert!(z.is_computed());
 /// // Its structure is complete — hence the structural queries that
 /// // work — but it counts **no** stored entry.
@@ -431,7 +431,7 @@ fn default_factor() -> f64 {
 /// # };
 /// # let mut bloc = SubMatrix::new(
 /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-/// #     DofOrdering::NodesThenVars, true).unwrap();
+/// #     DofOrdering::NodesThenVars, true);
 /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
 /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
 /// // A **block**: its row and column supports, its variables
@@ -511,7 +511,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true).unwrap();
+    /// #     DofOrdering::NodesThenVars, true);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -527,14 +527,14 @@ impl SubMatrix {
         primal_vars: Vec<String>,
         ordering: DofOrdering,
         symmetric: bool,
-    ) -> Result<Self> {
+    ) -> Self {
         // The block's row/col numbering *is* these supports' connectivity, read
         // in place on every access rather than copied; freeze them so it holds.
         crate::containers::mesh::seal(&row_support);
         crate::containers::mesh::seal(&col_support);
         let nrows = row_support.read().connectivity().len() * dual_vars.len();
         let ncols = col_support.read().connectivity().len() * primal_vars.len();
-        Ok(Self {
+        Self {
             row_support,
             col_support,
             dual_vars,
@@ -545,7 +545,7 @@ impl SubMatrix {
             recipe: None,
             physics: Vec::new(),
             factor: 1.0,
-        })
+        }
     }
 
     /// Build a **computed** block: a sized-but-empty placeholder that carries a
@@ -589,7 +589,7 @@ impl SubMatrix {
     ///         kind: MatrixKind::Stiffness,
     ///         inputs: KernelInputs::MaterialOnly,
     ///         col_fespaces: Vec::new(),
-    ///     })?;
+    ///     });
     /// assert!(z.recipe().is_some());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -602,14 +602,14 @@ impl SubMatrix {
         ordering: DofOrdering,
         symmetric: bool,
         recipe: ComputedRecipe,
-    ) -> Result<Self> {
+    ) -> Self {
         // The block's row/col numbering *is* these supports' connectivity, read
         // in place on every access rather than copied; freeze them so it holds.
         crate::containers::mesh::seal(&row_support);
         crate::containers::mesh::seal(&col_support);
         let nrows = row_support.read().connectivity().len() * dual_vars.len();
         let ncols = col_support.read().connectivity().len() * primal_vars.len();
-        Ok(Self {
+        Self {
             row_support,
             col_support,
             dual_vars,
@@ -620,7 +620,7 @@ impl SubMatrix {
             recipe: Some(recipe),
             physics: Vec::new(),
             factor: 1.0,
-        })
+        }
     }
 
     /// Build a block from an already-assembled COO whose indices are this
@@ -648,7 +648,7 @@ impl SubMatrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true).unwrap();
+    /// #         DofOrdering::NodesThenVars, true);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -726,7 +726,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true).unwrap();
+    /// #     DofOrdering::NodesThenVars, true);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -754,7 +754,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true).unwrap();
+    /// #     DofOrdering::NodesThenVars, true);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -783,7 +783,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true).unwrap();
+    /// #     DofOrdering::NodesThenVars, true);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -822,7 +822,7 @@ impl SubMatrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true).unwrap();
+    /// #         DofOrdering::NodesThenVars, true);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -858,7 +858,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true).unwrap();
+    /// #     DofOrdering::NodesThenVars, true);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -886,7 +886,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true).unwrap();
+    /// #     DofOrdering::NodesThenVars, true);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -912,7 +912,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true).unwrap();
+    /// #     DofOrdering::NodesThenVars, true);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -939,7 +939,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true).unwrap();
+    /// #     DofOrdering::NodesThenVars, true);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -966,7 +966,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true).unwrap();
+    /// #     DofOrdering::NodesThenVars, true);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -992,7 +992,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true).unwrap();
+    /// #     DofOrdering::NodesThenVars, true);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1018,7 +1018,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true).unwrap();
+    /// #     DofOrdering::NodesThenVars, true);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1044,7 +1044,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true).unwrap();
+    /// #     DofOrdering::NodesThenVars, true);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1077,7 +1077,7 @@ impl SubMatrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true).unwrap();
+    /// #         DofOrdering::NodesThenVars, true);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1114,7 +1114,7 @@ impl SubMatrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true).unwrap();
+    /// #         DofOrdering::NodesThenVars, true);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1147,7 +1147,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true).unwrap();
+    /// #     DofOrdering::NodesThenVars, true);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1181,7 +1181,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true).unwrap();
+    /// #     DofOrdering::NodesThenVars, true);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1224,7 +1224,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true).unwrap();
+    /// #     DofOrdering::NodesThenVars, true);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1347,7 +1347,7 @@ impl SubMatrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true).unwrap();
+    /// #         DofOrdering::NodesThenVars, true);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1356,7 +1356,7 @@ impl SubMatrix {
     /// # };
     /// let mut z = SubMatrix::new(
     ///     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    ///     DofOrdering::NodesThenVars, true)?;
+    ///     DofOrdering::NodesThenVars, true);
     /// // Two calls at the same place **accumulate** — that is what lets the
     /// // assembly pour cell by cell without reading anything back.
     /// z.add_entry(a.id(), "q", a.id(), "T", 1.0)?;
@@ -1449,7 +1449,7 @@ impl SubMatrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true).unwrap();
+    /// #         DofOrdering::NodesThenVars, true);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1487,7 +1487,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true).unwrap();
+    /// #     DofOrdering::NodesThenVars, true);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1521,7 +1521,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true).unwrap();
+    /// #     DofOrdering::NodesThenVars, true);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1549,7 +1549,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true).unwrap();
+    /// #     DofOrdering::NodesThenVars, true);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1652,7 +1652,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true).unwrap();
+    /// #     DofOrdering::NodesThenVars, true);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1714,7 +1714,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true).unwrap();
+    /// #     DofOrdering::NodesThenVars, true);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1748,7 +1748,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true).unwrap();
+    /// #     DofOrdering::NodesThenVars, true);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1787,7 +1787,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true).unwrap();
+    /// #     DofOrdering::NodesThenVars, true);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1820,7 +1820,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true).unwrap();
+    /// #     DofOrdering::NodesThenVars, true);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1846,7 +1846,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true).unwrap();
+    /// #     DofOrdering::NodesThenVars, true);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1872,7 +1872,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true).unwrap();
+    /// #     DofOrdering::NodesThenVars, true);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -2160,7 +2160,7 @@ struct AssembledData {
 /// # };
 /// # let mut bloc = SubMatrix::new(
 /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-/// #     DofOrdering::NodesThenVars, true).unwrap();
+/// #     DofOrdering::NodesThenVars, true);
 /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
 /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
 /// // The aggregate: blocks, a global numbering, an assembled state.
@@ -2225,7 +2225,7 @@ crate::impl_aggregate!(Matrix, SubMatrix, sub_matrix, "sub-matrix(es)", {
 /// # let bloc = || {
 /// #     let mut z = SubMatrix::new(
 /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-/// #         DofOrdering::NodesThenVars, true).unwrap();
+/// #         DofOrdering::NodesThenVars, true);
 /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
 /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
 /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -2381,7 +2381,7 @@ impl DofSeen {
 /// # let bloc = || {
 /// #     let mut z = SubMatrix::new(
 /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-/// #         DofOrdering::NodesThenVars, true).unwrap();
+/// #         DofOrdering::NodesThenVars, true);
 /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
 /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
 /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -2450,7 +2450,7 @@ pub struct AssemblyPattern {
 /// # let bloc = || {
 /// #     let mut z = SubMatrix::new(
 /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-/// #         DofOrdering::NodesThenVars, true).unwrap();
+/// #         DofOrdering::NodesThenVars, true);
 /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
 /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
 /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -2576,7 +2576,7 @@ impl AssemblyPattern {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true).unwrap();
+    /// #         DofOrdering::NodesThenVars, true);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -2787,7 +2787,7 @@ impl Matrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true).unwrap();
+    /// #         DofOrdering::NodesThenVars, true);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -2900,7 +2900,7 @@ impl Matrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true).unwrap();
+    /// #         DofOrdering::NodesThenVars, true);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -2947,7 +2947,7 @@ impl Matrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true).unwrap();
+    /// #         DofOrdering::NodesThenVars, true);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -4023,7 +4023,7 @@ impl Matrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true).unwrap();
+    /// #         DofOrdering::NodesThenVars, true);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -4068,7 +4068,7 @@ impl Matrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true).unwrap();
+    /// #         DofOrdering::NodesThenVars, true);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -4206,7 +4206,7 @@ impl Matrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true).unwrap();
+    /// #         DofOrdering::NodesThenVars, true);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -4462,8 +4462,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             false,
-        )
-        .unwrap();
+        );
         assert_eq!(m.n_rows(), 2);
         assert_eq!(m.n_cols(), 2);
         assert_eq!(m.entry_count(), 0);
@@ -4480,8 +4479,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             true,
-        )
-        .unwrap();
+        );
         assert!(m.symmetric());
     }
 
@@ -4496,8 +4494,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             false,
-        )
-        .unwrap();
+        );
         m.add_entry(a, "q", a, "T", 2.0).unwrap();
         m.add_entry(a, "q", b, "T", -1.0).unwrap();
         m.add_entry(b, "q", a, "T", -1.0).unwrap();
@@ -4519,8 +4516,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             false,
-        )
-        .unwrap();
+        );
         // unknown field → 0.0
         assert_eq!(m.get(nodes[0].id(), "x", nodes[0].id(), "y"), 0.0);
     }
@@ -4536,8 +4532,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             false,
-        )
-        .unwrap();
+        );
         m.add_entry(a, "q", a, "T", 2.0).unwrap();
         m.add_entry(a, "q", a, "T", 1.5).unwrap();
         m.add_entry(a, "q", a, "T", -0.5).unwrap();
@@ -4555,8 +4550,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             false,
-        )
-        .unwrap();
+        );
         m.add_entry(a, "q", a, "T", 2.0).unwrap();
         m.add_entry(a, "q", b, "T", -1.0).unwrap();
         m.add_entry(b, "q", a, "T", -1.0).unwrap();
@@ -4576,8 +4570,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             false,
-        )
-        .unwrap();
+        );
         m.add_entry(a, "q", a, "T", 2.0).unwrap();
         m.add_entry(a, "q", b, "T", -1.0).unwrap();
         m.add_entry(b, "q", a, "T", -1.0).unwrap();
@@ -4611,8 +4604,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             true,
-        )
-        .unwrap();
+        );
         m.add_entry(a, "q", a, "T", 2.0).unwrap();
         m.add_entry(a, "q", b, "T", -1.0).unwrap();
         m.add_entry(b, "q", a, "T", -1.0).unwrap();
@@ -4632,8 +4624,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             false,
-        )
-        .unwrap();
+        );
         m.add_entry(a, "q", a, "T", 1.0).unwrap();
         // 1 col, but x has 2 elements
         assert!(m.mul_dense(&[1.0, 2.0]).is_err());
@@ -4650,8 +4641,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             false,
-        )
-        .unwrap();
+        );
         c.add_entry(row_nodes[0].id(), "T", col_nodes[0].id(), "T", 1.0)
             .unwrap();
         c.add_entry(row_nodes[1].id(), "T", col_nodes[1].id(), "T", 1.0)
@@ -4673,8 +4663,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             false,
-        )
-        .unwrap();
+        );
         m.add_entry(a, "q", a, "T", 1.0).unwrap();
         m.add_entry(b, "q", b, "T", 2.0).unwrap();
         m.add_entry(a, "q", a, "T", 3.0).unwrap();
@@ -4696,8 +4685,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             true,
-        )
-        .unwrap();
+        );
         m.add_entry(a, "q", a, "T", 2.0).unwrap();
         assert_eq!(m.factor(), 1.0);
 
@@ -4739,7 +4727,6 @@ mod tests {
                 DofOrdering::NodesThenVars,
                 false,
             )
-            .unwrap()
         };
 
         // A fresh block is untagged — the "rien" case.
@@ -4785,8 +4772,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             true,
-        )
-        .unwrap();
+        );
         m.add_entry(a, "q", a, "T", 2.0).unwrap();
         let d = format!("{:?}", m);
         assert!(d.contains("SubMatrix"));
@@ -4812,8 +4798,7 @@ mod tests {
             vec!["u".into(), "v".into()],
             DofOrdering::VarsThenNodes,
             false,
-        )
-        .unwrap();
+        );
         // With VarsThenNodes: row 0 = (p, node_a), row 1 = (p, node_b),
         //                     row 2 = (q, node_a), row 3 = (q, node_b)
         m.add_entry(a, "p", c, "u", 1.0).unwrap();
@@ -4845,8 +4830,7 @@ mod tests {
             vec!["u".into(), "v".into()],
             DofOrdering::NodesThenVars,
             false,
-        )
-        .unwrap();
+        );
         // With NodesThenVars: row 0 = (node_a, p), row 1 = (node_a, q),
         //                     row 2 = (node_b, p), row 3 = (node_b, q)
         m.add_entry(a, "p", c, "u", 7.0).unwrap();
@@ -4895,8 +4879,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             true,
-        )
-        .unwrap();
+        );
         a.add_entry(na, "q", ca0, "T", 2.0).unwrap();
         a.add_entry(na, "q", ca1, "T", -1.0).unwrap();
 
@@ -4914,8 +4897,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             true,
-        )
-        .unwrap();
+        );
         b.add_entry(m0, "q", m0, "T", 0.5).unwrap();
         b.add_entry(m1, "q", m0, "T", -1.0).unwrap();
         b.add_entry(m1, "q", m1, "T", 2.0).unwrap();
@@ -4940,8 +4922,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             true,
-        )
-        .unwrap();
+        );
         let b = SubMatrix::new(
             sup.clone(),
             sup,
@@ -4949,8 +4930,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             false,
-        )
-        .unwrap();
+        );
         let mut k = Matrix::empty();
         k.add_sub(Handle::new(a)).unwrap();
         k.add_sub(Handle::new(b)).unwrap();
@@ -4968,8 +4948,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             true,
-        )
-        .unwrap();
+        );
         blk.add_entry(a, "q", a, "T", 2.0).unwrap();
         blk.add_entry(b, "q", b, "T", 3.0).unwrap();
         let mut orig = Matrix::empty();
@@ -5022,8 +5001,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             true,
-        )
-        .unwrap();
+        );
         k_blk.add_entry(a, "q", a, "T", 2.0).unwrap();
         k_blk.add_entry(a, "q", b, "T", -1.0).unwrap();
         k_blk.add_entry(b, "q", a, "T", -1.0).unwrap();
@@ -5043,8 +5021,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             true,
-        )
-        .unwrap();
+        );
         m_blk.add_entry(a, "q", a, "T", 4.0).unwrap();
         m_blk.add_entry(b, "q", b, "T", 4.0).unwrap();
         let mut m = Matrix::empty();
@@ -5088,8 +5065,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             false,
-        )
-        .unwrap();
+        );
         a.add_entry(na, "q", na, "T", 2.0).unwrap();
 
         let mut b = SubMatrix::new(
@@ -5099,8 +5075,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             false,
-        )
-        .unwrap();
+        );
         b.add_entry(nb, "q", nb, "T", 3.0).unwrap();
 
         let mut k = Matrix::empty();
@@ -5139,8 +5114,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             false,
-        )
-        .unwrap();
+        );
         a.add_entry(na, "q", na, "T", 2.0).unwrap();
         let mut b = SubMatrix::new(
             sup_b.clone(),
@@ -5149,8 +5123,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             false,
-        )
-        .unwrap();
+        );
         b.add_entry(nb, "q", nb, "T", 3.0).unwrap();
 
         let mut k = Matrix::empty();
@@ -5184,8 +5157,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             false,
-        )
-        .unwrap();
+        );
         m.add_entry(a, "q", a, "T", 1.0).unwrap();
         let mut k = Matrix::empty();
         k.add_sub(Handle::new(m)).unwrap();
@@ -5213,8 +5185,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             true,
-        )
-        .unwrap();
+        );
         a.add_entry(na0, "q", na0, "T", 2.0).unwrap();
         a.add_entry(na0, "q", na1, "T", -1.0).unwrap();
 
@@ -5229,8 +5200,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             true,
-        )
-        .unwrap();
+        );
         b.add_entry(na1, "q", na0, "T", -1.0).unwrap();
         b.add_entry(na1, "q", na1, "T", 2.0).unwrap();
 
@@ -5257,8 +5227,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             true,
-        )
-        .unwrap();
+        );
         sm.add_entry(a, "q", a, "T", 2.0).unwrap();
         sm.add_entry(a, "q", b, "T", -1.0).unwrap();
         sm.add_entry(b, "q", a, "T", -1.0).unwrap();
@@ -5308,8 +5277,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             false,
-        )
-        .unwrap();
+        );
         a.add_entry(na, "q", na, "T", 1.0).unwrap();
 
         let mut b = SubMatrix::new(
@@ -5319,8 +5287,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             false,
-        )
-        .unwrap();
+        );
         b.add_entry(nb, "q", nb, "T", 2.0).unwrap();
 
         let mut k = Matrix::empty();
@@ -5344,8 +5311,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             true,
-        )
-        .unwrap();
+        );
         a.add_entry(a_id, "q", a_id, "T", 2.0).unwrap();
         let mut k = Matrix::empty();
         k.add_sub(Handle::new(a)).unwrap();
@@ -5391,8 +5357,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             true,
-        )
-        .unwrap();
+        );
         k.add_entry(phys_nodes[0].id(), "q", phys_nodes[0].id(), "T", 1.0)
             .unwrap();
         let mut c = SubMatrix::new(
@@ -5402,8 +5367,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             false,
-        )
-        .unwrap();
+        );
         c.add_entry(mult_node.id(), "imposed_T", phys_nodes[0].id(), "T", 1.0)
             .unwrap();
         let mut ct = SubMatrix::new(
@@ -5413,8 +5377,7 @@ mod tests {
             vec!["lambda_T".into()],
             DofOrdering::NodesThenVars,
             false,
-        )
-        .unwrap();
+        );
         ct.add_entry(phys_nodes[0].id(), "q", mult_node.id(), "lambda_T", 1.0)
             .unwrap();
 
@@ -5461,8 +5424,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             false,
-        )
-        .unwrap();
+        );
         a.add_entry(nodes[0].id(), "q", nodes[0].id(), "T", 1.0)
             .unwrap();
         let mut b = SubMatrix::new(
@@ -5472,8 +5434,7 @@ mod tests {
             vec!["P".into()],
             DofOrdering::NodesThenVars,
             false,
-        )
-        .unwrap();
+        );
         b.add_entry(nodes[1].id(), "r", nodes[1].id(), "P", 1.0)
             .unwrap();
 
@@ -5529,8 +5490,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             true,
-        )
-        .unwrap();
+        );
         k.add_entry(n0.id(), "q", n0.id(), "T", 2.0).unwrap();
         k.add_entry(n1.id(), "q", n1.id(), "T", 2.0).unwrap();
         let mut c = SubMatrix::new(
@@ -5540,8 +5500,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             false,
-        )
-        .unwrap();
+        );
         c.add_entry(nm.id(), "imposed_T", n0.id(), "T", 1.0)
             .unwrap();
         let mut m = Matrix::empty();
@@ -5635,8 +5594,7 @@ mod tests {
             vec!["T".into()],
             DofOrdering::NodesThenVars,
             false,
-        )
-        .unwrap();
+        );
         blk.add_entry(r0.id(), "q", c0.id(), "T", 1.0).unwrap();
 
         let mut m = Matrix::empty();
