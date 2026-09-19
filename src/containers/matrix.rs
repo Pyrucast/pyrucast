@@ -1374,6 +1374,33 @@ impl SubMatrix {
         col_var: &str,
         value: f64,
     ) -> Result<()> {
+        // The supports' own `NodeId → position` tables, borrowed in place. Rows
+        // and columns usually share one handle, so ask that lock only once.
+        // The computed-block refusal lives in `add_entry_with`, tested once here
+        // rather than twice.
+        let (row_g, col_g) = self.support_guards();
+        let row = &row_g;
+        let col = col_g.as_deref().unwrap_or(&row_g);
+        self.add_entry_with(row, col, row_node, row_var, col_node, col_var, value)
+    }
+
+    /// [`add_entry`](Self::add_entry) reading support guards the caller already
+    /// holds — the zero-copy form (see `book/src/developper/parallelisme.md`).
+    /// Pass the same reference twice for a square block.
+    ///
+    /// A caller filling a block in a loop should hold the guards once and use
+    /// this, rather than let every entry re-lock the supports.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn add_entry_with(
+        &mut self,
+        row_support: &SubMesh,
+        col_support: &SubMesh,
+        row_node: NodeId,
+        row_var: &str,
+        col_node: NodeId,
+        col_var: &str,
+        value: f64,
+    ) -> Result<()> {
         if self.is_computed() {
             return Err(PyrucastError::Message(
                 "add_entry: this is a computed block (its values come from its \
@@ -1381,12 +1408,6 @@ impl SubMatrix {
                     .into(),
             ));
         }
-        // The supports' own `NodeId → position` tables, borrowed in place. Rows
-        // and columns usually share one handle, so ask that lock only once.
-        let (row_g, col_g) = self.support_guards();
-        let row_support: &SubMesh = &row_g;
-        let col_support: &SubMesh = col_g.as_deref().unwrap_or(&row_g);
-
         let n_rn = row_support.connectivity().len();
         let n_dv = self.dual_vars.len();
         let n_cn = col_support.connectivity().len();
@@ -1419,8 +1440,6 @@ impl SubMatrix {
 
         let ri = self.ordering.to_index(rnl, rvi, n_rn, n_dv);
         let ci = self.ordering.to_index(cnl, cvi, n_cn, n_pv);
-        drop(col_g);
-        drop(row_g);
         self.coo.push(ri, ci, value);
         Ok(())
     }

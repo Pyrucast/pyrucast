@@ -1377,8 +1377,6 @@ pub(crate) fn constraint_block_pair(
     imposed_value: &str,
     coefficient: f64,
 ) -> Result<(SubMatrix, SubMatrix)> {
-    let mult_nodes: Vec<NodeId> = multiplier_sm.read().connectivity().to_vec();
-    let cons_nodes: Vec<NodeId> = constrained_sm.read().connectivity().to_vec();
     // C block: rows = multiplier × imposed_value, cols = constrained × variable.
     let mut c = SubMatrix::new(
         multiplier_sm.clone(),
@@ -1397,9 +1395,33 @@ pub(crate) fn constraint_block_pair(
         DofOrdering::NodesThenVars,
         false,
     );
-    for (cons, mult) in cons_nodes.iter().zip(mult_nodes.iter()) {
-        c.add_entry(*mult, imposed_value, *cons, variable, coefficient)?;
-        ct.add_entry(*cons, target_dual, *mult, multiplier, coefficient)?;
+    // Both blocks are built — hence both `seal`s, the only writers here — so the
+    // node lists can now be read in place instead of copied: `add_entry` only
+    // ever takes a read guard on the supports.
+    let (mult_g, cons_g) = (multiplier_sm.read(), constrained_sm.read());
+    for (cons, mult) in cons_g
+        .connectivity()
+        .iter()
+        .zip(mult_g.connectivity().iter())
+    {
+        c.add_entry_with(
+            &mult_g,
+            &cons_g,
+            *mult,
+            imposed_value,
+            *cons,
+            variable,
+            coefficient,
+        )?;
+        ct.add_entry_with(
+            &cons_g,
+            &mult_g,
+            *cons,
+            target_dual,
+            *mult,
+            multiplier,
+            coefficient,
+        )?;
     }
     Ok((c, ct))
 }

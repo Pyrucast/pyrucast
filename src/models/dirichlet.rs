@@ -37,7 +37,7 @@
 //! be overridden by hand.
 
 use crate::aggregate::Aggregate;
-use crate::atoms::{ElementType, NodeId};
+use crate::atoms::ElementType;
 use crate::containers::element_field::SubElementField;
 use crate::containers::mesh::Mesh;
 use crate::dump::DumpOptions;
@@ -405,11 +405,15 @@ impl Constraint for Dirichlet {
     fn relations(&self) -> Result<Vec<Relation>> {
         let mut relations = Vec::with_capacity(self.imposed_mesh.cell_count());
         for i in 0..self.imposed_mesh.len() {
-            let imposed_nodes: Vec<NodeId> =
-                self.imposed_mesh.get(i)?.read().connectivity().to_vec();
-            let multiplier_nodes: Vec<NodeId> =
-                self.multiplier_mesh.get(i)?.read().connectivity().to_vec();
-            for (imp, mult) in imposed_nodes.iter().zip(multiplier_nodes.iter()) {
+            // Read in place: the loop below only copies ids out by value and
+            // clones strings, it never re-locks either submesh.
+            let imposed = self.imposed_mesh.get(i)?.read();
+            let multiplier = self.multiplier_mesh.get(i)?.read();
+            for (imp, mult) in imposed
+                .connectivity()
+                .iter()
+                .zip(multiplier.connectivity().iter())
+            {
                 relations.push(Relation {
                     multiplier_node: *mult,
                     imposed_value: self.imposed_value.clone(),

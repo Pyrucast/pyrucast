@@ -39,7 +39,7 @@
 //! [`Model::dual_of`](crate::containers::model::Model::dual_of).
 
 use crate::aggregate::Aggregate;
-use crate::atoms::{ElementType, NodeId};
+use crate::atoms::ElementType;
 use crate::containers::element_field::SubElementField;
 use crate::containers::mesh::Mesh;
 use crate::dump::DumpOptions;
@@ -526,28 +526,30 @@ impl Constraint for Mpc {
         let n_sub = self.multiplier_mesh.len();
         let mut relations = Vec::new();
         for i in 0..n_sub {
-            let mult_nodes: Vec<NodeId> =
-                self.multiplier_mesh.get(i)?.read().connectivity().to_vec();
-            // One node list per term for this submesh (relation r = index r).
-            let term_nodes: Vec<Vec<NodeId>> = self
+            let mult = self.multiplier_mesh.get(i)?.read();
+            // One **guard** per term for this submesh, all held together, so the
+            // relation at index r reads the r-th node of each in place. Two terms
+            // may name the same submesh: two read guards on one object, which the
+            // lock allows (see `handle.rs`, Concurrency).
+            let term_guards: Vec<crate::handle::ReadGuard<crate::containers::mesh::SubMesh>> = self
                 .terms
                 .iter()
-                .map(|t| Ok(t.mesh.get(i)?.read().connectivity().to_vec()))
+                .map(|t| Ok(t.mesh.get(i)?.read()))
                 .collect::<Result<Vec<_>>>()?;
-            for (r, mult) in mult_nodes.iter().enumerate() {
+            for (r, mult_node) in mult.connectivity().iter().enumerate() {
                 let terms = self
                     .terms
                     .iter()
-                    .enumerate()
-                    .map(|(k, t)| ConstraintTerm {
-                        node: term_nodes[k][r],
+                    .zip(&term_guards)
+                    .map(|(t, g)| ConstraintTerm {
+                        node: g.connectivity()[r],
                         variable: t.variable.clone(),
                         target_dual: t.target_dual.clone(),
                         coefficient: t.coefficient,
                     })
                     .collect();
                 relations.push(Relation {
-                    multiplier_node: *mult,
+                    multiplier_node: *mult_node,
                     imposed_value: self.imposed_value.clone(),
                     terms,
                     sense: self.sense,
