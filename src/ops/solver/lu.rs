@@ -4,8 +4,9 @@
 //! sparse linear algebra of [`faer`]. It exposes a single free function —
 //! [`solve`] — that:
 //!
-//! 1. converts the assembled `Matrix` to a CSC (`nalgebra_sparse`), then to a
-//!    faer `SparseColMat`;
+//! 1. hands faer the assembled CSR **borrowed**: one counting-sort transpose
+//!    into column-major arrays, wrapped as a `SparseColMatRef`. The matrix is
+//!    never materialised in another form;
 //! 2. reads a right-hand-side vector out of the `NodeField`, one entry
 //!    per **row DOF** of the matrix (zones resolved first-found; missing
 //!    entries default to `0.0`);

@@ -69,12 +69,25 @@ L'ordre des DOFs dans `row_dofs()` / `col_dofs()` est l'**ordre de première ren
 - `ops::matrix::stiffness(model, materials)` construit les blocs (calculés pour les physiques volumiques, littéraux pour Dirichlet) et assemble, motif mémoïsé sur le `Model`.
 - `Matrix::assemble(&mut self)` réassemble une matrice **depuis ses blocs seuls**, sans `Model` : c'est le chemin de **composition** — combiner une sous-matrice neuve (de provenance quelconque) à une matrice existante puis réassembler. La `Matrix` ne dépendant que de ses blocs, cette composabilité de base est ainsi préservée y compris en présence de blocs calculés.
 
-Les opérations qui profitent du creux (matrice-vecteur, factorisation directe) utilisent `nalgebra-sparse` via des conversions à la demande :
+Pour qui veut une matrice creuse d'une autre bibliothèque, des conversions **à la demande** existent — elles fabriquent un objet neuf et ne retiennent rien :
 
 - [`Matrix::to_csr`](#api-rust--accès-en-lecture) → `nalgebra_sparse::CsrMatrix<f64>`
 - [`Matrix::to_csc`](#api-rust--accès-en-lecture) → `nalgebra_sparse::CscMatrix<f64>`
 - [`Matrix::to_coo`](#api-rust--accès-en-lecture) → `nalgebra_sparse::CooMatrix<f64>`
 - [`Matrix::to_dmatrix`](#api-rust--accès-en-lecture) → `nalgebra::DMatrix<f64>`
+
+Mais **le solveur n'en emprunte aucune**. La forme assemblée n'a pas besoin d'être
+convertie, seulement d'être regardée sous le bon angle : une CSR est, octet pour
+octet, la CSC de la transposée, et une CSC triée sans doublon est exactement ce que
+le LU creux de faer demande. `ops::solver::lu` lit donc les tableaux par
+[`Matrix::csr_arrays`](#api-rust--accès-en-lecture) — **empruntés**, la sparsité
+restant celle du motif — transpose une fois par tri par comptage, et tend à faer
+une vue. Aucune copie de la matrice ne coexiste avec la factorisation, qui est
+le moment où la mémoire est la plus tendue.
+
+Le produit matrice-vecteur, lui, tire parti de l'orientation **lignes** : lectures
+contiguës, un accumulateur par ligne, parallélisable sur les lignes sans atomique.
+C'est la raison pour laquelle la forme assemblée reste une CSR.
 
 ## Facteur scalaire et somme de matrices
 
