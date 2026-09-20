@@ -368,6 +368,36 @@ def test_division_by_zero_is_refused():
         k / 0.0
     with pytest.raises(ValueError):
         k / float("inf")
+    with pytest.raises(ZeroDivisionError):
+        block / 0.0
+    with pytest.raises(ValueError):
+        block / float("inf")
+
+
+def test_sub_matrix_scales_like_the_matrix():
+    """A block carries the same scalar algebra as the aggregate: `*`, `/`,
+    the scalar on either side, and the unary minus — all on `factor`, so no
+    stored value is rewritten."""
+    c = pyrucast.Coords(1)
+    a = c.add_node([0.0])
+    block = _make_block(c, [a], [a], ["q"], ["T"], symmetric=True)
+    block.add_entry(a, "q", a, "T", 2.0)
+
+    assert (block * 2.5).factor == 2.5
+    assert (2.5 * block).factor == 2.5
+    assert (block / 4.0).factor == 0.25
+    assert (-block).factor == -1.0
+    assert block.factor == 1.0, "the source block is untouched"
+
+    # The factor reaches the values the block emits, and chains.
+    scaled = block * 3.0
+    assert scaled.get(a, "q", a, "T") == 6.0
+    assert (scaled / 2.0).get(a, "q", a, "T") == 3.0
+
+    # And a scaled block still sums like any other.
+    total = scaled + block
+    total.finalize()
+    assert total.get(a, "q", a, "T") == 8.0
 
 
 def test_sum_counts_a_shared_block_twice_where_union_drops_it():

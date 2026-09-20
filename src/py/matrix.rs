@@ -14,6 +14,25 @@ use pyo3::prelude::*;
 /// `(row_node, row_field, col_node, col_field, value)` tuple per entry.
 type PyMatrixEntries = Vec<(u32, String, u32, String, f64)>;
 
+/// Reject a divisor that would make every value of the result non-finite.
+///
+/// The Rust operator stops the program on one — a scalar operator yields the
+/// value type, so it has no fallible form to return. Here a zero can actually
+/// reach us from user data, so it becomes the exception Python expects.
+fn check_divisor(rhs: f64, what: &str) -> PyResult<()> {
+    if rhs == 0.0 {
+        return Err(pyo3::exceptions::PyZeroDivisionError::new_err(format!(
+            "{what} division by zero"
+        )));
+    }
+    if !rhs.is_finite() {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "{what} division by {rhs}: every value of the result would be non-finite"
+        )));
+    }
+    Ok(())
+}
+
 // ─── PySubMatrix ───────────────────────────────────────────────────────────
 
 /// One block (a COO sub-matrix) of a global `Matrix`, viewed by indexing
@@ -83,6 +102,31 @@ impl PySubMatrix {
     #[getter]
     fn factor(&self) -> f64 {
         self.handle.read().factor()
+    }
+
+    /// `sub_matrix * scalar` — a fresh block carrying the scaled `factor`
+    /// (lazy: no stored value is rewritten, so it works on a *computed* block
+    /// too, whose values only exist once the matrix is assembled).
+    fn __mul__(&self, rhs: f64) -> PySubMatrix {
+        PySubMatrix {
+            handle: Handle::new(&*self.handle.read() * rhs),
+        }
+    }
+
+    /// `scalar * sub_matrix` — the mirror of `sub_matrix * scalar`.
+    fn __rmul__(&self, lhs: f64) -> PySubMatrix {
+        self.__mul__(lhs)
+    }
+
+    /// `sub_matrix / scalar` — a fresh block carrying the divided `factor`
+    /// (lazy). Raises `ZeroDivisionError` for a divisor of zero, and
+    /// `ValueError` for one that is not finite: either would make every value
+    /// the block emits non-finite.
+    fn __truediv__(&self, rhs: f64) -> PyResult<PySubMatrix> {
+        check_divisor(rhs, "sub_matrix")?;
+        Ok(PySubMatrix {
+            handle: Handle::new(&*self.handle.read() / rhs),
+        })
     }
 
     /// The physics nature(s) of the sub-model that produced this block, as a list
@@ -326,16 +370,7 @@ impl PyMatrix {
     /// for a divisor of zero, and `ValueError` for one that is not finite:
     /// either would make every value of the result non-finite.
     fn __truediv__(&self, rhs: f64) -> PyResult<PyMatrix> {
-        if rhs == 0.0 {
-            return Err(pyo3::exceptions::PyZeroDivisionError::new_err(
-                "matrix division by zero",
-            ));
-        }
-        if !rhs.is_finite() {
-            return Err(pyo3::exceptions::PyValueError::new_err(format!(
-                "matrix division by {rhs}: every value of the result would be non-finite"
-            )));
-        }
+        check_divisor(rhs, "matrix")?;
         Ok(PyMatrix {
             inner: &self.inner / rhs,
         })

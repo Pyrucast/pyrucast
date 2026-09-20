@@ -957,12 +957,14 @@ class Matrix:
         r"""
         Re-assemble this matrix **from its blocks alone** — no `Model` —
         mutating it in place. The composition path: after combining blocks of
-        any provenance (via `matrix * scalar` / `matrix / scalar`, `|` union,
-        `add_sub`, `filter`, …), including *computed* ones (which `finalize()`
-        refuses — the element kernel lives outside `containers`), call this to
-        fold everything into one CSR. Needed, for instance, to solve
-        `(M/dt + K) u = …` : `sys = (m / dt) | k; sys.assemble();
-        pyrucast.solver.solve(sys, rhs)`.
+        any provenance (via `+`/`-`, `|` union, `add_sub`, `filter`, …),
+        including *computed* ones (which `finalize()` refuses — the element
+        kernel lives outside `containers`), call this to fold everything into
+        one CSR. Needed, for instance, to solve `(M/dt + K) u = …` :
+        `sys = m / dt + k; sys.assemble(); pyrucast.solver.solve(sys, rhs)`.
+        
+        Not needed after a bare `matrix * scalar`: scaling carries the assembled
+        CSR along, scaled.
         """
     def finalize(self) -> None:
         r"""
@@ -1023,7 +1025,18 @@ class Matrix:
     def __truediv__(self, rhs: builtins.float) -> Matrix:
         r"""
         `matrix / scalar` — a fresh `Matrix` whose blocks carry the divided
-        `factor` (lazy). Not finalized; see `__mul__`.
+        `factor` (lazy). Not finalized; see `__mul__`. Raises `ZeroDivisionError`
+        for a divisor of zero, and `ValueError` for one that is not finite:
+        either would make every value of the result non-finite.
+        """
+    def __rmul__(self, lhs: builtins.float) -> Matrix:
+        r"""
+        `scalar * matrix` — the mirror of `matrix * scalar`.
+        """
+    def __neg__(self) -> Matrix:
+        r"""
+        `-matrix` — a fresh `Matrix` whose blocks carry the negated `factor`
+        (lazy). Sugar for `matrix * -1.0`.
         """
     def entries(self) -> builtins.list[tuple[builtins.int, builtins.str, builtins.int, builtins.str, builtins.float]]:
         r"""
@@ -1042,6 +1055,18 @@ class Matrix:
         `matrix * scalar` → a fresh `Matrix` whose blocks carry the scaled
         `factor` (lazy — no value is rewritten). **Not** finalized: call
         `finalize()` (or `assemble` for computed blocks) before solving.
+        """
+    def __add__(self, rhs: Matrix  |  SubMatrix) -> Matrix:
+        r"""
+        `matrix + other` → a fresh `Matrix` holding the blocks of both,
+        shared and **not** deduplicated: `k + k` is `2k` where `k | k` is `k`.
+        Reach for `|` to compose one operator out of distinct parts, for `+` to
+        add two operators. **Not** finalized: call `assemble()` before solving.
+        """
+    def __sub__(self, rhs: Matrix  |  SubMatrix) -> Matrix:
+        r"""
+        `matrix - other` → as `+`, with the right-hand side's blocks
+        negated (which copies them, the factor living in the block).
         """
     @typing.overload
     def __getitem__(self, key: int) -> SubMatrix:
@@ -3112,6 +3137,23 @@ class SubMatrix:
         r"""
         Number of stored COO entries.
         """
+    def __mul__(self, rhs: builtins.float) -> SubMatrix:
+        r"""
+        `sub_matrix * scalar` — a fresh block carrying the scaled `factor`
+        (lazy: no stored value is rewritten, so it works on a *computed* block
+        too, whose values only exist once the matrix is assembled).
+        """
+    def __rmul__(self, lhs: builtins.float) -> SubMatrix:
+        r"""
+        `scalar * sub_matrix` — the mirror of `sub_matrix * scalar`.
+        """
+    def __truediv__(self, rhs: builtins.float) -> SubMatrix:
+        r"""
+        `sub_matrix / scalar` — a fresh block carrying the divided `factor`
+        (lazy). Raises `ZeroDivisionError` for a divisor of zero, and
+        `ValueError` for one that is not finite: either would make every value
+        the block emits non-finite.
+        """
     def physics(self) -> builtins.list[builtins.str]:
         r"""
         The physics nature(s) of the sub-model that produced this block, as a list
@@ -3145,6 +3187,20 @@ class SubMatrix:
         tuples, in insertion order.
         """
     def __len__(self) -> builtins.int: ...
+    def __add__(self, rhs: Matrix  |  SubMatrix) -> Matrix:
+        r"""
+        `sub_matrix + other` → a fresh `Matrix` holding this block and the
+        other operand's, as `Matrix.__add__` does.
+        """
+    def __sub__(self, rhs: Matrix  |  SubMatrix) -> Matrix:
+        r"""
+        `sub_matrix - other` → as `+`, with the right-hand side negated.
+        """
+    def __neg__(self) -> SubMatrix:
+        r"""
+        `-sub_matrix` → a fresh block carrying the negated `factor`
+        (lazy — no value is rewritten).
+        """
     def __or__(self, other: SubMatrix) -> Matrix:
         r"""
         `sub_matrix | sub_matrix` → a fresh `Matrix` holding both blocks.

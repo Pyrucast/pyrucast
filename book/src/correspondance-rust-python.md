@@ -369,7 +369,7 @@ vaut `k`, `k + k` vaut `2k`.
 | `Matrix` | `k * s`, `s * k`, `k / s` (`s`: `float`) | facteur scalaire, blocs clonés dans de nouveaux slots (aucune valeur réécrite), CSR assemblée mise à l'échelle avec, `k` inchangée | `Mul`/`Div<f64> for &Matrix`, `Mul<Matrix> for f64` |
 | `Matrix` | `-k` | facteur nié, sucre pour `k * -1.0` | `Neg for &Matrix` |
 | `Matrix`, `SubMatrix` | `a + b`, `a - b` | somme : blocs des deux opérandes, partagés, **non** dédoublonnés ; résultat non assemblé | `Add`/`Sub` (toutes combinaisons `Matrix`/`SubMatrix`) |
-| `SubMatrix` | `-b` | bloc neuf au facteur nié | `Neg for &SubMatrix` |
+| `SubMatrix` | `b * s`, `s * b`, `b / s`, `-b` | bloc neuf au facteur ajusté (aucune valeur réécrite) | `Mul`/`Div<f64>`/`Neg for &SubMatrix` |
 | `SubMatrix` | `.factor` (lecture seule) | facteur courant du bloc (`1.0` par défaut) | `SubMatrix::factor` |
 
 ### Indexation par clé
