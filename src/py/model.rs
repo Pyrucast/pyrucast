@@ -155,7 +155,7 @@ impl PyModel {
     /// `"radiation"`.
     fn filter(&self, physics: Physics) -> PyResult<Self> {
         Ok(Self {
-            inner: self.inner.filter(physics)?,
+            inner: self.inner.filter(physics),
         })
     }
 

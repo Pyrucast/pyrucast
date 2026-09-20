@@ -255,11 +255,11 @@ fn the_interface_takes_its_nature_from_its_target() -> Result<()> {
     let (_, model, _) = two_square_model(5.0)?;
     // The two Fick squares, and the interface tying them; the support and the
     // input are constraints and a load, counted apart.
-    let diffusion = model.filter(Physics::Diffusion)?;
+    let diffusion = model.filter(Physics::Diffusion);
     assert!(diffusion
         .iter()
         .any(|sub| sub.read().as_kind().label() == "InterfaceTransfer"));
-    assert!(model.filter(Physics::Thermal)?.is_empty());
+    assert!(model.filter(Physics::Thermal).is_empty());
     Ok(())
 }
 

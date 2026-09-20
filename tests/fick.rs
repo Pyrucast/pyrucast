@@ -151,11 +151,11 @@ fn diffusion_and_conduction_coexist_and_filter_apart() -> Result<()> {
     let full = pyrucast::ops::matrix::stiffness(&model, &materials)?;
 
     // The nature selectors split the model — and the assembled matrix — apart.
-    let only_diffusion = model.filter(Physics::Diffusion)?;
-    let only_thermal = model.filter(Physics::Thermal)?;
+    let only_diffusion = model.filter(Physics::Diffusion);
+    let only_thermal = model.filter(Physics::Thermal);
     assert_eq!(only_diffusion.len(), 1);
     assert_eq!(only_thermal.len(), 1);
-    assert!(model.filter(Physics::Mechanical)?.is_empty());
+    assert!(model.filter(Physics::Mechanical).is_empty());
 
     // The diffusion block alone is the diffusion part of the coupled matrix:
     // `D` scales the same Laplacian, so its (0,0) entry is `D/h` against `K/h`.

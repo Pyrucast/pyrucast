@@ -3935,18 +3935,23 @@ impl Matrix {
     /// # use pyrucast::models::Physics;
     /// # use pyrucast::ops::model;
     /// // The result is **not** assembled: call `assemble` before solving.
-    /// let thermique = k.filter(Physics::Thermal).unwrap();
+    /// let thermique = k.filter(Physics::Thermal);
     /// assert_eq!(thermique.len(), 1);
-    /// assert!(k.filter(Physics::Mechanical).unwrap().is_empty());
+    /// assert!(k.filter(Physics::Mechanical).is_empty());
     /// ```
-    pub fn filter(&self, physics: Physics) -> Result<Matrix> {
-        let mut indices: Vec<usize> = Vec::new();
-        for (i, h) in self.iter().enumerate() {
+    pub fn filter(&self, physics: Physics) -> Matrix {
+        // Built block by block rather than through `subset`: that one is
+        // fallible on an out-of-range index, which selecting by predicate
+        // cannot produce — and `Matrix` is the one aggregate with no
+        // `check_push`, so appending never fails either.
+        let mut out = Matrix::empty();
+        for h in self {
             if h.read().physics().contains(&physics) {
-                indices.push(i);
+                out.push(h.clone());
             }
         }
-        self.subset(indices)
+        out.post_push();
+        out
     }
 
     /// The set of [`Physics`] natures present across this matrix's blocks —
@@ -4768,10 +4773,10 @@ mod tests {
         let _ = a; // silence unused in some build configs
 
         // Containment: the coupled block appears under both its natures.
-        assert_eq!(k.filter(Physics::Mechanical).unwrap().len(), 1);
-        assert_eq!(k.filter(Physics::Thermal).unwrap().len(), 1);
+        assert_eq!(k.filter(Physics::Mechanical).len(), 1);
+        assert_eq!(k.filter(Physics::Thermal).len(), 1);
         // Only the explicitly-tagged block is reached by Other; the bare one never.
-        assert_eq!(k.filter(Physics::Other).unwrap().len(), 1);
+        assert_eq!(k.filter(Physics::Other).len(), 1);
         // The aggregate reports every distinct nature present (bare contributes none).
         let present = k.physics();
         assert!(present.contains(&Physics::Mechanical));

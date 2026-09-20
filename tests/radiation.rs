@@ -136,9 +136,9 @@ fn radiation_answers_to_both_of_its_natures() -> Result<()> {
     let coupled = fixture.bulk.union(&fixture.radiation)?;
     assert_eq!(coupled.len(), 2);
     // Both sub-models are thermal; only one is radiative.
-    assert_eq!(coupled.filter(Physics::Thermal)?.len(), 2);
-    assert_eq!(coupled.filter(Physics::Radiation)?.len(), 1);
-    assert!(coupled.filter(Physics::Diffusion)?.is_empty());
+    assert_eq!(coupled.filter(Physics::Thermal).len(), 2);
+    assert_eq!(coupled.filter(Physics::Radiation).len(), 1);
+    assert!(coupled.filter(Physics::Diffusion).is_empty());
     Ok(())
 }
 

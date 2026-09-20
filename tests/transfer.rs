@@ -155,8 +155,8 @@ fn the_foundation_takes_its_nature_from_the_elasticity() -> Result<()> {
 
     let elastic = model::elasticity(&fes, Kinematics::PlaneStress)?;
     let appui = model::boundary_transfer(&right, &elastic, vec![("u_x".into(), "f_x".into())])?;
-    assert_eq!(appui.filter(Physics::Mechanical)?.len(), 1);
-    assert!(appui.filter(Physics::Thermal)?.is_empty());
+    assert_eq!(appui.filter(Physics::Mechanical).len(), 1);
+    assert!(appui.filter(Physics::Thermal).is_empty());
 
     // A conduction on the same square assembles no displacement.
     let conduction = model::heat_conduction(&fes)?;

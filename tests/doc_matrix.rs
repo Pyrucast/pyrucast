@@ -64,7 +64,7 @@ fn filtrer_une_matrice_par_nature() -> Result<()> {
     let (model, materials, _, _) = barre()?;
     let k = matrix::stiffness(&model, &materials)?;
 
-    let k_meca = k.filter(Physics::Mechanical)?; // blocs au moins mécaniques
+    let k_meca = k.filter(Physics::Mechanical); // blocs au moins mécaniques
     let natures = k.physics(); // ex. [Thermal, Constraint]
 
     assert!(k_meca.is_empty()); // ce modèle est thermique

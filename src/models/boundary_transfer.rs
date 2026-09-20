@@ -396,7 +396,7 @@ crate::physics_operator! {
     /// assert_eq!(film.primal_vars(), vec!["T".to_string()]);
     /// // United with the conduction, it files under the same kind as it.
     /// let m = conduction.union(&film)?;
-    /// assert_eq!(m.filter(Physics::Thermal)?.len(), 2);
+    /// assert_eq!(m.filter(Physics::Thermal).len(), 2);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn boundary_transfer(fes, target, components: Vec<(String, String)>) via SubModel::boundary_transfer;

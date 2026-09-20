@@ -2073,7 +2073,7 @@ impl crate::dump::Dump for SubModel {
 ///     &model::dirichlet(&cible, "T", &impose, &mult,
 ///                       RelationSense::Equality)?)?;
 /// assert_eq!(m.len(), 2);
-/// assert_eq!(m.filter(Physics::Thermal)?.len(), 1);
+/// assert_eq!(m.filter(Physics::Thermal).len(), 1);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Serialize, Deserialize, Default)]
@@ -2574,18 +2574,23 @@ impl Model {
     ///     .union(&model::elasticity(&fes, Kinematics::PlaneStress)?)?;
     /// // Extracting one physics from the multi-physics model — the sub-models
     /// // are **shared**, not copied.
-    /// assert_eq!(m.filter(Physics::Thermal)?.primal_vars(), vec!["T".to_string()]);
-    /// assert!(m.filter(Physics::Diffusion)?.is_empty());
+    /// assert_eq!(m.filter(Physics::Thermal).primal_vars(), vec!["T".to_string()]);
+    /// assert!(m.filter(Physics::Diffusion).is_empty());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn filter(&self, physics: Physics) -> Result<Model> {
-        let mut indices: Vec<usize> = Vec::new();
-        for (i, h) in self.iter().enumerate() {
+    pub fn filter(&self, physics: Physics) -> Model {
+        // Built sub-model by sub-model rather than through `subset`: that one is
+        // fallible on an out-of-range index, which selecting by predicate cannot
+        // produce — and `Model`, like `Matrix`, declares no `check_push`, so
+        // appending never fails either. Nothing matching yields an empty model.
+        let mut out = Model::empty();
+        for h in self {
             if h.read().physics().contains(&physics) {
-                indices.push(i);
+                out.push(h.clone());
             }
         }
-        self.subset(indices)
+        out.post_push();
+        out
     }
 }
 
@@ -2719,14 +2724,14 @@ mod tests {
         let (_cfg, _, _, model, _mat) = build_seg2_heat_model(1.0, 1.0, true);
         assert_eq!(model.len(), 2);
 
-        let thermal = model.filter(Physics::Thermal).unwrap();
+        let thermal = model.filter(Physics::Thermal);
         assert_eq!(thermal.len(), 1);
         assert_eq!(
             thermal.get(0).unwrap().read().physics(),
             &[Physics::Thermal]
         );
 
-        let constraint = model.filter(Physics::Constraint).unwrap();
+        let constraint = model.filter(Physics::Constraint);
         assert_eq!(constraint.len(), 1);
         assert_eq!(
             constraint.get(0).unwrap().read().physics(),
@@ -2734,7 +2739,7 @@ mod tests {
         );
 
         // A nature no sub-model has yields an empty model.
-        let mechanical = model.filter(Physics::Mechanical).unwrap();
+        let mechanical = model.filter(Physics::Mechanical);
         assert_eq!(mechanical.len(), 0);
     }
 
@@ -2754,14 +2759,14 @@ mod tests {
         assert!(present.contains(&Physics::Constraint));
 
         // The constraint filter keeps only the Dirichlet C/Cᵀ pair.
-        let constraint = k.filter(Physics::Constraint).unwrap();
+        let constraint = k.filter(Physics::Constraint);
         assert_eq!(constraint.len(), 2);
         for h in &constraint {
             assert_eq!(h.read().physics(), &[Physics::Constraint]);
         }
 
         // The thermal filter keeps only the heat-conduction block.
-        let thermal = k.filter(Physics::Thermal).unwrap();
+        let thermal = k.filter(Physics::Thermal);
         assert_eq!(thermal.len(), 1);
     }
 

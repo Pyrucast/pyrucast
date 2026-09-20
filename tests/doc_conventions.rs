@@ -105,8 +105,8 @@ fn filtrer_un_modele_et_sa_matrice_par_nature() -> Result<()> {
     let materials = element_field::material_field(&model, &[("k", 1.0)])?;
     let k = matrix::stiffness(&model, &materials)?;
 
-    let meca = model.filter(Physics::Mechanical)?; // sous-modèles au moins mécaniques
-    let k_meca = k.filter(Physics::Mechanical)?; // blocs au moins mécaniques (non assemblés)
+    let meca = model.filter(Physics::Mechanical); // sous-modèles au moins mécaniques
+    let k_meca = k.filter(Physics::Mechanical); // blocs au moins mécaniques (non assemblés)
     let natures = k.physics(); // ex. [Thermal, Constraint]
 
     assert!(meca.is_empty() && k_meca.is_empty()); // ce modèle est thermique
