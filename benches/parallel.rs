@@ -48,7 +48,7 @@ use pyrucast::ops::solver::lu::{solve, solve_with_options, SolveMethod, SolveOpt
 /// several gigabytes of resident memory. Only `behavior::integrate` stays short
 /// — it is some fourteen times cheaper per cell than the assembly; read it with
 /// that in mind.
-const ASSEMBLY_N: usize = 450; // 202 500 QUA4 cells
+const ASSEMBLY_N: usize = 880; // 774 400 QUA4 cells — ~0,5 s/itération
 
 /// Grid side for the constitutive-law group.
 ///
