@@ -198,6 +198,36 @@ impl<T> Handle<T> {
         Arc::ptr_eq(&self.cell, &other.cell)
     }
 
+    /// `true` when this is the **only** handle on the object — nothing else can
+    /// observe a mutation made through it.
+    ///
+    /// The one licence to modify a shared object in place instead of rebuilding
+    /// it: an owner holding the sole handle knows no other holder exists, so the
+    /// side effect a shared object would suffer cannot happen. Used by the
+    /// matrix scalar operators, which rebuild a block rather than rescale it
+    /// (see [`crate::containers::matrix`]) — except when this says the block
+    /// belongs to no one else.
+    ///
+    /// Sound to act on: a second handle can only be made by cloning an existing
+    /// one, so an answer of `true` cannot be invalidated by another thread while
+    /// the caller holds `self`. The converse is a snapshot — `false` may turn
+    /// stale the instant another holder drops its handle — which only ever costs
+    /// a copy that was not strictly needed.
+    ///
+    /// ```
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::coords::Coords;
+    /// let a = Handle::new(Coords::new(2).unwrap());
+    /// assert!(a.is_sole_owner()); // personne d'autre ne le tient
+    /// let b = a.clone();
+    /// assert!(!a.is_sole_owner()); // b l'observerait
+    /// drop(b);
+    /// assert!(a.is_sole_owner()); // de nouveau seul
+    /// ```
+    pub fn is_sole_owner(&self) -> bool {
+        Arc::strong_count(&self.cell) == 1
+    }
+
     /// An opaque identity, hashable and comparable — for use as a map key when
     /// grouping by object.
     ///

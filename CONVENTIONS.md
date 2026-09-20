@@ -591,6 +591,15 @@ waiver, recorded in `tests/python/test_mirror_completeness.py`.
   one zone). Where a component mismatch must be an error (`Evolution`
   interpolation), `SubField::check_same_components` guards `merge_components`
   upstream.
+- matrix+matrix addition → **operator `+`** (algebraic sum of two operators),
+  deliberately distinct from the composition `a | b`. `+` concatenates the
+  blocks **without deduplicating**, so a block handed over twice counts twice
+  (`k + k` = `2k`), where `|` deduplicates by handle (`k | k` = `k`). Reach for
+  `|` to compose one operator out of distinct parts, for `+` to add two
+  operators. The sum copies nothing and leaves a computed block computed — the
+  assembler sums whatever lands on the same global `(row, col)`. Primitive:
+  `Matrix::concat`; `-` negates the right-hand side's blocks, which copies them
+  (the scalar factor lives in the block).
 - `stiffness(model, mat)`, `mass(model)` → **`ops::matrix`** (assembler family;
   `mass` follows `stiffness`, they do not get separated).
 - `consolidate(mesh)`, `to_poi1(mesh)` → **`ops::mesh`** (single-container, but

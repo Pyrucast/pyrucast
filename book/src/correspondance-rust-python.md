@@ -348,20 +348,28 @@ valeur).
 > fusionner des zones avec vérification (et non additionner) : `merge(a, b)`
 > ≡ `a | b`.
 
-### Facteur scalaire et produit matrice-vecteur sur `Matrix` / `SubMatrix`
+### Algèbre de `Matrix` / `SubMatrix`
 
 `Matrix.__mul__` **dispatche selon l'opérande droite**, comme l'arithmétique de
 champ ci-dessus : un `NodeField` déclenche le produit matrice-vecteur
 (`mul_field`), un `float` la mise à l'échelle **paresseuse** du facteur (voir
-[Matrice creuse](../matrix.md#facteur-scalaire-mulf64--divf64-et-combinaison-de-matrices)).
-`/` n'existe que pour le facteur (`Matrix` n'a pas de division matrice-vecteur).
-Comme pour les champs, `*`/`/` renvoient une **nouvelle** `Matrix` — jamais de
-mutation en place — et ne sont **pas** la composition (`|`, ci-dessous).
+[Matrice creuse](matrix.md#facteur-scalaire-et-somme-de-matrices)).
+`/` n'existe que pour le facteur (`Matrix` n'a pas de division matrice-vecteur),
+et refuse un diviseur nul (`ZeroDivisionError`) ou non fini (`ValueError`).
+Comme pour les champs, tous ces opérateurs renvoient une **nouvelle** `Matrix` —
+jamais de mutation en place.
+
+`+` et `-` additionnent deux opérateurs ; ils ne sont **pas** la composition
+(`|`, ci-dessous), qui écarte un bloc dont elle tient déjà l'emplacement : `k | k`
+vaut `k`, `k + k` vaut `2k`.
 
 | Classe | Opérateurs / méthodes Python | Sémantique | Backing Rust |
 |---|---|---|---|
 | `Matrix` | `k * field` | produit matrice-vecteur `A·x`, `NodeField` neuf | `Matrix::mul_field`, `Mul<&NodeField>` |
-| `Matrix` | `k * s`, `k / s` (`s`: `float`) | facteur scalaire, blocs clonés dans de nouveaux slots (aucune valeur réécrite), `k` inchangée | `Mul`/`Div<f64> for &Matrix` |
+| `Matrix` | `k * s`, `s * k`, `k / s` (`s`: `float`) | facteur scalaire, blocs clonés dans de nouveaux slots (aucune valeur réécrite), CSR assemblée mise à l'échelle avec, `k` inchangée | `Mul`/`Div<f64> for &Matrix`, `Mul<Matrix> for f64` |
+| `Matrix` | `-k` | facteur nié, sucre pour `k * -1.0` | `Neg for &Matrix` |
+| `Matrix`, `SubMatrix` | `a + b`, `a - b` | somme : blocs des deux opérandes, partagés, **non** dédoublonnés ; résultat non assemblé | `Add`/`Sub` (toutes combinaisons `Matrix`/`SubMatrix`) |
+| `SubMatrix` | `-b` | bloc neuf au facteur nié | `Neg for &SubMatrix` |
 | `SubMatrix` | `.factor` (lecture seule) | facteur courant du bloc (`1.0` par défaut) | `SubMatrix::factor` |
 
 ### Indexation par clé

@@ -111,7 +111,7 @@ dt = 0.1
 rhs = pyrucast.NodeField(multiplier, ["imposed_T"])
 rhs[0].set_value(multiplier.node(0, 0, 0), "imposed_T", 1.0)
 # ANCHOR: somme
-sys = (m / dt) | k
+sys = m / dt + k
 sys.assemble()
 u = pyrucast.solver.solve(sys, rhs)
 # ANCHOR_END: somme

@@ -76,40 +76,61 @@ Les opérations qui profitent du creux (matrice-vecteur, factorisation directe) 
 - [`Matrix::to_coo`](#api-rust--accès-en-lecture) → `nalgebra_sparse::CooMatrix<f64>`
 - [`Matrix::to_dmatrix`](#api-rust--accès-en-lecture) → `nalgebra::DMatrix<f64>`
 
-## Facteur scalaire (`Mul<f64>` / `Div<f64>`) et combinaison de matrices
+## Facteur scalaire et somme de matrices
 
-Chaque `SubMatrix` porte un **facteur** `f64`, `1.0` par défaut, multiplié ou divisé par
-`bloc * s` / `bloc / s`. Le facteur ne touche **que** ce champ — jamais les valeurs
-stockées (`coo`) — ce qui le rend utilisable aussi bien sur un bloc **littéral** que sur
-un bloc **calculé** (dont les valeurs n'existent qu'à l'assemblage, produites par le
-noyau élémentaire). Il est pris en compte partout où une valeur du bloc est lue ou
-émise : les accesseurs directs (`get`, `dense`, `to_dmatrix`, `to_coo`, `to_csr`,
+### Le facteur
+
+Chaque `SubMatrix` porte un **facteur** `f64`, `1.0` par défaut, ajusté par
+`bloc * s`, `bloc / s` et `-bloc`. Le facteur ne touche **que** ce champ — jamais les
+valeurs stockées (`coo`) — ce qui le rend utilisable aussi bien sur un bloc **littéral**
+que sur un bloc **calculé** (dont les valeurs n'existent qu'à l'assemblage, produites
+par le noyau élémentaire). Il est pris en compte partout où une valeur du bloc est lue
+ou émise : les accesseurs directs (`get`, `dense`, `to_dmatrix`, `to_coo`, `to_csr`,
 `to_csc`, `mul_dense`) et les deux passes d'assemblage global (`Matrix::finalize` et
 `ops::matrix::scatter`, calculé comme littéral). Seules les formes **locales** brutes
 (`local_triplets`, `local_coo_arrays`) restent non mises à l'échelle — ce sont des vues
 internes destinées au remappage global, chaque consommateur y applique le facteur
 lui-même.
 
-`&Matrix * s` / `&Matrix / s` mettent à l'échelle une matrice entière : chaque bloc est
-**cloné** dans un nouvel objet avec son facteur ajusté — jamais muté en place.
-C'est nécessaire car `add_sub`/`union`/`filter`/`subset` **partagent** les
-`Handle<SubMatrix>` (même objet, compté) plutôt que de les copier ; muter le facteur
-en place risquerait de rescaler silencieusement toute autre `Matrix` référençant le
-même bloc. Comme pour `filter`, le résultat n'est **pas assemblé** — `finalize()` ou
-`m.assemble()` avant de résoudre.
+`&Matrix * s`, `&Matrix / s` et `-&Matrix` mettent à l'échelle une matrice entière :
+chaque bloc est **cloné** dans un nouvel objet avec son facteur ajusté. C'est nécessaire
+car `add_sub`/`union`/`filter`/`subset` **partagent** les `Handle<SubMatrix>` (même
+objet, compté) plutôt que de les copier ; muter le facteur en place rescalerait
+silencieusement toute autre `Matrix` référençant le même bloc. La forme **possédante**
+(`matrix * s` sur une valeur, pas une référence) fait l'économie de cette copie pour
+tout bloc que personne d'autre ne tient — ce que `Handle::is_sole_owner` établit.
 
-Ces deux opérateurs sont **infaillibles** : ils rendent une `Matrix`, pas un
-`Result<Matrix>`. Cloner un bloc et l'ajouter ne peut pas échouer, `Matrix` étant le
-seul agrégat qui ne déclare aucun `check_push`.
+Le scalaire se lit des deux côtés (`2.0 * k` comme `k * 2.0`). Ces opérateurs sont
+**infaillibles**, à une exception près : une division refuse un diviseur nul ou non
+fini, qui rendrait non finie chaque valeur du résultat. Côté Rust elle interrompt
+l'exécution ; côté Python elle lève `ZeroDivisionError` ou `ValueError`.
+
+**La CSR assemblée suit, mise à l'échelle.** Mettre tous les blocs à la même échelle met
+chaque entrée à cette échelle et laisse la sparsité intacte : seul le tableau des
+valeurs est parcouru, les tableaux d'indices et la table de noms sont des `Arc` partagés.
+Une matrice assemblée reste donc assemblée après `* s`, et n'a pas à repasser par un
+`assemble()` qui relancerait tous les noyaux élémentaires pour appliquer un scalaire.
+
+> `(Σ v) · s` n'est pas, au bit près, le `Σ (v · s)` que calculerait un réassemblage :
+> l'addition flottante n'est pas associative. Les deux valent la même quantité à
+> l'arrondi près, et chaque chemin reste reproductible.
 
 ```rust,ignore
 {{#include ../../tests/doc_matrix.rs:facteur}}
 ```
 
-**Pas d'opérateur `Matrix + Matrix`** : l'assembleur somme déjà les contributions qui
-tombent sur le même `(row, col)` global (`build_global_triplets`,
-`scatter_serial`/`scatter_parallel`). `M/dt + K` s'obtient donc avec les primitives
-existantes — l'union `|` (partage de blocs, pas de copie) suivie d'un réassemblage :
+### La somme
+
+`a + b` rend une `Matrix` portant les blocs des deux opérandes, **partagés** et
+délibérément **non dédoublonnés**. Rien n'est calculé : c'est l'assembleur qui somme ce
+qui retombe sur le même `(row, col)` global (`build_global_triplets`,
+`scatter_serial`/`scatter_parallel`). Une somme coûte donc quelques incréments de
+compteur, ne touche aucune valeur, et laisse un bloc calculé calculé. Comme pour
+`filter`, le résultat n'est **pas assemblé** : `assemble()` avant de résoudre.
+
+`a - b` nie les blocs de droite, ce qui les **recopie** (le facteur vit dans le bloc) ;
+`a + b` ne copie rien. Les deux opérateurs acceptent indifféremment une `Matrix` ou une
+`SubMatrix` de chaque côté, et `-a` nie une matrice entière.
 
 ```rust,ignore
 {{#include ../../tests/doc_matrix.rs:somme}}
@@ -117,8 +138,21 @@ existantes — l'union `|` (partage de blocs, pas de copie) suivie d'un réassem
 
 Aucun traitement particulier n'est nécessaire quand `K` et `M` n'ont pas le même
 ensemble de DOFs (cas courant : un Dirichlet/MPC n'entre que dans la matrice de
-raideur, jamais dans la masse) — l'union prend simplement l'union des DOFs des deux
+raideur, jamais dans la masse) — la somme prend simplement l'union des DOFs des deux
 côtés, et les blocs de `M` ne contribuent rien aux DOFs qu'ils ne portent pas.
+
+### `|` compose, `+` additionne
+
+C'est la seule chose qui les sépare, et elle ne se voit que sur des blocs partagés :
+l'union **écarte** un bloc dont elle tient déjà l'emplacement, la somme le compte à
+chaque fois qu'on le lui donne. Donc `k | k` vaut `k`, tandis que `k + k` vaut `2k`.
+
+Prendre `|` pour **composer un opérateur à partir de morceaux distincts** (une raideur
+et son bloc de Dirichlet), `+` pour **additionner deux opérateurs**.
+
+```rust,ignore
+{{#include ../../tests/doc_matrix.rs:union_ou_somme}}
+```
 
 ## Drapeau `symmetric`
 
@@ -162,5 +196,6 @@ Une contrainte de Dirichlet introduit, par sa nature, un bloc **rectangulaire** 
 ## Limitations actuelles
 
 - **Cache de motif non invalidé par les mutations profondes** : le motif creux mémoïsé sur le `Model` est invalidé à l'ajout d'un sous-modèle (`add_sub`), mais pas si le maillage / l'espace EF sous-jacent change *en place* (remaillage) — reconstruire le modèle dans ce cas. Le chemin de composition `m.assemble()`, lui, reconstruit toujours le motif depuis les blocs.
-- **Pas de produit matrice-matrice** ni d'opérations algébriques entre matrices (somme, etc.) : à venir avec les premiers besoins concrets (préconditionneurs, formulations couplées).
+- **Pas de produit matrice-matrice** : à venir avec les premiers besoins concrets (préconditionneurs, formulations couplées).
+- **La somme n'assemble pas de manière opportuniste** : `a + b` rend une matrice non assemblée même quand les deux opérandes le sont. Fusionner leurs CSR — ce qui éviterait de relancer les noyaux élémentaires dans une boucle en temps à pas variable — est possible sans changer la sémantique (l'ordre des DDL d'une concaténation est exactement celui de `a` suivi des DDL que seule `b` apporte), mais demande une addition creuse complète : retable des variables, remappage et retri des colonnes de `b`, fusion ligne à ligne. À faire quand un intégrateur en temps le justifiera.
 - Le drapeau `symmetric` n'est pas vérifié numériquement à l'assemblage. C'est de la responsabilité de l'assembleur (du `Model`) d'apparier correctement la déclaration et la réalité.

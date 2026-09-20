@@ -210,12 +210,14 @@ impl PyMatrix {
 
     /// Re-assemble this matrix **from its blocks alone** — no `Model` —
     /// mutating it in place. The composition path: after combining blocks of
-    /// any provenance (via `matrix * scalar` / `matrix / scalar`, `|` union,
-    /// `add_sub`, `filter`, …), including *computed* ones (which `finalize()`
-    /// refuses — the element kernel lives outside `containers`), call this to
-    /// fold everything into one CSR. Needed, for instance, to solve
-    /// `(M/dt + K) u = …` : `sys = (m / dt) | k; sys.assemble();
-    /// pyrucast.solver.solve(sys, rhs)`.
+    /// any provenance (via `+`/`-`, `|` union, `add_sub`, `filter`, …),
+    /// including *computed* ones (which `finalize()` refuses — the element
+    /// kernel lives outside `containers`), call this to fold everything into
+    /// one CSR. Needed, for instance, to solve `(M/dt + K) u = …` :
+    /// `sys = m / dt + k; sys.assemble(); pyrucast.solver.solve(sys, rhs)`.
+    ///
+    /// Not needed after a bare `matrix * scalar`: scaling carries the assembled
+    /// CSR along, scaled.
     fn assemble(&mut self) -> PyResult<()> {
         self.inner.assemble()?;
         Ok(())
@@ -320,11 +322,38 @@ impl PyMatrix {
     }
 
     /// `matrix / scalar` — a fresh `Matrix` whose blocks carry the divided
-    /// `factor` (lazy). Not finalized; see `__mul__`.
+    /// `factor` (lazy). Not finalized; see `__mul__`. Raises `ZeroDivisionError`
+    /// for a divisor of zero, and `ValueError` for one that is not finite:
+    /// either would make every value of the result non-finite.
     fn __truediv__(&self, rhs: f64) -> PyResult<PyMatrix> {
+        if rhs == 0.0 {
+            return Err(pyo3::exceptions::PyZeroDivisionError::new_err(
+                "matrix division by zero",
+            ));
+        }
+        if !rhs.is_finite() {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "matrix division by {rhs}: every value of the result would be non-finite"
+            )));
+        }
         Ok(PyMatrix {
             inner: &self.inner / rhs,
         })
+    }
+
+    /// `scalar * matrix` — the mirror of `matrix * scalar`.
+    fn __rmul__(&self, lhs: f64) -> PyMatrix {
+        PyMatrix {
+            inner: &self.inner * lhs,
+        }
+    }
+
+    /// `-matrix` — a fresh `Matrix` whose blocks carry the negated `factor`
+    /// (lazy). Sugar for `matrix * -1.0`.
+    fn __neg__(&self) -> PyMatrix {
+        PyMatrix {
+            inner: -&self.inner,
+        }
     }
 
     /// List of `(row_node, row_field, col_node, col_field, value)`
@@ -361,6 +390,99 @@ impl PyMatrix {
     }
 }
 
+/// The right-hand side of a matrix sum, as a `Matrix` or a `SubMatrix`.
+///
+/// Kept as the borrowed alternatives rather than a materialised `Matrix`: the
+/// sum shares its operands' blocks, and an aggregate is not cloneable anyway
+/// (it carries the factorization cache).
+enum SumOperand<'py> {
+    Aggregate(PyRef<'py, PyMatrix>),
+    Block(PyRef<'py, PySubMatrix>),
+}
+
+impl<'py> SumOperand<'py> {
+    fn extract(rhs: &Bound<'py, PyAny>, op: &str) -> PyResult<Self> {
+        if let Ok(m) = rhs.extract::<PyRef<'py, PyMatrix>>() {
+            return Ok(Self::Aggregate(m));
+        }
+        if let Ok(b) = rhs.extract::<PyRef<'py, PySubMatrix>>() {
+            return Ok(Self::Block(b));
+        }
+        Err(pyo3::exceptions::PyTypeError::new_err(format!(
+            "{op}: the right-hand side must be a Matrix or a SubMatrix"
+        )))
+    }
+}
+
+// Polymorphic sum and difference — **closed block**, undecorated on purpose
+// (see `impl_aggregate_pymethods!`): the `.pyi` entries are the hand-written
+// overloads submitted below.
+#[pymethods]
+impl PyMatrix {
+    /// `matrix + other` — a fresh `Matrix` holding the blocks of both, shared
+    /// and **not** deduplicated: unlike `|`, a block handed over twice counts
+    /// twice, so `k + k` is `2k` where `k | k` is `k`. Nothing is computed here;
+    /// the assembler sums whatever lands on the same global `(row, col)`. **Not**
+    /// finalized: call `assemble()` before solving.
+    fn __add__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyMatrix> {
+        let inner = match SumOperand::extract(rhs, "matrix + x")? {
+            SumOperand::Aggregate(m) => &self.inner + &m.inner,
+            SumOperand::Block(b) => &self.inner + &*b.handle.read(),
+        };
+        Ok(PyMatrix { inner })
+    }
+
+    /// `matrix - other` — as `+`, with the right-hand side's blocks negated
+    /// (which copies them, the factor living in the block).
+    fn __sub__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyMatrix> {
+        let inner = match SumOperand::extract(rhs, "matrix - x")? {
+            SumOperand::Aggregate(m) => &self.inner - &m.inner,
+            SumOperand::Block(b) => &self.inner - &*b.handle.read(),
+        };
+        Ok(PyMatrix { inner })
+    }
+}
+
+// Same, on a block: `sub_matrix + x` yields the two-block `Matrix`.
+#[pymethods]
+impl PySubMatrix {
+    /// `sub_matrix + other` — a fresh `Matrix` holding this block and the
+    /// other operand's, as `Matrix.__add__` does.
+    fn __add__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyMatrix> {
+        let inner = match SumOperand::extract(rhs, "sub_matrix + x")? {
+            SumOperand::Aggregate(m) => &*self.handle.read() + &m.inner,
+            // One guard at a time: `b + b` hands over the same block twice, and
+            // a second read on a lock this thread already holds may deadlock
+            // against a queued writer.
+            SumOperand::Block(b) => {
+                let other = (*b.handle.read()).clone();
+                &*self.handle.read() + &other
+            }
+        };
+        Ok(PyMatrix { inner })
+    }
+
+    /// `sub_matrix - other` — as `+`, with the right-hand side negated.
+    fn __sub__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyMatrix> {
+        let inner = match SumOperand::extract(rhs, "sub_matrix - x")? {
+            SumOperand::Aggregate(m) => &*self.handle.read() - &m.inner,
+            SumOperand::Block(b) => {
+                let other = (*b.handle.read()).clone();
+                &*self.handle.read() - &other
+            }
+        };
+        Ok(PyMatrix { inner })
+    }
+
+    /// `-sub_matrix` — a fresh block carrying the negated `factor` (lazy). No
+    /// value is rewritten.
+    fn __neg__(&self) -> PySubMatrix {
+        PySubMatrix {
+            handle: Handle::new(-&*self.handle.read()),
+        }
+    }
+}
+
 #[cfg(feature = "stub-gen")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
@@ -374,6 +496,36 @@ class PyMatrix:
         """`matrix * scalar` → a fresh `Matrix` whose blocks carry the scaled
         `factor` (lazy — no value is rewritten). **Not** finalized: call
         `finalize()` (or `assemble` for computed blocks) before solving."""
+    "# }
+}
+
+#[cfg(feature = "stub-gen")]
+pyo3_stub_gen::inventory::submit! {
+    pyo3_stub_gen::derive::gen_methods_from_python! { r#"
+class PyMatrix:
+    def __add__(self, rhs: pyo3_stub_gen.RustType["PyMatrix"] | pyo3_stub_gen.RustType["PySubMatrix"]) -> pyo3_stub_gen.RustType["PyMatrix"]:
+        """`matrix + other` → a fresh `Matrix` holding the blocks of both,
+        shared and **not** deduplicated: `k + k` is `2k` where `k | k` is `k`.
+        Reach for `|` to compose one operator out of distinct parts, for `+` to
+        add two operators. **Not** finalized: call `assemble()` before solving."""
+    def __sub__(self, rhs: pyo3_stub_gen.RustType["PyMatrix"] | pyo3_stub_gen.RustType["PySubMatrix"]) -> pyo3_stub_gen.RustType["PyMatrix"]:
+        """`matrix - other` → as `+`, with the right-hand side's blocks
+        negated (which copies them, the factor living in the block)."""
+    "# }
+}
+
+#[cfg(feature = "stub-gen")]
+pyo3_stub_gen::inventory::submit! {
+    pyo3_stub_gen::derive::gen_methods_from_python! { r#"
+class PySubMatrix:
+    def __add__(self, rhs: pyo3_stub_gen.RustType["PyMatrix"] | pyo3_stub_gen.RustType["PySubMatrix"]) -> pyo3_stub_gen.RustType["PyMatrix"]:
+        """`sub_matrix + other` → a fresh `Matrix` holding this block and the
+        other operand's, as `Matrix.__add__` does."""
+    def __sub__(self, rhs: pyo3_stub_gen.RustType["PyMatrix"] | pyo3_stub_gen.RustType["PySubMatrix"]) -> pyo3_stub_gen.RustType["PyMatrix"]:
+        """`sub_matrix - other` → as `+`, with the right-hand side negated."""
+    def __neg__(self) -> pyo3_stub_gen.RustType["PySubMatrix"]:
+        """`-sub_matrix` → a fresh block carrying the negated `factor`
+        (lazy — no value is rewritten)."""
     "# }
 }
 

@@ -947,20 +947,17 @@ mod tests {
     }
 
     /// Scaling the real production `stiffness()` output (computed volumetric
-    /// blocks + literal Dirichlet block) with `Matrix * f64`, then re-assembling
-    /// with [`Matrix::assemble`] (required: `finalize` refuses a computed
-    /// block), matches the literal reference scaled by hand.
+    /// blocks + literal Dirichlet block) with `Matrix * f64` matches the literal
+    /// reference scaled by hand — and needs **no re-assembly** to do so: the
+    /// scaling carries the assembled CSR along, scaled, rather than dropping it
+    /// and making `assemble()` re-run every element kernel for one scalar.
     #[test]
     fn scaled_stiffness_matches_scaled_literal_reference() {
         let (model, materials) = chain_heat_with_dirichlet(6);
         let k = stiffness(&model, &materials).unwrap();
-        let mut scaled = &k * 2.5;
-        assert!(
-            scaled.finalize().is_err(),
-            "finalize must still refuse a computed block after scaling"
-        );
-        scaled.assemble().unwrap();
+        let scaled = &k * 2.5;
 
+        // Read straight back: no `finalize()` / `assemble()` in between.
         let k_ref = assemble_literal_reference(&model, &materials).unwrap();
         let csr_new = scaled.to_csr().unwrap();
         let csr_ref = k_ref.to_csr().unwrap();
@@ -972,6 +969,33 @@ mod tests {
                 "value mismatch: {x} vs 2.5×{y}"
             );
         }
+
+        // Re-assembling from the blocks computes `Σ (v · s)` where the scaling
+        // computed `(Σ v) · s`: the same quantity, to within rounding.
+        let mut reassembled = &k * 2.5;
+        reassembled.assemble().unwrap();
+        for (x, y) in reassembled
+            .to_csr()
+            .unwrap()
+            .values()
+            .iter()
+            .zip(csr_new.values())
+        {
+            assert!(
+                (x - y).abs() <= 1e-12 * (1.0 + y.abs()),
+                "scaled vs re-assembled: {x} vs {y}"
+            );
+        }
+
+        // A scaled matrix that was **not** assembled still cannot be finalized:
+        // the element kernel lives outside `containers`, so a computed block
+        // sends the caller to `assemble()`. (Owned `*`, so this also exercises
+        // the in-place path.)
+        let mut unassembled = assemble_computed_blocks(&model, &materials) * 2.5;
+        assert!(
+            unassembled.finalize().is_err(),
+            "finalize must still refuse an unassembled computed block"
+        );
     }
 
     /// The colouring is fixed and each colour's writes are disjoint, so the

@@ -81,33 +81,63 @@ fn diviser_une_matrice_ne_reecrit_aucune_valeur() -> Result<()> {
     let a = m.row_mesh()?.node(0, 0, 0)?.id();
     let dt = 0.1;
 
-    let mut m_dt = &m / dt; // facteur = 1/dt sur chaque bloc, aucune valeur réécrite
-                            // A **computed** block's factor materializes only at assembly: without this
-                            // `assemble`, reading back would return zeros.
-    m_dt.assemble()?;
+    // Facteur 1/dt sur chaque bloc : aucune valeur stockée n'est réécrite. Et
+    // `m` étant déjà assemblée, sa CSR suit, mise à l'échelle — donc pas de
+    // réassemblage, donc aucun noyau élémentaire relancé pour un scalaire.
+    let m_dt = &m / dt;
+
     assert_eq!(m.get(a, "q", a, "T"), m_dt.get(a, "q", a, "T") * dt); // m inchangée
+    assert!(m_dt.to_csr().is_ok()); // utilisable telle quelle
     Ok(())
 }
 // ANCHOR_END: facteur
 
 // ANCHOR: somme
 #[test]
-fn composer_deux_matrices_puis_resoudre() -> Result<()> {
+fn additionner_deux_matrices_puis_resoudre() -> Result<()> {
     let (model, materials, _, rhs) = barre()?;
     let k = matrix::stiffness(&model, &materials)?;
     let m = matrix::stiffness(&model, &materials)?;
     let dt = 0.1;
 
-    // Composition : `union` côté Rust — le `|` de la surface Python n'a pas
-    // d'équivalent en surcharge d'opérateur ici.
-    let mut sys = (&m / dt).union(&k)?;
-    sys.assemble()?; // requis dès qu'un bloc calculé est présent
+    // `+` porte les blocs des deux opérandes, partagés : rien n'est copié,
+    // aucune valeur n'est touchée. C'est l'assembleur qui somme ce qui retombe
+    // au même (ligne, colonne) global.
+    let mut sys = &m / dt + &k;
+    sys.assemble()?; // la somme n'est pas assemblée : requis avant de résoudre
     let u = solver::lu::solve(&sys, &rhs)?;
 
     assert!(u.node_count()? > 0);
     Ok(())
 }
 // ANCHOR_END: somme
+
+// ANCHOR: union_ou_somme
+#[test]
+fn union_compose_somme_additionne() -> Result<()> {
+    let (model, materials, _, _) = barre()?;
+    let k = matrix::stiffness(&model, &materials)?;
+    let a = k.row_mesh()?.node(0, 0, 0)?.id();
+    let kaa = k.get(a, "q", a, "T");
+
+    // `+` compte une contribution chaque fois qu'on la lui donne.
+    let mut deux_fois = &k + &k;
+    deux_fois.assemble()?;
+    assert_eq!(deux_fois.get(a, "q", a, "T"), 2.0 * kaa);
+
+    // `|` écarte un bloc dont il tient déjà l'emplacement : c'est l'outil pour
+    // composer un opérateur à partir de morceaux distincts, pas pour additionner.
+    let mut une_fois = k.union(&k)?;
+    une_fois.assemble()?;
+    assert_eq!(une_fois.get(a, "q", a, "T"), kaa);
+
+    // `-` nie les blocs de droite (ce qui les recopie) ; `+` ne copie rien.
+    let mut nulle = &k - &k;
+    nulle.assemble()?;
+    assert_eq!(nulle.get(a, "q", a, "T"), 0.0);
+    Ok(())
+}
+// ANCHOR_END: union_ou_somme
 
 // ANCHOR: bloc_carre
 #[test]

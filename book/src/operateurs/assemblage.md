@@ -118,9 +118,9 @@ reste sur `stiffness`.
 
 C'est aussi le chemin de composition pour la dynamique : chaque `SubMatrix`
 porte un **facteur scalaire** paresseux (`bloc * s` / `bloc / s`, `1.0` par
-défaut — voir [Matrice creuse](../matrix.md#facteur-scalaire-mulf64--divf64-et-combinaison-de-matrices)),
-et l'assembleur somme déjà les contributions d'un même DOF, donc `M/dt + K`
-s'obtient sans opérateur dédié :
+défaut — voir [Matrice creuse](../matrix.md#facteur-scalaire-et-somme-de-matrices)),
+et `+` porte les blocs des deux opérandes sans rien copier, l'assembleur sommant
+les contributions qui retombent sur un même DOF. D'où `M/dt + K` :
 
 ```python
 {{#include ../../../tests/python/test_doc_ops_assemblage.py:somme}}

@@ -1914,12 +1914,31 @@ impl SubMatrix {
     }
 }
 
+/// Reject a divisor that no matrix can survive.
+///
+/// A scalar operator yields the value type — as it does for every number in
+/// `std` — so `Div<f64>` has no fallible form to return. A divisor that would
+/// make every value non-finite therefore stops here, rather than seeding an
+/// `inf` that surfaces as a `NaN` inside the solver several calls later. The
+/// Python surface, where a zero can actually arrive from user data, raises
+/// `ZeroDivisionError` instead (`crate::py::matrix`).
+#[track_caller]
+fn check_divisor(rhs: f64) -> f64 {
+    assert!(
+        rhs != 0.0 && rhs.is_finite(),
+        "matrix division by {rhs}: every value of the result would be non-finite"
+    );
+    rhs
+}
+
 // ─── SubMatrix scalar operators ─────────────────────────────────────────────
 //
-// `blk * s` / `blk / s` only touch `factor` — never the stored `coo` — so they
-// are zero-copy and work identically for a literal block (values live in `coo`)
-// and a computed one (values don't exist until assembly evaluates the recipe).
-// No `Add`/`Sub<f64>`: shifting a matrix by a constant has no physical meaning.
+// `blk * s` / `blk / s` / `-blk` only touch `factor` — never the stored `coo` —
+// so they are zero-copy and work identically for a literal block (values live
+// in `coo`) and a computed one (values don't exist until assembly evaluates the
+// recipe). No `Add`/`Sub<f64>`: shifting a matrix by a constant has no physical
+// meaning. Block **plus** block, on the other hand, is a sum of contributions
+// and yields a two-block `Matrix` — see the aggregate operators.
 
 impl std::ops::Mul<f64> for SubMatrix {
     type Output = SubMatrix;
@@ -1936,18 +1955,50 @@ impl std::ops::Mul<f64> for &SubMatrix {
     }
 }
 
+// Scalar on the left — `2.0 * blk` reads as the mathematics does. `f64` is a
+// foreign type, so these live here rather than as a blanket impl.
+impl std::ops::Mul<SubMatrix> for f64 {
+    type Output = SubMatrix;
+    fn mul(self, rhs: SubMatrix) -> SubMatrix {
+        rhs * self
+    }
+}
+
+impl std::ops::Mul<&SubMatrix> for f64 {
+    type Output = SubMatrix;
+    fn mul(self, rhs: &SubMatrix) -> SubMatrix {
+        rhs * self
+    }
+}
+
 impl std::ops::Div<f64> for SubMatrix {
     type Output = SubMatrix;
+    #[track_caller]
     fn div(mut self, rhs: f64) -> SubMatrix {
-        self.factor /= rhs;
+        self.factor /= check_divisor(rhs);
         self
     }
 }
 
 impl std::ops::Div<f64> for &SubMatrix {
     type Output = SubMatrix;
+    #[track_caller]
     fn div(self, rhs: f64) -> SubMatrix {
         self.clone() / rhs
+    }
+}
+
+impl std::ops::Neg for SubMatrix {
+    type Output = SubMatrix;
+    fn neg(self) -> SubMatrix {
+        self * -1.0
+    }
+}
+
+impl std::ops::Neg for &SubMatrix {
+    type Output = SubMatrix;
+    fn neg(self) -> SubMatrix {
+        self * -1.0
     }
 }
 
@@ -4258,18 +4309,102 @@ impl Matrix {
     }
 
     /// A fresh [`Matrix`] with every block replaced by `f(block.clone())`, each
-    /// re-inserted under a **new store slot**. Backs the scalar operators
-    /// (`Mul<f64>`/`Div<f64>`, which only touch each clone's `factor`). Never
-    /// mutates `self` or any of its blocks in place: `add_sub`/`union`/`filter`
-    /// share `Handle<SubMatrix>`s (same store slot, refcount bump — see
-    /// [`Aggregate::subset`]), so scaling in place would silently rescale every
-    /// other `Matrix` aliasing the same block. Like [`filter`](Self::filter), the
-    /// result is **not assembled**.
+    /// re-inserted under a **new store slot**. Never mutates `self` or any of its
+    /// blocks in place: `add_sub`/`union`/`filter` share `Handle<SubMatrix>`s
+    /// (same store slot, refcount bump — see [`Aggregate::subset`]), so mutating
+    /// one would silently reach every other `Matrix` aliasing it. Like
+    /// [`filter`](Self::filter), the result is **not assembled**.
     fn map_blocks(&self, f: impl Fn(SubMatrix) -> SubMatrix) -> Matrix {
         let mut out = Matrix::empty();
         for h in self {
-            let scaled = f((*h.read()).clone());
-            out.push(Handle::new(scaled));
+            let mapped = f((*h.read()).clone());
+            out.push(Handle::new(mapped));
+        }
+        out.post_push();
+        out
+    }
+
+    /// A fresh [`Matrix`] whose values are `self`'s put through `f` — the engine
+    /// behind `Mul<f64>`, `Div<f64>` and `Neg`, which pass `|v| v * s`,
+    /// `|v| v / s` and `|v| -v`.
+    ///
+    /// `f` lands on each block's [`factor`](SubMatrix::factor), never on the
+    /// stored `coo`, so a computed block scales exactly like a literal one.
+    ///
+    /// **The assembled CSR comes along, scaled.** Scaling every block by the
+    /// same amount scales every entry by it, leaving the sparsity untouched, so
+    /// the assembly stays valid: only `values` is walked. Dropping it instead —
+    /// as this did until the operators were reworked — meant the mandatory
+    /// `assemble()` re-ran every element kernel over the whole mesh to apply one
+    /// scalar. The index arrays and the name table are `Arc`s and are shared
+    /// rather than copied ([`AssembledCsr`]). Note that `(Σ v) · s` is not, bit
+    /// for bit, the `Σ (v · s)` a re-assembly would compute: both are the same
+    /// quantity to within rounding, each reproducible.
+    ///
+    /// The cached factorization is *not* carried over: the fresh `Matrix` starts
+    /// without one.
+    fn scaled(&self, f: impl Fn(f64) -> f64) -> Matrix {
+        let mut out = self.map_blocks(|mut b| {
+            b.factor = f(b.factor);
+            b
+        });
+        // After `map_blocks`, whose `post_push` has just cleared this.
+        out.assembled = self.assembled.as_ref().map(|a| AssembledData {
+            vars: a.vars.clone(),
+            row_keys: a.row_keys.clone(),
+            col_keys: a.col_keys.clone(),
+            csr: AssembledCsr {
+                row_offsets: a.csr.row_offsets.clone(),
+                col_indices: a.csr.col_indices.clone(),
+                values: a.csr.values.iter().map(|&v| f(v)).collect(),
+                ncols: a.csr.ncols,
+            },
+        });
+        out
+    }
+
+    /// [`scaled`](Self::scaled) for an owner: same result, but a block **no one
+    /// else holds** is rescaled where it lies instead of being copied.
+    ///
+    /// A block is rebuilt only to protect the other matrices sharing it. When
+    /// [`Handle::is_sole_owner`] says there are none — the common case for a
+    /// matrix just back from [`crate::ops::matrix::stiffness`] — there is nobody
+    /// to protect, and a literal block's COO need not be copied at all.
+    fn scale_in_place(&mut self, f: impl Fn(f64) -> f64) {
+        for h in self.items_mut() {
+            if h.is_sole_owner() {
+                let mut blk = h.write();
+                blk.factor = f(blk.factor);
+            } else {
+                let mut blk = (*h.read()).clone();
+                blk.factor = f(blk.factor);
+                *h = Handle::new(blk);
+            }
+        }
+        if let Some(a) = &mut self.assembled {
+            for v in &mut a.csr.values {
+                *v = f(*v);
+            }
+        }
+        // Scaled values ⇒ any factorization of the old ones is stale. Done by
+        // hand: nothing was pushed, so `post_push` never ran.
+        *self.factorization.get_mut() = None;
+    }
+
+    /// A fresh [`Matrix`] holding `self`'s blocks then `other`'s, **shared** and
+    /// deliberately **not** deduplicated — the engine behind `Add`/`Sub`.
+    ///
+    /// This is what parts `+` from `|`: [`Aggregate::union`] drops a block whose
+    /// slot it already holds, so `k | k` is `k`, whereas a sum must count a
+    /// contribution as many times as it is handed over — `k + k` is `2k`. The
+    /// assembler sums whatever lands on the same global `(row, col)` and walks
+    /// blocks by position, so a block present twice simply contributes twice.
+    ///
+    /// Like [`filter`](Self::filter), the result is **not assembled**.
+    fn concat(&self, other: &Matrix) -> Matrix {
+        let mut out = Matrix::empty();
+        for h in self.iter().chain(other.iter()) {
+            out.push(h.clone());
         }
         out.post_push();
         out
@@ -4294,41 +4429,200 @@ impl std::ops::Mul<&NodeField> for Matrix {
 
 // ─── Matrix scalar operators ────────────────────────────────────────────────
 //
-// `&matrix * s` / `&matrix / s` — a fresh `Matrix` whose blocks are scaled
-// clones of `self`'s (see `map_blocks`). **Infallible**: cloning a block and
-// appending it cannot fail, `Matrix` being the one aggregate that declares no
-// `check_push`. No `Matrix + Matrix`: the assembler already sums contributions
-// landing on the same global `(row, col)` ([`Matrix::assemble`]), so `M/dt + K`
-// is `(&m / dt).union(&k)?` followed by `sys.assemble()` — see
-// `book/src/matrix.md`.
+// `&matrix * s`, `/ s` and `-matrix` — a fresh `Matrix` whose blocks are scaled
+// clones of `self`'s, carrying the assembled CSR along, scaled (see `scaled`).
+// The owning forms rescale in place whatever block no one else holds
+// (`scale_in_place`). **Infallible**: cloning a block and appending it cannot
+// fail, `Matrix` being the one aggregate that declares no `check_push` — except
+// a division, which refuses a divisor no matrix can survive (`check_divisor`).
 
 impl std::ops::Mul<f64> for &Matrix {
     type Output = Matrix;
     fn mul(self, rhs: f64) -> Self::Output {
-        self.map_blocks(|b| b * rhs)
+        self.scaled(|v| v * rhs)
     }
 }
 
 impl std::ops::Mul<f64> for Matrix {
     type Output = Matrix;
-    fn mul(self, rhs: f64) -> Self::Output {
-        (&self).mul(rhs)
+    fn mul(mut self, rhs: f64) -> Self::Output {
+        self.scale_in_place(|v| v * rhs);
+        self
+    }
+}
+
+// Scalar on the left — `2.0 * k` reads as the mathematics does.
+impl std::ops::Mul<Matrix> for f64 {
+    type Output = Matrix;
+    fn mul(self, rhs: Matrix) -> Matrix {
+        rhs * self
+    }
+}
+
+impl std::ops::Mul<&Matrix> for f64 {
+    type Output = Matrix;
+    fn mul(self, rhs: &Matrix) -> Matrix {
+        rhs * self
     }
 }
 
 impl std::ops::Div<f64> for &Matrix {
     type Output = Matrix;
+    #[track_caller]
     fn div(self, rhs: f64) -> Self::Output {
-        self.map_blocks(|b| b / rhs)
+        let d = check_divisor(rhs);
+        self.scaled(|v| v / d)
     }
 }
 
 impl std::ops::Div<f64> for Matrix {
     type Output = Matrix;
-    fn div(self, rhs: f64) -> Self::Output {
-        (&self).div(rhs)
+    #[track_caller]
+    fn div(mut self, rhs: f64) -> Self::Output {
+        let d = check_divisor(rhs);
+        self.scale_in_place(|v| v / d);
+        self
     }
 }
+
+impl std::ops::Neg for &Matrix {
+    type Output = Matrix;
+    fn neg(self) -> Matrix {
+        self.scaled(|v| -v)
+    }
+}
+
+impl std::ops::Neg for Matrix {
+    type Output = Matrix;
+    fn neg(mut self) -> Matrix {
+        self.scale_in_place(|v| -v);
+        self
+    }
+}
+
+// ─── Matrix algebra: `a + b`, `a - b` ───────────────────────────────────────
+//
+// A sum is **structural**: the result holds the blocks of both operands, shared
+// and not deduplicated, and the assembler does the adding — it already sums
+// whatever lands on the same global `(row, col)`. So `M/dt + K` costs a handful
+// of refcount bumps, no value is touched, and a computed block stays computed.
+// Like `filter`, the result is not assembled: `assemble()` before solving.
+//
+// This is where `+` parts from `|`. `union` drops a block it already holds, so
+// `k | k` is `k` — right for composing an operator out of distinct pieces,
+// wrong for a sum, which must count a contribution once per handing over.
+// `k + k` is `2k`. Reach for `|` to assemble one operator from its parts, for
+// `+` to add two operators.
+//
+// `a - b` negates `b`'s blocks, which copies them (the factor lives in the
+// block); `a + b` copies nothing.
+
+impl SubMatrix {
+    /// This block alone in a fresh one-block [`Matrix`], copied into a new store
+    /// slot — the operand the mixed block/matrix sums are built from.
+    fn as_matrix(&self) -> Matrix {
+        let mut out = Matrix::empty();
+        out.push(Handle::new(self.clone()));
+        out.post_push();
+        out
+    }
+
+    /// This block negated, alone in a fresh [`Matrix`] — the right-hand side of
+    /// a subtraction.
+    fn as_negated_matrix(&self) -> Matrix {
+        (-self).as_matrix()
+    }
+}
+
+/// Write the three owned/borrowed variants of a binary operator whose reference
+/// form (`&lhs op &rhs`) is already spelled out just above.
+macro_rules! forward_ref_binop {
+    ($trait:ident, $method:ident, $lhs:ty, $rhs:ty) => {
+        impl std::ops::$trait<$rhs> for &$lhs {
+            type Output = Matrix;
+            fn $method(self, rhs: $rhs) -> Matrix {
+                std::ops::$trait::$method(self, &rhs)
+            }
+        }
+        impl std::ops::$trait<&$rhs> for $lhs {
+            type Output = Matrix;
+            fn $method(self, rhs: &$rhs) -> Matrix {
+                std::ops::$trait::$method(&self, rhs)
+            }
+        }
+        impl std::ops::$trait<$rhs> for $lhs {
+            type Output = Matrix;
+            fn $method(self, rhs: $rhs) -> Matrix {
+                std::ops::$trait::$method(&self, &rhs)
+            }
+        }
+    };
+}
+
+impl std::ops::Add<&Matrix> for &Matrix {
+    type Output = Matrix;
+    fn add(self, rhs: &Matrix) -> Matrix {
+        self.concat(rhs)
+    }
+}
+
+impl std::ops::Sub<&Matrix> for &Matrix {
+    type Output = Matrix;
+    fn sub(self, rhs: &Matrix) -> Matrix {
+        self.concat(&rhs.map_blocks(|b| -b))
+    }
+}
+
+impl std::ops::Add<&SubMatrix> for &Matrix {
+    type Output = Matrix;
+    fn add(self, rhs: &SubMatrix) -> Matrix {
+        self.concat(&rhs.as_matrix())
+    }
+}
+
+impl std::ops::Sub<&SubMatrix> for &Matrix {
+    type Output = Matrix;
+    fn sub(self, rhs: &SubMatrix) -> Matrix {
+        self.concat(&rhs.as_negated_matrix())
+    }
+}
+
+impl std::ops::Add<&Matrix> for &SubMatrix {
+    type Output = Matrix;
+    fn add(self, rhs: &Matrix) -> Matrix {
+        self.as_matrix().concat(rhs)
+    }
+}
+
+impl std::ops::Sub<&Matrix> for &SubMatrix {
+    type Output = Matrix;
+    fn sub(self, rhs: &Matrix) -> Matrix {
+        self.as_matrix().concat(&rhs.map_blocks(|b| -b))
+    }
+}
+
+impl std::ops::Add<&SubMatrix> for &SubMatrix {
+    type Output = Matrix;
+    fn add(self, rhs: &SubMatrix) -> Matrix {
+        self.as_matrix().concat(&rhs.as_matrix())
+    }
+}
+
+impl std::ops::Sub<&SubMatrix> for &SubMatrix {
+    type Output = Matrix;
+    fn sub(self, rhs: &SubMatrix) -> Matrix {
+        self.as_matrix().concat(&rhs.as_negated_matrix())
+    }
+}
+
+forward_ref_binop!(Add, add, Matrix, Matrix);
+forward_ref_binop!(Sub, sub, Matrix, Matrix);
+forward_ref_binop!(Add, add, Matrix, SubMatrix);
+forward_ref_binop!(Sub, sub, Matrix, SubMatrix);
+forward_ref_binop!(Add, add, SubMatrix, Matrix);
+forward_ref_binop!(Sub, sub, SubMatrix, Matrix);
+forward_ref_binop!(Add, add, SubMatrix, SubMatrix);
+forward_ref_binop!(Sub, sub, SubMatrix, SubMatrix);
 
 impl crate::dump::Dump for Matrix {
     fn render(&self, opts: &crate::dump::DumpOptions) -> String {
@@ -5001,13 +5295,209 @@ mod tests {
         );
     }
 
-    /// `M/dt + K` ≡ `(M/dt) | K` followed by `Matrix::assemble` — no
-    /// dedicated `Matrix + Matrix` operator is needed, because the assembler
-    /// already sums contributions landing on the same global `(row, col)`.
-    /// `K` carries a DOF (`c`) that `M` doesn't (mirroring a Dirichlet
-    /// multiplier row/column, which only ever enters the stiffness matrix) —
-    /// the union must still assemble correctly, leaving that entry untouched by
-    /// `M`'s contribution.
+    /// A one-block literal matrix on `sup`, carrying `value` on the diagonal of
+    /// each node of `nodes`.
+    fn diag(sup: &Handle<SubMesh>, nodes: &[NodeId], value: f64) -> Matrix {
+        let mut blk = SubMatrix::new(
+            sup.clone(),
+            sup.clone(),
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            true,
+        );
+        for &n in nodes {
+            blk.add_entry(n, "q", n, "T", value).unwrap();
+        }
+        let mut m = Matrix::empty();
+        m.add_sub(Handle::new(blk)).unwrap();
+        m
+    }
+
+    /// Scaling an **assembled** matrix carries the CSR along, scaled, instead of
+    /// dropping it. What that buys: the result is usable without a second
+    /// assembly — which, on a matrix with computed blocks, would re-run every
+    /// element kernel to apply one scalar.
+    #[test]
+    fn scaling_carries_the_assembled_csr() {
+        let (_cfg, nodes, sup) = make_poi1(2);
+        let (a, b) = (nodes[0].id(), nodes[1].id());
+        let mut k = diag(&sup, &[a, b], 2.0);
+        k.finalize().unwrap();
+
+        let scaled = &k * 3.0;
+
+        // Assembled on arrival: no `finalize()` / `assemble()` in between.
+        assert_eq!(scaled.to_csr().unwrap().values(), &[6.0, 6.0]);
+        assert_eq!(scaled.get(a, "q", a, "T"), 6.0);
+        // The sparsity is untouched, so the index arrays are *shared*, not copied.
+        let (ka, sa) = (
+            k.assembled.as_ref().unwrap(),
+            scaled.assembled.as_ref().unwrap(),
+        );
+        assert!(std::sync::Arc::ptr_eq(
+            &ka.csr.row_offsets,
+            &sa.csr.row_offsets
+        ));
+        assert!(std::sync::Arc::ptr_eq(
+            &ka.csr.col_indices,
+            &sa.csr.col_indices
+        ));
+        // And the source keeps its own values.
+        assert_eq!(k.to_csr().unwrap().values(), &[2.0, 2.0]);
+
+        // An unassembled source still yields an unassembled result.
+        let raw = diag(&sup, &[a], 1.0);
+        assert!((&raw * 2.0).to_csr().is_err());
+    }
+
+    /// The owning `*` rescales a block **no one else holds** where it lies; a
+    /// block another matrix shares is rebuilt, so that other matrix is spared.
+    #[test]
+    fn owned_scaling_reuses_a_block_no_one_else_holds() {
+        let (_cfg, nodes, sup) = make_poi1(1);
+        let a = nodes[0].id();
+
+        let sole = diag(&sup, &[a], 2.0);
+        let slot = sole.iter().next().unwrap().id();
+        let scaled = sole * 3.0;
+        assert_eq!(
+            scaled.iter().next().unwrap().id(),
+            slot,
+            "sole owner: in place"
+        );
+        assert_eq!(scaled.get(a, "q", a, "T"), 6.0);
+
+        // Now with a second holder of the same block.
+        let shared = diag(&sup, &[a], 2.0);
+        let alias = shared.subset([0]).unwrap();
+        let slot = shared.iter().next().unwrap().id();
+        let scaled = shared * 3.0;
+        assert_ne!(scaled.iter().next().unwrap().id(), slot, "shared: rebuilt");
+        assert_eq!(scaled.get(a, "q", a, "T"), 6.0);
+        assert_eq!(
+            alias.get(a, "q", a, "T"),
+            2.0,
+            "the aliasing matrix is spared"
+        );
+    }
+
+    /// What parts `+` from `|`: a sum counts a contribution once per handing
+    /// over, a union drops a block whose slot it already holds.
+    #[test]
+    fn sum_counts_a_shared_block_twice_where_union_drops_it() {
+        let (_cfg, nodes, sup) = make_poi1(1);
+        let a = nodes[0].id();
+        let k = diag(&sup, &[a], 2.0);
+
+        let mut sum = &k + &k;
+        sum.finalize().unwrap();
+        assert_eq!(sum.len(), 2);
+        assert_eq!(sum.get(a, "q", a, "T"), 4.0, "k + k is 2k");
+
+        let mut union = k.union(&k).unwrap();
+        union.finalize().unwrap();
+        assert_eq!(union.len(), 1);
+        assert_eq!(union.get(a, "q", a, "T"), 2.0, "k | k is k");
+
+        // The sum shares its operands' blocks — nothing is copied.
+        assert!(sum
+            .iter()
+            .next()
+            .unwrap()
+            .same_object(k.iter().next().unwrap()));
+        // …and leaves the source alone.
+        assert_eq!(k.get(a, "q", a, "T"), 2.0);
+    }
+
+    /// `a - b` negates the right-hand side's blocks, which copies them; `a + b`
+    /// copies nothing. Both leave their operands alone.
+    #[test]
+    fn difference_negates_only_the_right_hand_side() {
+        let (_cfg, nodes, sup) = make_poi1(1);
+        let a = nodes[0].id();
+        let x = diag(&sup, &[a], 5.0);
+        let y = diag(&sup, &[a], 2.0);
+
+        let mut d = &x - &y;
+        d.finalize().unwrap();
+        assert_eq!(d.get(a, "q", a, "T"), 3.0);
+        assert_eq!(y.get(a, "q", a, "T"), 2.0, "the subtrahend is untouched");
+        assert!(!d
+            .iter()
+            .nth(1)
+            .unwrap()
+            .same_object(y.iter().next().unwrap()));
+
+        // A matrix minus itself is zero — the structural sum, then the assembler.
+        let mut z = &x - &x;
+        z.finalize().unwrap();
+        assert_eq!(z.get(a, "q", a, "T"), 0.0);
+    }
+
+    /// The scalar reads on either side, and the unary minus agrees with `× -1`.
+    #[test]
+    fn scalar_on_the_left_and_unary_minus() {
+        let (_cfg, nodes, sup) = make_poi1(1);
+        let a = nodes[0].id();
+        let k = diag(&sup, &[a], 2.0);
+
+        assert_eq!((2.0 * &k).get(a, "q", a, "T"), 4.0);
+        assert_eq!((-&k).get(a, "q", a, "T"), -2.0);
+        assert_eq!((-&k).get(a, "q", a, "T"), (&k * -1.0).get(a, "q", a, "T"));
+
+        // On a block too.
+        let blk = (*k.iter().next().unwrap().read()).clone();
+        assert_eq!((3.0 * &blk).factor(), 3.0);
+        assert_eq!((-&blk).factor(), -1.0);
+    }
+
+    /// A block and an aggregate mix in a sum, either way round.
+    #[test]
+    fn a_block_and_a_matrix_mix_in_a_sum() {
+        let (_cfg, nodes, sup) = make_poi1(1);
+        let a = nodes[0].id();
+        let k = diag(&sup, &[a], 2.0);
+        let blk = (*k.iter().next().unwrap().read()).clone();
+
+        for mut s in [&k + &blk, &blk + &k] {
+            s.finalize().unwrap();
+            assert_eq!(s.len(), 2);
+            assert_eq!(s.get(a, "q", a, "T"), 4.0);
+        }
+        let mut two_blocks = &blk + &blk;
+        two_blocks.finalize().unwrap();
+        assert_eq!(two_blocks.get(a, "q", a, "T"), 4.0);
+
+        let mut d = &k - &blk;
+        d.finalize().unwrap();
+        assert_eq!(d.get(a, "q", a, "T"), 0.0);
+    }
+
+    /// A divisor no matrix survives is refused at the operator, not left to
+    /// surface as a `NaN` inside the solver.
+    #[test]
+    #[should_panic(expected = "matrix division by 0")]
+    fn division_by_zero_is_refused() {
+        let (_cfg, nodes, sup) = make_poi1(1);
+        let k = diag(&sup, &[nodes[0].id()], 2.0);
+        let _ = &k / 0.0;
+    }
+
+    #[test]
+    #[should_panic(expected = "non-finite")]
+    fn division_by_infinity_is_refused() {
+        let (_cfg, nodes, sup) = make_poi1(1);
+        let k = diag(&sup, &[nodes[0].id()], 2.0);
+        let _ = &k / f64::INFINITY;
+    }
+
+    /// `M/dt + K` through the **union**, which stays the way to compose one
+    /// operator out of distinct parts (`+` is the algebraic sum — see
+    /// `sum_counts_a_shared_block_twice_where_union_drops_it`). `K` carries a
+    /// DOF (`c`) that `M` doesn't (mirroring a Dirichlet multiplier row/column,
+    /// which only ever enters the stiffness matrix) — the union must still
+    /// assemble correctly, leaving that entry untouched by `M`'s contribution.
     #[test]
     fn union_and_reassemble_combines_scaled_mass_with_stiffness() {
         let (coords, nodes, _) = make_poi1(3);

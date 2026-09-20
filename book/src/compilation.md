@@ -185,7 +185,9 @@ correspondant, sur les sept sites d'appel de la macro.
 
 Le même patron — bloc fermé + `submit!` adjacent — sert partout où une méthode
 écrite à la main est polymorphe : `SubNodeField.__getitem__`,
-`SubElementField.__getitem__`, `Node.__or__`/`__ror__`, `Matrix.__mul__`. Il
+`SubElementField.__getitem__`, `Node.__or__`/`__ror__`, `Matrix.__mul__`, et
+les sommes `__add__`/`__sub__` de `Matrix` et `SubMatrix` (plus le `__neg__` du
+bloc, logé dans le même bloc fermé). Il
 sert aussi à corriger une **différence de vocabulaire** : `pyo3` regroupe les
 comparaisons sous `__richcmp__`, qui n'existe pas côté Python — le stub des
 champs déclare donc à la main `__ge__`/`__gt__`/`__le__`/`__lt__`, qui rendent

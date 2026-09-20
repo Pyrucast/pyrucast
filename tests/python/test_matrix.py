@@ -1,5 +1,7 @@
 """Python tests for the Matrix / SubMatrix containers."""
 
+import pytest
+
 import pyrucast
 
 
@@ -330,6 +332,106 @@ def test_matrix_mul_and_truediv_scale_by_factor():
     halved.finalize()
     assert halved.get(a, "q", a, "T") == 2.5
     assert halved.get(b, "q", b, "T") == 5.0
+
+
+def test_scalar_reads_on_either_side_and_negates():
+    """`s * k` mirrors `k * s`, and `-k` is `k * -1.0` — all lazy."""
+    c = pyrucast.Coords(1)
+    a = c.add_node([0.0])
+    block = _make_block(c, [a], [a], ["q"], ["T"], symmetric=True)
+    block.add_entry(a, "q", a, "T", 2.0)
+    k = pyrucast.Matrix()
+    k.add_sub(block)
+
+    left = 3.0 * k
+    left.finalize()
+    assert left.get(a, "q", a, "T") == 6.0
+
+    negated = -k
+    negated.finalize()
+    assert negated.get(a, "q", a, "T") == -2.0
+    assert k[0].factor == 1.0, "k must be untouched"
+    assert (-block).factor == -1.0
+
+
+def test_division_by_zero_is_refused():
+    """A divisor no matrix survives is refused at the operator, rather than
+    seeding an `inf` that surfaces as a `NaN` inside the solver."""
+    c = pyrucast.Coords(1)
+    a = c.add_node([0.0])
+    block = _make_block(c, [a], [a], ["q"], ["T"], symmetric=True)
+    block.add_entry(a, "q", a, "T", 2.0)
+    k = pyrucast.Matrix()
+    k.add_sub(block)
+
+    with pytest.raises(ZeroDivisionError):
+        k / 0.0
+    with pytest.raises(ValueError):
+        k / float("inf")
+
+
+def test_sum_counts_a_shared_block_twice_where_union_drops_it():
+    """What parts `+` from `|`: a sum counts a contribution once per handing
+    over, a union drops a block whose slot it already holds."""
+    c = pyrucast.Coords(1)
+    a = c.add_node([0.0])
+    block = _make_block(c, [a], [a], ["q"], ["T"], symmetric=True)
+    block.add_entry(a, "q", a, "T", 2.0)
+    k = pyrucast.Matrix()
+    k.add_sub(block)
+
+    total = k + k
+    assert len(total) == 2
+    total.finalize()
+    assert total.get(a, "q", a, "T") == 4.0, "k + k is 2k"
+
+    union = k | k
+    assert len(union) == 1
+    union.finalize()
+    assert union.get(a, "q", a, "T") == 2.0, "k | k is k"
+
+    diff = k - k
+    diff.finalize()
+    assert diff.get(a, "q", a, "T") == 0.0
+    assert k[0].factor == 1.0, "the operands are untouched"
+
+
+def test_a_block_and_a_matrix_mix_in_a_sum():
+    """Both operands may be a `Matrix` or a `SubMatrix`, either way round."""
+    c = pyrucast.Coords(1)
+    a = c.add_node([0.0])
+    block = _make_block(c, [a], [a], ["q"], ["T"], symmetric=True)
+    block.add_entry(a, "q", a, "T", 2.0)
+    k = pyrucast.Matrix()
+    k.add_sub(block)
+
+    for total in (k + block, block + k, block + block):
+        assert len(total) == 2
+        total.finalize()
+        assert total.get(a, "q", a, "T") == 4.0
+
+    with pytest.raises(TypeError):
+        k + "not a matrix"
+
+
+def test_scaling_an_assembled_matrix_needs_no_reassembly():
+    """Scaling carries the assembled CSR along, scaled: the result is usable
+    without a second assembly — which would re-run every element kernel."""
+    c = pyrucast.Coords(1)
+    a = c.add_node([0.0])
+    b = c.add_node([1.0])
+    mesh = pyrucast.Mesh(c, "SEG2")
+    mesh.unit().add_cell([a, b])
+    fes = pyrucast.FiniteElementSpace(mesh)
+    model = pyrucast.model.heat_conduction(fes)
+    materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
+    k = pyrucast.matrix.stiffness(model, materials)
+
+    scaled = k * 3.0
+    # No `assemble()` here: a computed block whose CSR had been dropped would
+    # read back as zero.
+    assert abs(scaled.get(a, "q", a, "T") - 3.0 * k.get(a, "q", a, "T")) < 1e-12
+    assert k[0].factor == 1.0, "the source is untouched"
 
 
 def test_assemble_reassembles_scaled_mass_union_stiffness():
