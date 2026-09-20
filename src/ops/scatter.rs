@@ -612,12 +612,14 @@ pub fn scatter_serial(k: &Matrix, pattern: &AssemblyPattern) -> Result<Vec<f64>>
 }
 
 /// Assemble `k` into a CSR by scattering each block's contribution into
-/// `pattern`'s value slots **in parallel**, colour by colour. A computed
-/// block's element matrices are evaluated in parallel
-/// ([`kernel::element_block_triplets_per_cell`]); then, for each colour of the
-/// block's cell colouring (cached on its FE subspace), that colour's cells —
-/// which touch pairwise-disjoint DOFs — scatter concurrently into disjoint
-/// slots. Literal blocks scatter serially. The colouring is deterministic, so
+/// `pattern`'s value slots **in parallel**, colour by colour. A computed block
+/// is evaluated and scattered in the same breath
+/// ([`kernel::element_block_colored`]): for each colour of the block's cell
+/// colouring (cached on its FE subspace), that colour's cells — which touch
+/// pairwise-disjoint DOFs — produce their element matrix on a per-task scratch
+/// and pour it straight into their precomputed slots, concurrently. No cell's
+/// `ke` outlives its scatter, so nothing block-wide is ever materialised.
+/// Literal blocks scatter serially. The colouring is deterministic, so
 /// the assembled values are reproducible regardless of thread count (though the
 /// per-slot summation order differs from the serial path, hence not bit-for-bit
 /// with it).

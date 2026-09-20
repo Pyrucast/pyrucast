@@ -48,13 +48,12 @@ use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::{Cancel, NoCancel};
 use crate::models::RelationSense;
-use faer::sparse::{SparseColMat, Triplet};
 use nalgebra::{DMatrix, DVector};
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use super::lu::{self, lu_solve_vec, SolveMethod, SolveOptions, SparseLu};
+use super::lu::{self, factorize_csc_arrays, lu_solve_vec, SolveMethod, SolveOptions, SparseLu};
 
 type NamedDof = (NodeId, String);
 
@@ -946,36 +945,78 @@ fn factorize_status(
     #[cfg(test)]
     FACTORIZE_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let n = csc.nrows();
-    // Rows to blank: the constraint rows of the inactive inequalities.
+    // Rows to blank: the constraint rows of the inactive inequalities — and,
+    // for each, the identity entry that replaces that row.
     let mut blanked = vec![false; n];
+    let mut inserted: Vec<(usize, usize)> = Vec::new();
     for (ineq, &active) in inequalities.iter().zip(status) {
         if !active {
             blanked[ineq.row] = true;
+            inserted.push((ineq.lambda_col, ineq.row));
         }
     }
+    // By column then row: each column then meets its own in the order a CSC
+    // column wants them.
+    inserted.sort_unstable();
+
     let col_offsets = csc.col_offsets();
     let row_indices = csc.row_indices();
     let values = csc.values();
-    let mut triplets: Vec<Triplet<usize, usize, f64>> = Vec::with_capacity(values.len());
-    for col in 0..csc.ncols() {
+
+    // The modified system is written **straight into CSC arrays**, rather than
+    // unfolded into triplets for faer to sort back into columns. The survivors
+    // of a column come out of the base CSC already sorted, and the entries put
+    // back are sorted above, so the two merge in one pass — there is nothing
+    // left for a sort to do. This runs once per active-set status, so what it
+    // saves, it saves as many times.
+    let mut col_ptr = vec![0usize; n + 1];
+    for col in 0..n {
+        col_ptr[col + 1] = (col_offsets[col]..col_offsets[col + 1])
+            .filter(|&k| !blanked[row_indices[k]])
+            .count();
+    }
+    for &(col, _) in &inserted {
+        col_ptr[col + 1] += 1;
+    }
+    for col in 0..n {
+        col_ptr[col + 1] += col_ptr[col];
+    }
+
+    let mut row_idx = vec![0usize; col_ptr[n]];
+    let mut vals = vec![0.0f64; col_ptr[n]];
+    let (mut w, mut seen) = (0usize, 0usize);
+    for col in 0..n {
+        // This column's inserted rows: a contiguous run of `inserted`.
+        let start = seen;
+        while seen < inserted.len() && inserted[seen].0 == col {
+            seen += 1;
+        }
+        let mut ins = start;
         for k in col_offsets[col]..col_offsets[col + 1] {
             let row = row_indices[k];
-            if !blanked[row] {
-                triplets.push(Triplet::new(row, col, values[k]));
+            if blanked[row] {
+                continue;
             }
+            // A blanked row is gone from *every* column, so an inserted entry
+            // can never collide with a survivor — only precede it.
+            while ins < seen && inserted[ins].1 < row {
+                row_idx[w] = inserted[ins].1;
+                vals[w] = 1.0;
+                w += 1;
+                ins += 1;
+            }
+            row_idx[w] = row;
+            vals[w] = values[k];
+            w += 1;
+        }
+        while ins < seen {
+            row_idx[w] = inserted[ins].1;
+            vals[w] = 1.0;
+            w += 1;
+            ins += 1;
         }
     }
-    for (ineq, &active) in inequalities.iter().zip(status) {
-        if !active {
-            triplets.push(Triplet::new(ineq.row, ineq.lambda_col, 1.0));
-        }
-    }
-    let a = SparseColMat::<usize, f64>::try_new_from_triplets(n, n, &triplets).map_err(|e| {
-        PyrucastError::Message(format!("solve_unilateral: sparse build failed: {e:?}"))
-    })?;
-    a.sp_lu().map_err(|e| {
-        PyrucastError::Message(format!("solve_unilateral: LU failed (singular?): {e:?}"))
-    })
+    factorize_csc_arrays(n, &col_ptr, &row_idx, &vals)
 }
 
 // ─── Unit tests ────────────────────────────────────────────────────────────

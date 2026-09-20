@@ -46,11 +46,11 @@ use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::{Cancel, NoCancel};
 use nalgebra::DVector;
-use nalgebra_sparse::{CooMatrix, CscMatrix, CsrMatrix};
+use nalgebra_sparse::{CooMatrix, CsrMatrix};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use super::lu::{self, factorize_csc, lu_solve_vec, SolveOptions, SparseLu};
+use super::lu::{self, factorize_csr, lu_solve_vec, SolveOptions, SparseLu};
 
 /// One eliminated slave DOF and the data needed to build `u₀` and recover its
 /// reaction. The masters are folded into `T` at build time, so they are not kept.
@@ -651,7 +651,14 @@ fn build_condensation(model: &Model, matrix: &Matrix) -> Result<Condensation> {
 
     // ── Reduced K̂ = Tᵀ K T, factorized ────────────────────────────────
     let khat: CsrMatrix<f64> = &(&tt * &k_phys) * &t;
-    let reduced = factorize_csc(&CscMatrix::from(&khat))?;
+    // Borrowed: a `CsrMatrix` already keeps each row's columns sorted and
+    // duplicate-free, which is exactly what the factorization demands.
+    let reduced = factorize_csr(
+        khat.nrows(),
+        khat.row_offsets(),
+        khat.col_indices(),
+        khat.values(),
+    )?;
 
     let slaves = records
         .into_iter()

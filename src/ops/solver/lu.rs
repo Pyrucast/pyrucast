@@ -90,8 +90,7 @@ use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::{Cancel, NoCancel};
 use faer::linalg::solvers::Solve;
-use faer::sparse::{SparseColMat, Triplet};
-use nalgebra_sparse::CscMatrix;
+use faer::sparse::{SparseColMatRef, SymbolicSparseColMatRef};
 use std::sync::Arc;
 
 /// A faer sparse LU factorization over `usize` indices and `f64` values — the
@@ -99,48 +98,123 @@ use std::sync::Arc;
 /// [`crate::ops::solver::eliminate`] (reduced condensed system).
 pub(crate) type SparseLu = faer::sparse::linalg::solvers::Lu<usize, f64>;
 
-/// Factorize a square CSC matrix with sparse LU (faer). The single place the
-/// nalgebra-sparse CSC → faer `SparseColMat` → `sp_lu` conversion lives, so both
-/// the Lagrange and the elimination solvers share one implementation.
-pub(crate) fn factorize_csc(csc: &CscMatrix<f64>) -> Result<SparseLu> {
-    let n = csc.nrows();
+/// Transpose a square CSR into CSC arrays, by counting sort.
+///
+/// Columns come out **sorted** for free: the outer loop walks rows in
+/// increasing order, so each column receives its row indices in increasing
+/// order — which is exactly the invariant [`SymbolicSparseColMatRef::new_checked`]
+/// demands. Nothing is sorted, nothing is deduplicated: a CSR that already
+/// holds each `(row, col)` once transposes into a CSC that does too.
+///
+/// Sequential on purpose. The scatter pass carries one cursor per column, which
+/// a parallel split would have to partition and merge, for an O(nnz) pass that
+/// costs a fraction of the factorization it feeds.
+fn transpose_to_csc(
+    n: usize,
+    offsets: &[usize],
+    cols: &[usize],
+    vals: &[f64],
+) -> (Vec<usize>, Vec<usize>, Vec<f64>) {
+    let nnz = cols.len();
+    let mut col_ptr = vec![0usize; n + 1];
+    for &c in cols {
+        col_ptr[c + 1] += 1;
+    }
+    for j in 0..n {
+        col_ptr[j + 1] += col_ptr[j];
+    }
+    let mut cursor = col_ptr[..n].to_vec();
+    let mut row_idx = vec![0usize; nnz];
+    let mut out = vec![0.0f64; nnz];
+    for r in 0..n {
+        for k in offsets[r]..offsets[r + 1] {
+            let j = cols[k];
+            let p = cursor[j];
+            row_idx[p] = r;
+            out[p] = vals[k];
+            cursor[j] = p + 1;
+        }
+    }
+    (col_ptr, row_idx, out)
+}
+
+/// Factorize a square matrix, given in **CSR** form, with sparse LU (faer). The
+/// single place the → faer → `sp_lu` handover lives, so both the Lagrange and
+/// the elimination solvers share one implementation.
+///
+/// Takes the three CSR arrays **borrowed** rather than a `CscMatrix`, and hands
+/// faer a borrowed [`SparseColMatRef`] rather than an owned matrix built from
+/// triplets. What that removes, in the order it used to happen: the CSR→CSC
+/// materialisation, the `Vec<Triplet>` it was unfolded into (24 bytes per
+/// non-zero), the index-sorting array faer allocates to put that back in order,
+/// and the owned `SparseColMat` at the end. All four used to be **live at once
+/// during `sp_lu`** — the moment the factorization is allocating its own
+/// factors, which is the worst possible time to be holding four copies of the
+/// matrix. Only the counting-sort transpose below remains.
+///
+/// The caller's arrays must satisfy what faer checks: offsets non-decreasing,
+/// and each row's column indices strictly increasing (sorted, no duplicate).
+/// Both the assembled pattern ([`crate::ops::scatter::build_pattern`]) and
+/// `nalgebra_sparse::CsrMatrix` guarantee this.
+pub(crate) fn factorize_csr(
+    n: usize,
+    offsets: &[usize],
+    cols: &[usize],
+    vals: &[f64],
+) -> Result<SparseLu> {
     if n == 0 {
         return Err(PyrucastError::Message("solve: matrix is empty".into()));
     }
-    if csc.ncols() != n {
+    if offsets.len() != n + 1 {
         return Err(PyrucastError::Message(format!(
-            "solve: matrix must be square; got {}×{}",
-            n,
-            csc.ncols()
+            "solve: matrix must be square; got {} row offset(s) for {n} column(s)",
+            offsets.len()
         )));
     }
-    // Build a faer sparse matrix from the (duplicate-summed) CSC. Each
-    // (row, col) appears once, so the triplet form is exact.
-    let col_offsets = csc.col_offsets();
-    let row_indices = csc.row_indices();
-    let values = csc.values();
-    let mut triplets: Vec<Triplet<usize, usize, f64>> = Vec::with_capacity(values.len());
-    for col in 0..n {
-        for k in col_offsets[col]..col_offsets[col + 1] {
-            triplets.push(Triplet::new(row_indices[k], col, values[k]));
-        }
-    }
-    let a = SparseColMat::<usize, f64>::try_new_from_triplets(n, n, &triplets)
-        .map_err(|e| PyrucastError::Message(format!("solve: sparse build failed: {e:?}")))?;
+    let (col_ptr, row_idx, values) = transpose_to_csc(n, offsets, cols, vals);
+    factorize_csc_arrays(n, &col_ptr, &row_idx, &values)
+}
+
+/// Factorize a square matrix already held as **CSC** arrays, borrowed.
+///
+/// The seam [`factorize_csr`] lands on, and the entry point for a caller that
+/// builds its column-major form itself (the active-set solver, which rebuilds a
+/// modified system per status — see [`crate::ops::solver::unilateral`]).
+pub(crate) fn factorize_csc_arrays(
+    n: usize,
+    col_ptr: &[usize],
+    row_idx: &[usize],
+    values: &[f64],
+) -> Result<SparseLu> {
+    // `new_checked` walks the arrays once, allocating nothing, and panics on a
+    // malformed one. Kept rather than its unchecked twin: one O(nnz) pass buys
+    // an invariant the factorization would otherwise trust blindly, for a
+    // fraction of what the factorization itself costs.
+    let symbolic = SymbolicSparseColMatRef::<usize>::new_checked(n, n, col_ptr, None, row_idx);
+    let a = SparseColMatRef::<usize, f64>::new(symbolic, values);
     a.sp_lu()
         .map_err(|e| PyrucastError::Message(format!("solve: LU failed (singular?): {e:?}")))
 }
 
 /// Solve `A·x = b` for one right-hand side against a computed [`SparseLu`]
-/// (descent / back-substitution only). Shared by both direct solvers.
-pub(crate) fn lu_solve_vec(lu: &SparseLu, b: &[f64]) -> Vec<f64> {
+/// (descent / back-substitution only), **in place**. Shared by both direct
+/// solvers.
+///
+/// faer solves in place, so `b` is both the right-hand side and the result.
+/// Wrapping the caller's buffer as a one-column matrix rather than copying it
+/// into a fresh `faer::Mat` spares two vectors of length `n` and the two
+/// element-by-element passes that used to fill and drain them.
+pub(crate) fn lu_solve_in_place(lu: &SparseLu, b: &mut [f64]) {
     let n = b.len();
-    let mut x = faer::Mat::<f64>::zeros(n, 1);
-    for (i, &v) in b.iter().enumerate() {
-        x[(i, 0)] = v;
-    }
-    lu.solve_in_place(&mut x);
-    (0..n).map(|i| x[(i, 0)]).collect()
+    let x = faer::MatMut::from_column_major_slice_mut(b, n, 1);
+    lu.solve_in_place(x);
+}
+
+/// [`lu_solve_in_place`] for a caller that owns no buffer yet.
+pub(crate) fn lu_solve_vec(lu: &SparseLu, b: &[f64]) -> Vec<f64> {
+    let mut x = b.to_vec();
+    lu_solve_in_place(lu, &mut x);
+    x
 }
 
 /// Direct solver method. Today only sparse LU (faer); the enum leaves room to
@@ -313,8 +387,11 @@ pub struct Factorization {
     /// The row numbering the factorization is valid for, in packed form: a
     /// materialised `(NodeId, String)` list would hold one heap allocation per
     /// degree of freedom for the whole life of the cached factorization.
+    /// Shared with the matrix it was computed from, not copied: the numbering
+    /// outlives neither of them separately, and a factorization cached for the
+    /// life of a solve loop has no reason to hold its own eight bytes per DOF.
     vars: Arc<Vec<String>>,
-    row_keys: Vec<DofKey>,
+    row_keys: Arc<Vec<DofKey>>,
 }
 
 impl Factorization {
@@ -366,7 +443,10 @@ impl Factorization {
                 n_cols
             )));
         }
-        let lu = factorize_csc(&matrix.to_csc()?)?;
+        // Borrowed straight from the assembled CSR: the matrix is handed to
+        // faer without ever being materialised in another form.
+        let (offsets, cols, vals) = matrix.csr_arrays()?;
+        let lu = factorize_csr(row_keys.len(), offsets, cols, vals)?;
         Ok(Self { lu, vars, row_keys })
     }
 

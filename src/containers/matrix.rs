@@ -2200,8 +2200,12 @@ impl AssembledCsr {
 /// names.
 struct AssembledData {
     vars: std::sync::Arc<Vec<String>>,
-    row_keys: Vec<DofKey>,
-    col_keys: Vec<DofKey>,
+    /// Shared with the pattern that produced them, like the sparsity beside
+    /// them: the numbering is the pattern's, and an assembled matrix borrows it
+    /// rather than copying eight bytes per degree of freedom out of it at every
+    /// assembly — twice, rows and columns.
+    row_keys: std::sync::Arc<Vec<DofKey>>,
+    col_keys: std::sync::Arc<Vec<DofKey>>,
     csr: AssembledCsr,
 }
 
@@ -2474,10 +2478,13 @@ pub struct AssemblyPattern {
     /// The variable name table the DOF keys index — interned once for the whole
     /// pattern, rows and columns together.
     pub vars: std::sync::Arc<Vec<String>>,
-    /// Global row DOFs as packed [`DofKey`]s, in CSR row order.
-    pub row_keys: Vec<DofKey>,
-    /// Global column DOFs as packed [`DofKey`]s, in CSR column order.
-    pub col_keys: Vec<DofKey>,
+    /// Global row DOFs as packed [`DofKey`]s, in CSR row order. Held by `Arc`
+    /// for the same reason as the sparsity below: every matrix assembled from
+    /// this pattern **shares** the numbering instead of copying it.
+    pub row_keys: std::sync::Arc<Vec<DofKey>>,
+    /// Global column DOFs as packed [`DofKey`]s, in CSR column order. Shared
+    /// like [`row_keys`](Self::row_keys).
+    pub col_keys: std::sync::Arc<Vec<DofKey>>,
     /// CSR row offsets, length `row_keys.len() + 1`. Held by `Arc` because the
     /// assembled matrices built from this pattern **share** it rather than each
     /// copying the sparsity out.
@@ -2911,8 +2918,8 @@ impl Matrix {
         };
         self.assembled = Some(AssembledData {
             vars,
-            row_keys,
-            col_keys,
+            row_keys: std::sync::Arc::new(row_keys),
+            col_keys: std::sync::Arc::new(col_keys),
             csr,
         });
         Ok(())
@@ -2928,8 +2935,8 @@ impl Matrix {
     pub(crate) fn set_assembled(
         &mut self,
         vars: std::sync::Arc<Vec<String>>,
-        row_keys: Vec<DofKey>,
-        col_keys: Vec<DofKey>,
+        row_keys: std::sync::Arc<Vec<DofKey>>,
+        col_keys: std::sync::Arc<Vec<DofKey>>,
         csr: AssembledCsr,
     ) {
         self.assembled = Some(AssembledData {
@@ -3335,12 +3342,12 @@ impl Matrix {
     /// assert_eq!(k.dof_vars()[dof_var(cles[0]) as usize], "q");
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn row_dof_keys(&self) -> Result<Vec<DofKey>> {
+    pub fn row_dof_keys(&self) -> Result<std::sync::Arc<Vec<DofKey>>> {
         if let Some(a) = &self.assembled {
             return Ok(a.row_keys.clone());
         }
         let vars = self.field_names();
-        self.collect_dof_keys(true, &vars)
+        Ok(std::sync::Arc::new(self.collect_dof_keys(true, &vars)?))
     }
 
     /// Column DOFs as packed [`DofKey`]s, in CSR column order — the column twin
@@ -3372,12 +3379,12 @@ impl Matrix {
     /// assert_eq!(k.dof_vars()[dof_var(cles[0]) as usize], "T");
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn col_dof_keys(&self) -> Result<Vec<DofKey>> {
+    pub fn col_dof_keys(&self) -> Result<std::sync::Arc<Vec<DofKey>>> {
         if let Some(a) = &self.assembled {
             return Ok(a.col_keys.clone());
         }
         let vars = self.field_names();
-        self.collect_dof_keys(false, &vars)
+        Ok(std::sync::Arc::new(self.collect_dof_keys(false, &vars)?))
     }
 
     /// Union of all field names (dual + primal) across blocks.
