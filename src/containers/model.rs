@@ -1637,17 +1637,28 @@ impl SubModel {
         components: &[String],
         values: &std::collections::HashMap<(NodeId, String), f64>,
     ) -> Result<NodeField> {
+        use crate::containers::field::SubField;
         let mut field = NodeField::default();
+        let ncomp = components.len();
         for sm in &self.multiplier_mesh()? {
+            // `from_poi1` seals, which writes — so it runs before the guard.
             let mut sub = SubNodeField::from_poi1(sm, components.to_vec())?;
-            let nids: Vec<NodeId> = sm.read().connectivity().to_vec();
-            for nid in nids {
-                for comp in components {
-                    if let Some(&g) = values.get(&(nid, comp.clone())) {
-                        sub.set_value(nid, comp, g)?;
-                    }
-                }
+            // One pass over the supplied values rather than one over the nodes:
+            // it visits only what was actually given, and no `(node, name)` key
+            // has to be rebuilt — the loop allocates nothing. The zone's node
+            // order is the support's own, so the write is positional.
+            let support = sm.read();
+            let index = support.node_index();
+            let vals = sub.values_mut();
+            for ((nid, comp), &g) in values {
+                let (Some(&ni), Some(ci)) =
+                    (index.get(nid), components.iter().position(|c| c == comp))
+                else {
+                    continue; // another zone's node, or a component this field does not carry
+                };
+                vals[ni * ncomp + ci] = g;
             }
+            drop(support);
             field.add_sub(Handle::new(sub))?;
         }
         Ok(field)

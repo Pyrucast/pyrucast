@@ -60,7 +60,7 @@ use crate::containers::mesh::SubMesh;
 use crate::containers::node_field::{NodeFieldView, SubNodeField};
 use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
-use crate::handle::Handle;
+use crate::handle::{Handle, ReadGuard};
 use crate::ops::coloring;
 use crate::parallel::*;
 use nalgebra_sparse::CooMatrix;
@@ -1792,21 +1792,15 @@ pub fn element_block_triplets_per_cell(
     // Support → local position maps (first occurrence wins), and the block's
     // local row/col dimensions — all known up front, so the whole loop runs in
     // parallel (no shared mutation).
-    let row_nodes: Vec<NodeId> = row_support.read().connectivity().to_vec();
-    let col_nodes: Vec<NodeId> = col_support.read().connectivity().to_vec();
+    let (row_g, col_g) = support_guards(row_support, col_support);
+    let row_nodes = row_g.connectivity();
+    let col_nodes = col_g.as_deref().unwrap_or(&row_g).connectivity();
     let n_row_nodes = row_nodes.len();
     let n_col_nodes = col_nodes.len();
     let nrows = n_row_nodes * n_dual;
     let ncols = n_col_nodes * n_primal;
-    let pos_map = |nodes: &[NodeId]| -> HashMap<NodeId, u32> {
-        let mut m = HashMap::with_capacity(nodes.len());
-        for (i, &n) in nodes.iter().enumerate() {
-            m.entry(n).or_insert(i as u32);
-        }
-        m
-    };
-    let row_pos = pos_map(&row_nodes);
-    let col_pos = pos_map(&col_nodes);
+    let row_pos = position_map(row_nodes);
+    let col_pos = position_map(col_nodes);
     // The position of **every node of the connectivity**, in a single pass,
     // before the parallel region. Hashing it inside the loop asked the same
     // question at every cell and every assembly, for an answer that is a fact
@@ -2093,16 +2087,17 @@ pub fn element_block_pattern(
     let n_cells = fe.cell_count();
     let n_nodes = conn.len().checked_div(n_cells).unwrap_or(0);
 
-    let row_nodes: Vec<NodeId> = row_support.read().connectivity().to_vec();
-    let col_nodes: Vec<NodeId> = col_support.read().connectivity().to_vec();
+    let (row_g, col_g) = support_guards(row_support, col_support);
+    let row_nodes = row_g.connectivity();
+    let col_nodes = col_g.as_deref().unwrap_or(&row_g).connectivity();
     let (n_row_support, n_col_support) = (row_nodes.len(), col_nodes.len());
 
     Ok(BlockPattern {
         nrows: n_row_support * n_dual,
         ncols: n_col_support * n_primal,
         n_cells,
-        row_slot: local_positions(conn, &position_map(&row_nodes), "row")?,
-        col_slot: local_positions(conn, &position_map(&col_nodes), "column")?,
+        row_slot: local_positions(conn, &position_map(row_nodes), "row")?,
+        col_slot: local_positions(conn, &position_map(col_nodes), "column")?,
         row_nodes_per_cell: n_nodes,
         col_nodes_per_cell: n_nodes,
         n_row_support,
@@ -2230,12 +2225,13 @@ pub fn coupling_block_triplets_per_cell(
         col_rds.push(RefData::snapshot(&f)?);
     }
 
-    let row_nodes: Vec<NodeId> = row_support.read().connectivity().to_vec();
-    let col_nodes: Vec<NodeId> = col_support.read().connectivity().to_vec();
+    let (row_g, col_g) = support_guards(row_support, col_support);
+    let row_nodes = row_g.connectivity();
+    let col_nodes = col_g.as_deref().unwrap_or(&row_g).connectivity();
     let (n_row_support, n_col_support) = (row_nodes.len(), col_nodes.len());
     let (nrows, ncols) = (n_row_support * n_dual, n_col_support * n_primal);
-    let row_pos = position_map(&row_nodes);
-    let col_pos = position_map(&col_nodes);
+    let row_pos = position_map(row_nodes);
+    let col_pos = position_map(col_nodes);
 
     let n_cols_loc = n_col_nodes_cell * n_primal;
     let ke_len = (n_row_nodes_cell * n_dual) * n_cols_loc;
@@ -2687,16 +2683,17 @@ pub fn coupling_block_pattern(
     let (n_cells, row_nodes_per_cell, col_nodes_per_cell) =
         check_conforming(&row_fe, &col_fe, row_conn, col_conn)?;
 
-    let row_nodes: Vec<NodeId> = row_support.read().connectivity().to_vec();
-    let col_nodes: Vec<NodeId> = col_support.read().connectivity().to_vec();
+    let (row_g, col_g) = support_guards(row_support, col_support);
+    let row_nodes = row_g.connectivity();
+    let col_nodes = col_g.as_deref().unwrap_or(&row_g).connectivity();
     let (n_row_support, n_col_support) = (row_nodes.len(), col_nodes.len());
 
     Ok(BlockPattern {
         nrows: n_row_support * n_dual,
         ncols: n_col_support * n_primal,
         n_cells,
-        row_slot: local_positions(row_conn, &position_map(&row_nodes), "row")?,
-        col_slot: local_positions(col_conn, &position_map(&col_nodes), "column")?,
+        row_slot: local_positions(row_conn, &position_map(row_nodes), "row")?,
+        col_slot: local_positions(col_conn, &position_map(col_nodes), "column")?,
         row_nodes_per_cell,
         col_nodes_per_cell,
         n_row_support,
@@ -2708,6 +2705,24 @@ pub fn coupling_block_pattern(
 }
 
 /// Node → position in a support (first occurrence wins).
+/// Read guards on a block's two supports, taking a **single** one when rows and
+/// columns name the same handle — the square case every volumetric physics
+/// produces. The connectivities are then read in place rather than copied out
+/// (see `book/src/developper/parallelisme.md` § Zéro-copie); asking one
+/// `RwLock` twice in a thread is what the `None` avoids.
+fn support_guards(
+    row: &Handle<SubMesh>,
+    col: &Handle<SubMesh>,
+) -> (ReadGuard<SubMesh>, Option<ReadGuard<SubMesh>>) {
+    let r = row.read();
+    let c = if col.same_object(row) {
+        None
+    } else {
+        Some(col.read())
+    };
+    (r, c)
+}
+
 fn position_map(nodes: &[NodeId]) -> HashMap<NodeId, u32> {
     let mut m = HashMap::with_capacity(nodes.len());
     for (i, &n) in nodes.iter().enumerate() {
@@ -2832,8 +2847,16 @@ pub fn scatter_to_nodes(
     // Support slots: the unique nodes of `support` and each node's flat base.
     // `support` is the POI1 of the submesh, so it covers every connectivity node
     // and the map is total.
-    let unique: Vec<NodeId> = support.read().connectivity().to_vec();
-    let slot_of: HashMap<NodeId, usize> = unique.iter().enumerate().map(|(k, &n)| (n, k)).collect();
+    // Read in place, under a guard **scoped to this table**: `from_poi1` below
+    // seals the same support, and sealing writes.
+    let slot_of: HashMap<NodeId, usize> = {
+        let g = support.read();
+        g.connectivity()
+            .iter()
+            .enumerate()
+            .map(|(k, &n)| (n, k))
+            .collect()
+    };
     // The slot of **every node of the connectivity**, in a single pass, before
     // the parallel region. The comment above says the table is total: better
     // to use it once than to hash it per cell.
