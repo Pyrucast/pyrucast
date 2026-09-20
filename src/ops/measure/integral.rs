@@ -75,7 +75,8 @@ pub fn integral(field: &NodeField, fespace: &FiniteElementSpace, component: &str
     let mut total = 0.0;
     for sub_h in fespace {
         let submesh = sub_h.read().submesh();
-        let conn: Vec<NodeId> = submesh.read().connectivity().to_vec();
+        let submesh_g = submesh.read();
+        let conn = submesh_g.connectivity();
         // This integral interpolates the nodal field: it needs a field basis, and
         // that is a fact of the zone.
         kernel::require_field_basis(sub_h, "shape values")?;
@@ -84,7 +85,7 @@ pub fn integral(field: &NodeField, fespace: &FiniteElementSpace, component: &str
         // the parallel per-cell kernel does O(1) look-ups and never re-reads the
         // store.
         let mut vals: HashMap<NodeId, f64> = HashMap::new();
-        for &nid in &conn {
+        for &nid in conn {
             if let std::collections::hash_map::Entry::Vacant(e) = vals.entry(nid) {
                 e.insert(view.value(nid, component)?);
             }

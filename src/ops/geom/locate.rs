@@ -133,10 +133,11 @@ pub fn locate_points(host: &Mesh, points: &[Vec<f64>], tol: f64) -> Result<Vec<O
 
     let mut cells: Vec<Cell> = Vec::new();
     for (s_idx, sm_handle) in host.into_iter().enumerate() {
-        let (element_type, conn, coords_handle) = {
-            let sm = sm_handle.read();
-            (sm.element_type(), sm.connectivity().to_vec(), sm.coords())
-        };
+        // Guard held across the `Coords` read below: distinct objects, and
+        // `SubMesh` → `Coords` is the order the whole crate locks in.
+        let sm = sm_handle.read();
+        let (element_type, conn, coords_handle) =
+            (sm.element_type(), sm.connectivity(), sm.coords());
         if element_type == ElementType::POI1 {
             continue; // A node has no interior to contain anything.
         }

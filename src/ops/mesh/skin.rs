@@ -168,10 +168,9 @@ pub fn skin(mesh: &Mesh, angle_deg: f64) -> Result<Mesh> {
         k
     };
     for sm in mesh {
-        let (et, conn) = {
-            let s = sm.read();
-            (s.element_type(), s.connectivity().to_vec())
-        };
+        // Guard held for this zone's pass: the loop below only reads.
+        let s = sm.read();
+        let (et, conn) = (s.element_type(), s.connectivity());
         if et == ElementType::POI1 {
             continue;
         }
@@ -205,10 +204,9 @@ pub fn skin(mesh: &Mesh, angle_deg: f64) -> Result<Mesh> {
     {
         let c = coords.read();
         for sm in mesh {
-            let (et, conn) = {
-                let s = sm.read();
-                (s.element_type(), s.connectivity().to_vec())
-            };
+            // Guard held for this zone's pass: the loop below only reads.
+            let s = sm.read();
+            let (et, conn) = (s.element_type(), s.connectivity());
             if et == ElementType::POI1 {
                 continue;
             }

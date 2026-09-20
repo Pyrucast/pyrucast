@@ -53,29 +53,30 @@ use crate::handle::Handle;
 pub fn barycenter(mesh: &Mesh) -> Result<Mesh> {
     let mut result = Mesh::empty();
     for sm_handle in mesh {
-        let (coords, element_type, conn) = {
-            let sm = sm_handle.read();
-            (sm.coords(), sm.element_type(), sm.connectivity().to_vec())
-        };
-        let npc = element_type.nodes_per_cell();
-        let n_cells = conn.len() / npc;
+        let coords = sm_handle.read().coords();
 
-        // Compute every centroid under a read lock, then mint the whole cloud
-        // under a write lock — two critical sections for a zone, whatever its
-        // cell count.
+        // Compute every centroid under the read locks — the connectivity
+        // borrowed in place, never copied out — then mint the whole cloud under
+        // a write lock. Two critical sections for a zone, whatever its cell
+        // count, and the guards are gone before the write.
         let centroids: Vec<f64> = {
+            let sm = sm_handle.read();
+            let npc = sm.element_type().nodes_per_cell();
+            let conn = sm.connectivity();
             let c = coords.read();
             let dim = c.dim() as usize;
-            let mut buf = Vec::with_capacity(n_cells * dim);
-            for cell in 0..n_cells {
-                let ids = &conn[cell * npc..(cell + 1) * npc];
-                let mut centroid = vec![0.0; dim];
-                for &nid in ids {
-                    for (acc, &x) in centroid.iter_mut().zip(c.position(nid)?) {
+            let mut buf = vec![0.0; (conn.len() / npc) * dim];
+            // Accumulated straight into the output buffer: a centroid is a
+            // window of it, so no cell allocates.
+            for (cell, out) in conn.chunks_exact(npc).zip(buf.chunks_exact_mut(dim)) {
+                for &nid in cell {
+                    for (acc, &x) in out.iter_mut().zip(c.position(nid)?) {
                         *acc += x;
                     }
                 }
-                buf.extend(centroid.iter().map(|x| x / npc as f64));
+                for v in out.iter_mut() {
+                    *v /= npc as f64;
+                }
             }
             buf
         };

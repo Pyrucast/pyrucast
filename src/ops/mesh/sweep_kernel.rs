@@ -50,14 +50,10 @@ pub fn qua4_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Mes
         ));
     }
 
-    let (et_a, n_elems, conn_a) = {
-        let s = sm_a.read();
-        (s.element_type(), s.cell_count(), s.connectivity().to_vec())
-    };
-    let (et_b, n_elems_b, conn_b) = {
-        let s = sm_b.read();
-        (s.element_type(), s.cell_count(), s.connectivity().to_vec())
-    };
+    // Guards held for the read pass; the `Coords` write comes after.
+    let (a, b) = (sm_a.read(), sm_b.read());
+    let (et_a, n_elems, conn_a) = (a.element_type(), a.cell_count(), a.connectivity());
+    let (et_b, n_elems_b, conn_b) = (b.element_type(), b.cell_count(), b.connectivity());
 
     if et_a != ElementType::SEG2 {
         return Err(PyrucastError::Message(
@@ -172,7 +168,7 @@ fn columns(mesh: &Mesh, op: &str) -> Result<Columns> {
     let mut index: std::collections::HashMap<NodeId, usize> = std::collections::HashMap::new();
     let mut ids: Vec<NodeId> = Vec::new();
     for sm in mesh {
-        for id in sm.read().connectivity().to_vec() {
+        for &id in sm.read().connectivity() {
             index.entry(id).or_insert_with(|| {
                 let col = ids.len();
                 ids.push(id);
@@ -241,10 +237,9 @@ fn layered(
 
     let mut result = Mesh::empty();
     for sm_handle in mesh {
-        let (et, n_cells, conn) = {
-            let s = sm_handle.read();
-            (s.element_type(), s.cell_count(), s.connectivity().to_vec())
-        };
+        // Guard held for this zone's pass: what follows only reads.
+        let s = sm_handle.read();
+        let (et, n_cells, conn) = (s.element_type(), s.cell_count(), s.connectivity());
         let npc = et.nodes_per_cell();
 
         let swept_et = match et {
@@ -549,14 +544,10 @@ pub fn solid_between(mesh_a: &Mesh, mesh_b: &Mesh, n_layers: usize) -> Result<Me
         ));
     }
 
-    let (et_a, conn_a) = {
-        let s = sm_a.read();
-        (s.element_type(), s.connectivity().to_vec())
-    };
-    let (et_b, conn_b) = {
-        let s = sm_b.read();
-        (s.element_type(), s.connectivity().to_vec())
-    };
+    // Guards held for the read pass; the `Coords` write comes after.
+    let (a, b) = (sm_a.read(), sm_b.read());
+    let (et_a, conn_a) = (a.element_type(), a.connectivity());
+    let (et_b, conn_b) = (b.element_type(), b.connectivity());
     if et_a != et_b {
         return Err(PyrucastError::Message(format!(
             "sweep_solid: element types differ ({et_a} vs {et_b})"

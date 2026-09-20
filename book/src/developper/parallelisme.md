@@ -57,6 +57,27 @@ read-guards** pendant toute la région parallèle et on **emprunte les tranches
 (méthodes `&self` pures), donc `&SubFiniteElementSpace` est `Sync` et appelable
 depuis plusieurs threads.
 
+**La règle ne s'arrête pas aux régions parallèles.** Une `.to_vec()` sur une
+connectivité est suspecte partout, y compris dans du code séquentiel : elle coûte
+4 octets par nœud et par copie, et elle se refait souvent à chaque assemblage ou à
+chaque évaluation de résidu. Deux idiomes reviennent, et aucun n'oblige à recopier :
+
+- **Un opérateur de maillage** lit toutes ses zones, puis écrit dans `Coords`
+  (`add_nodes`, `decref_all`). Les deux phases sont séparées : la garde de lecture
+  meurt avant l'écriture, il suffit de l'ouvrir pour la passe au lieu d'en extraire
+  un tuple. Quand les deux se chevauchent vraiment, tenir la garde reste licite —
+  `SubMesh` → `Coords` est l'ordre de verrouillage de tout le dépôt, jamais
+  l'inverse, et `SubMesh::to_poi1` le pratique déjà.
+- **Un remplisseur de bloc ou de champ** construit d'abord (un constructeur scelle,
+  et sceller **écrit**), puis ouvre ses gardes et remplit. Les formes `_with`
+  existent pour ça — `SubMatrix::add_entry_with`, `SubNodeField::nodes_with` : elles
+  reçoivent le `&SubMesh` que l'appelant tient déjà, au lieu de reprendre un verrou
+  à chaque entrée.
+
+Les seules copies légitimes sont celles qu'on **mute** ensuite (dédoublonner, trier,
+étendre) et celles qu'impose une signature : une fonction qui rend une liste sans
+rendre la garde qui la porte, comme `Cell::node_ids` ou la frontière Python.
+
 ## Déterminisme
 
 Les opérateurs de champ et d'intégration parallélisés soit **écrivent chaque

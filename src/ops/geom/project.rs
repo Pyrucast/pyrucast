@@ -153,10 +153,11 @@ pub fn project_points(surface: &Mesh, points: &[Vec<f64>]) -> Result<Vec<Project
     let sdim = surface.coords()?.read().dim() as usize;
     let mut facets: Vec<Facet> = Vec::new();
     for (s_idx, sm_handle) in surface.into_iter().enumerate() {
-        let (element_type, conn, coords_handle) = {
-            let sm = sm_handle.read();
-            (sm.element_type(), sm.connectivity().to_vec(), sm.coords())
-        };
+        // Guard held across the `Coords` read below: distinct objects, and
+        // `SubMesh` → `Coords` is the order the whole crate locks in.
+        let sm = sm_handle.read();
+        let (element_type, conn, coords_handle) =
+            (sm.element_type(), sm.connectivity(), sm.coords());
         if element_type.topological_dim() + 1 != sdim {
             return Err(PyrucastError::Message(format!(
                 "project_points: submesh {s_idx} is {element_type} (topological dim {}) \

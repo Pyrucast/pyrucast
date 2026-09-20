@@ -78,10 +78,9 @@ pub fn chain(mesh: &Mesh) -> Result<Mesh> {
     let coords = mesh.coords()?;
     let mut result = Mesh::empty();
     for sm_handle in mesh {
-        let (et, color, conn) = {
-            let s = sm_handle.read();
-            (s.element_type(), s.face_color(), s.connectivity().to_vec())
-        };
+        // Guard held for this zone's pass: what follows only reads.
+        let s = sm_handle.read();
+        let (et, color, conn) = (s.element_type(), s.face_color(), s.connectivity());
         if !matches!(et, ElementType::SEG2 | ElementType::SEG3) {
             return Err(PyrucastError::Message(format!(
                 "chain: expects a line mesh (SEG2 or SEG3), got {et}"

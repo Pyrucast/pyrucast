@@ -179,10 +179,9 @@ pub fn orient(mesh: &Mesh) -> Result<Mesh> {
     let mut facet_map: HashMap<Vec<NodeId>, Vec<(usize, i8)>> = HashMap::new();
 
     for sm_handle in mesh {
-        let (et, conn) = {
-            let s = sm_handle.read();
-            (s.element_type(), s.connectivity().to_vec())
-        };
+        // Guard held for this zone's pass: what follows only reads.
+        let s = sm_handle.read();
+        let (et, conn) = (s.element_type(), s.connectivity());
         let npc = et.nodes_per_cell();
         let nc = et.as_kind().corner_count();
         for chunk in conn.chunks(npc) {

@@ -205,15 +205,15 @@ fn side_columns(mesh: &Mesh, label: &str) -> Result<SideColumns> {
         )));
     }
     let sm = mesh.get(0)?;
-    let (coords, et, n_elems, conn) = {
-        let s = sm.read();
-        (
-            s.coords(),
-            s.element_type(),
-            s.cell_count(),
-            s.connectivity().to_vec(),
-        )
-    };
+    // Guard held while the connectivity is read; `Coords` is a distinct
+    // object, locked after it as everywhere else.
+    let s = sm.read();
+    let (coords, et, n_elems, conn) = (
+        s.coords(),
+        s.element_type(),
+        s.cell_count(),
+        s.connectivity(),
+    );
     if et != ElementType::SEG2 {
         return Err(PyrucastError::Message(format!(
             "transfinite: {label} must be a SEG2 mesh"

@@ -79,10 +79,9 @@ pub(super) fn qua4_to_tri3(mesh: &Mesh) -> Result<Mesh> {
     let coords = mesh.coords()?;
     let mut result = Mesh::empty();
     for sm_h in mesh {
-        let (color, conn) = {
-            let s = sm_h.read();
-            (s.face_color(), s.connectivity().to_vec())
-        };
+        // Guard held for this zone's pass: what follows only reads.
+        let s = sm_h.read();
+        let (color, conn) = (s.face_color(), s.connectivity());
         // Two triangles per quad, laid out whole then posted in one locked
         // pass over the `Coords`.
         let split: Vec<NodeId> = conn
@@ -105,10 +104,9 @@ pub(super) fn qua8_to_qua9(mesh: &Mesh) -> Result<Mesh> {
     let coords = mesh.coords()?;
     let mut result = Mesh::empty();
     for sm_h in mesh {
-        let (color, conn) = {
-            let s = sm_h.read();
-            (s.face_color(), s.connectivity().to_vec())
-        };
+        // Guard held for this zone's pass: what follows only reads.
+        let s = sm_h.read();
+        let (color, conn) = (s.face_color(), s.connectivity());
         // Every centre first — one flat buffer, one `Coords` write — then the
         // connectivity that references them, in order.
         let centers: Vec<f64> = {

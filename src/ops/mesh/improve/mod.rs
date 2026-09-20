@@ -130,10 +130,9 @@ impl Surface {
         let guard = coords.read();
         let mut cells = 0usize;
         for sm in mesh {
-            let (et, conn) = {
-                let s = sm.read();
-                (s.element_type(), s.connectivity().to_vec())
-            };
+            // Guard held for this zone's pass: what follows only reads.
+            let s = sm.read();
+            let (et, conn) = (s.element_type(), s.connectivity());
             match et {
                 ElementType::POI1 | ElementType::SEG2 => continue,
                 ElementType::TRI3 | ElementType::QUA4 => {}

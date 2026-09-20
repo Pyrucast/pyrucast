@@ -63,6 +63,8 @@ SYMBOLES_TOLERES = {
     "T::union_subs": "T is a type parameter, not a concrete type",
     "ops::mesher": "historical name, cited to tell the 2026-08-03 renaming",
     "SubMesh::connectivity": "pub(crate): the Parallelism page describes the internal machinery",
+    "SubMatrix::add_entry_with": "pub(crate): same page, the zero-copy twin of a public method",
+    "SubNodeField::nodes_with": "pub(crate): same page, the zero-copy twin of a public method",
     "Type::membre": "metavariable of the Documentation et tests page",
     "module::verbe": "metavariable: the marker of delegation methods",
     "Coords::acquire": "wrong name, cited to tell what the guard found",

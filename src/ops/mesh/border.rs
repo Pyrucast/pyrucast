@@ -96,10 +96,9 @@ pub fn border(mesh: &Mesh, angle_deg: Option<f64>) -> Result<Mesh> {
     let mut counts: HashMap<(NodeId, NodeId), u32> = HashMap::new();
     let mut any_surface = false;
     for sm in mesh {
-        let (et, conn) = {
-            let s = sm.read();
-            (s.element_type(), s.connectivity().to_vec())
-        };
+        // Guard held for this zone's pass: the loop below only reads.
+        let s = sm.read();
+        let (et, conn) = (s.element_type(), s.connectivity());
         match et {
             ElementType::POI1 => continue, // no edges — tolerated
             ElementType::TRI3 | ElementType::QUA4 => {}
@@ -132,10 +131,9 @@ pub fn border(mesh: &Mesh, angle_deg: Option<f64>) -> Result<Mesh> {
     let mut adj: HashMap<NodeId, Vec<NodeId>> = HashMap::new();
     let mut order: Vec<NodeId> = Vec::new();
     for sm in mesh {
-        let (et, conn) = {
-            let s = sm.read();
-            (s.element_type(), s.connectivity().to_vec())
-        };
+        // Guard held for this zone's pass: the loop below only reads.
+        let s = sm.read();
+        let (et, conn) = (s.element_type(), s.connectivity());
         if et == ElementType::POI1 {
             continue;
         }

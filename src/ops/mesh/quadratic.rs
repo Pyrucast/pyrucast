@@ -73,10 +73,10 @@ pub fn to_quadratic(mesh: &Mesh) -> Result<Mesh> {
     let mut zones: Vec<PendingZone> = Vec::new();
 
     for sm_h in mesh {
-        let (et, color, conn) = {
-            let s = sm_h.read();
-            (s.element_type(), s.face_color(), s.connectivity().to_vec())
-        };
+        // Guard held for the zone's read pass; the `coords.write()` that mints
+        // the mid-edge nodes comes after the loop, so nothing crosses it.
+        let s = sm_h.read();
+        let (et, color, conn) = (s.element_type(), s.face_color(), s.connectivity());
         let (quad_et, edges) = quadratic_of(et)?;
         let npc = et.nodes_per_cell();
 
