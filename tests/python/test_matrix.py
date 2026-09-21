@@ -191,12 +191,12 @@ def test_matrix_aggregates_two_blocks():
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
-    # Block A: row a, cols (a, b).
-    block_a = _make_block(c, [a], [a, b], ["q"], ["T"], symmetry="full")
+    # Block A: row a, cols (a, b) — rectangular, so it carries no symmetry.
+    block_a = _make_block(c, [a], [a, b], ["q"], ["T"], symmetry="none")
     block_a.add_entry(a, "q", a, "T", 2.0)
     block_a.add_entry(a, "q", b, "T", -1.0)
-    # Block B: row b, cols (a, b).
-    block_b = _make_block(c, [b], [a, b], ["q"], ["T"], symmetry="full")
+    # Block B: row b, cols (a, b) — rectangular too.
+    block_b = _make_block(c, [b], [a, b], ["q"], ["T"], symmetry="none")
     block_b.add_entry(b, "q", a, "T", -1.0)
     block_b.add_entry(b, "q", b, "T", 2.0)
 
@@ -209,7 +209,12 @@ def test_matrix_aggregates_two_blocks():
     assert len(k) == 2
     assert k.n_rows() == 2
     assert k.n_cols() == 2
-    assert k.symmetric is True
+    # The assembled array IS symmetric, and the flag still says False: cut into
+    # row slices, neither block can declare it. A rectangular block is never
+    # `full`, and these two are not each other's transpose either, so no `half`
+    # pair expresses it. A symmetry is forgotten, never invented.
+    assert k.dense() == [2.0, -1.0, -1.0, 2.0]
+    assert k.symmetric is False
     assert k.get(a, "q", a, "T") == 2.0
     assert k.get(b, "q", b, "T") == 2.0
     assert k.dense() == [2.0, -1.0, -1.0, 2.0]
@@ -223,12 +228,12 @@ def test_matrix_compose_blocks_with_union():
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     ba = pyrucast.Matrix.block(
-        _poi1(c, [a]), _poi1(c, [a, b]), ["q"], ["T"], symmetry="full"
+        _poi1(c, [a]), _poi1(c, [a, b]), ["q"], ["T"], symmetry="none"
     )
     ba[0].add_entry(a, "q", a, "T", 2.0)
     ba[0].add_entry(a, "q", b, "T", -1.0)
     bb = pyrucast.Matrix.block(
-        _poi1(c, [b]), _poi1(c, [a, b]), ["q"], ["T"], symmetry="full"
+        _poi1(c, [b]), _poi1(c, [a, b]), ["q"], ["T"], symmetry="none"
     )
     bb[0].add_entry(b, "q", a, "T", -1.0)
     bb[0].add_entry(b, "q", b, "T", 2.0)
@@ -238,8 +243,9 @@ def test_matrix_compose_blocks_with_union():
     assert len(k) == 2
     assert k.n_rows() == 2
     assert k.n_cols() == 2
-    assert k.symmetric is True
+    # Row slices again: symmetric as an array, undeclarable block by block.
     assert k.dense() == [2.0, -1.0, -1.0, 2.0]
+    assert k.symmetric is False
 
 
 def test_matrix_get_sums_across_blocks():
@@ -552,9 +558,10 @@ def test_matrix_dump_prints_global_grid_and_elides(capsys):
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
-    block_a = _make_block(c, [a], [a, b], ["q"], ["T"], symmetry="full")
+    # Both rectangular, so neither carries any symmetry.
+    block_a = _make_block(c, [a], [a, b], ["q"], ["T"], symmetry="none")
     block_a.add_entry(a, "q", a, "T", 2.0)
-    block_b = _make_block(c, [b], [a, b], ["q"], ["T"], symmetry="full")
+    block_b = _make_block(c, [b], [a, b], ["q"], ["T"], symmetry="none")
     block_b.add_entry(b, "q", b, "T", 2.0)
     k = pyrucast.Matrix()
     k.add_sub(block_a)

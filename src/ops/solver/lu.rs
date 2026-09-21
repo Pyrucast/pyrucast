@@ -240,14 +240,10 @@ pub(crate) fn factorize_csr(
     // comes with it, are skipped. This is the whole point of carrying the flag:
     // the peak alongside the factorization drops from two copies to one.
     //
-    // KNOWN DEFECT, being fixed next: the flag describes the **operator**, while
-    // what is needed here is the **array**. The global row and column orders are
-    // collected in two independent walks over the blocks, so a constraint that
-    // introduces two new nodes at once — `embedded`, whose immersed node the
-    // physics never numbered — has them discovered in opposite order on the two
-    // sides, and lands the multiplier at row `k` against the immersed node at
-    // column `k`. The array is then a permutation away from symmetric, and this
-    // short-circuit quietly factorizes the transpose.
+    // What makes this sound is upstream: a matrix that declares itself symmetric
+    // has its two global DOF orders built in **one conjugate walk**, rank for
+    // rank, so the flag describes the assembled array and not merely the
+    // operator behind it (`Matrix::collect_conjugate_dof_keys`).
     let transposed = (!symmetric).then(|| transpose_to_csc(n, offsets, cols, vals));
     let (col_ptr, row_idx, values) = match &transposed {
         Some((ptr, idx, v)) => (&ptr[..], &idx[..], &v[..]),

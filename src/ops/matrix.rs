@@ -921,6 +921,117 @@ mod tests {
         assert!(k.symmetric(), "two of each member is a complete pairing");
     }
 
+    /// One TRI3 of heat conduction with a node immersed in it, plus its
+    /// multiplier — five DOFs.
+    fn immersed_node_in_a_triangle() -> (Model, ElementField) {
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let corners: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+            .iter()
+            .map(|c| Node::create_in(coords.clone(), c).unwrap())
+            .collect();
+        let mut host = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
+        host.add_cell(&corners.iter().map(|n| n.id()).collect::<Vec<_>>())
+            .unwrap();
+        let fes = FiniteElementSpace::lagrange1(&host).unwrap();
+        let physics = crate::ops::model::heat_conduction(&fes).unwrap();
+
+        let immersed = Node::create_in(coords, &[0.25, 0.25]).unwrap();
+        let bar = Mesh::from_submesh(SubMesh::poi1_from_nodes(&[immersed]).unwrap());
+
+        let mut model = Model::empty();
+        model.add_sub(physics.get(0).unwrap()).unwrap();
+        model
+            .add_sub(Handle::new(
+                SubModel::embedded(&physics, &bar, &host, vec!["T".into()], 1e-9).unwrap(),
+            ))
+            .unwrap();
+        let materials = material_field_per_sub_model(&model, &[&[("k", 1.0)], &[]]).unwrap();
+        (model, materials)
+    }
+
+    /// The case that proved the two DOF orders were collected independently.
+    ///
+    /// `embedded` brings **two** new nodes at once — the immersed node, which no
+    /// physics ever numbered, and its multiplier — and the two walks used to
+    /// discover them in opposite order: the array came out `0.5` away from
+    /// symmetric while the flag said it was symmetric. A plain Dirichlet hid
+    /// this, its constrained node being numbered by the physics already.
+    #[test]
+    fn an_immersed_node_does_not_cross_the_two_dof_orders() {
+        let (model, materials) = immersed_node_in_a_triangle();
+        let k = stiffness(&model, &materials).unwrap();
+
+        assert!(
+            csr_is_symmetric(&k),
+            "the assembled CSR must be symmetric, not merely the operator"
+        );
+        assert!(k.symmetric(), "and the declaration must agree");
+    }
+
+    /// The same, through the other assembly path. `finalize` (literal blocks) and
+    /// `assemble` (scattered kernels) are deliberately parallel so the two can be
+    /// compared — which only means something if they number the DOFs alike.
+    #[test]
+    fn both_assembly_paths_number_the_immersed_case_alike() {
+        let (model, materials) = immersed_node_in_a_triangle();
+        let scattered = stiffness(&model, &materials).unwrap();
+        let mut literal = assemble_literal_reference(&model, &materials).unwrap();
+        literal.finalize().unwrap();
+
+        assert_eq!(scattered.row_dofs().unwrap(), literal.row_dofs().unwrap());
+        assert_eq!(scattered.col_dofs().unwrap(), literal.col_dofs().unwrap());
+        assert!(csr_is_symmetric(&literal), "and the literal path too");
+    }
+
+    /// The other producer that mints pairs. Two `QUA4` blocks, the lower one's
+    /// top edge as master and the upper one's bottom nodes as slaves: node-facet
+    /// coupling across two meshes, with coefficients varying node by node.
+    #[test]
+    fn a_contact_pair_keeps_the_two_dof_orders_conjugate() {
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let node = |x: f64, y: f64| Node::create_in(coords.clone(), &[x, y]).unwrap();
+        // Lower block y ∈ [0, 1], upper block y ∈ [1.1, 2.1].
+        let lower: Vec<Node> = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+            .iter()
+            .map(|&(x, y)| node(x, y))
+            .collect();
+        let upper: Vec<Node> = [(0.0, 1.1), (1.0, 1.1), (1.0, 2.1), (0.0, 2.1)]
+            .iter()
+            .map(|&(x, y)| node(x, y))
+            .collect();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
+        for block in [&lower, &upper] {
+            mesh.add_cell(&block.iter().map(|n| n.id()).collect::<Vec<_>>())
+                .unwrap();
+        }
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+
+        // Master runs in −x so the facet normal points +y, toward the slaves.
+        let mut master = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+        master.add_cell(&[lower[2].id(), lower[3].id()]).unwrap();
+        let slave = Mesh::from_submesh(
+            SubMesh::poi1_from_nodes(&[upper[0].clone(), upper[1].clone()]).unwrap(),
+        );
+
+        let elasticity =
+            crate::ops::model::elasticity(&fes, crate::models::tensor::Kinematics::PlaneStress)
+                .unwrap();
+        let contact = crate::ops::model::contact(
+            &elasticity,
+            &slave,
+            &master,
+            vec!["u_x".into(), "u_y".into()],
+        )
+        .unwrap();
+        let model = elasticity.union(&contact).unwrap();
+        let materials =
+            material_field_per_sub_model(&model, &[&[("E", 1.0), ("nu", 0.3)], &[]]).unwrap();
+        let k = stiffness(&model, &materials).unwrap();
+
+        assert!(csr_is_symmetric(&k), "the assembled CSR must be symmetric");
+        assert!(k.symmetric(), "and the declaration must agree");
+    }
+
     /// A thick shell over an `n`×1 strip of `QUA4` facets in 3-D. Exercises the
     /// **multi-fespace** computed path: each block integrates two FE subspaces
     /// (membrane/bending at full Gauss + transverse shear reduced) sharing one

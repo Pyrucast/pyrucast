@@ -132,8 +132,9 @@ impl DofIndex {
 /// ```
 pub fn build_pattern(k: &Matrix) -> Result<AssemblyPattern> {
     let vars = k.dof_vars();
-    let row_keys = k.row_dof_keys()?;
-    let col_keys = k.col_dof_keys()?;
+    // Both at once: on a symmetric matrix they come out of one conjugate walk,
+    // and asking separately would run it twice.
+    let (row_keys, col_keys) = k.dof_key_orders()?;
     let slot_of: HashMap<String, u32> = vars
         .iter()
         .cloned()

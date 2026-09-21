@@ -2576,6 +2576,56 @@ impl DofSeen {
     }
 }
 
+/// Spell a packed key for an error message — `"node 9 · imposed_T"`.
+fn dof_text(key: DofKey, vars: &[String]) -> String {
+    format!("node {} · {}", dof_node(key).0, vars[dof_var(key) as usize])
+}
+
+/// Record one conjugate pair in the two global orders.
+///
+/// The two sides advance **together** or not at all. A DOF that is new on one
+/// side and already placed on the other means the same dual DOF has been
+/// declared conjugate to two different primal ones: a contradiction between
+/// blocks, reported rather than papered over — the reader counts, it does not
+/// correct.
+fn push_conjugate(
+    seen_row: &mut DofSeen,
+    seen_col: &mut DofSeen,
+    out_row: &mut Vec<DofKey>,
+    out_col: &mut Vec<DofKey>,
+    vars: &[String],
+    r: DofKey,
+    c: DofKey,
+) -> Result<()> {
+    let fresh_row = seen_row.insert(r);
+    let fresh_col = seen_col.insert(c);
+    if fresh_row != fresh_col {
+        return Err(PyrucastError::Message(format!(
+            "Matrix: {} and {} are declared conjugate, but one of them is already \
+             paired with another DOF — two blocks disagree on what faces what",
+            dof_text(r, vars),
+            dof_text(c, vars)
+        )));
+    }
+    if fresh_row {
+        out_row.push(r);
+        out_col.push(c);
+    }
+    Ok(())
+}
+
+/// Both sides of a conjugate run must hold the same number of DOFs.
+fn conjugate_lengths(rows: usize, cols: usize, what: &str) -> Result<()> {
+    if rows != cols {
+        return Err(PyrucastError::Message(format!(
+            "Matrix: {what} faces {rows} row DOF(s) with {cols} column DOF(s); a block \
+             declaring symmetry must be square, and the two members of a pair must be \
+             each other's transpose"
+        )));
+    }
+    Ok(())
+}
+
 /// Global CSR sparsity pattern plus the DOF numbering it indexes.
 ///
 /// A pure function of a model's **block structure** — not of the material
@@ -3054,8 +3104,7 @@ impl Matrix {
             }
         }
         let vars = std::sync::Arc::new(self.field_names());
-        let row_keys = self.collect_dof_keys(true, &vars)?;
-        let col_keys = self.collect_dof_keys(false, &vars)?;
+        let (row_keys, col_keys) = self.dof_orders(&vars)?;
         let triplets = self.build_global_triplets(&vars, &row_keys, &col_keys)?;
         let (row_offsets, col_indices, values) =
             csr_from_triplets_parallel(row_keys.len(), col_keys.len(), triplets);
@@ -3260,6 +3309,167 @@ impl Matrix {
             }
         }
         Ok(out)
+    }
+
+    /// The two global DOF orders, row and column.
+    ///
+    /// On a matrix that [declares itself symmetric](Self::symmetric) they are
+    /// built **together**, so that rank `i` holds conjugate DOFs on both sides —
+    /// which is what makes the assembled array symmetric and not merely the
+    /// operator it represents. Otherwise the two orders are collected
+    /// independently, as they always were: a rectangular matrix has no conjugate
+    /// to pair with, and demanding the alignment would refuse it.
+    fn dof_orders(&self, vars: &[String]) -> Result<(Vec<DofKey>, Vec<DofKey>)> {
+        if self.symmetric() {
+            self.collect_conjugate_dof_keys(vars)
+        } else {
+            Ok((
+                self.collect_dof_keys(true, vars)?,
+                self.collect_dof_keys(false, vars)?,
+            ))
+        }
+    }
+
+    /// Both DOF orders in **one** walk, conjugate rank for rank.
+    ///
+    /// Nothing here learns that `q` is the dual of `T`. It reads only which
+    /// *positions* correspond, which the blocks already declare:
+    ///
+    /// - a `Full` block is square over one support (a physics block hands the
+    ///   **same handle** to both sides) with its dual and primal variables
+    ///   matched by position, so its row `k` faces its own column `k`;
+    /// - a `Half` pair crosses: [`pairs_are_mutual_transposes`] already holds
+    ///   that one block's row support **is** the other's column support, by
+    ///   handle identity. So `a`'s rows face `b`'s columns, and `a`'s columns
+    ///   face `b`'s rows.
+    ///
+    /// [`pairs_are_mutual_transposes`]: Self::pairs_are_mutual_transposes
+    fn collect_conjugate_dof_keys(&self, vars: &[String]) -> Result<(Vec<DofKey>, Vec<DofKey>)> {
+        let slot_of: HashMap<String, u32> = vars
+            .iter()
+            .cloned()
+            .enumerate()
+            .map(|(i, v)| (v, i as u32))
+            .collect();
+
+        // Both sides bound the seen-sets here, the walk filling them in step.
+        let (mut total, mut max_node) = (0usize, 0u32);
+        for h in self {
+            let sub = h.read();
+            total += sub.n_rows();
+            for support in [sub.row_support(), sub.col_support()] {
+                for n in support.read().connectivity() {
+                    max_node = max_node.max(n.0);
+                }
+            }
+        }
+
+        let mut seen_row = DofSeen::new(max_node, vars.len(), total);
+        let mut seen_col = DofSeen::new(max_node, vars.len(), total);
+        let mut out_row: Vec<DofKey> = Vec::with_capacity(total);
+        let mut out_col: Vec<DofKey> = Vec::with_capacity(total);
+        let mut consumed = vec![false; self.len()];
+
+        for (i, h) in self.iter().enumerate() {
+            if consumed[i] {
+                continue;
+            }
+            let a = h.read();
+            // Each support guard is taken and dropped on its own: the two sides
+            // of a pair share one `SubMesh`, and holding both at once would mean
+            // two read locks on the same lock.
+            let a_rows = {
+                let g = a.row_support().read();
+                a.row_dof_keys_with(&g, &slot_of)?
+            };
+            let a_cols = {
+                let g = a.col_support().read();
+                a.col_dof_keys_with(&g, &slot_of)?
+            };
+            match a.symmetry() {
+                Symmetry::Full => {
+                    conjugate_lengths(a_rows.len(), a_cols.len(), "a Full block")?;
+                    for (&r, &c) in a_rows.iter().zip(a_cols.iter()) {
+                        push_conjugate(
+                            &mut seen_row,
+                            &mut seen_col,
+                            &mut out_row,
+                            &mut out_col,
+                            vars,
+                            r,
+                            c,
+                        )?;
+                    }
+                }
+                Symmetry::Half(id) => {
+                    // The other member: same group, **other** low bit. Two blocks
+                    // sharing the bit are the same member and do not cross.
+                    let partner = self.iter().enumerate().position(|(j, g)| {
+                        j != i
+                            && !consumed[j]
+                            && matches!(g.read().symmetry(),
+                                Symmetry::Half(o) if o & !1 == id & !1 && o & 1 != id & 1)
+                    });
+                    let Some(j) = partner else {
+                        return Err(PyrucastError::Message(
+                            "Matrix: a Half block has no partner in this matrix, so the two \
+                             DOF orders cannot be paired — the symmetry declaration and the \
+                             blocks disagree"
+                                .into(),
+                        ));
+                    };
+                    let p = self.iter().nth(j).expect("index from position").read();
+                    let p_rows = {
+                        let g = p.row_support().read();
+                        p.row_dof_keys_with(&g, &slot_of)?
+                    };
+                    let p_cols = {
+                        let g = p.col_support().read();
+                        p.col_dof_keys_with(&g, &slot_of)?
+                    };
+                    conjugate_lengths(a_rows.len(), p_cols.len(), "a Half pair")?;
+                    conjugate_lengths(p_rows.len(), a_cols.len(), "a Half pair")?;
+                    for (&r, &c) in a_rows.iter().zip(p_cols.iter()) {
+                        push_conjugate(
+                            &mut seen_row,
+                            &mut seen_col,
+                            &mut out_row,
+                            &mut out_col,
+                            vars,
+                            r,
+                            c,
+                        )?;
+                    }
+                    for (&r, &c) in p_rows.iter().zip(a_cols.iter()) {
+                        push_conjugate(
+                            &mut seen_row,
+                            &mut seen_col,
+                            &mut out_row,
+                            &mut out_col,
+                            vars,
+                            r,
+                            c,
+                        )?;
+                    }
+                    consumed[j] = true;
+                }
+                // `symmetric()` returned true, so no block declares `None`.
+                Symmetry::None => unreachable!("a None block cannot reach the conjugate walk"),
+            }
+        }
+
+        if let Some(first) = self.iter().next() {
+            let coords_h = first.read().coords();
+            if let Some(perm) = coords_h.read().permutation() {
+                // Sorted as **pairs**, on the row's node — the conjugate shares
+                // it — so the two sides cannot drift apart. Stable, so a node's
+                // variables keep their relative order.
+                let mut pairs: Vec<(DofKey, DofKey)> = out_row.into_iter().zip(out_col).collect();
+                pairs.par_sort_by_key(|&(r, _)| perm[dof_node(r).0 as usize]);
+                (out_row, out_col) = pairs.into_iter().unzip();
+            }
+        }
+        Ok((out_row, out_col))
     }
 
     /// Materialise packed keys into `(node, variable name)` pairs.
@@ -3566,8 +3776,23 @@ impl Matrix {
         if let Some(a) = &self.assembled {
             return Ok(a.row_keys.clone());
         }
+        Ok(self.dof_key_orders()?.0)
+    }
+
+    /// Both DOF orders at once — what a caller needing the two should ask for.
+    ///
+    /// On a symmetric matrix the two are built in a single conjugate walk, so
+    /// asking for them separately would run that walk twice for one half of its
+    /// result each time.
+    pub(crate) fn dof_key_orders(
+        &self,
+    ) -> Result<(std::sync::Arc<Vec<DofKey>>, std::sync::Arc<Vec<DofKey>>)> {
+        if let Some(a) = &self.assembled {
+            return Ok((a.row_keys.clone(), a.col_keys.clone()));
+        }
         let vars = self.field_names();
-        Ok(std::sync::Arc::new(self.collect_dof_keys(true, &vars)?))
+        let (row, col) = self.dof_orders(&vars)?;
+        Ok((std::sync::Arc::new(row), std::sync::Arc::new(col)))
     }
 
     /// Column DOFs as packed [`DofKey`]s, in CSR column order — the column twin
@@ -3603,8 +3828,7 @@ impl Matrix {
         if let Some(a) = &self.assembled {
             return Ok(a.col_keys.clone());
         }
-        let vars = self.field_names();
-        Ok(std::sync::Arc::new(self.collect_dof_keys(false, &vars)?))
+        Ok(self.dof_key_orders()?.1)
     }
 
     /// Union of all field names (dual + primal) across blocks.
@@ -4875,8 +5099,7 @@ impl crate::dump::Dump for Matrix {
                 )
             } else {
                 let vars = self.field_names();
-                let row_keys = self.collect_dof_keys(true, &vars)?;
-                let col_keys = self.collect_dof_keys(false, &vars)?;
+                let (row_keys, col_keys) = self.dof_orders(&vars)?;
                 let triplets = self.build_global_triplets(&vars, &row_keys, &col_keys)?;
                 let row_dofs = Self::name_dofs(&row_keys, &vars);
                 let col_dofs = Self::name_dofs(&col_keys, &vars);
@@ -5480,7 +5703,8 @@ mod tests {
             nodes[4].id(),
         );
 
-        // Block a: 1 row (na) × 2 cols (ca0, ca1)
+        // Block a: 1 row (na) × 2 cols (ca0, ca1) — rectangular, hence `None`:
+        // a block that is not square cannot carry any symmetry.
         let mut row_a = SubMesh::new(coords.clone(), ElementType::POI1);
         row_a.add_cell(&[na]).unwrap();
         let mut col_a = SubMesh::new(coords.clone(), ElementType::POI1);
@@ -5492,7 +5716,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            Symmetry::Full,
+            Symmetry::None,
         );
         a.add_entry(na, "q", ca0, "T", 2.0).unwrap();
         a.add_entry(na, "q", ca1, "T", -1.0).unwrap();
@@ -5988,13 +6212,14 @@ mod tests {
         row_a.add_cell(&[na0]).unwrap();
         let row_a_h = Handle::new(row_a);
 
+        // One row against a two-node column support: rectangular, so `None`.
         let mut a = SubMatrix::new(
             row_a_h,
             sup_a.clone(),
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            Symmetry::Full,
+            Symmetry::None,
         );
         a.add_entry(na0, "q", na0, "T", 2.0).unwrap();
         a.add_entry(na0, "q", na1, "T", -1.0).unwrap();
@@ -6009,7 +6234,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            Symmetry::Full,
+            Symmetry::None,
         );
         b.add_entry(na1, "q", na0, "T", -1.0).unwrap();
         b.add_entry(na1, "q", na1, "T", 2.0).unwrap();

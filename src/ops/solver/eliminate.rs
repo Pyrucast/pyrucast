@@ -518,6 +518,11 @@ fn build_condensation(
             n_phys
         )));
     }
+    // Guaranteed upstream now: a matrix that declares itself symmetric has its
+    // two DOF orders built in one conjugate walk, and dropping the multiplier
+    // DOFs from both sides preserves that. The check stays because the guarantee
+    // does not extend here — the matrix need not declare itself symmetric, and
+    // this is the one place that would silently solve the wrong system.
     for k in 0..n_phys {
         if dof_node(phys_row_keys[k]) != dof_node(phys_col_keys[k]) {
             return Err(PyrucastError::Message(

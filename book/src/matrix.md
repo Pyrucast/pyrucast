@@ -185,6 +185,29 @@ producteur, et l'agrégat additionne les déclarations sans les corriger. Un blo
 **vide**, par exemple, est symétrique : il déclare `Full`, et la règle n'a pas
 d'exception à prévoir pour lui.
 
+### La numérotation suit la déclaration
+
+Un tableau n'est symétrique que si le rang `i` désigne des DDL **conjugués** des
+deux côtés. Or les deux ordres globaux se construisaient par deux parcours
+indépendants des blocs, et rien ne les faisait tomber d'accord : une contrainte
+qui introduit deux nœuds neufs d'un coup — `embedded`, dont le nœud immergé
+n'appartient à aucune physique — les faisait découvrir en ordre inverse de chaque
+côté.
+
+Quand la matrice se déclare symétrique, les deux ordres sont donc construits en
+**un seul parcours conjugué**. Ce parcours n'apprend jamais que `q` est le dual
+de `T` : il lit seulement quelles positions se correspondent, ce que la
+déclaration dit déjà. Un bloc `Full` est carré sur un support unique, donc sa
+ligne `k` fait face à sa propre colonne `k` ; une paire `Half` croise, la ligne
+de l'un faisant face à la colonne de l'autre.
+
+Deux incohérences y sont **refusées**, jamais rattrapées : un même DDL dual
+déclaré conjugué à deux DDL primaux différents, et une paire dont les deux
+membres n'ont pas le même nombre de DDL.
+
+Une matrice non symétrique garde les deux parcours indépendants : une matrice
+rectangulaire n'a pas de conjugué à apparier.
+
 ### Pourquoi une moitié
 
 Une contrainte de Dirichlet introduit deux blocs **rectangulaires**, `C` et `Cᵀ`
@@ -250,3 +273,4 @@ Une contrainte de Dirichlet introduit, par sa nature, un bloc **rectangulaire** 
 - **Pas de produit matrice-matrice** : à venir avec les premiers besoins concrets (préconditionneurs, formulations couplées).
 - **La somme n'assemble pas de manière opportuniste** : `a + b` rend une matrice non assemblée même quand les deux opérandes le sont. Fusionner leurs CSR — ce qui éviterait de relancer les noyaux élémentaires dans une boucle en temps à pas variable — est possible sans changer la sémantique (l'ordre des DDL d'une concaténation est exactement celui de `a` suivi des DDL que seule `b` apporte), mais demande une addition creuse complète : retable des variables, remappage et retri des colonnes de `b`, fusion ligne à ligne. À faire quand un intégrateur en temps le justifiera.
 - La symétrie déclarée n'est pas vérifiée numériquement à l'assemblage, et ne doit pas l'être : c'est une déclaration du modèle, pas une mesure. Des tests unitaires confrontent la déclaration à la CSR réellement assemblée ; le calcul, lui, fait confiance.
+- **Une symétrie découpée en tranches de lignes n'est pas exprimable** : deux blocs rectangulaires qui sont chacun une tranche de lignes d'une matrice symétrique ne peuvent rien déclarer — ni `Full`, qui suppose un bloc carré, ni `Half`, les deux n'étant pas transposés l'un de l'autre. Le tableau assemblé est symétrique, le drapeau répond `false`, et le calcul prend le chemin général. C'est le mode de défaillance voulu : on oublie une symétrie, on n'en invente pas.
