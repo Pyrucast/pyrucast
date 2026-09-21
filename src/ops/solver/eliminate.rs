@@ -691,6 +691,7 @@ mod tests {
     use super::*;
     use crate::aggregate::Aggregate;
     use crate::atoms::{ElementType, Node};
+    use crate::containers::matrix::Symmetry;
     use crate::containers::matrix::{DofOrdering, SubMatrix};
     use crate::containers::mesh::SubMesh;
     use crate::containers::node_field::SubNodeField;
@@ -714,7 +715,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::None,
         );
         block.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
         let mut m = Matrix::empty();

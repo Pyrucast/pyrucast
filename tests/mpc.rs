@@ -10,7 +10,7 @@ use pyrucast::atoms::{ElementType, Node};
 use pyrucast::containers::element_field::{ElementField, SubElementField};
 use pyrucast::containers::field::SubField;
 use pyrucast::containers::finite_element_space::{FiniteElementSpace, SubFiniteElementSpace};
-use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::{Model, SubModel};
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
@@ -617,7 +617,7 @@ fn elimination_condensation_cached_then_invalidated() -> Result<()> {
         vec!["q".into()],
         vec!["T".into()],
         DofOrdering::NodesThenVars,
-        false,
+        Symmetry::None,
     );
     block.add_entry(b.id(), "q", b.id(), "T", 4.0)?;
     k.add_sub(Handle::new(block))?;

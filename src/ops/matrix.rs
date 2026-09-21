@@ -345,13 +345,14 @@ fn build_contribution(
                 layout.dual_vars,
                 layout.primal_vars,
                 layout.ordering,
-                layout.symmetric,
+                layout.symmetry,
                 recipe,
             )]
         }
         // An inter-mesh block: same computed path, but rows and columns on
-        // different supports. Never symmetric on its own — only the four blocks
-        // of an exchange law are, together, exactly as for Dirichlet's C / Cᵀ.
+        // different supports. Never symmetric on its own — the law declares its
+        // two off-diagonal blocks a pair, exactly as Dirichlet does for C / Cᵀ,
+        // and the aggregate checks both are present.
         Contribution::Coupling(layout) => {
             let recipe = ComputedRecipe {
                 submodel: sub_h.clone(),
@@ -367,7 +368,7 @@ fn build_contribution(
                 layout.dual_vars,
                 layout.primal_vars,
                 layout.ordering,
-                false,
+                layout.symmetry,
                 recipe,
             )]
         }
@@ -656,6 +657,7 @@ mod tests {
     use super::*;
     use crate::atoms::{ElementType, Node};
     use crate::containers::finite_element_space::FiniteElementSpace;
+    use crate::containers::matrix::Symmetry;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
     use crate::ops::element_field::material_field_per_sub_model;
@@ -801,6 +803,122 @@ mod tests {
 
         let materials = material_field_per_sub_model(&model, &[&[("k", 2.0)], &[]]).unwrap();
         (model, materials)
+    }
+
+    /// Is the assembled CSR itself symmetric? Measured, not asked — this is what
+    /// the declared flag is confronted with below.
+    fn csr_is_symmetric(k: &Matrix) -> bool {
+        let (offsets, cols, vals) = k.csr_arrays().unwrap();
+        let at = |r: usize, c: usize| {
+            let (lo, hi) = (offsets[r], offsets[r + 1]);
+            cols[lo..hi]
+                .binary_search(&c)
+                .map(|i| vals[lo + i])
+                .unwrap_or(0.0)
+        };
+        // Only square makes the question meaningful — and a matrix that lost half
+        // of a constraint pair is not even square any more.
+        if k.n_rows().unwrap() != k.n_cols().unwrap() {
+            return false;
+        }
+        // Rows and columns of an assembled matrix are conjugate index for index,
+        // so `(i, j)` and `(j, i)` name transposed entries.
+        (0..offsets.len() - 1).all(|r| {
+            (offsets[r]..offsets[r + 1]).all(|k| {
+                let c = cols[k];
+                (vals[k] - at(c, r)).abs() <= 1e-12 * (1.0 + vals[k].abs())
+            })
+        })
+    }
+
+    /// The case the whole flag exists for. A Dirichlet contributes two
+    /// rectangular blocks, neither symmetric alone; before pairing was
+    /// expressible, the aggregate answered `false` for every constrained
+    /// matrix — that is to say for every real problem.
+    #[test]
+    fn a_constrained_stiffness_is_symmetric_and_says_so() {
+        let (model, materials) = chain_heat_with_dirichlet(6);
+        let k = stiffness(&model, &materials).unwrap();
+
+        assert!(csr_is_symmetric(&k), "the assembled CSR must be symmetric");
+        assert!(
+            k.symmetric(),
+            "and the declaration must agree with the measurement"
+        );
+    }
+
+    /// Slicing a matrix can separate a pair. The half that remains carries no
+    /// symmetry, and the aggregate must say so — the CSR agrees.
+    #[test]
+    fn slicing_a_pair_apart_drops_the_symmetry() {
+        let (model, materials) = chain_heat_with_dirichlet(4);
+        let k = stiffness(&model, &materials).unwrap();
+
+        // Blocks: the conduction one, then the constraint's C and Cᵀ. Keeping
+        // the physics and one half leaves a matrix that is genuinely not
+        // symmetric any more.
+        let mut halves: Vec<usize> = k
+            .iter()
+            .enumerate()
+            .filter(|(_, h)| !matches!(h.read().symmetry(), Symmetry::Half(_)))
+            .map(|(i, _)| i)
+            .collect();
+        halves.push(k.len() - 1);
+        let mut sliced = k.subset(halves).unwrap();
+        sliced.assemble().unwrap();
+
+        assert!(!csr_is_symmetric(&sliced), "one half really breaks it");
+        assert!(!sliced.symmetric(), "and the declaration follows");
+    }
+
+    /// The same constraint declared twice: four blocks, one identity, two of
+    /// each member. The matrix is symmetric, and the count of members — rather
+    /// than of blocks — is what lets the aggregate see it.
+    #[test]
+    fn a_constraint_declared_twice_still_pairs_up() {
+        let coords = Handle::new(Coords::new(1).unwrap());
+        let nodes: Vec<Node> = (0..=3)
+            .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
+            .collect();
+        let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+        for i in 0..3 {
+            sm.add_cell(&[nodes[i].id(), nodes[i + 1].id()]).unwrap();
+        }
+        let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+        let mut model = Model::empty();
+        model
+            .add_sub(Handle::new(
+                SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
+            ))
+            .unwrap();
+        let imposed =
+            Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[0])).unwrap());
+        let multiplier = crate::ops::mesh::barycenter(&imposed).unwrap();
+        // Twice, on the same supports and the same variable: the two pairs hash
+        // alike, so all four blocks share one identity.
+        for _ in 0..2 {
+            model
+                .add_sub(Handle::new(
+                    SubModel::dirichlet(&model, "T", &imposed, &multiplier, Default::default())
+                        .unwrap(),
+                ))
+                .unwrap();
+        }
+        let materials = material_field_per_sub_model(&model, &[&[("k", 2.0)], &[], &[]]).unwrap();
+        let k = stiffness(&model, &materials).unwrap();
+
+        let ids: Vec<u64> = k
+            .iter()
+            .filter_map(|h| match h.read().symmetry() {
+                Symmetry::Half(id) => Some(id & !1),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(ids.len(), 4, "four halves");
+        assert!(ids.windows(2).all(|w| w[0] == w[1]), "one identity");
+
+        assert!(csr_is_symmetric(&k));
+        assert!(k.symmetric(), "two of each member is a complete pairing");
     }
 
     /// A thick shell over an `n`×1 strip of `QUA4` facets in 3-D. Exercises the
@@ -1110,7 +1228,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             crate::containers::matrix::DofOrdering::NodesThenVars,
-            true,
+            Symmetry::Full,
         );
         blk.add_entry(a.id(), "q", a.id(), "T", 10.0).unwrap();
         k.add_sub(Handle::new(blk)).unwrap();
@@ -1148,7 +1266,7 @@ mod tests {
                         layout.dual_vars,
                         layout.primal_vars,
                         layout.ordering,
-                        layout.symmetric,
+                        layout.symmetry,
                         ComputedRecipe {
                             submodel: sub_h.clone(),
                             fespaces: layout.fespaces,

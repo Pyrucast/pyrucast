@@ -17,6 +17,7 @@ use crate::containers::element_field::SubElementField;
 use crate::containers::field::ABSENT_COMPONENT;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
+use crate::containers::matrix::Symmetry;
 use crate::containers::mesh::SubMesh;
 use crate::containers::model::SubModel;
 use crate::dump::DumpOptions;
@@ -156,7 +157,7 @@ impl SubModelKind for Truss {
             dual_vars: self.dual_vars(),
             primal_vars: self.primal_vars(),
             ordering: DofOrdering::NodesThenVars,
-            symmetric: true,
+            symmetry: Symmetry::Full,
         })
     }
 
@@ -362,7 +363,7 @@ fn cell_cosine(geom: &CellGeom, space_dim: usize, out: &mut [f64; 3]) -> Result<
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::SubElementField;
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
@@ -386,7 +387,7 @@ fn cell_cosine(geom: &CellGeom, space_dim: usize, out: &mut [f64; 3]) -> Result<
 /// let (duals, primals) = ddl();
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
-///     DofOrdering::NodesThenVars, true, &mat, None,
+///     DofOrdering::NodesThenVars, Symmetry::Full, &mat, None,
 ///     |geoms, m, s, ke| truss::element_stiffness(&geoms[0], m, &lay, ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
@@ -433,7 +434,7 @@ pub fn element_stiffness(
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::SubElementField;
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
@@ -461,7 +462,7 @@ pub fn element_stiffness(
 /// let (duals, primals) = ddl();
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
-///     DofOrdering::NodesThenVars, true, &mat, None,
+///     DofOrdering::NodesThenVars, Symmetry::Full, &mat, None,
 ///     |geoms, m, s, ke| truss::element_mass(&geoms[0], m, &lay, ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
@@ -514,7 +515,7 @@ pub fn element_mass(
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::SubElementField;
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
@@ -538,7 +539,7 @@ pub fn element_mass(
 /// let (duals, primals) = ddl();
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
-///     DofOrdering::NodesThenVars, true, &mat, Some(&mat),
+///     DofOrdering::NodesThenVars, Symmetry::Full, &mat, Some(&mat),
 ///     |geoms, m, s, ke| truss::element_geometric(&geoms[0], s.unwrap(), &lay, ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();

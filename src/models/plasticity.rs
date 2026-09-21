@@ -71,6 +71,7 @@ use crate::models::{ElementLayout, MatrixKind};
 use law::{MatParams, PlasticLaw, PrevState, MAX_INTERNAL_VARS};
 use serde::{Deserialize, Serialize};
 
+use crate::containers::matrix::Symmetry;
 /// Full 3-D tensor component suffixes, in the internal state order
 /// `[xx, yy, zz, yz, xz, xy]` (off-diagonals are **tensor** strains, `ε_ij`).
 use crate::models::plasticity::law::TENSOR_SUFFIXES;
@@ -292,7 +293,7 @@ impl SubModelKind for Plasticity {
             dual_vars: self.dual_vars(),
             primal_vars: self.primal_vars(),
             ordering: crate::containers::matrix::DofOrdering::NodesThenVars,
-            symmetric: true,
+            symmetry: Symmetry::Full,
         })
     }
 

@@ -406,7 +406,7 @@ impl Continuum {
     /// # use pyrucast::containers::element_field::SubElementField;
     /// # use pyrucast::containers::field::SubField;
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -438,7 +438,7 @@ impl Continuum {
     /// let (duals, primals) = vars();
     /// let bloc = assemble_block(
     ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
-    ///     DofOrdering::NodesThenVars, true, &mat, None,
+    ///     DofOrdering::NodesThenVars, Symmetry::Full, &mat, None,
     ///     |geoms, m, _s, ke| c.element_stiffness(
     ///         &geoms[0], m, &lay, MaterialSymmetry::Isotropic, ke),
     /// )?;
@@ -528,7 +528,7 @@ impl Continuum {
     /// # use pyrucast::containers::element_field::SubElementField;
     /// # use pyrucast::containers::field::SubField;
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -562,7 +562,7 @@ impl Continuum {
     /// let (duals, primals) = vars();
     /// let bloc = assemble_block(
     ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
-    ///     DofOrdering::NodesThenVars, true, &mat, None,
+    ///     DofOrdering::NodesThenVars, Symmetry::Full, &mat, None,
     ///     |geoms, m, _s, ke| c.element_mass(&geoms[0], m, &lay, ke),
     /// )?;
     /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();
@@ -619,7 +619,7 @@ impl Continuum {
     /// # use pyrucast::containers::element_field::SubElementField;
     /// # use pyrucast::containers::field::SubField;
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -659,7 +659,7 @@ impl Continuum {
     /// let (duals, primals) = vars();
     /// let bloc = assemble_block(
     ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
-    ///     DofOrdering::NodesThenVars, true, &bidon, Some(&etat),
+    ///     DofOrdering::NodesThenVars, Symmetry::Full, &bidon, Some(&etat),
     ///     |geoms, _m, s, ke| c.element_geometric(&geoms[0], s.unwrap(), &lay, ke),
     /// )?;
     /// // It too is singular: the rigid modes cost nothing in it.

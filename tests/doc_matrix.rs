@@ -9,7 +9,7 @@
 use pyrucast::aggregate::Aggregate;
 use pyrucast::atoms::{ElementType, Node, NodeId};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
-use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::NodeField;
@@ -160,7 +160,7 @@ fn les_entrees_vivent_dans_un_bloc() -> Result<()> {
         vec!["q".into()], // variables duales   → lignes
         vec!["T".into()], // variables primales → colonnes
         DofOrdering::NodesThenVars,
-        true, // symétrique
+        Symmetry::Full, // symétrique à lui seul
     );
 
     // A simple 2-node model (a segment):
@@ -211,7 +211,9 @@ fn un_bloc_de_lagrange_est_rectangulaire() -> Result<()> {
         vec!["T".into()],
         vec!["T".into()],
         DofOrdering::NodesThenVars,
-        false,
+        // Un bloc rectangulaire ne peut pas être symétrique seul ; construit à
+        // la main, il n'a pas de moitié qui lui réponde.
+        Symmetry::None,
     );
     block.add_entry(m0.id(), "T", a.id(), "T", 1.0)?;
     block.add_entry(m1.id(), "T", b.id(), "T", 1.0)?;

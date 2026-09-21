@@ -170,6 +170,33 @@ macro_rules! named_enum {
             }
         }
 
+        // The other direction, so the value can also **leave** for Python — as
+        // the `str` the stub already promises. Without it a `#[pyo3(signature =
+        // …)]` could not even render a default of this type.
+        #[cfg(feature = "python-api")]
+        impl<'py> ::pyo3::IntoPyObject<'py> for $ty {
+            type Target = ::pyo3::types::PyString;
+            type Output = ::pyo3::Bound<'py, Self::Target>;
+            type Error = ::std::convert::Infallible;
+
+            // Spelled out rather than `Self::Output` / `Self::Error`: an
+            // enumeration carrying an `Error` variant — `OutOfRange` has one —
+            // would make the associated type ambiguous, exactly as it does for
+            // `FromPyObject` above.
+            fn into_pyobject(
+                self,
+                py: ::pyo3::Python<'py>,
+            ) -> ::std::result::Result<
+                ::pyo3::Bound<'py, ::pyo3::types::PyString>,
+                ::std::convert::Infallible,
+            > {
+                Ok(::pyo3::types::PyString::new(
+                    py,
+                    <$ty as $crate::named::Named>::name(self),
+                ))
+            }
+        }
+
         #[cfg(feature = "stub-gen")]
         impl ::pyo3_stub_gen::PyStubType for $ty {
             fn type_output() -> ::pyo3_stub_gen::TypeInfo {
@@ -190,6 +217,7 @@ named_enum!(
     crate::models::shell::ShellModel,
     crate::models::symmetry::MaterialSymmetry,
     crate::containers::evolution::OutOfRange,
+    crate::containers::matrix::Symmetry,
     crate::ops::mesh::FrontRelax,
 );
 

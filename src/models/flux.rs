@@ -21,6 +21,7 @@
 use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
+use crate::containers::matrix::Symmetry;
 use crate::containers::mesh::SubMesh;
 use crate::containers::model::{Model, SubModel};
 use crate::dump::DumpOptions;
@@ -175,7 +176,7 @@ impl Flux {
             dual_vars: vec![self.dual.clone()],
             primal_vars: Vec::new(),
             ordering: DofOrdering::NodesThenVars,
-            symmetric: false,
+            symmetry: Symmetry::None,
         }
     }
 }

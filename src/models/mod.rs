@@ -33,6 +33,7 @@ use crate::atoms::NodeId;
 use crate::containers::element_field::SubElementField;
 use crate::containers::field::SubField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
+use crate::containers::matrix::{hash_f64, hash_name, hash_nodes, mint_pair, Symmetry, FNV_SEED};
 use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::containers::node_field::NodeField;
@@ -232,6 +233,7 @@ pub enum TangentSource {
 /// one [`SubMesh`] gives both the row and column node sequence.
 ///
 /// ```
+/// # use pyrucast::containers::matrix::Symmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -259,7 +261,8 @@ pub enum TangentSource {
 /// let l = volume.as_kind().matrix_layout(MatrixKind::Stiffness).unwrap();
 /// assert_eq!(l.dual_vars, vec!["q".to_string()]);
 /// assert_eq!(l.primal_vars, vec!["T".to_string()]);
-/// assert!(l.symmetric);
+/// // A standard Galerkin form is symmetric on its own.
+/// assert_eq!(l.symmetry, Symmetry::Full);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub struct MatrixLayout {
@@ -278,8 +281,11 @@ pub struct MatrixLayout {
     pub primal_vars: Vec<String>,
     /// `(node_local, var)` ↔ matrix-index ordering.
     pub ordering: DofOrdering,
-    /// Whether the block is numerically symmetric.
-    pub symmetric: bool,
+    /// What share of the matrix's symmetry the block carries — **declared** by
+    /// the physics, believed without verification. A standard Galerkin bilinear
+    /// form is [`Symmetry::Full`]; see [`Symmetry`] for what the other shares
+    /// mean and who may claim them.
+    pub symmetry: Symmetry,
 }
 
 /// One stiffness contribution of a sub-model, as handed to the global
@@ -414,6 +420,7 @@ pub enum ResidualContribution {
 // ANCHOR: coupling_layout
 ///
 /// ```
+/// # use pyrucast::containers::matrix::Symmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -450,6 +457,9 @@ pub enum ResidualContribution {
 ///     dual_vars: vec!["q".into()],
 ///     primal_vars: vec!["T".into()],
 ///     ordering: DofOrdering::NodesThenVars,
+///     // An inter-mesh block is never symmetric alone; a real exchange law
+///     // declares its two off-diagonal blocks a `Half` pair instead.
+///     symmetry: Symmetry::None,
 /// };
 /// assert_eq!(l.fespaces.len(), l.col_fespaces.len());
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -469,6 +479,11 @@ pub struct CouplingLayout {
     pub primal_vars: Vec<String>,
     /// `(node_local, var)` ↔ matrix-index ordering.
     pub ordering: DofOrdering,
+    /// What share of the matrix's symmetry the block carries. An inter-mesh
+    /// block is never symmetric alone — its rows and columns live on facing
+    /// meshes — so an exchange law declares its two off-diagonal blocks a
+    /// [`Symmetry::Half`] pair, exactly as a constraint declares `C` and `Cᵀ`.
+    pub symmetry: Symmetry,
 }
 // ANCHOR_END: coupling_layout
 
@@ -813,7 +828,7 @@ pub trait SubModelKind: Sync {
             layout.dual_vars,
             layout.primal_vars,
             layout.ordering,
-            layout.symmetric,
+            layout.symmetry,
             material,
             None,
             |geoms, m, _state, ke| domain.element_matrix(geoms, m, &lay, ke),
@@ -1377,6 +1392,21 @@ pub(crate) fn constraint_block_pair(
     imposed_value: &str,
     coefficient: f64,
 ) -> Result<(SubMatrix, SubMatrix)> {
+    // Neither block is symmetric — both are rectangular — but together they are,
+    // and this is the one place that knows it: the same coefficient is written
+    // into both, a few lines below. The identity folds in everything that tells
+    // this pair from another; two constraints that hashed alike would be
+    // *rejected* by `Matrix::symmetric`, never wrongly accepted.
+    let (id_c, id_ct) = {
+        let (mult_g, cons_g) = (multiplier_sm.read(), constrained_sm.read());
+        let mut h = FNV_SEED;
+        h = hash_nodes(h, mult_g.connectivity());
+        h = hash_nodes(h, cons_g.connectivity());
+        for name in [variable, target_dual, multiplier, imposed_value] {
+            h = hash_name(h, name);
+        }
+        mint_pair(hash_f64(h, coefficient))
+    };
     // C block: rows = multiplier × imposed_value, cols = constrained × variable.
     let mut c = SubMatrix::new(
         multiplier_sm.clone(),
@@ -1384,7 +1414,7 @@ pub(crate) fn constraint_block_pair(
         vec![imposed_value.to_string()],
         vec![variable.to_string()],
         DofOrdering::NodesThenVars,
-        false,
+        Symmetry::Half(id_c),
     );
     // Cᵀ block: rows = constrained × target_dual, cols = multiplier × multiplier.
     let mut ct = SubMatrix::new(
@@ -1393,7 +1423,7 @@ pub(crate) fn constraint_block_pair(
         vec![target_dual.to_string()],
         vec![multiplier.to_string()],
         DofOrdering::NodesThenVars,
-        false,
+        Symmetry::Half(id_ct),
     );
     // Both blocks are built — hence both `seal`s, the only writers here — so the
     // node lists can now be read in place instead of copied: `add_entry` only

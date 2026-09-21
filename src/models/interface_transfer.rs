@@ -72,6 +72,7 @@ use crate::containers::element_field::SubElementField;
 use crate::containers::field::SubField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
+use crate::containers::matrix::{hash_name, hash_nodes, mint_pair, PairId, Symmetry, FNV_SEED};
 use crate::containers::mesh::SubMesh;
 use crate::containers::model::Model;
 use crate::coords::Coords;
@@ -216,7 +217,7 @@ impl InterfaceTransfer {
             dual_vars: self.dual_vars(),
             primal_vars: self.primal_vars(),
             ordering: DofOrdering::NodesThenVars,
-            symmetric: true,
+            symmetry: Symmetry::Full,
         }
     }
 
@@ -237,6 +238,7 @@ impl InterfaceTransfer {
         row_support: &Handle<SubMesh>,
         col_fespace: &Handle<SubFiniteElementSpace>,
         col_support: &Handle<SubMesh>,
+        symmetry: Symmetry,
     ) -> CouplingLayout {
         CouplingLayout {
             fespaces: vec![row_fespace.clone()],
@@ -246,7 +248,26 @@ impl InterfaceTransfer {
             dual_vars: self.dual_vars(),
             primal_vars: self.primal_vars(),
             ordering: DofOrdering::NodesThenVars,
+            symmetry,
         }
+    }
+
+    /// The identities of this interface's off-diagonal pair.
+    ///
+    /// They are exact transposes of one another because the measure is taken
+    /// from the row side and the two sides carry the same surface — which
+    /// `check_conforming_geometry` makes a precondition, refused at
+    /// construction. The identity folds both supports in the **same order**
+    /// whichever block asks, so the two halves agree.
+    fn coupling_pair(&self) -> (PairId, PairId) {
+        let (a, b) = (self.support_a.read(), self.support_b.read());
+        let mut h = FNV_SEED;
+        h = hash_nodes(h, a.connectivity());
+        h = hash_nodes(h, b.connectivity());
+        for name in self.dual_vars().iter().chain(&self.primal_vars()) {
+            h = hash_name(h, name);
+        }
+        mint_pair(h)
     }
 }
 
@@ -277,6 +298,10 @@ impl SubModelKind for InterfaceTransfer {
         if kind != MatrixKind::Stiffness {
             return Ok(Vec::new());
         }
+        // The two diagonal blocks integrate `∫ NᵢNⱼ` on one support, so each is
+        // symmetric on its own; the two off-diagonal ones are each other's
+        // transpose, hence one pair.
+        let (id_ab, id_ba) = self.coupling_pair();
         Ok(vec![
             Contribution::Computed(self.diagonal_layout(&self.side_a, &self.support_a)),
             Contribution::Computed(self.diagonal_layout(&self.side_b, &self.support_b)),
@@ -285,12 +310,14 @@ impl SubModelKind for InterfaceTransfer {
                 &self.support_a,
                 &self.side_b,
                 &self.support_b,
+                Symmetry::Half(id_ab),
             )),
             Contribution::Coupling(self.coupling_layout(
                 &self.side_b,
                 &self.support_b,
                 &self.side_a,
                 &self.support_a,
+                Symmetry::Half(id_ba),
             )),
         ])
     }
@@ -317,7 +344,7 @@ impl SubModelKind for InterfaceTransfer {
                 dual_vars: self.dual_vars(),
                 primal_vars: self.primal_vars(),
                 ordering: DofOrdering::NodesThenVars,
-                symmetric: true,
+                symmetry: Symmetry::Full,
             })
         })
         .collect()

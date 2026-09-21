@@ -28,8 +28,13 @@ multiplicateur) et deux blocs **rectangulaires** dans la matrice :
 
 Chacun des blocs `C` et `Cᵀ` est, pris isolément, **non symétrique** ; seule
 leur union `C ∪ Cᵀ` l'est — c'est une propriété **globale** du système
-point-selle, pas de chaque bloc (voir le drapeau `symmetric` de la
-[Matrice](matrix.md)).
+point-selle, pas de chaque bloc.
+
+C'est exactement ce que la [déclaration de symétrie](matrix.md#symétrie) rend
+exprimable : chacun des deux déclare porter une **moitié** (`Symmetry::Half`), avec
+une identité de paire commune que seul `constraint_block_pair` mint — celui qui
+écrit le même coefficient des deux côtés. L'agrégat conclut à la symétrie quand il
+tient les **deux** moitiés, et la retire si un découpage en sépare une.
 
 Les **nœuds-multiplicateurs** sont des nœuds comme les autres, fournis par
 l'utilisateur via un maillage : la contrainte ne crée jamais de nœud et ne

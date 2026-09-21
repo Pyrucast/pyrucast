@@ -28,7 +28,7 @@ use pyrucast::aggregate::Aggregate;
 use pyrucast::atoms::{ElementType, Node, NodeId};
 use pyrucast::containers::element_field::ElementField;
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
-use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
@@ -166,7 +166,7 @@ fn spd_system(n: usize) -> (Matrix, NodeField) {
         vec!["q".into()],
         vec!["T".into()],
         DofOrdering::NodesThenVars,
-        true,
+        Symmetry::Full,
     );
     for j in 0..=n {
         for i in 0..=n {

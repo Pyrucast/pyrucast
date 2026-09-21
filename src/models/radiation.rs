@@ -54,6 +54,7 @@ use crate::containers::element_field::SubElementField;
 use crate::containers::field::ABSENT_COMPONENT;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
+use crate::containers::matrix::Symmetry;
 use crate::containers::mesh::SubMesh;
 use crate::containers::model::{Model, SubModel};
 use crate::dump::DumpOptions;
@@ -207,7 +208,7 @@ impl Radiation {
             dual_vars: self.dual_vars(),
             primal_vars: self.primal_vars(),
             ordering: DofOrdering::NodesThenVars,
-            symmetric: true,
+            symmetry: Symmetry::Full,
         }
     }
 }

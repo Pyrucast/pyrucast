@@ -49,6 +49,7 @@ use crate::containers::element_field::SubElementField;
 use crate::containers::field::ABSENT_COMPONENT;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
+use crate::containers::matrix::Symmetry;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
@@ -67,7 +68,7 @@ use serde::{Deserialize, Serialize};
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::SubElementField;
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::matrix::{DofOrdering};
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
@@ -100,7 +101,7 @@ pub fn primal_var(species: &str) -> String {
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::SubElementField;
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::matrix::{DofOrdering};
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
@@ -241,7 +242,7 @@ impl Fick {
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::element_field::SubElementField;
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::matrix::{DofOrdering};
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -279,7 +280,7 @@ impl Fick {
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::element_field::SubElementField;
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::matrix::{DofOrdering};
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -356,7 +357,7 @@ impl SubModelKind for Fick {
             dual_vars: self.dual_vars(),
             primal_vars: self.primal_vars(),
             ordering: DofOrdering::NodesThenVars,
-            symmetric: true,
+            symmetry: Symmetry::Full,
         })
     }
 
@@ -513,7 +514,7 @@ impl Behavior for Fick {
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::SubElementField;
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
@@ -536,7 +537,7 @@ impl Behavior for Fick {
 /// // The same Laplacian as the conduction, with the species' diffusivity.
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support,
-///     vec!["j_H2".into()], vec!["c_H2".into()], DofOrdering::NodesThenVars, true,
+///     vec!["j_H2".into()], vec!["c_H2".into()], DofOrdering::NodesThenVars, Symmetry::Full,
 ///     &mat, None,
 ///     |geoms, m, _s, ke| fick::element_stiffness(
 ///         &geoms[0], m, &lay, MaterialSymmetry::Isotropic, ke),
@@ -615,7 +616,7 @@ pub fn element_stiffness(
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::SubElementField;
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
@@ -640,7 +641,7 @@ pub fn element_stiffness(
 /// // Le pendant de la capacité thermique, côté transport de masse.
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support,
-///     vec!["j_H2".into()], vec!["c_H2".into()], DofOrdering::NodesThenVars, true,
+///     vec!["j_H2".into()], vec!["c_H2".into()], DofOrdering::NodesThenVars, Symmetry::Full,
 ///     &mat, None,
 ///     |geoms, m, _s, ke| fick::element_storage(&geoms[0], m, &lay, ke),
 /// )?;

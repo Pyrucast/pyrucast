@@ -9,6 +9,7 @@ use crate::containers::element_field::SubElementField;
 use crate::containers::field::ABSENT_COMPONENT;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
+use crate::containers::matrix::Symmetry;
 use crate::containers::mesh::SubMesh;
 use crate::dump::DumpOptions;
 use crate::error::Result;
@@ -28,7 +29,7 @@ use serde::{Deserialize, Serialize};
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::SubElementField;
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::matrix::{DofOrdering};
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
@@ -58,7 +59,7 @@ pub const PRIMAL_VAR: &str = "T";
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::SubElementField;
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::matrix::{DofOrdering};
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
@@ -87,7 +88,7 @@ pub const DUAL_VAR: &str = "q";
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::SubElementField;
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::matrix::{DofOrdering};
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
@@ -217,7 +218,7 @@ impl HeatConduction {
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::element_field::SubElementField;
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::matrix::{DofOrdering};
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -255,7 +256,7 @@ impl HeatConduction {
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::element_field::SubElementField;
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::matrix::{DofOrdering};
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -320,7 +321,7 @@ impl SubModelKind for HeatConduction {
             dual_vars: self.dual_vars(),
             primal_vars: self.primal_vars(),
             ordering: DofOrdering::NodesThenVars,
-            symmetric: true,
+            symmetry: Symmetry::Full,
         })
     }
 
@@ -480,7 +481,7 @@ impl Behavior for HeatConduction {
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::SubElementField;
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
@@ -504,7 +505,7 @@ impl Behavior for HeatConduction {
 /// // temperature field conducts nothing.
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support,
-///     vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+///     vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, Symmetry::Full,
 ///     &mat, None,
 ///     |geoms, m, _s, ke| heat_conduction::element_stiffness(
 ///         &geoms[0], m, &lay, MaterialSymmetry::Isotropic, ke),
@@ -585,7 +586,7 @@ pub fn element_stiffness(
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::SubElementField;
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
@@ -612,7 +613,7 @@ pub fn element_stiffness(
 /// // la capacité de la maille entière.
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support,
-///     vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+///     vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, Symmetry::Full,
 ///     &mat, None,
 ///     |geoms, m, _s, ke| heat_conduction::element_capacity(&geoms[0], m, &lay, ke),
 /// )?;

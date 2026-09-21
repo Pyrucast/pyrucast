@@ -55,6 +55,7 @@ use crate::containers::field::SubField;
 use crate::containers::finite_element_space::{
     build_dn_dx, build_jacobian, jacobian_measure, SubFiniteElementSpace, MAX_JACOBIAN,
 };
+use crate::containers::matrix::Symmetry;
 use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::SubMesh;
 use crate::containers::node_field::{NodeFieldView, SubNodeField};
@@ -222,7 +223,7 @@ fn scale_slope_slots_into(row: &[f64], j: f64, out: &mut [f64]) {
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
@@ -245,7 +246,7 @@ fn scale_slope_slots_into(row: &[f64], j: f64, out: &mut [f64]) {
 /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
 /// #     assemble_block(
 /// #         std::slice::from_ref(&zone), &support, &support,
-/// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+/// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, Symmetry::Full,
 /// #         &mat, None,
 /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
 /// #     ).map(|_| ())
@@ -301,7 +302,7 @@ impl<'a> CellGeom<'a> {
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -324,7 +325,7 @@ impl<'a> CellGeom<'a> {
     /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
     /// #     assemble_block(
     /// #         std::slice::from_ref(&zone), &support, &support,
-    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, Symmetry::Full,
     /// #         &mat, None,
     /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
     /// #     ).map(|_| ())
@@ -346,7 +347,7 @@ impl<'a> CellGeom<'a> {
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -369,7 +370,7 @@ impl<'a> CellGeom<'a> {
     /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
     /// #     assemble_block(
     /// #         std::slice::from_ref(&zone), &support, &support,
-    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, Symmetry::Full,
     /// #         &mat, None,
     /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
     /// #     ).map(|_| ())
@@ -409,7 +410,7 @@ impl<'a> CellGeom<'a> {
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -432,7 +433,7 @@ impl<'a> CellGeom<'a> {
     /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
     /// #     assemble_block(
     /// #         std::slice::from_ref(&zone), &support, &support,
-    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, Symmetry::Full,
     /// #         &mat, None,
     /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
     /// #     ).map(|_| ())
@@ -470,7 +471,7 @@ impl<'a> CellGeom<'a> {
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -493,7 +494,7 @@ impl<'a> CellGeom<'a> {
     /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
     /// #     assemble_block(
     /// #         std::slice::from_ref(&zone), &support, &support,
-    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, Symmetry::Full,
     /// #         &mat, None,
     /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
     /// #     ).map(|_| ())
@@ -519,7 +520,7 @@ impl<'a> CellGeom<'a> {
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -542,7 +543,7 @@ impl<'a> CellGeom<'a> {
     /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
     /// #     assemble_block(
     /// #         std::slice::from_ref(&zone), &support, &support,
-    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, Symmetry::Full,
     /// #         &mat, None,
     /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
     /// #     ).map(|_| ())
@@ -564,7 +565,7 @@ impl<'a> CellGeom<'a> {
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -587,7 +588,7 @@ impl<'a> CellGeom<'a> {
     /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
     /// #     assemble_block(
     /// #         std::slice::from_ref(&zone), &support, &support,
-    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, Symmetry::Full,
     /// #         &mat, None,
     /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
     /// #     ).map(|_| ())
@@ -616,7 +617,7 @@ impl<'a> CellGeom<'a> {
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -639,7 +640,7 @@ impl<'a> CellGeom<'a> {
     /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
     /// #     assemble_block(
     /// #         std::slice::from_ref(&zone), &support, &support,
-    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, Symmetry::Full,
     /// #         &mat, None,
     /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
     /// #     ).map(|_| ())
@@ -763,7 +764,7 @@ impl<'a> CellGeom<'a> {
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -786,7 +787,7 @@ impl<'a> CellGeom<'a> {
     /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
     /// #     assemble_block(
     /// #         std::slice::from_ref(&zone), &support, &support,
-    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, Symmetry::Full,
     /// #         &mat, None,
     /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
     /// #     ).map(|_| ())
@@ -828,7 +829,7 @@ impl<'a> CellGeom<'a> {
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -847,7 +848,7 @@ impl<'a> CellGeom<'a> {
     /// #         zone.clone(), vec!["k".into()], &[1.0]).unwrap());
     /// assemble_block(
     ///     std::slice::from_ref(&zone), &support, &support,
-    ///     vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+    ///     vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, Symmetry::Full,
     ///     &mat_bidon, None,
     ///     |geoms, _m, _s, _ke| {
     ///         let geom = &geoms[0];
@@ -905,7 +906,7 @@ impl<'a> CellGeom<'a> {
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -928,7 +929,7 @@ impl<'a> CellGeom<'a> {
     /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
     /// #     assemble_block(
     /// #         std::slice::from_ref(&zone), &support, &support,
-    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, Symmetry::Full,
     /// #         &mat, None,
     /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
     /// #     ).map(|_| ())
@@ -974,7 +975,7 @@ impl<'a> CellGeom<'a> {
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -997,7 +998,7 @@ impl<'a> CellGeom<'a> {
     /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
     /// #     assemble_block(
     /// #         std::slice::from_ref(&zone), &support, &support,
-    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, Symmetry::Full,
     /// #         &mat, None,
     /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
     /// #     ).map(|_| ())
@@ -1123,7 +1124,7 @@ impl<'a> CellGeom<'a> {
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::DofOrdering;
+    /// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -1146,7 +1147,7 @@ impl<'a> CellGeom<'a> {
     /// # let noyau = |verifier: &(dyn Fn(&CellGeom) -> pyrucast::Result<()> + Sync)| {
     /// #     assemble_block(
     /// #         std::slice::from_ref(&zone), &support, &support,
-    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+    /// #         vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, Symmetry::Full,
     /// #         &mat, None,
     /// #         |geoms, _m, _s, _ke| verifier(&geoms[0]),
     /// #     ).map(|_| ())
@@ -1450,7 +1451,7 @@ pub(crate) const MAX_CELL_DOFS: usize = 96;
 /// # use pyrucast::containers::element_field::{ElementField, SubElementField};
 /// # use pyrucast::containers::field::SubField;
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
@@ -1471,7 +1472,7 @@ pub(crate) const MAX_CELL_DOFS: usize = 96;
 /// // Here, a local identity matrix.
 /// let bloc = kernel::assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support,
-///     vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+///     vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, Symmetry::Full,
 ///     &mat_bidon, None,
 ///     |geoms, _m, _s, ke| {
 ///         let npc = geoms[0].n_nodes;
@@ -1493,7 +1494,7 @@ pub fn assemble_block(
     dual_vars: Vec<String>,
     primal_vars: Vec<String>,
     ordering: DofOrdering,
-    symmetric: bool,
+    symmetry: Symmetry,
     material: &Handle<SubElementField>,
     state: Option<&Handle<SubElementField>>,
     element: impl Fn(&[CellGeom], &SubElementField, Option<&SubElementField>, &mut [f64]) -> Result<()>
@@ -1526,7 +1527,7 @@ pub fn assemble_block(
         dual_vars,
         primal_vars,
         ordering,
-        symmetric,
+        symmetry,
         coo,
     )
 }

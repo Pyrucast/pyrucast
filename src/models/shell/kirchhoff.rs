@@ -295,7 +295,7 @@ fn bending_b(
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::SubElementField;
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
@@ -327,7 +327,7 @@ fn bending_b(
 /// let (duals, primals) = ddl();
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
-///     DofOrdering::NodesThenVars, true, &mat, None,
+///     DofOrdering::NodesThenVars, Symmetry::Full, &mat, None,
 ///     |geoms, m, _s, ke| kirchhoff::element_stiffness(&geoms[0], m, &lay, ke),
 /// )?;
 /// // The block carries each node's six DOFs: 18 × 18 on a TRI3.

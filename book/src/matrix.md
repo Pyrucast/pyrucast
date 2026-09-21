@@ -167,14 +167,49 @@ et son bloc de Dirichlet), `+` pour **additionner deux opérateurs**.
 {{#include ../../tests/doc_matrix.rs:union_ou_somme}}
 ```
 
-## Drapeau `symmetric`
+## Symétrie
 
-Le dernier argument de `SubMatrix::new` est un drapeau qui déclare l'intention de l'assembleur :
+Le dernier argument des constructeurs de `SubMatrix` déclare **quelle part de la
+symétrie de la matrice ce bloc porte** :
 
-- `true` : la matrice est numériquement symétrique (`A[i, j] = A[j, i]` pour les paires `(i, j)` correspondantes). C'est le cas de toute matrice de raideur d'une formulation variationnelle Galerkine standard.
-- `false` : la symétrie n'est pas garantie (cas Lagrange seul, formulations non-Galerkine, problèmes de transport non self-adjoint, …).
+| `Symmetry` | sens |
+|---|---|
+| `Full` | le bloc est symétrique à lui seul — toute raideur de Galerkine, toute matrice de masse, toute matrice de Gram |
+| `Half(id)` | il n'en porte que la **moitié** : sa transposée est l'autre bloc de même identité. Ni l'un ni l'autre n'est symétrique seul |
+| `None` | il n'en porte aucune |
 
-**Le drapeau est informatif** : le stockage n'est **pas** dédupliqué (les deux triangles peuvent contenir des entrées indépendantes). Un solveur qui sait exploiter la symétrie (Cholesky) lit le drapeau pour décider de la factorisation ; un solveur générique l'ignore et utilise tout le contenu.
+La propriété visée est celle du **tableau assemblé** — `A[i][j] == A[j][i]` sur la
+CSR — et rien d'autre. Un bloc la **déclare** et on le croit : un modèle sait ce
+qu'il écrit, et rien ici ne le vérifie. Déclarer juste est donc tout le travail du
+producteur, et l'agrégat additionne les déclarations sans les corriger. Un bloc
+**vide**, par exemple, est symétrique : il déclare `Full`, et la règle n'a pas
+d'exception à prévoir pour lui.
+
+### Pourquoi une moitié
+
+Une contrainte de Dirichlet introduit deux blocs **rectangulaires**, `C` et `Cᵀ`
+(voir [Contraintes](contraintes.md)). Aucun des deux ne peut être symétrique — un
+bloc rectangulaire ne l'est jamais — mais ensemble ils le sont. C'est une propriété
+du **couple**, que `Half` rend exprimable : le producteur qui écrit le même
+coefficient des deux côtés est celui qui les apparie.
+
+L'identité de la paire est une empreinte de son **contenu** : les nœuds des deux
+supports, les quatre noms de variables, le coefficient. Déterministe, donc l'archive
+reste reproductible ; et si deux paires réellement distinctes venaient à partager
+une empreinte, elles seraient **rejetées**, jamais acceptées à tort — on oublie une
+symétrie, on n'en invente pas.
+
+### Ce que l'agrégat en conclut
+
+`Matrix::symmetric()` est vrai si chaque bloc est `Full`, ou `Half` avec ses **deux
+membres présents en nombres égaux**. Compter les membres plutôt que les blocs permet
+à une contrainte déclarée deux fois (quatre blocs, deux de chaque) de tenir, tandis
+qu'une paire coupée par un `subset` tombe.
+
+**Le stockage n'est pas dédupliqué** : une matrice symétrique porte quand même ses
+deux triangles. Mais la déclaration, elle, est consultée — c'est elle qui décidera si
+la CSR assemblée peut être tendue telle quelle à la factorisation comme sa propre
+CSC.
 
 ## Cas d'usage typique : matrice de raideur du laplacien
 
@@ -211,4 +246,4 @@ Une contrainte de Dirichlet introduit, par sa nature, un bloc **rectangulaire** 
 - **Cache de motif non invalidé par les mutations profondes** : le motif creux mémoïsé sur le `Model` est invalidé à l'ajout d'un sous-modèle (`add_sub`), mais pas si le maillage / l'espace EF sous-jacent change *en place* (remaillage) — reconstruire le modèle dans ce cas. Le chemin de composition `m.assemble()`, lui, reconstruit toujours le motif depuis les blocs.
 - **Pas de produit matrice-matrice** : à venir avec les premiers besoins concrets (préconditionneurs, formulations couplées).
 - **La somme n'assemble pas de manière opportuniste** : `a + b` rend une matrice non assemblée même quand les deux opérandes le sont. Fusionner leurs CSR — ce qui éviterait de relancer les noyaux élémentaires dans une boucle en temps à pas variable — est possible sans changer la sémantique (l'ordre des DDL d'une concaténation est exactement celui de `a` suivi des DDL que seule `b` apporte), mais demande une addition creuse complète : retable des variables, remappage et retri des colonnes de `b`, fusion ligne à ligne. À faire quand un intégrateur en temps le justifiera.
-- Le drapeau `symmetric` n'est pas vérifié numériquement à l'assemblage. C'est de la responsabilité de l'assembleur (du `Model`) d'apparier correctement la déclaration et la réalité.
+- La symétrie déclarée n'est pas vérifiée numériquement à l'assemblage, et ne doit pas l'être : c'est une déclaration du modèle, pas une mesure. Des tests unitaires confrontent la déclaration à la CSR réellement assemblée ; le calcul, lui, fait confiance.

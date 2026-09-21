@@ -936,7 +936,10 @@ class Matrix:
     @property
     def symmetric(self) -> builtins.bool:
         r"""
-        Whether the matrix is declared symmetric.
+        Whether the assembled matrix satisfies `A[i][j] == A[j][i]`, by adding up
+        what its blocks declare. A constraint's two rectangular blocks count as one
+        symmetry when **both** are present, and as none when one has been sliced
+        away.
         """
     def __new__(cls) -> Matrix:
         r"""
@@ -944,9 +947,9 @@ class Matrix:
         build blocks with `Matrix.block(...)` and compose them with `|`.
         """
     @classmethod
-    def block(cls, row_support: typing.Any, col_support: typing.Any, dual_vars: typing.Sequence[builtins.str], primal_vars: typing.Sequence[builtins.str], ordering: builtins.str = 'nodes_then_vars', symmetric: builtins.bool = False) -> Matrix:
+    def block(cls, row_support: typing.Any, col_support: typing.Any, dual_vars: typing.Sequence[builtins.str], primal_vars: typing.Sequence[builtins.str], ordering: builtins.str = 'nodes_then_vars', symmetry: builtins.str = 'none') -> Matrix:
         r"""
-        `Matrix.block(row_support, col_support, dual_vars, primal_vars, ordering="nodes_then_vars", symmetric=False)`
+        `Matrix.block(row_support, col_support, dual_vars, primal_vars, ordering="nodes_then_vars", symmetry="none")`
         — a single-block `Matrix` (unit aggregate). `row_support` /
         `col_support` may each be a `SubMesh` view or a **unitary** `Mesh`.
         `ordering` is `"nodes_then_vars"` (default) or `"vars_then_nodes"`.
@@ -3106,9 +3109,11 @@ class SubMatrix:
     level with `Matrix.block(...)` (a unit `Matrix`), composed with `|`.
     """
     @property
-    def symmetric(self) -> builtins.bool:
+    def is_symmetric(self) -> builtins.bool:
         r"""
-        Whether this block is declared symmetric.
+        Whether this block is symmetric **on its own**. A block that carries only
+        half of a symmetry — a constraint's `C` or `Cᵀ` — answers `False`: it is
+        symmetric only paired, which `Matrix.symmetric` is what resolves.
         """
     @property
     def factor(self) -> builtins.float:

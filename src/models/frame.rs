@@ -90,7 +90,7 @@ fn matmul(a: &[[f64; 6]; 6], b: &[[f64; 6]; 6]) -> [[f64; 6]; 6] {
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::SubElementField;
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
@@ -112,7 +112,7 @@ fn matmul(a: &[[f64; 6]; 6], b: &[[f64; 6]; 6]) -> [[f64; 6]; 6] {
 /// let (duals, primals) = ddl();
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
-///     DofOrdering::NodesThenVars, true, &mat, None,
+///     DofOrdering::NodesThenVars, Symmetry::Full, &mat, None,
 ///     // The kernel takes the section constants, not the field: the physics
 ///     // is what reads its contract, the kernel only does the maths.
 ///     |geoms, m, s, ke| frame::element_stiffness(
@@ -221,7 +221,7 @@ fn cell_frame(geom: &CellGeom) -> Result<(f64, f64, f64)> {
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::SubElementField;
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
@@ -241,7 +241,7 @@ fn cell_frame(geom: &CellGeom) -> Result<(f64, f64, f64)> {
 /// let (duals, primals) = ddl();
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
-///     DofOrdering::NodesThenVars, true, &mat, None,
+///     DofOrdering::NodesThenVars, Symmetry::Full, &mat, None,
 ///     |geoms, m, s, ke| frame::element_mass(
 ///         &geoms[0], 3.0 * 0.01, 3.0 * 1e-05, 210000.0 * 1e-05,
 ///         Some(80000.0 * 0.008), ke),
@@ -273,7 +273,7 @@ pub fn element_mass(
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::SubElementField;
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
@@ -293,7 +293,7 @@ pub fn element_mass(
 /// let (duals, primals) = ddl();
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support, duals, primals,
-///     DofOrdering::NodesThenVars, true, &mat, Some(&mat),
+///     DofOrdering::NodesThenVars, Symmetry::Full, &mat, Some(&mat),
 ///     |geoms, m, s, ke| frame::element_geometric(&geoms[0], 100.0, ke),
 /// )?;
 /// let total: f64 = bloc.iter_entries().into_iter().map(|(_, _, _, _, v)| v).sum();

@@ -14,7 +14,7 @@ def _poi1(c, ids):
     return mesh
 
 
-def _make_block(c, row_ids, col_ids, dual_vars, primal_vars, symmetric=False):
+def _make_block(c, row_ids, col_ids, dual_vars, primal_vars, symmetry="none"):
     """A single COO block, returned as the `SubMatrix` view of a unit
     `Matrix` (SubMatrix is no longer constructed directly — see
     CONVENTIONS.md). The view supports `add_entry` / `get` / `n_rows`."""
@@ -24,7 +24,7 @@ def _make_block(c, row_ids, col_ids, dual_vars, primal_vars, symmetric=False):
         dual_vars,
         primal_vars,
         ordering="nodes_then_vars",
-        symmetric=symmetric,
+        symmetry=symmetry,
     )[0]
 
 
@@ -39,14 +39,14 @@ def test_empty_sub_matrix():
     assert m.n_rows() == 2
     assert m.n_cols() == 2
     assert m.entry_count() == 0
-    assert m.symmetric is False
+    assert m.is_symmetric is False
 
 
 def test_sub_matrix_symmetric_flag():
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
-    m = _make_block(c, [a], [a], ["q"], ["T"], symmetric=True)
-    assert m.symmetric is True
+    m = _make_block(c, [a], [a], ["q"], ["T"], symmetry="full")
+    assert m.is_symmetric is True
 
 
 def test_sub_matrix_factor_defaults_to_one():
@@ -63,7 +63,7 @@ def test_sub_matrix_add_entry_and_get():
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
-    m = _make_block(c, [a, b], [a, b], ["q"], ["T"], symmetric=True)
+    m = _make_block(c, [a, b], [a, b], ["q"], ["T"], symmetry="full")
     m.add_entry(a, "q", a, "T", 2.0)
     m.add_entry(a, "q", b, "T", -1.0)
     m.add_entry(b, "q", a, "T", -1.0)
@@ -111,7 +111,7 @@ def test_sub_matrix_mul_dense_against_known_block():
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
-    m = _make_block(c, [a, b], [a, b], ["q"], ["T"], symmetric=True)
+    m = _make_block(c, [a, b], [a, b], ["q"], ["T"], symmetry="full")
     m.add_entry(a, "q", a, "T", 2.0)
     m.add_entry(a, "q", b, "T", -1.0)
     m.add_entry(b, "q", a, "T", -1.0)
@@ -164,10 +164,11 @@ def test_sub_matrix_entries_preserves_insertion_order():
 def test_sub_matrix_repr_and_str():
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
-    m = _make_block(c, [a], [a], ["q"], ["T"], symmetric=True)
+    m = _make_block(c, [a], [a], ["q"], ["T"], symmetry="full")
     m.add_entry(a, "q", a, "T", 2.0)
     assert "SubMatrix" in repr(m)
-    assert "symmetric" in repr(m)
+    # The debug form names the declared share, so a wrong variant shows.
+    assert "symmetry: Full" in repr(m)
     s = str(m)
     assert "SubMatrix" in s
     assert "1 row" in s
@@ -191,11 +192,11 @@ def test_matrix_aggregates_two_blocks():
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     # Block A: row a, cols (a, b).
-    block_a = _make_block(c, [a], [a, b], ["q"], ["T"], symmetric=True)
+    block_a = _make_block(c, [a], [a, b], ["q"], ["T"], symmetry="full")
     block_a.add_entry(a, "q", a, "T", 2.0)
     block_a.add_entry(a, "q", b, "T", -1.0)
     # Block B: row b, cols (a, b).
-    block_b = _make_block(c, [b], [a, b], ["q"], ["T"], symmetric=True)
+    block_b = _make_block(c, [b], [a, b], ["q"], ["T"], symmetry="full")
     block_b.add_entry(b, "q", a, "T", -1.0)
     block_b.add_entry(b, "q", b, "T", 2.0)
 
@@ -222,12 +223,12 @@ def test_matrix_compose_blocks_with_union():
     a = c.add_node([0.0])
     b = c.add_node([1.0])
     ba = pyrucast.Matrix.block(
-        _poi1(c, [a]), _poi1(c, [a, b]), ["q"], ["T"], symmetric=True
+        _poi1(c, [a]), _poi1(c, [a, b]), ["q"], ["T"], symmetry="full"
     )
     ba[0].add_entry(a, "q", a, "T", 2.0)
     ba[0].add_entry(a, "q", b, "T", -1.0)
     bb = pyrucast.Matrix.block(
-        _poi1(c, [b]), _poi1(c, [a, b]), ["q"], ["T"], symmetric=True
+        _poi1(c, [b]), _poi1(c, [a, b]), ["q"], ["T"], symmetry="full"
     )
     bb[0].add_entry(b, "q", a, "T", -1.0)
     bb[0].add_entry(b, "q", b, "T", 2.0)
@@ -257,8 +258,8 @@ def test_matrix_get_sums_across_blocks():
 def test_matrix_symmetric_is_and_of_blocks():
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
-    block_a = _make_block(c, [a], [a], ["q"], ["T"], symmetric=True)
-    block_b = _make_block(c, [a], [a], ["q"], ["T"], symmetric=False)
+    block_a = _make_block(c, [a], [a], ["q"], ["T"], symmetry="full")
+    block_b = _make_block(c, [a], [a], ["q"], ["T"], symmetry="none")
     k = pyrucast.Matrix()
     k.add_sub(block_a)
     k.add_sub(block_b)
@@ -288,7 +289,7 @@ def test_matrix_mul_field_returns_matrix_vector_product():
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
-    block = _make_block(c, [a, b], [a, b], ["q"], ["T"], symmetric=True)
+    block = _make_block(c, [a, b], [a, b], ["q"], ["T"], symmetry="full")
     block.add_entry(a, "q", a, "T", 2.0)
     block.add_entry(a, "q", b, "T", -1.0)
     block.add_entry(b, "q", a, "T", -1.0)
@@ -313,7 +314,7 @@ def test_matrix_mul_and_truediv_scale_by_factor():
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
-    block = _make_block(c, [a, b], [a, b], ["q"], ["T"], symmetric=True)
+    block = _make_block(c, [a, b], [a, b], ["q"], ["T"], symmetry="full")
     block.add_entry(a, "q", a, "T", 2.0)
     block.add_entry(b, "q", b, "T", 4.0)
     k = pyrucast.Matrix()
@@ -338,7 +339,7 @@ def test_scalar_reads_on_either_side_and_negates():
     """`s * k` mirrors `k * s`, and `-k` is `k * -1.0` — all lazy."""
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
-    block = _make_block(c, [a], [a], ["q"], ["T"], symmetric=True)
+    block = _make_block(c, [a], [a], ["q"], ["T"], symmetry="full")
     block.add_entry(a, "q", a, "T", 2.0)
     k = pyrucast.Matrix()
     k.add_sub(block)
@@ -359,7 +360,7 @@ def test_division_by_zero_is_refused():
     seeding an `inf` that surfaces as a `NaN` inside the solver."""
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
-    block = _make_block(c, [a], [a], ["q"], ["T"], symmetric=True)
+    block = _make_block(c, [a], [a], ["q"], ["T"], symmetry="full")
     block.add_entry(a, "q", a, "T", 2.0)
     k = pyrucast.Matrix()
     k.add_sub(block)
@@ -380,7 +381,7 @@ def test_sub_matrix_scales_like_the_matrix():
     stored value is rewritten."""
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
-    block = _make_block(c, [a], [a], ["q"], ["T"], symmetric=True)
+    block = _make_block(c, [a], [a], ["q"], ["T"], symmetry="full")
     block.add_entry(a, "q", a, "T", 2.0)
 
     assert (block * 2.5).factor == 2.5
@@ -405,7 +406,7 @@ def test_sum_counts_a_shared_block_twice_where_union_drops_it():
     over, a union drops a block whose slot it already holds."""
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
-    block = _make_block(c, [a], [a], ["q"], ["T"], symmetric=True)
+    block = _make_block(c, [a], [a], ["q"], ["T"], symmetry="full")
     block.add_entry(a, "q", a, "T", 2.0)
     k = pyrucast.Matrix()
     k.add_sub(block)
@@ -430,7 +431,7 @@ def test_a_block_and_a_matrix_mix_in_a_sum():
     """Both operands may be a `Matrix` or a `SubMatrix`, either way round."""
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
-    block = _make_block(c, [a], [a], ["q"], ["T"], symmetric=True)
+    block = _make_block(c, [a], [a], ["q"], ["T"], symmetry="full")
     block.add_entry(a, "q", a, "T", 2.0)
     k = pyrucast.Matrix()
     k.add_sub(block)
@@ -510,7 +511,7 @@ def test_assemble_reassembles_scaled_mass_union_stiffness():
 def test_matrix_repr_and_str():
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
-    block_a = _make_block(c, [a], [a], ["q"], ["T"], symmetric=True)
+    block_a = _make_block(c, [a], [a], ["q"], ["T"], symmetry="full")
     block_a.add_entry(a, "q", a, "T", 2.0)
     k = pyrucast.Matrix()
     k.add_sub(block_a)
@@ -551,9 +552,9 @@ def test_matrix_dump_prints_global_grid_and_elides(capsys):
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])
     b = c.add_node([1.0])
-    block_a = _make_block(c, [a], [a, b], ["q"], ["T"], symmetric=True)
+    block_a = _make_block(c, [a], [a, b], ["q"], ["T"], symmetry="full")
     block_a.add_entry(a, "q", a, "T", 2.0)
-    block_b = _make_block(c, [b], [a, b], ["q"], ["T"], symmetric=True)
+    block_b = _make_block(c, [b], [a, b], ["q"], ["T"], symmetry="full")
     block_b.add_entry(b, "q", b, "T", 2.0)
     k = pyrucast.Matrix()
     k.add_sub(block_a)

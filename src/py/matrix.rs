@@ -2,7 +2,7 @@
 //! aggregate [`crate::containers::matrix::Matrix`].
 
 use crate::aggregate::Aggregate;
-use crate::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+use crate::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
 use crate::handle::Handle;
 use crate::models::Physics;
 use crate::py::mesh::submesh_handle;
@@ -91,10 +91,12 @@ impl PySubMatrix {
         self.handle.read().entry_count()
     }
 
-    /// Whether this block is declared symmetric.
+    /// Whether this block is symmetric **on its own**. A block that carries only
+    /// half of a symmetry — a constraint's `C` or `Cᵀ` — answers `False`: it is
+    /// symmetric only paired, which `Matrix.symmetric` is what resolves.
     #[getter]
-    fn symmetric(&self) -> bool {
-        self.handle.read().symmetric()
+    fn is_symmetric(&self) -> bool {
+        self.handle.read().is_symmetric()
     }
 
     /// The scalar factor applied to every value this block emits (`1.0` unless
@@ -218,14 +220,14 @@ impl PyMatrix {
         }
     }
 
-    /// `Matrix.block(row_support, col_support, dual_vars, primal_vars, ordering="nodes_then_vars", symmetric=False)`
+    /// `Matrix.block(row_support, col_support, dual_vars, primal_vars, ordering="nodes_then_vars", symmetry="none")`
     /// — a single-block `Matrix` (unit aggregate). `row_support` /
     /// `col_support` may each be a `SubMesh` view or a **unitary** `Mesh`.
     /// `ordering` is `"nodes_then_vars"` (default) or `"vars_then_nodes"`.
     /// Fill entries via the block view (`block[0].add_entry(...)`) and
     /// compose several blocks with `|`, then `finalize()`.
     #[classmethod]
-    #[pyo3(signature = (row_support, col_support, dual_vars, primal_vars, ordering="nodes_then_vars", symmetric=false))]
+    #[pyo3(signature = (row_support, col_support, dual_vars, primal_vars, ordering="nodes_then_vars", symmetry=Symmetry::None))]
     fn block(
         _cls: &pyo3::Bound<'_, pyo3::types::PyType>,
         row_support: &Bound<'_, PyAny>,
@@ -233,7 +235,7 @@ impl PyMatrix {
         dual_vars: Vec<String>,
         primal_vars: Vec<String>,
         ordering: &str,
-        symmetric: bool,
+        symmetry: Symmetry,
     ) -> PyResult<Self> {
         let ord = match ordering {
             "nodes_then_vars" => DofOrdering::NodesThenVars,
@@ -246,7 +248,7 @@ impl PyMatrix {
         };
         let row = submesh_handle(row_support)?;
         let col = submesh_handle(col_support)?;
-        let sub = SubMatrix::new(row, col, dual_vars, primal_vars, ord, symmetric);
+        let sub = SubMatrix::new(row, col, dual_vars, primal_vars, ord, symmetry);
         let mut m = Matrix::empty();
         m.add_sub(Handle::new(sub))?;
         Ok(Self { inner: m })
@@ -312,7 +314,10 @@ impl PyMatrix {
         self.inner.entry_count()
     }
 
-    /// Whether the matrix is declared symmetric.
+    /// Whether the assembled matrix satisfies `A[i][j] == A[j][i]`, by adding up
+    /// what its blocks declare. A constraint's two rectangular blocks count as one
+    /// symmetry when **both** are present, and as none when one has been sliced
+    /// away.
     #[getter]
     fn symmetric(&self) -> bool {
         self.inner.symmetric()

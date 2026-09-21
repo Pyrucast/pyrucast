@@ -16,7 +16,7 @@ use pyrucast::containers::evolution::{
 };
 use pyrucast::containers::field::{Field, SubField};
 use pyrucast::containers::finite_element_space::FiniteElementSpace;
-use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::node_field::NodeField;
 use pyrucast::coords::Coords;
@@ -251,7 +251,7 @@ fn ajouter_un_bloc_invalide_l_assemblage() -> Result<()> {
         vec!["q".into()],
         vec!["T".into()],
         DofOrdering::NodesThenVars,
-        true,
+        Symmetry::Full,
     );
 
     let mut k = matrix::stiffness(&model, &materials)?;

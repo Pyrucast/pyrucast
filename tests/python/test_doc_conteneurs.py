@@ -338,7 +338,7 @@ import pyrucast
 
 # The entries live in a **block**, never in the aggregate: a block knows its
 # POI1 supports (rows and columns) and its variables.
-k = pyrucast.Matrix.block(support, support, ["q"], ["T"], symmetric=True)
+k = pyrucast.Matrix.block(support, support, ["q"], ["T"], symmetry="full")
 bloc = k[0]
 bloc.add_entry(a, "q", a, "T", 2.0)
 bloc.add_entry(a, "q", b, "T", -1.0)

@@ -18,9 +18,11 @@
 //!   per sub-model).  Read-only: every accessor unions the blocks on the
 //!   fly.
 //!
-//! A `symmetric: bool` flag lives on each [`SubMatrix`]. The aggregate
-//! [`Matrix`] is reported symmetric iff every one of its blocks is. The
-//! flag is **informative only**: storage is never de-duplicated.
+//! Each [`SubMatrix`] declares what share of the matrix's symmetry it carries
+//! ([`Symmetry`]), and the aggregate [`Matrix`] adds those declarations up
+//! ([`Matrix::symmetric`]). Storage is never de-duplicated — a symmetric matrix
+//! still holds both triangles — but the declaration *is* consulted: it decides
+//! whether the assembled CSR may be handed to the factorization as its own CSC.
 //!
 //! # DOF layout
 //!
@@ -47,7 +49,7 @@
 //! use pyrucast::atoms::ElementType;
 //! use pyrucast::containers::mesh::SubMesh;
 //! use pyrucast::atoms::Node;
-//! use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+//! use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
 //! use pyrucast::handle::Handle;
 //!
 //! let coords = Handle::new(Coords::new(1).unwrap());
@@ -61,7 +63,7 @@
 //! let mut k = SubMatrix::new(
 //!     support.clone(), support.clone(),
 //!     vec!["q".into()], vec!["T".into()],
-//!     DofOrdering::NodesThenVars, true,
+//!     DofOrdering::NodesThenVars, Symmetry::Full,
 //! );
 //! k.add_entry(a.id(), "q", a.id(), "T",  2.0).unwrap();
 //! k.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
@@ -70,7 +72,7 @@
 //!
 //! assert_eq!(k.n_rows(), 2);
 //! assert_eq!(k.n_cols(), 2);
-//! assert!(k.symmetric());
+//! assert!(k.is_symmetric());
 //! assert_eq!(k.get(a.id(), "q", a.id(), "T"), 2.0);
 //! ```
 
@@ -99,7 +101,7 @@ use std::fmt;
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+/// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
 /// # use pyrucast::containers::mesh::SubMesh;
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
@@ -115,7 +117,7 @@ use std::fmt;
 /// # let bloc = || {
 /// #     let mut z = SubMatrix::new(
 /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-/// #         DofOrdering::NodesThenVars, true);
+/// #         DofOrdering::NodesThenVars, Symmetry::Full);
 /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
 /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
 /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -140,7 +142,7 @@ pub type MatrixEntry = (NodeId, String, NodeId, String, f64);
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+/// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
 /// # use pyrucast::containers::mesh::SubMesh;
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
@@ -156,7 +158,7 @@ pub type MatrixEntry = (NodeId, String, NodeId, String, f64);
 /// # let bloc = || {
 /// #     let mut z = SubMatrix::new(
 /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-/// #         DofOrdering::NodesThenVars, true);
+/// #         DofOrdering::NodesThenVars, Symmetry::Full);
 /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
 /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
 /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -187,7 +189,7 @@ impl DofOrdering {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
     /// # use pyrucast::containers::mesh::SubMesh;
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -203,7 +205,7 @@ impl DofOrdering {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -234,7 +236,7 @@ impl DofOrdering {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
     /// # use pyrucast::containers::mesh::SubMesh;
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -250,7 +252,7 @@ impl DofOrdering {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -337,7 +339,7 @@ pub enum KernelInputs {
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::ElementField;
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::matrix::{ComputedRecipe, DofOrdering, KernelInputs, SubMatrix};
+/// # use pyrucast::containers::matrix::{ComputedRecipe, DofOrdering, KernelInputs, SubMatrix, Symmetry};
 /// # use pyrucast::models::MatrixKind;
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::containers::model::Model;
@@ -367,7 +369,7 @@ pub enum KernelInputs {
 /// };
 /// let z = SubMatrix::computed(
 ///     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-///     DofOrdering::NodesThenVars, true, recette);
+///     DofOrdering::NodesThenVars, Symmetry::Full, recette);
 /// assert!(z.is_computed());
 /// // Its structure is complete — hence the structural queries that
 /// // work — but it counts **no** stored entry.
@@ -412,11 +414,127 @@ fn default_factor() -> f64 {
     1.0
 }
 
+/// Identity of a symmetric **pair** of blocks — see [`Symmetry::Half`].
+///
+/// Its high 63 bits are a hash of what defines the pair; bit 0 tells the two
+/// members apart. Only the producer that builds both halves mints one, so a
+/// `Half` never arrives alone by accident.
+///
+/// ```
+/// # use pyrucast::containers::matrix::{PairId, Symmetry};
+/// // Two halves of one pair name the same identity and differ in its low bit.
+/// let Symmetry::Half(id) = Symmetry::Half(42 as PairId) else { unreachable!() };
+/// assert_eq!(id & !1, 42);
+/// ```
+pub type PairId = u64;
+
+/// FNV-1a over `bytes`, folded into the running hash `h`.
+///
+/// Hand-rolled because the pair identity must be **deterministic across runs** —
+/// it is serialized, and two saves of the same objects must give the same bytes
+/// (`tests/archive.rs`). `DefaultHasher` guarantees no such stability, and a
+/// random id would need a dependency this crate does not have.
+fn fnv(h: u64, bytes: &[u8]) -> u64 {
+    let mut h = h;
+    for &b in bytes {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    h
+}
+
+/// The seed every pair hash starts from (the FNV-1a offset basis).
+pub(crate) const FNV_SEED: u64 = 0xcbf2_9ce4_8422_2325;
+
+/// Fold a node list into a running pair hash.
+pub(crate) fn hash_nodes(h: u64, nodes: &[NodeId]) -> u64 {
+    nodes.iter().fold(h, |h, n| fnv(h, &n.0.to_le_bytes()))
+}
+
+/// Fold a name into a running pair hash.
+pub(crate) fn hash_name(h: u64, name: &str) -> u64 {
+    fnv(h, name.as_bytes())
+}
+
+/// Fold an `f64` into a running pair hash, by its bits.
+pub(crate) fn hash_f64(h: u64, v: f64) -> u64 {
+    fnv(h, &v.to_bits().to_le_bytes())
+}
+
+/// The two identities of one symmetric pair, from a hash of its content.
+///
+/// Handed back **together** because they only mean anything together: no
+/// producer can obtain one half without the other, which is what keeps a lone
+/// `Half` from ever being minted by hand.
+///
+/// `content` should fold in everything that distinguishes this pair from any
+/// other — both supports' nodes, the variable names, any coefficient — through
+/// [`hash_nodes`], [`hash_name`] and [`hash_f64`] starting from [`FNV_SEED`].
+/// Two genuinely distinct pairs that hashed alike would be *rejected* by
+/// [`Matrix::symmetric`], never wrongly accepted: the error is to forget a
+/// symmetry, never to invent one.
+pub(crate) fn mint_pair(content: u64) -> (PairId, PairId) {
+    // Bit 0 is not a property of either block — it is a label saying "these two
+    // are not the same one". Which member gets which is irrelevant; that they
+    // differ is what the count below relies on.
+    let base = content & !1;
+    (base, base | 1)
+}
+
+/// What share of the matrix's symmetry a [`SubMatrix`] carries.
+///
+/// The property at stake is the assembled array's: `A[i][j] == A[j][i]` on the
+/// CSR. A block **declares** its share and is believed — a model knows what it
+/// writes, and nothing here verifies it.
+///
+/// Declaring correctly is therefore the producer's whole job, and the aggregate
+/// adds up declarations without correcting them. In particular an **empty block
+/// is symmetric** (it contributes nothing that could break `A = Aᵀ`), so it
+/// declares [`Full`](Self::Full) — the rule has no exception for it.
+///
+/// ```
+/// # use pyrucast::containers::matrix::Symmetry;
+/// # use pyrucast::named::Named;
+/// // Only the two nameable shares can be parsed: a half means nothing alone.
+/// assert_eq!(Symmetry::parse("full")?, Symmetry::Full);
+/// assert!(Symmetry::parse("half").is_err());
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Symmetry {
+    /// This block is symmetric on its own — the usual case for a block whose
+    /// row and column supports coincide (a stiffness, a mass, a Gram matrix).
+    Full,
+    /// This block carries **half** of a symmetry: its transpose is the other
+    /// block sharing this [`PairId`]. Neither is symmetric alone — a Dirichlet's
+    /// `C` and `Cᵀ` are rectangular — and only the aggregate can see whether
+    /// both are present.
+    Half(PairId),
+    /// This block carries none of it.
+    None,
+}
+
+impl crate::named::Named for Symmetry {
+    const LABEL: &'static str = "symmetry";
+    // `Half` is deliberately absent: a half cannot be named into existence, it
+    // only means anything paired. Refusing "half" with `expected full|none` is
+    // the right message for someone declaring a block by hand.
+    const VALUES: &'static [Self] = &[Symmetry::Full, Symmetry::None];
+
+    fn name(self) -> &'static str {
+        match self {
+            Symmetry::Full => "full",
+            Symmetry::Half(_) => "half",
+            Symmetry::None => "none",
+        }
+    }
+}
+
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+/// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
 /// # use pyrucast::containers::mesh::SubMesh;
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
@@ -431,7 +549,7 @@ fn default_factor() -> f64 {
 /// # };
 /// # let mut bloc = SubMatrix::new(
 /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-/// #     DofOrdering::NodesThenVars, true);
+/// #     DofOrdering::NodesThenVars, Symmetry::Full);
 /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
 /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
 /// // A **block**: its row and column supports, its variables
@@ -456,7 +574,9 @@ pub struct SubMatrix {
     /// COO data, sized `(n_row_nodes × n_dual_vars) × (n_col_nodes × n_primal_vars)`.
     #[serde(with = "coo_serde")]
     coo: CooMatrix<f64>,
-    symmetric: bool,
+    /// What share of the matrix's symmetry this block carries — **declared**
+    /// by its producer, believed without verification. See [`Symmetry`].
+    symmetry: Symmetry,
     /// `Some` ⇒ this is a **computed** block: `coo` is an empty placeholder and
     /// the contribution is produced on the fly by the global assembler from this
     /// recipe. `None` ⇒ **literal** block, `coo` holds the values (the historical
@@ -501,7 +621,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::mesh;
@@ -511,7 +631,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -526,7 +646,7 @@ impl SubMatrix {
         dual_vars: Vec<String>,
         primal_vars: Vec<String>,
         ordering: DofOrdering,
-        symmetric: bool,
+        symmetry: Symmetry,
     ) -> Self {
         // The block's row/col numbering *is* these supports' connectivity, read
         // in place on every access rather than copied; freeze them so it holds.
@@ -541,7 +661,7 @@ impl SubMatrix {
             primal_vars,
             ordering,
             coo: CooMatrix::new(nrows, ncols),
-            symmetric,
+            symmetry,
             recipe: None,
             physics: Vec::new(),
             factor: 1.0,
@@ -559,7 +679,7 @@ impl SubMatrix {
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::element_field::ElementField;
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::matrix::{ComputedRecipe, DofOrdering, KernelInputs, SubMatrix};
+    /// # use pyrucast::containers::matrix::{ComputedRecipe, DofOrdering, KernelInputs, SubMatrix, Symmetry};
     /// # use pyrucast::models::MatrixKind;
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
     /// # use pyrucast::containers::model::Model;
@@ -581,7 +701,7 @@ impl SubMatrix {
     /// // whose values will come from the sub-model's kernel.
     /// let z = SubMatrix::computed(
     ///     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    ///     DofOrdering::NodesThenVars, true,
+    ///     DofOrdering::NodesThenVars, Symmetry::Full,
     ///     ComputedRecipe {
     ///         submodel: modele.get(0)?,
     ///         fespaces: vec![zone.clone()],
@@ -600,7 +720,7 @@ impl SubMatrix {
         dual_vars: Vec<String>,
         primal_vars: Vec<String>,
         ordering: DofOrdering,
-        symmetric: bool,
+        symmetry: Symmetry,
         recipe: ComputedRecipe,
     ) -> Self {
         // The block's row/col numbering *is* these supports' connectivity, read
@@ -616,7 +736,7 @@ impl SubMatrix {
             primal_vars,
             ordering,
             coo: CooMatrix::new(nrows, ncols),
-            symmetric,
+            symmetry,
             recipe: Some(recipe),
             physics: Vec::new(),
             factor: 1.0,
@@ -632,7 +752,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
     /// # use pyrucast::containers::mesh::SubMesh;
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -648,7 +768,7 @@ impl SubMatrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -663,12 +783,12 @@ impl SubMatrix {
     /// coo.push(1, 1, 2.0);
     /// let z = SubMatrix::from_coo(
     ///     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    ///     DofOrdering::NodesThenVars, true, coo)?;
+    ///     DofOrdering::NodesThenVars, Symmetry::Full, coo)?;
     /// assert_eq!(z.get(a.id(), "q", a.id(), "T"), 2.0);
     /// // Indices are **local** to the block, and its size must match.
     /// assert!(SubMatrix::from_coo(
     ///     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    ///     DofOrdering::NodesThenVars, true, CooMatrix::new(3, 3)).is_err());
+    ///     DofOrdering::NodesThenVars, Symmetry::Full, CooMatrix::new(3, 3)).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     #[allow(clippy::too_many_arguments)]
@@ -678,7 +798,7 @@ impl SubMatrix {
         dual_vars: Vec<String>,
         primal_vars: Vec<String>,
         ordering: DofOrdering,
-        symmetric: bool,
+        symmetry: Symmetry,
         coo: CooMatrix<f64>,
     ) -> Result<Self> {
         // The block's row/col numbering *is* these supports' connectivity, read
@@ -703,7 +823,7 @@ impl SubMatrix {
             primal_vars,
             ordering,
             coo,
-            symmetric,
+            symmetry,
             recipe: None,
             physics: Vec::new(),
             factor: 1.0,
@@ -716,7 +836,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::mesh;
@@ -726,7 +846,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -744,7 +864,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::mesh;
@@ -754,7 +874,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -773,7 +893,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::mesh;
@@ -783,7 +903,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -806,7 +926,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
     /// # use pyrucast::containers::mesh::SubMesh;
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -822,7 +942,7 @@ impl SubMatrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -848,7 +968,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::mesh;
@@ -858,7 +978,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -876,7 +996,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::mesh;
@@ -886,15 +1006,40 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-    /// assert!(bloc.symmetric()); // declared at construction
+    /// assert!(bloc.is_symmetric()); // declared at construction
     /// ```
-    pub fn symmetric(&self) -> bool {
-        self.symmetric
+    pub fn is_symmetric(&self) -> bool {
+        matches!(self.symmetry, Symmetry::Full)
+    }
+
+    /// What share of the matrix's symmetry this block declares.
+    ///
+    /// [`is_symmetric`](Self::is_symmetric) answers the yes/no question about
+    /// this block alone; this one also tells a half from nothing, which only
+    /// [`Matrix::symmetric`] can resolve.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let support = mesh::poi1_from_nodes(&[a.clone()]).unwrap().get(0).unwrap();
+    /// # let bloc = SubMatrix::new(
+    /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// assert_eq!(bloc.symmetry(), Symmetry::Full);
+    /// ```
+    pub fn symmetry(&self) -> Symmetry {
+        self.symmetry
     }
 
     /// Number of row DOFs = `n_row_nodes × n_dual_vars`.
@@ -902,7 +1047,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::mesh;
@@ -912,7 +1057,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -929,7 +1074,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::mesh;
@@ -939,7 +1084,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -956,7 +1101,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::mesh;
@@ -966,7 +1111,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -982,7 +1127,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::mesh;
@@ -992,7 +1137,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1008,7 +1153,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::mesh;
@@ -1018,7 +1163,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1034,7 +1179,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::mesh;
@@ -1044,7 +1189,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1061,7 +1206,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
     /// # use pyrucast::containers::mesh::SubMesh;
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -1077,7 +1222,7 @@ impl SubMatrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1098,7 +1243,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
     /// # use pyrucast::containers::mesh::SubMesh;
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -1114,7 +1259,7 @@ impl SubMatrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1137,7 +1282,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::mesh;
@@ -1147,7 +1292,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1171,7 +1316,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::mesh;
@@ -1181,7 +1326,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1214,7 +1359,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::mesh;
@@ -1224,7 +1369,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1331,7 +1476,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
     /// # use pyrucast::containers::mesh::SubMesh;
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -1347,7 +1492,7 @@ impl SubMatrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1356,7 +1501,7 @@ impl SubMatrix {
     /// # };
     /// let mut z = SubMatrix::new(
     ///     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    ///     DofOrdering::NodesThenVars, true);
+    ///     DofOrdering::NodesThenVars, Symmetry::Full);
     /// // Two calls at the same place **accumulate** — that is what lets the
     /// // assembly pour cell by cell without reading anything back.
     /// z.add_entry(a.id(), "q", a.id(), "T", 1.0)?;
@@ -1452,7 +1597,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
     /// # use pyrucast::containers::mesh::SubMesh;
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -1468,7 +1613,7 @@ impl SubMatrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1496,7 +1641,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::mesh;
@@ -1506,7 +1651,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1530,7 +1675,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::mesh;
@@ -1540,7 +1685,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1558,7 +1703,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::mesh;
@@ -1568,7 +1713,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1661,7 +1806,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::mesh;
@@ -1671,7 +1816,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1723,7 +1868,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::mesh;
@@ -1733,7 +1878,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1757,7 +1902,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::mesh;
@@ -1767,7 +1912,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1796,7 +1941,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::mesh;
@@ -1806,7 +1951,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1829,7 +1974,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::mesh;
@@ -1839,7 +1984,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1855,7 +2000,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::mesh;
@@ -1865,7 +2010,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -1881,7 +2026,7 @@ impl SubMatrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
     /// # use pyrucast::ops::mesh;
@@ -1891,7 +2036,7 @@ impl SubMatrix {
     /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
     /// # let mut bloc = SubMatrix::new(
     /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #     DofOrdering::NodesThenVars, true);
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
     /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -2008,7 +2153,7 @@ impl fmt::Debug for SubMatrix {
             .field("n_rows", &self.coo.nrows())
             .field("n_cols", &self.coo.ncols())
             .field("entries", &self.coo.nnz())
-            .field("symmetric", &self.symmetric)
+            .field("symmetry", &self.symmetry)
             .field("dual_vars", &self.dual_vars)
             .field("primal_vars", &self.primal_vars)
             .field("ordering", &self.ordering)
@@ -2043,7 +2188,11 @@ impl fmt::Display for SubMatrix {
             self.coo.nrows(),
             self.coo.ncols(),
             entries,
-            if self.symmetric { ", symmetric" } else { "" },
+            if self.is_symmetric() {
+                ", symmetric"
+            } else {
+                ""
+            },
             physics,
             factor,
         )
@@ -2081,8 +2230,8 @@ impl crate::dump::Dump for SubMatrix {
         // grid that follows, and the factor decides its values. Without this
         // line, the "content" level would teach less than the structure does.
         format!(
-            "{self}\n  symmetric: {}, ordering: {:?}, factor: {:?}\n  dual_vars: [{}], primal_vars: [{}]\n{}",
-            self.symmetric,
+            "{self}\n  symmetry: {}, ordering: {:?}, factor: {:?}\n  dual_vars: [{}], primal_vars: [{}]\n{}",
+            crate::named::Named::name(self.symmetry),
             self.ordering,
             self.factor,
             self.dual_vars.join(", "),
@@ -2219,7 +2368,7 @@ struct AssembledData {
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+/// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
 /// # use pyrucast::containers::mesh::SubMesh;
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
@@ -2234,7 +2383,7 @@ struct AssembledData {
 /// # };
 /// # let mut bloc = SubMatrix::new(
 /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-/// #     DofOrdering::NodesThenVars, true);
+/// #     DofOrdering::NodesThenVars, Symmetry::Full);
 /// # bloc.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
 /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
 /// // The aggregate: blocks, a global numbering, an assembled state.
@@ -2283,7 +2432,7 @@ crate::impl_aggregate!(Matrix, SubMatrix, sub_matrix, "sub-matrix(es)", {
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+/// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
 /// # use pyrucast::containers::mesh::SubMesh;
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
@@ -2299,7 +2448,7 @@ crate::impl_aggregate!(Matrix, SubMatrix, sub_matrix, "sub-matrix(es)", {
 /// # let bloc = || {
 /// #     let mut z = SubMatrix::new(
 /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-/// #         DofOrdering::NodesThenVars, true);
+/// #         DofOrdering::NodesThenVars, Symmetry::Full);
 /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
 /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
 /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -2439,7 +2588,7 @@ impl DofSeen {
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+/// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
 /// # use pyrucast::containers::mesh::SubMesh;
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
@@ -2455,7 +2604,7 @@ impl DofSeen {
 /// # let bloc = || {
 /// #     let mut z = SubMatrix::new(
 /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-/// #         DofOrdering::NodesThenVars, true);
+/// #         DofOrdering::NodesThenVars, Symmetry::Full);
 /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
 /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
 /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -2511,7 +2660,7 @@ pub struct AssemblyPattern {
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+/// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
 /// # use pyrucast::containers::mesh::SubMesh;
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
@@ -2527,7 +2676,7 @@ pub struct AssemblyPattern {
 /// # let bloc = || {
 /// #     let mut z = SubMatrix::new(
 /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-/// #         DofOrdering::NodesThenVars, true);
+/// #         DofOrdering::NodesThenVars, Symmetry::Full);
 /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
 /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
 /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -2637,7 +2786,7 @@ impl AssemblyPattern {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
     /// # use pyrucast::containers::mesh::SubMesh;
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -2653,7 +2802,7 @@ impl AssemblyPattern {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -2848,7 +2997,7 @@ impl Matrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
     /// # use pyrucast::containers::mesh::SubMesh;
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -2864,7 +3013,7 @@ impl Matrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -2961,7 +3110,7 @@ impl Matrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
     /// # use pyrucast::containers::mesh::SubMesh;
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -2977,7 +3126,7 @@ impl Matrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -3008,7 +3157,7 @@ impl Matrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
     /// # use pyrucast::containers::mesh::SubMesh;
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -3024,7 +3173,7 @@ impl Matrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -3174,8 +3323,22 @@ impl Matrix {
 
     // ── Inspection (always available) ───────────────────────────────────
 
-    /// Aggregate is symmetric iff every block is. Vacuously true for an
-    /// empty aggregate.
+    /// Whether the assembled matrix satisfies `A[i][j] == A[j][i]`, by adding up
+    /// what its blocks [declare](Symmetry). Vacuously true for an empty aggregate.
+    ///
+    /// A block declaring [`Full`](Symmetry::Full) carries its own symmetry. A
+    /// [`Half`](Symmetry::Half) carries only one side of one, so the aggregate
+    /// must find the other: among the blocks sharing a [`PairId`], the two
+    /// members — told apart by its low bit — must be present **in equal,
+    /// non-zero numbers**.
+    ///
+    /// Counting the members rather than the blocks is what lets a constraint
+    /// declared twice (four blocks, two of each) stand, while a pair broken by
+    /// [`Aggregate::subset`] (two blocks, both the same member) falls. A bare
+    /// "exactly two" would lose the first; a parity check would accept the second.
+    ///
+    /// Blocks are a handful, so the tally lives in one small `Vec` — and this runs
+    /// once when a matrix is about to be solved, never inside a loop.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -3197,16 +3360,73 @@ impl Matrix {
     /// # let model = model::heat_conduction(&fes).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
-    /// // A Galerkin stiffness is symmetric: the flag declares it.
+    /// // A Galerkin stiffness is symmetric, and its Dirichlet's two rectangular
+    /// // blocks are a pair — so the aggregate concludes it is.
     /// assert!(k.symmetric());
     /// ```
     pub fn symmetric(&self) -> bool {
+        // One entry per pair met: its identity with the low bit cleared, and how
+        // many blocks of each member it has been handed.
+        let mut pairs: Vec<(PairId, [usize; 2])> = Vec::new();
         for h in self {
-            if !h.read().symmetric() {
-                return false;
+            match h.read().symmetry() {
+                Symmetry::Full => {}
+                Symmetry::None => return false,
+                Symmetry::Half(id) => {
+                    let (base, member) = (id & !1, (id & 1) as usize);
+                    match pairs.iter_mut().find(|(b, _)| *b == base) {
+                        Some((_, seen)) => seen[member] += 1,
+                        None => {
+                            let mut seen = [0usize; 2];
+                            seen[member] = 1;
+                            pairs.push((base, seen));
+                        }
+                    }
+                }
             }
         }
+        if pairs.iter().any(|(_, seen)| seen[0] != seen[1]) {
+            return false;
+        }
+        debug_assert!(
+            self.pairs_are_mutual_transposes(),
+            "a Half group holds blocks that are not each other's transpose — \
+             two distinct pairs hashed alike, or a pair was minted wrongly"
+        );
         true
+    }
+
+    /// Every `Half` group holds blocks whose supports and variables cross — the
+    /// structural half of what `Half` claims.
+    ///
+    /// Only a `debug_assert!` calls this. It cannot check the low bit, which
+    /// encodes a producer's choice rather than a fact, and it is not meant to
+    /// stand between a hash collision and a wrong answer in release: it catches a
+    /// pair minted wrongly while that mistake is still cheap to fix.
+    fn pairs_are_mutual_transposes(&self) -> bool {
+        let halves: Vec<_> = self
+            .iter()
+            .filter_map(|h| match h.read().symmetry() {
+                Symmetry::Half(id) => Some((id & !1, h)),
+                _ => None,
+            })
+            .collect();
+        halves.iter().all(|(base, h)| {
+            let a = h.read();
+            halves.iter().any(|(other_base, g)| {
+                if other_base != base || Handle::same_object(h, g) {
+                    return false;
+                }
+                let b = g.read();
+                // Only the **supports** cross. The variable names do not: the
+                // transpose swaps the dual and primal *roles*, and a constraint
+                // gives those roles different names on each side (`imposed_T`
+                // against `lambda_T` at the multiplier). There is nothing to
+                // compare there.
+                Handle::same_object(a.row_support(), b.col_support())
+                    && Handle::same_object(a.col_support(), b.row_support())
+            })
+        })
     }
 
     /// Union of all row DOFs across blocks, in first-seen order.
@@ -4089,7 +4309,7 @@ impl Matrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
     /// # use pyrucast::containers::mesh::SubMesh;
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -4105,7 +4325,7 @@ impl Matrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -4134,7 +4354,7 @@ impl Matrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
     /// # use pyrucast::containers::mesh::SubMesh;
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -4150,7 +4370,7 @@ impl Matrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -4272,7 +4492,7 @@ impl Matrix {
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix};
+    /// # use pyrucast::containers::matrix::{DofOrdering, Matrix, SubMatrix, Symmetry};
     /// # use pyrucast::containers::mesh::SubMesh;
     /// # use pyrucast::coords::Coords;
     /// # use pyrucast::handle::Handle;
@@ -4288,7 +4508,7 @@ impl Matrix {
     /// # let bloc = || {
     /// #     let mut z = SubMatrix::new(
     /// #         support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
-    /// #         DofOrdering::NodesThenVars, true);
+    /// #         DofOrdering::NodesThenVars, Symmetry::Full);
     /// #     z.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
     /// #     z.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// #     z.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
@@ -4786,26 +5006,95 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::None,
         );
         assert_eq!(m.n_rows(), 2);
         assert_eq!(m.n_cols(), 2);
         assert_eq!(m.entry_count(), 0);
-        assert!(!m.symmetric());
+        assert!(!m.is_symmetric());
     }
 
+    /// The declared share survives a save and a reload — deserialization being
+    /// the fourth way a block enters the world, alongside the three
+    /// constructors. A `Half` that lost its identity on the way back would
+    /// silently stop pairing, and nothing would say so.
+    ///
+    /// The value alone is round-tripped, not a whole block: a `SubMatrix` holds
+    /// `Handle`s, which refuse to serialize outside an archive.
     #[test]
-    fn symmetric_flag_round_trip() {
-        let (_cfg, _nodes, sup) = make_poi1(1);
-        let m = SubMatrix::new(
-            sup.clone(),
-            sup,
-            vec!["q".into()],
+    fn symmetry_round_trips_through_serde() {
+        let (left, right) = mint_pair(0x1234_5678_9abc_def0);
+        for declared in [Symmetry::Full, Symmetry::None, Symmetry::Half(left)] {
+            let bytes =
+                bincode::serde::encode_to_vec(declared, bincode::config::standard()).unwrap();
+            let (back, _): (Symmetry, usize) =
+                bincode::serde::decode_from_slice(&bytes, bincode::config::standard()).unwrap();
+            assert_eq!(back, declared, "{declared:?} did not survive");
+        }
+        assert_ne!(left, right);
+    }
+
+    /// The two identities of a pair differ, and only in the bit that says so.
+    /// Two contents that differ give two pairs that differ.
+    #[test]
+    fn mint_pair_splits_one_content_in_two() {
+        let (a, b) = mint_pair(0xdead_beef_0000_1111);
+        assert_ne!(a, b);
+        assert_eq!(a & !1, b & !1, "both halves name the same pair");
+        assert_eq!(a & 1, 0);
+        assert_eq!(b & 1, 1);
+        // Minting is a function of the content alone — the same content reminted
+        // gives the same pair, which is what lets an archive be reproducible.
+        assert_eq!(mint_pair(0xdead_beef_0000_1111), (a, b));
+
+        let mut h = FNV_SEED;
+        h = hash_name(h, "T");
+        let mut other = FNV_SEED;
+        other = hash_name(other, "P");
+        assert_ne!(mint_pair(h).0 & !1, mint_pair(other).0 & !1);
+    }
+
+    /// A pair counts as one symmetry when both halves are there, and as none
+    /// when one has been sliced away. Neither half is symmetric on its own.
+    #[test]
+    fn a_half_counts_only_with_its_other_half() {
+        // One configuration, so the two node ids cannot collide.
+        let (coords, nodes, _) = make_poi1(2);
+        let (a, m) = (nodes[0].id(), nodes[1].id());
+        let one = |n: NodeId| {
+            let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+            sm.add_cell(&[n]).unwrap();
+            Handle::new(sm)
+        };
+        let (sup_a, sup_m) = (one(a), one(m));
+        let (id_c, id_ct) = mint_pair(0x5555_5555_5555_5555);
+        // C: rows on the multiplier, columns on the constrained node — and Cᵀ
+        // the other way round, with the variables crossed.
+        let c = SubMatrix::new(
+            sup_m.clone(),
+            sup_a.clone(),
+            vec!["imposed_T".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            true,
+            Symmetry::Half(id_c),
         );
-        assert!(m.symmetric());
+        let ct = SubMatrix::new(
+            sup_a,
+            sup_m,
+            vec!["T".into()],
+            vec!["imposed_T".into()],
+            DofOrdering::NodesThenVars,
+            Symmetry::Half(id_ct),
+        );
+        assert!(!c.is_symmetric(), "a half is not symmetric on its own");
+
+        let mut both = Matrix::empty();
+        both.add_sub(Handle::new(c)).unwrap();
+        both.add_sub(Handle::new(ct)).unwrap();
+        assert!(both.symmetric(), "the pair is complete");
+
+        let halved = both.subset([0]).unwrap();
+        assert!(!halved.symmetric(), "one half alone carries no symmetry");
     }
 
     #[test]
@@ -4818,7 +5107,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::None,
         );
         m.add_entry(a, "q", a, "T", 2.0).unwrap();
         m.add_entry(a, "q", b, "T", -1.0).unwrap();
@@ -4840,7 +5129,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::None,
         );
         // unknown field → 0.0
         assert_eq!(m.get(nodes[0].id(), "x", nodes[0].id(), "y"), 0.0);
@@ -4856,7 +5145,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::None,
         );
         m.add_entry(a, "q", a, "T", 2.0).unwrap();
         m.add_entry(a, "q", a, "T", 1.5).unwrap();
@@ -4874,7 +5163,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::None,
         );
         m.add_entry(a, "q", a, "T", 2.0).unwrap();
         m.add_entry(a, "q", b, "T", -1.0).unwrap();
@@ -4894,7 +5183,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::None,
         );
         m.add_entry(a, "q", a, "T", 2.0).unwrap();
         m.add_entry(a, "q", b, "T", -1.0).unwrap();
@@ -4928,7 +5217,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            true,
+            Symmetry::Full,
         );
         m.add_entry(a, "q", a, "T", 2.0).unwrap();
         m.add_entry(a, "q", b, "T", -1.0).unwrap();
@@ -4948,7 +5237,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::None,
         );
         m.add_entry(a, "q", a, "T", 1.0).unwrap();
         // 1 col, but x has 2 elements
@@ -4965,7 +5254,7 @@ mod tests {
             vec!["T".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::None,
         );
         c.add_entry(row_nodes[0].id(), "T", col_nodes[0].id(), "T", 1.0)
             .unwrap();
@@ -4987,7 +5276,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::None,
         );
         m.add_entry(a, "q", a, "T", 1.0).unwrap();
         m.add_entry(b, "q", b, "T", 2.0).unwrap();
@@ -5009,7 +5298,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            true,
+            Symmetry::Full,
         );
         m.add_entry(a, "q", a, "T", 2.0).unwrap();
         assert_eq!(m.factor(), 1.0);
@@ -5050,7 +5339,7 @@ mod tests {
                 vec!["q".into()],
                 vec!["T".into()],
                 DofOrdering::NodesThenVars,
-                false,
+                Symmetry::None,
             )
         };
 
@@ -5096,13 +5385,13 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            true,
+            Symmetry::Full,
         );
         m.add_entry(a, "q", a, "T", 2.0).unwrap();
         let d = format!("{:?}", m);
         assert!(d.contains("SubMatrix"));
         assert!(d.contains("n_rows"));
-        assert!(d.contains("symmetric"));
+        assert!(d.contains("symmetry"));
         let s = format!("{}", m);
         assert!(s.contains("SubMatrix"));
         assert!(s.contains("1 row"));
@@ -5122,7 +5411,7 @@ mod tests {
             vec!["p".into(), "q".into()],
             vec!["u".into(), "v".into()],
             DofOrdering::VarsThenNodes,
-            false,
+            Symmetry::None,
         );
         // With VarsThenNodes: row 0 = (p, node_a), row 1 = (p, node_b),
         //                     row 2 = (q, node_a), row 3 = (q, node_b)
@@ -5154,7 +5443,7 @@ mod tests {
             vec!["p".into(), "q".into()],
             vec!["u".into(), "v".into()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::None,
         );
         // With NodesThenVars: row 0 = (node_a, p), row 1 = (node_a, q),
         //                     row 2 = (node_b, p), row 3 = (node_b, q)
@@ -5203,7 +5492,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            true,
+            Symmetry::Full,
         );
         a.add_entry(na, "q", ca0, "T", 2.0).unwrap();
         a.add_entry(na, "q", ca1, "T", -1.0).unwrap();
@@ -5221,7 +5510,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            true,
+            Symmetry::Full,
         );
         b.add_entry(m0, "q", m0, "T", 0.5).unwrap();
         b.add_entry(m1, "q", m0, "T", -1.0).unwrap();
@@ -5246,7 +5535,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            true,
+            Symmetry::Full,
         );
         let b = SubMatrix::new(
             sup.clone(),
@@ -5254,7 +5543,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::None,
         );
         let mut k = Matrix::empty();
         k.add_sub(Handle::new(a)).unwrap();
@@ -5272,7 +5561,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            true,
+            Symmetry::Full,
         );
         blk.add_entry(a, "q", a, "T", 2.0).unwrap();
         blk.add_entry(b, "q", b, "T", 3.0).unwrap();
@@ -5311,7 +5600,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            true,
+            Symmetry::Full,
         );
         for &n in nodes {
             blk.add_entry(n, "q", n, "T", value).unwrap();
@@ -5521,7 +5810,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            true,
+            Symmetry::Full,
         );
         k_blk.add_entry(a, "q", a, "T", 2.0).unwrap();
         k_blk.add_entry(a, "q", b, "T", -1.0).unwrap();
@@ -5541,7 +5830,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            true,
+            Symmetry::Full,
         );
         m_blk.add_entry(a, "q", a, "T", 4.0).unwrap();
         m_blk.add_entry(b, "q", b, "T", 4.0).unwrap();
@@ -5585,7 +5874,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::None,
         );
         a.add_entry(na, "q", na, "T", 2.0).unwrap();
 
@@ -5595,7 +5884,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::None,
         );
         b.add_entry(nb, "q", nb, "T", 3.0).unwrap();
 
@@ -5634,7 +5923,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::None,
         );
         a.add_entry(na, "q", na, "T", 2.0).unwrap();
         let mut b = SubMatrix::new(
@@ -5643,7 +5932,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::None,
         );
         b.add_entry(nb, "q", nb, "T", 3.0).unwrap();
 
@@ -5677,7 +5966,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::None,
         );
         m.add_entry(a, "q", a, "T", 1.0).unwrap();
         let mut k = Matrix::empty();
@@ -5705,7 +5994,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            true,
+            Symmetry::Full,
         );
         a.add_entry(na0, "q", na0, "T", 2.0).unwrap();
         a.add_entry(na0, "q", na1, "T", -1.0).unwrap();
@@ -5720,7 +6009,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            true,
+            Symmetry::Full,
         );
         b.add_entry(na1, "q", na0, "T", -1.0).unwrap();
         b.add_entry(na1, "q", na1, "T", 2.0).unwrap();
@@ -5747,7 +6036,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            true,
+            Symmetry::Full,
         );
         sm.add_entry(a, "q", a, "T", 2.0).unwrap();
         sm.add_entry(a, "q", b, "T", -1.0).unwrap();
@@ -5797,7 +6086,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::None,
         );
         a.add_entry(na, "q", na, "T", 1.0).unwrap();
 
@@ -5807,7 +6096,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::None,
         );
         b.add_entry(nb, "q", nb, "T", 2.0).unwrap();
 
@@ -5831,7 +6120,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            true,
+            Symmetry::Full,
         );
         a.add_entry(a_id, "q", a_id, "T", 2.0).unwrap();
         let mut k = Matrix::empty();
@@ -5877,7 +6166,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            true,
+            Symmetry::Full,
         );
         k.add_entry(phys_nodes[0].id(), "q", phys_nodes[0].id(), "T", 1.0)
             .unwrap();
@@ -5887,7 +6176,7 @@ mod tests {
             vec!["imposed_T".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::None,
         );
         c.add_entry(mult_node.id(), "imposed_T", phys_nodes[0].id(), "T", 1.0)
             .unwrap();
@@ -5897,7 +6186,7 @@ mod tests {
             vec!["q".into()],
             vec!["lambda_T".into()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::None,
         );
         ct.add_entry(phys_nodes[0].id(), "q", mult_node.id(), "lambda_T", 1.0)
             .unwrap();
@@ -5944,7 +6233,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::None,
         );
         a.add_entry(nodes[0].id(), "q", nodes[0].id(), "T", 1.0)
             .unwrap();
@@ -5954,7 +6243,7 @@ mod tests {
             vec!["r".into()],
             vec!["P".into()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::None,
         );
         b.add_entry(nodes[1].id(), "r", nodes[1].id(), "P", 1.0)
             .unwrap();
@@ -6010,7 +6299,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            true,
+            Symmetry::Full,
         );
         k.add_entry(n0.id(), "q", n0.id(), "T", 2.0).unwrap();
         k.add_entry(n1.id(), "q", n1.id(), "T", 2.0).unwrap();
@@ -6020,7 +6309,7 @@ mod tests {
             vec!["imposed_T".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::None,
         );
         c.add_entry(nm.id(), "imposed_T", n0.id(), "T", 1.0)
             .unwrap();
@@ -6114,7 +6403,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::None,
         );
         blk.add_entry(r0.id(), "q", c0.id(), "T", 1.0).unwrap();
 

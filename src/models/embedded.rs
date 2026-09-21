@@ -46,6 +46,7 @@
 use crate::aggregate::Aggregate;
 use crate::atoms::NodeId;
 use crate::containers::element_field::SubElementField;
+use crate::containers::matrix::{hash_name, hash_nodes, mint_pair, Symmetry, FNV_SEED};
 use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::dump::DumpOptions;
@@ -465,6 +466,24 @@ impl SubModelKind for Embedded {
 
         let mut blocks = Vec::with_capacity(self.components.len() * 2);
         for comp in &self.components {
+            // Neither block is symmetric alone; the pair is. One component's
+            // identity folds in both supports and its four names — a second
+            // component on the same supports differs by them.
+            let (id_c, id_ct) = {
+                let (mult_g, sup_g) = (mult_sm.read(), support_sm.read());
+                let mut h = FNV_SEED;
+                h = hash_nodes(h, mult_g.connectivity());
+                h = hash_nodes(h, sup_g.connectivity());
+                for name in [
+                    &comp.variable,
+                    &comp.target_dual,
+                    &comp.multiplier,
+                    &comp.imposed_value,
+                ] {
+                    h = hash_name(h, name);
+                }
+                mint_pair(h)
+            };
             // C: rows (multiplier, imposed_value), cols (constrained, variable).
             let mut c = SubMatrix::new(
                 mult_sm.clone(),
@@ -472,7 +491,7 @@ impl SubModelKind for Embedded {
                 vec![comp.imposed_value.clone()],
                 vec![comp.variable.clone()],
                 DofOrdering::NodesThenVars,
-                false,
+                Symmetry::Half(id_c),
             );
             // Cᵀ: rows (constrained, target_dual), cols (multiplier, multiplier).
             let mut ct = SubMatrix::new(
@@ -481,7 +500,7 @@ impl SubModelKind for Embedded {
                 vec![comp.target_dual.clone()],
                 vec![comp.multiplier.clone()],
                 DofOrdering::NodesThenVars,
-                false,
+                Symmetry::Half(id_ct),
             );
             for r in 0..n {
                 let m = self.multiplier_node(r)?;

@@ -737,6 +737,7 @@ mod tests {
     use crate::containers::element_field::SubElementField;
     use crate::containers::field::SubField;
     use crate::containers::finite_element_space::FiniteElementSpace;
+    use crate::containers::matrix::Symmetry;
     use crate::containers::mesh::Mesh;
     use crate::containers::mesh::SubMesh;
     use crate::containers::model::{Model, SubModel};
@@ -965,7 +966,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::None,
         );
         block.add_entry(r0.id(), "q", c0.id(), "T", 1.0).unwrap();
         block.add_entry(r1.id(), "q", c0.id(), "T", 1.0).unwrap();
@@ -1003,7 +1004,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::None,
         );
         block.add_entry(a.id(), "q", a.id(), "T", 2.0).unwrap();
         let mut m = crate::containers::matrix::Matrix::empty();
@@ -1078,7 +1079,7 @@ mod tests {
             vec!["q".into()],
             vec!["T".into()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::None,
         );
         block.add_entry(b.id(), "q", b.id(), "T", 4.0).unwrap();
         m.add_sub(Handle::new(block)).unwrap();

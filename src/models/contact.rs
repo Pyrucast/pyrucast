@@ -47,6 +47,7 @@
 use crate::aggregate::Aggregate;
 use crate::atoms::NodeId;
 use crate::containers::element_field::SubElementField;
+use crate::containers::matrix::{hash_name, hash_nodes, mint_pair, Symmetry, FNV_SEED};
 use crate::containers::matrix::{DofOrdering, SubMatrix};
 use crate::containers::mesh::{Mesh, SubMesh};
 use crate::dump::DumpOptions;
@@ -468,6 +469,22 @@ impl SubModelKind for Contact {
             .map(|c| c.target_dual.clone())
             .collect();
 
+        // Neither block is symmetric alone; the pair is. The identity folds in
+        // both supports, this sub-model's two names, and every component's pair
+        // of names — which is what tells one contact from another.
+        let (id_c, id_ct) = {
+            let (mult_g, sup_g) = (mult_sm.read(), support_sm.read());
+            let mut h = FNV_SEED;
+            h = hash_nodes(h, mult_g.connectivity());
+            h = hash_nodes(h, sup_g.connectivity());
+            h = hash_name(h, &self.multiplier);
+            h = hash_name(h, &self.imposed_value);
+            for comp in &self.components {
+                h = hash_name(h, &comp.variable);
+                h = hash_name(h, &comp.target_dual);
+            }
+            mint_pair(h)
+        };
         // C: rows (multiplier, imposed_value), cols (support, every variable).
         let mut c = SubMatrix::new(
             mult_sm.clone(),
@@ -475,7 +492,7 @@ impl SubModelKind for Contact {
             vec![self.imposed_value.clone()],
             variables,
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::Half(id_c),
         );
         // Cᵀ: rows (support, every dual), cols (multiplier, multiplier).
         let mut ct = SubMatrix::new(
@@ -484,7 +501,7 @@ impl SubModelKind for Contact {
             duals,
             vec![self.multiplier.clone()],
             DofOrdering::NodesThenVars,
-            false,
+            Symmetry::Half(id_ct),
         );
         for (r, p) in self.pairings.iter().enumerate() {
             let m = self.multiplier_node(r)?;

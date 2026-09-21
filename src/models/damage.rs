@@ -43,6 +43,7 @@ pub mod law;
 use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
+use crate::containers::matrix::Symmetry;
 use crate::dump::DumpOptions;
 use crate::error::Result;
 use crate::handle::Handle;
@@ -189,7 +190,7 @@ impl SubModelKind for Damage {
             dual_vars: self.dual_vars(),
             primal_vars: self.primal_vars(),
             ordering: DofOrdering::NodesThenVars,
-            symmetric: true,
+            symmetry: Symmetry::Full,
         })
     }
 

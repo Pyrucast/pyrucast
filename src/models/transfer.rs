@@ -280,7 +280,7 @@ pub(crate) fn target_physics(
 /// # use pyrucast::containers::element_field::SubElementField;
 /// # use pyrucast::containers::field::SubField;
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::matrix::DofOrdering;
+/// # use pyrucast::containers::matrix::{DofOrdering, Symmetry};
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
 /// # use pyrucast::coords::Coords;
 /// # use pyrucast::handle::Handle;
@@ -306,7 +306,7 @@ pub(crate) fn target_physics(
 /// // makes an interface's four blocks integrate identically.
 /// let bloc = assemble_block(
 ///     std::slice::from_ref(&zone), &support, &support,
-///     vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, true,
+///     vec!["q".into()], vec!["T".into()], DofOrdering::NodesThenVars, Symmetry::Full,
 ///     &mat, None,
 ///     |geoms, m, _s, ke| {
 ///         transfer::exchange_matrix(&geoms[0], &geoms[0], m, &lay.material, 1.0, ke)
