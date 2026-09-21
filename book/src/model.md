@@ -251,7 +251,11 @@ lecture des inconnues et des réactions) sont déroulés dans
   sub-models, etc.) est vérifiée au moment de `matrix.stiffness` /
   `matrix.mass`, pas à l'ajout du sub-model. Si on découvre des cas où ça pose
   problème, un check eager est facile à ajouter.
-- **Un seul back-end de solveur** : la résolution passe par une LU creuse
-  directe (faer), avec cache de factorisation. Ni méthode itérative, ni
-  factorisation Cholesky exploitant le drapeau de symétrie de la `Matrix` —
-  `SolveMethod` est le point d'extension prévu pour cela.
+- **Deux back-ends de solveur, tous deux directs** : LU creuse (défaut) et
+  Cholesky, au choix de l'appelant via `method=`, toutes deux en faer et avec
+  cache de factorisation. Cholesky exige une matrice qui se **déclare**
+  symétrique — un triangle ne se lisant que d'un côté, elle ne se tromperait pas
+  bruyamment sur une matrice qui ne l'est pas — et définie positive : un
+  point-selle à multiplicateurs, symétrique mais indéfini, est refusé au pivot
+  fautif, qu'on l'élimine d'abord ou qu'on le résolve en LU. Pas de méthode
+  itérative ; `SolveMethod` reste le point d'extension prévu pour cela.

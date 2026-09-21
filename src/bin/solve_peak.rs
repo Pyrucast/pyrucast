@@ -6,8 +6,12 @@
 //!   assemble   stop after `stiffness`  — the matrix alone
 //!   solve      bit-level fingerprint of a constrained solve — the acceptance
 //!              check that a change to the faer handover changed no result
-//!   borrowed   the path the solver takes: counting-sort transpose, then a
-//!              borrowed `SparseColMatRef` handed to `sp_lu`
+//!   borrowed   a counting-sort transpose, then a borrowed `SparseColMatRef`
+//!              handed to `sp_lu` — what a **non-symmetric** matrix gets
+//!   direct     no transpose at all: a symmetric matrix is its own CSC, so its
+//!              CSR arrays go straight to `sp_lu`
+//!   cholesky   the same arrays handed to `sp_cholesky` — what a symmetric
+//!              matrix gets when the caller asks for it
 //!   triplets   the path it took before: `to_csc`, unfold into `Vec<Triplet>`,
 //!              let faer sort them back, own the result — kept as the
 //!              before/after reference
@@ -18,10 +22,16 @@
 //! so running two paths in one process would report the worse of the two for
 //! both.
 //!
-//! The two solve modes mirror `ops::solver::lu` rather than calling it: its
-//! entry points are `pub(crate)`, and a binary is a separate crate. They are
-//! kept faithful to it by hand — if that module's handover to faer changes,
-//! `borrowed` changes with it.
+//! The solve modes mirror `ops::solver::lu` rather than calling it: its entry
+//! points are `pub(crate)`, and a binary is a separate crate. They are kept
+//! faithful to it by hand — if that module's handover to faer changes, they
+//! change with it.
+//!
+//! A cube carries no boundary condition, so its stiffness is only *semi*
+//! definite — the rigid-body modes make it singular. `cholesky` is therefore
+//! expected to be **refused** on it, which is itself the point: that refusal is
+//! exactly what a caller who picks `method="cholesky"` gets back, naming the
+//! pivot where it stopped.
 //!
 //! **A cube is the worst case for fill.** A massive geometry is where a sparse
 //! LU behaves at its worst; a thin structure (sheet, shell, slender part) sits
@@ -288,8 +298,36 @@ fn main() {
             });
             std::hint::black_box(&lu);
         }
+        "direct" => {
+            // A symmetric matrix is its own CSC: nothing to turn around.
+            let lu = stage("sp_lu (no transpose)", || {
+                let sym =
+                    SymbolicSparseColMatRef::<usize>::new_checked(ndof, ndof, offsets, None, cols);
+                SparseColMatRef::<usize, f64>::new(sym, vals)
+                    .sp_lu()
+                    .unwrap()
+            });
+            std::hint::black_box(&lu);
+        }
+        "cholesky" => {
+            let outcome = stage("sp_cholesky (no transpose)", || {
+                let sym =
+                    SymbolicSparseColMatRef::<usize>::new_checked(ndof, ndof, offsets, None, cols);
+                SparseColMatRef::<usize, f64>::new(sym, vals).sp_cholesky(faer::Side::Lower)
+            });
+            match outcome {
+                Ok(llt) => {
+                    std::hint::black_box(&llt);
+                    println!("  Cholesky accepted this matrix");
+                }
+                Err(e) => println!("  Cholesky refused: {e:?} — the solver falls back to LU"),
+            }
+        }
         other => {
-            eprintln!("unknown mode '{other}' (assemble | borrowed | triplets)");
+            eprintln!(
+                "unknown mode '{other}' \
+                 (assemble | solve | borrowed | direct | cholesky | triplets)"
+            );
             std::process::exit(2);
         }
     }

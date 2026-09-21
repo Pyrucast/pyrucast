@@ -311,6 +311,7 @@ fn bench_solver(c: &mut Criterion) {
     let no_cache = SolveOptions {
         method: SolveMethod::Lu,
         cache: false,
+        ..Default::default()
     };
 
     // Fresh factorization on every solve.

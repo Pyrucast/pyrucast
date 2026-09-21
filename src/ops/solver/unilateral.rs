@@ -53,7 +53,9 @@ use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use super::lu::{self, factorize_csc_arrays, lu_solve_vec, SolveMethod, SolveOptions, SparseLu};
+use super::lu::{
+    self, factorize_csc_arrays, lu_solve_vec, SolveMethod, SolveOptions, SparseLu, Verbosity,
+};
 
 type NamedDof = (NodeId, String);
 
@@ -184,16 +186,21 @@ pub struct UnilateralOptions {
     /// Sign tolerance for releasing (`λ` past `tol`) and activating (gap past
     /// `−tol`) a relation.
     pub tol: f64,
+    /// How much the solve says about what it did.
+    pub verbosity: Verbosity,
 }
 
 impl Default for UnilateralOptions {
     fn default() -> Self {
         Self {
+            // The active-set path is LU-only: the system of one status is
+            // never symmetric (see `factorize_status`).
             method: SolveMethod::Lu,
             active_set: ActiveSetMethod::default(),
             cache: true,
             max_iter: 100,
             tol: 1e-10,
+            verbosity: Verbosity::Silent,
         }
     }
 }
@@ -459,7 +466,8 @@ fn solve_inner(
     options: &UnilateralOptions,
     cancel: &dyn Cancel,
 ) -> Result<NodeField> {
-    let SolveMethod::Lu = options.method;
+    // `options.method` ne s'applique pas ici : le système d'un statut n'est
+    // jamais symétrique — voir `factorize_status`.
     cancel.check()?;
 
     // ── Step 1 — obtain the active-set state (cached or fresh) ─────────
@@ -481,6 +489,7 @@ fn solve_inner(
         let opts = SolveOptions {
             method: options.method,
             cache: options.cache,
+            verbosity: options.verbosity,
         };
         return lu::solve_cancellable_with_options(matrix, rhs, &opts, cancel);
     }

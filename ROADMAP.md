@@ -251,9 +251,9 @@ side.
   the solver order from the identity, but nobody computes it: a bandwidth/profile
   reduction (Cuthill–McKee style) remains to be written, with the invariance of
   the results as a test.
-- **Iterative methods** and **Cholesky factorisation** for symmetric matrices —
-  the symmetry flag already exists on the `Matrix`, and `SolveMethod` is the
-  planned extension point.
+- **Iterative methods** — `SolveMethod` is the extension point, already carrying
+  `Lu` and `Cholesky`. A conjugate gradient would be the first one to need a
+  preconditioner, hence a matrix-matrix product.
 - **A performance pass** on a large mesh, with the benches (`benches/parallel.rs`,
   `benches/geom.rs`, `script/scaling.sh`) as the instrument.
 - **A global allocator** — see below.

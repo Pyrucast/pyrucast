@@ -10,16 +10,18 @@
 //! 2. reads a right-hand-side vector out of the `NodeField`, one entry
 //!    per **row DOF** of the matrix (zones resolved first-found; missing
 //!    entries default to `0.0`);
-//! 3. runs a multithreaded **sparse LU** factorization with partial pivoting;
+//! 3. runs a multithreaded sparse factorization — **LU** with partial pivoting
+//!    by default, **Cholesky** when the caller asks for it and the matrix is
+//!    symmetric positive definite;
 //! 4. wraps the solution back into a fresh single-zone `NodeField`
 //!    indexed by the **column DOFs** of the matrix.
 //!
 //! The factorization is **reusable**: it is cached inside the `Matrix`
 //! ([`SolveOptions::cache`]), so a Newton loop or a multi-load-case run pays
 //! for it once and only redoes descent / back-substitution afterwards —
-//! *factor once, solve many*. [`SolveMethod`] is the seam through which another
-//! back-end (iterative, preconditioned) could be selected later without
-//! touching the call sites.
+//! *factor once, solve many*. [`SolveMethod`] is the seam that already carries
+//! LU and Cholesky, and through which an iterative back-end could be selected
+//! later without touching the call sites.
 //!
 //! # Example
 //!
@@ -91,6 +93,7 @@ use crate::containers::node_field::NodeField;
 use crate::error::{PyrucastError, Result};
 use crate::interrupt::{Cancel, NoCancel};
 use faer::linalg::solvers::Solve;
+use faer::sparse::linalg::LltError;
 use faer::sparse::{SparseColMatRef, SymbolicSparseColMatRef};
 use std::sync::Arc;
 
@@ -98,6 +101,59 @@ use std::sync::Arc;
 /// direct back-end shared by [`Factorization`] (full saddle-point system) and
 /// [`crate::ops::solver::eliminate`] (reduced condensed system).
 pub(crate) type SparseLu = faer::sparse::linalg::solvers::Lu<usize, f64>;
+
+/// A faer sparse Cholesky (`L·Lᵀ`) factorization, for the matrices that admit
+/// one.
+pub(crate) type SparseLlt = faer::sparse::linalg::solvers::Llt<usize, f64>;
+
+/// The factorization a matrix turned out to admit.
+///
+/// `L·Lᵀ` stores **one** triangle of factors where `L·U` stores two, searches no
+/// pivot, and is ordered by AMD rather than COLAMD — the ordering suited to a
+/// symmetric pattern. It is worth attempting whenever the matrix is symmetric,
+/// and it is only an attempt: positive-definiteness is a numerical property that
+/// depends on the boundary conditions, so nothing can declare it in advance.
+/// An unconstrained stiffness is only *semi*-definite, and a Lagrange
+/// saddle-point is symmetric **indefinite** — never positive definite.
+///
+/// Both variants answer `solve_in_place` identically: faer implements
+/// `Solve` for anything that implements `SolveCore`.
+pub(crate) enum Factored {
+    /// `L·Lᵀ` — the matrix was symmetric positive definite.
+    Cholesky(SparseLlt),
+    /// `L·U` with partial pivoting — everything else.
+    Lu(SparseLu),
+}
+
+impl Factored {
+    /// Solve `A·x = b` in place against this factorization.
+    pub(crate) fn solve_in_place(&self, b: &mut [f64]) {
+        let n = b.len();
+        let x = faer::MatMut::from_column_major_slice_mut(b, n, 1);
+        match self {
+            Factored::Cholesky(llt) => llt.solve_in_place(x),
+            Factored::Lu(lu) => lu.solve_in_place(x),
+        }
+    }
+
+    /// [`solve_in_place`](Self::solve_in_place) for a caller that owns no buffer.
+    pub(crate) fn solve_vec(&self, b: &[f64]) -> Vec<f64> {
+        let mut x = b.to_vec();
+        self.solve_in_place(&mut x);
+        x
+    }
+
+    /// Which factorization ran — `"cholesky"` or `"lu"`.
+    ///
+    /// The one way to observe the attempt's outcome without reading printed
+    /// text: what the tests assert on, and what the verbose modes report.
+    pub(crate) fn method(&self) -> &'static str {
+        match self {
+            Factored::Cholesky(_) => "cholesky",
+            Factored::Lu(_) => "lu",
+        }
+    }
+}
 
 /// Transpose a square CSR into CSC arrays, by counting sort.
 ///
@@ -139,9 +195,13 @@ fn transpose_to_csc(
     (col_ptr, row_idx, out)
 }
 
-/// Factorize a square matrix, given in **CSR** form, with sparse LU (faer). The
-/// single place the → faer → `sp_lu` handover lives, so both the Lagrange and
-/// the elimination solvers share one implementation.
+/// Factorize a square matrix, given in **CSR** form (faer). The single place the
+/// → faer handover lives, so both the Lagrange and the elimination solvers share
+/// one implementation — and one reading of the symmetry flag.
+///
+/// `symmetric` is what the caller guarantees about the **array**, and it decides
+/// two things: whether the CSR arrays can be handed over as their own CSC
+/// without a turnaround, and whether a Cholesky may be attempted at all.
 ///
 /// Takes the three CSR arrays **borrowed** rather than a `CscMatrix`, and hands
 /// faer a borrowed [`SparseColMatRef`] rather than an owned matrix built from
@@ -162,7 +222,10 @@ pub(crate) fn factorize_csr(
     offsets: &[usize],
     cols: &[usize],
     vals: &[f64],
-) -> Result<SparseLu> {
+    symmetric: bool,
+    options: &SolveOptions,
+) -> Result<Factored> {
+    let start = std::time::Instant::now();
     if n == 0 {
         return Err(PyrucastError::Message("solve: matrix is empty".into()));
     }
@@ -172,8 +235,100 @@ pub(crate) fn factorize_csr(
             offsets.len()
         )));
     }
-    let (col_ptr, row_idx, values) = transpose_to_csc(n, offsets, cols, vals);
-    factorize_csc_arrays(n, &col_ptr, &row_idx, &values)
+    // A symmetric matrix is its own CSC — `CSR(A)` is bit-for-bit `CSC(Aᵀ)`, and
+    // `Aᵀ = A` — so the turnaround, and the second full copy of the matrix that
+    // comes with it, are skipped. This is the whole point of carrying the flag:
+    // the peak alongside the factorization drops from two copies to one.
+    //
+    // KNOWN DEFECT, being fixed next: the flag describes the **operator**, while
+    // what is needed here is the **array**. The global row and column orders are
+    // collected in two independent walks over the blocks, so a constraint that
+    // introduces two new nodes at once — `embedded`, whose immersed node the
+    // physics never numbered — has them discovered in opposite order on the two
+    // sides, and lands the multiplier at row `k` against the immersed node at
+    // column `k`. The array is then a permutation away from symmetric, and this
+    // short-circuit quietly factorizes the transpose.
+    let transposed = (!symmetric).then(|| transpose_to_csc(n, offsets, cols, vals));
+    let (col_ptr, row_idx, values) = match &transposed {
+        Some((ptr, idx, v)) => (&ptr[..], &idx[..], &v[..]),
+        None => (offsets, cols, vals),
+    };
+    let out = match options.method {
+        SolveMethod::Lu => Factored::Lu(lu_of(n, col_ptr, row_idx, values)?),
+        SolveMethod::Cholesky => {
+            // faer cannot catch this one: a Cholesky reads a single triangle, so
+            // on a non-symmetric matrix it does not fail — it quietly uses the
+            // half it was handed. The refusal has to come from here.
+            if !symmetric {
+                return Err(PyrucastError::Message(
+                    "solve: Cholesky needs a symmetric matrix, and this one does not \
+                     declare itself symmetric. A Cholesky reads only one triangle, so it \
+                     would not fail on the other half — it would quietly use the wrong \
+                     one. Solve with the LU, or fix the model's symmetry declaration."
+                        .into(),
+                ));
+            }
+            Factored::Cholesky(cholesky_of(n, col_ptr, row_idx, values).map_err(|e| {
+                PyrucastError::Message(match e {
+                    LltError::Numeric(
+                        faer::linalg::cholesky::llt::factor::LltError::NonPositivePivot { index },
+                    ) => format!(
+                        "solve: Cholesky refused this matrix at pivot {index} — it is not \
+                         positive definite. A Lagrange saddle-point never is; solve it with \
+                         the LU, or eliminate the constraints first."
+                    ),
+                    other => format!("solve: Cholesky could not be set up: {other:?}"),
+                })
+            })?)
+        }
+    };
+    report(options, n, cols.len(), &out, start);
+    Ok(out)
+}
+
+/// Account for one factorization, at the level the caller asked for.
+fn report(
+    options: &SolveOptions,
+    n: usize,
+    nnz: usize,
+    factored: &Factored,
+    start: std::time::Instant,
+) {
+    if let Verbosity::Silent = options.verbosity {
+        return;
+    }
+    print!("solve: {n} DOF, {nnz} nnz, {}", factored.method());
+    if let Verbosity::Detailed = options.verbosity {
+        print!(" — factorized in {:.2?}", start.elapsed());
+    }
+    println!();
+}
+
+/// `L·Lᵀ` of a symmetric matrix given as borrowed CSC arrays.
+///
+/// Only one triangle is read — `Lower` and `Upper` are interchangeable here,
+/// both being present and equal in a matrix this crate assembles, so the choice
+/// is arbitrary.
+fn cholesky_of(
+    n: usize,
+    col_ptr: &[usize],
+    row_idx: &[usize],
+    values: &[f64],
+) -> std::result::Result<SparseLlt, LltError> {
+    let symbolic = SymbolicSparseColMatRef::<usize>::new_checked(n, n, col_ptr, None, row_idx);
+    SparseColMatRef::<usize, f64>::new(symbolic, values).sp_cholesky(faer::Side::Lower)
+}
+
+/// `L·U` of a matrix given as borrowed CSC arrays.
+fn lu_of(n: usize, col_ptr: &[usize], row_idx: &[usize], values: &[f64]) -> Result<SparseLu> {
+    // `new_checked` walks the arrays once, allocating nothing, and panics on a
+    // malformed one. Kept rather than its unchecked twin: one O(nnz) pass buys
+    // an invariant the factorization would otherwise trust blindly, for a
+    // fraction of what the factorization itself costs.
+    let symbolic = SymbolicSparseColMatRef::<usize>::new_checked(n, n, col_ptr, None, row_idx);
+    SparseColMatRef::<usize, f64>::new(symbolic, values)
+        .sp_lu()
+        .map_err(|e| PyrucastError::Message(format!("solve: LU failed (singular?): {e:?}")))
 }
 
 /// Factorize a square matrix already held as **CSC** arrays, borrowed.
@@ -187,14 +342,7 @@ pub(crate) fn factorize_csc_arrays(
     row_idx: &[usize],
     values: &[f64],
 ) -> Result<SparseLu> {
-    // `new_checked` walks the arrays once, allocating nothing, and panics on a
-    // malformed one. Kept rather than its unchecked twin: one O(nnz) pass buys
-    // an invariant the factorization would otherwise trust blindly, for a
-    // fraction of what the factorization itself costs.
-    let symbolic = SymbolicSparseColMatRef::<usize>::new_checked(n, n, col_ptr, None, row_idx);
-    let a = SparseColMatRef::<usize, f64>::new(symbolic, values);
-    a.sp_lu()
-        .map_err(|e| PyrucastError::Message(format!("solve: LU failed (singular?): {e:?}")))
+    lu_of(n, col_ptr, row_idx, values)
 }
 
 /// Solve `A·x = b` for one right-hand side against a computed [`SparseLu`]
@@ -218,9 +366,11 @@ pub(crate) fn lu_solve_vec(lu: &SparseLu, b: &[f64]) -> Vec<f64> {
     x
 }
 
-/// Direct solver method. Today only sparse LU (faer); the enum leaves room to
-/// force another backend (iterative, …) in the future without changing the
-/// `solve` call sites.
+/// Which factorization a solve should run. The caller chooses; nothing is
+/// attempted and retried behind their back, because the case that fails is the
+/// common one — every multiplier boundary condition assembles a saddle-point —
+/// and the failed attempt would be paid on each factorization. The enum leaves
+/// room for an iterative back-end without changing the `solve` call sites.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -254,22 +404,93 @@ pub(crate) fn lu_solve_vec(lu: &SparseLu, b: &[f64]) -> Vec<f64> {
 /// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
 /// # use pyrucast::ops::solver::lu::{SolveMethod, SolveOptions};
 /// # use pyrucast::ops::model;
-/// // A single token today — sparse LU — but the enumeration leaves room for
-/// // another engine without touching the calls.
+/// // The LU takes any square matrix, and is what a solve runs unless told
+/// // otherwise.
 /// assert_eq!(SolveMethod::default(), SolveMethod::Lu);
-/// let o = SolveOptions { method: SolveMethod::Lu, cache: false };
+/// let o = SolveOptions { method: SolveMethod::Lu, cache: false, ..Default::default() };
 /// assert!(solver::lu::solve_with_options(&k, &charge, &o).is_ok());
+///
+/// // This one is clamped by a Lagrange multiplier: symmetric, but **indefinite**.
+/// // Cholesky refuses it, and says where.
+/// let c = SolveOptions { method: SolveMethod::Cholesky, cache: false, ..Default::default() };
+/// let err = solver::lu::solve_with_options(&k, &charge, &c).unwrap_err().to_string();
+/// assert!(err.contains("positive definite"), "{err}");
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SolveMethod {
-    /// Sparse LU with partial pivoting (faer, multithreaded).
+    /// Sparse LU with partial pivoting (faer, multithreaded). Works on any
+    /// square matrix, and is what a solve does unless told otherwise.
     #[default]
     Lu,
+    /// Sparse Cholesky (`L·Lᵀ`). Half the factors of an LU, no pivot search,
+    /// AMD ordering instead of COLAMD — but only a **symmetric positive
+    /// definite** matrix admits one, and asking for it is asserting that.
+    ///
+    /// A non-positive pivot comes back as an error naming where it refused: a
+    /// Lagrange saddle-point is symmetric but indefinite and will always refuse,
+    /// whereas the system an [elimination](crate::ops::solver::eliminate)
+    /// reduces it to carries no multiplier DOF and usually accepts.
+    Cholesky,
 }
 
-/// Options for [`solve_with_options`]. Defaults: sparse LU with the reusable
-/// factorization cache enabled.
+/// How much a solve says about what it did.
+///
+/// A solve is an **action**, not an object: there is nothing to inspect with
+/// [`Dump`](crate::dump::Dump) afterwards. What is useful is for the solve to
+/// account for itself as it goes — which method it settled on, and what it
+/// cost. Printed to stdout, as `Dump::dump` already does; this crate carries no
+/// logging dependency.
+///
+/// ```
+/// # use pyrucast::ops::solver::lu::Verbosity;
+/// # use pyrucast::named::Named;
+/// assert_eq!(Verbosity::default(), Verbosity::Silent);
+/// assert_eq!(Verbosity::parse("brief")?, Verbosity::Brief);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Verbosity {
+    /// Say nothing.
+    #[default]
+    Silent,
+    /// One line per solve: size, non-zero count, and the method used.
+    Brief,
+    /// The same, plus what each phase cost.
+    ///
+    /// Not the size of the factors: faer's `SymbolicLlt` keeps its inner
+    /// symbolic private, so the `len_val` that would give it exactly is out of
+    /// reach without dropping to the low-level API.
+    Detailed,
+}
+
+impl crate::named::Named for Verbosity {
+    const LABEL: &'static str = "verbosity";
+    const VALUES: &'static [Self] = &[Verbosity::Silent, Verbosity::Brief, Verbosity::Detailed];
+
+    fn name(self) -> &'static str {
+        match self {
+            Verbosity::Silent => "silent",
+            Verbosity::Brief => "brief",
+            Verbosity::Detailed => "detailed",
+        }
+    }
+}
+
+impl crate::named::Named for SolveMethod {
+    const LABEL: &'static str = "solver method";
+    const VALUES: &'static [Self] = &[SolveMethod::Lu, SolveMethod::Cholesky];
+
+    fn name(self) -> &'static str {
+        match self {
+            SolveMethod::Lu => "lu",
+            SolveMethod::Cholesky => "cholesky",
+        }
+    }
+}
+
+/// Options for [`solve_with_options`]. Defaults: sparse LU, silent, with the
+/// reusable factorization cache enabled.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -312,7 +533,7 @@ pub enum SolveMethod {
 /// assert!(k.cached_factorization::<solver::lu::Factorization>().is_some());
 ///
 /// // `cache: false` factorizes afresh and **does not touch** the cache.
-/// let sans = SolveOptions { method: SolveMethod::Lu, cache: false };
+/// let sans = SolveOptions { method: SolveMethod::Lu, cache: false, ..Default::default() };
 /// solver::lu::solve_with_options(&k, &charge, &sans)?;
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -325,6 +546,8 @@ pub struct SolveOptions {
     /// matrix reuse the factors (descent/back-substitution only). When `false`,
     /// factorize fresh and do not touch the cache.
     pub cache: bool,
+    /// How much the solve says about what it did.
+    pub verbosity: Verbosity,
 }
 
 impl Default for SolveOptions {
@@ -332,11 +555,12 @@ impl Default for SolveOptions {
         Self {
             method: SolveMethod::Lu,
             cache: true,
+            verbosity: Verbosity::Silent,
         }
     }
 }
 
-/// A reusable sparse LU factorization of a [`Matrix`], plus the DOF layout
+/// A reusable sparse factorization of a [`Matrix`], plus the DOF layout
 /// needed to map a right-hand side in and a solution out. Cached transparently
 /// inside the `Matrix` (see [`SolveOptions::cache`]); derived, non-serialized
 /// state — never persisted.
@@ -377,14 +601,14 @@ impl Default for SolveOptions {
 /// // A **derived** state, never persisted: it carries the LU and the DOF
 /// // layout that makes it usable. It is not called directly — `solve` drops
 /// // it in the matrix's cache and picks it up again at the next solve.
-/// k.store_factorization(Arc::new(Factorization::new(&k)?));
+/// k.store_factorization(Arc::new(Factorization::new(&k, &Default::default())?));
 /// assert!(k.cached_factorization::<Factorization>().is_some());
 /// let u = solver::lu::solve(&k, &charge)?;
 /// assert!(u.node_count()? > 0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub struct Factorization {
-    lu: SparseLu,
+    factored: Factored,
     /// The row numbering the factorization is valid for, in packed form: a
     /// materialised `(NodeId, String)` list would hold one heap allocation per
     /// degree of freedom for the whole life of the cached factorization.
@@ -396,7 +620,8 @@ pub struct Factorization {
 }
 
 impl Factorization {
-    /// Factorize `matrix` (must be square and finalized) with sparse LU.
+    /// Factorize `matrix` (must be square and finalized) with the method
+    /// `options` names.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -429,11 +654,11 @@ impl Factorization {
     /// # let charge = NodeField::from_submesh(&mult.get(0).unwrap(),
     /// #                                      vec!["imposed_T".into()]).unwrap();
     /// # charge.get(0).unwrap().write().add_to_component("imposed_T", 100.0).unwrap();
-    /// // La matrice doit être **carrée et finalisée**.
-    /// assert!(solver::lu::Factorization::new(&k).is_ok());
+    /// // The matrix must be **square and finalized**.
+    /// assert!(solver::lu::Factorization::new(&k, &Default::default()).is_ok());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn new(matrix: &Matrix) -> Result<Self> {
+    pub fn new(matrix: &Matrix, options: &SolveOptions) -> Result<Self> {
         let vars = matrix.dof_vars();
         let row_keys = matrix.row_dof_keys()?;
         let n_cols = matrix.col_dof_keys()?.len();
@@ -445,15 +670,36 @@ impl Factorization {
             )));
         }
         // Borrowed straight from the assembled CSR: the matrix is handed to
-        // faer without ever being materialised in another form.
+        // faer without ever being materialised in another form — and, when the
+        // matrix declares itself symmetric, without even being turned around.
         let (offsets, cols, vals) = matrix.csr_arrays()?;
-        let lu = factorize_csr(row_keys.len(), offsets, cols, vals)?;
-        Ok(Self { lu, vars, row_keys })
+        let factored = factorize_csr(
+            row_keys.len(),
+            offsets,
+            cols,
+            vals,
+            matrix.symmetric(),
+            options,
+        )?;
+        Ok(Self {
+            factored,
+            vars,
+            row_keys,
+        })
     }
 
     /// Solve `A·x = b` for one right-hand side (descent/back-substitution only).
     fn solve_vec(&self, b: &[f64]) -> Vec<f64> {
-        lu_solve_vec(&self.lu, b)
+        self.factored.solve_vec(b)
+    }
+
+    /// Which factorization this one turned out to be — `"cholesky"` or `"lu"`.
+    ///
+    /// The one way to observe the attempt's outcome without reading printed
+    /// text; the verbose modes report it, tests assert on it.
+    #[cfg(test)]
+    pub(crate) fn method(&self) -> &'static str {
+        self.factored.method()
     }
 }
 
@@ -555,7 +801,7 @@ pub fn solve(matrix: &Matrix, rhs: &NodeField) -> Result<NodeField> {
 /// # use pyrucast::ops::solver::lu::{SolveMethod, SolveOptions};
 /// # use pyrucast::ops::model;
 /// // La forme explicite : méthode et cache de factorisation.
-/// let o = SolveOptions { method: SolveMethod::Lu, cache: true };
+/// let o = SolveOptions { method: SolveMethod::Lu, cache: true, ..Default::default() };
 /// let u = solver::lu::solve_with_options(&k, &charge, &o)?;
 /// assert!((u.get(0)?.read().value(n[0].id(), "T")? - 100.0).abs() < 1e-9);
 /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -685,7 +931,6 @@ fn solve_inner(
     options: &SolveOptions,
     cancel: &dyn Cancel,
 ) -> Result<NodeField> {
-    let SolveMethod::Lu = options.method;
     cancel.check()?;
 
     // ── Step 1 — obtain the factorization (cached or fresh) ────────────
@@ -693,13 +938,13 @@ fn solve_inner(
         match matrix.cached_factorization::<Factorization>() {
             Some(f) => f,
             None => {
-                let f = Arc::new(Factorization::new(matrix)?);
+                let f = Arc::new(Factorization::new(matrix, options)?);
                 matrix.store_factorization(f.clone());
                 f
             }
         }
     } else {
-        Arc::new(Factorization::new(matrix)?)
+        Arc::new(Factorization::new(matrix, options)?)
     };
     cancel.check()?;
 
@@ -1016,6 +1261,172 @@ mod tests {
         (m, NodeField::from_sub(rhs), a.id())
     }
 
+    /// A symmetric **positive definite** matrix: a 5-point Laplacian with a
+    /// strictly dominant diagonal, the same shape `benches/parallel.rs`
+    /// factorizes. Cholesky must take it — and the solution must be right.
+    fn spd_grid(n: usize) -> (crate::containers::matrix::Matrix, NodeField) {
+        use crate::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let ids: Vec<crate::atoms::NodeId> = (0..=n)
+            .flat_map(|j| (0..=n).map(move |i| (i, j)))
+            .map(|(i, j)| {
+                Node::create_in(coords.clone(), &[i as f64, j as f64])
+                    .unwrap()
+                    .id()
+            })
+            .collect();
+        let at = |i: usize, j: usize| ids[j * (n + 1) + i];
+        let sm = {
+            let mut sm = SubMesh::new(coords.clone(), ElementType::POI1);
+            for &id in &ids {
+                sm.add_cell(&[id]).unwrap();
+            }
+            Handle::new(sm)
+        };
+        let mut block = SubMatrix::new(
+            sm.clone(),
+            sm.clone(),
+            vec!["q".into()],
+            vec!["T".into()],
+            DofOrdering::NodesThenVars,
+            Symmetry::Full,
+        );
+        for j in 0..=n {
+            for i in 0..=n {
+                let c = at(i, j);
+                let mut neighbours = Vec::with_capacity(4);
+                if i > 0 {
+                    neighbours.push(at(i - 1, j));
+                }
+                if i < n {
+                    neighbours.push(at(i + 1, j));
+                }
+                if j > 0 {
+                    neighbours.push(at(i, j - 1));
+                }
+                if j < n {
+                    neighbours.push(at(i, j + 1));
+                }
+                for &m in &neighbours {
+                    block.add_entry(c, "q", m, "T", -1.0).unwrap();
+                }
+                // diag = #neighbours + 1 ⇒ strictly dominant ⇒ positive definite.
+                block
+                    .add_entry(c, "q", c, "T", neighbours.len() as f64 + 1.0)
+                    .unwrap();
+            }
+        }
+        let mut m = crate::containers::matrix::Matrix::empty();
+        m.add_sub(Handle::new(block)).unwrap();
+        m.finalize().unwrap();
+
+        let mut rhs = SubNodeField::from_poi1(&sm, vec!["q".into()]).unwrap();
+        for &id in &ids {
+            rhs.set_value(id, "q", 1.0).unwrap();
+        }
+        (m, NodeField::from_sub(rhs))
+    }
+
+    /// Asking for a Cholesky on a matrix that admits one.
+    #[test]
+    fn an_spd_system_is_factorized_by_cholesky() {
+        let (m, _) = spd_grid(4);
+        assert!(m.symmetric(), "the fixture must declare itself symmetric");
+        let f = Factorization::new(&m, &cholesky()).unwrap();
+        assert_eq!(f.method(), "cholesky");
+    }
+
+    fn cholesky() -> SolveOptions {
+        SolveOptions {
+            method: SolveMethod::Cholesky,
+            ..Default::default()
+        }
+    }
+
+    /// A Cholesky reads one triangle, so on a non-symmetric matrix it does not
+    /// fail — it quietly uses the half it was handed. faer cannot catch that,
+    /// so the refusal comes from us, before anything is factorized.
+    #[test]
+    fn cholesky_refuses_a_matrix_that_declares_no_symmetry() {
+        let (m, _, _) = tiny_system();
+        assert!(!m.symmetric());
+        let Err(err) = Factorization::new(&m, &cholesky()) else {
+            panic!("a matrix declaring no symmetry must be refused");
+        };
+        assert!(err.to_string().contains("symmetric"), "{err}");
+    }
+
+    /// A conduction bar clamped at one end by a **Lagrange multiplier** — the
+    /// shape every clamped beam of this repo assembles, and the reason a
+    /// Cholesky cannot be the default: symmetric, and indefinite.
+    fn clamped_bar() -> crate::containers::matrix::Matrix {
+        let coords = Handle::new(Coords::new(1).unwrap());
+        let nodes: Vec<Node> = (0..=3)
+            .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
+            .collect();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
+        for i in 0..3 {
+            mesh.add_cell(&[nodes[i].id(), nodes[i + 1].id()]).unwrap();
+        }
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+        let sub = fes.get(0).unwrap();
+
+        let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
+        mat.set_uniform("k", 1.0).unwrap();
+        let mut materials = crate::containers::element_field::ElementField::empty();
+        materials.add_sub(Handle::new(mat)).unwrap();
+
+        let mut model = Model::empty();
+        model
+            .add_sub(Handle::new(SubModel::heat_conduction(sub).unwrap()))
+            .unwrap();
+        let imposed =
+            Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[0])).unwrap());
+        let mult = crate::ops::mesh::barycenter(&imposed).unwrap();
+        let dir = SubModel::dirichlet(&model, "T", &imposed, &mult, Default::default()).unwrap();
+        model.add_sub(Handle::new(dir)).unwrap();
+
+        crate::ops::matrix::stiffness(&model, &materials).unwrap()
+    }
+
+    /// A Lagrange saddle-point — what every clamped beam in this repo assembles
+    /// — is symmetric but **indefinite**: the zero block at its bottom right
+    /// forbids positive-definiteness whatever the physics. Cholesky refuses it,
+    /// and says where.
+    #[test]
+    fn a_lagrange_saddle_point_is_refused_by_cholesky() {
+        let m = clamped_bar();
+        assert!(
+            m.symmetric(),
+            "a stiffness with its Dirichlet pair is symmetric"
+        );
+        // The LU takes it without blinking.
+        let f = Factorization::new(&m, &SolveOptions::default()).unwrap();
+        assert_eq!(f.method(), "lu");
+
+        let Err(err) = Factorization::new(&m, &cholesky()) else {
+            panic!("an indefinite saddle-point must be refused by Cholesky");
+        };
+        let err = err.to_string();
+        assert!(err.contains("positive definite"), "{err}");
+        assert!(err.contains("pivot"), "the message must say where: {err}");
+    }
+
+    /// The two methods answer the same question. On a matrix that admits both,
+    /// they must agree — to rounding, being two different factorizations.
+    #[test]
+    fn both_methods_agree_on_a_matrix_that_admits_both() {
+        let (m, rhs) = spd_grid(3);
+        let node = m.row_mesh().unwrap().node(0, 0, 0).unwrap().id();
+        let by_lu = solve_with_options(&m, &rhs, &SolveOptions::default()).unwrap();
+        let by_llt = solve_with_options(&m, &rhs, &cholesky()).unwrap();
+        let (a, b) = (
+            by_lu.value(node, "T").unwrap(),
+            by_llt.value(node, "T").unwrap(),
+        );
+        assert!((a - b).abs() <= 1e-10 * (1.0 + a.abs()), "{a} vs {b}");
+    }
+
     #[test]
     fn solve_cancellable_stops_on_preset_flag() {
         use std::sync::atomic::AtomicBool;
@@ -1092,6 +1503,7 @@ mod tests {
         let opts = SolveOptions {
             method: SolveMethod::Lu,
             cache: false,
+            ..Default::default()
         };
         let s = solve_with_options(&m, &rhs, &opts).unwrap();
         assert!((s.value(a, "T").unwrap() - 3.0).abs() < 1e-12);

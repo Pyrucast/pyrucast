@@ -1131,16 +1131,25 @@ class Matrix:
         (Cast3M `LUMP`). Applied to a consistent mass / capacity matrix it yields the
         diagonal (lumped) mass, conserving the total mass.
         """
-    def solve(self, rhs: NodeField, method: typing.Optional[builtins.str] = None, cache: builtins.bool = True) -> NodeField:
+    def solve(self, rhs: NodeField, method: builtins.str = 'lu', cache: builtins.bool = True, verbosity: builtins.str = 'silent') -> NodeField:
         r"""
-        Solve the linear system `A·x = b` for `x` (sparse LU, faer).
+        Solve the linear system `A·x = b` for `x` (sparse direct, faer).
         
         `matrix` is the finalized system `A`; `rhs` is the right-hand side `b`
         as a `NodeField` (read through the aggregate, zones resolved per DOF).
         Returns the solution `x` as a single-zone `NodeField` over the
         column-DOF nodes.
         
-        `method` selects the direct solver (currently only `"lu"`, the default).
+        `method` selects the factorization: `"lu"` (default) works on any square
+        matrix, `"cholesky"` is half the factors and no pivot search but asks that the
+        matrix be symmetric **and** positive definite. A Lagrange saddle-point — what
+        any multiplier boundary condition assembles — is symmetric and *indefinite*,
+        and comes back as an error naming the pivot that refused; solve it with the
+        LU, or eliminate the constraints first (`solve_eliminate`).
+        
+        `verbosity` says how much the solve reports on stdout: `"silent"` (default),
+        `"brief"` (one line: size, non-zeros, method) or `"detailed"` (plus timings).
+        
         `cache` (default `True`) reuses a factorization stored transparently on the
         matrix: the first solve factorizes, later solves on the same matrix reuse the
         factors (much cheaper). The cache is cleared automatically when the matrix
@@ -1150,7 +1159,7 @@ class Matrix:
         itself is a single library call and is not interrupted mid-way; when it is
         already cached, only the (cheap) substitution runs.
         """
-    def solve_eliminate(self, model: Model, rhs: NodeField, method: typing.Optional[builtins.str] = None, cache: builtins.bool = True) -> NodeField:
+    def solve_eliminate(self, model: Model, rhs: NodeField, method: builtins.str = 'lu', cache: builtins.bool = True, verbosity: builtins.str = 'silent') -> NodeField:
         r"""
         Solve `model`'s constrained system by **master/slave elimination**
         (condensation) — the alternative to the Lagrange-multiplier path of
@@ -1166,12 +1175,15 @@ class Matrix:
         A model with no constraint falls back to a plain [`solve`]. v1 scope:
         non-chained, disjoint slaves (a slave DOF may not appear in another relation).
         
-        `method` selects the direct back-end for the reduced system (currently only
-        `"lu"`). `cache` (default `True`) reuses the condensation stored transparently
-        on the matrix, cleared when the matrix changes. `Ctrl+C` is honoured at phase
-        boundaries.
+        `method` selects the factorization of the reduced system: `"lu"` (default) or
+        `"cholesky"`. Unlike the saddle-point it replaces, the reduced system carries
+        no multiplier DOF and is usually positive definite, so this is the path where
+        a Cholesky stands a real chance. `verbosity` (`"silent"`, `"brief"`,
+        `"detailed"`) says how much it reports. `cache` (default `True`) reuses the
+        condensation stored transparently on the matrix, cleared when the matrix
+        changes. `Ctrl+C` is honoured at phase boundaries.
         """
-    def solve_unilateral(self, model: Model, rhs: NodeField, method: typing.Optional[builtins.str] = None, active_set: typing.Optional[builtins.str] = None, cache: builtins.bool = True, max_iter: builtins.int = 100, tol: builtins.float = 1e-10) -> NodeField:
+    def solve_unilateral(self, model: Model, rhs: NodeField, method: builtins.str = 'lu', active_set: typing.Optional[builtins.str] = None, cache: builtins.bool = True, max_iter: builtins.int = 100, tol: builtins.float = 1e-10, verbosity: builtins.str = 'silent') -> NodeField:
         r"""
         Solve `model`'s system with **unilateral** (inequality) constraints by the
         active-set (status) method — the operator for constraints built with
@@ -1187,8 +1199,11 @@ class Matrix:
         
         A model with no inequality relation falls back to a plain `solve`.
         
-        `method` selects the direct back-end of each iteration (currently only
-        `"lu"`). `active_set` selects how each status's system is factorized:
+        `method` selects the factorization of each iteration — `"lu"` (default); a
+        `"cholesky"` is refused here, blanking a row breaking the symmetry
+        structurally. `verbosity` (`"silent"`, `"brief"`, `"detailed"`) says how much
+        each iteration reports. `active_set` selects how each status's system is
+        factorized:
         `"schur"` (default) factorizes the inequality-free base once and updates it
         per status (falling back to refactorization when that base is singular),
         `"refactorize"` refactorizes the full system at each status change. `cache`
@@ -5200,16 +5215,25 @@ def skin(mesh: Mesh, angle_deg: typing.Optional[builtins.float] = None) -> Mesh:
     orientation; the original nodes are reused.
     """
 
-def solve(matrix: Matrix, rhs: NodeField, method: typing.Optional[builtins.str] = None, cache: builtins.bool = True) -> NodeField:
+def solve(matrix: Matrix, rhs: NodeField, method: builtins.str = 'lu', cache: builtins.bool = True, verbosity: builtins.str = 'silent') -> NodeField:
     r"""
-    Solve the linear system `A·x = b` for `x` (sparse LU, faer).
+    Solve the linear system `A·x = b` for `x` (sparse direct, faer).
     
     `matrix` is the finalized system `A`; `rhs` is the right-hand side `b`
     as a `NodeField` (read through the aggregate, zones resolved per DOF).
     Returns the solution `x` as a single-zone `NodeField` over the
     column-DOF nodes.
     
-    `method` selects the direct solver (currently only `"lu"`, the default).
+    `method` selects the factorization: `"lu"` (default) works on any square
+    matrix, `"cholesky"` is half the factors and no pivot search but asks that the
+    matrix be symmetric **and** positive definite. A Lagrange saddle-point — what
+    any multiplier boundary condition assembles — is symmetric and *indefinite*,
+    and comes back as an error naming the pivot that refused; solve it with the
+    LU, or eliminate the constraints first (`solve_eliminate`).
+    
+    `verbosity` says how much the solve reports on stdout: `"silent"` (default),
+    `"brief"` (one line: size, non-zeros, method) or `"detailed"` (plus timings).
+    
     `cache` (default `True`) reuses a factorization stored transparently on the
     matrix: the first solve factorizes, later solves on the same matrix reuse the
     factors (much cheaper). The cache is cleared automatically when the matrix
@@ -5220,7 +5244,7 @@ def solve(matrix: Matrix, rhs: NodeField, method: typing.Optional[builtins.str] 
     already cached, only the (cheap) substitution runs.
     """
 
-def solve_eliminate(matrix: Matrix, model: Model, rhs: NodeField, method: typing.Optional[builtins.str] = None, cache: builtins.bool = True) -> NodeField:
+def solve_eliminate(matrix: Matrix, model: Model, rhs: NodeField, method: builtins.str = 'lu', cache: builtins.bool = True, verbosity: builtins.str = 'silent') -> NodeField:
     r"""
     Solve `model`'s constrained system by **master/slave elimination**
     (condensation) — the alternative to the Lagrange-multiplier path of
@@ -5236,13 +5260,16 @@ def solve_eliminate(matrix: Matrix, model: Model, rhs: NodeField, method: typing
     A model with no constraint falls back to a plain [`solve`]. v1 scope:
     non-chained, disjoint slaves (a slave DOF may not appear in another relation).
     
-    `method` selects the direct back-end for the reduced system (currently only
-    `"lu"`). `cache` (default `True`) reuses the condensation stored transparently
-    on the matrix, cleared when the matrix changes. `Ctrl+C` is honoured at phase
-    boundaries.
+    `method` selects the factorization of the reduced system: `"lu"` (default) or
+    `"cholesky"`. Unlike the saddle-point it replaces, the reduced system carries
+    no multiplier DOF and is usually positive definite, so this is the path where
+    a Cholesky stands a real chance. `verbosity` (`"silent"`, `"brief"`,
+    `"detailed"`) says how much it reports. `cache` (default `True`) reuses the
+    condensation stored transparently on the matrix, cleared when the matrix
+    changes. `Ctrl+C` is honoured at phase boundaries.
     """
 
-def solve_unilateral(matrix: Matrix, model: Model, rhs: NodeField, method: typing.Optional[builtins.str] = None, active_set: typing.Optional[builtins.str] = None, cache: builtins.bool = True, max_iter: builtins.int = 100, tol: builtins.float = 1e-10) -> NodeField:
+def solve_unilateral(matrix: Matrix, model: Model, rhs: NodeField, method: builtins.str = 'lu', active_set: typing.Optional[builtins.str] = None, cache: builtins.bool = True, max_iter: builtins.int = 100, tol: builtins.float = 1e-10, verbosity: builtins.str = 'silent') -> NodeField:
     r"""
     Solve `model`'s system with **unilateral** (inequality) constraints by the
     active-set (status) method — the operator for constraints built with
@@ -5258,8 +5285,11 @@ def solve_unilateral(matrix: Matrix, model: Model, rhs: NodeField, method: typin
     
     A model with no inequality relation falls back to a plain `solve`.
     
-    `method` selects the direct back-end of each iteration (currently only
-    `"lu"`). `active_set` selects how each status's system is factorized:
+    `method` selects the factorization of each iteration — `"lu"` (default); a
+    `"cholesky"` is refused here, blanking a row breaking the symmetry
+    structurally. `verbosity` (`"silent"`, `"brief"`, `"detailed"`) says how much
+    each iteration reports. `active_set` selects how each status's system is
+    factorized:
     `"schur"` (default) factorizes the inequality-free base once and updates it
     per status (falling back to refactorization when that base is singular),
     `"refactorize"` refactorizes the full system at each status change. `cache`

@@ -50,7 +50,7 @@ use nalgebra_sparse::{CooMatrix, CsrMatrix};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use super::lu::{self, factorize_csr, lu_solve_vec, SolveOptions, SparseLu};
+use super::lu::{self, factorize_csr, Factored, SolveOptions};
 
 /// One eliminated slave DOF and the data needed to build `u₀` and recover its
 /// reaction. The masters are folded into `T` at build time, so they are not kept.
@@ -120,7 +120,7 @@ pub struct Condensation {
     /// Physics stiffness `K` (`n_phys × n_phys`), for `K·u₀` and the reactions.
     k_phys: CsrMatrix<f64>,
     /// LU factorization of the reduced `K̂ = Tᵀ K T` (`n_free × n_free`).
-    reduced: SparseLu,
+    reduced: Factored,
     /// The variable name table the DOF keys below index.
     vars: Arc<Vec<String>>,
     /// Physics dual (row) DOFs, in shared physics-index order — where `f` is read.
@@ -129,6 +129,16 @@ pub struct Condensation {
     phys_col_keys: Vec<DofKey>,
     /// One entry per eliminated slave.
     slaves: Vec<SlaveInfo>,
+}
+
+impl Condensation {
+    /// Which factorization the **reduced** system admitted — `"cholesky"` or
+    /// `"lu"`. Unlike the saddle-point it came from, `K̂` carries no multiplier
+    /// DOFs, so it stands a real chance of being positive definite.
+    #[cfg(test)]
+    pub(crate) fn method(&self) -> &'static str {
+        self.reduced.method()
+    }
 }
 
 /// Solve `model`'s system by master/slave elimination, using the default options
@@ -356,13 +366,13 @@ fn solve_inner(
         match matrix.cached_factorization::<Condensation>() {
             Some(c) => c,
             None => {
-                let c = Arc::new(build_condensation(model, matrix)?);
+                let c = Arc::new(build_condensation(model, matrix, options)?);
                 matrix.store_factorization(c.clone());
                 c
             }
         }
     } else {
-        Arc::new(build_condensation(model, matrix)?)
+        Arc::new(build_condensation(model, matrix, options)?)
     };
     cancel.check()?;
 
@@ -386,7 +396,7 @@ fn solve_inner(
     cancel.check()?;
 
     // ── Step 4 — solve the reduced system and prolong ──────────────────
-    let u_hat = lu_solve_vec(&cond.reduced, rhs_hat.as_slice());
+    let u_hat = cond.reduced.solve_vec(rhs_hat.as_slice());
     if u_hat.iter().any(|v| !v.is_finite()) {
         return Err(PyrucastError::Message(
             "solve: reduced LU failed (matrix is singular)".into(),
@@ -438,7 +448,11 @@ fn has_constraint(model: &Model) -> bool {
 /// Build the [`Condensation`]: partition physics vs multiplier DOFs, extract the
 /// physics stiffness, read the relations, pick slaves, assemble `T` and factorize
 /// the reduced matrix.
-fn build_condensation(model: &Model, matrix: &Matrix) -> Result<Condensation> {
+fn build_condensation(
+    model: &Model,
+    matrix: &Matrix,
+    options: &SolveOptions,
+) -> Result<Condensation> {
     // ── Collect (relation, imposed_value_slot) from every constraint ────
     // The slot is carried **per relation** (`Relation::imposed_value`), so a
     // multi-component constraint (`Embedded`) reads each component's own g slot.
@@ -653,11 +667,21 @@ fn build_condensation(model: &Model, matrix: &Matrix) -> Result<Condensation> {
     let khat: CsrMatrix<f64> = &(&tt * &k_phys) * &t;
     // Borrowed: a `CsrMatrix` already keeps each row's columns sorted and
     // duplicate-free, which is exactly what the factorization demands.
+    //
+    // `K̂` carries no symmetry declaration of its own — it is a bare
+    // `CsrMatrix`, outside the `Matrix` type. That it is symmetric is **our
+    // inference**: `k_phys` is a principal sub-block of the assembled matrix,
+    // so it is symmetric whenever that one is, and `Tᵀ K T` preserves it. And
+    // unlike the saddle-point it came from, `K̂` is *definite* — no multiplier
+    // DOFs left — so this is the path where a Cholesky actually stands a
+    // chance.
     let reduced = factorize_csr(
         khat.nrows(),
         khat.row_offsets(),
         khat.col_indices(),
         khat.values(),
+        matrix.symmetric(),
+        options,
     )?;
 
     let slaves = records
@@ -697,6 +721,60 @@ mod tests {
     use crate::containers::node_field::SubNodeField;
     use crate::coords::Coords;
     use crate::handle::Handle;
+
+    /// The contrast that makes Cholesky worth offering at all. The **same**
+    /// clamped bar gives a Lagrange saddle-point that is symmetric but
+    /// indefinite — Cholesky refuses it outright (see `lu::tests`) — while the
+    /// system the elimination reduces it to carries no multiplier DOF, is
+    /// definite, and is taken.
+    #[test]
+    fn the_reduced_system_is_taken_by_cholesky() {
+        use crate::containers::element_field::{ElementField, SubElementField};
+        use crate::containers::field::SubField;
+        use crate::containers::finite_element_space::FiniteElementSpace;
+        use crate::containers::mesh::Mesh;
+        use crate::containers::model::SubModel;
+
+        let coords = Handle::new(Coords::new(1).unwrap());
+        let nodes: Vec<Node> = (0..=3)
+            .map(|i| Node::create_in(coords.clone(), &[i as f64]).unwrap())
+            .collect();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
+        for i in 0..3 {
+            mesh.add_cell(&[nodes[i].id(), nodes[i + 1].id()]).unwrap();
+        }
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+        let sub = fes.get(0).unwrap();
+        let mut mat = SubElementField::new(sub.clone(), vec!["k".into()]).unwrap();
+        mat.set_uniform("k", 1.0).unwrap();
+        let mut materials = ElementField::empty();
+        materials.add_sub(Handle::new(mat)).unwrap();
+
+        let mut model = Model::empty();
+        model
+            .add_sub(Handle::new(SubModel::heat_conduction(sub).unwrap()))
+            .unwrap();
+        let imposed =
+            Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[0])).unwrap());
+        let mult = crate::ops::mesh::barycenter(&imposed).unwrap();
+        model
+            .add_sub(Handle::new(
+                SubModel::dirichlet(&model, "T", &imposed, &mult, Default::default()).unwrap(),
+            ))
+            .unwrap();
+        let m = crate::ops::matrix::stiffness(&model, &materials).unwrap();
+
+        let ask_cholesky = SolveOptions {
+            method: crate::ops::solver::lu::SolveMethod::Cholesky,
+            ..Default::default()
+        };
+        let cond = build_condensation(&model, &m, &ask_cholesky).unwrap();
+        assert_eq!(cond.method(), "cholesky");
+
+        // And the default takes the LU, on the very same reduced system.
+        let cond = build_condensation(&model, &m, &SolveOptions::default()).unwrap();
+        assert_eq!(cond.method(), "lu");
+    }
 
     /// A constraint-free model must route through the plain LU solver: a
     /// standalone `2·T = 6` system (no constraints) solves to `T = 3`.

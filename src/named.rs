@@ -218,6 +218,8 @@ named_enum!(
     crate::models::symmetry::MaterialSymmetry,
     crate::containers::evolution::OutOfRange,
     crate::containers::matrix::Symmetry,
+    crate::ops::solver::lu::SolveMethod,
+    crate::ops::solver::lu::Verbosity,
     crate::ops::mesh::FrontRelax,
 );
 

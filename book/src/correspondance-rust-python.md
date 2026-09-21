@@ -278,9 +278,9 @@ dérogations correspondantes sont enregistrées, avec leur raison, dans
 
 | Rust (`ops::solver::…`) | Python (`pyrucast.solver.…`) |
 |---|---|
-| `lu::solve(matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve(matrix, rhs) -> NodeField` |
-| `eliminate::solve(model: &Model, matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve_eliminate(matrix, model, rhs) -> NodeField` |
-| `unilateral::solve(model: &Model, matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve_unilateral(matrix, model, rhs, max_iter=100, tol=1e-10) -> NodeField` |
+| `lu::solve(matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve(matrix, rhs, method="lu", cache=True, verbosity="silent") -> NodeField` |
+| `eliminate::solve(model: &Model, matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve_eliminate(matrix, model, rhs, method="lu", cache=True, verbosity="silent") -> NodeField` |
+| `unilateral::solve(model: &Model, matrix: &Matrix, rhs: &NodeField) -> NodeField` | `solve_unilateral(matrix, model, rhs, method="lu", active_set=None, cache=True, max_iter=100, tol=1e-10, verbosity="silent") -> NodeField` |
 
 ### `ops::export` — export vers des formats externes
 

@@ -207,9 +207,12 @@ membres présents en nombres égaux**. Compter les membres plutôt que les blocs
 qu'une paire coupée par un `subset` tombe.
 
 **Le stockage n'est pas dédupliqué** : une matrice symétrique porte quand même ses
-deux triangles. Mais la déclaration, elle, est consultée — c'est elle qui décidera si
-la CSR assemblée peut être tendue telle quelle à la factorisation comme sa propre
-CSC.
+deux triangles. Mais la déclaration, elle, est **consultée** : elle décide si la CSR
+assemblée peut être tendue telle quelle à la factorisation comme sa propre CSC. Une
+matrice symétrique l'est — `CSR(A)` est au bit près `CSC(Aᵀ)`, et `Aᵀ = A` — si bien
+que le retournement, et la seconde copie complète de la matrice qui va avec,
+disparaissent. C'est elle aussi qui autorise Cholesky (voir
+[Résolution](model.md)).
 
 ## Cas d'usage typique : matrice de raideur du laplacien
 

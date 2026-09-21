@@ -4,7 +4,7 @@
 //! mirroring `src/ops/solver/` — per the `py/ops/` convention (its identity
 //! is the *operation*, not its `NodeField` result).
 
-use crate::ops::solver::lu::{SolveMethod, SolveOptions};
+use crate::ops::solver::lu::{SolveMethod, SolveOptions, Verbosity};
 use crate::ops::solver::unilateral::{ActiveSetMethod, UnilateralOptions};
 use crate::py::matrix::PyMatrix;
 use crate::py::model::PyModel;
@@ -13,18 +13,6 @@ use crate::py::signals::PySignals;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyrucast_macros::py_op;
-
-/// Resolve the optional `method` string into a [`SolveMethod`] (the direct
-/// back-end for the — possibly reduced — system). Shared by `solve` and
-/// `solve_eliminate`.
-fn parse_method(method: Option<&str>) -> PyResult<SolveMethod> {
-    match method {
-        None | Some("lu") | Some("LU") => Ok(SolveMethod::Lu),
-        Some(other) => Err(PyValueError::new_err(format!(
-            "unknown solver method '{other}' (expected 'lu')"
-        ))),
-    }
-}
 
 /// Resolve the optional `active_set` string into an [`ActiveSetMethod`] for
 /// `solve_unilateral` (`"schur"` default, or `"refactorize"`).
@@ -38,14 +26,23 @@ fn parse_active_set(active_set: Option<&str>) -> PyResult<ActiveSetMethod> {
     }
 }
 
-/// Solve the linear system `A·x = b` for `x` (sparse LU, faer).
+/// Solve the linear system `A·x = b` for `x` (sparse direct, faer).
 ///
 /// `matrix` is the finalized system `A`; `rhs` is the right-hand side `b`
 /// as a `NodeField` (read through the aggregate, zones resolved per DOF).
 /// Returns the solution `x` as a single-zone `NodeField` over the
 /// column-DOF nodes.
 ///
-/// `method` selects the direct solver (currently only `"lu"`, the default).
+/// `method` selects the factorization: `"lu"` (default) works on any square
+/// matrix, `"cholesky"` is half the factors and no pivot search but asks that the
+/// matrix be symmetric **and** positive definite. A Lagrange saddle-point — what
+/// any multiplier boundary condition assembles — is symmetric and *indefinite*,
+/// and comes back as an error naming the pivot that refused; solve it with the
+/// LU, or eliminate the constraints first (`solve_eliminate`).
+///
+/// `verbosity` says how much the solve reports on stdout: `"silent"` (default),
+/// `"brief"` (one line: size, non-zeros, method) or `"detailed"` (plus timings).
+///
 /// `cache` (default `True`) reuses a factorization stored transparently on the
 /// matrix: the first solve factorizes, later solves on the same matrix reuse the
 /// factors (much cheaper). The cache is cleared automatically when the matrix
@@ -57,17 +54,19 @@ fn parse_active_set(active_set: Option<&str>) -> PyResult<ActiveSetMethod> {
 #[py_op(method_on = PyMatrix)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (matrix, rhs, method=None, cache=true))]
+#[pyo3(signature = (matrix, rhs, method=SolveMethod::Lu, cache=true, verbosity=Verbosity::Silent))]
 pub fn solve(
     py: Python<'_>,
     matrix: PyRef<PyMatrix>,
     rhs: PyRef<PyNodeField>,
-    method: Option<String>,
+    method: SolveMethod,
     cache: bool,
+    verbosity: Verbosity,
 ) -> PyResult<PyNodeField> {
     let options = SolveOptions {
-        method: parse_method(method.as_deref())?,
+        method,
         cache,
+        verbosity,
     };
     let solution = crate::ops::solver::lu::solve_cancellable_with_options(
         &matrix.inner,
@@ -92,25 +91,30 @@ pub fn solve(
 /// A model with no constraint falls back to a plain [`solve`]. v1 scope:
 /// non-chained, disjoint slaves (a slave DOF may not appear in another relation).
 ///
-/// `method` selects the direct back-end for the reduced system (currently only
-/// `"lu"`). `cache` (default `True`) reuses the condensation stored transparently
-/// on the matrix, cleared when the matrix changes. `Ctrl+C` is honoured at phase
-/// boundaries.
+/// `method` selects the factorization of the reduced system: `"lu"` (default) or
+/// `"cholesky"`. Unlike the saddle-point it replaces, the reduced system carries
+/// no multiplier DOF and is usually positive definite, so this is the path where
+/// a Cholesky stands a real chance. `verbosity` (`"silent"`, `"brief"`,
+/// `"detailed"`) says how much it reports. `cache` (default `True`) reuses the
+/// condensation stored transparently on the matrix, cleared when the matrix
+/// changes. `Ctrl+C` is honoured at phase boundaries.
 #[py_op(method_on = PyMatrix)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (matrix, model, rhs, method=None, cache=true))]
+#[pyo3(signature = (matrix, model, rhs, method=SolveMethod::Lu, cache=true, verbosity=Verbosity::Silent))]
 pub fn solve_eliminate(
     py: Python<'_>,
     matrix: PyRef<PyMatrix>,
     model: PyRef<PyModel>,
     rhs: PyRef<PyNodeField>,
-    method: Option<String>,
+    method: SolveMethod,
     cache: bool,
+    verbosity: Verbosity,
 ) -> PyResult<PyNodeField> {
     let options = SolveOptions {
-        method: parse_method(method.as_deref())?,
+        method,
         cache,
+        verbosity,
     };
     let solution = crate::ops::solver::eliminate::solve_cancellable_with_options(
         &matrix.inner,
@@ -136,8 +140,11 @@ pub fn solve_eliminate(
 ///
 /// A model with no inequality relation falls back to a plain `solve`.
 ///
-/// `method` selects the direct back-end of each iteration (currently only
-/// `"lu"`). `active_set` selects how each status's system is factorized:
+/// `method` selects the factorization of each iteration — `"lu"` (default); a
+/// `"cholesky"` is refused here, blanking a row breaking the symmetry
+/// structurally. `verbosity` (`"silent"`, `"brief"`, `"detailed"`) says how much
+/// each iteration reports. `active_set` selects how each status's system is
+/// factorized:
 /// `"schur"` (default) factorizes the inequality-free base once and updates it
 /// per status (falling back to refactorization when that base is singular),
 /// `"refactorize"` refactorizes the full system at each status change. `cache`
@@ -148,25 +155,27 @@ pub fn solve_eliminate(
 #[py_op(method_on = PyMatrix)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (matrix, model, rhs, method=None, active_set=None, cache=true, max_iter=100, tol=1e-10))]
+#[pyo3(signature = (matrix, model, rhs, method=SolveMethod::Lu, active_set=None, cache=true, max_iter=100, tol=1e-10, verbosity=Verbosity::Silent))]
 #[allow(clippy::too_many_arguments)]
 pub fn solve_unilateral(
     py: Python<'_>,
     matrix: PyRef<PyMatrix>,
     model: PyRef<PyModel>,
     rhs: PyRef<PyNodeField>,
-    method: Option<String>,
+    method: SolveMethod,
     active_set: Option<String>,
     cache: bool,
     max_iter: usize,
     tol: f64,
+    verbosity: Verbosity,
 ) -> PyResult<PyNodeField> {
     let options = UnilateralOptions {
-        method: parse_method(method.as_deref())?,
+        method,
         active_set: parse_active_set(active_set.as_deref())?,
         cache,
         max_iter,
         tol,
+        verbosity,
     };
     let solution = crate::ops::solver::unilateral::solve_cancellable_with_options(
         &matrix.inner,
