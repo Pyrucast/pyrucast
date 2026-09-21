@@ -1400,7 +1400,7 @@ impl SubMatrix {
     /// `slot_of` names each variable by its index in the aggregate's table
     /// ([`Matrix::dof_vars`]); it is resolved **once per block**, so no DOF ever
     /// touches a string.
-    pub(crate) fn row_dof_keys(&self, slot_of: &HashMap<String, u32>) -> Result<Vec<DofKey>> {
+    pub(crate) fn row_dof_keys(&self, slot_of: &HashMap<String, u32>) -> Vec<DofKey> {
         self.row_dof_keys_with(&self.row_support.read(), slot_of)
     }
 
@@ -1410,19 +1410,18 @@ impl SubMatrix {
         &self,
         row_support: &SubMesh,
         slot_of: &HashMap<String, u32>,
-    ) -> Result<Vec<DofKey>> {
-        let slots = self.var_slots(&self.dual_vars, slot_of)?;
-        Ok(Self::keys(
+    ) -> Vec<DofKey> {
+        Self::keys(
             row_support.connectivity(),
-            &slots,
+            &self.var_slots(&self.dual_vars, slot_of),
             self.ordering,
             self.coo.nrows(),
-        ))
+        )
     }
 
     /// Column DOFs as packed [`DofKey`]s — the column twin of
     /// [`row_dof_keys`](Self::row_dof_keys).
-    pub(crate) fn col_dof_keys(&self, slot_of: &HashMap<String, u32>) -> Result<Vec<DofKey>> {
+    pub(crate) fn col_dof_keys(&self, slot_of: &HashMap<String, u32>) -> Vec<DofKey> {
         self.col_dof_keys_with(&self.col_support.read(), slot_of)
     }
 
@@ -1432,24 +1431,28 @@ impl SubMatrix {
         &self,
         col_support: &SubMesh,
         slot_of: &HashMap<String, u32>,
-    ) -> Result<Vec<DofKey>> {
-        let slots = self.var_slots(&self.primal_vars, slot_of)?;
-        Ok(Self::keys(
+    ) -> Vec<DofKey> {
+        Self::keys(
             col_support.connectivity(),
-            &slots,
+            &self.var_slots(&self.primal_vars, slot_of),
             self.ordering,
             self.coo.ncols(),
-        ))
+        )
     }
 
     /// This block's variable names as slots in the aggregate's table.
-    fn var_slots(&self, vars: &[String], slot_of: &HashMap<String, u32>) -> Result<Vec<u32>> {
+    ///
+    /// Infallible by construction: `slot_of` is always built from the
+    /// aggregate's own [`field_names`](Matrix::field_names), which is the union
+    /// of every block's dual and primal variables — so a block looks its own
+    /// names up in a table that was made to contain them. A miss would mean the
+    /// caller built the table from something else, which is a bug here and not
+    /// a condition a user can produce.
+    fn var_slots(&self, vars: &[String], slot_of: &HashMap<String, u32>) -> Vec<u32> {
         vars.iter()
             .map(|v| {
-                slot_of.get(v).copied().ok_or_else(|| {
-                    PyrucastError::Message(format!(
-                        "row_dof_keys: variable '{v}' is absent from the matrix name table"
-                    ))
+                *slot_of.get(v).unwrap_or_else(|| {
+                    panic!("variable '{v}' is absent from the matrix name table")
                 })
             })
             .collect()
@@ -3290,9 +3293,9 @@ impl Matrix {
         for h in self {
             let sub = h.read();
             let keys = if row {
-                sub.row_dof_keys_with(&sub.row_support().read(), &slot_of)?
+                sub.row_dof_keys_with(&sub.row_support().read(), &slot_of)
             } else {
-                sub.col_dof_keys_with(&sub.col_support().read(), &slot_of)?
+                sub.col_dof_keys_with(&sub.col_support().read(), &slot_of)
             };
             for k in keys {
                 if seen.insert(k) {
@@ -3380,11 +3383,11 @@ impl Matrix {
             // two read locks on the same lock.
             let a_rows = {
                 let g = a.row_support().read();
-                a.row_dof_keys_with(&g, &slot_of)?
+                a.row_dof_keys_with(&g, &slot_of)
             };
             let a_cols = {
                 let g = a.col_support().read();
-                a.col_dof_keys_with(&g, &slot_of)?
+                a.col_dof_keys_with(&g, &slot_of)
             };
             match a.symmetry() {
                 Symmetry::Full => {
@@ -3421,11 +3424,11 @@ impl Matrix {
                     let p = self.iter().nth(j).expect("index from position").read();
                     let p_rows = {
                         let g = p.row_support().read();
-                        p.row_dof_keys_with(&g, &slot_of)?
+                        p.row_dof_keys_with(&g, &slot_of)
                     };
                     let p_cols = {
                         let g = p.col_support().read();
-                        p.col_dof_keys_with(&g, &slot_of)?
+                        p.col_dof_keys_with(&g, &slot_of)
                     };
                     conjugate_lengths(a_rows.len(), p_cols.len(), "a Half pair")?;
                     conjugate_lengths(p_rows.len(), a_cols.len(), "a Half pair")?;
@@ -3506,12 +3509,12 @@ impl Matrix {
             let sub = h.read();
             // local DOF index → global index (the "simple remap").
             let trow: Vec<usize> = sub
-                .row_dof_keys(&slot_of)?
+                .row_dof_keys(&slot_of)
                 .iter()
                 .map(|k| row_map[k])
                 .collect();
             let tcol: Vec<usize> = sub
-                .col_dof_keys(&slot_of)?
+                .col_dof_keys(&slot_of)
                 .iter()
                 .map(|k| col_map[k])
                 .collect();

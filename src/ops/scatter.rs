@@ -64,9 +64,15 @@ impl DofIndex {
         }
     }
 
-    /// The global index of `key`, which the caller's block is known to carry.
+    /// The global index of `key`.
+    ///
+    /// Infallible: this index is built from the **union** of every block's DOFs,
+    /// and the only keys looked up are a block's own. A miss would mean the
+    /// index and the blocks came from different matrices — a bug here, not a
+    /// condition a user can produce. It matters that this stays a plain lookup:
+    /// it runs once per block DOF.
     #[inline]
-    fn get(&self, key: DofKey) -> Result<usize> {
+    fn get(&self, key: DofKey) -> usize {
         let found = match self {
             DofIndex::Dense { at, n_vars } => at
                 .get(dof_node(key).0 as usize * *n_vars + dof_var(key) as usize)
@@ -75,14 +81,7 @@ impl DofIndex {
                 .map(|i| i as usize),
             DofIndex::Sparse(map) => map.get(&key).copied(),
         };
-        found.ok_or_else(|| {
-            PyrucastError::Message(format!(
-                "build_pattern: DOF (node {:?}, variable slot {}) is absent from \
-                 the global numbering",
-                dof_node(key),
-                dof_var(key)
-            ))
-        })
+        found.expect("scatter: a block DOF is absent from the global numbering")
     }
 }
 
@@ -161,15 +160,15 @@ pub fn build_pattern(k: &Matrix) -> Result<AssemblyPattern> {
     for blk_h in k {
         let blk = blk_h.read();
         let trow: Vec<u32> = blk
-            .row_dof_keys(&slot_of)?
+            .row_dof_keys(&slot_of)
             .iter()
-            .map(|&d| row_map.get(d).map(|i| i as u32))
-            .collect::<Result<_>>()?;
+            .map(|&d| row_map.get(d) as u32)
+            .collect();
         let tcol: Vec<u32> = blk
-            .col_dof_keys(&slot_of)?
+            .col_dof_keys(&slot_of)
             .iter()
-            .map(|&d| col_map.get(d).map(|i| i as u32))
-            .collect::<Result<_>>()?;
+            .map(|&d| col_map.get(d) as u32)
+            .collect();
         shapes.push(match blk.recipe() {
             Some(recipe) => {
                 // A non-empty `col_fespaces` marks an inter-mesh block: rows and
@@ -336,16 +335,16 @@ pub fn build_pattern(k: &Matrix) -> Result<AssemblyPattern> {
         .into_par_iter()
         .map(|shape| match shape {
             BlockShape::Computed { pat, trow, tcol } => {
-                Ok(computed_slots(&pattern, &pat, &trow, &tcol))
+                computed_slots(&pattern, &pat, &trow, &tcol)
             }
-            BlockShape::Literal(entries) => Ok(BlockSlots::Literal(
+            BlockShape::Literal(entries) => BlockSlots::Literal(
                 entries
                     .iter()
                     .map(|&(r, c)| pattern.slot(r as usize, c as usize))
                     .collect(),
-            )),
+            ),
         })
-        .collect::<Result<_>>()?;
+        .collect();
 
     Ok(pattern)
 }
