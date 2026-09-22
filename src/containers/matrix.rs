@@ -1132,6 +1132,7 @@ impl SubMatrix {
     /// the global CSR ([`Matrix::memory_bytes`]).
     ///
     /// ```
+    /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::Node;
     /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
     /// # use pyrucast::coords::Coords;
