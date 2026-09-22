@@ -2497,6 +2497,35 @@ pub type DofKey = u64;
 /// The row and column orders are handed to several consumers at once — the
 /// assembly pattern, the solver, the elimination — and each holds on to its
 /// own for as long as it needs it, so they are reference-counted.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::matrix::DofOrder;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::Model;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::{element_field, matrix};
+/// # use pyrucast::ops::model;
+/// # let coords = Handle::new(Coords::new(1).unwrap());
+/// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+/// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+/// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+/// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+/// # let model = model::heat_conduction(&fes).unwrap();
+/// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+/// # let k = matrix::stiffness(&model, &materials).unwrap();
+/// // It numbers the rows: one entry per row of the assembled CSR.
+/// let lignes: DofOrder = k.row_dof_keys()?;
+/// assert_eq!(lignes.len(), k.n_rows()?);
+/// // And it is **shared**, not rebuilt: two callers asking an assembled matrix
+/// // for its numbering get the very same allocation, not a copy of it.
+/// assert!(std::sync::Arc::ptr_eq(&lignes, &k.row_dof_keys()?));
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
 pub type DofOrder = std::sync::Arc<Vec<DofKey>>;
 
 /// Pack `(node, var_slot)` into a [`DofKey`].
