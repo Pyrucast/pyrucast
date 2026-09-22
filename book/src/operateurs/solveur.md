@@ -242,36 +242,48 @@ réseau (NFS) rendrait chaque éviction très lente. Il faut aussi la place des
 facteurs : l'espace est réservé à l'allocation, donc un disque plein fait
 échouer l'allocation au lieu de planter plus loin.
 
-Même cube, Cholesky, RAM suffisante, débordement sur ext4 :
+Même cube à 363k DDL, Cholesky, RAM suffisante, débordement sur ext4, les cinq
+configurations dans une même série :
 
-| DDL | pic anonyme sans / avec | temps sans / avec |
-|---|---|---|
-| 135 k | 2,23 Go / 0,42 Go | 38 s / 46 s |
-| 363 k | 7,20 Go / 0,27 Go | 214 s / 418 s |
+| Configuration | blocs débordés | pic anonyme | pic total | temps |
+|---|---|---|---|---|
+| sans la feature `spill` | — | 6,84 Go | 6,84 Go | 163 s |
+| feature, sans `PYRUCAST_SPILL_DIR` | — | 6,84 Go | 6,85 Go | 159 s |
+| seuil 8 Gio | 0 | 6,87 Go | 6,88 Go | 160 s |
+| seuil 1 Gio | 2 | 1,13 Go | 6,85 Go | 441 s |
+| seuil 64 Mio | 25 | 0,26 Go | 6,84 Go | 475 s |
 
-La solution est identique au bit près. Le prix se paie même quand la RAM
-suffit : une page écrite d'un fichier mappé part sur disque au bout d'une
-trentaine de secondes, pression ou non, et ce délai n'est réglable que par
-root. D'où un débordement **à la demande**, par exécution.
+La solution est identique au bit près dans les cinq cas.
+
+**Le test ne coûte rien de mesurable** : sans répertoire de débordement, ou avec
+un seuil au-dessus du plus gros bloc, on retrouve le temps du binaire compilé
+sans la feature — l'écart entre les trois premières lignes est du bruit.
+
+**Le pic total ne bouge pas**, et c'est voulu : tant que la RAM est libre, le
+noyau garde en cache les pages des fichiers. Ce qui change, c'est qu'elles sont
+**évinçables**. La colonne qui décide si un calcul passe ou se fait tuer est le
+pic **anonyme**, qui tombe ici de 6,84 Go à 1,13 Go.
+
+**Le prix est payé même sans pression mémoire** : une page écrite d'un fichier
+mappé part sur disque au bout d'une trentaine de secondes, pression ou non, et
+ce délai n'est réglable que par root. D'où un débordement **à la demande**, par
+exécution. Ici, ×2,7 à ×2,9 sur un RAID à ~50 Mo/s utiles ; un NVMe en
+demanderait beaucoup moins.
 
 ### Choisir le seuil
 
 Le seuil ne connaît pas les types : **tout tampon assez gros déborde**, quel
 qu'il soit. Le monter haut ne laisse partir que les tableaux qui comptent
-vraiment, et garde en RAM les données petites et souvent relues. Sur le même
-cube de 363k DDL, avec un seuil de 1 Gio, deux blocs seulement sont partis sur
-disque — 5,22 Go, qui sont les valeurs du facteur de Cholesky, et 1,08 Go de
-tampon de factorisation :
+vraiment, et garde en RAM les données petites et souvent relues. Sur le cube
+ci-dessus, avec un seuil de 1 Gio, deux blocs seulement sont partis sur disque
+— 5,22 Go, qui sont les valeurs du facteur de Cholesky, et 1,08 Go de tampon de
+factorisation ; la CSR (146 Mo) est restée en mémoire. Le seuil bas, lui, fait
+déborder vingt-cinq blocs pour 0,9 Go d'anonyme gagnés de plus.
 
-| Seuil | pic anonyme | temps |
-|---|---|---|
-| — (sans débordement) | 7,20 Go | 214 s |
-| 64 Mio | 0,27 Go | 418 s |
-| 1 Gio | 1,12 Go | 338 s |
-
-Un seuil de l'ordre du gigaoctet est donc le bon réglage d'un gros calcul : il
-récupère un tiers du surcoût en temps. Un seuil bas n'a d'intérêt que si la RAM
-manque à ce point.
+Un seuil de l'ordre du gigaoctet est donc le réglage d'un gros calcul ; un seuil
+bas ne se justifie que si la RAM manque à ce point. L'écart de temps entre les
+deux, environ 8 %, est du même ordre que la variabilité d'une exécution à
+l'autre.
 
 [`spill::stats()`](https://docs.rs/pyrucast) rend, côté Rust, le nombre de blocs
 débordés, le plus gros, et le maximum mappé d'un coup ; `PYRUCAST_SPILL_LOG`
