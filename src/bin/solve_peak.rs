@@ -15,8 +15,19 @@
 //!   triplets   the path it took before: `to_csc`, unfold into `Vec<Triplet>`,
 //!              let faer sort them back, own the result — kept as the
 //!              before/after reference
+//!   thermal-lu        n×n×n HEX8 heat conduction, bottom face held by
+//!                     Lagrange multipliers, through the public
+//!                     `solver::lu::solve` — the path a user's script takes
+//!   thermal-cholesky  the same cube, constraints eliminated, then Cholesky
+//!                     (`solver::eliminate`) — the SPD path
 //!   n          grid size → n×n×n HEX8 cells, 3-D elasticity (default 20)
 //! ```
+//!
+//! Every stage reports, beside the process peak, the peaks of its **anonymous**
+//! and **file-backed** resident memory, sampled by a background thread. With
+//! the `spill` feature and `PYRUCAST_SPILL_DIR` set, large blocks live in
+//! file-backed mappings the kernel may evict without swap: the anonymous peak
+//! is then what the machine must really hold.
 //!
 //! **One mode per process.** `VmHWM` is a high-water mark that only ever rises,
 //! so running two paths in one process would report the worse of the two for
@@ -51,6 +62,8 @@ use pyrucast::handle::Handle;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field::material_field;
 use pyrucast::ops::{matrix, model};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::Instant;
 
 /// `b` bytes in the largest unit that keeps it readable.
@@ -86,22 +99,74 @@ fn reset_peak() {
     let _ = std::fs::write("/proc/self/clear_refs", "5");
 }
 
+/// Peaks of the anonymous and file-backed resident sets, polled every few
+/// milliseconds by a background thread — the kernel keeps a high-water mark
+/// for their sum (`VmHWM`) only, not for each part.
+struct Sampler {
+    stop: Arc<AtomicBool>,
+    anon: Arc<AtomicUsize>,
+    file: Arc<AtomicUsize>,
+    thread: std::thread::JoinHandle<()>,
+}
+
+impl Sampler {
+    fn start() -> Self {
+        let stop = Arc::new(AtomicBool::new(false));
+        let anon = Arc::new(AtomicUsize::new(0));
+        let file = Arc::new(AtomicUsize::new(0));
+        let (s, a, f) = (stop.clone(), anon.clone(), file.clone());
+        let thread = std::thread::spawn(move || loop {
+            a.fetch_max(vm("RssAnon:"), Ordering::Relaxed);
+            f.fetch_max(vm("RssFile:") + vm("RssShmem:"), Ordering::Relaxed);
+            if s.load(Ordering::Relaxed) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        });
+        Sampler {
+            stop,
+            anon,
+            file,
+            thread,
+        }
+    }
+
+    /// `(anonymous peak, file-backed peak)` since `start`.
+    fn finish(self) -> (usize, usize) {
+        self.stop.store(true, Ordering::Relaxed);
+        self.thread.join().unwrap();
+        (
+            self.anon.load(Ordering::Relaxed),
+            self.file.load(Ordering::Relaxed),
+        )
+    }
+}
+
 /// Run one stage: its wall time, the RSS it leaves behind, and the peak it
-/// reached getting there.
+/// reached getting there — in total, and split into anonymous and file-backed.
 fn stage<T>(name: &str, f: impl FnOnce() -> T) -> T {
+    stage_peaks(name, f).0
+}
+
+/// [`stage`], also returning its `(anonymous, file-backed)` peaks.
+fn stage_peaks<T>(name: &str, f: impl FnOnce() -> T) -> (T, usize, usize) {
     reset_peak();
     let before = vm("VmRSS:");
+    let sampler = Sampler::start();
     let t = Instant::now();
     let out = f();
     let dt = t.elapsed();
+    let (anon, file) = sampler.finish();
     println!(
-        "{name:<32} {:>9.2?}   RSS {} (+{})   peak {}",
+        "{name:<32} {:>9.2?}   RSS {} (+{})   peak {}   anon peak {}   file peak {}",
         dt,
         bytes(vm("VmRSS:")),
         bytes(vm("VmRSS:").saturating_sub(before)),
-        bytes(vm("VmHWM:"))
+        bytes(vm("VmHWM:")),
+        bytes(anon),
+        bytes(file)
     );
-    out
+    (out, anon, file)
 }
 
 /// Full 3-D elasticity on an `n × n × n` HEX8 cube — one zone, one computed
@@ -176,6 +241,122 @@ fn transpose_to_csc(
     (col_ptr, row_idx, out)
 }
 
+/// Heat conduction on an `n × n × n` HEX8 cube, the bottom face held at
+/// `T = 1` by one multiplier per node, solved through the public entry points —
+/// Lagrange + LU, or elimination + Cholesky. Prints the stage costs and an
+/// FNV-1a fingerprint of the solution, so a spilled run can be checked against
+/// an unspilled one bit for bit.
+fn thermal(n: usize, eliminate: bool) {
+    use pyrucast::aggregate::Aggregate;
+    use pyrucast::containers::node_field::NodeField;
+    use pyrucast::models::RelationSense;
+    use pyrucast::ops::solver::lu::{SolveMethod, SolveOptions};
+    use pyrucast::ops::{mesh, solver};
+
+    let path = if eliminate {
+        "elimination + Cholesky"
+    } else {
+        "Lagrange + LU"
+    };
+    println!("\n=== thermal — {n}×{n}×{n} HEX8 cube, {path} ===");
+    let (m, materials, bottom, mult) = stage("mesh + model", || {
+        let coords = Handle::new(Coords::new(3).unwrap());
+        let side = n + 1;
+        let mut nodes: Vec<Node> = Vec::with_capacity(side * side * side);
+        for k in 0..=n {
+            for j in 0..=n {
+                for i in 0..=n {
+                    nodes.push(
+                        Node::create_in(coords.clone(), &[i as f64, j as f64, k as f64]).unwrap(),
+                    );
+                }
+            }
+        }
+        let at = |i: usize, j: usize, k: usize| nodes[(k * side + j) * side + i].id();
+        let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::HEX8));
+        for k in 0..n {
+            for j in 0..n {
+                for i in 0..n {
+                    mesh.add_cell(&[
+                        at(i, j, k),
+                        at(i + 1, j, k),
+                        at(i + 1, j + 1, k),
+                        at(i, j + 1, k),
+                        at(i, j, k + 1),
+                        at(i + 1, j, k + 1),
+                        at(i + 1, j + 1, k + 1),
+                        at(i, j + 1, k + 1),
+                    ])
+                    .unwrap();
+                }
+            }
+        }
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+        let bottom = mesh::poi1_from_nodes(&nodes[..side * side]).unwrap();
+        let mult = mesh::barycenter(&bottom).unwrap();
+        let conduction = model::heat_conduction(&fes).unwrap();
+        let m = conduction
+            .union(
+                &model::dirichlet(&conduction, "T", &bottom, &mult, RelationSense::Equality)
+                    .unwrap(),
+            )
+            .unwrap();
+        let materials = material_field(&m, &[("k", 1.0)]).unwrap();
+        (m, materials, nodes, mult)
+    });
+    let k: Matrix = stage("assembly (stiffness)", || {
+        matrix::stiffness(&m, &materials).unwrap()
+    });
+    let (ndof, nnz) = (k.n_rows().unwrap(), k.csr_arrays().unwrap().2.len());
+    println!(
+        "\n  {ndof} DOF   {nnz} nnz   assembled CSR {}   ({:.1} nnz/row)\n",
+        bytes(nnz * 16 + (ndof + 1) * 8),
+        nnz as f64 / ndof as f64
+    );
+    let rhs = NodeField::from_submesh(&mult.get(0).unwrap(), vec!["imposed_T".into()]).unwrap();
+    {
+        let zone = rhs.get(0).unwrap();
+        let mut guard = zone.write();
+        let sm = mult.get(0).unwrap();
+        let ids: Vec<NodeId> = sm.read().node_index().keys().copied().collect();
+        for id in ids {
+            guard.set_value(id, "imposed_T", 1.0).unwrap();
+        }
+    }
+    let options = SolveOptions {
+        method: if eliminate {
+            SolveMethod::Cholesky
+        } else {
+            SolveMethod::Lu
+        },
+        cache: false,
+        ..Default::default()
+    };
+    let (u, anon, file) = stage_peaks("solve (factorize + substitute)", || {
+        if eliminate {
+            solver::eliminate::solve_with_options(&k, &m, &rhs, &options).unwrap()
+        } else {
+            solver::lu::solve_with_options(&k, &rhs, &options).unwrap()
+        }
+    });
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut counted = 0usize;
+    let zone = u.get(0).unwrap();
+    let guard = zone.read();
+    for node in &bottom {
+        if let Ok(v) = guard.value(node.id(), "T") {
+            for b in v.to_bits().to_le_bytes() {
+                h ^= b as u64;
+                h = h.wrapping_mul(0x0000_0100_0000_01b3);
+            }
+            counted += 1;
+        }
+    }
+    println!("\n  thermal fingerprint: {counted} value(s), FNV-1a = {h:#018x}");
+    // Raw, for `tests/spill.rs` to read.
+    println!("  solve peaks (bytes): anon={anon} file={file}");
+}
+
 /// A constrained thermal bar of `n` SEG2, solved through the public
 /// `solver::lu::solve`, reported as a hash of the **bit patterns** of its
 /// solution.
@@ -246,6 +427,20 @@ fn main() {
         let n = if n == 20 { 400 } else { n };
         let (count, h) = solve_fingerprint(n);
         println!("solve fingerprint: {count} value(s), FNV-1a = {h:#018x}");
+        return;
+    }
+
+    if let Some(method) = mode.strip_prefix("thermal-") {
+        let eliminate = match method {
+            "lu" => false,
+            "cholesky" => true,
+            other => {
+                eprintln!("unknown thermal method '{other}' (lu | cholesky)");
+                std::process::exit(2);
+            }
+        };
+        thermal(n, eliminate);
+        println!("\n  -- process peak: {} --\n", bytes(vm("VmHWM:")));
         return;
     }
 
@@ -326,7 +521,8 @@ fn main() {
         other => {
             eprintln!(
                 "unknown mode '{other}' \
-                 (assemble | solve | borrowed | direct | cholesky | triplets)"
+                 (assemble | solve | borrowed | direct | cholesky | triplets \
+                 | thermal-lu | thermal-cholesky)"
             );
             std::process::exit(2);
         }
