@@ -289,7 +289,13 @@ l'autre.
 de blocs débordés, le plus gros, ce qui est mappé à l'instant et le maximum d'un
 coup — en octets, le seuil valant `None` quand rien ne déborde.
 `PYRUCAST_SPILL_LOG` donne la même chose bloc par bloc, au fil de l'eau, dans
-l'unité qui se lit le mieux :
+l'unité qui se lit le mieux.
+
+```python
+{{#include ../../../tests/python/test_doc_ops_physiques.py:spill_stats}}
+```
+
+Le journal, lui, ressemble à ceci :
 
 ```text
 pyrucast spill: +5.2 GB, 5.2 GB mapped

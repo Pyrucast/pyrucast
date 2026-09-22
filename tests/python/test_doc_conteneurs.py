@@ -349,4 +349,10 @@ k.finalize()  # required before any solver use
 assert k.n_rows() == 2
 assert k.n_cols() == 2
 assert k.symmetric is True
+
+# What it weighs, estimated: the four entries of the block, plus the assembled
+# CSR. The factorization, larger than both, cannot be counted (faer keeps the
+# size of its factors private).
+assert bloc.memory_bytes() == 4 * 24
+assert k.memory_bytes() > bloc.memory_bytes()
 # ANCHOR_END: matrix_api

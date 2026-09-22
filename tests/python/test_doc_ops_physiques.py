@@ -77,6 +77,18 @@ sol3 = pyrucast.solver.solve(
 assert abs(T - 1.0) < 1e-9
 assert abs(sol2.value(some_node, "T") - sol3.value(some_node, "T")) < 1e-12
 
+# ── ce que le calcul a fait déborder sur disque ────────────
+
+# ANCHOR: spill_stats
+stats = pyrucast.spill_stats()
+if stats["threshold"] is None:
+    pass  # PYRUCAST_SPILL_DIR absente : rien ne déborde, tout est en RAM
+else:
+    print(f"{stats['count']} bloc(s), le plus gros {stats['largest'] / 2**30:.1f} Gio")
+    print(f"au plus {stats['peak'] / 2**30:.1f} Gio mappés d'un coup")
+# ANCHOR_END: spill_stats
+assert set(stats) == {"threshold", "count", "largest", "live", "peak"}
+
 # ── solve eliminate ────────────────────────────────────────
 
 _, _, fes, noeuds = _barre_thermique()
