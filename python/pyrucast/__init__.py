@@ -48,6 +48,11 @@ from ._pyrucast import (
     save as save,
 )
 
+# ── Diagnostics : ce que l'allocateur a fait déborder sur disque ────────────
+from ._pyrucast import (
+    spill_stats as spill_stats,
+)
+
 from ._pyrucast import __doc__, __features__, __version__  # noqa: F401
 
 # ── Verbs laid out by theme (mirror of `src/ops/*`) ─────────────────────────
@@ -90,6 +95,8 @@ __all__ = [
     # sauvegarde / relecture
     "load",
     "save",
+    # diagnostics
+    "spill_stats",
     # sous-modules de verbes
     "coords",
     "element_field",
