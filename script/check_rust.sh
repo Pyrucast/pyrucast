@@ -30,5 +30,8 @@
 step "cargo check (features par défaut)"       cargo check --workspace --all-targets
 step "cargo test --features viz"               cargo test --workspace --features viz
 step "cargo build --features viz-interactive"  cargo build --features viz-interactive
+# L'allocateur `spill` est global au processus : ses tests pilotent `solve_peak`
+# dans des processus fils, et ce binaire n'a l'allocateur que sous la feature.
+step "cargo test --features spill --test spill" cargo test --features spill --test spill
 
 echo "OK : Rust."

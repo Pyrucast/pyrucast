@@ -117,6 +117,12 @@ parking_lot = { version = "0.12.5", features = ["arc_lock"] }
 # keep their roles.
 faer = "0.24.4"
 
+# The `spill` allocator talks to the kernel directly (`O_TMPFILE`, `fallocate`,
+# `mmap`) and must not allocate while doing so. Already in the graph through
+# rayon's dependencies.
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = { version = "0.2", optional = true }
+
 [dev-dependencies]
 # Benchmark harness (see `benches/parallel.rs`). Run with `cargo bench`; vary
 # `RAYON_NUM_THREADS` between runs to read the parallel speedup.
@@ -143,7 +149,12 @@ python-api = ["dep:pyo3", "dep:pyrucast-macros"]
 # Build as a Python extension module loaded by an interpreter. Tells
 # pyo3 NOT to link to libpython, since the host interpreter provides
 # it at runtime. Enabled by maturin when packaging the .so.
-extension-module = ["python-api", "pyo3/extension-module"]
+extension-module = ["python-api", "pyo3/extension-module", "spill"]
+# User-space swap (Linux): allocations of at least `PYRUCAST_SPILL_MIN` bytes
+# live in file-backed mappings under `PYRUCAST_SPILL_DIR`, which the kernel can
+# evict without swap or root. Inert unless that variable is set. Installs a
+# global allocator — a Rust user who has their own leaves the feature off.
+spill = ["dep:libc"]
 # Off-screen visualization (PNG / SVG / SVGZ export). Pure CPU rendering.
 viz = ["dep:plotters", "dep:flate2"]
 # Interactive visualization (mouse-driven window).

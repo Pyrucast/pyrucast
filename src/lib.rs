@@ -47,6 +47,14 @@ pub mod models;
 pub mod named;
 pub mod ops;
 pub mod parallel;
+#[cfg(all(target_os = "linux", feature = "spill"))]
+mod spill;
+
+// Large allocations spill into file-backed mappings the kernel can evict
+// without swap — see `spill`. Opt-in at run time through `PYRUCAST_SPILL_DIR`.
+#[cfg(all(target_os = "linux", feature = "spill"))]
+#[global_allocator]
+static ALLOCATOR: spill::SpillAlloc = spill::SpillAlloc;
 
 #[cfg(feature = "python-api")]
 pub mod py;
@@ -88,6 +96,8 @@ pub const FEATURES: &[&str] = &[
     "viz-interactive",
     #[cfg(feature = "abi3")]
     "abi3",
+    #[cfg(feature = "spill")]
+    "spill",
 ];
 
 #[cfg(feature = "python-api")]
