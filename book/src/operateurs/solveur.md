@@ -196,6 +196,63 @@ Voir la section « Relations unilatérales » de la page
 [Contraintes](../contraintes.md) pour les conditions de complémentarité et la
 convention de signe.
 
+## Calculs plus gros que la RAM
+
+Sur un gros modèle, c'est la **factorisation** qui sature la mémoire, pas
+l'assemblage. Mesuré sur un cube de conduction thermique HEX8, face inférieure
+imposée :
+
+| DDL | assemblage | `solve` (Lagrange + LU) | `solve_eliminate` + `method="cholesky"` |
+|---|---|---|---|
+| 31 k | 28 Mo | 1,01 Go, 10,8 s | 0,28 Go, 1,8 s |
+| 135 k | 118 Mo | 10,6 Go, 330 s | 2,22 Go, 42 s |
+| 363 k | 348 Mo | — | 7,20 Go, 217 s |
+
+Premier levier, donc : quand le système éliminé est symétrique défini positif
+(thermique, élasticité), `solve_eliminate(…, method="cholesky")` divise le pic
+par cinq et le temps par huit.
+
+Un cube est le pire cas du remplissage. Une pièce mince ou élancée s'en tient
+bien en dessous, à nombre de DDL égal.
+
+### Déborder sur disque sans être root
+
+Une roue compilée avec la feature `spill` (Linux ; c'est le cas de la roue
+Python) sait placer ses grosses allocations dans des **fichiers mappés en
+mémoire** plutôt qu'en mémoire anonyme. Le noyau peut écrire ces pages sur
+disque et les évincer sous pression, puis les recharger au besoin. C'est un
+swap, sans swap configuré et sans droit root. Les facteurs de faer en profitent
+sans le savoir.
+
+| Variable | Rôle |
+|---|---|
+| `PYRUCAST_SPILL_DIR` | Répertoire des fichiers de débordement. Absente, le débordement est inactif. |
+| `PYRUCAST_SPILL_MIN` | Taille, en octets, à partir de laquelle une allocation déborde. Défaut : 64 Mio. |
+
+Les variables sont lues **une seule fois**, à la première allocation du
+processus. Il faut donc les poser avant de le lancer, par exemple
+`PYRUCAST_SPILL_DIR=/scratch/moi python calcul.py`, et non depuis le script. Un
+répertoire illisible arrête le processus avec un message. Les fichiers sont
+anonymes (`O_TMPFILE`) : rien à nettoyer, même après un plantage.
+
+Le répertoire doit être sur un **disque local**. `/tmp` est souvent un
+`tmpfs`, c'est-à-dire de la RAM, et y déborder ne sert à rien. Un montage
+réseau (NFS) rendrait chaque éviction très lente. Il faut aussi la place des
+facteurs : l'espace est réservé à l'allocation, donc un disque plein fait
+échouer l'allocation au lieu de planter plus loin.
+
+Même cube, Cholesky, RAM suffisante, débordement sur ext4 :
+
+| DDL | pic anonyme sans / avec | temps sans / avec |
+|---|---|---|
+| 135 k | 2,23 Go / 0,42 Go | 38 s / 46 s |
+| 363 k | 7,20 Go / 0,27 Go | 214 s / 418 s |
+
+La solution est identique au bit près. Le prix se paie même quand la RAM
+suffit : une page écrite d'un fichier mappé part sur disque au bout d'une
+trentaine de secondes, pression ou non, et ce délai n'est réglable que par
+root. D'où un débordement **à la demande**, par exécution.
+
 ## Déterminisme
 
 Contrairement au reste des opérateurs (bit-à-bit identiques quel que soit le
