@@ -23,6 +23,7 @@ pub mod node;
 pub mod node_field;
 pub mod ops;
 pub mod signals;
+pub mod spill;
 
 /// Build the [`View`](crate::viz::View) every `plot()` shares from the
 /// arguments they all take: the optional `(yaw, pitch, scale)` triple (`None`

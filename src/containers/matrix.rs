@@ -1122,6 +1122,38 @@ impl SubMatrix {
         self.coo.nnz()
     }
 
+    /// Heap bytes this block holds, estimated: its COO entries, each a row
+    /// index, a column index and a value.
+    ///
+    /// What it leaves out: the supports and the variable names, which are
+    /// shared with the objects the block was built from — counting them here
+    /// would count them once per block. A *computed* block stores no entry at
+    /// all, so it answers `0`: its values are born at assembly time and live in
+    /// the global CSR ([`Matrix::memory_bytes`]).
+    ///
+    /// ```
+    /// # use pyrucast::atoms::Node;
+    /// # use pyrucast::containers::matrix::{DofOrdering, SubMatrix, Symmetry};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::mesh;
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let support = mesh::poi1_from_nodes(&[a.clone(), b.clone()]).unwrap().get(0).unwrap();
+    /// # let mut bloc = SubMatrix::new(
+    /// #     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
+    /// #     DofOrdering::NodesThenVars, Symmetry::Full);
+    /// let vide = bloc.memory_bytes();
+    /// bloc.add_entry(a.id(), "q", b.id(), "T", -1.0)?;
+    /// // One more entry: an index, an index and a value.
+    /// assert_eq!(bloc.memory_bytes(), vide + 24);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn memory_bytes(&self) -> usize {
+        self.coo.nnz() * (2 * std::mem::size_of::<usize>() + std::mem::size_of::<f64>())
+    }
+
     /// Row variable names (dual variables).
     ///
     /// ```
@@ -2150,12 +2182,34 @@ impl std::ops::Neg for &SubMatrix {
     }
 }
 
+/// `b` bytes, in the largest unit that keeps the number short — the estimates
+/// of [`SubMatrix::memory_bytes`] and [`Matrix::memory_bytes`] are shown this
+/// way, a raw byte count of a big matrix being unreadable.
+fn human_bytes(b: usize) -> String {
+    const UNITS: [&str; 5] = ["B", "kB", "MB", "GB", "TB"];
+    let mut v = b as f64;
+    let mut u = 0;
+    while v >= 1024.0 && u + 1 < UNITS.len() {
+        v /= 1024.0;
+        u += 1;
+    }
+    if u == 0 {
+        format!("{b} B")
+    } else {
+        format!("{v:.1} {}", UNITS[u])
+    }
+}
+
 impl fmt::Debug for SubMatrix {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SubMatrix")
             .field("n_rows", &self.coo.nrows())
             .field("n_cols", &self.coo.ncols())
             .field("entries", &self.coo.nnz())
+            .field(
+                "memory",
+                &crate::aggregate::Unquoted(&human_bytes(self.memory_bytes())),
+            )
             .field("symmetry", &self.symmetry)
             .field("dual_vars", &self.dual_vars)
             .field("primal_vars", &self.primal_vars)
@@ -2422,10 +2476,11 @@ crate::impl_aggregate!(Matrix, SubMatrix, sub_matrix, "sub-matrix(es)", {
         let n_cols = self.n_cols().unwrap_or(0);
         let sym = self.symmetric();
         Some(format!(
-            ", {} row(s) × {} col(s){}",
+            ", {} row(s) × {} col(s){}, ~{}",
             n_rows,
             n_cols,
-            if sym { ", symmetric" } else { "" }
+            if sym { ", symmetric" } else { "" },
+            human_bytes(self.memory_bytes())
         ))
     }
 });
@@ -4019,6 +4074,55 @@ impl Matrix {
         let mut total = 0usize;
         for h in self {
             total += h.read().entry_count();
+        }
+        total
+    }
+
+    /// Heap bytes this matrix holds, estimated — what a big model actually
+    /// spends before it reaches the solver.
+    ///
+    /// The assembled CSR dominates: per non-zero, a column index and a value,
+    /// plus one offset per row and the packed DOF key of each row and column.
+    /// The blocks' own entries ([`SubMatrix::memory_bytes`]) are added to it;
+    /// a matrix straight out of [`stiffness`](crate::ops::matrix::stiffness)
+    /// carries none, its blocks being computed.
+    ///
+    /// **What it cannot count: the factorization.** It is the largest of all —
+    /// twenty to sixty-five times the matrix — but faer keeps the size of its
+    /// factors private, so it is out of reach here.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::ops::{element_field, matrix, model};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+    /// let k = matrix::stiffness(&model, &materials)?;
+    /// // At least an index and a value per non-zero, counted independently on
+    /// // the CSR itself.
+    /// assert!(k.memory_bytes() >= k.to_csr()?.nnz() * 16);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn memory_bytes(&self) -> usize {
+        let mut total = 0usize;
+        for h in self {
+            total += h.read().memory_bytes();
+        }
+        if let Some(a) = &self.assembled {
+            let word = std::mem::size_of::<usize>();
+            total += a.csr.row_offsets.len() * word
+                + a.csr.col_indices.len() * word
+                + a.csr.values.len() * std::mem::size_of::<f64>()
+                + (a.row_keys.len() + a.col_keys.len()) * std::mem::size_of::<DofKey>();
         }
         total
     }

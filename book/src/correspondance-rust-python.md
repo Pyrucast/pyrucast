@@ -290,6 +290,16 @@ dérogations correspondantes sont enregistrées, avec leur raison, dans
 | `write_vtk_node_field(mesh: &Mesh, field: &NodeField, path: &Path)` | `export_vtk(mesh, path, field=node_field) -> None` |
 | `write_vtk_element_field(mesh: &Mesh, field: &ElementField, path: &Path)` | `export_vtk(mesh, path, field=element_field) -> None` |
 
+### `spill` — le swap utilisateur
+
+| Rust (`spill::…`) | Python (`pyrucast.…`) |
+|---|---|
+| `stats() -> SpillStats` | `spill_stats() -> dict` |
+
+Les clés du dictionnaire sont `threshold`, `count`, `largest`, `live` et `peak`,
+en octets ; `threshold` vaut `None` quand rien ne déborde. Voir
+[Calculs plus gros que la RAM](operateurs/solveur.md).
+
 ### `archive` — sauvegarde et relecture d'un graphe
 
 Les deux seuls verbes qui restent au **niveau racine** : ils ne produisent

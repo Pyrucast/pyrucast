@@ -47,12 +47,12 @@ pub mod models;
 pub mod named;
 pub mod ops;
 pub mod parallel;
-#[cfg(all(target_os = "linux", feature = "spill"))]
+#[cfg(all(unix, feature = "spill"))]
 pub mod spill;
 
 // Large allocations spill into file-backed mappings the kernel can evict
 // without swap — see `spill`. Opt-in at run time through `PYRUCAST_SPILL_DIR`.
-#[cfg(all(target_os = "linux", feature = "spill"))]
+#[cfg(all(unix, feature = "spill"))]
 #[global_allocator]
 static ALLOCATOR: spill::SpillAlloc = spill::SpillAlloc;
 
@@ -119,6 +119,7 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // A tuple, not a list: what the binary carries is not modified
     // depuis Python.
     m.add("__features__", pyo3::types::PyTuple::new(m.py(), FEATURES)?)?;
+    m.add_function(wrap_pyfunction!(py::spill::spill_stats, m)?)?;
     m.add_function(wrap_pyfunction!(py::archive::save, m)?)?;
     m.add_function(wrap_pyfunction!(py::archive::load, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::solver::solve, m)?)?;

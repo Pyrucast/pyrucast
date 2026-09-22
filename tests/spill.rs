@@ -1,7 +1,7 @@
 //! The `spill` allocator, driven through the `solve_peak` harness in a child
 //! process — the allocator is process-wide and reads its environment once, so
 //! each configuration needs a process of its own.
-#![cfg(all(target_os = "linux", feature = "spill"))]
+#![cfg(all(unix, feature = "spill"))]
 
 use std::process::{Command, Output};
 

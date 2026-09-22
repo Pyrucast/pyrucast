@@ -285,9 +285,17 @@ bas ne se justifie que si la RAM manque à ce point. L'écart de temps entre les
 deux, environ 8 %, est du même ordre que la variabilité d'une exécution à
 l'autre.
 
-[`spill::stats()`](https://docs.rs/pyrucast) rend, côté Rust, le nombre de blocs
-débordés, le plus gros, et le maximum mappé d'un coup ; `PYRUCAST_SPILL_LOG`
-donne la même chose bloc par bloc, au fil de l'eau.
+`spill_stats()` en Python, `spill::stats()` en Rust, rendent le seuil, le nombre
+de blocs débordés, le plus gros, ce qui est mappé à l'instant et le maximum d'un
+coup — en octets, le seuil valant `None` quand rien ne déborde.
+`PYRUCAST_SPILL_LOG` donne la même chose bloc par bloc, au fil de l'eau, dans
+l'unité qui se lit le mieux :
+
+```text
+pyrucast spill: +5.2 GB, 5.2 GB mapped
+pyrucast spill: +1.0 GB, 6.2 GB mapped
+pyrucast spill: -1.0 GB, 5.2 GB mapped
+```
 
 ## Déterminisme
 

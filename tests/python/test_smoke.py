@@ -31,3 +31,16 @@ def test_features_exposed():
 def test_features_match_what_is_compiled():
     """The list is observed on the API, not copied by hand."""
     assert ("viz" in pyrucast.__features__) == hasattr(pyrucast.Mesh, "plot")
+
+
+def test_spill_stats_reports_an_inactive_allocator():
+    """The test suite runs without `PYRUCAST_SPILL_DIR`, so nothing spills.
+
+    A binary that carries `spill` still answers, with a threshold of `None`;
+    one that does not carries the same keys, so a script never has to ask.
+    """
+    stats = pyrucast.spill_stats()
+    assert set(stats) == {"threshold", "count", "largest", "live", "peak"}
+    assert stats["threshold"] is None
+    assert stats["count"] == 0
+    assert stats["live"] == 0 and stats["peak"] == 0

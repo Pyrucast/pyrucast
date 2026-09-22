@@ -129,6 +129,7 @@ __all__ = [
     "solve",
     "solve_eliminate",
     "solve_unilateral",
+    "spill_stats",
     "sqrt",
     "stiffness",
     "sub_material_field",
@@ -1000,6 +1001,14 @@ class Matrix:
     def entry_count(self) -> builtins.int:
         r"""
         Total number of stored entries across all blocks.
+        """
+    def memory_bytes(self) -> builtins.int:
+        r"""
+        Estimated heap bytes of the matrix: the assembled CSR (a column index
+        and a value per non-zero, an offset per row, a DOF key per row and
+        column) plus whatever the blocks store. The **factorization is not
+        counted** — it is the largest part by far, and faer keeps the size of
+        its factors private.
         """
     def field_names(self) -> builtins.list[builtins.str]:
         r"""
@@ -3157,6 +3166,12 @@ class SubMatrix:
         r"""
         Number of stored COO entries.
         """
+    def memory_bytes(self) -> builtins.int:
+        r"""
+        Estimated heap bytes of this block: its stored entries, each an index,
+        an index and a value. Supports and variable names, being shared, are not
+        counted; a computed block stores nothing and answers `0`.
+        """
     def __mul__(self, rhs: builtins.float) -> SubMatrix:
         r"""
         `sub_matrix * scalar` — a fresh block carrying the scaled `factor`
@@ -5297,6 +5312,20 @@ def solve_unilateral(matrix: Matrix, model: Model, rhs: NodeField, method: built
     (cleared when the matrix changes). `max_iter` (default `100`) bounds the
     status loop; `tol` (default `1e-10`) is the sign tolerance on the multiplier
     and the gap. `Ctrl+C` is honoured at each iteration boundary.
+    """
+
+def spill_stats() -> dict:
+    r"""
+    Counters of the spilling allocator, as a dictionary.
+    
+    Keys: `threshold` (bytes from which an allocation spills, `None` when
+    spilling is off), `count` (blocks spilled so far), `largest`, `live` (bytes
+    mapped right now) and `peak`.
+    
+    Spilling is configured before the process starts, through
+    `PYRUCAST_SPILL_DIR` and `PYRUCAST_SPILL_MIN`; on a build that cannot spill
+    at all — the feature absent, or a platform other than Unix — every count is
+    zero and `threshold` is `None`.
     """
 
 def sqrt(field: typing.Any) -> typing.Any:

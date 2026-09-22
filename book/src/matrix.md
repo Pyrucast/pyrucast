@@ -263,6 +263,23 @@ Une contrainte de Dirichlet introduit, par sa nature, un bloc **rectangulaire** 
 {{#include ../../tests/python/test_doc_conteneurs.py:matrix_api}}
 ```
 
+## Ce que pèse une matrice
+
+`memory_bytes()`, sur un bloc comme sur la matrice, estime les octets de tas
+occupés. Pour un bloc, ce sont ses entrées stockées : un indice de ligne, un
+indice de colonne et une valeur, soit 24 octets chacune — un bloc *calculé* n'en
+stocke aucune et répond `0`. Pour la matrice, c'est la CSR assemblée (un indice
+de colonne et une valeur par terme non nul, un décalage par ligne, une clé de
+DDL par ligne et par colonne) plus ce que gardent ses blocs.
+
+L'estimation apparaît dans l'affichage : `Matrix: 2 sous-matrice(s), 3 row(s) ×
+3 col(s), symmetric, ~1.2 kB`.
+
+**Ce qu'elle ne compte pas, et qui est pourtant le plus gros : la
+factorisation.** Ses facteurs pèsent vingt à soixante-cinq fois la matrice,
+mais faer garde leur taille privée. Pour la mémoire réellement consommée par un
+solve, voir [Calculs plus gros que la RAM](operateurs/solveur.md).
+
 ## Sérialisation
 
 `Matrix` implémente `Portable` via `serde` (comme tous les objets pyrucast). Les triplets COO, la table de noms et les DOFs voyagent dans le format binaire portable Linux ↔ Windows. La CSR assemblée et la factorisation, elles, ne sont **pas** écrites : elles se reconstruisent (voir [Sauvegarde et relecture](sauvegarde.md)).

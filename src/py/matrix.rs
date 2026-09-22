@@ -91,6 +91,13 @@ impl PySubMatrix {
         self.handle.read().entry_count()
     }
 
+    /// Estimated heap bytes of this block: its stored entries, each an index,
+    /// an index and a value. Supports and variable names, being shared, are not
+    /// counted; a computed block stores nothing and answers `0`.
+    fn memory_bytes(&self) -> usize {
+        self.handle.read().memory_bytes()
+    }
+
     /// Whether this block is symmetric **on its own**. A block that carries only
     /// half of a symmetry — a constraint's `C` or `Cᵀ` — answers `False`: it is
     /// symmetric only paired, which `Matrix.symmetric` is what resolves.
@@ -312,6 +319,15 @@ impl PyMatrix {
     /// Total number of stored entries across all blocks.
     fn entry_count(&self) -> usize {
         self.inner.entry_count()
+    }
+
+    /// Estimated heap bytes of the matrix: the assembled CSR (a column index
+    /// and a value per non-zero, an offset per row, a DOF key per row and
+    /// column) plus whatever the blocks store. The **factorization is not
+    /// counted** — it is the largest part by far, and faer keeps the size of
+    /// its factors private.
+    fn memory_bytes(&self) -> usize {
+        self.inner.memory_bytes()
     }
 
     /// Whether the assembled matrix satisfies `A[i][j] == A[j][i]`, by adding up

@@ -7,9 +7,9 @@
 //! in again on access — which is what swap does, with no privilege at all.
 //!
 //! [`SpillAlloc`] is the process-wide allocator under the `spill` feature
-//! (Linux only). Every allocation of at least `PYRUCAST_SPILL_MIN` bytes
-//! (default 64 MiB) goes to its own unnamed temporary file created in
-//! `PYRUCAST_SPILL_DIR` (`O_TMPFILE`: nothing to clean up, even after a crash);
+//! (Unix). Every allocation of at least `PYRUCAST_SPILL_MIN` bytes (default
+//! 64 MiB) goes to its own nameless temporary file created in
+//! `PYRUCAST_SPILL_DIR` — nothing to clean up, even after a crash;
 //! everything smaller, and everything when the variable is unset, goes to the
 //! system allocator. faer allocates its factors through the global allocator,
 //! so a factorization spills without knowing it.
@@ -20,9 +20,15 @@
 //! enough. Hence opt-in, per run.
 //!
 //! [`stats`] tells what was spilled: how many blocks, how large, how much is
-//! mapped now and at most. With `PYRUCAST_SPILL_LOG` set as well, every mapping
-//! and unmapping is also written to stderr as it happens — the list of the
-//! blocks, one line each.
+//! mapped now and at most, in bytes. With `PYRUCAST_SPILL_LOG` set as well,
+//! every mapping and unmapping is written to stderr as it happens — the list of
+//! the blocks, one line each, sized in the unit that reads best:
+//!
+//! ```text
+//! pyrucast spill: +5.2 GB, 5.2 GB mapped
+//! pyrucast spill: +1.0 GB, 6.2 GB mapped
+//! pyrucast spill: -1.0 GB, 5.2 GB mapped
+//! ```
 //!
 //! The variables are read **once**, by the first allocation of the process —
 //! set them before starting it (before `import pyrucast` in Python). A
@@ -50,6 +56,11 @@ static LIVE: AtomicUsize = AtomicUsize::new(0);
 static PEAK: AtomicUsize = AtomicUsize::new(0);
 static COUNT: AtomicUsize = AtomicUsize::new(0);
 static LARGEST: AtomicUsize = AtomicUsize::new(0);
+
+/// Serial number of the next spill file, where the file needs a name to exist
+/// (everywhere but Linux). Distinct from `COUNT`, which counts what spilled.
+#[cfg(not(target_os = "linux"))]
+static NAMES: AtomicUsize = AtomicUsize::new(0);
 
 /// What the spilling allocator has done since the process started.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -167,28 +178,85 @@ fn spilled(layout: Layout) -> bool {
     }
 }
 
-/// A fresh, zero-filled shared mapping of `size` bytes, backed by an unnamed
-/// file in the spill directory. Null when the file cannot be created or its
-/// blocks reserved — the allocation then fails as any other would.
+/// A nameless file of `size` bytes in the spill directory, open for writing.
+/// `-1` when it cannot be created, or its blocks reserved.
+///
+/// Linux has `O_TMPFILE`, which opens a file that never had a name and that the
+/// kernel removes when the last descriptor closes — nothing to clean up, even
+/// after a crash. Elsewhere the same effect takes two calls: create under a
+/// unique name, then unlink it straight away, keeping the descriptor.
 #[cold]
-fn map(size: usize) -> *mut u8 {
-    let dir = DIR.load(Ordering::Relaxed);
-    // SAFETY: plain system calls on descriptors this function owns; every
+unsafe fn temporary_file(dir: i32, size: usize) -> i32 {
+    // SAFETY: plain system calls on a descriptor this module owns; every
     // failure is checked before its result is used.
     unsafe {
+        #[cfg(target_os = "linux")]
         let fd = libc::openat(
             dir,
             c".".as_ptr(),
             libc::O_TMPFILE | libc::O_RDWR | libc::O_CLOEXEC,
             0o600,
         );
+        #[cfg(not(target_os = "linux"))]
+        let fd = {
+            // `pyrucast-spill-<pid>-<n>`, formatted on the stack: the process
+            // owns its pid, and the counter makes the name its own.
+            let mut name = [0u8; 48];
+            let mut n = 0;
+            let (mut a, mut b) = ([0u8; 20], [0u8; 20]);
+            for part in [
+                &b"pyrucast-spill-"[..],
+                decimal(libc::getpid() as usize, &mut a),
+                b"-",
+                decimal(NAMES.fetch_add(1, Ordering::Relaxed), &mut b),
+                b"\0",
+            ] {
+                name[n..n + part.len()].copy_from_slice(part);
+                n += part.len();
+            }
+            let fd = libc::openat(
+                dir,
+                name.as_ptr().cast(),
+                libc::O_CREAT | libc::O_EXCL | libc::O_RDWR | libc::O_CLOEXEC,
+                0o600,
+            );
+            if fd >= 0 {
+                // From here the file has no name either; the descriptor alone
+                // keeps it alive, and closing it frees the blocks.
+                libc::unlinkat(dir, name.as_ptr().cast(), 0);
+            }
+            fd
+        };
         if fd < 0 {
-            return std::ptr::null_mut();
+            return -1;
         }
         // Reserve the blocks now: a sparse file would report a full disk as a
-        // SIGBUS on some later write, far from any allocation.
-        if libc::fallocate(fd, 0, 0, size as libc::off_t) != 0 {
+        // SIGBUS on some later write, far from any allocation. macOS has
+        // neither `fallocate` nor `posix_fallocate`, so there the file stays
+        // sparse and a full disk is felt late.
+        #[cfg(target_os = "linux")]
+        let reserved = libc::fallocate(fd, 0, 0, size as libc::off_t) == 0;
+        #[cfg(not(target_os = "linux"))]
+        let reserved = libc::ftruncate(fd, size as libc::off_t) == 0;
+        if !reserved {
             libc::close(fd);
+            return -1;
+        }
+        fd
+    }
+}
+
+/// A fresh, zero-filled shared mapping of `size` bytes, backed by a nameless
+/// file in the spill directory. Null when the file cannot be created or the
+/// mapping refused — the allocation then fails as any other would.
+#[cold]
+fn map(size: usize) -> *mut u8 {
+    let dir = DIR.load(Ordering::Relaxed);
+    // SAFETY: plain system calls on descriptors this function owns; every
+    // failure is checked before its result is used.
+    unsafe {
+        let fd = temporary_file(dir, size);
+        if fd < 0 {
             return std::ptr::null_mut();
         }
         let p = libc::mmap(
@@ -223,7 +291,7 @@ fn unmap(ptr: *mut u8, size: usize) {
     log(b'-', size, live);
 }
 
-/// `pyrucast spill: +<size> bytes, <live> mapped` on stderr, when asked for —
+/// `pyrucast spill: +5.2 GB, 6.3 GB mapped` on stderr, when asked for —
 /// formatted on the stack, since this runs inside the allocator.
 fn log(sign: u8, size: usize, live: usize) {
     if !LOG.load(Ordering::Relaxed) {
@@ -231,13 +299,13 @@ fn log(sign: u8, size: usize, live: usize) {
     }
     let mut line = [0u8; 96];
     let mut n = 0;
-    let (mut a, mut b) = ([0u8; 20], [0u8; 20]);
+    let (mut a, mut b) = ([0u8; 24], [0u8; 24]);
     for part in [
         &b"pyrucast spill: "[..],
         &[sign],
-        decimal(size, &mut a),
-        b" bytes, ",
-        decimal(live, &mut b),
+        size_in_units(size, &mut a),
+        b", ",
+        size_in_units(live, &mut b),
         b" mapped\n",
     ] {
         line[n..n + part.len()].copy_from_slice(part);
@@ -245,6 +313,34 @@ fn log(sign: u8, size: usize, live: usize) {
     }
     // SAFETY: a plain write of a stack buffer to fd 2.
     unsafe { libc::write(2, line.as_ptr().cast(), n) };
+}
+
+/// `b` bytes as `5.2 GB`, written at the start of `buf` — the unit that keeps
+/// the number short, one decimal, and integer arithmetic throughout: an
+/// allocator may neither allocate nor drag in float formatting.
+fn size_in_units(b: usize, buf: &mut [u8; 24]) -> &[u8] {
+    const UNITS: [&[u8]; 5] = [b" B", b" kB", b" MB", b" GB", b" TB"];
+    let (mut v, mut u) = (b, 0);
+    while v >= 1024 && u + 1 < UNITS.len() {
+        v /= 1024;
+        u += 1;
+    }
+    let mut n = 0;
+    let mut digits = [0u8; 20];
+    let mut put = |part: &[u8], buf: &mut [u8; 24]| {
+        buf[n..n + part.len()].copy_from_slice(part);
+        n += part.len();
+    };
+    put(decimal(v, &mut digits), buf);
+    if u > 0 {
+        // The first decimal, from the remainder at that unit: `b` divided by
+        // the unit below, modulo 1024, scaled by ten.
+        let tenths = (b / (1usize << (10 * (u - 1))) % 1024) * 10 / 1024;
+        put(b".", buf);
+        put(decimal(tenths, &mut digits), buf);
+    }
+    put(UNITS[u], buf);
+    &buf[..n]
 }
 
 /// `v` in decimal, written at the end of `buf`.
@@ -328,6 +424,16 @@ mod tests {
     fn byte_counts_parse_as_decimal() {
         assert_eq!(parse_bytes(b"4096"), 4096);
         assert_eq!(parse_bytes(b"67108864"), DEFAULT_THRESHOLD);
+    }
+
+    #[test]
+    fn sizes_carry_their_unit_and_one_decimal() {
+        let mut buf = [0u8; 24];
+        assert_eq!(size_in_units(512, &mut buf), b"512 B");
+        assert_eq!(size_in_units(1024, &mut buf), b"1.0 kB");
+        assert_eq!(size_in_units(64 << 20, &mut buf), b"64.0 MB");
+        // 5_604_776_272 = 5,22 GiB.
+        assert_eq!(size_in_units(5_604_776_272, &mut buf), b"5.2 GB");
     }
 
     #[test]

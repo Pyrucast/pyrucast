@@ -77,6 +77,17 @@ def test_sub_matrix_add_entry_and_get():
     assert m.get(b, "q", b, "T") == 2.0
 
 
+def test_memory_bytes_counts_what_is_stored():
+    c = pyrucast.Coords(1)
+    a = c.add_node([0.0])
+    b = c.add_node([1.0])
+    m = _make_block(c, [a, b], [a, b], ["q"], ["T"], symmetry="full")
+    empty = m.memory_bytes()
+    m.add_entry(a, "q", b, "T", -1.0)
+    # One entry more: a row index, a column index and a value.
+    assert m.memory_bytes() == empty + 24
+
+
 def test_sub_matrix_get_unknown_returns_zero():
     c = pyrucast.Coords(1)
     a = c.add_node([0.0])

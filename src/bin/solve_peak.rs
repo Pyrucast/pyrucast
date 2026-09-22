@@ -355,7 +355,7 @@ fn thermal(n: usize, eliminate: bool) {
     println!("\n  thermal fingerprint: {counted} value(s), FNV-1a = {h:#018x}");
     // Raw, for `tests/spill.rs` to read.
     println!("  solve peaks (bytes): anon={anon} file={file}");
-    #[cfg(all(target_os = "linux", feature = "spill"))]
+    #[cfg(all(unix, feature = "spill"))]
     {
         let s = pyrucast::spill::stats();
         if s.threshold != usize::MAX {
