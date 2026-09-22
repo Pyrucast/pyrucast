@@ -122,7 +122,12 @@ pub(crate) enum Factored {
     /// `L·Lᵀ` — the matrix was symmetric positive definite.
     Cholesky(SparseLlt),
     /// `L·U` with partial pivoting — everything else.
-    Lu(SparseLu),
+    ///
+    /// Boxed: faer's `Lu` is an order of magnitude wider than its `Llt` (344
+    /// bytes against 32), and an enum is as wide as its widest variant. The
+    /// indirection is paid once per solve, ahead of a triangular solve over the
+    /// whole factor — it does not register.
+    Lu(Box<SparseLu>),
 }
 
 impl Factored {
@@ -250,7 +255,7 @@ pub(crate) fn factorize_csr(
         None => (offsets, cols, vals),
     };
     let out = match options.method {
-        SolveMethod::Lu => Factored::Lu(lu_of(n, col_ptr, row_idx, values)?),
+        SolveMethod::Lu => Factored::Lu(Box::new(lu_of(n, col_ptr, row_idx, values)?)),
         SolveMethod::Cholesky => {
             // faer cannot catch this one: a Cholesky reads a single triangle, so
             // on a non-symmetric matrix it does not fail — it quietly uses the

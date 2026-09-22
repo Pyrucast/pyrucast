@@ -2492,6 +2492,13 @@ pub type NamedDof = (NodeId, String);
 /// ```
 pub type DofKey = u64;
 
+/// One side's global DOF numbering, shared rather than copied.
+///
+/// The row and column orders are handed to several consumers at once — the
+/// assembly pattern, the solver, the elimination — and each holds on to its
+/// own for as long as it needs it, so they are reference-counted.
+pub type DofOrder = std::sync::Arc<Vec<DofKey>>;
+
 /// Pack `(node, var_slot)` into a [`DofKey`].
 ///
 /// ```
@@ -3775,7 +3782,7 @@ impl Matrix {
     /// assert_eq!(k.dof_vars()[dof_var(cles[0]) as usize], "q");
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn row_dof_keys(&self) -> Result<std::sync::Arc<Vec<DofKey>>> {
+    pub fn row_dof_keys(&self) -> Result<DofOrder> {
         if let Some(a) = &self.assembled {
             return Ok(a.row_keys.clone());
         }
@@ -3787,9 +3794,7 @@ impl Matrix {
     /// On a symmetric matrix the two are built in a single conjugate walk, so
     /// asking for them separately would run that walk twice for one half of its
     /// result each time.
-    pub(crate) fn dof_key_orders(
-        &self,
-    ) -> Result<(std::sync::Arc<Vec<DofKey>>, std::sync::Arc<Vec<DofKey>>)> {
+    pub(crate) fn dof_key_orders(&self) -> Result<(DofOrder, DofOrder)> {
         if let Some(a) = &self.assembled {
             return Ok((a.row_keys.clone(), a.col_keys.clone()));
         }
@@ -3827,7 +3832,7 @@ impl Matrix {
     /// assert_eq!(k.dof_vars()[dof_var(cles[0]) as usize], "T");
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn col_dof_keys(&self) -> Result<std::sync::Arc<Vec<DofKey>>> {
+    pub fn col_dof_keys(&self) -> Result<DofOrder> {
         if let Some(a) = &self.assembled {
             return Ok(a.col_keys.clone());
         }
