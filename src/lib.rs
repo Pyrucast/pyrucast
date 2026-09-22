@@ -48,7 +48,7 @@ pub mod named;
 pub mod ops;
 pub mod parallel;
 #[cfg(all(target_os = "linux", feature = "spill"))]
-mod spill;
+pub mod spill;
 
 // Large allocations spill into file-backed mappings the kernel can evict
 // without swap — see `spill`. Opt-in at run time through `PYRUCAST_SPILL_DIR`.

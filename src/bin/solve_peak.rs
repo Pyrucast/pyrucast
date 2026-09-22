@@ -355,6 +355,19 @@ fn thermal(n: usize, eliminate: bool) {
     println!("\n  thermal fingerprint: {counted} value(s), FNV-1a = {h:#018x}");
     // Raw, for `tests/spill.rs` to read.
     println!("  solve peaks (bytes): anon={anon} file={file}");
+    #[cfg(all(target_os = "linux", feature = "spill"))]
+    {
+        let s = pyrucast::spill::stats();
+        if s.threshold != usize::MAX {
+            println!(
+                "  spilled: {} block(s) of at least {}, largest {}, at most {} mapped at once",
+                s.count,
+                bytes(s.threshold),
+                bytes(s.largest),
+                bytes(s.peak)
+            );
+        }
+    }
 }
 
 /// A constrained thermal bar of `n` SEG2, solved through the public

@@ -228,6 +228,7 @@ sans le savoir.
 |---|---|
 | `PYRUCAST_SPILL_DIR` | Répertoire des fichiers de débordement. Absente, le débordement est inactif. |
 | `PYRUCAST_SPILL_MIN` | Taille, en octets, à partir de laquelle une allocation déborde. Défaut : 64 Mio. |
+| `PYRUCAST_SPILL_LOG` | Présente, chaque bloc mappé et démappé s'écrit sur la sortie d'erreur. |
 
 Les variables sont lues **une seule fois**, à la première allocation du
 processus. Il faut donc les poser avant de le lancer, par exemple
@@ -252,6 +253,29 @@ La solution est identique au bit près. Le prix se paie même quand la RAM
 suffit : une page écrite d'un fichier mappé part sur disque au bout d'une
 trentaine de secondes, pression ou non, et ce délai n'est réglable que par
 root. D'où un débordement **à la demande**, par exécution.
+
+### Choisir le seuil
+
+Le seuil ne connaît pas les types : **tout tampon assez gros déborde**, quel
+qu'il soit. Le monter haut ne laisse partir que les tableaux qui comptent
+vraiment, et garde en RAM les données petites et souvent relues. Sur le même
+cube de 363k DDL, avec un seuil de 1 Gio, deux blocs seulement sont partis sur
+disque — 5,22 Go, qui sont les valeurs du facteur de Cholesky, et 1,08 Go de
+tampon de factorisation :
+
+| Seuil | pic anonyme | temps |
+|---|---|---|
+| — (sans débordement) | 7,20 Go | 214 s |
+| 64 Mio | 0,27 Go | 418 s |
+| 1 Gio | 1,12 Go | 338 s |
+
+Un seuil de l'ordre du gigaoctet est donc le bon réglage d'un gros calcul : il
+récupère un tiers du surcoût en temps. Un seuil bas n'a d'intérêt que si la RAM
+manque à ce point.
+
+[`spill::stats()`](https://docs.rs/pyrucast) rend, côté Rust, le nombre de blocs
+débordés, le plus gros, et le maximum mappé d'un coup ; `PYRUCAST_SPILL_LOG`
+donne la même chose bloc par bloc, au fil de l'eau.
 
 ## Déterminisme
 
