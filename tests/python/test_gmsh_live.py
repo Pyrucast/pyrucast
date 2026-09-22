@@ -1,6 +1,6 @@
 """Fetching the mesh of a **live** gmsh session — `mesh.from_gmsh`.
 
-Ces tests exigent le module gmsh : ils portent le marqueur `gmsh` et sortent
+These tests require the gmsh module: they carry the `gmsh` marker and are
 hence out of the normal pass (`addopts = -m "not gmsh"`). `script/check_gmsh.sh`
 is what runs them, and it fails outright if gmsh is missing, rather than
 turning green on a volley of *skips*.
@@ -18,7 +18,7 @@ except Exception as e:  # noqa: BLE001
     # libraries are missing, that raises `OSError` — which `pytest.importorskip`
     # does not catch, and collection would break for everyone.
 
-    pytest.skip(f"gmsh indisponible : {e}", allow_module_level=True)
+    pytest.skip(f"gmsh unavailable: {e}", allow_module_level=True)
 
 pytestmark = pytest.mark.gmsh
 
@@ -90,8 +90,8 @@ def test_one_coords_shared_by_every_group(session):
 
     The proof is in the count: the import only lays gmsh's nodes into the
     ``Coords``, one per tag. If each group carried its own, the total would
-    exceed that count, since the volume and its skin share a face
-    entière.
+    exceed that count, since the volume and its skin share a whole
+    face.
     """
     cube(session)
     attendu = len(session.model.mesh.getNodes()[0])
@@ -120,7 +120,7 @@ def test_tag_restricts_to_one_entity(session):
 
 def test_tag_without_dim_is_refused(session):
     cube(session)
-    with pytest.raises(ValueError, match="précisez dim"):
+    with pytest.raises(ValueError, match="specify dim"):
         pyrucast.mesh.from_gmsh(pyrucast.Coords(dim=3), tag=1)
 
 
