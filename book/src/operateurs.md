@@ -14,7 +14,7 @@ correspondance.
 
 | Module Rust | Chapitre | Contenu |
 |---|---|---|
-| `ops::mesh` | [Maillage](operateurs/maillage.md) | `line`, `circle`, `arc`, `extrude`, `revolve`, `sweep`, `transfinite` (DALL), `sweep_solid`, `copy`, `translate`, `rotate`, `symmetry_point`, `symmetry_line`, `symmetry_plane`, `triangulate_surface`, `pave_surface`, `grid_surface`, `grid_surface2`, `triangulate_volume`, `pave_volume`, `regularize`, `cleanup`, `merge_triangles`, `border`, `skin`, `orient`, `invert`, `chain`, `elements_on`, sélection de nœuds par région (`points_in_sphere`, `points_on_plane`, `points_in_cylinder`, `points_on_cone`, `points_on_torus`…), `merge_nodes`, `read_gmsh`, `from_gmsh`, `from_gmsh_arrays`, `poi1_from_nodes`, `from_live_nodes`, `to_poi1`, `to_quadratic`, `convert`, `barycenter`, `mesh.consolidate`… |
+| `ops::mesh` | [Maillage](operateurs/maillage.md) | `line`, `circle`, `arc`, `extrude`, `revolve`, `sweep`, `transfinite` (DALL), `sweep_solid`, `copy`, `translate`, `rotate`, `symmetry_point`, `symmetry_line`, `symmetry_plane`, `triangulate_surface`, `pave_surface`, `grid_surface`, `grid_surface2`, `triangulate_volume`, `pave_volume`, `regularize`, `cleanup`, `merge_triangles`, `border`, `skin`, `orient`, `invert`, `chain`, `elements_on`, sélection de nœuds par région (`points_in_sphere`, `points_on_plane`, `points_in_cylinder`, `points_on_cone`, `points_on_torus`…), `merge_nodes`, `read_gmsh`, `from_gmsh`, `from_medcoupling`, `from_arrays`, `poi1_from_nodes`, `from_live_nodes`, `to_poi1`, `to_quadratic`, `convert`, `barycenter`, `mesh.consolidate`… |
 | `ops::model` | [Modèle](model.md) | les déclarations de physique : `heat_conduction`, `fick`, `radiation`, `boundary_transfer`, `interface_transfer`, `elasticity`, `plasticity_perfect` et les lois d'écoulement, `mazars` et les lois d'endommagement, `truss`, `bernoulli`, `timoshenko`, `shell`, et les contraintes `dirichlet`, `mpc`, `embedded`, `contact` |
 | `ops::element_field` | [Construction](operateurs/construction.md) | champs matériau (`material_field`…) |
 | `ops::coords` | [Champs](operateurs/champs.md) | `set`, `displace` — les deux seuls opérateurs qui écrivent la géométrie |
@@ -24,7 +24,7 @@ correspondance.
 | `ops::matrix` | [Assemblage](operateurs/assemblage.md) | `stiffness`, `mass`, rigidité géométrique `geometric`, tangente cohérente `tangent`, concentration `lump`, composition `assemble` (réassemble depuis les blocs seuls, sans `Model`), et les deux côtés du bilan `Σ f_int = Σ f_ext` — `internal_forces` (le `BSIG`, `∫ Bᵀ σ` ; sans modèle c'est `node_field.divergence(field, "sigma")`) et `external_forces`, d'où sort tout terme donné : l'ambiant d'un transfert de bord, la densité d'une charge répartie |
 | `ops::element_field::behavior` | [Comportement](operateurs/comportement.md) | `integrate_behavior` (le `COMP`) |
 | `ops::solver` | [Solveur](operateurs/solveur.md) | `solve` (LU creux, Lagrange), `solve_eliminate` (condensation MPC), `solve_unilateral` (actif/inactif, relations unilatérales) |
-| `ops::export` | [Visualisation](visualization.md) | `export_vtk` (maillage / champ → VTK pour ParaView) |
+| `ops::export` | [Visualisation](visualization.md) | `export_vtk` (maillage / champ / évolution → VTK ASCII ou binaire pour ParaView), `to_arrays`, `to_gmsh`, `to_medcoupling` |
 | `archive` | [Sauvegarde et relecture](sauvegarde.md) | `save` / `load` (graphe d'objets, partage préservé) — au niveau racine, hors `ops` |
 | `src/viz` | [Visualisation](visualization.md) | tracé des maillages, coloration par champ |
 

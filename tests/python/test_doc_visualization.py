@@ -180,6 +180,26 @@ pyrucast.export.export_vtk(mesh, "solution.vtk", field=temperature)
 pyrucast.export.export_vtk(mesh, "contraintes.vtk", field=stresses)
 # ANCHOR_END: vtk
 
+# ── VTK binaire et séries temporelles ──────────────────────────────────────
+
+_, mesh, n = _triangle()
+support = pyrucast.mesh.poi1_from_nodes(n)
+t0, t1 = (_champ_nodal(n, ["T"], v, support) for v in (20.0, 80.0))
+# ANCHOR: vtk_binaire
+# Same file, numbers written raw (big-endian): smaller, faster to read.
+pyrucast.export.export_vtk(mesh, "solution_bin.vtk", field=t1, binary=True)
+# ANCHOR_END: vtk_binaire
+
+# ANCHOR: vtk_serie
+# An Evolution of fields: one file per time, plus an index for ParaView.
+chauffe = pyrucast.Evolution([(0.0, t0), (30.0, t1)])
+pyrucast.export.export_vtk(mesh, "chauffe.vtk.series", field=chauffe, binary=True)
+# → chauffe_0000.vtk, chauffe_0001.vtk and chauffe.vtk.series:
+#   open the .series in ParaView, the time slider plays the two steps.
+# The steps themselves, as whole fields:
+print(chauffe.shared_abscissas(), len(chauffe.frames()))  # [0.0, 30.0] 2
+# ANCHOR_END: vtk_serie
+
 # ── Évolutions ──────────────────────────────────────────────────────────────
 
 

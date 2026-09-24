@@ -142,8 +142,8 @@ jobs:
           # bougé. `maturin` construit le module que tout le reste du job
           # importe. `pytest` n'a pas de contrat de sortie, et `gmsh` doit
           # rester libre — l'intérêt de `check_gmsh` est justement de tester
-          # l'interface contre le gmsh du jour.
-          pip install --quiet maturin==1.14.1 pytest ruff==0.16.4 gmsh
+          # l'interface contre le gmsh du jour ; même chose pour medcoupling.
+          pip install --quiet maturin==1.14.1 pytest ruff==0.16.4 gmsh medcoupling
 
       - name: Les blocs de check_all sont bien les cinq attendus
         # Les étapes ci-dessous énumèrent les blocs une seconde fois. Cette
@@ -169,6 +169,9 @@ jobs:
       # La CI, elle, l'exige. Après `check_python`, qui a construit le module.
       - name: check_gmsh
         run: bash script/check_gmsh.sh
+      # Même statut pour l'interface medcoupling (roues Linux x86_64 et Windows).
+      - name: check_medcoupling
+        run: bash script/check_medcoupling.sh
       - name: check_examples
         run: bash script/check_examples.sh
       - name: check_doc

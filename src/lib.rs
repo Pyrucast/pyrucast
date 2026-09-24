@@ -250,10 +250,14 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::mesh::points_on_cone, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::points_in_torus, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::points_on_torus, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::mesh::from_gmsh_arrays, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesh::from_arrays, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesh::element_type_from_gmsh, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesh::gauss_to_external, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::mesh::match_gauss, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::read_gmsh, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::read_gmsh_str, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::export::export_vtk, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::export::to_arrays, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::consolidate, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::node_field::consolidate, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::element_field::consolidate, m)?)?;
@@ -336,5 +340,6 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<py::model::PyModel>()?;
     m.add_class::<py::evolution::PySubEvolution>()?;
     m.add_class::<py::evolution::PyEvolution>()?;
+    m.add_class::<py::arrays::PyArray>()?;
     Ok(())
 }

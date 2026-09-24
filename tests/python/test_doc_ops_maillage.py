@@ -770,23 +770,53 @@ assert plate.cell_count() == 2
 os.chdir(_CWD)
 
 
-# ANCHOR: from_gmsh_arrays
-# The same square, but as gmsh hands it over in memory: the tags of the nodes,
-# their three coordinates each, then one block per element type whose
-# connectivity is flattened.
+# ANCHOR: from_arrays
+# The same square, but as flat arrays already in memory: the tags of the
+# nodes, their coordinates, then one block per element type and group, whose
+# connectivity is flattened. This is what `from_gmsh` and `from_medcoupling`
+# hand over.
 tags = [1, 2, 3, 4]
 xyz = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0]
 blocs = [
-    (1, [1, 2], ["bottom"]),  # code 1: SEG2
-    (2, [1, 2, 3, 1, 3, 4], ["plate"]),  # code 2: TRI3
+    ("SEG2", [1, 2], ["bottom"]),
+    ("TRI3", [1, 2, 3, 1, 3, 4], ["plate"]),
 ]
 
 coords = pyrucast.Coords(dim=2)
-regions = pyrucast.mesh.from_gmsh_arrays(coords, tags, xyz, blocs)
+regions, _, _ = pyrucast.mesh.from_arrays(coords, tags, xyz, blocs)
 print(regions["plate"].element_types())  # ['TRI3']
 print(coords.node_count())  # 4 — a single Coords for both groups
-# ANCHOR_END: from_gmsh_arrays
+# ANCHOR_END: from_arrays
 
 assert regions["plate"].element_types() == ["TRI3"]
 assert regions["plate"].cell_count() == 2
 assert coords.node_count() == 4
+
+# ANCHOR: to_arrays
+# The way back: the same flat shape, ready for any other tool.
+sortie = pyrucast.export.to_arrays(regions)
+print(list(sortie["node_tags"]))  # [1, 2, 3, 4]
+print(sortie["blocks"][1][0], list(sortie["blocks"][1][1]))  # TRI3 [1, 2, 3, 1, 3, 4]
+# Each array is a read-only pyrucast.Array: numpy.asarray(...) or
+# memoryview(...) read it without a copy; tolist() copies it into Python.
+tags = sortie["node_tags"]
+print(isinstance(tags, pyrucast.Array), tags.format)  # True l — int64
+print(tags.tolist())  # [1, 2, 3, 4]
+# ANCHOR_END: to_arrays
+
+# ANCHOR: gauss_codes
+# The translations the exchange adapters rely on.
+print(pyrucast.mesh.element_type_from_gmsh(4))  # TET4 — gmsh code 4
+# pyrucast's Gauss rule of TRI3, in a reference triangle twice as large:
+refs = [0.0, 0.0, 2.0, 0.0, 0.0, 2.0]
+xi, w = pyrucast.mesh.gauss_to_external("TRI3", refs, "pyrucast")
+print(len(w))  # 3 points, weights four times heavier
+# ...and back: which external point is each of pyrucast's points.
+print(pyrucast.mesh.match_gauss("TRI3", refs, xi, w, "pyrucast"))  # [0, 1, 2]
+# ANCHOR_END: gauss_codes
+
+assert pyrucast.mesh.element_type_from_gmsh(4) == "TET4"
+assert len(w) == 3
+
+assert list(sortie["node_tags"]) == [1, 2, 3, 4]
+assert sortie["blocks"][1][0] == "TRI3"

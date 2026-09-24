@@ -280,15 +280,19 @@ deviation allowed, and it must stay limited to that case.
 
 ### The other direction: an op that Rust *cannot* carry
 
-`pyrucast.mesh.from_gmsh` is the only free function that exists on the Python
-side alone. It is not a surface choice: it reads the model of a live **gmsh**
-session, so it requires a CPython interpreter carrying the `gmsh` module. Rust
-cannot have it — a pure-Rust `cargo test` does not even link libpython.
+`pyrucast.mesh.from_gmsh` is the model of the free functions that exist on the
+Python side alone. It is not a surface choice: it reads the model of a live
+**gmsh** session, so it requires a CPython interpreter carrying the `gmsh`
+module. Rust cannot have it — a pure-Rust `cargo test` does not even link
+libpython.
 
 The waiver stays narrow because the function **invents no operation**: it
-fetches the current model's arrays and passes them to
-`ops::mesh::from_gmsh_arrays`, the Rust operator, which is a strict mirror and
-carries all the work. The criterion to remember for a future case: a
+fetches the current model's arrays and passes them to `ops::mesh::from_arrays`,
+the Rust operator, which is a strict mirror and carries all the work.
+`to_gmsh`, `from_medcoupling` and `to_medcoupling` follow the same waiver for
+the other ends of the exchange: each translates between a module only the
+interpreter has and `ops::mesh::from_arrays` / `ops::export::to_arrays`, and
+imports that module inside the function — never at `import pyrucast`. The criterion to remember for a future case: a
 Python-only function is justified only if its *input* does not exist outside the
 interpreter, and it must delegate its algorithm to a Rust operator. It then goes
 into the `PYTHON_ONLY` of `tests/python/test_mirror_completeness.py`, with its

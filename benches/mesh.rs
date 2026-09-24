@@ -102,5 +102,74 @@ fn bench_translate(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_merge_nodes, bench_translate);
+/// A structured `N³` block of HEX8 as an exchange format hands it over: a node
+/// table (tags `1..`, three coordinates each) and one flat connectivity.
+const N: usize = 96;
+
+fn exchange_arrays() -> (Vec<u64>, Vec<f64>, Vec<u64>) {
+    let s = N + 1;
+    let tag = |i: usize, j: usize, k: usize| ((k * s + j) * s + i + 1) as u64;
+    let mut tags = Vec::with_capacity(s * s * s);
+    let mut xyz = Vec::with_capacity(3 * s * s * s);
+    for k in 0..s {
+        for j in 0..s {
+            for i in 0..s {
+                tags.push(tag(i, j, k));
+                xyz.extend_from_slice(&[i as f64, j as f64, k as f64]);
+            }
+        }
+    }
+    let mut conn = Vec::with_capacity(8 * N * N * N);
+    for k in 0..N {
+        for j in 0..N {
+            for i in 0..N {
+                conn.extend_from_slice(&[
+                    tag(i, j, k),
+                    tag(i + 1, j, k),
+                    tag(i + 1, j + 1, k),
+                    tag(i, j + 1, k),
+                    tag(i, j, k + 1),
+                    tag(i + 1, j, k + 1),
+                    tag(i + 1, j + 1, k + 1),
+                    tag(i, j + 1, k + 1),
+                ]);
+            }
+        }
+    }
+    (tags, xyz, conn)
+}
+
+fn bench_from_arrays(c: &mut Criterion) {
+    let (tags, xyz, conn) = exchange_arrays();
+    let groups = ["solid".to_string(), "all".to_string()];
+    c.bench_function("from_arrays", |b| {
+        b.iter(|| {
+            let coords = Handle::new(Coords::new(3).unwrap());
+            let blocks = [mesh::CellBlock {
+                element_type: ElementType::HEX8,
+                node_tags: &conn,
+                cell_tags: &[],
+                groups: &groups,
+            }];
+            let out = mesh::from_arrays(
+                coords,
+                &tags,
+                &xyz,
+                &blocks,
+                &[],
+                &[],
+                mesh::NodeOrder::Gmsh,
+            )
+            .unwrap();
+            black_box(out.groups.len())
+        })
+    });
+}
+
+criterion_group!(
+    benches,
+    bench_merge_nodes,
+    bench_translate,
+    bench_from_arrays
+);
 criterion_main!(benches);

@@ -402,6 +402,64 @@ impl Coords {
         Ok(start..start + n as u32)
     }
 
+    /// Append `refcounts.len()` nodes that are **already referenced**: node
+    /// `k` starts with `refcounts[k]` units instead of one, and `fill` writes
+    /// the positions straight into the zeroed `n × dim` slice of the store —
+    /// no intermediate buffer, no `incref_all` pass afterwards.
+    ///
+    /// The bulk importers count every occurrence while they translate the
+    /// connectivity, so the count is known before the nodes exist; the
+    /// submeshes then take their units with
+    /// [`SubMesh::from_counted_connectivity`](crate::containers::mesh::SubMesh::from_counted_connectivity).
+    /// A negative radius in an axisymmetric `Coords` refuses the whole batch.
+    pub(crate) fn add_counted_nodes(
+        &mut self,
+        refcounts: &[u32],
+        fill: impl FnOnce(&mut [f64]),
+    ) -> Result<std::ops::Range<u32>> {
+        let d = self.dim as usize;
+        let n = refcounts.len();
+        let start = self.alive.len();
+        let base = start * d;
+        let (first, rest) = self.configs.split_at_mut(1);
+        let first = &mut first[0];
+        first.resize(base + n * d, 0.0);
+        fill(&mut first[base..]);
+        if self.frame.is_axisymmetric()
+            && let Some(p) = first[base..].chunks_exact(d).find(|p| p[0] < 0.0)
+        {
+            let msg = format!(
+                "add_nodes: negative radius x = {} in an axisymmetric Coords \
+                 (x = r ≥ 0, y = z along the axis of revolution)",
+                p[0]
+            );
+            first.truncate(base);
+            return Err(PyrucastError::Message(msg));
+        }
+        for set in rest {
+            set.extend_from_slice(&first[base..]);
+        }
+        self.alive.resize(start + n, true);
+        self.refcount.extend_from_slice(refcounts);
+        let (start, end) = (start as u32, (start + n) as u32);
+        if let Some(perm) = &mut self.permutation {
+            perm.extend(start..end);
+        }
+        Ok(start..end)
+    }
+
+    /// Positions of `ids`, `dim` values each, written into `out` in the order
+    /// of `ids` — one locked pass for a whole cloud. The ids come from live
+    /// connectivities, so they are alive by construction: nothing to report.
+    pub(crate) fn positions_of(&self, ids: &[NodeId], out: &mut [f64]) {
+        let d = self.dim as usize;
+        let set = &self.configs[self.active];
+        for (dst, id) in out.chunks_exact_mut(d).zip(ids) {
+            let at = id.0 as usize * d;
+            dst.copy_from_slice(&set[at..at + d]);
+        }
+    }
+
     /// Increment the refcount of a live node.
     ///
     /// ```

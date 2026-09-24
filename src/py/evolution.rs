@@ -249,6 +249,46 @@ pub struct PyEvolution {
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyEvolution {
+    /// The abscissas every zone shares — the times of a series. Raises if
+    /// the zones tabulate at different abscissas.
+    fn shared_abscissas(&self) -> PyResult<Vec<f64>> {
+        Ok(self.inner.shared_abscissas()?)
+    }
+
+    /// The tabulated values as whole fields, one per shared abscissa: a
+    /// `list[NodeField]` or a `list[ElementField]`. Raises for scalars.
+    fn frames(&self, py: Python<'_>) -> PyResult<Vec<Py<PyAny>>> {
+        use crate::containers::evolution::ValueKind;
+        let n = self.inner.frame_count()?;
+        match self.inner.kind()? {
+            ValueKind::Node => (0..n)
+                .map(|k| {
+                    Ok(Py::new(
+                        py,
+                        PyNodeField {
+                            inner: self.inner.node_frame(k)?,
+                        },
+                    )?
+                    .into_any())
+                })
+                .collect(),
+            ValueKind::Element => (0..n)
+                .map(|k| {
+                    Ok(Py::new(
+                        py,
+                        PyElementField {
+                            inner: self.inner.element_frame(k)?,
+                        },
+                    )?
+                    .into_any())
+                })
+                .collect(),
+            ValueKind::Scalar => Err(PyTypeError::new_err(
+                "frames: this evolution tabulates scalars, not fields",
+            )),
+        }
+    }
+
     /// `Evolution(steps, out_of_range="error")` — build from whole values
     /// (`out_of_range` defaults to `"error"`)
     /// tabulated at each abscissa. `steps` is a list of `(abscissa, value)`

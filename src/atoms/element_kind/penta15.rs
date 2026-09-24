@@ -208,8 +208,12 @@ impl ElementKind for Penta15 {
         18
     }
 
-    fn gmsh_permutation(&self) -> Option<&'static [usize]> {
-        Some(&[0, 1, 2, 3, 4, 5, 6, 9, 7, 12, 14, 13, 8, 10, 11])
+    fn med_permutation(&self) -> &'static [usize] {
+        &[0, 2, 1, 3, 5, 4, 8, 7, 6, 11, 10, 9, 12, 14, 13]
+    }
+
+    fn gmsh_permutation(&self) -> &'static [usize] {
+        &[0, 1, 2, 3, 4, 5, 6, 9, 7, 12, 14, 13, 8, 10, 11]
     }
 
     fn linear_parent(&self) -> Option<ElementType> {

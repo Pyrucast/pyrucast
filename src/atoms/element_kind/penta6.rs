@@ -173,6 +173,10 @@ impl ElementKind for Penta6 {
         6
     }
 
+    fn med_permutation(&self) -> &'static [usize] {
+        &[0, 2, 1, 3, 5, 4]
+    }
+
     fn quadratic(&self) -> Option<ElementType> {
         Some(ElementType::PENTA15)
     }

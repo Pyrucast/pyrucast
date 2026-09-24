@@ -36,7 +36,8 @@ ElementKind  (trait : le comportement d'un type d'élément)
 │   ├── gauss -> (Vec, Vec)             (requis)
 │   └── reduced                         (fourni : centroïde × mesure)
 ├── Échange (requis)
-│   └── vtk_code / gmsh_code / gmsh_permutation (défaut : None)
+│   └── vtk_code / gmsh_code / gmsh_permutation / med_permutation
+│                                         (permutations : identité par défaut)
 └── Familles (défaut : None)
     └── quadratic / linear_parent / split_into
 ```
@@ -62,8 +63,13 @@ Rien d'autre. En particulier :
 - `nodes_per_cell`, `topological_dim` et `from_name` sur `ElementType`
   délèguent au trait, et n'ont donc pas de bras à compléter ;
 - `skin`, `orient`, `border`, `convert`, `to_quadratic`, l'export VTK, la
-  lecture gmsh, le rendu et la subdivision colorée sont **génériques** et ne
-  changent pas.
+  lecture gmsh, l'échange MED, le rendu et la subdivision colorée sont
+  **génériques** et ne changent pas — à condition que `gmsh_permutation` et
+  `med_permutation` disent comment ces formats numérotent les nœuds de la
+  maille. Pour un volume, la numérotation MED se vérifie contre medcoupling :
+  `tests/python/test_medcoupling.py` exige un volume positif et des nœuds
+  milieux au milieu des arêtes qu'il en déduit ; ajouter le type à sa table
+  `REFERENCE`.
 
 Reste à écrire la doc : une fiche `book/src/elements/<nom>.md`, une entrée
 dans `SUMMARY.md`, une ligne dans les deux tableaux de
@@ -145,7 +151,7 @@ ligne de test à écrire :
 - jeux de coins de facettes distincts ;
 - centroïde intérieur, nœuds de référence dans le domaine, clamp ramenant
   dedans ;
-- codes VTK et gmsh uniques, permutations gmsh bijectives ;
+- codes VTK et gmsh uniques, permutations gmsh et MED bijectives ;
 - couple linéaire ↔ quadratique réciproque, à coins et arêtes égaux ;
 - somme des poids = mesure de référence ;
 - partition de l'unité, somme des dérivées nulle, Kronecker aux nœuds,

@@ -64,20 +64,24 @@ types, de `POI1` à `HEX27`, y compris les versions quadratiques
 
 ## Échanges avec les outils extérieurs
 
-pyrucast ne parle, à ce jour, que deux formats externes :
+pyrucast échange avec trois outils externes :
 
-- **import** de maillage **Gmsh** (`pyrucast.mesh.read_gmsh`,
-  `read_gmsh_str`) — un dictionnaire `nom de région → Mesh` ;
-- **export VTK legacy** (`pyrucast.export.export_vtk`), lisible par
-  ParaView — voir la fin du script de barre plus haut.
+- **gmsh** — fichier `.msh` (`pyrucast.mesh.read_gmsh`, `read_gmsh_str`) ou
+  session vivante, dans les deux sens et avec les vues
+  (`pyrucast.mesh.from_gmsh`, `pyrucast.export.to_gmsh`) ;
+- **MED** (Salome, code_aster) au travers de medcoupling — maillages, groupes,
+  champs aux nœuds, aux mailles et aux points de Gauss, séries temporelles
+  (`pyrucast.mesh.from_medcoupling`, `pyrucast.export.to_medcoupling`) ;
+- **VTK legacy** pour ParaView, ASCII ou binaire, et séries temporelles
+  (`pyrucast.export.export_vtk`) — voir la fin du script de barre plus haut.
 
-> **Non disponible dans pyrucast.** Pas d'échange Nastran/Abaqus/MED/Salomé,
+> **Non disponible dans pyrucast.** Pas d'échange Nastran/Abaqus,
 > pas de format CSV/Excel dédié pour les listes ou les tables (Cast3M
 > `SORT 'EXCE'`/`LIRE 'CSV'`), pas de format XDR de sauvegarde/restitution
 > (Cast3M `OPTI 'SAUV'`/`OPTI 'REST'`) — un script pyrucast reconstruit
 > toujours son état depuis son code, il ne le sérialise pas sur disque.
-> L'export VTK est en outre limité au format legacy ASCII : un maillage et
-> un champ par fichier, pas de série temporelle (pas d'équivalent PVD).
+> L'export VTK est en outre limité au format legacy (pas de `.vtu`) : un
+> champ par fichier.
 
 ## Développer sur pyrucast
 

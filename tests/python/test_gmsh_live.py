@@ -53,7 +53,7 @@ def shape(groups):
 def test_named_groups_become_keys(session):
     """Surfaces, volumes and points named in gmsh are the dict's keys."""
     cube(session)
-    regions = pyrucast.mesh.from_gmsh(pyrucast.Coords(dim=3))
+    regions, _ = pyrucast.mesh.from_gmsh(pyrucast.Coords(dim=3))
 
     assert set(regions) == {"capteur", "encastrement", "piece", "<ungrouped>"}
     assert regions["piece"].element_types() == ["TET4"]
@@ -68,7 +68,7 @@ def test_everything_else_lands_ungrouped(session):
     """The rest of the model is not lost: it falls under `<ungrouped>`, the same
     convention as the file reader."""
     cube(session)
-    regions = pyrucast.mesh.from_gmsh(pyrucast.Coords(dim=3))
+    regions, _ = pyrucast.mesh.from_gmsh(pyrucast.Coords(dim=3))
     reste = regions["<ungrouped>"]
     # The 7 other corners, the 12 edges, the 5 other faces.
     assert reste.element_types() == ["POI1", "SEG2", "TRI3"]
@@ -79,7 +79,7 @@ def test_a_model_without_physical_groups_yields_everything(session):
     session.model.occ.addRectangle(0, 0, 0, 1, 1)
     session.model.occ.synchronize()
     session.model.mesh.generate(2)
-    regions = pyrucast.mesh.from_gmsh(pyrucast.Coords(dim=2))
+    regions, _ = pyrucast.mesh.from_gmsh(pyrucast.Coords(dim=2))
     assert list(regions) == ["<ungrouped>"]
     assert "TRI3" in regions["<ungrouped>"].element_types()
 
@@ -97,7 +97,7 @@ def test_one_coords_shared_by_every_group(session):
     attendu = len(session.model.mesh.getNodes()[0])
 
     coords = pyrucast.Coords(dim=3)
-    regions = pyrucast.mesh.from_gmsh(coords)
+    regions, _ = pyrucast.mesh.from_gmsh(coords)
 
     assert coords.node_count() == attendu
     # The clamped face really is a piece of the part, not a copy.
@@ -107,14 +107,14 @@ def test_one_coords_shared_by_every_group(session):
 
 def test_dim_restricts_the_import(session):
     cube(session)
-    surfaces = pyrucast.mesh.from_gmsh(pyrucast.Coords(dim=3), dim=2)
+    surfaces, _ = pyrucast.mesh.from_gmsh(pyrucast.Coords(dim=3), dim=2)
     assert set(surfaces) == {"encastrement", "<ungrouped>"}
     assert surfaces["encastrement"].element_types() == ["TRI3"]
 
 
 def test_tag_restricts_to_one_entity(session):
     cube(session)
-    une = pyrucast.mesh.from_gmsh(pyrucast.Coords(dim=3), dim=2, tag=1)
+    une, _ = pyrucast.mesh.from_gmsh(pyrucast.Coords(dim=3), dim=2, tag=1)
     assert list(une) == ["encastrement"]
 
 
@@ -129,7 +129,7 @@ def test_matches_the_file_reader(session, tmp_path):
     named groups, exactly the same mesh. At order 2, so that the permutation of
     the quadratic volumes is part of the deal."""
     cube(session, order=2)
-    memoire = pyrucast.mesh.from_gmsh(pyrucast.Coords(dim=3))
+    memoire, _ = pyrucast.mesh.from_gmsh(pyrucast.Coords(dim=3))
 
     path = tmp_path / "cube.msh"
     session.write(str(path))
@@ -158,7 +158,7 @@ def test_finalize_does_not_take_the_mesh_with_it(session):
     data, so `gmsh.finalize()` does not carry them off."""
     cube(session)
     coords = pyrucast.Coords(dim=3)
-    regions = pyrucast.mesh.from_gmsh(coords)
+    regions, _ = pyrucast.mesh.from_gmsh(coords)
     counts = regions["piece"].cell_counts()
 
     gmsh.finalize()
@@ -166,3 +166,97 @@ def test_finalize_does_not_take_the_mesh_with_it(session):
 
     assert regions["piece"].cell_counts() == counts
     assert coords.node_count() > 0
+
+
+# ── Views, and the other direction: to_gmsh ────────────────────────────────
+
+
+def square(session):
+    """A meshed unit square, its surface named "plate"."""
+    session.model.occ.addRectangle(0, 0, 0, 1, 1)
+    session.model.occ.synchronize()
+    session.model.addPhysicalGroup(2, [1], name="plate")
+    session.model.mesh.generate(2)
+
+
+def test_node_views_become_fields_and_steps_an_evolution(session):
+    square(session)
+    tags, xyz, _ = session.model.mesh.getNodes()
+    model = session.model.getCurrent()
+    view = session.view.add("T")
+    for step, time in enumerate([0.0, 2.0]):
+        values = [x + time for x in xyz[0::3]]
+        session.view.addHomogeneousModelData(
+            view, step, model, "NodeData", tags, values, time, 1
+        )
+    coords = pyrucast.Coords(dim=2)
+    regions, fields = pyrucast.mesh.from_gmsh(coords)
+    temperature = fields["T"]
+    assert isinstance(temperature, pyrucast.Evolution)
+    assert temperature.shared_abscissas() == [0.0, 2.0]
+    late = temperature.frames()[1]
+    for node in regions["plate"].cell(0, 0).nodes():
+        assert late.value(node, "T") == pytest.approx(node.position()[0] + 2.0)
+
+
+def test_element_views_become_one_point_fields(session):
+    square(session)
+    types, cells, _ = session.model.mesh.getElements(2)
+    model = session.model.getCurrent()
+    view = session.view.add("E")
+    session.view.addHomogeneousModelData(
+        view, 0, model, "ElementData", cells[0], [7.0] * len(cells[0]), 0.0, 1
+    )
+    regions, fields = pyrucast.mesh.from_gmsh(pyrucast.Coords(dim=2))
+    zone = fields["E"][0]
+    assert zone.gauss_count() == 1
+    assert zone.cell_count() == regions["plate"].cell_count()
+    assert zone.value(0, 0, "E") == 7.0
+
+
+def test_views_can_be_left_out(session):
+    square(session)
+    tags, _, _ = session.model.mesh.getNodes()
+    view = session.view.add("T")
+    session.view.addHomogeneousModelData(
+        view, 0, session.model.getCurrent(), "NodeData", tags, [0.0] * len(tags), 0.0, 1
+    )
+    _, fields = pyrucast.mesh.from_gmsh(pyrucast.Coords(dim=2), views=False)
+    assert fields == {}
+
+
+def test_to_gmsh_then_from_gmsh_gives_the_mesh_and_fields_back(session):
+    square(session)
+    coords = pyrucast.Coords(dim=2)
+    regions, _ = pyrucast.mesh.from_gmsh(coords)
+    plate = regions["plate"]
+    temperature = pyrucast.NodeField(plate, ["T"])
+    for z in range(len(temperature)):
+        for i in range(temperature[z].node_count()):
+            temperature[z].set(i, 0, float(i))
+    fes = pyrucast.FiniteElementSpace(plate)
+    stress = pyrucast.ElementField(fes, ["s"])
+    stress[0].set_uniform("s", 3.0)
+    cold = pyrucast.NodeField(plate, ["T"])
+    series = pyrucast.Evolution([(0.0, cold), (1.0, temperature)])
+
+    name = pyrucast.export.to_gmsh(
+        {"plate": plate}, {"T": series, "s": stress}, model_name="back"
+    )
+    assert session.model.getCurrent() == name
+    back, fields = pyrucast.mesh.from_gmsh(pyrucast.Coords(dim=2))
+    assert back["plate"].element_types() == plate.element_types()
+    assert back["plate"].cell_counts() == plate.cell_counts()
+    assert isinstance(fields["T"], pyrucast.Evolution)
+    assert fields["T"].shared_abscissas() == [0.0, 1.0]
+    assert fields["s"][0].value(0, 0, "s") == 3.0
+    # The values follow the nodes, whatever the numbering: compare by position.
+    before = {
+        tuple(n.position()): temperature.value(n, "T")
+        for c in range(plate.cell_count())
+        for n in plate.cell(0, c).nodes()
+    }
+    after = fields["T"].frames()[1]
+    for c in range(back["plate"].cell_count()):
+        for n in back["plate"].cell(0, c).nodes():
+            assert after.value(n, "T") == before[tuple(n.position())]

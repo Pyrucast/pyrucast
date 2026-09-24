@@ -215,6 +215,30 @@ impl SubMesh {
         })
     }
 
+    /// Wrap a connectivity whose nodes were created **already counted**
+    /// ([`Coords::add_counted_nodes`](crate::coords::Coords::add_counted_nodes)):
+    /// the units this submesh holds were handed out at creation, so there is
+    /// no `incref_all` pass and nothing left to check — the importer built the
+    /// ids itself, a whole number of cells of live nodes.
+    pub(crate) fn from_counted_connectivity(
+        coords: Handle<Coords>,
+        element_type: ElementType,
+        connectivity: Vec<NodeId>,
+    ) -> Self {
+        debug_assert!(connectivity
+            .len()
+            .is_multiple_of(element_type.nodes_per_cell().max(1)));
+        Self {
+            element_type,
+            coords,
+            connectivity,
+            face_color: RgbColor::default(),
+            sealed: false,
+            node_index: OnceLock::new(),
+            poi1_companion: OnceLock::new(),
+        }
+    }
+
     /// Whether this submesh is sealed (connectivity frozen).
     ///
     /// ```
@@ -675,8 +699,26 @@ impl SubMesh {
         self.connectivity.len() / self.element_type.nodes_per_cell()
     }
 
-    /// Flat connectivity buffer (all cells concatenated).
-    pub(crate) fn connectivity(&self) -> &[NodeId] {
+    /// Flat connectivity buffer (all cells concatenated): cell `i` occupies
+    /// `[i * npc, (i + 1) * npc)`, in pyrucast's (VTK) local node order.
+    ///
+    /// ```
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::mesh::SubMesh;
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// let ids: Vec<_> = n.iter().map(|x| x.id()).collect();
+    /// let sm = SubMesh::from_connectivity(
+    ///     coords.clone(), ElementType::TRI3, vec![ids[0], ids[1], ids[2], ids[1], ids[3], ids[2]])?;
+    /// // Two triangles, three ids each, back to back.
+    /// assert_eq!(sm.connectivity().len(), 6);
+    /// assert_eq!(sm.connectivity()[3..], [ids[1], ids[3], ids[2]]);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn connectivity(&self) -> &[NodeId] {
         &self.connectivity
     }
 

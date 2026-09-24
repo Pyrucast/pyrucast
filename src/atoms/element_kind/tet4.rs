@@ -122,6 +122,10 @@ impl ElementKind for Tet4 {
         4
     }
 
+    fn med_permutation(&self) -> &'static [usize] {
+        &[0, 2, 1, 3]
+    }
+
     fn quadratic(&self) -> Option<ElementType> {
         Some(ElementType::TET10)
     }

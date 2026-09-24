@@ -152,8 +152,12 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `merge_nodes(mesh: &Mesh, tol: f64, in_place: bool) -> Mesh` | `merge_nodes(mesh, tol, in_place=False) -> Mesh` |
 | `read_gmsh(coords: Handle<Coords>, path: &Path) -> Vec<(String, Mesh)>` | `read_gmsh(coords, path) -> dict[str, Mesh]` |
 | `read_gmsh_str(coords: Handle<Coords>, text: &str) -> Vec<(String, Mesh)>` | `read_gmsh_str(coords, text) -> dict[str, Mesh]` |
-| `from_gmsh_arrays(coords: Handle<Coords>, node_tags: &[u64], node_coords: &[f64], blocks: &[GmshBlock]) -> Vec<(String, Mesh)>` | `from_gmsh_arrays(coords, node_tags, node_coords, blocks) -> dict[str, Mesh]` |
-| — (exige l'interpréteur) | `from_gmsh(coords, *, dim=-1, tag=-1) -> dict[str, Mesh]` |
+| `from_arrays(coords: Handle<Coords>, node_tags: &[T], node_coords: &[f64], blocks: &[CellBlock<T>], node_values: &[NodeValues<T>], cell_values: &[CellValues<T>], order: NodeOrder) -> Imported` | `from_arrays(coords, node_tags, node_coords, blocks, *, node_fields=(), cell_fields=(), order="pyrucast") -> (dict[str, Mesh], list[NodeField], list[ElementField])` |
+| `element_type_from_gmsh(code: u32) -> ElementType` | `element_type_from_gmsh(code) -> str` |
+| `gauss_to_external(et: ElementType, order: NodeOrder, ext_ref_nodes: &[f64]) -> (Vec<f64>, Vec<f64>)` | `gauss_to_external(element_type, ref_nodes, order) -> (list, list)` |
+| `match_gauss(et: ElementType, order: NodeOrder, ext_ref_nodes: &[f64], ext_xi: &[f64], ext_weights: &[f64]) -> Vec<usize>` | `match_gauss(element_type, ref_nodes, xi, weights, order) -> list[int]` |
+| — (exige l'interpréteur) | `from_gmsh(coords, *, dim=-1, tag=-1, views=True) -> (dict[str, Mesh], dict)` |
+| — (exige l'interpréteur) | `from_medcoupling(coords, source, *, mesh_name=None) -> (dict[str, Mesh], dict)` |
 | `consolidate(mesh: &Mesh) -> Mesh` | `consolidate(mesh) -> Mesh` |
 | `select_nodes(field: &NodeField, band: &Band, …) -> Mesh` / `select_cells(field: &ElementField, …) -> Mesh` | `select(field, ge=None, gt=None, le=None, lt=None, components=None) -> Mesh` (dispatch par type ; part d'un champ mais rend un maillage, d'où son rangement ici) |
 
@@ -286,9 +290,13 @@ dérogations correspondantes sont enregistrées, avec leur raison, dans
 
 | Rust (`ops::export::…`) | Python (`pyrucast.export.…`) |
 |---|---|
-| `write_vtk_mesh(mesh: &Mesh, path: &Path)` | `export_vtk(mesh, path) -> None` |
-| `write_vtk_node_field(mesh: &Mesh, field: &NodeField, path: &Path)` | `export_vtk(mesh, path, field=node_field) -> None` |
-| `write_vtk_element_field(mesh: &Mesh, field: &ElementField, path: &Path)` | `export_vtk(mesh, path, field=element_field) -> None` |
+| `write_vtk_mesh(mesh: &Mesh, path: &Path, encoding: VtkEncoding)` | `export_vtk(mesh, path, binary=False) -> None` |
+| `write_vtk_node_field(mesh: &Mesh, field: &NodeField, path: &Path, encoding: VtkEncoding)` | `export_vtk(mesh, path, field=node_field, binary=False) -> None` |
+| `write_vtk_element_field(mesh: &Mesh, field: &ElementField, path: &Path, encoding: VtkEncoding)` | `export_vtk(mesh, path, field=element_field, binary=False) -> None` |
+| `write_vtk_series(mesh: &Mesh, evolution: &Evolution, path: &Path, encoding: VtkEncoding) -> Vec<PathBuf>` | `export_vtk(mesh, path, field=evolution, binary=False) -> None` |
+| `to_arrays(groups: &[(String, &Mesh)], node_fields: &[&NodeField], element_fields: &[(&ElementField, ElementLayout)], order: NodeOrder, first_tag: i64) -> Exported` | `to_arrays(groups, *, node_fields=[], element_fields=[], gauss=False, order="pyrucast", first_tag=1) -> dict` |
+| — (exige l'interpréteur) | `to_gmsh(meshes, fields=None, *, model_name="pyrucast") -> str` |
+| — (exige l'interpréteur) | `to_medcoupling(meshes, fields=None, *, mesh_name="mesh", gauss=True) -> MEDFileData` |
 
 ### `spill` — le swap utilisateur
 

@@ -103,6 +103,27 @@ impl Facet {
     }
 }
 
+/// The first `n` entries of `0, 1, 2, …`: the node permutation of a format
+/// that numbers a cell like pyrucast does. Static, so an interchange
+/// permutation is always a slice — never an `Option` a hot loop would test.
+///
+/// ```
+/// # use pyrucast::atoms::element_kind::identity_permutation;
+/// assert_eq!(identity_permutation(4), [0, 1, 2, 3]);
+/// ```
+pub fn identity_permutation(n: usize) -> &'static [usize] {
+    const IDENTITY: [usize; 27] = {
+        let mut t = [0; 27];
+        let mut i = 0;
+        while i < 27 {
+            t[i] = i;
+            i += 1;
+        }
+        t
+    };
+    &IDENTITY[..n]
+}
+
 /// Everything a single element type knows about itself.
 ///
 /// Split, like [`crate::models::SubModelKind`], between **required** methods
@@ -223,11 +244,21 @@ pub trait ElementKind: Sync {
     fn gmsh_code(&self) -> u32;
 
     /// Permutation mapping a gmsh cell's node order to pyrucast's:
-    /// `pyrucast[i] = gmsh[perm[i]]`. `None` (the default) when the two orders
-    /// already coincide — every linear type, plus `SEG3`/`TRI6`/`QUA8`/`QUA9`.
-    /// gmsh numbers the mid-side nodes of the quadratic volumes differently.
-    fn gmsh_permutation(&self) -> Option<&'static [usize]> {
-        None
+    /// `pyrucast[i] = gmsh[perm[i]]`. The identity (the default) when the two
+    /// orders already coincide — every linear type, plus
+    /// `SEG3`/`TRI6`/`QUA8`/`QUA9`. gmsh numbers the mid-side nodes of the
+    /// quadratic volumes differently.
+    fn gmsh_permutation(&self) -> &'static [usize] {
+        identity_permutation(self.nodes_per_cell())
+    }
+
+    /// Permutation mapping a MED cell's node order to pyrucast's:
+    /// `pyrucast[i] = med[perm[i]]`. The identity (the default) for the
+    /// segments and the surface types, which MED numbers like VTK. MED orients
+    /// its volumes the other way round — the first face is walked clockwise
+    /// seen from the rest of the cell — so every volume type overrides it.
+    fn med_permutation(&self) -> &'static [usize] {
+        identity_permutation(self.nodes_per_cell())
     }
 
     // ── Families (provided: standing alone) ─────────────────────────────
@@ -530,21 +561,24 @@ mod tests {
         }
     }
 
-    /// A gmsh permutation must be a bijection of the element's nodes —
+    /// A gmsh or MED permutation must be a bijection of the element's nodes —
     /// otherwise a read silently drops or duplicates connectivity.
     #[test]
-    fn gmsh_permutations_are_bijections() {
+    fn interchange_permutations_are_bijections() {
         for &et in ElementType::ALL {
             let k = et.as_kind();
-            let Some(perm) = k.gmsh_permutation() else {
-                continue;
-            };
-            assert_eq!(perm.len(), k.nodes_per_cell(), "{et}: permutation length");
-            let mut seen = vec![false; perm.len()];
-            for &i in perm {
-                assert!(i < perm.len(), "{et}: index {i} out of range");
-                assert!(!seen[i], "{et}: index {i} repeated");
-                seen[i] = true;
+            for (format, perm) in [("gmsh", k.gmsh_permutation()), ("med", k.med_permutation())] {
+                assert_eq!(
+                    perm.len(),
+                    k.nodes_per_cell(),
+                    "{et}: {format} permutation length"
+                );
+                let mut seen = vec![false; perm.len()];
+                for &i in perm {
+                    assert!(i < perm.len(), "{et}: {format} index {i} out of range");
+                    assert!(!seen[i], "{et}: {format} index {i} repeated");
+                    seen[i] = true;
+                }
             }
         }
     }

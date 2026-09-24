@@ -22,6 +22,7 @@ by theme**, mirroring the Rust organization:
 
 # ── Containers (nouns): top-level classes, same name as the Rust struct ─────
 from ._pyrucast import (
+    Array as Array,
     Cell as Cell,
     Coords as Coords,
     Element as Element,
@@ -74,6 +75,7 @@ from . import thermomechanics as thermomechanics
 
 __all__ = [
     # conteneurs
+    "Array",
     "Cell",
     "Coords",
     "Element",

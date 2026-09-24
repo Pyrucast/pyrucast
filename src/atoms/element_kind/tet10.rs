@@ -170,9 +170,13 @@ impl ElementKind for Tet10 {
         11
     }
 
+    fn med_permutation(&self) -> &'static [usize] {
+        &[0, 2, 1, 3, 6, 5, 4, 7, 9, 8]
+    }
+
     /// gmsh swaps the last two mid-edge nodes.
-    fn gmsh_permutation(&self) -> Option<&'static [usize]> {
-        Some(&[0, 1, 2, 3, 4, 5, 6, 7, 9, 8])
+    fn gmsh_permutation(&self) -> &'static [usize] {
+        &[0, 1, 2, 3, 4, 5, 6, 7, 9, 8]
     }
 
     fn linear_parent(&self) -> Option<ElementType> {

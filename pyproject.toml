@@ -61,7 +61,8 @@ testpaths = ["tests/python"]
 # Un développeur qui n'y touche pas n'a pas à installer gmsh ; `check_gmsh.sh`
 # les rattrape avec `pytest -m gmsh` (l'option de la ligne de commande
 # l'emporte sur celle-ci).
-addopts = "--continue-on-collection-errors -m \"not gmsh\""
+addopts = "--continue-on-collection-errors -m \"not gmsh and not medcoupling\""
 markers = [
     "gmsh: exige le module gmsh installé — lancé par script/check_gmsh.sh",
+    "medcoupling: exige le module medcoupling installé — lancé par script/check_medcoupling.sh",
 ]

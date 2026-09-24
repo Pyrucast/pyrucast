@@ -297,7 +297,7 @@ La caméra se recentre à chaque bascule : le corps balayé est centré sur l'ax
 
 Pour les maillages industriels — ou simplement pour exploiter les filtres de
 **ParaView** — `export_vtk` écrit un fichier **VTK legacy**
-(`UNSTRUCTURED_GRID`, ASCII) que ParaView lit nativement. C'est l'opérateur
+(`UNSTRUCTURED_GRID`) que ParaView lit nativement. C'est l'opérateur
 d'*export* (`src/ops/export`), pendant « écriture » du lecteur `read_gmsh`.
 
 ```python
@@ -306,48 +306,103 @@ d'*export* (`src/ops/export`), pendant « écriture » du lecteur `read_gmsh`.
 
 - Chaque sous-maillage est écrit ; les types d'éléments se traduisent un pour
   un (`POI1`→VERTEX, `SEG2`→LINE, `TRI3`→TRIANGLE, `QUA4`→QUAD, `TET4`→TETRA,
-  `HEX8`→HEXAHEDRON) et l'ordre local des nœuds coïncide déjà avec celui de
-  VTK : la connectivité est copiée telle quelle.
+  `PYRA5`→PYRAMID, `PENTA6`→WEDGE, `HEX8`→HEXAHEDRON, et leurs variantes
+  quadratiques) et l'ordre local des nœuds coïncide déjà avec celui de VTK :
+  la connectivité est copiée telle quelle.
 - Une `Coords` 2-D est complétée en 3-D avec `z = 0`.
 - Un `NodeField` donne un tableau `SCALARS` par composante aux **points**
   (valeur nodale, `0` là où le champ n'est pas défini) ; un `ElementField`
   donne un tableau par composante aux **cellules**. La valeur par cellule est
   la moyenne des points de Gauss de *cette* cellule (moyenne **intra**-élément
   uniquement — les discontinuités inter-éléments restent visibles). Le champ
-  aux éléments doit provenir d'un espace bâti sur **ce** maillage (cellules
-  alignées une à une).
+  aux éléments doit couvrir toutes les cellules du maillage : il provient d'un
+  espace bâti sur **ce** maillage.
+
+L'écrivain VTK n'est qu'un **formateur** : la mise à plat (quels points, quelles
+cellules dans quel ordre, quelles valeurs) vient de `to_arrays`, la sortie que
+partagent tous les échanges (voir
+[`to_arrays`](operateurs/maillage.md#le-chemin-inverse--to_arrays)). Les
+fichiers ASCII produits sont identiques, octet pour octet, à ceux de la
+première version.
+
+### Binaire
+
+`binary=True` écrit les mêmes sections, les nombres en binaire brut
+**gros-boutiste** comme l'exige le format legacy : fichier bien plus petit,
+lecture bien plus rapide pour un gros maillage.
+
+```python
+{{#include ../../tests/python/test_doc_visualization.py:vtk_binaire}}
+```
+
+### Séries temporelles
+
+Passée une `Evolution` de champs, `export_vtk` écrit une **série** : un fichier
+par valeur tabulée, `nom_0000.vtk`, `nom_0001.vtk`…, et un index
+`nom.vtk.series` (JSON) qui donne à chacun son temps, l'abscisse de
+l'évolution. ParaView ouvre l'index comme un seul jeu de données muni d'un
+curseur de temps. Le maillage n'est mis à plat qu'une fois pour tous les pas.
+
+```python
+{{#include ../../tests/python/test_doc_visualization.py:vtk_serie}}
+```
 
 Côté Rust : `ops::export::write_vtk_mesh`, `write_vtk_node_field`,
-`write_vtk_element_field` (et leurs variantes `vtk_*_string` qui rendent le
-texte sans toucher au disque).
+`write_vtk_element_field` (avec un `VtkEncoding`), `write_vtk_series`, et les
+variantes `vtk_*_string` qui rendent le texte ASCII sans toucher au disque.
 
 ### Limites actuelles et évolutions possibles
 
-Cette première version vise la simplicité et la portabilité. Limites assumées,
-et les directions pour les lever :
-
-- **VTK legacy ASCII uniquement.** Pas de `.vtu` (XML), pas de variante
-  binaire ni de compression : les fichiers sont donc volumineux et l'écriture
-  reste en texte. Évolutions : un back-end `.vtu` (recommandé par ParaView,
-  extensible), puis un encodage binaire/compressé pour les gros maillages.
+- **VTK legacy uniquement.** Pas de `.vtu` (XML) ni de compression. Évolution :
+  un back-end `.vtu`, recommandé par ParaView.
 - **Composantes en scalaires séparés.** Chaque composante donne un tableau
   `SCALARS` distinct ; pas de regroupement en `VECTORS`/`TENSORS`. Un
   déplacement `(ux, uy, uz)` sort en trois scalaires plutôt qu'en un champ
-  vectoriel directement « warpable » dans ParaView. Évolution : détecter/grouper
-  les composantes vectorielles et tensorielles.
-- **`CELL_DATA` = moyenne des points de Gauss.** Un champ aux éléments est
-  réduit à **une** valeur par cellule (moyenne intra-élément). Pas d'export
-  des valeurs nodales reconstruites par élément ni des points de Gauss
-  individuels. Évolution : écrire les valeurs ajustées par élément (comme la
-  viz) en `POINT_DATA` discontinu, ou un VTK à plusieurs points de Gauss.
-- **Un seul `Mesh`, un seul champ par fichier.** Pas de séries temporelles
-  (`PVD`/`.vtu` multi-pas) ni de plusieurs champs simultanés. Évolutions :
-  accepter plusieurs champs en une passe, et une série temporelle pour les
-  calculs transitoires (cf. `PASAPAS`).
-- **Cellules alignées requises pour `CELL_DATA`.** Le champ aux éléments doit
-  provenir d'un espace bâti sur **ce** maillage (correspondance cellule à
-  cellule, vérifiée par un simple comptage). Évolution : un appariement
-  explicite maillage ↔ espace EF plutôt qu'un ordre implicite.
+  vectoriel directement « warpable » dans ParaView.
+- **`CELL_DATA` = moyenne des points de Gauss.** VTK ne connaît pas de donnée
+  au point d'intégration. Pour garder les points de Gauss, passer par MED
+  (`to_medcoupling`, `ON_GAUSS_PT`).
+- **Un champ par fichier.** Plusieurs champs simultanés dans un même fichier
+  restent à faire.
+
+## Échanger avec gmsh et Salome (`to_gmsh`, `to_medcoupling`)
+
+Les deux sens des échanges passent par le même format à plat. Pour la lecture,
+voir [`from_gmsh`](operateurs/maillage.md#déléguer-le-maillage-à-gmsh--from_gmsh)
+et [`from_medcoupling`](operateurs/maillage.md#lire-un-fichier-med--from_medcoupling).
+
+`to_gmsh` pousse maillages et champs dans la session gmsh en cours, comme un
+nouveau modèle : chaque clé devient un groupe physique, chaque champ une vue —
+`NodeData` pour un champ aux nœuds, `ElementData` (moyenne par maille) pour un
+champ aux éléments, un pas par valeur d'une `Evolution`. gmsh dessine 1, 3 ou
+9 composantes : un champ d'un autre nombre donne une vue par composante.
+
+```python
+{{#include ../../tests/python/test_doc_gmsh.py:to_gmsh}}
+```
+
+`to_medcoupling` construit un `medcoupling.MEDFileData`, qu'on écrit avec sa
+propre méthode `write` : chaque clé devient un groupe MED (un maillage POI1, un
+groupe de **nœuds**), un champ aux nœuds `ON_NODES`, un champ aux éléments
+`ON_GAUSS_PT` avec sa règle déclarée dans l'élément de référence MED
+(`gauss=False` : `ON_CELLS`, la moyenne par maille), un profil quand le champ
+ne couvre pas tout un niveau, une `Evolution` un pas de temps par valeur.
+
+```python
+{{#include ../../tests/python/test_doc_medcoupling.py:to_medcoupling}}
+```
+
+> **Limite de medcoupling pour `TRI6`, `PENTA15` et `HEX20` aux points de
+> Gauss.** Les éléments de référence par défaut de medcoupling ne suivent pas,
+> pour ces trois types, sa propre connectivité MED (le `TRI6` répète un sommet,
+> les deux autres rangent leurs nœuds milieux autrement), et son localisateur
+> de points de Gauss n'en accepte pas d'autres. pyrucast déclare l'élément
+> cohérent avec la connectivité écrite : le fichier est juste et se relit dans
+> pyrucast, mais `getLocalizationOfDiscr()` de medcoupling le refuse. Les douze
+> autres types sont localisés exactement par medcoupling.
+
+Ni gmsh ni medcoupling ne sont des dépendances : `import pyrucast` ne charge
+aucun des deux, ils ne sont importés qu'à l'appel de ces fonctions.
 
 ## Notes techniques
 

@@ -6,7 +6,9 @@
 
 use crate::atoms::ElementType;
 use crate::containers::mesh::Mesh;
-use crate::ops::mesh::{FrontRelax, GmshBlock};
+use crate::ops::mesh::{
+    CellBlock, CellLayout, CellValues, FrontRelax, GaussRule, NodeOrder, NodeValues,
+};
 use crate::py::coords::PyCoords;
 use crate::py::element_field::{PyElementField, PySubElementField};
 use crate::py::mesh::PyMesh;
@@ -1201,84 +1203,358 @@ fn groups_to_dict<'py>(
     Ok(dict)
 }
 
-/// Build meshes from a gmsh mesh **already in memory** — the node table and
-/// the element blocks — instead of from a file.
+/// Map a gmsh element-type code to pyrucast's element-type name — the
+/// translation `pyrucast.mesh.from_gmsh` applies to every block before
+/// handing it to `from_arrays`. Raises for a gmsh type pyrucast has no
+/// counterpart for (third order and above, …).
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn element_type_from_gmsh(code: u32) -> PyResult<&'static str> {
+    Ok(crate::ops::mesh::gmsh::element_type_from_gmsh(code)?.name())
+}
+
+/// pyrucast's Gauss rule for `element_type`, carried into an external
+/// reference element — `ref_nodes`, its nodes numbered in `order`
+/// (`"pyrucast"`, `"gmsh"`, `"med"`), `dim` coordinates each. Returns
+/// `(xi, weights)`, the points in pyrucast's order, the weights scaled by the
+/// ratio of the reference measures. Raises if the external element is not an
+/// affine image of pyrucast's under that numbering.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn gauss_to_external(
+    element_type: ElementType,
+    ref_nodes: Vec<f64>,
+    order: &str,
+) -> PyResult<(Vec<f64>, Vec<f64>)> {
+    let order = crate::py::arrays::parse_order(order)?;
+    Ok(crate::ops::mesh::gauss_map::gauss_to_external(
+        element_type,
+        order,
+        &ref_nodes,
+    )?)
+}
+
+/// For each of pyrucast's Gauss points of `element_type`, the index of the
+/// same point in the external rule `(xi, weights)` declared in the external
+/// reference element `ref_nodes` (numbered in `order`). Raises when the two
+/// rules are not the same quadrature.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn match_gauss(
+    element_type: ElementType,
+    ref_nodes: Vec<f64>,
+    xi: Vec<f64>,
+    weights: Vec<f64>,
+    order: &str,
+) -> PyResult<Vec<usize>> {
+    let order = crate::py::arrays::parse_order(order)?;
+    Ok(crate::ops::mesh::gauss_map::match_gauss(
+        element_type,
+        order,
+        &ref_nodes,
+        &xi,
+        &weights,
+    )?)
+}
+
+/// Build meshes and fields from **flat arrays** — the one import every
+/// exchange format goes through (`pyrucast.mesh.from_gmsh` and
+/// `pyrucast.mesh.from_medcoupling` are built on it).
 ///
-/// This is the low-level operator behind `pyrucast.mesh.from_gmsh`, which is
-/// what you normally want: it asks the live gmsh model for these arrays
-/// itself. Call this one when you hold the arrays already, or when you want
-/// to choose exactly what to import.
+/// - `node_tags` — one integer tag per node (`uint64` or `int64`);
+/// - `node_coords` — 1 to 3 coordinates per tag, in the same order; the
+///   dimension of `coords` decides how many are kept (padded with zeros);
+/// - `blocks` — a sequence of `(element_type, node_tags, cell_tags, groups)`,
+///   one per block of cells sharing a type and a combination of groups: the
+///   pyrucast type name (`"TET4"`), the flat connectivity in node tags, one
+///   tag per cell (or an empty sequence when no cell field names the block),
+///   and the group names the cells belong to. A 3-tuple without `cell_tags`
+///   is accepted too;
+/// - `node_fields` — a sequence of `(components, node_tags, values)`,
+///   `len(node_tags) * len(components)` values, node-major;
+/// - `cell_fields` — a sequence of `(components, cell_tags, values, layout)`:
+///   `layout` is `"cell"` (one value per cell and component) or a sequence of
+///   Gauss rules `(element_type, ref_nodes, xi, weights)` in the format's own
+///   reference element — one value per point, component and cell, the points
+///   in the order of the rule, which must be pyrucast's;
+/// - `order` — the node numbering inside a cell: `"pyrucast"` (= VTK),
+///   `"gmsh"` or `"med"`.
 ///
-/// - `node_tags` — gmsh's node tags, as `gmsh.model.mesh.getNodes()` returns
-///   them (first of the triple);
-/// - `node_coords` — three coordinates per tag, in the same order (second of
-///   the triple);
-/// - `blocks` — a sequence of `(element_type, node_tags, groups)`, one per
-///   homogeneous block: the gmsh type code (`2` for a triangle, `4` for a
-///   tetrahedron, …), that block's flat connectivity, and the physical-group
-///   names its cells belong to.
+/// Returns `(meshes, node_fields, element_fields)`: a `dict` from group name
+/// to `Mesh` (all sharing `coords`, in order of first appearance), then the
+/// fields in the order they were given. Only nodes referenced by a cell are
+/// created; a node field keeps the nodes the mesh created; a cell field gets
+/// a zone on every group all of whose cells it defines.
 ///
 /// numpy arrays are read **without being copied**, through the buffer
 /// protocol; plain Python lists work too, at the cost of a conversion.
-///
-/// Same rules and same result as `read_gmsh`: a `dict` from group name to
-/// `Mesh`, all sharing the `coords` you pass, whose dimension decides how many
-/// of gmsh's three coordinates are kept. Raises if a block is not a whole
-/// number of cells, if a cell names a tag absent from `node_tags`, or if a
-/// gmsh element type has no pyrucast counterpart.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-pub fn from_gmsh_arrays<'py>(
+#[pyo3(signature = (coords, node_tags, node_coords, blocks, *, node_fields = Vec::new(), cell_fields = Vec::new(), order = "pyrucast"))]
+#[allow(clippy::too_many_arguments)]
+pub fn from_arrays<'py>(
     py: Python<'py>,
     coords: PyRef<PyCoords>,
     node_tags: &Bound<'py, PyAny>,
     node_coords: &Bound<'py, PyAny>,
     blocks: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyDict>> {
-    // Unpack every block first, so the Python objects holding the buffers stay
-    // alive for as long as the slices that borrow from them.
-    let mut codes: Vec<u32> = Vec::new();
-    let mut tag_objects: Vec<Bound<'py, PyAny>> = Vec::new();
-    let mut names: Vec<Vec<String>> = Vec::new();
-    for (i, item) in blocks.try_iter()?.enumerate() {
-        let item = item?;
-        let unpack = |k: usize| {
-            item.get_item(k).map_err(|_| {
-                PyValueError::new_err(format!(
-                    "block {i}: expected a (element_type, node_tags, groups) triple"
-                ))
-            })
-        };
-        codes.push(unpack(0)?.extract()?);
-        tag_objects.push(unpack(1)?);
-        names.push(unpack(2)?.extract()?);
+    node_fields: Vec<Py<PyAny>>,
+    cell_fields: Vec<Py<PyAny>>,
+    order: &str,
+) -> PyResult<(Bound<'py, PyDict>, Vec<PyNodeField>, Vec<PyElementField>)> {
+    let order = crate::py::arrays::parse_order(order)?;
+    // The tag type follows the node table: medcoupling hands `int64`, gmsh
+    // `uint64`. Every other tag array is borrowed as the same type (copied
+    // only if its dtype differs).
+    let signed = pyo3::buffer::PyBuffer::<i64>::get(node_tags).is_ok();
+    let node_fields: Vec<Bound<'py, PyAny>> =
+        node_fields.into_iter().map(|f| f.into_bound(py)).collect();
+    let cell_fields: Vec<Bound<'py, PyAny>> =
+        cell_fields.into_iter().map(|f| f.into_bound(py)).collect();
+    let inputs = ExchangeInputs::unpack(blocks, &node_fields, &cell_fields)?;
+    let out = if signed {
+        inputs.import::<i64>(coords.handle.clone(), node_tags, node_coords, order)?
+    } else {
+        inputs.import::<u64>(coords.handle.clone(), node_tags, node_coords, order)?
+    };
+    Ok((
+        groups_to_dict(py, out.groups)?,
+        out.node_fields
+            .into_iter()
+            .map(|inner| PyNodeField { inner })
+            .collect(),
+        out.element_fields
+            .into_iter()
+            .map(|inner| PyElementField { inner })
+            .collect(),
+    ))
+}
+
+/// The Python objects behind `from_arrays`' arguments, unpacked **first** so
+/// they outlive the slices borrowed from them.
+struct ExchangeInputs<'py> {
+    blocks: Vec<BlockObjects<'py>>,
+    node_fields: Vec<(Vec<String>, Bound<'py, PyAny>, Bound<'py, PyAny>)>,
+    cell_fields: Vec<CellFieldObjects<'py>>,
+}
+
+/// One block as given: `(element_type, node_tags, cell_tags, groups)`.
+type BlockObjects<'py> = (
+    ElementType,
+    Bound<'py, PyAny>,
+    Option<Bound<'py, PyAny>>,
+    Vec<String>,
+);
+
+/// One cell field as given: `(components, cell_tags, values, rules)`, the
+/// rules absent for the `"cell"` layout.
+type CellFieldObjects<'py> = (
+    Vec<String>,
+    Bound<'py, PyAny>,
+    Bound<'py, PyAny>,
+    Option<Vec<RuleObjects<'py>>>,
+);
+
+/// One Gauss rule as given: `(element_type, ref_nodes, xi, weights)`.
+type RuleObjects<'py> = (
+    ElementType,
+    Bound<'py, PyAny>,
+    Bound<'py, PyAny>,
+    Bound<'py, PyAny>,
+);
+
+fn nth<'py>(item: &Bound<'py, PyAny>, k: usize, what: &str) -> PyResult<Bound<'py, PyAny>> {
+    item.get_item(k)
+        .map_err(|_| PyValueError::new_err(format!("{what}: missing entry {k}")))
+}
+
+impl<'py> ExchangeInputs<'py> {
+    fn unpack(
+        blocks: &Bound<'py, PyAny>,
+        node_fields: &[Bound<'py, PyAny>],
+        cell_fields: &[Bound<'py, PyAny>],
+    ) -> PyResult<Self> {
+        let mut bs = Vec::new();
+        for (i, item) in blocks.try_iter()?.enumerate() {
+            let item = item?;
+            let what = format!("block {i}: expected (element_type, node_tags, cell_tags, groups)");
+            let (cells, groups) = match item.len()? {
+                3 => (None, nth(&item, 2, &what)?),
+                4 => (Some(nth(&item, 2, &what)?), nth(&item, 3, &what)?),
+                _ => return Err(PyValueError::new_err(what)),
+            };
+            bs.push((
+                nth(&item, 0, &what)?.extract()?,
+                nth(&item, 1, &what)?,
+                cells,
+                groups.extract()?,
+            ));
+        }
+        let mut nfs = Vec::new();
+        for (i, item) in node_fields.iter().enumerate() {
+            let what = format!("node field {i}: expected (components, node_tags, values)");
+            nfs.push((
+                nth(item, 0, &what)?.extract()?,
+                nth(item, 1, &what)?,
+                nth(item, 2, &what)?,
+            ));
+        }
+        let mut cfs = Vec::new();
+        for (i, item) in cell_fields.iter().enumerate() {
+            let what = format!("cell field {i}: expected (components, cell_tags, values, layout)");
+            let layout = nth(item, 3, &what)?;
+            let rules = if let Ok(s) = layout.extract::<String>() {
+                if !s.trim().eq_ignore_ascii_case("cell") {
+                    return Err(PyValueError::new_err(format!(
+                        "cell field {i}: layout '{s}' is neither 'cell' nor a list of Gauss rules"
+                    )));
+                }
+                None
+            } else {
+                let mut rules = Vec::new();
+                for r in layout.try_iter()? {
+                    let r = r?;
+                    let what = format!("cell field {i}: expected Gauss rules (element_type, ref_nodes, xi, weights)");
+                    rules.push((
+                        nth(&r, 0, &what)?.extract()?,
+                        nth(&r, 1, &what)?,
+                        nth(&r, 2, &what)?,
+                        nth(&r, 3, &what)?,
+                    ));
+                }
+                Some(rules)
+            };
+            cfs.push((
+                nth(item, 0, &what)?.extract()?,
+                nth(item, 1, &what)?,
+                nth(item, 2, &what)?,
+                rules,
+            ));
+        }
+        Ok(Self {
+            blocks: bs,
+            node_fields: nfs,
+            cell_fields: cfs,
+        })
     }
 
-    let tags = crate::py::arrays::borrow::<u64>(node_tags)?;
-    let xyz = crate::py::arrays::borrow::<f64>(node_coords)?;
-    let block_tags = tag_objects
-        .iter()
-        .map(crate::py::arrays::borrow::<u64>)
-        .collect::<PyResult<Vec<_>>>()?;
+    fn import<T>(
+        &self,
+        coords: crate::handle::Handle<crate::coords::Coords>,
+        node_tags: &Bound<'py, PyAny>,
+        node_coords: &Bound<'py, PyAny>,
+        order: NodeOrder,
+    ) -> PyResult<crate::ops::mesh::Imported>
+    where
+        T: crate::ops::mesh::Tag + pyo3::buffer::Element + for<'b, 'p> FromPyObject<'b, 'p>,
+    {
+        use crate::py::arrays::borrow;
+        let tags = borrow::<T>(node_tags)?;
+        let xyz = borrow::<f64>(node_coords)?;
+        let conns = self
+            .blocks
+            .iter()
+            .map(|b| borrow::<T>(&b.1))
+            .collect::<PyResult<Vec<_>>>()?;
+        let cells = self
+            .blocks
+            .iter()
+            .map(|b| b.2.as_ref().map(borrow::<T>).transpose())
+            .collect::<PyResult<Vec<_>>>()?;
+        let blocks: Vec<CellBlock<'_, T>> = self
+            .blocks
+            .iter()
+            .zip(&conns)
+            .zip(&cells)
+            .map(|((b, conn), cells)| CellBlock {
+                element_type: b.0,
+                node_tags: conn.as_slice(),
+                cell_tags: cells.as_ref().map_or(&[], |c| c.as_slice()),
+                groups: &b.3,
+            })
+            .collect();
 
-    let blocks: Vec<GmshBlock<'_>> = codes
-        .iter()
-        .zip(&block_tags)
-        .zip(&names)
-        .map(|((&element_type, tags), groups)| GmshBlock {
-            element_type,
-            node_tags: tags.as_slice(),
-            groups,
-        })
-        .collect();
+        let nf_arrays = self
+            .node_fields
+            .iter()
+            .map(|f| Ok((borrow::<T>(&f.1)?, borrow::<f64>(&f.2)?)))
+            .collect::<PyResult<Vec<_>>>()?;
+        let node_values: Vec<NodeValues<'_, T>> = self
+            .node_fields
+            .iter()
+            .zip(&nf_arrays)
+            .map(|(f, (t, v))| NodeValues {
+                components: &f.0,
+                node_tags: t.as_slice(),
+                values: v.as_slice(),
+            })
+            .collect();
 
-    let groups = crate::ops::mesh::from_gmsh_arrays(
-        coords.handle.clone(),
-        tags.as_slice(),
-        xyz.as_slice(),
-        &blocks,
-    )?;
-    groups_to_dict(py, groups)
+        let cf_arrays = self
+            .cell_fields
+            .iter()
+            .map(|f| Ok((borrow::<T>(&f.1)?, borrow::<f64>(&f.2)?)))
+            .collect::<PyResult<Vec<_>>>()?;
+        let rule_arrays = self
+            .cell_fields
+            .iter()
+            .map(|f| {
+                f.3.iter()
+                    .flatten()
+                    .map(|r| {
+                        Ok((
+                            borrow::<f64>(&r.1)?,
+                            borrow::<f64>(&r.2)?,
+                            borrow::<f64>(&r.3)?,
+                        ))
+                    })
+                    .collect::<PyResult<Vec<_>>>()
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+        let rules: Vec<Vec<GaussRule<'_>>> = self
+            .cell_fields
+            .iter()
+            .zip(&rule_arrays)
+            .map(|(f, arrays)| {
+                f.3.iter()
+                    .flatten()
+                    .zip(arrays)
+                    .map(|(r, (refs, xi, w))| GaussRule {
+                        element_type: r.0,
+                        ref_nodes: refs.as_slice(),
+                        xi: xi.as_slice(),
+                        weights: w.as_slice(),
+                    })
+                    .collect()
+            })
+            .collect();
+        let cell_values: Vec<CellValues<'_, T>> = self
+            .cell_fields
+            .iter()
+            .zip(&cf_arrays)
+            .zip(&rules)
+            .map(|((f, (t, v)), rules)| CellValues {
+                components: &f.0,
+                cell_tags: t.as_slice(),
+                values: v.as_slice(),
+                layout: if f.3.is_some() {
+                    CellLayout::Gauss(rules)
+                } else {
+                    CellLayout::Cell
+                },
+            })
+            .collect();
+
+        Ok(crate::ops::mesh::from_arrays(
+            coords,
+            tags.as_slice(),
+            xyz.as_slice(),
+            &blocks,
+            &node_values,
+            &cell_values,
+            order,
+        )?)
+    }
 }
 
 /// Read a gmsh `.msh` file (ASCII or binary, MSH 2.2 or 4.1) into a `dict`

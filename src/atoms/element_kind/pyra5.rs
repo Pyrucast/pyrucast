@@ -217,4 +217,8 @@ impl ElementKind for Pyra5 {
     fn gmsh_code(&self) -> u32 {
         7
     }
+
+    fn med_permutation(&self) -> &'static [usize] {
+        &[0, 3, 2, 1, 4]
+    }
 }

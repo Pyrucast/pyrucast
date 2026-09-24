@@ -12,6 +12,7 @@
 //!   by [`sweep()`](fn@sweep), [`extrude()`] and [`revolve()`].
 
 pub mod arc;
+pub mod arrays;
 pub mod barycenter;
 pub mod border;
 pub mod chain;
@@ -23,6 +24,7 @@ pub mod copy;
 pub mod elements_on;
 pub mod extrude;
 pub mod from_live_nodes;
+pub mod gauss_map;
 pub mod gmsh;
 pub mod grid_surface;
 pub mod grid_surface2;
@@ -54,6 +56,9 @@ pub mod triangulate_volume;
 pub mod triangulation;
 
 pub use arc::arc;
+pub use arrays::{
+    from_arrays, CellBlock, CellLayout, CellValues, GaussRule, Imported, NodeOrder, NodeValues, Tag,
+};
 pub use barycenter::barycenter;
 pub use border::border;
 pub use chain::chain;
@@ -64,7 +69,8 @@ pub use copy::copy;
 pub use elements_on::elements_on;
 pub use extrude::extrude;
 pub use from_live_nodes::from_live_nodes;
-pub use gmsh::{from_gmsh_arrays, read_gmsh, read_gmsh_str, GmshBlock};
+pub use gauss_map::{gauss_to_external, match_gauss};
+pub use gmsh::{element_type_from_gmsh, read_gmsh, read_gmsh_str};
 pub use grid_surface::{grid_surface, grid_surface_cancellable};
 pub use grid_surface2::{grid_surface2, grid_surface2_cancellable};
 pub use improve::{cleanup, merge_triangles, regularize};

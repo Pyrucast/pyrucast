@@ -196,10 +196,16 @@ impl ElementKind for Hex20 {
         17
     }
 
-    fn gmsh_permutation(&self) -> Option<&'static [usize]> {
-        Some(&[
+    fn med_permutation(&self) -> &'static [usize] {
+        &[
+            0, 3, 2, 1, 4, 7, 6, 5, 11, 10, 9, 8, 15, 14, 13, 12, 16, 19, 18, 17,
+        ]
+    }
+
+    fn gmsh_permutation(&self) -> &'static [usize] {
+        &[
             0, 1, 2, 3, 4, 5, 6, 7, 8, 11, 13, 9, 16, 18, 19, 17, 10, 12, 14, 15,
-        ])
+        ]
     }
 
     fn linear_parent(&self) -> Option<ElementType> {

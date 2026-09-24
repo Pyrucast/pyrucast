@@ -188,7 +188,7 @@ stub-gen = ["python-api", "dep:pyo3-stub-gen", "viz"]
 # The floor is **3.11**, not 3.9: `pyo3::buffer` is gated
 # `#![cfg(any(not(Py_LIMITED_API), Py_3_11))]`, because `PyObject_GetBuffer`
 # and `Py_buffer` only entered the limited API in CPython 3.11. Below that
-# floor the buffer protocol is simply absent, and `ops::mesh::from_gmsh_arrays`
+# floor the buffer protocol is simply absent, and `ops::mesh::from_arrays`
 # reads its node and connectivity arrays through it. Raising the floor keeps
 # the single wheel; the alternative was one wheel per CPython minor.
 abi3 = ["pyo3/abi3-py311"]

@@ -5,10 +5,12 @@ transformations, skin and border extraction, geometric selections, gmsh
 reading. Everything that returns a ``Mesh`` is here, whatever the input —
 including ``select``, which extracts a field's support.
 
-``from_gmsh`` is the only function of this module written in Python: it needs
-an interpreter carrying the ``gmsh`` module, which Rust cannot have. It
-merely fetches the arrays of the current gmsh model and hands them to
-``from_gmsh_arrays``, which is the Rust operator proper.
+``from_gmsh`` and ``from_medcoupling`` are the only functions of this module
+written in Python: they need an interpreter carrying the ``gmsh`` or
+``medcoupling`` module, which Rust cannot have — and they import it only when
+called, never at ``import pyrucast``. They merely fetch the arrays of a live
+gmsh model or of a MED file and hand them to ``from_arrays``, the Rust import
+every exchange format shares.
 """
 
 from ._pyrucast import (
@@ -23,7 +25,10 @@ from ._pyrucast import (
     copy as copy,
     elements_on as elements_on,
     extrude as extrude,
-    from_gmsh_arrays as from_gmsh_arrays,
+    from_arrays as from_arrays,
+    element_type_from_gmsh as element_type_from_gmsh,
+    gauss_to_external as gauss_to_external,
+    match_gauss as match_gauss,
     from_live_nodes as from_live_nodes,
     grid_surface as grid_surface,
     grid_surface2 as grid_surface2,
@@ -71,21 +76,25 @@ __all__ = [
     "barycenter",
     "border",
     "chain",
-    "cleanup",
     "circle",
+    "cleanup",
     "consolidate",
     "convert",
+    "element_type_from_gmsh",
     "elements_on",
     "extrude",
+    "from_arrays",
     "from_gmsh",
-    "from_gmsh_arrays",
     "from_live_nodes",
+    "from_medcoupling",
+    "gauss_to_external",
     "grid_surface",
     "grid_surface2",
     "invert",
     "line",
-    "merge_triangles",
+    "match_gauss",
     "merge_nodes",
+    "merge_triangles",
     "orient",
     "pave_surface",
     "pave_volume",
@@ -102,8 +111,8 @@ __all__ = [
     "points_on_sphere",
     "points_on_torus",
     "read_gmsh",
-    "regularize",
     "read_gmsh_str",
+    "regularize",
     "revolve",
     "rotate",
     "select",
@@ -122,93 +131,7 @@ __all__ = [
 ]
 
 
-# ── Fetching the current gmsh model ─────────────────────────────────────────
-# Fallback name for cells without a physical group. It must stay the file
-# reader's own (`UNGROUPED`, src/ops/mesh/gmsh.rs): both paths return the same
-# dictionary for the same mesh, that name included.
-_UNGROUPED = "<ungrouped>"
-
-
-def _import_gmsh():
-    """The ``gmsh`` module, or an error saying what to do."""
-    try:
-        import gmsh
-    except ImportError as e:  # pragma: no cover - depends on the environment
-        raise ImportError(
-            "pyrucast.mesh.from_gmsh needs the gmsh module: pip install gmsh"
-        ) from e
-    if not gmsh.isInitialized():
-        # Without this guard nothing would show: gmsh writes "Gmsh has not
-        # been initialized" on its error output and returns empty arrays,
-        # without raising. We would return an empty dict without saying why.
-        raise RuntimeError(
-            "gmsh is not initialized: call gmsh.initialize() and mesh "
-            "before fetching the mesh"
-        )
-    return gmsh
-
-
-def _group_names(gmsh, dim):
-    """``(dim, entity) -> [physical group names]``.
-
-    An entity may carry several groups; the names are accumulated before
-    emitting anything, so that a block's nodes are resolved only once. A group
-    without a name takes ``physical <tag>``, like the file reader.
-
-    """
-    names = {}
-    for gdim, gtag in gmsh.model.getPhysicalGroups(dim):
-        name = gmsh.model.getPhysicalName(gdim, gtag) or f"physical {gtag}"
-        for entity in gmsh.model.getEntitiesForPhysicalGroup(gdim, gtag):
-            names.setdefault((gdim, int(entity)), []).append(name)
-    return names
-
-
-def from_gmsh(coords, *, dim=-1, tag=-1):
-    """Fetches the current gmsh model's mesh, one ``Mesh`` per named group.
-
-    To be called once meshing is done on the gmsh side — pyrucast reads, it
-    does not drive: geometry and meshing remain gmsh's business.
-
-    Returns the same ``dict[str, Mesh]`` as :func:`read_gmsh`, under the same
-    rules: nodes land in the supplied ``coords``, whose dimension decides how
-    many of gmsh's three coordinates are kept (a 2-D ``Coords`` flattens onto
-    ``xy``); every returned mesh shares that ``Coords``, so a node between two
-    groups is *the same* on both sides; one zone per element type in each
-    group; cells without a physical group under the key ``"<ungrouped>"``. A
-    model with no physical group at all therefore returns its whole mesh under
-    that single key.
-
-    Surfaces and points named in gmsh (``addPhysicalGroup(..., name=)``) become
-    the dictionary's keys. gmsh meshes its point entities, so a named point
-    arrives as a POI1 ``Mesh``, ready to carry a boundary condition.
-
-
-    ``dim`` restricts the import to one dimension (``-1``, the default: all),
-    and ``tag`` to that single entity of dimension ``dim``. The node table is
-    read in full whatever happens — a surface cell leans on nodes classified
-    on its border curves — and only the nodes actually referenced are
-    materialized.
-
-    gmsh's arrays are **views** on its own memory, and pyrucast reads them
-    through the buffer protocol: nothing is copied until the mesh is built. So
-    ``gmsh.finalize()`` may be called right after — pyrucast then owns its data.
-
-    """
-    gmsh = _import_gmsh()
-    if tag >= 0 and dim < 0:
-        raise ValueError("tag is only given with a dimension: specify dim")
-
-    node_tags, node_coords, _ = gmsh.model.mesh.getNodes()
-    named = _group_names(gmsh, dim)
-
-    entities = [(dim, tag)] if tag >= 0 else gmsh.model.getEntities(dim)
-    blocks = []
-    for edim, etag in entities:
-        key = (int(edim), int(etag))
-        groups = named.get(key, [_UNGROUPED])
-        types, _, connectivity = gmsh.model.mesh.getElements(*key)
-        for element_type, conn in zip(types, connectivity):
-            blocks.append((int(element_type), conn, groups))
-
-    return from_gmsh_arrays(coords, node_tags, node_coords, blocks)
+# Exchange adapters written in Python: they need an interpreter carrying the
+# `gmsh` / `medcoupling` modules, imported only when one of them runs.
+from ._gmsh import from_gmsh as from_gmsh  # noqa: E402
+from ._med import from_medcoupling as from_medcoupling  # noqa: E402

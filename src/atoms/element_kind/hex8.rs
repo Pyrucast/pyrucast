@@ -157,6 +157,10 @@ impl ElementKind for Hex8 {
         5
     }
 
+    fn med_permutation(&self) -> &'static [usize] {
+        &[0, 3, 2, 1, 4, 7, 6, 5]
+    }
+
     fn quadratic(&self) -> Option<ElementType> {
         Some(ElementType::HEX20)
     }

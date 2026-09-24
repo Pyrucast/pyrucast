@@ -147,13 +147,22 @@ impl ElementKind for Hex27 {
         12
     }
 
-    fn gmsh_permutation(&self) -> Option<&'static [usize]> {
-        Some(&[
+    fn med_permutation(&self) -> &'static [usize] {
+        &[
+            0, 3, 2, 1, 4, 7, 6, 5, // corners
+            11, 10, 9, 8, 15, 14, 13, 12, 16, 19, 18, 17, // edges (as HEX20)
+            21, 23, 24, 22, 20, 25, // faces
+            26, // body centre
+        ]
+    }
+
+    fn gmsh_permutation(&self) -> &'static [usize] {
+        &[
             0, 1, 2, 3, 4, 5, 6, 7, // corners
             8, 11, 13, 9, 16, 18, 19, 17, 10, 12, 14, 15, // edges (as HEX20)
             22, 23, 21, 24, 20, 25, // faces (x-, x+, y-, y+, z-, z+)
             26, // body centre
-        ])
+        ]
     }
 
     fn linear_parent(&self) -> Option<ElementType> {

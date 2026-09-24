@@ -59,6 +59,7 @@ RUST_ONLY = {
     "write_vtk_mesh": "dispatched inside `export.export_vtk`",
     "write_vtk_node_field": "dispatched inside `export.export_vtk`",
     "write_vtk_element_field": "dispatched inside `export.export_vtk`",
+    "write_vtk_series": "dispatched inside `export.export_vtk` (an `Evolution`)",
     "vtk_mesh_string": '"to a string" variant, not exposed',
     "vtk_node_field_string": '"to a string" variant, not exposed',
     "vtk_element_field_string": '"to a string" variant, not exposed',
@@ -182,9 +183,15 @@ PYTHON_ONLY = {
     # The only entry that is not a plain renaming: `from_gmsh` needs a live
     # CPython interpreter carrying the `gmsh` module, which Rust cannot have. It
     # invents no operation either — it fetches the arrays of the current model
-    # and passes them to the Rust operator `mesh::from_gmsh_arrays`, which is
-    # itself a strict mirror.
+    # and passes them to the Rust operator `mesh::from_arrays`, which is itself
+    # a strict mirror.
     "from_gmsh": "reads the live gmsh model: requires the interpreter, hence no Rust twin",
+    # The same waiver, and the same narrowness, for the other ends of the
+    # exchange: each translates between an interpreter-only module and the Rust
+    # operators `mesh::from_arrays` / `export::to_arrays`.
+    "to_gmsh": "writes into the live gmsh model: requires the interpreter",
+    "from_medcoupling": "reads through the medcoupling module: requires the interpreter",
+    "to_medcoupling": "builds medcoupling objects: requires the interpreter",
 }
 
 

@@ -6,6 +6,7 @@ import os
 import pathlib
 import typing
 __all__ = [
+    "Array",
     "Cell",
     "Coords",
     "Element",
@@ -53,6 +54,7 @@ __all__ = [
     "divergence",
     "drucker_prager",
     "elasticity",
+    "element_type_from_gmsh",
     "elements_on",
     "embedded",
     "exp",
@@ -61,8 +63,9 @@ __all__ = [
     "extrude",
     "fick",
     "flux",
-    "from_gmsh_arrays",
+    "from_arrays",
     "from_live_nodes",
+    "gauss_to_external",
     "geometric",
     "gradient",
     "grid_surface",
@@ -83,6 +86,7 @@ __all__ = [
     "mask_element",
     "mask_node",
     "mass",
+    "match_gauss",
     "material_field",
     "material_field_per_sub_model",
     "mazars",
@@ -143,6 +147,7 @@ __all__ = [
     "tanh",
     "thermal_strain",
     "timoshenko",
+    "to_arrays",
     "to_poi1",
     "to_quadratic",
     "transfinite",
@@ -155,6 +160,36 @@ __all__ = [
     "xtx",
     "xty",
 ]
+
+@typing.final
+class Array:
+    r"""
+    A read-only one-dimensional array handed out by pyrucast — node tags,
+    coordinates, connectivities, field values.
+    
+    It **owns** the buffer the export built and lends it through the buffer
+    protocol: `numpy.asarray(a)` and `memoryview(a)` read it **without a
+    copy**, and pyrucast does not need numpy for that. `list(a)` or
+    `a.tolist()` copy it into Python numbers.
+    """
+    @property
+    def format(self) -> builtins.str:
+        r"""
+        The item format of the buffer: `"d"` (float64), or the int64 code of
+        the platform (`"l"` where a C `long` is 64-bit, `"q"` elsewhere).
+        """
+    def __len__(self) -> builtins.int: ...
+    def __getitem__(self, i: builtins.int) -> typing.Any:
+        r"""
+        Item `i` (negative counts from the end) — what makes the array a
+        sequence, so `list(a)` and `for x in a` work. Slow per element: bulk
+        reads go through `numpy.asarray(a)`.
+        """
+    def tolist(self) -> typing.Any:
+        r"""
+        A copy as a Python list.
+        """
+    def __repr__(self) -> builtins.str: ...
 
 @typing.final
 class Cell:
@@ -723,6 +758,16 @@ class Evolution:
     zone); or low-level by composing `SubEvolution`s with `|`. Index it
     (`evolution[i]`) to reach a `SubEvolution`.
     """
+    def shared_abscissas(self) -> builtins.list[builtins.float]:
+        r"""
+        The abscissas every zone shares — the times of a series. Raises if
+        the zones tabulate at different abscissas.
+        """
+    def frames(self) -> builtins.list[typing.Any]:
+        r"""
+        The tabulated values as whole fields, one per shared abscissa: a
+        `list[NodeField]` or a `list[ElementField]`. Raises for scalars.
+        """
     def __new__(cls, steps: typing.Sequence[tuple[builtins.float, typing.Any]], out_of_range: typing.Optional[builtins.str] = None, abscissa_type: typing.Optional[builtins.str] = None, ordinate_type: typing.Optional[builtins.str] = None) -> Evolution:
         r"""
         `Evolution(steps, out_of_range="error")` — build from whole values
@@ -4176,6 +4221,14 @@ def elasticity(fespace: FiniteElementSpace, kinematics: builtins.str, symmetry: 
     in 3-D — which are orthonormalised internally.
     """
 
+def element_type_from_gmsh(code: builtins.int) -> builtins.str:
+    r"""
+    Map a gmsh element-type code to pyrucast's element-type name — the
+    translation `pyrucast.mesh.from_gmsh` applies to every block before
+    handing it to `from_arrays`. Raises for a gmsh type pyrucast has no
+    counterpart for (third order and above, …).
+    """
+
 def elements_on(mesh: Mesh, points: Mesh, strict: builtins.bool = True) -> Mesh:
     r"""
     Keep the elements of `mesh` resting on the nodes of `points`
@@ -4214,16 +4267,23 @@ def exp(field: typing.Any) -> typing.Any:
     Element-wise exponential `eˣ` of a field.
     """
 
-def export_vtk(mesh: Mesh, path: builtins.str, field: typing.Optional[typing.Any] = None) -> None:
+def export_vtk(mesh: Mesh, path: builtins.str, field: typing.Optional[typing.Any] = None, binary: builtins.bool = False) -> None:
     r"""
-    Write `mesh` to a legacy **VTK** file (`UNSTRUCTURED_GRID`, ASCII) that
-    ParaView reads natively.
+    Write `mesh` to a legacy **VTK** file (`UNSTRUCTURED_GRID`) that ParaView
+    reads natively — as text, or with `binary=True` as raw big-endian numbers
+    (much smaller and faster to read for a large mesh).
     
     With `field=None` only the geometry is written. Pass a `NodeField` to add
     it as `POINT_DATA` (one scalar array per component, the nodal value at
     each point) or an `ElementField` to add it as `CELL_DATA` (one array per
     component, the per-cell mean of that cell's Gauss values). An element
     field must come from a space built on **this** mesh, so its cells line up.
+    
+    Pass an `Evolution` of node or element fields to write a **time series**:
+    `path` is then the index, a `.vtk.series` file ParaView opens as one
+    dataset with a time slider, and each tabulated value goes to its own file
+    next to it, `stem_0000.vtk`, `stem_0001.vtk`, … — `stem` being the name
+    of `path` up to its first dot.
     """
 
 def external_forces(model: Model, materials: ElementField) -> NodeField:
@@ -4286,38 +4346,54 @@ def flux(fespace: FiniteElementSpace, target: Model, dual: builtins.str) -> Mode
     duale d'une autre.
     """
 
-def from_gmsh_arrays(coords: Coords, node_tags: typing.Any, node_coords: typing.Any, blocks: typing.Any) -> dict:
+def from_arrays(coords: Coords, node_tags: typing.Any, node_coords: typing.Any, blocks: typing.Any, *, node_fields: typing.Sequence[typing.Any] = [], cell_fields: typing.Sequence[typing.Any] = [], order: builtins.str = 'pyrucast') -> tuple[dict, builtins.list[NodeField], builtins.list[ElementField]]:
     r"""
-    Build meshes from a gmsh mesh **already in memory** — the node table and
-    the element blocks — instead of from a file.
+    Build meshes and fields from **flat arrays** — the one import every
+    exchange format goes through (`pyrucast.mesh.from_gmsh` and
+    `pyrucast.mesh.from_medcoupling` are built on it).
     
-    This is the low-level operator behind `pyrucast.mesh.from_gmsh`, which is
-    what you normally want: it asks the live gmsh model for these arrays
-    itself. Call this one when you hold the arrays already, or when you want
-    to choose exactly what to import.
+    - `node_tags` — one integer tag per node (`uint64` or `int64`);
+    - `node_coords` — 1 to 3 coordinates per tag, in the same order; the
+      dimension of `coords` decides how many are kept (padded with zeros);
+    - `blocks` — a sequence of `(element_type, node_tags, cell_tags, groups)`,
+      one per block of cells sharing a type and a combination of groups: the
+      pyrucast type name (`"TET4"`), the flat connectivity in node tags, one
+      tag per cell (or an empty sequence when no cell field names the block),
+      and the group names the cells belong to. A 3-tuple without `cell_tags`
+      is accepted too;
+    - `node_fields` — a sequence of `(components, node_tags, values)`,
+      `len(node_tags) * len(components)` values, node-major;
+    - `cell_fields` — a sequence of `(components, cell_tags, values, layout)`:
+      `layout` is `"cell"` (one value per cell and component) or a sequence of
+      Gauss rules `(element_type, ref_nodes, xi, weights)` in the format's own
+      reference element — one value per point, component and cell, the points
+      in the order of the rule, which must be pyrucast's;
+    - `order` — the node numbering inside a cell: `"pyrucast"` (= VTK),
+      `"gmsh"` or `"med"`.
     
-    - `node_tags` — gmsh's node tags, as `gmsh.model.mesh.getNodes()` returns
-      them (first of the triple);
-    - `node_coords` — three coordinates per tag, in the same order (second of
-      the triple);
-    - `blocks` — a sequence of `(element_type, node_tags, groups)`, one per
-      homogeneous block: the gmsh type code (`2` for a triangle, `4` for a
-      tetrahedron, …), that block's flat connectivity, and the physical-group
-      names its cells belong to.
+    Returns `(meshes, node_fields, element_fields)`: a `dict` from group name
+    to `Mesh` (all sharing `coords`, in order of first appearance), then the
+    fields in the order they were given. Only nodes referenced by a cell are
+    created; a node field keeps the nodes the mesh created; a cell field gets
+    a zone on every group all of whose cells it defines.
     
     numpy arrays are read **without being copied**, through the buffer
     protocol; plain Python lists work too, at the cost of a conversion.
-    
-    Same rules and same result as `read_gmsh`: a `dict` from group name to
-    `Mesh`, all sharing the `coords` you pass, whose dimension decides how many
-    of gmsh's three coordinates are kept. Raises if a block is not a whole
-    number of cells, if a cell names a tag absent from `node_tags`, or if a
-    gmsh element type has no pyrucast counterpart.
     """
 
 def from_live_nodes(coords: Coords) -> Mesh:
     r"""
     Build a points (POI1) mesh holding every live node of `coords`.
+    """
+
+def gauss_to_external(element_type: builtins.str, ref_nodes: typing.Sequence[builtins.float], order: builtins.str) -> tuple[builtins.list[builtins.float], builtins.list[builtins.float]]:
+    r"""
+    pyrucast's Gauss rule for `element_type`, carried into an external
+    reference element — `ref_nodes`, its nodes numbered in `order`
+    (`"pyrucast"`, `"gmsh"`, `"med"`), `dim` coordinates each. Returns
+    `(xi, weights)`, the points in pyrucast's order, the weights scaled by the
+    ratio of the reference measures. Raises if the external element is not an
+    affine image of pyrucast's under that numbering.
     """
 
 def geometric(model: Model, materials: ElementField, stress: ElementField) -> Matrix:
@@ -4616,6 +4692,14 @@ def mass(model: Model, materials: ElementField) -> Matrix:
     Mechanics assembles `M = ∫ ρ Nᵀ N` (material `rho`); heat conduction
     assembles `C = ∫ ρ cp Nᵀ N` (material `rho`, `cp`). `materials` carries the
     per-zone coefficients, exactly like [`stiffness`].
+    """
+
+def match_gauss(element_type: builtins.str, ref_nodes: typing.Sequence[builtins.float], xi: typing.Sequence[builtins.float], weights: typing.Sequence[builtins.float], order: builtins.str) -> builtins.list[builtins.int]:
+    r"""
+    For each of pyrucast's Gauss points of `element_type`, the index of the
+    same point in the external rule `(xi, weights)` declared in the external
+    reference element `ref_nodes` (numbered in `order`). Raises when the two
+    rules are not the same quadrature.
     """
 
 def material_field(model: Model, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> ElementField:
@@ -5456,6 +5540,40 @@ def timoshenko(fespace: FiniteElementSpace) -> Model:
     
     Prefer `bernoulli` for a slender member, where the shear compliance is
     negligible.
+    """
+
+def to_arrays(groups: dict, *, node_fields: typing.Sequence[NodeField] = [], element_fields: typing.Sequence[ElementField] = [], gauss: builtins.bool = False, order: builtins.str = 'pyrucast', first_tag: builtins.int = 1) -> dict:
+    r"""
+    Lay meshes and fields out as **flat arrays** — the one exit every exchange
+    format goes through (`pyrucast.export.to_gmsh`,
+    `pyrucast.export.to_medcoupling`, the VTK writer), and the mirror of
+    `pyrucast.mesh.from_arrays`: what it returns has the shape that function
+    reads back.
+    
+    - `groups` — `dict` from group name to `Mesh`, all on one `Coords`;
+    - `node_fields` — `NodeField`s: one row per exported node, `0` where a
+      field defines nothing;
+    - `element_fields` — `ElementField`s, on the cells their zones cover:
+      the Gauss **mean** per cell, or with `gauss=True` the raw values per
+      point along with each type's rule;
+    - `order` — node numbering inside a cell: `"pyrucast"` (= VTK), `"gmsh"`,
+      `"med"`;
+    - `first_tag` — first node and cell tag (gmsh counts from 1, medcoupling
+      from 0).
+    
+    Returns a `dict`:
+    
+    - `"node_tags"`, `"node_coords"` (`dim` per node), `"dim"`;
+    - `"blocks"` — `(element_type, node_tags, cell_tags, groups)` per block of
+      cells sharing a type and a combination of groups; a cell of several
+      groups is exported once;
+    - `"node_fields"` — `(components, node_tags, values)`;
+    - `"cell_fields"` — `(components, cell_tags, values, layout)`, `layout`
+      being `"cell"` or the list of `(element_type, ref_nodes, xi, weights)`
+      rules, in pyrucast's reference element numbered in `order`.
+    
+    Every array is an `Array`: read-only, and read **without a copy** by
+    `numpy.asarray` or `memoryview`.
     """
 
 def to_poi1(mesh: Mesh) -> Mesh:
