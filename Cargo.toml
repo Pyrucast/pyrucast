@@ -9,7 +9,7 @@ members = ["macros"]
 # n'est ainsi déclarée qu'**une fois** dans tout le dépôt — c'est l'invariant
 # que `check-version` vérifie au tag (.github/workflows/release.yml).
 [workspace.package]
-version = "0.9.1"
+version = "0.10.0"
 edition = "2024"
 # Plancher de compilateur, à déclarer parce que rien ne le devine. Deux
 # exigences le fixent, et c'est la plus haute qui gagne :
