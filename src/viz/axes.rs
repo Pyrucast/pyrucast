@@ -102,6 +102,7 @@ mod tests {
 
     #[test]
     fn gizmo_renders_three_colored_segments_in_svg() {
+        crate::viz::register_fonts();
         let mut buf = String::new();
         {
             let backend = SVGBackend::with_string(&mut buf, (200, 200));

@@ -621,6 +621,7 @@ pub(crate) fn run_interactive_mesh_field(
     view: View,
     title: Option<&str>,
 ) -> Result<()> {
+    super::register_fonts();
     let drawable = FieldDrawable::new(
         GeomSource::Mesh(mesh),
         field,
@@ -663,6 +664,7 @@ pub(crate) fn run_interactive_submesh_field(
     view: View,
     title: Option<&str>,
 ) -> Result<()> {
+    super::register_fonts();
     let drawable = FieldDrawable::new(
         GeomSource::SubMesh(submesh),
         field,
@@ -710,6 +712,7 @@ pub(crate) fn run_interactive<D: Drawable>(
     view: View,
     title: Option<&str>,
 ) -> Result<()> {
+    super::register_fonts();
     let bbox = object.bbox()?;
     EVENT_LOOP.with(|cell| -> Result<()> {
         let mut slot = cell.borrow_mut();
@@ -914,6 +917,7 @@ pub(crate) fn run_interactive_evolution(
     view: View,
     title: Option<&str>,
 ) -> Result<()> {
+    super::register_fonts();
     if frames.is_empty() {
         return Err(PyrucastError::Message(
             "evolution plot: no tabulated frame".into(),

@@ -126,6 +126,7 @@ mod tests {
 
     #[test]
     fn draws_axis_labels_and_legend_in_svg() {
+        crate::viz::register_fonts();
         let plot = CurvePlot {
             series: vec![
                 ("zone 0".into(), vec![(0.0, 10.0), (1.0, 20.0), (2.0, 5.0)]),
@@ -150,6 +151,7 @@ mod tests {
 
     #[test]
     fn empty_series_is_noop() {
+        crate::viz::register_fonts();
         let plot = CurvePlot {
             series: vec![],
             x_label: "x".into(),

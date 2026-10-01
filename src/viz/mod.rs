@@ -235,6 +235,30 @@ impl SaveFormat {
 pub(crate) const DEFAULT_WIDTH: u32 = 800;
 pub(crate) const DEFAULT_HEIGHT: u32 = 600;
 
+// ─── Embedded font ──────────────────────────────────────────────────────────
+
+/// Register the embedded font under `"sans-serif"`, the family every text
+/// style of the viz layer asks for, plotters' own defaults included.
+///
+/// plotters resolves a family when a style is built (`into_font()`), so this
+/// must run before anything is drawn: the entry points call it once per plot,
+/// never inside a drawing loop. Every call after the first returns at once.
+pub(crate) fn register_fonts() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        let parsed = plotters::style::register_font(
+            "sans-serif",
+            plotters::style::FontStyle::Normal,
+            include_bytes!("fonts/DejaVuSans.ttf"),
+        )
+        .is_ok();
+        assert!(
+            parsed,
+            "the embedded font src/viz/fonts/DejaVuSans.ttf does not parse"
+        );
+    });
+}
+
 // ─── Render dispatch ────────────────────────────────────────────────────────
 
 /// Reject a [`Revolve`] asked of a geometry that is not axisymmetric — the
@@ -707,6 +731,7 @@ fn render_to_file<D: Drawable>(
 ) -> Result<()> {
     use plotters::prelude::*;
 
+    register_fonts();
     let fmt = SaveFormat::from_path(path)?;
     let w = DEFAULT_WIDTH;
     let h = DEFAULT_HEIGHT;

@@ -95,8 +95,11 @@ nalgebra-sparse = "0.12"
 # the per-physics drivers (`models::kernel`); the physics kernels
 # themselves never see it.
 rayon = "1"
-# Visualization stack (gated by features below).
-plotters = { version = "0.3", default-features = false, features = ["bitmap_backend", "bitmap_encoder", "svg_backend", "ttf", "line_series", "all_series"], optional = true }
+# Visualization stack (gated by features below). Text goes through the
+# `ab_glyph` backend and the font embedded in `src/viz/fonts`; the `ttf` backend
+# would look fonts up on the system, which on Linux needs the fontconfig
+# development files to build.
+plotters = { version = "0.3", default-features = false, features = ["bitmap_backend", "bitmap_encoder", "svg_backend", "ab_glyph", "line_series", "all_series"], optional = true }
 winit = { version = "0.30", optional = true }
 softbuffer = { version = "0.4", optional = true }
 # Gzip for the `.svgz` output. Already compiled as part of the visualization
@@ -155,7 +158,8 @@ extension-module = ["python-api", "pyo3/extension-module", "spill"]
 # evict without swap or root. Inert unless that variable is set. Installs a
 # global allocator — a Rust user who has their own leaves the feature off.
 spill = ["dep:libc"]
-# Off-screen visualization (PNG / SVG / SVGZ export). Pure CPU rendering.
+# Off-screen visualization (PNG / SVG / SVGZ export). Pure CPU rendering, with
+# an embedded font: no system library is needed to build or to run it.
 viz = ["dep:plotters", "dep:flate2"]
 # Interactive visualization (mouse-driven window).
 # Implies `viz`; requires a display server at runtime.

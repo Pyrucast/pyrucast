@@ -450,6 +450,7 @@ mod tests {
 
     #[test]
     fn draw_overlay_renders_label_in_svg() {
+        crate::viz::register_fonts();
         let mut buf = String::new();
         {
             let backend = SVGBackend::with_string(&mut buf, (400, 100));
@@ -466,6 +467,7 @@ mod tests {
 
     #[test]
     fn draw_figure_title_renders_text_in_svg() {
+        crate::viz::register_fonts();
         let mut buf = String::new();
         {
             let backend = SVGBackend::with_string(&mut buf, (400, 40));
@@ -479,6 +481,7 @@ mod tests {
 
     #[test]
     fn draw_colorbar_renders_value_ticks() {
+        crate::viz::register_fonts();
         let mut buf = String::new();
         {
             let backend = SVGBackend::with_string(&mut buf, (400, 300));
@@ -495,6 +498,7 @@ mod tests {
 
     #[test]
     fn draw_colorbar_gradient_is_banded_not_per_pixel() {
+        crate::viz::register_fonts();
         let mut buf = String::new();
         {
             let backend = SVGBackend::with_string(&mut buf, (400, 300));
@@ -541,6 +545,7 @@ mod tests {
 
     #[test]
     fn draw_slider_renders_label_in_svg() {
+        crate::viz::register_fonts();
         let mut buf = String::new();
         {
             let backend = SVGBackend::with_string(&mut buf, (640, 480));
@@ -555,6 +560,7 @@ mod tests {
 
     #[test]
     fn draw_view_readout_renders_values_in_svg() {
+        crate::viz::register_fonts();
         let mut buf = String::new();
         {
             let backend = SVGBackend::with_string(&mut buf, (400, 100));
@@ -576,6 +582,7 @@ mod tests {
 
     #[test]
     fn revolve_button_hit_test_and_labels() {
+        crate::viz::register_fonts();
         let (bx, by, bw, bh) = revolve_button_rect();
         assert!(click_hits_revolve_button(
             (bx + bw / 2) as f64,
@@ -602,6 +609,7 @@ mod tests {
 
     #[test]
     fn draw_colorbar_skips_tiny_canvas() {
+        crate::viz::register_fonts();
         // Too small to host the bar + labels — must be a no-op, not panic.
         let mut buf = String::new();
         {
