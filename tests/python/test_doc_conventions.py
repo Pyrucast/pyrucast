@@ -117,7 +117,7 @@ print(c)  # same as str(c)
 
 def _modele_thermomecanique():
     """A 2×2 QUA4 plate: conduction + elasticity + supports, and its history
-    of temperature. The full setup is in `examples/thermomechanique_pas_a_pas.py`."""
+    of temperature. The full setup is in `examples/thermomecanique_pas_a_pas.py`."""
     import pyrucast as pc
 
     nx = ny = 2
