@@ -13,8 +13,9 @@ mc = pytest.importorskip("medcoupling")
 
 pytestmark = pytest.mark.medcoupling
 
+_TMP = tempfile.TemporaryDirectory()
 _CWD = os.getcwd()
-os.chdir(tempfile.mkdtemp())
+os.chdir(_TMP.name)
 
 import pyrucast  # noqa: E402
 

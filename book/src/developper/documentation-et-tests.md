@@ -65,6 +65,20 @@ Trois distinctions valent d'être tenues :
   pas de mémoire — puis relancer, pour trier ce qui est du bruit de ce qui est
   un écart.
 
+Enfin, **un test qui écrit sur disque efface ce qu'il a écrit**, qu'il passe ou
+non :
+
+- côté Rust, un test d'intégration prend un `common::TempDir`
+  (`tests/common/mod.rs`, déclaré par `mod common;`). C'est un dossier à lui
+  seul, supprimé quand la valeur tombe, y compris pendant le déroulement d'un
+  test en échec ;
+- côté Python, une fonction de test prend `tmp_path`, et un fichier exécuté au
+  niveau module prend `tempfile.TemporaryDirectory()` (voir plus bas).
+
+Un nom fabriqué à la main sous `std::env::temp_dir()`, ou un `mkdtemp()`, survit
+au test. En dix-sept jours, ces noms avaient laissé quinze cents dossiers dans
+un `/tmp` qui vit en mémoire vive.
+
 ## Où vit un exemple
 
 C'est l'arbre de décision pratique. On part de **ce que l'exemple illustre**,

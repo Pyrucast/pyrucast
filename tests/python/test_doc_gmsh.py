@@ -52,8 +52,9 @@ assert coords.node_count() > 0
 
 gmsh.initialize()
 gmsh.option.setNumber("General.Terminal", 0)
+_TMP = tempfile.TemporaryDirectory()
 _CWD = os.getcwd()
-os.chdir(tempfile.mkdtemp())
+os.chdir(_TMP.name)
 temperature = pyrucast.NodeField(piece, ["T"])
 for _z in range(len(temperature)):
     for _i in range(temperature[_z].node_count()):

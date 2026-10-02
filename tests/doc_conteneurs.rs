@@ -199,6 +199,7 @@ fn sauver_et_relire_un_graphe_d_objets() -> Result<()> {
 
     assert_eq!(mesh2.cell_count(), 1);
     assert_eq!(dt, 0.05);
+    std::fs::remove_file(chemin)?;
     Ok(())
 }
 // ANCHOR_END: archive

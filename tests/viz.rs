@@ -5,6 +5,8 @@
 
 #![cfg(feature = "viz")]
 
+mod common;
+
 use pyrucast::aggregate::Aggregate;
 use pyrucast::atoms::color::RgbColor;
 use pyrucast::atoms::element_type::ElementType;
@@ -14,17 +16,9 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::viz::{ColorScale, MeshStyle, View};
 
-fn tmpdir() -> std::path::PathBuf {
-    let p = std::env::temp_dir().join(format!(
-        "pyrucast-viz-{}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0),
-    ));
-    std::fs::create_dir_all(&p).unwrap();
-    p
+/// A directory of the test's own, removed with its pictures when the test ends.
+fn tmpdir() -> common::TempDir {
+    common::TempDir::new("pyrucast-viz")
 }
 
 fn build_two_triangles() -> SubMesh {

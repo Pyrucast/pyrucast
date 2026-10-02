@@ -4,12 +4,14 @@
 //! `pyrucast::viz` does not exist and the file compiles empty. `check_rust`
 //! runs `cargo test --features viz`, which exercises it for real.
 //!
-//! The excerpts write SVGs under short names; the module switches into a
-//! throwaway folder and **gives the current directory back** at the end.
+//! The excerpts write their SVGs into a throwaway folder of their own,
+//! removed with them when the test ends.
 //!
 //! Voir `book/src/developper/documentation-et-tests.md`.
 
 #![cfg(feature = "viz")]
+
+mod common;
 
 use pyrucast::aggregate::Aggregate;
 use pyrucast::atoms::{ElementType, Node, RgbColor};
@@ -22,9 +24,8 @@ use pyrucast::viz::{ColorScale, Colormap, FieldArg, MeshStyle, Revolve, View};
 use pyrucast::Result;
 
 /// A throwaway folder, and the 3-D triangle every excerpt uses.
-fn scene() -> Result<(std::path::PathBuf, Handle<Coords>, Mesh)> {
-    let dossier = std::env::temp_dir().join(format!("pyrucast_viz_{}", std::process::id()));
-    std::fs::create_dir_all(&dossier).unwrap();
+fn scene() -> Result<(common::TempDir, Handle<Coords>, Mesh)> {
+    let dossier = common::TempDir::new("pyrucast_viz");
     let coords = Handle::new(Coords::new(3)?);
     let a = Node::create_in(coords.clone(), &[0.0, 0.0, 0.0])?;
     let b = Node::create_in(coords.clone(), &[1.0, 0.0, 0.0])?;
@@ -146,9 +147,8 @@ fn peau_opaque_ou_fil_de_fer() -> Result<()> {
 // ANCHOR_END: style
 
 /// An axisymmetric section: revolution only makes sense on one.
-fn section_axisymetrique() -> Result<(std::path::PathBuf, Mesh)> {
-    let dossier = std::env::temp_dir().join(format!("pyrucast_rev_{}", std::process::id()));
-    std::fs::create_dir_all(&dossier).unwrap();
+fn section_axisymetrique() -> Result<(common::TempDir, Mesh)> {
+    let dossier = common::TempDir::new("pyrucast_rev");
     let coords = Handle::new(Coords::axisymmetric()?);
     let n: Vec<Node> = [[1.0, 0.0], [2.0, 0.0], [1.0, 1.0]]
         .iter()

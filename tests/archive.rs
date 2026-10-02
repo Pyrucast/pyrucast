@@ -5,6 +5,8 @@
 //! support stay two fields on one support.* Everything else here follows from
 //! that, or guards the rule that decides what the file carries.
 
+mod common;
+
 use pyrucast::aggregate::Aggregate;
 use pyrucast::archive::{self, ArchiveRoot};
 use pyrucast::atoms::element_type::ElementType;
@@ -16,10 +18,25 @@ use pyrucast::error::Result;
 use pyrucast::handle::Handle;
 use pyrucast::ops::model;
 
-fn tmp(name: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("pyrucast_archive_{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    dir.join(name)
+/// A path named `name` in a directory of its own, removed with the file when
+/// the value is dropped.
+struct TempPath {
+    path: std::path::PathBuf,
+    _dir: common::TempDir,
+}
+
+impl AsRef<std::path::Path> for TempPath {
+    fn as_ref(&self) -> &std::path::Path {
+        &self.path
+    }
+}
+
+fn tmp(name: &str) -> TempPath {
+    let dir = common::TempDir::new("pyrucast_archive");
+    TempPath {
+        path: dir.join(name),
+        _dir: dir,
+    }
 }
 
 /// A segment mesh of `n` cells along x, its coordinates, and its node ids.
