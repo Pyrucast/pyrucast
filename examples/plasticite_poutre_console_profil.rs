@@ -73,9 +73,9 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field::behavior::integrate;
-use pyrucast::ops::element_field::deformation;
 use pyrucast::ops::element_field::mask;
 use pyrucast::ops::element_field::material_field;
+use pyrucast::ops::element_field::{deformation, StrainMeasure};
 use pyrucast::ops::matrix::stiffness;
 use pyrucast::ops::mesh::select_nodes;
 use pyrucast::ops::mesh::{line, sweep, to_poi1, translate};
@@ -285,7 +285,7 @@ fn main() -> Result<()> {
         let residual_at = |u: &NodeField| -> Result<(NodeField, f64, ElementField)> {
             tic(&T_RESID_WALL, || {
                 N_RESID_EVAL.fetch_add(1, Ordering::Relaxed);
-                let strain = tic(&T_DEFORM, || deformation(u, &fes))?;
+                let strain = tic(&T_DEFORM, || deformation(u, &fes, StrainMeasure::Linear))?;
                 // Behaviour A→B: ε(B) directly, state of A in `prev`.
                 let out = tic(&T_BEHAVIOR, || {
                     integrate(&model, &strain, state.as_ref(), &materials, None)

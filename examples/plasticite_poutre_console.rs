@@ -68,9 +68,9 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field::behavior::integrate;
-use pyrucast::ops::element_field::deformation;
 use pyrucast::ops::element_field::mask;
 use pyrucast::ops::element_field::material_field;
+use pyrucast::ops::element_field::{deformation, StrainMeasure};
 use pyrucast::ops::matrix::stiffness;
 use pyrucast::ops::mesh::select_nodes;
 use pyrucast::ops::mesh::{line, sweep, to_poi1, translate};
@@ -251,7 +251,7 @@ fn main() -> Result<()> {
 
         for _ in 0..max_newton {
             // ε(u) = ε(B), state of A in `prev` → σ, VAR1 (COMP), A→B rise.
-            let strain = deformation(&u, &fes)?;
+            let strain = deformation(&u, &fes, StrainMeasure::Linear)?;
             let out = integrate(&model, &strain, state.as_ref(), &materials, None)?;
             // Internal forces F_int = ∫ Bᵀ σ dΩ (BSIG).
             let f_int = internal_forces(&model, &out, &u, &materials)?;

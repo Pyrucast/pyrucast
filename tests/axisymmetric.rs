@@ -28,6 +28,7 @@ use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::model;
 
 use pyrucast::handle::Handle;
+use pyrucast::ops::element_field::StrainMeasure;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::ops::{element_field, measure, mesh, node_field};
 use pyrucast::Result;
@@ -165,7 +166,7 @@ fn axial_translation_is_rigid_but_radial_translation_is_not() -> Result<()> {
     };
 
     // Axial translation: every component vanishes, hoop included.
-    let strain = element_field::deformation(&uniform(0.0, 0.5)?, &fes)?;
+    let strain = element_field::deformation(&uniform(0.0, 0.5)?, &fes, StrainMeasure::Linear)?;
     let s = strain.get(0)?.read();
     for g in 0..s.gauss_count() {
         for c in ["eps_xx", "eps_yy", "eps_xy", "eps_zz"] {
@@ -179,7 +180,7 @@ fn axial_translation_is_rigid_but_radial_translation_is_not() -> Result<()> {
     drop(s);
 
     // Radial translation: meridian strains vanish, the hoop does not.
-    let strain = element_field::deformation(&uniform(0.5, 0.0)?, &fes)?;
+    let strain = element_field::deformation(&uniform(0.5, 0.0)?, &fes, StrainMeasure::Linear)?;
     let s = strain.get(0)?.read();
     for g in 0..s.gauss_count() {
         for c in ["eps_xx", "eps_yy", "eps_xy"] {
@@ -218,7 +219,7 @@ fn uniform_dilation_is_an_exact_constant_strain_state() -> Result<()> {
     }
     let u = NodeField::from_sub(u);
 
-    let strain = element_field::deformation(&u, &fes)?;
+    let strain = element_field::deformation(&u, &fes, StrainMeasure::Linear)?;
     let s = strain.get(0)?.read();
     for cell in 0..s.cell_count() {
         for g in 0..s.gauss_count() {
@@ -343,7 +344,7 @@ fn lame_case(nr: usize, quadratic: bool) -> Result<(f64, f64)> {
         vec!["u_x".to_string(), "u_y".to_string()],
     )?;
     let displacement = node_field::restrict_like(&solution, &NodeField::from_sub(zero))?;
-    let strain = element_field::deformation(&displacement, &fes)?;
+    let strain = element_field::deformation(&displacement, &fes, StrainMeasure::Linear)?;
     let stress =
         pyrucast::ops::element_field::behavior::integrate(&model, &strain, None, &materials, None)?;
     // The radius at each Gauss point, obtained the same way any field is: the
@@ -441,7 +442,7 @@ fn internal_forces_match_stiffness_times_displacement() -> Result<()> {
     }
     let u = NodeField::from_sub(u);
 
-    let strain = element_field::deformation(&u, &fes)?;
+    let strain = element_field::deformation(&u, &fes, StrainMeasure::Linear)?;
     let stress =
         pyrucast::ops::element_field::behavior::integrate(&model, &strain, None, &materials, None)?;
     let bsig = pyrucast::ops::node_field::internal_forces(&model, &stress, &u, &materials)?;

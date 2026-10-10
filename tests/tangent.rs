@@ -14,8 +14,8 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field::behavior::integrate;
-use pyrucast::ops::element_field::deformation;
 use pyrucast::ops::element_field::material_field;
+use pyrucast::ops::element_field::{deformation, StrainMeasure};
 use pyrucast::ops::matrix::tangent;
 use pyrucast::ops::node_field::internal_forces;
 use pyrucast::Result;
@@ -46,7 +46,7 @@ fn internal_force_vec(
     disp: &[f64],
 ) -> Result<Vec<f64>> {
     let u = build_u(nodes, dim, disp)?;
-    let strain = deformation(&u, fes)?;
+    let strain = deformation(&u, fes, StrainMeasure::Linear)?;
     let state = integrate(model, &strain, None, materials, None)?;
     let f = internal_forces(model, &state, &u, materials)?;
     let mut out = vec![0.0; nodes.len() * dim];
@@ -70,7 +70,7 @@ fn check_tangent_fd(
     let materials = material_field(model, &[("E", 70_000.0), ("nu", 0.3), ("sigma_y", 200.0)])?;
 
     // The analytical tangent, evaluated at the converged state of `base`.
-    let strain = deformation(&build_u(nodes, dim, base)?, fes)?;
+    let strain = deformation(&build_u(nodes, dim, base)?, fes, StrainMeasure::Linear)?;
     let kt = tangent(model, &materials, &strain, None, None)?;
 
     let ndof = nodes.len() * dim;
@@ -221,7 +221,7 @@ fn elastic_regime_tangent_equals_stiffness() -> Result<()> {
 
     // Tiny displacement ⇒ everywhere elastic.
     let base: Vec<f64> = plastic_disp_2d().iter().map(|d| d * 1e-4).collect();
-    let strain = deformation(&build_u(&n, 2, &base)?, &fes)?;
+    let strain = deformation(&build_u(&n, 2, &base)?, &fes, StrainMeasure::Linear)?;
 
     let kt = tangent(&model, &materials, &strain, None, None)?;
     let k = stiffness(&model, &materials)?;

@@ -25,7 +25,7 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::tensor::Kinematics;
-use pyrucast::ops::element_field::{deformation, interp_to_gauss, thermal_strain};
+use pyrucast::ops::element_field::{deformation, interp_to_gauss, thermal_strain, StrainMeasure};
 use pyrucast::ops::mesh;
 use pyrucast::ops::model;
 use pyrucast::ops::node_field::internal_forces;
@@ -117,7 +117,7 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
         disp.set_value(n.id(), "u_x", solution.value(n.id(), "u_x")?)?;
         disp.set_value(n.id(), "u_y", solution.value(n.id(), "u_y")?)?;
     }
-    let eps = deformation(&NodeField::from_sub(disp), &fes)?;
+    let eps = deformation(&NodeField::from_sub(disp), &fes, StrainMeasure::Linear)?;
     let eps_mech = eps.merge_field(&eps_th, |a, b| a - b)?;
     let sigma = pyrucast::ops::element_field::behavior::integrate(
         &model, &eps_mech, None, &materials, None,

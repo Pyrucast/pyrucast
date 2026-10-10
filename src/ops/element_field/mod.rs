@@ -3,8 +3,8 @@
 //! per-Gauss-point quantities of the assembly chain.
 //!
 //! - *kinematics* — [`gradient`](fn@gradient) (`∇f` of a nodal field),
-//!   [`deformation`](fn@deformation) (the linearized strain `ε` of a
-//!   displacement field) and its structural variants
+//!   [`deformation`](fn@deformation) (the strain of a displacement field,
+//!   linearized `ε` or finite, per [`StrainMeasure`]) and its structural variants
 //!   [`beam_deformation`](fn@beam_deformation),
 //!   [`shell_deformation`](fn@shell_deformation),
 //!   [`interp_to_gauss`](fn@interp_to_gauss),
@@ -30,7 +30,7 @@ pub mod thermal_strain;
 
 pub use beam_deformation::beam_deformation;
 pub use consolidate::{check_unique_component_per_support, consolidate};
-pub use deformation::deformation;
+pub use deformation::{deformation, StrainMeasure};
 pub use gradient::gradient;
 pub use interp_to_gauss::interp_to_gauss;
 pub use mask::{mask, mask_sub};

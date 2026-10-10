@@ -191,7 +191,7 @@ par la sortie.
 | Rust (`ops::element_field::…`) | Python (`pyrucast.element_field.…`) |
 |---|---|
 | `gradient(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `gradient(field, fespace) -> ElementField` |
-| `deformation(u: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `deformation(u, fespace) -> ElementField` |
+| `deformation(u: &NodeField, fespace: &FiniteElementSpace, measure: StrainMeasure) -> ElementField` | `deformation(u, fespace, measure="linear") -> ElementField` (`StrainMeasure` passe par son nom : `"linear"`, `"gradient"`, `"green_lagrange"`, `"right_cauchy_green"`, `"left_cauchy_green"`, `"hencky"`, `"euler_almansi"`) |
 | `interp_to_gauss(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `interp_to_gauss(field, fespace) -> ElementField` |
 | `thermal_strain(temperature: &ElementField, material: &ElementField, fespace: &FiniteElementSpace, t_ref: f64) -> ElementField` | `thermal_strain(temperature, materials, fespace, t_ref) -> ElementField` |
 | `shell_deformation(field: &NodeField, fespace: &FiniteElementSpace, model: ShellModel) -> ElementField` | `shell_deformation(field, fespace, model) -> ElementField` |

@@ -32,7 +32,7 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::shell::ShellModel;
 use pyrucast::ops::element_field::{
-    beam_deformation, behavior, deformation, material_field, shell_deformation,
+    beam_deformation, behavior, deformation, material_field, shell_deformation, StrainMeasure,
 };
 use pyrucast::ops::node_field::internal_forces;
 use pyrucast::ops::solver::lu::solve;
@@ -305,7 +305,7 @@ fn truss_internal_forces_still_match_k_times_u() -> Result<()> {
     }
     let u = NodeField::from_sub(imposed);
 
-    let strain = deformation(&u, &fes)?;
+    let strain = deformation(&u, &fes, StrainMeasure::Linear)?;
     let state = behavior::integrate(&model, &strain, None, &materials, None)?;
     let f_int = internal_forces(&model, &state, &u, &materials)?;
     let k = pyrucast::ops::matrix::stiffness(&model, &materials)?;

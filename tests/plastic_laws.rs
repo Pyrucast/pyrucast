@@ -30,7 +30,9 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::plasticity::law::PlasticLaw;
 use pyrucast::models::tensor::Kinematics;
-use pyrucast::ops::element_field::{behavior::integrate, deformation, material_field};
+use pyrucast::ops::element_field::{
+    behavior::integrate, deformation, material_field, StrainMeasure,
+};
 use pyrucast::ops::matrix::tangent;
 use pyrucast::ops::model;
 use pyrucast::ops::node_field::internal_forces;
@@ -376,7 +378,7 @@ impl Cube {
 
     /// The converged state at the first Gauss point.
     fn stress(&self, disp: &[f64]) -> Result<State> {
-        let strain = deformation(&self.displacement(disp)?, &self.fes)?;
+        let strain = deformation(&self.displacement(disp)?, &self.fes, StrainMeasure::Linear)?;
         let state = integrate(&self.model, &strain, None, &self.materials, None)?;
         let sub = state.get(0)?.read();
         let names = ["xx", "yy", "zz", "yz", "xz", "xy"];
@@ -391,7 +393,7 @@ impl Cube {
     }
 
     fn internal_force_vec(&self, disp: &[f64]) -> Result<Vec<f64>> {
-        let strain = deformation(&self.displacement(disp)?, &self.fes)?;
+        let strain = deformation(&self.displacement(disp)?, &self.fes, StrainMeasure::Linear)?;
         let state = integrate(&self.model, &strain, None, &self.materials, None)?;
         let f = internal_forces(
             &self.model,
@@ -416,7 +418,7 @@ impl Cube {
     /// no-op and this is the full check; for a non-associated one (Drucker-
     /// Prager) it is the exact statement of what is promised.
     fn check_tangent(&self, base: &[f64], tol: f64) -> Result<()> {
-        let strain = deformation(&self.displacement(base)?, &self.fes)?;
+        let strain = deformation(&self.displacement(base)?, &self.fes, StrainMeasure::Linear)?;
         let kt = tangent(&self.model, &self.materials, &strain, None, None)?;
 
         let ndof = self.nodes.len() * 3;

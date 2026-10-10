@@ -221,6 +221,7 @@ named_enum!(
     crate::ops::solver::lu::SolveMethod,
     crate::ops::solver::lu::Verbosity,
     crate::ops::mesh::FrontRelax,
+    crate::ops::element_field::StrainMeasure,
 );
 
 #[cfg(feature = "viz")]

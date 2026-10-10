@@ -36,7 +36,7 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field;
-use pyrucast::ops::element_field::material_field;
+use pyrucast::ops::element_field::{material_field, StrainMeasure};
 use pyrucast::ops::solver::lu::{solve, solve_with_options, SolveMethod, SolveOptions};
 
 /// Grid side for the assembly / integration groups.
@@ -121,7 +121,8 @@ fn elasticity_grid_with(n: usize, model_kind: Kinematics) -> Grid {
         }
     }
     let displacement = NodeField::from_sub(u);
-    let strain = element_field::deformation(&displacement, &fespace).unwrap();
+    let strain =
+        element_field::deformation(&displacement, &fespace, StrainMeasure::Linear).unwrap();
     Grid {
         model,
         materials,
@@ -283,7 +284,14 @@ fn bench_axisymmetric(c: &mut Criterion) {
             &format!("deformation {tag} {ASSEMBLY_N}x{ASSEMBLY_N} QUA4"),
             |b| {
                 b.iter(|| {
-                    black_box(element_field::deformation(&g.displacement, &g.fespace).unwrap())
+                    black_box(
+                        element_field::deformation(
+                            &g.displacement,
+                            &g.fespace,
+                            StrainMeasure::Linear,
+                        )
+                        .unwrap(),
+                    )
                 })
             },
         );

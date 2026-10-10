@@ -27,7 +27,9 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::plasticity::law::PlasticLaw;
 use pyrucast::models::tensor::Kinematics;
-use pyrucast::ops::element_field::{behavior::integrate, deformation, material_field};
+use pyrucast::ops::element_field::{
+    behavior::integrate, deformation, material_field, StrainMeasure,
+};
 use pyrucast::ops::model;
 use pyrucast::Result;
 
@@ -84,7 +86,11 @@ fn a_viscous_law_refuses_to_integrate_without_dt() -> Result<()> {
         (PlasticLaw::ViscoplasticChaboche, CHABOCHE),
     ] {
         let cube = Cube::new(law, mat)?;
-        let strain = deformation(&cube.displacement(&uniaxial(2e-3))?, &cube.fes)?;
+        let strain = deformation(
+            &cube.displacement(&uniaxial(2e-3))?,
+            &cube.fes,
+            StrainMeasure::Linear,
+        )?;
         let err = integrate(&cube.model, &strain, None, &cube.materials, None).unwrap_err();
         let msg = err.to_string();
         assert!(
@@ -323,7 +329,7 @@ impl Cube {
     /// Integrate one step A → B at the given strain, from an optional previous
     /// state and over a time increment `dt`.
     fn step(&self, disp: &[f64], prev: Option<&ElementField>, dt: f64) -> Result<Step> {
-        let strain = deformation(&self.displacement(disp)?, &self.fes)?;
+        let strain = deformation(&self.displacement(disp)?, &self.fes, StrainMeasure::Linear)?;
         let field = integrate(&self.model, &strain, prev, &self.materials, Some(dt))?;
         let sub = field.get(0)?.read();
         let names = ["xx", "yy", "zz", "yz", "xz", "xy"];

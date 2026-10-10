@@ -4126,15 +4126,26 @@ def damage_tc(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
     `d_minus`.
     """
 
-def deformation(u: NodeField, fespace: FiniteElementSpace) -> ElementField:
+def deformation(u: NodeField, fespace: FiniteElementSpace, measure: builtins.str = 'linear') -> ElementField:
     r"""
-    Linearized (small-strain) deformation `ε = ½(∇u + ∇uᵀ)` of a displacement
-    field `u` at the Gauss points of `fespace`.
+    Deformation of a displacement field `u` at the Gauss points of `fespace`.
     
     `u` must carry exactly `space_dim` components, taken in order as the
-    displacement along x, y, z. Returns the symmetric strain tensor
-    (`eps_xx`, `eps_xy`, … in tensor convention). The only deformation
-    measure for now; non-linear ones will share this shape.
+    displacement along x, y, z. `measure` chooses the deformation, with
+    `H = ∇u` and `F = I + H`:
+    
+    | measure | formula | components |
+    |---|---|---|
+    | `"linear"` (default) | `ε = ½(H + Hᵀ)` | `eps_xx`, `eps_xy`, … (tensor convention) |
+    | `"gradient"` (`"F"`) | `F = I + H` | every `F_ij`, row-major |
+    | `"green_lagrange"` | `E = ½(FᵀF − I)` | `E_xx`, `E_xy`, … |
+    | `"right_cauchy_green"` (`"C"`) | `C = FᵀF` | `C_xx`, … |
+    | `"left_cauchy_green"` (`"b"`) | `b = FFᵀ` | `b_xx`, … |
+    | `"hencky"` (`"log"`) | `½ ln C` | `H_xx`, … |
+    | `"euler_almansi"` (`"almansi"`) | `e = ½(I − b⁻¹)` | `e_xx`, … |
+    
+    On an axisymmetric space, the hoop entry `<prefix>_zz` is appended
+    (`H_θθ = u_r / r`).
     """
 
 def dirichlet(target: Model, variable: builtins.str, imposed_mesh: Mesh, multiplier_mesh: Mesh, sense: typing.Optional[builtins.str] = None) -> Model:

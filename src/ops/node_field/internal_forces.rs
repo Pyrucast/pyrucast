@@ -264,8 +264,8 @@ mod tests {
     use crate::coords::Coords;
     use crate::models::tensor::Kinematics;
     use crate::ops::element_field::behavior::integrate;
-    use crate::ops::element_field::deformation;
     use crate::ops::element_field::material_field;
+    use crate::ops::element_field::{deformation, StrainMeasure};
 
     /// Elasticity on a single TRI3: for a linear law the internal forces equal
     /// `K·u` applied to the (linear) displacement solution.
@@ -298,7 +298,7 @@ mod tests {
         let u = NodeField::from_sub(u);
 
         // f_int = ∫ Bᵀ σ  vs  K·u.
-        let strain = deformation(&u, &fes).unwrap();
+        let strain = deformation(&u, &fes, StrainMeasure::Linear).unwrap();
         let stress = integrate(&model, &strain, None, &materials, None).unwrap();
         let f_int = internal_forces(&model, &stress, &u, &materials).unwrap();
 
@@ -348,7 +348,7 @@ mod tests {
         }
         let u = NodeField::from_sub(u);
 
-        let strain = deformation(&u, &fes).unwrap();
+        let strain = deformation(&u, &fes, StrainMeasure::Linear).unwrap();
         let stress = integrate(&model, &strain, None, &materials, None).unwrap();
 
         let via_model = internal_forces(&model, &stress, &u, &materials).unwrap();
@@ -394,7 +394,7 @@ mod tests {
         u.set_value(b.id(), "u_y", eps * len * c[1]).unwrap();
         let u = NodeField::from_sub(u);
 
-        let strain = deformation(&u, &fes).unwrap();
+        let strain = deformation(&u, &fes, StrainMeasure::Linear).unwrap();
         let stress = integrate(&model, &strain, None, &materials, None).unwrap();
         let f_int = internal_forces(&model, &stress, &u, &materials).unwrap();
 

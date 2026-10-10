@@ -212,24 +212,46 @@ Gradient d'un champ nodal aux points de Gauss, cellule par cellule :
 
 Une composante de sortie `<comp>_<axe>` par couple (composante d'entrée, axe).
 
-### `deformation(u, fespace)` → `ElementField`
+### `deformation(u, fespace, measure="linear")` → `ElementField`
 
-Déformation **linearisée** (petites déformations) d'un champ de déplacement :
+Déformation d'un champ de déplacement aux points de Gauss, dans la **mesure**
+choisie. `u` doit porter exactement `space_dim` composantes (déplacement selon
+x, y, z). On note \\(H = \nabla u\\) et \\(F = I + H\\) :
 
-\\[
-\varepsilon = \tfrac{1}{2}\big(\nabla u + \nabla u^\top\big).
-\\]
+| `measure` | formule | composantes |
+|---|---|---|
+| `"linear"` (défaut) | \\(\varepsilon = \tfrac12(H + H^\top)\\) | `eps_xx`, `eps_xy`, … |
+| `"gradient"` (`"F"`) | \\(F = I + H\\) | toutes les `F_ij`, ligne par ligne |
+| `"green_lagrange"` | \\(E = \tfrac12(F^\top F - I)\\) | `E_xx`, `E_xy`, … |
+| `"right_cauchy_green"` (`"C"`) | \\(C = F^\top F\\) | `C_xx`, … |
+| `"left_cauchy_green"` (`"b"`) | \\(b = F F^\top\\) | `b_xx`, … |
+| `"hencky"` (`"log"`) | \\(\tfrac12 \ln C\\) | `H_xx`, … |
+| `"euler_almansi"` (`"almansi"`) | \\(e = \tfrac12(I - b^{-1})\\) | `e_xx`, … |
 
-`u` doit porter exactement `space_dim` composantes (déplacement selon x, y, z).
-Le résultat est le tenseur **symétrique** en convention **tenseur**
-(`eps_xy = ½(∂u_x/∂y + ∂u_y/∂x)`, **pas** le cisaillement ingénieur `γ`), une
-composante `eps_<ai><aj>` par entrée indépendante `i ≤ j`. C'est l'entrée du
-comportement de l'[élasticité](../mecanique/elasticite.md).
+Chaque mesure a son **préfixe** : on ne peut pas en lire une à la place d'une
+autre. Une mesure symétrique produit une composante `<préfixe>_<ai><aj>` par
+entrée indépendante `i ≤ j`. Le gradient `F`, qui n'est pas symétrique, les
+produit toutes (9 en 3D, 4 en 2D). En 2D, la direction hors plan n'est pas
+déformée (\\(F_{zz} = 1\\)) et ses entrées ne sont pas produites.
+
+La mesure linéarisée est en convention **tenseur**
+(`eps_xy = ½(∂u_x/∂y + ∂u_y/∂x)`, **pas** le cisaillement ingénieur `γ`).
+C'est l'entrée du comportement de l'[élasticité](../mecanique/elasticite.md).
+Les mesures finies valent zéro (ou \\(I\\) pour `C` et `b`) sous une
+rotation rigide finie, contrairement à `eps`.
 
 Sur un sous-espace [axisymétrique](../coords.md#repère-de-révolution), une
-quatrième composante `eps_zz` est ajoutée : la déformation **orthoradiale**
-`ε_θθ = u_r / r`, que le gradient méridien ne peut pas exprimer (cf.
+composante `<préfixe>_zz` est ajoutée. C'est l'entrée **orthoradiale**,
+construite sur \\(H_{\theta\theta} = u_r / r\\), que le gradient méridien ne
+peut pas exprimer : `eps_zz = u_r / r`, `F_zz = 1 + u_r / r`… (cf.
 [Axisymétrie](../mecanique/elasticite.md#axisymétrie)).
+
+Une transformation dégénérée (\\(\det F = 0\\)) donne des valeurs non
+finies pour Hencky et Almansi : rien n'est vérifié au point de Gauss.
+
+```python
+{{#include ../../../tests/python/test_doc_ops_champs.py:mesures}}
+```
 
 ### `thermal_strain(temperature, materials, fespace, t_ref)` → `ElementField`
 

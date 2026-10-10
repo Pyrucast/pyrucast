@@ -63,9 +63,9 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field::behavior::integrate;
-use pyrucast::ops::element_field::deformation;
 use pyrucast::ops::element_field::mask;
 use pyrucast::ops::element_field::material_field;
+use pyrucast::ops::element_field::{deformation, StrainMeasure};
 use pyrucast::ops::matrix::stiffness;
 use pyrucast::ops::mesh::select_nodes;
 use pyrucast::ops::mesh::{line, sweep, to_poi1, translate};
@@ -248,7 +248,7 @@ fn main() -> Result<()> {
         // No nodal loop (field operators only).
         let residual_at = |u: &NodeField| -> Result<(NodeField, f64, ElementField)> {
             // ε(u)=ε(B), state of A in `prev` → σ, VAR1 (COMP) → F_int (BSIG).
-            let strain = deformation(u, &fes)?;
+            let strain = deformation(u, &fes, StrainMeasure::Linear)?;
             let out = integrate(&model, &strain, state.as_ref(), &materials, None)?;
             let f_int = internal_forces(&model, &out, u, &materials)?;
             // Residual r = F_ext − F_int and its norm on the free DOFs (field

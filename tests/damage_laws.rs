@@ -26,7 +26,9 @@ use pyrucast::handle::Handle;
 use pyrucast::models::damage::law::DamageLaw;
 use pyrucast::models::plasticity::law::PlasticLaw;
 use pyrucast::models::tensor::Kinematics;
-use pyrucast::ops::element_field::{behavior::integrate, deformation, material_field};
+use pyrucast::ops::element_field::{
+    behavior::integrate, deformation, material_field, StrainMeasure,
+};
 use pyrucast::ops::model;
 use pyrucast::Result;
 
@@ -329,7 +331,7 @@ impl Cube {
                 u.set_value(n.id(), &format!("u_{}", AXES[a]), disp[i * 3 + a])?;
             }
         }
-        let strain = deformation(&NodeField::from_sub(u), &self.fes)?;
+        let strain = deformation(&NodeField::from_sub(u), &self.fes, StrainMeasure::Linear)?;
         let field = integrate(&self.model, &strain, prev, &self.materials, None)?;
         let sub = field.get(0)?.read();
         let names = ["xx", "yy", "zz", "yz", "xz", "xy"];

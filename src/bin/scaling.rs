@@ -42,6 +42,7 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field::material_field;
+use pyrucast::ops::element_field::StrainMeasure;
 use pyrucast::ops::{element_field, matrix};
 
 /// Plane-stress elasticity on an `n × n` QUA4 grid: model, material field, and a
@@ -80,7 +81,8 @@ fn build(n: usize) -> (Model, ElementField, ElementField) {
             u.set_value(nid, "u_y", -0.005 * j as f64).unwrap();
         }
     }
-    let strain = element_field::deformation(&NodeField::from_sub(u), &fes).unwrap();
+    let strain =
+        element_field::deformation(&NodeField::from_sub(u), &fes, StrainMeasure::Linear).unwrap();
     (model, materials, strain)
 }
 

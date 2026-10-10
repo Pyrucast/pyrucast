@@ -10,6 +10,8 @@ at **collection** time; an example that breaks is a collection error, with a
 full traceback and a non-zero exit code.
 """
 
+import math
+
 import pyrucast
 
 
@@ -210,3 +212,22 @@ assert r2 == 6 * 25.0
 assert r2_uy == 6 * 16.0
 assert fy_max == 2.0
 assert partout == 1.0
+
+# ── mesures de déformation ─────────────────────────────────
+
+_, mesh, fes, n = _plaque()
+# Uniform stretch λ = 1.1 along x: u_x = 0.1·x.
+u = _champ_nodal(mesh, n, ["u_x", "u_y"], [[0.1 * p.position()[0], 0.0] for p in n])
+# ANCHOR: mesures
+# Linearized strain, the default: eps_xx, eps_xy, eps_yy.
+eps = pyrucast.element_field.deformation(u, fes)
+# Finite measures share the call; each has its own prefix.
+E = pyrucast.element_field.deformation(u, fes, "green_lagrange")  # E_xx…
+F = pyrucast.element_field.deformation(u, fes, "F")  # F_xx, F_xy, F_yx, F_yy
+H = pyrucast.element_field.deformation(u, fes, "hencky")  # H_xx…
+# ANCHOR_END: mesures
+assert abs(eps[0].value(0, 0, "eps_xx") - 0.1) < 1e-12
+assert abs(E[0].value(0, 0, "E_xx") - 0.105) < 1e-12
+assert F[0].components() == ["F_xx", "F_xy", "F_yx", "F_yy"]
+assert abs(F[0].value(0, 0, "F_xx") - 1.1) < 1e-12
+assert abs(math.exp(H[0].value(0, 0, "H_xx")) - 1.1) < 1e-12  # H_xx = ln λ
