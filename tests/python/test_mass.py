@@ -79,3 +79,18 @@ def test_mass_requires_density():
         pass
     else:
         raise AssertionError("expected mass() to require `rho`")
+
+
+def test_model_mass_matrix_method():
+    # The method form reads the same closed form, (ρ/36)·[4, 2, 1, 2] on a row.
+    rho = 2.0
+    fes, n = _unit_quad()
+    model = pyrucast.model.elasticity(fes, "plane_stress")
+    materials = pyrucast.element_field.material_field(
+        model, [("E", 1.0), ("nu", 0.3), ("rho", rho)]
+    )
+
+    m = model.mass_matrix(materials)
+    tol = 1e-12
+    for j, coef in enumerate([4.0, 2.0, 1.0, 2.0]):
+        assert abs(m.get(n[0], "f_x", n[j], "u_x") - rho * coef / 36.0) < tol

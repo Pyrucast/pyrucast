@@ -194,3 +194,76 @@ def test_step_by_step_returns_history_per_time():
         ux = r["displacement"].value(tip, "u_x")
         assert ux >= prev - 1e-12
         prev = ux
+
+
+def test_thermal_step_conducts_linearly_between_two_imposed_edges():
+    """Steady conduction, T_REF imposed on the left edge and T_HOT on the right:
+    no source, so T is linear in x — T = T_REF + (T_HOT − T_REF)·x/L."""
+    c, grid, mesh, fes, idx = _bar()
+    left = [grid[idx(0, j)] for j in range(NY + 1)]
+    right = [grid[idx(NX, j)] for j in range(NY + 1)]
+
+    thermal = pc.model.heat_conduction(fes)
+    model, loads = thermal, None
+    for edge, value in ((left, T_REF), (right, T_HOT)):
+        imposed = pc.mesh.poi1_from_nodes(edge)
+        multiplier = pc.mesh.translate(imposed, [0.0, 0.0])
+        model = model | pc.model.dirichlet(thermal, "T", imposed, multiplier)
+        load = pc.NodeField(multiplier, ["imposed_T"])
+        load[0].add_to_component("imposed_T", value)
+        loads = load if loads is None else loads | load
+    materials = pc.element_field.material_field(model, [("k", K_COND)])
+
+    temperature = pc.thermomechanics.thermal_step(model, materials, loads)
+    hx = L / NX
+    for j in range(NY + 1):
+        for i in range(NX + 1):
+            expected = T_REF + (T_HOT - T_REF) * i * hx / L
+            assert abs(temperature.value(grid[idx(i, j)], "T") - expected) < 1e-9
+
+
+def test_mechanical_step_clamped_bar_carries_the_thermal_stress():
+    """Both x-ends clamped, heated uniformly by ΔT: σ_xx = −E·α·ΔT, σ_yy = 0
+    (plane stress, free in y)."""
+    c, grid, mesh, fes, idx = _bar()
+    left = [grid[idx(0, j)] for j in range(NY + 1)]
+    right = [grid[idx(NX, j)] for j in range(NY + 1)]
+    bottom = [grid[idx(i, 0)] for i in range(NX + 1)]
+
+    mecanique = pc.model.elasticity(fes, "plane_stress")
+    model = (
+        mecanique
+        | _clamp(mecanique, left, "u_x")
+        | _clamp(mecanique, right, "u_x")
+        | _clamp(mecanique, bottom, "u_y")
+    )
+    materials = pc.element_field.material_field(
+        model, [("E", E), ("nu", NU), ("alpha", ALPHA)]
+    )
+    temperature = pc.NodeField(pc.mesh.poi1_from_nodes(grid), ["T"])
+    temperature[0].add_to_component("T", T_HOT)
+    # The residual norm is taken on the free nodes: on a clamped one it is the
+    # support reaction, which equilibrium does not drive to zero.
+    clamped = {n.id for n in left + right + bottom}
+    free = pc.mesh.poi1_from_nodes([n for n in grid if n.id not in clamped])
+
+    u, state, info = pc.thermomechanics.mechanical_step(
+        model,
+        fes,
+        mesh,
+        materials,
+        pc.NodeField(mesh, ["f_x", "f_y"]),
+        temperature,
+        pc.NodeField(mesh, ["u_x", "u_y"]),
+        None,
+        1.0,
+        t_ref=T_REF,
+        free_mesh=free,
+    )
+    assert info["converged"], info
+    expected = -E * ALPHA * (T_HOT - T_REF)
+    sub = state[0]
+    for cell in range(sub.cell_count()):
+        for g in range(sub.gauss_count()):
+            assert abs(sub.value(cell, g, "sigma_xx") - expected) < 1e-6
+            assert abs(sub.value(cell, g, "sigma_yy")) < 1e-6

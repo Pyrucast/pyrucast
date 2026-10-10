@@ -586,3 +586,19 @@ def test_matrix_dump_prints_global_grid_and_elides(capsys):
     # max_rows elides the grid and notes the overflow.
     k.dump(max_rows=1)
     assert "de plus" in capsys.readouterr().out
+
+
+def test_model_stiffness_matrix_is_the_conductivity_of_a_unit_quad():
+    # Bilinear QUA4 on the unit square: K = k/6·[[4, −1, −2, −1], …], the
+    # closed form of ∫ ∇Nᵢ·k∇Nⱼ — independent of the assembler.
+    c = pyrucast.Coords(2)
+    n = [c.add_node(p) for p in ([0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0])]
+    mesh = pyrucast.Mesh(c, "QUA4")
+    mesh.unit().add_cell(n)
+    model = pyrucast.model.heat_conduction(pyrucast.FiniteElementSpace(mesh))
+    k = 3.0
+    materials = pyrucast.element_field.material_field(model, [("k", k)])
+
+    kmat = model.stiffness_matrix(materials)
+    for j, coef in enumerate([4.0, -1.0, -2.0, -1.0]):
+        assert kmat.get(n[0], "q", n[j], "T") == pytest.approx(k * coef / 6.0)

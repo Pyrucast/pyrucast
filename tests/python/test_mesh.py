@@ -953,3 +953,21 @@ def test_set_face_color_works_on_a_sealed_mesh():
     assert mesh[0].is_sealed
     mesh.set_face_color((10, 20, 30))
     assert mesh[0].face_color == (10, 20, 30)
+
+
+def test_from_live_nodes_holds_exactly_the_live_nodes():
+    # Three nodes, one released and collected: liveness is read from `Coords`
+    # itself, then the POI1 mesh must carry the two survivors and nothing else.
+    c = pyrucast.Coords(2)
+    a = c.add_node([0.0, 0.0])
+    b = c.add_node([1.0, 0.0])
+    t = c.add_node([2.0, 0.0])
+    dead = t.id
+    del t
+    pygc.collect()
+    assert c.gc() == 1
+    assert not c.is_alive(dead)
+
+    mesh = pyrucast.mesh.from_live_nodes(c)
+    ids = sorted(n.id for i in range(mesh.cell_count()) for n in mesh.cell(0, i))
+    assert ids == sorted([a.id, b.id])

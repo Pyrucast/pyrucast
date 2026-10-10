@@ -1,6 +1,9 @@
 """Python tests for NodeField (aggregate) and SubNodeField (zone view)."""
 
 import gc as pygc
+import math
+
+import pytest
 
 import pyrucast
 
@@ -416,8 +419,6 @@ def test_pow_rejects_modulo():
 
 
 def test_unary_math_on_aggregate_and_subfield():
-    import math
-
     c, nodes, sm = _poi1_with(3)
     f = pyrucast.NodeField(sm, ["T"])
     f[0].set_value(nodes[0], "T", 0.0)
@@ -438,9 +439,31 @@ def test_unary_math_on_aggregate_and_subfield():
     assert abs(g.value(nodes[1], "T") - math.sin(math.pi)) < 1e-12
 
 
-def test_unary_math_log_unguarded_is_nan():
-    import math
+@pytest.mark.parametrize(
+    "function, reference",
+    [
+        (pyrucast.field.sinh, math.sinh),
+        (pyrucast.field.cosh, math.cosh),
+        (pyrucast.field.tanh, math.tanh),
+        (pyrucast.field.tan, math.tan),
+        (pyrucast.field.log10, math.log10),
+    ],
+)
+def test_unary_math_matches_the_standard_library(function, reference):
+    # Each value goes through the field function and through `math`, value by
+    # value: the standard library is the independent reference.
+    values = [0.25, 0.5, 1.5]
+    c, nodes, sm = _poi1_with(len(values))
+    f = pyrucast.NodeField(sm, ["T"])
+    for node, v in zip(nodes, values):
+        f[0].set_value(node, "T", v)
 
+    image = function(f)
+    for node, v in zip(nodes, values):
+        assert image.value(node, "T") == pytest.approx(reference(v))
+
+
+def test_unary_math_log_unguarded_is_nan():
     c, nodes, sm = _poi1_with(1)
     f = pyrucast.NodeField(sm, ["T"])
     f[0].set_value(nodes[0], "T", -1.0)
@@ -817,3 +840,14 @@ def test_op_bad_operand_raises_type_error():
             pass
         else:
             raise AssertionError("expected TypeError for str operand")
+
+
+def test_support_submesh_is_the_zone_the_field_was_built_on():
+    # The support handed back is a POI1 zone whose cells name exactly the
+    # nodes the field was built on — read from the support's own cells.
+    c, nodes, mesh = _poi1_with(3)
+    f = pyrucast.NodeField(mesh, ["T"])
+    support = f[0].support_submesh()
+    assert support.element_type == "POI1"
+    ids = sorted(n.id for cell in support for n in cell)
+    assert ids == sorted(n.id for n in nodes)

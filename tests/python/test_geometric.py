@@ -39,3 +39,21 @@ def test_geometric_stiffness_uniaxial():
     assert abs(kg.get(n[0], "f_x", n[1], "u_x") + sig / 3.0) < tol
     # No cross-component coupling.
     assert abs(kg.get(n[0], "f_x", n[0], "u_y")) < tol
+
+
+def test_model_geometric_matrix_method():
+    # Uniaxial σ_xx on the unit QUA4: the u_x diagonal is σ/3, the closed form
+    # of ∫ σ_xx ∂ₓNᵢ ∂ₓNⱼ.
+    sig = 3.0
+    fes, n = _unit_quad()
+    model = pyrucast.model.elasticity(fes, "plane_stress")
+    materials = pyrucast.element_field.material_field(model, [("E", 1.0), ("nu", 0.3)])
+    stress = pyrucast.ElementField(fes, ["sigma_xx", "sigma_yy", "sigma_xy"])
+    stress[0].set_uniform("sigma_xx", sig)
+    stress[0].set_uniform("sigma_yy", 0.0)
+    stress[0].set_uniform("sigma_xy", 0.0)
+
+    kg = model.geometric_matrix(materials, stress)
+    tol = 1e-12
+    assert abs(kg.get(n[0], "f_x", n[0], "u_x") - sig / 3.0) < tol
+    assert abs(kg.get(n[0], "f_x", n[1], "u_x") + sig / 3.0) < tol

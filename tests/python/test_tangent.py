@@ -5,6 +5,8 @@ that in a plastic regime it is symmetric and softened (the plastic diagonal is
 below the elastic one).
 """
 
+import pytest
+
 import pyrucast
 
 
@@ -79,3 +81,22 @@ def test_plastic_tangent_symmetric_and_softened():
     kt_d = kt.get(n[1], "f_x", n[1], "u_x")
     k_d = k.get(n[1], "f_x", n[1], "u_x")
     assert kt_d < k_d
+
+
+def test_model_tangent_matrix_method_in_elastic_regime():
+    # Below the yield stress the tangent is the plane-stress stiffness of the
+    # unit QUA4, whose closed form is k₁₁ = E(3 − ν)/(6(1 − ν²)) and
+    # k₁₂ = E/(8(1 − ν)).
+    E, NU, SY = 70_000.0, 0.3, 200.0
+    c, n, fes = _unit_quad()
+    model = pyrucast.model.plasticity_perfect(fes, "plane_stress")
+    materials = pyrucast.element_field.material_field(
+        model, [("E", E), ("nu", NU), ("sigma_y", SY)]
+    )
+    strain = pyrucast.element_field.deformation(_uniform_strain(c, n, 1e-5), fes)
+
+    kt = model.tangent_matrix(materials, strain)
+    assert kt.get(n[0], "f_x", n[0], "u_x") == pytest.approx(
+        E * (3.0 - NU) / (6.0 * (1.0 - NU**2))
+    )
+    assert kt.get(n[0], "f_x", n[0], "u_y") == pytest.approx(E / (8.0 * (1.0 - NU)))

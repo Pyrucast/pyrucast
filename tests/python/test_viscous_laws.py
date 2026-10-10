@@ -4,6 +4,8 @@ What distinguishes these from the plastic laws is that the answer depends on
 `dt`, so the tests turn on time rather than on a stress value.
 """
 
+import math
+
 import pytest
 
 import pyrucast
@@ -164,3 +166,60 @@ def test_lemaitre_chaboche_adds_damage():
         assert current >= first - 1e-15
         assert current <= 0.3 + 1e-12
         first = current
+
+
+# The implicit step solves Δp = dt·ṗ(q_end, p_end), with q_end = q_tr − 3μΔp
+# (radial return). Both equations are checked on the **outputs** — the stress
+# and `p` the law returns — against q_tr = 2μ·ε_xx, the von Mises trial stress
+# of a uniaxial strain, computed by hand.
+EXX, DT = 2e-3, 1e-4
+E, NU = 150_000.0, 0.3
+MU = E / (2.0 * (1.0 + NU))
+
+
+def _creep_step(model, material):
+    c, nodes, fes = _cube()
+    model = model(fes, "full_3d")
+    materials = pyrucast.element_field.material_field(model, material)
+    state = pyrucast.element_field.integrate_behavior(
+        model, _strain(c, nodes, fes, EXX), materials, dt=DT
+    )
+    q = _von_mises(state[0])
+    dp = state[0].value(0, 0, "p")
+    assert q == pytest.approx(2.0 * MU * EXX - 3.0 * MU * dp, rel=1e-9)
+    return state[0], q, dp
+
+
+def test_creep_lemaitre_solves_its_rate_law():
+    K, N, M = 400.0, 5.0, 0.3
+    _, q, dp = _creep_step(
+        pyrucast.model.creep_lemaitre,
+        [("E", E), ("nu", NU), ("K", K), ("N", N), ("M", M)],
+    )
+    assert dp > 0.0
+    # ṗ = (q/K)^N · p^(−M), at the end of the step (p_A = 0).
+    assert dp == pytest.approx(DT * (q / K) ** N * dp ** (-M), rel=1e-6)
+
+
+def test_creep_blackburn_solves_its_rate_law():
+    A, ALPHA, R, B, BETA = 1e-3, 0.01, 100.0, 1e-6, 0.01
+    sub, q, dp = _creep_step(
+        pyrucast.model.creep_blackburn,
+        [
+            ("E", E),
+            ("nu", NU),
+            ("A_1", A),
+            ("alpha_1", ALPHA),
+            ("r_1", R),
+            ("B_s", B),
+            ("beta_s", BETA),
+        ],
+    )
+    # p_prim relaxes towards ε_∞ = A·sinh(αq), implicitly: from p_prim(A) = 0,
+    # p_prim = dt·r·ε_∞ / (1 + dt·r).
+    eps_inf = A * math.sinh(ALPHA * q)
+    p_prim = sub.value(0, 0, "p_prim")
+    assert p_prim == pytest.approx(DT * R * eps_inf / (1.0 + DT * R), rel=1e-6)
+    # ṗ = r·(ε_∞ − p_prim) + B·sinh(βq).
+    rate = R * (eps_inf - p_prim) + B * math.sinh(BETA * q)
+    assert dp == pytest.approx(DT * rate, rel=1e-6)

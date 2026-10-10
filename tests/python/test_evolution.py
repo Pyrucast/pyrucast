@@ -105,3 +105,36 @@ def test_sub_evolution_interpolate_field():
     out = curve.interpolate(temperature[0])
     assert out.components() == ["E"]
     assert out.value(nodes[0], "E") == 5.0
+
+
+# ─── Accessors ───────────────────────────────────────────────────────────────
+
+
+def test_abscissas_are_the_samples_sorted():
+    # Samples given out of order: the curve stores them by increasing abscissa,
+    # which interpolation confirms independently (0.5 lies between 0 and 1).
+    se = pyrucast.SubEvolution([(2.0, 1.0), (0.0, 3.0), (1.0, 2.0)])
+    assert se.abscissas() == [0.0, 1.0, 2.0]
+    assert se.interpolate(0.5) == 2.5
+
+
+@pytest.mark.parametrize(
+    "policy, beyond",
+    [("clamp", 20.0), ("extrapolate", 30.0)],
+)
+def test_out_of_range_names_the_policy_it_applies(policy, beyond):
+    # The name read back is the one whose behaviour the curve shows past its
+    # last abscissa: 10 → 20 over [0, 1], evaluated at 2.
+    steps = [(0.0, 10.0), (1.0, 20.0)]
+    se = pyrucast.SubEvolution(steps, out_of_range=policy)
+    e = pyrucast.Evolution(steps, out_of_range=policy)
+    assert se.out_of_range() == policy
+    assert e.out_of_range() == policy
+    assert se.interpolate(2.0) == beyond
+
+
+def test_out_of_range_defaults_to_error():
+    se = pyrucast.SubEvolution([(0.0, 10.0), (1.0, 20.0)])
+    assert se.out_of_range() == "error"
+    with pytest.raises(Exception):
+        se.interpolate(2.0)
