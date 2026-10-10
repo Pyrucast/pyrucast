@@ -230,4 +230,4 @@ assert abs(eps[0].value(0, 0, "eps_xx") - 0.1) < 1e-12
 assert abs(E[0].value(0, 0, "E_xx") - 0.105) < 1e-12
 assert F[0].components() == ["F_xx", "F_xy", "F_yx", "F_yy"]
 assert abs(F[0].value(0, 0, "F_xx") - 1.1) < 1e-12
-assert abs(math.exp(H[0].value(0, 0, "H_xx")) - 1.1) < 1e-12  # H_xx = ln λ
+assert abs(H[0].value(0, 0, "H_xx") - math.log(1.1)) < 1e-12

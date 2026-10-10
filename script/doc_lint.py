@@ -644,16 +644,49 @@ def noms_cites():
     """Every identifier and attribute the book's examples write.
 
     Read by AST rather than by regular expression: a name in a comment or in
-    a string does not count.
+    a string does not count. Nor does a name reached through **another
+    module**: `math.log` or `from math import log` cites the standard
+    library, not `pyrucast.field.log`.
     """
     vus = set()
     for fichier in sorted(EXEMPLES_PY.glob("test_doc_*.py")):
-        for noeud in ast.walk(ast.parse(fichier.read_text(encoding="utf-8"))):
+        arbre = ast.parse(fichier.read_text(encoding="utf-8"))
+        modules_etrangers, noms_etrangers = imports_etrangers(arbre)
+        for noeud in ast.walk(arbre):
             if isinstance(noeud, ast.Attribute):
-                vus.add(noeud.attr)
+                if racine(noeud) not in modules_etrangers:
+                    vus.add(noeud.attr)
             elif isinstance(noeud, ast.Name):
-                vus.add(noeud.id)
+                if noeud.id not in noms_etrangers:
+                    vus.add(noeud.id)
     return vus
+
+
+def imports_etrangers(arbre):
+    """The names a file binds to modules other than `pyrucast`, and the names
+    it imports from them: `import math`, `import numpy as np` → `{math, np}`;
+    `from math import log` → `{log}`."""
+    modules, noms = set(), set()
+    for noeud in ast.walk(arbre):
+        if isinstance(noeud, ast.Import):
+            for alias in noeud.names:
+                if alias.name.split(".")[0] != "pyrucast":
+                    modules.add(alias.asname or alias.name.split(".")[0])
+        elif isinstance(noeud, ast.ImportFrom):
+            if noeud.level == 0 and (noeud.module or "").split(".")[0] != "pyrucast":
+                lies = {alias.asname or alias.name for alias in noeud.names}
+                # `from os import path`: `path` may itself be a module.
+                noms |= lies
+                modules |= lies
+    return modules, noms
+
+
+def racine(noeud):
+    """The name an attribute chain starts from — `os` for `os.path.join` —
+    or `None` when it starts from an expression (`f().x`)."""
+    while isinstance(noeud, ast.Attribute):
+        noeud = noeud.value
+    return noeud.id if isinstance(noeud, ast.Name) else None
 
 
 def check_api_python(ratchet=False):

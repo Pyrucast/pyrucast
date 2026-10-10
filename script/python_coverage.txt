@@ -1,5 +1,5 @@
-# Entrées publiques Python qu'aucun exemple du book ne cite.
-# Registre du cliquet : il ne peut que RÉTRÉCIR.
+# Public Python entries no example of the book cites.
+# Ratchet ledger: it can only SHRINK.
 # Régénérer : python script/doc_lint.py --ratchet-python
 abscissa_type
 abscissas
@@ -18,6 +18,7 @@ entry_count
 fespace
 field_names
 geometric_matrix
+get
 get_by_node
 has_behavior
 is_alive
@@ -37,6 +38,7 @@ pyrucast.element_field.thermal_strain
 pyrucast.field.cosh
 pyrucast.field.log
 pyrucast.field.log10
+pyrucast.field.sin
 pyrucast.field.sinh
 pyrucast.field.tan
 pyrucast.field.tanh
