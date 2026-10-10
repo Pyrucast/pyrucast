@@ -173,6 +173,9 @@ pub trait SubModelKind: Sync {
     fn geometric_layout(&self)  -> Option<MatrixLayout> { None }
     fn tangent_layout(&self)    -> Option<MatrixLayout> { None }
     fn matrix_layout(&self, kind: MatrixKind) -> Option<MatrixLayout> { /* fourni */ }
+    // Physique linéaire sans noyau de tangente (ou contrainte) : sa tangente EST
+    // sa raideur. Défaut false ⇒ ni tangent_layout ni ceci : la tangente erre.
+    fn tangent_is_stiffness(&self) -> bool { false }
 
     // Contributions telles que l'assembleur les consomme (défaut : Computed(layout)
     // si matrix_layout(kind), sinon — pour Stiffness seulement — Literal(build_stiffness_blocks)) :
@@ -311,6 +314,13 @@ sous-trait **et** redéfinir le seam correspondant pour rendre `Some(self)` :
   foyer de la famille contrainte — `Dirichlet`, `Mpc`, `Embedded`, `Contact`.
 - **Terme de masse, raideur géométrique, tangente cohérente** : déclarer le
   `*_layout` correspondant et écrire le noyau `element_*` (voir ci-dessous).
+- **Tangente d'une physique linéaire** : pas de noyau à écrire. Déclarer
+  `tangent_is_stiffness()` à `true` suffit, et une demande de tangente assemble
+  alors la raideur de ce sous-modèle, exactement. C'est le cas de la conduction,
+  de Fick, des échanges, des barres, poutres et coques, et de toutes les
+  contraintes, dont les relations sont linéaires. Une physique qui ne déclare ni
+  ceci ni `tangent_layout` fait **échouer** la tangente : un bloc nul ferait
+  diverger le Newton loin de la cause.
 
 Une **contrainte** comme `Dirichlet` n'implémente *que* `Constraint` (plus
 `contributions`, cf. ci-dessous) : elle n'a ni `element_matrix`, ni `Domain` —

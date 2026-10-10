@@ -446,6 +446,11 @@ impl SubModelKind for Shell {
         Ok(())
     }
 
+    /// A linear section law: the consistent tangent **is** the elastic stiffness.
+    fn tangent_is_stiffness(&self) -> bool {
+        true
+    }
+
     fn physics(&self) -> &'static [Physics] {
         &[Physics::Mechanical]
     }

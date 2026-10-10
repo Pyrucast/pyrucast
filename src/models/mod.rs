@@ -754,8 +754,11 @@ pub trait SubModelKind: Sync {
     /// [`Contribution::Computed`] (a volumetric physics, integrated straight
     /// into the CSR); `None` falls back — **only for `Stiffness`** — to a
     /// [`Contribution::Literal`] built from
-    /// [`build_stiffness_blocks`](Self::build_stiffness_blocks), and yields
-    /// nothing for the other kinds (a physics with no term for that kind).
+    /// [`build_stiffness_blocks`](Self::build_stiffness_blocks), errors for
+    /// `Tangent` (a physics with no tangent kernel that has not declared
+    /// [`tangent_is_stiffness`](Self::tangent_is_stiffness), which the
+    /// assembler resolves before asking), and yields nothing for the other
+    /// kinds (a physics with no term for that kind).
     ///
     /// A volumetric physics writes only its per-kind `element_*` + `*_layout`
     /// and takes the default. A sub-model whose blocks are *not* a single
@@ -786,6 +789,13 @@ pub trait SubModelKind: Sync {
                 vec![Contribution::Literal(
                     self.build_stiffness_blocks(material)?,
                 )]
+            }
+            None if kind == MatrixKind::Tangent => {
+                return Err(PyrucastError::Message(format!(
+                    "{}: no consistent tangent — this physics has no tangent kernel \
+                     and does not declare its tangent to be its stiffness",
+                    self.label()
+                )))
             }
             None => Vec::new(),
         })
@@ -866,6 +876,20 @@ pub trait SubModelKind: Sync {
     /// `None` (default: none).
     fn tangent_layout(&self) -> Option<MatrixLayout> {
         None
+    }
+
+    /// Whether this sub-model's consistent tangent **is** its stiffness: true of
+    /// a linear physics that has no tangent kernel of its own (conduction,
+    /// Fick, bars, beams, shells, boundary exchange) and of the constraints,
+    /// whose relations are linear in the unknowns. A `Tangent` request then
+    /// assembles this sub-model's [`Stiffness`](MatrixKind::Stiffness) — exact,
+    /// not an approximation.
+    ///
+    /// Default `false`. A physics that declares neither this nor a
+    /// [`tangent_layout`](Self::tangent_layout) makes the tangent an
+    /// **error**: a silent zero block would make Newton fail far from the cause.
+    fn tangent_is_stiffness(&self) -> bool {
+        false
     }
 
     /// Dispatch to the per-kind layout ([`stiffness_layout`](Self::stiffness_layout)

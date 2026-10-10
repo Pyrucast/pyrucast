@@ -222,6 +222,16 @@ pub fn assemble_kind(
         // `add_sub` (which takes the aggregate's write lock).
         let built = {
             let sub = sub_h.read();
+            // A physics whose tangent *is* its stiffness answers a tangent
+            // request with its stiffness, inputs and all: the deformation and
+            // state the tangent carries are for the laws that need them.
+            let tangent_by_stiffness =
+                kind == MatrixKind::Tangent && sub.as_kind().tangent_is_stiffness();
+            let sub_kind = if tangent_by_stiffness {
+                MatrixKind::Stiffness
+            } else {
+                kind
+            };
             // Generic over the physics: a sub-model needs material data iff it
             // declares a material FE subspace. No per-variant match.
             let material = match sub.material_fespace() {
@@ -243,16 +253,16 @@ pub fn assemble_kind(
             // same way, when a state aggregate is supplied and the physics reads
             // material on a cell fespace.
             let kernel_inputs = match sub.material_fespace() {
-                Some(fespace) => inputs.for_sub(&sub, &fespace)?,
-                None => KernelInputs::MaterialOnly,
+                Some(fespace) if !tangent_by_stiffness => inputs.for_sub(&sub, &fespace)?,
+                _ => KernelInputs::MaterialOnly,
             };
             let mut blocks = Vec::new();
-            for c in sub.as_kind().contributions(kind, material.as_ref())? {
+            for c in sub.as_kind().contributions(sub_kind, material.as_ref())? {
                 blocks.extend(build_contribution(
                     c,
                     sub_h,
                     material.clone(),
-                    kind,
+                    sub_kind,
                     kernel_inputs.clone(),
                 )?);
             }

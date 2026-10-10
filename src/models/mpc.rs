@@ -453,8 +453,9 @@ impl SubModelKind for Mpc {
         kind: MatrixKind,
         _material: Option<&crate::handle::Handle<SubElementField>>,
     ) -> Result<Vec<Contribution>> {
-        // A constraint only enters the global (stiffness) matrix — no
-        // mass/geometric/tangent term.
+        // A constraint only enters the global (stiffness) matrix — no mass or
+        // geometric term. A tangent request reaches it as a stiffness one
+        // (`tangent_is_stiffness`), so it never arrives here.
         if kind != MatrixKind::Stiffness {
             return Ok(Vec::new());
         }
@@ -478,6 +479,11 @@ impl SubModelKind for Mpc {
             }
         }
         Ok(vec![Contribution::Literal(blocks)])
+    }
+
+    /// Linear relations: their tangent blocks **are** their stiffness blocks.
+    fn tangent_is_stiffness(&self) -> bool {
+        true
     }
 
     fn physics(&self) -> &'static [Physics] {

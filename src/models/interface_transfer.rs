@@ -280,6 +280,11 @@ impl SubModelKind for InterfaceTransfer {
         self.components.iter().map(|(_, d)| d.clone()).collect()
     }
 
+    /// A linear exchange: the consistent tangent **is** its stiffness.
+    fn tangent_is_stiffness(&self) -> bool {
+        true
+    }
+
     fn physics(&self) -> &'static [Physics] {
         physics_slice(self.physics)
     }

@@ -242,3 +242,85 @@ fn elastic_regime_tangent_equals_stiffness() -> Result<()> {
     }
     Ok(())
 }
+
+/// A linear physics answers a tangent request with its stiffness — exactly, and
+/// without reading the deformation, which it has no law to differentiate. The
+/// conductivity of the unit QUA4 is anchored on its closed form
+/// `k/6·[4, −1, −2, −1]` so that a zero block on both sides cannot pass.
+#[test]
+fn a_linear_physics_tangent_is_its_stiffness() -> Result<()> {
+    use pyrucast::containers::element_field::ElementField;
+    use pyrucast::ops::matrix::stiffness;
+    use pyrucast::ops::model;
+    let (fes, n) = unit_quad()?;
+    let conduction = model::heat_conduction(&fes)?;
+    let k = 3.0;
+    let materials = material_field(&conduction, &[("k", k)])?;
+
+    let kt = tangent(&conduction, &materials, &ElementField::empty(), None, None)?;
+    for (j, coef) in [4.0, -1.0, -2.0, -1.0].iter().enumerate() {
+        let t = kt.get(n[0].id(), "q", n[j].id(), "T");
+        assert!((t - k * coef / 6.0).abs() < 1e-12, "q0 T{j}: {t}");
+    }
+    assert_eq!(kt.dense()?, stiffness(&conduction, &materials)?.dense()?);
+    Ok(())
+}
+
+/// A constraint's relations are linear: they enter the tangent as they enter
+/// the stiffness, multiplier rows included — without them a Newton iteration
+/// on the tangent would lose its boundary conditions.
+#[test]
+fn constraints_enter_the_tangent() -> Result<()> {
+    use pyrucast::containers::element_field::ElementField;
+    use pyrucast::models::RelationSense;
+    use pyrucast::ops::matrix::stiffness;
+    use pyrucast::ops::{mesh, model};
+    let (fes, n) = unit_quad()?;
+    let conduction = model::heat_conduction(&fes)?;
+    let imposed = mesh::poi1_from_nodes(&n[..1])?;
+    let multiplier = mesh::barycenter(&imposed)?;
+    let constrained = conduction.union(&model::dirichlet(
+        &conduction,
+        "T",
+        &imposed,
+        &multiplier,
+        RelationSense::Equality,
+    )?)?;
+    let materials = material_field(&constrained, &[("k", 1.0)])?;
+
+    let kt = tangent(&constrained, &materials, &ElementField::empty(), None, None)?;
+    let k = stiffness(&constrained, &materials)?;
+    // Four temperatures plus the multiplier: the constraint row is there.
+    assert_eq!(kt.n_rows()?, 5);
+    assert_eq!(kt.dense()?, k.dense()?);
+    Ok(())
+}
+
+/// A non-linear physics with no tangent kernel of its own must say so: a zero
+/// block would let a Newton iteration fail far from the cause.
+#[test]
+fn a_nonlinear_physics_without_tangent_errors() -> Result<()> {
+    use pyrucast::models::damage::law::DamageLaw;
+    use pyrucast::ops::model;
+    let (fes, n) = unit_quad()?;
+    let damage = model::damage_with_law(&fes, Kinematics::PlaneStress, DamageLaw::DamageTc)?;
+    let materials = material_field(
+        &damage,
+        &[
+            ("E", 30_000.0),
+            ("nu", 0.2),
+            ("f_t", 3.0),
+            ("f_c", 30.0),
+            ("A_t", 0.9),
+            ("A_c", 0.5),
+        ],
+    )?;
+    let strain = deformation(&build_u(&n, 2, &[0.0; 8])?, &fes, StrainMeasure::Linear)?;
+
+    let err = tangent(&damage, &materials, &strain, None, None).unwrap_err();
+    assert!(
+        err.to_string().contains("no consistent tangent"),
+        "unexpected message: {err}"
+    );
+    Ok(())
+}

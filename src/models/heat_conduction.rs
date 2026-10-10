@@ -370,6 +370,11 @@ impl SubModelKind for HeatConduction {
         Ok(())
     }
 
+    /// Linear conduction: the consistent tangent **is** the conductivity.
+    fn tangent_is_stiffness(&self) -> bool {
+        true
+    }
+
     fn physics(&self) -> &'static [Physics] {
         &[Physics::Thermal]
     }

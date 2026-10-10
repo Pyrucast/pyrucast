@@ -403,6 +403,11 @@ impl SubModelKind for Fick {
         Ok(())
     }
 
+    /// Linear diffusion: the consistent tangent **is** the diffusivity matrix.
+    fn tangent_is_stiffness(&self) -> bool {
+        true
+    }
+
     fn physics(&self) -> &'static [Physics] {
         &[Physics::Diffusion]
     }

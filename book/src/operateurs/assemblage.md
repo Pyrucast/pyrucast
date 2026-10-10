@@ -88,6 +88,12 @@ au lieu d'un, à chaque itération, que la tangente serve ou non.
 `model.tangent_source()` dit d'avance ce qu'une tangente coûtera.
 `materials` résout chaque zone comme `stiffness`.
 
+Une physique **linéaire** (conduction, Fick, échanges, barres, poutres, coques)
+et les **contraintes** (Dirichlet, MPC, contact…) n'ont pas de loi à dériver :
+leur tangente est leur raideur, et c'est elle qui est assemblée, sans lire
+`deformation`. Une physique non linéaire sans tangente propre (l'endommagement,
+pour l'instant) fait échouer l'appel plutôt que de rendre un bloc nul.
+
 ```python
 {{#include ../../../tests/python/test_doc_ops_assemblage.py:tangent}}
 ```
