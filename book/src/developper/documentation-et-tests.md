@@ -68,7 +68,7 @@ Trois distinctions valent d'être tenues :
 Enfin, **un test qui écrit sur disque efface ce qu'il a écrit**, qu'il passe ou
 non :
 
-- côté Rust, un test d'intégration prend un `common::TempDir`
+- côté Rust, un test d'intégration prend un `TempDir` du module `common`
   (`tests/common/mod.rs`, déclaré par `mod common;`). C'est un dossier à lui
   seul, supprimé quand la valeur tombe, y compris pendant le déroulement d'un
   test en échec ;
