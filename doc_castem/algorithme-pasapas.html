@@ -1,0 +1,933 @@
+<title>Algorithme de PASAPAS</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] },
+    svg: { fontCache: 'global' },
+    options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+  };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js" defer></script>
+<style>
+/* Layout: one reading column of a technical note; algorithms are numbered pseudo-code listings whose indentation guides show nesting; mechanics in steel blue, thermal in ember. */
+:root {
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --fg: #17202a;
+  --muted: #566272;
+  --line: #d6dce4;
+  --guide: #c3ccd7;
+  --code-bg: #eaeef3;
+  --meca: #1d5b94;
+  --meca-soft: #e3edf7;
+  --ther: #b2431b;
+  --ther-soft: #f8e9e1;
+  --risk: #b42318;
+  --risk-soft: #fbe8e6;
+  --know: #8a5a00;
+  --know-soft: #f8efd9;
+  --detail: #4b5868;
+  --detail-soft: #e9edf2;
+  --fix: #1a7f37;
+  --fix-soft: #e3f3e7;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141a; --surface: #161d26; --fg: #e2e7ee; --muted: #9aa6b4; --line: #2b3542; --guide: #34404f; --code-bg: #1c2532;
+    --meca: #74aee6; --meca-soft: #18283a; --ther: #f08c5f; --ther-soft: #33221a;
+    --risk: #f2877c; --risk-soft: #3a1e1c; --know: #e2b55a; --know-soft: #33291a; --detail: #aab5c2; --detail-soft: #222b36;
+    --fix: #5cc27a; --fix-soft: #17301f;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141a; --surface: #161d26; --fg: #e2e7ee; --muted: #9aa6b4; --line: #2b3542; --guide: #34404f; --code-bg: #1c2532;
+  --meca: #74aee6; --meca-soft: #18283a; --ther: #f08c5f; --ther-soft: #33221a;
+  --risk: #f2877c; --risk-soft: #3a1e1c; --know: #e2b55a; --know-soft: #33291a; --detail: #aab5c2; --detail-soft: #222b36;
+  --fix: #5cc27a; --fix-soft: #17301f;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 16px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+}
+main { max-width: 1000px; margin: 0 auto; display: grid; gap: 56px; }
+section { display: grid; gap: 18px; min-width: 0; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(2rem, 5vw, 2.9rem); font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 1.7rem; font-weight: 600; padding-top: 14px; border-top: 2px solid var(--fg); display: flex; gap: 12px; align-items: baseline; }
+h2 .num { font-family: var(--font-mono); font-size: 0.95rem; font-weight: 500; color: var(--muted); }
+h3 { font-size: 1.22rem; font-weight: 600; margin-top: 10px; }
+p, li { max-width: 74ch; }
+p { margin: 0; }
+ul, ol { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; }
+a { color: var(--meca); }
+a:focus-visible { outline: 2px solid var(--meca); outline-offset: 2px; }
+code { font-family: var(--font-mono); font-size: 0.86em; background: var(--code-bg); padding: 0.08em 0.35em; border-radius: 3px; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 1.12rem; color: var(--muted); max-width: 72ch; }
+header { display: grid; gap: 14px; }
+.stamps {
+  font-family: var(--font-mono); font-size: 0.78rem; line-height: 1.55;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 4px;
+  padding: 12px 14px; overflow-x: auto; white-space: pre; color: var(--muted);
+}
+.stamps b { color: var(--fg); font-weight: 500; }
+nav.toc { display: flex; flex-wrap: wrap; gap: 6px 8px; }
+nav.toc a {
+  font-family: var(--font-mono); font-size: 0.8rem; text-decoration: none; color: var(--fg);
+  border: 1px solid var(--line); background: var(--surface); padding: 3px 9px; border-radius: 3px;
+}
+nav.toc a:hover { border-color: var(--meca); color: var(--meca); }
+
+.answers { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 12px; }
+.answer { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.answer h3 { margin: 0; font-size: 1.02rem; }
+.answer p { font-size: 0.94rem; }
+.tag { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; padding: 1px 6px; border-radius: 2px; justify-self: start; }
+.tag.meca { color: var(--meca); background: var(--meca-soft); }
+.tag.ther { color: var(--ther); background: var(--ther-soft); }
+
+/* Algorithms */
+figure.algo { margin: 0; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); min-width: 0; overflow: hidden; }
+figure.algo > figcaption { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--code-bg); }
+.algo-id { font-family: var(--font-mono); font-weight: 600; font-size: 0.86rem; color: var(--meca); }
+.algo.ther .algo-id { color: var(--ther); }
+.algo-title { font-family: var(--font-display); font-weight: 600; font-size: 1.05rem; }
+.algo-src { font-family: var(--font-mono); font-size: 0.74rem; color: var(--muted); margin-left: auto; }
+.algo-scroll { overflow-x: auto; }
+pre.pc { margin: 0; padding: 12px 14px; font-family: var(--font-mono); font-size: 0.84rem; line-height: 1.65; white-space: pre; }
+.pc-body { display: grid; width: max-content; min-width: 100%; padding: 8px 0; font-family: var(--font-mono); font-size: 0.84rem; line-height: 1.7; }
+.pl { display: flex; align-items: baseline; padding-right: 14px; }
+.pl:hover { background: var(--code-bg); }
+.ln { flex: 0 0 2.8em; text-align: right; padding-right: 0.9em; color: var(--muted); font-size: 0.72rem; font-variant-numeric: tabular-nums; user-select: none; }
+.cd {
+  white-space: pre; padding-left: calc(var(--d, 0) * 1.6em);
+  background-image: repeating-linear-gradient(to right, var(--guide) 0 1px, transparent 1px 1.6em);
+  background-size: calc(var(--d, 0) * 1.6em) 100%; background-repeat: no-repeat; background-position: 0.3em 0;
+}
+.cd.only { color: var(--muted); font-style: italic; }
+.cm { margin-left: auto; padding-left: 2.4em; color: var(--muted); white-space: pre; font-size: 0.76rem; }
+.kw { color: var(--meca); font-weight: 600; }
+.algo.ther .kw { color: var(--ther); }
+.pc-body a { color: inherit; text-decoration: underline; text-decoration-color: var(--meca); text-underline-offset: 2px; font-weight: 500; }
+
+.legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.legend div { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; font-size: 0.9rem; min-width: 0; }
+.legend b { font-family: var(--font-mono); font-size: 0.82rem; font-weight: 600; color: var(--meca); display: block; margin-bottom: 2px; }
+
+.math { background: var(--surface); border-left: 3px solid var(--meca); padding: 10px 14px; overflow-x: auto; min-width: 0; }
+.math.ther { border-left-color: var(--ther); }
+.where { font-size: 0.92rem; color: var(--muted); }
+.table-wrap { overflow-x: auto; min-width: 0; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+th, td { text-align: left; vertical-align: top; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+th { font-family: var(--font-display); font-weight: 600; font-size: 0.86rem; letter-spacing: 0.02em; background: var(--code-bg); }
+tr:last-child td { border-bottom: none; }
+td code { white-space: nowrap; }
+td.num { font-variant-numeric: tabular-nums; font-family: var(--font-mono); font-size: 0.82rem; white-space: nowrap; }
+.callout { border: 1px solid var(--line); border-left: 3px solid var(--know); background: var(--surface); padding: 12px 14px; border-radius: 0 4px 4px 0; display: grid; gap: 6px; }
+.callout p { font-size: 0.95rem; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 14px 16px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.panel.ther { border-top: 3px solid var(--ther); }
+.panel.meca { border-top: 3px solid var(--meca); }
+.panel h3 { margin: 0; font-size: 1.02rem; }
+.panel ul, .panel p { font-size: 0.93rem; }
+
+.findings { display: grid; gap: 12px; }
+.finding { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 14px 16px; display: grid; gap: 8px; min-width: 0; }
+.finding .head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; }
+.finding h3 { margin: 0; font-size: 1.05rem; }
+.sev { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 7px; border-radius: 2px; }
+.sev.risk { color: var(--risk); background: var(--risk-soft); }
+.sev.know { color: var(--know); background: var(--know-soft); }
+.sev.detail { color: var(--detail); background: var(--detail-soft); }
+.sev.fix { color: var(--fix); background: var(--fix-soft); }
+.finding .ref { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); }
+footer { color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--line); padding-top: 14px; }
+</style>
+
+<main>
+<header>
+  <div class="eyebrow">Cast3M · lecture du source · procédure PASAPAS</div>
+  <h1>Algorithme de PASAPAS</h1>
+  <p class="lede">Ce que fait réellement PASAPAS, écrit en pseudo-code à partir des procédures Gibiane : la boucle en temps, le couplage thermique-mécanique, puis la mécanique en détail (opérateur du Newton, prédicteur, configurations, critères de convergence et de non-convergence) et les options avancées. Chaque ligne renvoie au source.</p>
+  <div class="stamps"><b>PASAPAS </b> PROCEDUR  SP204843  26/06/09   boucle en temps, couplage
+<b>UNPAS   </b> PROCEDUR  PV090527  26/09/09   un pas de mécanique (3 843 lignes)
+<b>TRANSNON</b> PROCEDUR  SP204843  26/03/20   un pas de thermique non linéaire
+<b>PAS_DEFA</b> PROCEDUR  JK148537  26/08/05   valeurs par défaut
+<b>PAS_MODL</b> PROCEDUR  JK148537  26/05/28   classification du modèle et du matériau
+<b>PAS_INIT</b> PROCEDUR  SP204843  26/10/15   configurations initiales
+<b>PAS_ETAT</b> PROCEDUR  SP204843  26/04/14   état aux instants intermédiaires
+<b>PAS_RESU</b> PROCEDUR  MB234859  25/03/07   transfert et sauvegarde des résultats
+<b>TRANSLIN</b> PROCEDUR  MB234859  24/09/11   un pas de thermique linéaire
+<b>DUPONT2 </b> PROCEDUR  MB234859  24/09/11   un pas de thermique, schéma de Dupont
+<b>CORMAN  </b> PROCEDUR  CHAT      13/02/05   méthode asymptotique numérique
+<b>UNILATER</b> PROCEDUR  PV090527  26/04/21   conditions unilatérales (contact)
+<b>PAS_RAYO</b> PROCEDUR  CB215821  25/05/21   rayonnement, avec HRAYO et HRCAV
+<b>AUTOPILO</b>, <b>PILOINDI</b>, <b>PAS_HELM</b>, <b>DEFO_IMP</b>   pilotage, Helmholtz, contrôle de déformation
+<b>Fortran </b> interpréteur Gibiane et opérateurs (ACT3, KTAN, CONF, EPSI, ECFE, SSTE, RAYE…)   voir le pied de page</div>
+  <nav class="toc" aria-label="Sommaire">
+    <a href="#bref">En bref</a>
+    <a href="#lire">1 · Lecture</a>
+    <a href="#temps">2 · Temps et couplage</a>
+    <a href="#thermique">3 · Thermique</a>
+    <a href="#pas">4 · Pas mécanique</a>
+    <a href="#iter">5 · Itérations</a>
+    <a href="#comp">6 · Comportement</a>
+    <a href="#cv">7 · Critères</a>
+    <a href="#annexes">8 · Annexes</a>
+    <a href="#defauts">9 · Défauts</a>
+    <a href="#constats">10 · Constats</a>
+    <a href="#corrections">11 · Corrections</a>
+  </nav>
+</header>
+
+<section id="bref">
+  <h2><span class="num">0</span>En bref</h2>
+  <div class="answers">
+    <div class="answer"><span class="tag meca">Temps</span><h3>Boucle en temps</h3><p>Une liste d'instants imposés (<code>TEMPS_CALCULES</code>). Si on ne donne que <code>TEMPS_SAUVES</code>, le pas s'adapte au nombre d'itérations : il est divisé par √2 au-delà de 20 et multiplié par √2 en deçà de 7.</p></div>
+    <div class="answer"><span class="tag ther">Couplage</span><h3>Thermique puis mécanique</h3><p>Le couplage est étagé : la thermique avance de t<sub>n</sub> à t<sub>n+1</sub>, puis la mécanique utilise T<sub>n+1</sub>. Il n'y a qu'une passe par défaut. La thermique ne voit la mécanique que par la géométrie (en grands déplacements) et par les procédures utilisateur.</p></div>
+    <div class="answer"><span class="tag meca">Newton</span><h3>Newton modifié, accéléré</h3><p>L'opérateur par défaut est la raideur élastique, plus K<sub>σ</sub> en grands déplacements. Elle est gardée d'un pas à l'autre quand c'est possible. ACT3 accélère la convergence une itération sur deux. La tangente n'est utilisée qu'avec <code>K_TANGENT</code>.</p></div>
+    <div class="answer"><span class="tag meca">Convergence</span><h3>Deux critères à 10⁻⁴</h3><p>Le résidu d'équilibre, en norme max et rapporté à une force de référence fixée en début de pas, doit passer sous 10⁻⁴. La variation de l'incrément de déformation entre deux itérations aussi. Un troisième critère porte sur les moments pour les éléments de structure.</p></div>
+    <div class="answer"><span class="tag meca">Échec</span><h3>Stagnation, puis convergence forcée</h3><p>Il y a non-convergence quand le critère n'a pas baissé de 1 % en 10 itérations, ou après <code>MAXITERATION</code> itérations. Par défaut, on repart alors de l'itéré non convergé comme nouvel état initial, jusqu'à 100 sous-pas.</p></div>
+    <div class="answer"><span class="tag meca">Configurations</span><h3>Quatre géométries</h3><p>En petits déplacements, tout se fait sur la configuration initiale. En grands déplacements : début de pas pour K et F<sub>int,n</sub>, mi-incrément pour Δε et la loi de comportement, fin de pas recalculée à chaque itération pour les forces internes.</p></div>
+  </div>
+</section>
+
+<section id="lire">
+  <h2><span class="num">1</span>Comment lire les algorithmes</h2>
+  <div class="legend">
+    <div><b>indentation</b>Une ligne plus indentée s'exécute à l'intérieur de la ligne au-dessus. Les guides verticaux montrent cette imbrication.</div>
+    <div><b>même niveau</b>Deux lignes alignées s'exécutent l'une après l'autre.</div>
+    <div><b>Algo n · Annexe X</b>Appel : le détail de cette étape est écrit ailleurs, sous ce nom (lien cliquable).</div>
+    <div><b>// l. 1234</b>Lignes du source, dans UNPAS sauf mention contraire. ← désigne une affectation.</div>
+  </div>
+  <div class="callout"><p>La version précédente de cette page utilisait des organigrammes. Une même flèche y signifiait tantôt « ensuite » (thermique puis mécanique), tantôt « contient » (les itérations à l'intérieur des sous-pas). C'était ambigu. Ici, l'imbrication se lit uniquement à l'indentation.</p></div>
+  <figure class="algo" id="algo-0">
+    <figcaption><span class="algo-id">Algo 0</span><span class="algo-title">Imbrication des boucles</span><span class="algo-src">PASAPAS · TRANSNON · UNPAS</span></figcaption>
+    <div class="algo-scroll"><pre class="pc">
+PASAPAS                                                   // Algo 1
+  pour chaque instant TI                                  // boucle BEXTERN
+    pour chaque passe k, une seule par défaut             // boucle BO_BOTH
+      thermique de t à TI                                 // Algo 2, 2L ou 2D
+        pour chaque sous-pas thermique                    // BOUC_SO, si PAS_MAX
+          répéter les itérations                          // BOU_IT1
+      puis mécanique de t à TI                            // Algo 3, UNPAS
+        pour chaque sous-pas s, 100 au plus               // BONOCONV, convergence forcée
+          répéter les itérations i                        // ETIQ, Algo 4
+            pour chaque sous-incrément k                  // sousinc, Algo 5
+              répéter les sous-itérations non locales     // BIHL, Annexe A
+</pre></div>
+  </figure>
+</section>
+
+<section id="temps">
+  <h2><span class="num">2</span>Boucle en temps et couplage</h2>
+  <figure class="algo" id="algo-1">
+    <figcaption><span class="algo-id">Algo 1</span><span class="algo-title">PASAPAS</span><span class="algo-src">lignes de PASAPAS</span></figcaption>
+    <div class="algo-scroll"><pre class="pc">
+entrées : modèle, matériau, chargement, options (table de PASAPAS)
+PAS_DEFA, PAS_INIT : valeurs par défaut ; FOR0 ← configuration courante    // l. 23 ; PAS_INIT l. 402-411
+GE0_DEB ← FOR0, ou FOR0 + u₀ en grands déplacements et en FEFP
+matériau à t₀ ; ETREF ← EPTH(T_ref) ; ETHER1 ← EPTH(T₀) − ETREF            // l. 50-76
+pour chaque instant TI de TEMPS_CALCULES                                   // BEXTERN, l. 101
+  si TI &lt; t, ou TI = t₀ initial, ou TI = t sans REEQUILIBRAGE : passer   // l. 105-119
+  si PAS_AJUSTE :                                                          // l. 123-158
+    si le pas précédent a convergé :
+      si NOMBRE_ITERATIONS &gt; 20 : Δt ← Δt / √2
+      si NOMBRE_ITERATIONS &lt; 7, sauf juste après un échec : Δt ← Δt · √2
+    sinon :
+      faire un pas quasi nul (10⁻¹⁰·Δt), puis repartir avec Δt / 2
+    TI ← t + Δt, sans dépasser la cible
+  Δt ← TI − t ; si Δt = 0 en dynamique ou en consolidation : passer        // l. 153-158
+  si le modèle évolue (CHAR_MODE) : modèle à TI ; T et ε des zones ajoutées   // l. 165-336
+  pour k = 1 … NB_BOTH                                                     // BO_BOTH, l. 349-499
+    si CONVERGENCE_MEC_THE : CHARGEMENT ← CHARGEMENT_I
+    si le modèle a une thermique et TI ≠ t :                               // l. 360, 375
+      géométrie ← GE0_DEB si k = 1 ; FOR, fin de pas, si k ≥ 2 en GD        // l. 361-372
+      T₂ ← Algo 2 (TRANSNON), Algo 2L (TRANSLIN) ou Algo 2D (DUPONT2)      // l. 402-412
+      REEV_THE                                                              // procédure utilisateur
+    si le modèle a une mécanique :
+      géométrie ← GE0_DEB                                                   // l. 437
+      appeler Algo 3 ; si échec sans convergence forcée : ERREUR 997        // l. 440-448
+      REEV_MEC                                                              // procédure utilisateur
+    si CONVERGENCE_MEC_THE :
+      si k ≥ 2 et max ‖T_k − T_k−1‖∞ / ‖T_k‖∞ &lt; CRITERE_COHERENCE : sortir   // l. 459-494
+      si k = NB_BOTH : ERREUR 999
+    sinon : sortir                                                          // une seule passe
+  si DUPONT : TET0 ← ESTIMATION.TEMPERATURES ; VIEUXPAS ← Δt               // l. 509-514
+  T₁ ← T₂ ; ETHER1 ← ETHER2 ; DEFOR1 ← DEFOR2 ; FREA1 ← FOPL                 // l. 527-550
+  si GD, ou FEFP réactualisé : GE0_DEB ← FOR                               // l. 553-557
+  si pilotage ou non convergé : t ← t + AUTOCOEF·(TI − t) ; sinon t ← TI     // l. 561-569
+  PAS_RESU : CONTINUATION ← ESTIMATION ; sauvegarde si convergé             // l. 598
+  si pilotage et cible non atteinte : rejouer la cible ; ERREUR 1000 après AUTOPAS essais   // l. 601-617
+  si PAS_AJUSTE et (TI avant la cible ou non convergé) : rejouer la cible  // l. 621-625
+</pre></div>
+  </figure>
+  <ul>
+    <li><strong>Instants.</strong> Sans <code>TEMPS_CALCULES</code>, PAS_DEFA active <code>PAS_AJUSTE</code> avec <code>TEMPS_SAUVES</code> comme cibles (PAS_DEFA l. 803-806). <code>NOMBRE_ITERATIONS</code> ne compte que les itérations des sous-pas convergés (UNPAS l. 3420).</li>
+    <li><strong>Pas non convergé.</strong> PAS_RESU recopie ESTIMATION dans CONTINUATION sans condition (PAS_RESU l. 19-42). Le pas quasi nul de <code>PAS_AJUSTE</code> sert donc vraisemblablement à rééquilibrer cet état avant de repartir ; c'est une interprétation.</li>
+  </ul>
+  <div class="two">
+    <div class="panel ther">
+      <h3>Thermique → mécanique</h3>
+      <ul>
+        <li>T₂ = température de fin de pas, projetée par <code>PROI</code> si les maillages diffèrent (UNPAS l. 352-375).</li>
+        <li>Matériau mécanique évalué à TI : PAS_ETAT lit T<sub>n+1</sub> dans ESTIMATION. Si le matériau dépend d'autres variables que le seul α, la raideur est recalculée à chaque pas (PAS_MODL l. 345-350).</li>
+        <li>Δε<sub>th</sub> = EPTH(T₂) − EPTH(T₁) entre au second membre comme pseudo-force, et elle est retirée de Δε avant COMP (Algo 3, Algo 5).</li>
+        <li>COMP reçoit T interpolée linéairement à chaque sous-incrément.</li>
+      </ul>
+    </div>
+    <div class="panel meca">
+      <h3>Mécanique → thermique</h3>
+      <ul>
+        <li>Géométrie : configuration de début de pas à la passe 1, de fin de pas aux passes suivantes en grands déplacements.</li>
+        <li>Champs mécaniques lus dans CONTINUATION, donc au début du pas (TRANSNON l. 312-344). TRANSNON lève une erreur si le matériau thermique en dépend et que <code>RELAXATION_THETA</code> ≠ 0 (l. 635-640).</li>
+        <li>Il reste les procédures utilisateur (<code>REEV_*</code>, <code>CHARTHER</code>, <code>PARATHER</code>).</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout"><p><strong>Conséquence.</strong> En petits déplacements et sans procédure utilisateur, la passe 2 de <code>CONVERGENCE_MEC_THE</code> redonne la même température. La cohérence est donc atteinte d'office et le coût double. Cette option coupe aussi la convergence forcée et le pilotage, et elle est incompatible avec <code>PAS_AJUSTE</code> (PAS_DEFA l. 985-999).</p></div>
+</section>
+
+<section id="thermique">
+  <h2><span class="num">3</span>La thermique</h2>
+  <figure class="algo ther" id="algo-2">
+    <figcaption><span class="algo-id">Algo 2</span><span class="algo-title">TRANSNON : un pas de thermique</span><span class="algo-src">lignes de TRANSNON</span></figcaption>
+    <div class="algo-scroll"><pre class="pc">
+entrées : T_n (CONTINUATION), intervalle [t, TI]
+pour chaque sous-pas thermique [t₀, t₁]                                    // BOUC_SO, l. 572 ; découpé si PAS_MAX
+  t_θ ← θ·t₁ + (1 − θ)·t₀                                                  // θ = RELAXATION_THETA = 1
+  matériau ← f(T_n, t_θ, champs mécaniques de début de pas)                 // l. 581-700
+  AA ← θ·K(T_n) + C(T_n)/Δt + blocages + rayonnement à T_n (Annexe E)     // l. 726-982 ; gardée tout le sous-pas
+  F ← flux, convection, sources, T imposées, rayonnement, CHARTHER         // l. 884-1031
+  R ← F − K(T_n)·T_n
+  pour i = 1, 2, …                                                         // BOU_IT1, l. 1052
+    si i &gt; MAXITERATION : « LE CALCUL N A PAS CONVERGE » ; erreur         // l. 1059-1065
+    si i pair et i &gt; 3 : R ← R − ACT3(4 derniers résidus)                // l. 1084-1089
+    ΔT⁽ⁱ⁾ ← RESO(AA, R)                                                     // incrément total : ΔT⁽ⁱ⁻¹⁾ + AA⁻¹·r
+    e ← max ‖ΔT⁽ⁱ⁾ − ΔT⁽ⁱ⁻¹⁾‖∞ / ½(‖T_n‖∞ + ‖T⁽ⁱ⁾‖∞), par inconnue          // l. 1187-1217
+    si e ≤ PRECISION (si TTOL est donné : toutes les variations ≤ TTOL) : sortir
+    T_θ ← T_n + θ·ΔT⁽ⁱ⁾ ; matériau ← f(T_θ)
+    R ← F(T_θ) − K(T_θ)·T_θ − C(T_θ)·ΔT⁽ⁱ⁾/Δt + AA·ΔT⁽ⁱ⁾                      // l. 1220-1468
+  T_n ← T_n + ΔT⁽ⁱ⁾
+ESTIMATION.TEMPERATURES ← T_n                                               // l. 1524
+</pre></div>
+  </figure>
+  <p>C'est un point fixe à matrice constante (Newton modifié) : AA est assemblée à la température de début de pas, puis gardée. Le critère porte sur la variation de l'incrément entre deux itérations, pas sur le résidu. Dans PASAPAS, θ vaut 1 (PAS_DEFA l. 517), alors que l'en-tête de TRANSNON annonce 0,5. Le nombre maximal d'itérations est celui de la mécanique, parce que TRANSNON lit la même table de travail (l. 290-294). θ est forcé à 1 en régime stationnaire et avec advection (l. 428-429).</p>
+
+  <h3>Les deux autres procédures thermiques</h3>
+  <p><code>PROCEDURE_THERMIQUE</code> choisit la procédure : <code>NONLINEAIRE</code> (défaut) appelle TRANSNON, <code>LINEAIRE</code> appelle TRANSLIN, <code>DUPONT</code> appelle DUPONT2. PAS_DEFA impose TRANSNON en cas de changement de phase, de solubilité, de diffusion ou de modèle THM (l. 1203-1206), mais pas en présence de sources de chaleur.</p>
+  <figure class="algo ther" id="algo-2L">
+    <figcaption><span class="algo-id">Algo 2L</span><span class="algo-title">TRANSLIN : thermique linéaire</span><span class="algo-src">lignes de TRANSLIN · 24/09/11</span></figcaption>
+    <div class="algo-scroll"><pre class="pc">
+entrées : T_n (CONTINUATION), sous-pas TEM_CALC
+θ ← RELAXATION_THETA (1) ; λ₂ ← SOUS-RELAXATION, jamais transmis, donc 1  // l. 72-81
+si pas de capacité (C ou RHO absent) : θ ← 1 ; λ₂ ← 1                     // l. 87-95, stationnaire
+pour chaque sous-pas [t₀, t₁]                                             // BOUC_SO, l. 143
+  t_m ← λ₂·t₁ + (1 − λ₂)·t₀                                                // l. 148
+  K ← CONDU(MOD_THE, MAT_THE) [+ conductivité constante]                   // l. 172-175 ; matériau sans VARI
+  C ← CAPA(MOD_THE, MAT_THE) [+ capacité constante]                        // l. 192-199
+  F ← flux Q(t_m) + T imposées(t₁) + CONV(convection, T_e(t_m))            // l. 160-168, 184-188, 221-226
+  système : (θ·K + C/Δt + blocages)·T₁ = ((θ − 1)·K + C/Δt)·T₀ + F         // l. 203-215
+  T₁ ← RESO, une seule résolution                                         // l. 230
+  T₀ ← T₁                                                                  // l. 248-252
+ESTIMATION.TEMPERATURES ← T₁                                               // l. 270
+</pre></div>
+  </figure>
+  <p>TRANSLIN fait une seule résolution par sous-pas, sans itération ni critère. Le matériau n'est pas instancié en fonction de la température (pas de <code>VARI</code>), et les matrices sont réassemblées à chaque sous-pas. TRANSLIN ne traite ni le rayonnement, ni les sources de chaleur, ni le changement de phase, ni les procédures <code>CHARTHER</code> et <code>PARATHER</code>.</p>
+
+  <figure class="algo ther" id="algo-2D">
+    <figcaption><span class="algo-id">Algo 2D</span><span class="algo-title">DUPONT2 : schéma de Dupont à trois niveaux</span><span class="algo-src">lignes de DUPONT2 · 24/09/11</span></figcaption>
+    <div class="algo-scroll"><pre class="pc">
+entrées : T_n (CONTINUATION), TET0, Δt = NOUV_PAS, Δt_préc = VIEUXPAS
+λ ← RELAXATION_DUPONT (0,25) ; λ₂ ← SOUS_RELAXATION, jamais transmis, donc 0,5   // l. 92-104
+si pas de capacité : λ₂ ← 1                                                 // l. 156-164
+si TET0 est un champ et |Δt − Δt_préc| / Δt ≤ 10⁻⁵ :                        // l. 188-197
+  T₀ ← TET0 ; T₁ ← T_n                                                      // niveaux t_n−1 et t_n
+sinon :                                                                     // premier pas, ou Δt modifié
+  T₂ ← Algo 2 sur le premier sous-pas                                       // TRANSNON, l. 199-207
+  si un seul sous-pas : retourner T₂                                        // l. 209-213
+  T₀ ← T_n ; T₁ ← T₂
+pour chaque sous-pas restant [t₁, t₂]                                       // BOUC_SO, l. 233
+  t_m ← λ₂·t₂ + (1 − λ₂)·t₁
+  T* ← extrapolation linéaire en t_m depuis (t₀, T₀) et (t₁, T₁)            // COLI, l. 238-242
+  matériau ← f(T*, t_m) ; dépendance mécanique : erreur si λ₂ ≠ 0           // l. 252-325
+  K ← COND + rayonnement à T* (Annexe E) + CHARTHER ; C ← CAPA             // l. 327-406
+  F ← flux Q(t_m) + T imposées(t₂) + convection T_e(t_m) + seconds membres  // l. 310-406
+  système : (C/Δt + (½ + λ)·K)·T₂ = (C/Δt + (2λ − ½)·K)·T₁ − λ·K·T₀ + F     // l. 408-431, une résolution
+  T₀ ← T₁ ; T₁ ← T₂                                                         // l. 455-461
+ESTIMATION.TEMPERATURES ← T₂ ; RELAXATION_DUPONT rendu à PASAPAS            // l. 476-486
+</pre></div>
+  </figure>
+  <div class="math ther">\[
+\frac{\mathbf C}{\Delta t}\big(\mathbf T_{n+1}-\mathbf T_n\big)+\mathbf K(\mathbf T^{*})\Big[\big(\tfrac12+\lambda\big)\mathbf T_{n+1}+\big(\tfrac12-2\lambda\big)\mathbf T_n+\lambda\,\mathbf T_{n-1}\Big]=\mathbf F\big(t_{n+\frac12}\big),
+\qquad \mathbf T^{*}=\tfrac32\mathbf T_n-\tfrac12\mathbf T_{n-1}
+\]</div>
+  <p class="where">Les poids du terme de conduction somment à 1. Avec λ = ¼, celui de T<sub>n</sub> s'annule : K(T*)·(¾ T<sub>n+1</sub> + ¼ T<sub>n−1</sub>). La non-linéarité du matériau est traitée sans itération : le matériau est évalué une fois, à une température extrapolée au milieu du pas (T* ci-dessus, pour des pas égaux). Il n'y a ni itération ni critère de convergence. Passent par TRANSNON le premier pas de chaque appel à PASAPAS (où <code>VIEUXPAS</code> repart à 0, PAS_DEFA l. 572), ainsi que tout pas dont la durée change de plus de 10⁻⁵ en relatif.</p>
+  <div class="callout"><p><strong>Le schéma à trois niveaux dégénère d'un pas PASAPAS à l'autre.</strong> PASAPAS range <code>ESTIMATION.TEMPERATURES</code> dans <code>TET0</code> (l. 511). DUPONT2 vient d'y écrire T<sub>n+1</sub> (l. 485), et PAS_RESU ne le recopie dans CONTINUATION qu'ensuite (l. 598). Au pas suivant, DUPONT2 lit donc T₀ = T₁ = T<sub>n</sub>.</p>
+  <p>Conséquences : l'extrapolation donne T* = T<sub>n</sub>, et le schéma se réduit à un θ-schéma à deux niveaux avec θ = ½ + λ = ¾ et un matériau figé à T<sub>n</sub>. Le vrai schéma à trois niveaux ne s'applique qu'entre sous-pas d'un même pas (<code>PAS_MAX</code>). Après une reprise, PAS_INIT range dans <code>TET0</code> la température d'indice NSOR − 2, soit deux instants avant le dernier (l. 84). Mais <code>VIEUXPAS</code> repart à 0, si bien que le premier pas passe par TRANSNON et que ce <code>TET0</code> n'est pas utilisé. C'est ce qu'indique la lecture du source ; je ne l'ai pas confirmé par un calcul.</p></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th></th><th>TRANSNON</th><th>TRANSLIN</th><th>DUPONT2</th></tr></thead>
+    <tbody>
+      <tr><td>Schéma en temps</td><td>θ-schéma, θ = 1</td><td>θ-schéma, θ = 1</td><td>Dupont, λ = ¼</td></tr>
+      <tr><td>Matériau</td><td>Réévalué à chaque itération</td><td>Constant</td><td>Évalué une fois, à T extrapolée</td></tr>
+      <tr><td>Résolutions par sous-pas</td><td>Jusqu'à <code>MAXITERATION</code></td><td>1</td><td>1 ; TRANSNON au 1er pas de chaque appel et si Δt change</td></tr>
+      <tr><td>Contrôle de convergence</td><td>Variation de ΔT ≤ <code>PRECISION</code></td><td>Aucun</td><td>Aucun</td></tr>
+      <tr><td>Chargements évalués à</td><td>t₁</td><td>t₁</td><td>Mi-pas, sauf T imposées à t₂</td></tr>
+      <tr><td>Rayonnement (Annexe E)</td><td>Oui : matrice à T<sub>n</sub>, résidu à T<sub>θ</sub></td><td>Non</td><td>Oui, une fois à T*</td></tr>
+      <tr><td>Sources (<code>SOURCE</code>)</td><td>Oui</td><td>Non</td><td>Non</td></tr>
+      <tr><td>Changement de phase, diffusion</td><td>Oui</td><td>Non</td><td>Non</td></tr>
+      <tr><td><code>CHARTHER</code> / <code>PARATHER</code></td><td>Oui / oui</td><td>Non / non</td><td>Oui / oui</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="pas">
+  <h2><span class="num">4</span>Un pas de mécanique</h2>
+  <figure class="algo" id="algo-3">
+    <figcaption><span class="algo-id">Algo 3</span><span class="algo-title">UNPAS : préparation et sous-pas</span><span class="algo-src">lignes d'UNPAS</span></figcaption>
+    <div class="algo-scroll"><pre class="pc">
+entrées : état de début (u_n, λ_n, σ_n, V_n, ε_n), T₁, T₂, t, TI
+D_{n+1} ← matériau à TI (PAS_ETAT, PAS_MATE)                                // l. 283-297
+F_ext ← chargement à TI ; pression convertie une fois en HPP               // l. 301-347
+Δε* ← [EPTH(T₂) − EPTH(T₁)] + [DEFI₂ − DEFI₁] + [D_{n+1}⁻¹ − D_n⁻¹]·σ_n       // l. 987-1046
+F* ← Bᵀ·D_{n+1}·Δε*                                                         // pseudo-force, l. 1060-1073
+si dynamique : F_rea ← M·a_n + C·v_n + (4/Δt)·M·v_n                         // l. 407-471
+t_déb ← t
+pour s = 1 … MAXSOUSPAS                                                     // BONOCONV, l. 649
+  K ← opérateur initial (tableau du § 5)                                    // l. 709-966
+  R⁰ ← [F_ext + F_suiv + F* + F_rea − F_int(σ_n) ; u_imp − A·u_n]           // l. 1129-1204
+  (δu⁰, λ⁰) ← RESO(K, R⁰)                                                   // l. 1252-1322
+  si s = 1 : F_ref, M_ref ← références du critère (§ 7)                      // l. 1334-1355
+  si le prédicteur s'applique : R⁰ ← R⁰ + a·F_NL                            // l. 1393-1443
+  (état, convergé) ← Algo 4
+  F_NL ← K·Δu − ΔF_int − F*, cumulée d'un sous-pas à l'autre après un échec  // l. 3607-3628
+  si convergé : sortir
+  si pas CONVERGENCE_FORCEE : retourner échec                               // ERREUR 997 dans PASAPAS
+  t_déb ← t_déb + α·(TI − t_déb) ; Δt ← TI − t_déb                          // α = COEPI, l. 3670-3671
+  si Δt ≈ 0 et (loi visqueuse ou dynamique ou consolidation) : ERREUR 1155  // l. 3672-3674
+  u_n, σ_n, V_n, ε_n, T₁, GEOM1 ← itéré non convergé                        // l. 3676-3704
+  matériau de début ← matériau à TI                                        // l. 700-707
+  si s = MAXSOUSPAS : ERREUR 996                                            // l. 3718-3721
+ESTIMATION ← u, réactions, σ, ε, V, ε_in ; v et a en dynamique              // l. 3733-3828
+</pre></div>
+  </figure>
+  <p><strong>Convergence forcée.</strong> Un état non convergé n'est jamais accepté comme résultat. Il sert de <em>point de départ</em> à un nouveau sous-pas, qui vise toujours TI. Avec α = 1 (défaut), il ne reste plus de temps à intégrer. Avec <code>RELAXATION_NONCONV</code> &lt; 1, la cible est ramenée à t + α·Δt ; une fois atteinte, UNPAS la déclare « non convergence due à la relaxation » et repart de là : c'est un vrai sous-découpage du pas.</p>
+  <div class="math">\[
+\mathbf R^{0}=\begin{Bmatrix}\mathbf F^{ext}_{n+1}+\mathbf F^{suiv}+\mathbf B^{\mathsf T}\mathbf D\,\Delta\boldsymbol\varepsilon^{*}-\mathbf F^{int}(\boldsymbol\sigma_n)\\[2pt] \mathbf u^{imp}_{n+1}-\mathbf A\,\mathbf u_n\end{Bmatrix},
+\qquad
+\mathbf F^{NL}_n=\mathbf K\,\Delta\mathbf u_n-\big(\mathbf F^{int}_{n+1}-\mathbf F^{int}_{n}\big)-\mathbf B^{\mathsf T}\mathbf D\,\Delta\boldsymbol\varepsilon^{*}_n
+\]</div>
+  <p class="where"><strong>Prédicteur.</strong> F<sup>NL</sup> est la part non linéaire des forces internes ; elle est nulle pour un pas thermo-élastique. Le pas suivant l'ajoute à R⁰ avec un coefficient a. Ce coefficient est le rapport des incréments de charge projetés sur Δu⁰<sub>n</sub> + Δu⁰<sub>n+1</sub>, borné par Δt/Δt<sub>préc</sub>. Il vaut Δt/Δt<sub>préc</sub> si l'incrément de charge est négligeable (fluage, thermique) ou petit devant F<sup>NL</sup> (projection de F<sup>NL</sup> plus de 200 fois plus grande), et 0 si, dans ce cas, le rapport des charges est sous −0,05. Hors de ce cas, un rapport négatif désactive le prédicteur. Le prédicteur ne s'applique que si 0 &lt; a &lt; 20, si le pas précédent a convergé sans sous-pas et était non linéaire, et si le modèle n'a pas changé. Le test de convergence est alors sauté à l'itération 1.</p>
+</section>
+
+<section id="iter">
+  <h2><span class="num">5</span>Les itérations d'équilibre et l'opérateur</h2>
+  <figure class="algo" id="algo-4">
+    <figcaption><span class="algo-id">Algo 4</span><span class="algo-title">ETIQ : itérations d'équilibre</span><span class="algo-src">lignes d'UNPAS</span></figcaption>
+    <div class="algo-scroll"><pre class="pc">
+Δu ← 0 ; λ ← λ_n ; Δε_préc ← 0 ; R ← R⁰
+pour i = 1, 2, …                                                           // ETIQ, l. 1483
+  si GD et i &gt; 1 et (i − i_K multiple de max(20, DELTAITER), ou urgence) :   // l. 1540-1795
+    K ← K_e(GEOM2) + K_σ(σ) + blocages + contact + masse                   // perd C et H
+    plus de 20 reconstructions dans le sous-pas : NONCONV ← vrai           // l. 1552-1553
+  si K_TANGENT et i ≥ 2 et i multiple de NITER_KTANGENT :                  // l. 1799-1842
+    K ← KTAN(σ, V) + K_σ + blocages                                         // ou tangente SSTE, ou KTAN PERT
+  si i &gt; 3 et ITACC ≤ 0 :                                                  // i = 4, 6, 8…, l. 1875-1921
+    R ← R − ACT3(4 derniers résidus) ; ITACC ← 2
+  (δu, λ) ← RESO(K, R)                                                      // l. 1930-1982 ; contact : Annexe D
+  si MAN et i = 1 : δu ← prédicteur asymptotique                           // Annexe B
+  si pilotage indirect : δu ← δu + Δη·δu_II                                // Annexe C
+  Δu ← Δu + δu ; u ← u_n + Δu ; en GD : GEOM2 ← FOR0 + u                   // λ en total, l. 2070-2152
+  si pilotage automatique : normaliser Δu, recalculer α                    // Annexe C
+  si le critère précédent dépasse 10⁸, une seule fois : abandonner l'itération   // l. 2128-2132
+  (σ, V, ε_in, Δε) ← Algo 5
+  F_int ← BSIGMA(σ) sur GEOM2 (FOR0 en HPP) [+ (4/Δt²)·M·Δu + (2/Δt)·C·Δu]  // l. 2991-3151
+  F_suiv ← pression suiveuse et CHARMECA sur GEOM2
+  r ← F_ext + F_suiv − F_int − Aᵀ·λ                                          // RESIDC, pour le critère
+  R ← [F_ext + F_suiv − F_int ; u_imp − A·u]                                 // l. 3206-3225
+  selon Algo 6 :
+    convergé : retourner (état, vrai)
+    échec : retourner (état, faux)
+  Δε_préc ← Δε
+</pre></div>
+  </figure>
+  <div class="math">\[
+\begin{bmatrix}\mathbf K & \mathbf A^{\mathsf T}\\ \mathbf A & \mathbf 0\end{bmatrix}
+\begin{Bmatrix}\delta\mathbf u\\ \boldsymbol\lambda^{(i)}\end{Bmatrix}
+=
+\begin{Bmatrix}\mathbf F^{ext}_{n+1}+\mathbf F^{suiv}-\mathbf F^{int}\big(\boldsymbol\sigma^{(i-1)}\big)\\[2pt] \mathbf u^{imp}_{n+1}-\mathbf A\,\mathbf u^{(i-1)}\end{Bmatrix}
+\]</div>
+  <p class="where">Les déplacements se résolvent en correction, les multiplicateurs « en total » : λ<sup>(i)</sup> est directement la réaction courante (l. 2058-2069). Le second membre ne contient donc pas les réactions.</p>
+  <h3>Ce qu'il y a dans K</h3>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Situation</th><th>Opérateur d'itération</th><th>Reconstruit</th><th>Source</th></tr></thead>
+    <tbody>
+      <tr><td>Défaut : petits déplacements, matériau constant</td><td>K<sub>e</sub>(matériau à TI) + blocages</td><td><strong>Une fois par appel de PASAPAS</strong> (<code>WTAB.RRRR</code>, oubliée en fin d'appel, PASAPAS l. 644-645), si la raideur ne contient pas de relations (sinon, voir § 10)</td><td class="num">l. 711-771</td></tr>
+      <tr><td>Matériau variable (hors α seul)</td><td>K<sub>e</sub>(matériau à TI)</td><td>Chaque pas</td><td class="num">PAS_MODL 345-350</td></tr>
+      <tr><td>Endommagement, viscodommage, céramique</td><td>Raideur sécante endommagée <code>HOOK</code>(V<sub>n</sub>)</td><td>Chaque pas</td><td class="num">l. 713-716</td></tr>
+      <tr><td>Grands déplacements</td><td>K<sub>e</sub>(x<sub>n</sub>) + K<sub>σ</sub>(σ<sub>n</sub>), puis K<sub>e</sub>(x<sup>(i)</sup>) + K<sub>σ</sub>(σ<sup>(i)</sup>)</td><td>Chaque pas, puis toutes les 20 itérations ou en urgence</td><td class="num">l. 961-966, 1540-1795</td></tr>
+      <tr><td><code>K_TANGENT</code></td><td>Itération 1 : KTAN du pas précédent, sinon KTAN(σ<sub>n</sub>, V<sub>n</sub>, Δt = 0). Ensuite : KTAN(σ<sup>(i)</sup>, V<sup>(i)</sup>)</td><td>Chaque itération à partir de la 2e</td><td class="num">l. 912-956, 1799-1842</td></tr>
+      <tr><td><code>K_TANGENT_PERT</code></td><td>Tangente par perturbation de COMP (C1 = 10⁻³, C2 = C1/100)</td><td>Idem</td><td class="num">l. 1809-1821</td></tr>
+      <tr><td>FEFP ; SSTE avec <code>K_TANGENT</code></td><td>Tangente cohérente rendue par ECFE ou SSTE</td><td>Chaque itération</td><td class="num">l. 2179-2188, 2457</td></tr>
+      <tr><td><code>DYNAMIQUE</code> / <code>CONSOLIDATION</code></td><td>+ 4/Δt² M + 2/Δt C / − θΔt H</td><td><strong>Chaque pas</strong> : <code>RECAOP</code>, vrai au premier appel, n'est jamais remis à faux</td><td class="num">l. 789-855</td></tr>
+      <tr><td><code>CONTACT</code></td><td>+ relations unilatérales <code>RFCO</code></td><td>Chaque sous-pas, à chaque reconstruction GD, contrôle à convergence</td><td class="num">l. 861-908</td></tr>
+      <tr><td>Divers</td><td><code>RIGIDITE_CONSTANTE</code>, rigidité augmentée, <code>ADDI_MATRICE</code> de CHARMECA, advection</td><td>Avec l'opérateur</td><td class="num">l. 737-762, 1102-1104</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout">
+    <p><strong>KTAN n'est pas la tangente algorithmique.</strong> Dans le Fortran (KTANGE, KTANGA, DOHOT1, PENT1), KTAN ne reçoit que l'état (σ, V) et le matériau, jamais l'incrément. En chaque point de Gauss, il teste si σ est sur la surface de charge à <code>PREC</code> près (<code>PRECISINTER</code> = 10⁻⁸ dans UNPAS, l. 149, 1827). Sous la surface, il prend la matrice élastique. Sur la surface, il prend la tangente élasto-plastique continue, par exemple le module H′E/(H′ + E) sur une courbe de traction. Au-dessus, pour les modèles de plasticité de PENT1, il s'arrête sur l'erreur 275 au lieu de revenir à l'élastique. Les modèles sans tangente codée reçoivent la matrice élastique. UNPAS écrit d'ailleurs « cohérente » entre guillemets (l. 930, 944). Seuls KTAN <code>PERT</code> (KTAPER perturbe l'intégration autour de l'incrément courant), FEFP (ECFE) et SSTE fournissent une tangente cohérente avec l'intégration. Enfin, <code>K_TANGENT</code> est ignoré, avec un message, si le modèle n'est ni plastique ni visqueux (l. 203-207).</p>
+    <p><strong>ACT3.</strong> Le Fortran d'ACT3 lit 3 champs « primaux » D₀, D₁, D₂ et 4 champs « duaux » F₀ … F₃. Il cherche les coefficients x₁, x₂, x₃ qui minimisent ‖F₀ + Σ x<sub>j</sub>(F<sub>j</sub> − F₀)‖ au sens des moindres carrés, puis rend (x₁ + x₂ + x₃)·D₀ + (x₂ + x₃)·D₁ + x₃·D₂. C'est une accélération de type Anderson à mémoire 3. Dans UNPAS, les F sont les quatre derniers résidus, pondérés par 1/√(volume nodal) (l. 583-588) ; les D sont ces résidus non pondérés, diminués de la correction précédente (l. 1882-1887). Le résultat est retranché du second membre (l. 1892-1914). Si le système est singulier, ACT3 se rabat sur 2 puis 1 direction, et il renonce si l'extrapolation retombe sur un point déjà connu. Dans TRANSNON, les F sont les incréments du second membre, qui valent les résidus, sans pondération. Il est suspendu pendant 3 ou 4 itérations (<code>ITACC</code> = 4, selon l'endroit où le compteur est remis à 4) dans les cas suivants : un souci de résolution, une itération abandonnée, une convergence refusée (bascule HPP → GD, souci de COMP, contact à actualiser), une reconstruction de K à l'itération 2, une relaxation, ou, en GD, une non-convergence détectée plus de 3 itérations après la dernière reconstruction de K (l. 1507, 1792, 2027, 3408, 3447, 3453). Il reste actif avec <code>K_TANGENT</code>, sauf en FEFP et en SSTE (l. 210-212). Avec <code>STABILITE</code> (vrai par défaut), une correction rétrograde est annulée et une correction excessive est bornée (l. 1896-1912).</p>
+  </div>
+</section>
+
+<section id="comp">
+  <h2><span class="num">6</span>Intégration du comportement et configurations</h2>
+  <figure class="algo" id="algo-5">
+    <figcaption><span class="algo-id">Algo 5</span><span class="algo-title">Intégration du comportement</span><span class="algo-src">lignes d'UNPAS</span></figcaption>
+    <div class="algo-scroll"><pre class="pc">
+entrées : Δu, x_n, état de début (σ_n, V_n, ε_n, ε_in,n), T₁, T₂, t_déb, α
+si FEFP : (K_t, σ, V, b_e) ← ECFE(u, ou Δu en réactualisé) ; K ← K_t + blocages ; retourner   // l. 2174-2205
+N ← SOUS_INCREMENT ; en GD, ajusté d'une itération à l'autre pour ‖Δε_k‖ ≤ DEPS_MAX   // l. 2217, 2367-2370
+pour k = 1 … N                                                              // sousinc, l. 2224
+  Δu_k ← Δu / N
+  si GD et hypothèse non linéaire :                                         // l. 2245-2299
+    x_mid ← x_n + (k − ½)·Δu / N
+    Δε_k ← E_xmid(Δu_k / 2) − E_xmid(−Δu_k / 2)                              // = sym ∇_xmid Δu_k
+    si jacobien négatif : Δε_k ← déformation linéaire sur x_n
+  sinon :
+    Δε_k ← sym ∇Δu_k sur la configuration de début de pas                   // l. 2303-2320
+  transporter Δε_k sur FOR0 ; en GD, σ, ε et Δε_k sur la configuration LAGRANGIEN   // l. 2334-2352
+  si élastique linéaire :
+    Δσ_k ← D_{n+1}·(Δε_k − α·Δε*/N)                                          // l. 2422-2432
+  sinon :
+    Δε_k ← Δε_k − α·Δε*/N                                                    // l. 2443-2447
+    si SUBSTEPPING : (σ, V, ε_in, K_t) ← SSTE(σ, V_n, Δε_k)                  // l. 2456-2462
+    sinon :
+      initial ← (ε, σ, V, ε_in, T(t_k−1), t_k−1, matériau de début)
+      final ← (ε + Δε_k, T(t_k), t_k, matériau à TI)
+      (σ, V, ε_in) ← COMP(initial, final)                                    // l. 2467-2539
+      si non local : régulariser V, puis rappeler COMP                       // Annexe A
+  σ ← σ + Δσ_k, ramenée sur FOR0                                             // l. 2918-2928
+retourner σ, V, ε_in, Δε = Σ Δε_k
+</pre></div>
+  </figure>
+  <div class="math">\[
+\Delta\boldsymbol\varepsilon_k=\mathbf E_{\mathbf x_{k-\frac12}}\!\big(\tfrac12\Delta\mathbf u_k\big)-\mathbf E_{\mathbf x_{k-\frac12}}\!\big(-\tfrac12\Delta\mathbf u_k\big)=\operatorname{sym}\nabla_{\mathbf x_{k-\frac12}}\Delta\mathbf u_k,
+\qquad \mathbf E(\mathbf a)=\tfrac12\big(\nabla\mathbf a+\nabla\mathbf a^{\mathsf T}+\nabla\mathbf a^{\mathsf T}\nabla\mathbf a\big)
+\]</div>
+  <ul>
+    <li><strong>Point milieu.</strong> Pour les éléments massifs, les termes quadratiques s'annulent exactement : Δε est le gradient symétrique de l'incrément pris sur la configuration de mi-incrément. Le calcul est le même pour <code>QUADRATIQUE</code>, <code>TRUESDELL</code>, <code>JAUMANN</code> et <code>UTILISATEUR</code> : dans le Fortran, EPSI <code>'QUAD'</code> ajoute ½∇uᵀ∇u à la partie linéaire (BST2), et ce terme pair s'annule dans la différence. Seul le transport change, car UNPAS règle <code>OPTI 'EPSI'</code> sur l'hypothèse (l. 174) et <code>CONF</code> lit cette option. En endommagement, Δε vient d'<code>EPSI 'LINE'</code> sur GEOMM, ce qui revient au même.</li>
+    <li><strong>Temps et températures.</strong> t<sub>k</sub> = t<sub>déb</sub> + αΔt·k/N ; T(t<sub>k</sub>) = T₁ + (k/N)(T₂ − T₁), qui n'est pas mise à l'échelle par α.</li>
+    <li><strong>Contraintes et forces internes.</strong> σ est rangée sur FOR0 comme une contrainte de type Piola-Kirchhoff 2. Avant COMP, <code>CONF</code> la pousse sur la configuration <code>LAGRANGIEN</code> ; avant BSIGMA, sur GEOM2. Δσ est ensuite ramené sur FOR0. En <code>LAGRANGIEN TOTAL</code>, COMP travaille donc en (S, E) sur FOR0. En <code>MI_PAS</code> (défaut), c'est une loi incrémentale en contrainte de Cauchy sur x<sub>mid</sub>, avec un transport convectif de type Truesdell. Ce transport se réduit à une rotation avec <code>JAUMANN</code> ; il n'y en a aucun avec <code>UTILISATEUR</code> ni pour les lois UMAT.</li>
+    <li><strong>FEFP</strong> (<code>FEFP_FORMULATION</code>) : plasticité multiplicative F = F<sub>e</sub>F<sub>p</sub>. Les grands déplacements « classiques » sont coupés ; <code>K_SIGMA</code>, <code>K_TANGENT</code> et <code>RECARI</code> sont forcés (PAS_DEFA l. 1479-1485).
+      <ul>
+        <li>ECFE intègre la loi directement à partir du déplacement, par retour exponentiel sur les déformations logarithmiques principales de b<sub>e</sub>, avec recherche linéaire sauf pour un des modèles de poudre (Fortran FEFP2, ADFEFP). Modèles : VMT_FEFP, RHMC_FEFP, POWDER_FEFP et POWDERCAP_FEFP.</li>
+        <li>ECFE rend σ, V, la déformation élastique b<sub>e</sub> (rangée dans <code>DEFORMATIONS_INELASTIQUES</code>) et la tangente cohérente. On obtient un Newton complet, sans ACT3, et DEPSTDM porte alors sur b<sub>e</sub>.</li>
+      </ul></li>
+    <li><strong>SSTE</strong> (<code>SUBSTEPPING</code>) : intégration avec sous-découpage au point de Gauss pour les modèles J2, RH_COULOMB et MRS_LADE ; un sous-pas raté est coupé en deux, et SSTE rend la tangente cohérente, composée sous-pas par sous-pas (Fortran SBSTEP).
+      <ul>
+        <li>Sa tangente ne sert d'opérateur qu'avec <code>K_TANGENT</code> ; sans cette option, l'opérateur reste la raideur élastique.</li>
+        <li><code>NMAXSUBSTEPS</code> vaut 1 par défaut : sans réglage, il n'y a pas de vrai sous-découpage.</li>
+        <li>SSTE repart de V<sub>n</sub> à chaque sous-incrément (l. 2458).</li>
+      </ul></li>
+  </ul>
+  <h3>Configurations</h3>
+  <p><code>FORM</code> active une géométrie, ou la crée en ajoutant un déplacement aux coordonnées courantes ; les opérateurs suivants travaillent dessus. <code>CONF</code> pousse un champ de sa configuration vers la configuration courante, F étant le gradient de la transformation (Fortran CONFIG, PIOCAP). Les contraintes deviennent J⁻¹·F·σ·Fᵀ et les déformations F⁻ᵀ·ε·F⁻¹ (PIOCAF) pour <code>LINEAIRE</code>, <code>QUADRATIQUE</code> et <code>TRUESDELL</code>. Avec <code>JAUMANN</code>, le champ est tourné, R·σ·Rᵀ, R venant de la décomposition polaire (JAUCAU). Avec <code>UTILISATEUR</code>, ou pour une loi UMAT, il est recopié tel quel.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Configuration</th><th>Définition</th><th>Utilisée pour</th></tr></thead>
+    <tbody>
+      <tr><td><code>GEOREF0</code> = <code>FOR0</code></td><td>Configuration au premier appel de PASAPAS</td><td>Matériau à TI, stockage de σ et Δε, lagrangien total (<code>LAG_TOT</code> 1, et 0 en endommagement)</td></tr>
+      <tr><td><code>GEOM1</code> = <code>GE0_DEB</code></td><td>Petits déplacements : FOR0. Grands déplacements et FEFP : X + u<sub>n</sub>, actualisée après chaque pas</td><td>K et K<sub>σ</sub> initiaux, F<sub>int,n</sub>, pseudo-forces, thermique de la passe 1</td></tr>
+      <tr><td><code>GEOMM</code></td><td>x<sub>n</sub> + (k − ½)Δu/N</td><td>Δε ; COMP en lagrangien <code>REACTUALISE</code> ou <code>MI_PAS</code> (<code>LAG_TOT</code> 3, défaut en GD)</td></tr>
+      <tr><td><code>GEOMF</code></td><td>x<sub>n</sub> + kΔu/N</td><td>COMP en lagrangien <code>FIN_PAS</code> (<code>LAG_TOT</code> 2)</td></tr>
+      <tr><td><code>GEOM2</code></td><td>FOR0 + u<sup>(i)</sup>, à chaque itération</td><td>BSIGMA, pression suiveuse (sans raideur de chargement), reconstruction de K, K<sub>σ</sub>, KTAN, contact ; devient <code>WTAB.FOR</code></td></tr>
+    </tbody>
+  </table></div>
+  <p class="where">Avec le prédicteur <code>HPP</code>, UNPAS converge d'abord avec les forces internes calculées sur la configuration de début de pas et des précisions divisées par 10. Il bascule ensuite en grands déplacements (l. 3401-3412). Le contact force les grands déplacements.</p>
+</section>
+
+<section id="cv">
+  <h2><span class="num">7</span>Critères de convergence et de non-convergence</h2>
+  <figure class="algo" id="algo-6">
+    <figcaption><span class="algo-id">Algo 6</span><span class="algo-title">Tests après l'itération i</span><span class="algo-src">lignes d'UNPAS</span></figcaption>
+    <div class="algo-scroll"><pre class="pc">
+XCONV ← max(‖r‖∞ sur les forces, ‖Aᵀ·(λ⁽ⁱ⁾ − λ⁽ⁱ⁻¹⁾)‖∞) / F_ref              // l. 3229-3242
+XCONVM ← ‖r‖∞ sur les moments / M_ref, si coques, poutres, joints ou poreux  // l. 3245-3258
+si aucun moment n'est appliqué : XCONVM ← 0 ; si les forces appliquées sont négligeables devant les moments (rapport &lt; 10⁻¹²) : XCONV ← 0
+DEPSTDM ← ‖Δε⁽ⁱ⁾ − Δε⁽ⁱ⁻¹⁾‖∞                                                  // l. 3321-3322
+// convergence
+si le test n'est pas sauté :                                                // sauté : i = 1 après prédicteur, frottement à i = 1, souci
+  p ← PRECISION ; p_ε ← PRECDEFO ; divisées par 10 en prédicteur HPP
+  si XCONV &lt; p et DEPSTDM &lt; p_ε et (XCONVM &lt; PRECFLEX si moments) :    // l. 3330-3337
+    si le contact n'est pas résolu : retourner échec                       // « contact »
+    si α &lt; 1 : retourner échec                                             // « relaxation » : cible réduite atteinte
+    si l'augmentation ou la réduction du chargement est active : retourner échec   // « augmentation »
+    si prédicteur HPP, souci de COMP, ou réactions de contact changées sur GEOM2 :
+      basculer en GD ou reconstruire K ; continuer                          // l. 3401-3412
+    retourner convergé
+// détection de non-convergence
+XCONVREF ← 0,99 · XCONV(i − d) si i &gt; d, sinon ∞                         // d = DELTAITER (10), l. 3429-3432
+si test non sauté, non détectée, i ≥ 2, pas de pilotage, contact résolu et (i ≥ IMAX ou XCONV &gt; XCONVREF) :   // l. 3437-3488
+  NONCONV ← vrai ; IMAX ← 3·i
+  α ← RELAXATION_NONCONV ; si α &lt; 1 : cible ← t_déb + α·Δt ; charge et matériau réévalués
+si NONCONV et i &gt; 15 : ε_nc ← 2·ε_nc                                       // ε_nc part de 10⁻⁵
+// déclaration
+si test non sauté et ‖Δε‖∞ &lt; ε_nc et (i ≥ IMAX ou (NONCONV et XCONV &gt; XCONVREF et ‖Δε‖∞ ≥ ¼‖Δε_préc‖∞)) :   // l. 3498-3506
+  retourner échec                                                           // « NON CONVERGENCE »
+continuer
+</pre></div>
+  </figure>
+  <div class="math">\[
+\text{XCONV}=\frac{\max\Big(\big\|\mathbf r^{(i)}\big\|_{\infty,\,F},\ \big\|\mathbf A^{\mathsf T}\big(\boldsymbol\lambda^{(i)}-\boldsymbol\lambda^{(i-1)}\big)\big\|_{\infty}\Big)}{F_{ref}},
+\qquad
+F_{ref}=\max\left(\frac{\big|\Delta\mathbf u^{0}\cdot\mathbf F^{ext}_{n+1}-\boldsymbol\lambda^{0}\cdot\Delta\mathbf u^{imp}\big|}{\|\Delta\mathbf u^{0}\|_\infty}+2\,\big\|\mathbf F^{int}_n+\mathbf F^{\varepsilon}\big\|_\infty,\ \big\|\mathbf F^{ext}_{n+1}\big\|_\infty,\ \big\|\mathbf K\,\mathbf u_n\big\|_\infty^{\,\text{(GD)}}\right)
+\]</div>
+  <ul>
+    <li><strong>Normes.</strong> Ce sont des maximums sur tous les nœuds et toutes les composantes. r<sub>F</sub> exclut les moments, le fluide (<code>FP</code>, <code>FPQ</code>, <code>FTP</code>) et les <code>FLX</code>. Le second terme exige que les réactions se stabilisent ; sur les <code>FLX</code>, il porte aussi sur la variation de A·u, nulle une fois les liaisons satisfaites (l. 3230).</li>
+    <li><strong>Déformation.</strong> DEPSTDM est un écart <em>absolu</em> sur les composantes membranaires et axiales ; les courbures sont exclues. À l'itération 1, Δε<sup>(0)</sup> = 0 : DEPSTDM vaut donc tout l'incrément, et un pas qui déforme de plus de 10⁻⁴ ne peut pas converger en une itération.</li>
+    <li><strong>Références.</strong> F<sub>ref</sub> est calculée au premier sous-pas et gardée pour tout le pas ; elle est remplacée par 1 si elle est quasi nulle. F<sup>ε</sup> regroupe les forces des déformations imposées totales en fin de pas (thermique et <code>DEFI</code>) et la pseudo-force F* (l. 1065-1071, 1340). Avec <code>FTOL</code> ou <code>MTOL</code>, le critère devient absolu.</li>
+    <li><strong>Plafond.</strong> IMAX vaut d'abord <code>MAXITERATION</code> (250 par défaut). Il n'est pas réinitialisé entre sous-pas.</li>
+    <li><strong>Fenêtre.</strong> d vaut d'abord <code>DELTAITER</code>. Une bascule HPP → GD, un souci de COMP ou un contact à actualiser la portent à DELTAITER + i (l. 3410), sans retour en arrière, même aux sous-pas suivants (l. 123). En GD, plus de 20 reconstructions de K dans un sous-pas mettent NONCONV à vrai (l. 1552-1553).</li>
+    <li><strong>Exemple.</strong> Prenons un pas avec ‖Δε‖∞ = 10⁻³ dont le résidu stagne dès le départ. La non-convergence est détectée à l'itération 11. Le seuil ε<sub>nc</sub> double ensuite à chaque itération et dépasse 10⁻³ à l'itération 22 (10⁻⁵ × 2⁷) : c'est là que la non-convergence est déclarée.</li>
+  </ul>
+</section>
+
+<section id="annexes">
+  <h2><span class="num">8</span>Annexes : options avancées</h2>
+  <figure class="algo" id="annexe-A">
+    <figcaption><span class="algo-id">Annexe A</span><span class="algo-title">Non local : moyenne et Helmholtz</span><span class="algo-src">UNPAS l. 2541-2876 · PAS_HELM</span></figcaption>
+    <div class="algo-scroll"><pre class="pc">
+// après le premier COMP local (ISTEP = 1), dans Algo 5
+pour j = 1 … MAXSOUSITERATION (500)                                        // BIHL, l. 2558
+  si NON_LOCAL = MOYE ou SB :
+    Ṽ ← NLOC(V) : moyenne sur le voisinage CONN ; SB pondère par les contraintes   // l. 2560-2570
+  sinon :                                                                   // HELM
+    pour chaque variable délocalisée v :                                    // l. 2588-2796
+      H ← K_cond + C sur le modèle de Helmholtz                             // PAS_HELM
+      f ← SOUR(v aux nœuds)
+      si j = 1 : ṽ ← H⁻¹·f
+      sinon si formulation non linéaire :
+        r_H ← f − H·ṽ ; r_H ← r_H − ACT3 aux sous-itérations 6, 9, 12…
+        ṽ ← ṽ + H⁻¹·r_H
+      erreur_v ← ‖C⁻¹·r_H‖∞ / ‖C⁻¹·f‖∞
+      remplacer v par ṽ dans V
+  ISTEP ← 2 si j = MAXSOUSITERATION, si tout est linéaire, ou si j &gt; 1 et max erreur_v &lt; PRECSOUSITERATION ; sinon 3   // l. 2810-2825
+  (σ, V) ← COMP(état initial avec Ṽ, état final, ISTEP)                     // l. 2834-2852
+  si ISTEP = 2 : sortir
+</pre></div>
+  </figure>
+  <p class="where">C'est un couplage par alternance : la loi locale, puis la régularisation, puis la loi relue avec la variable régularisée. Une formulation linéaire ne fait qu'un aller-retour. KTAN <code>PERT</code> est désactivé en non local (l. 208).</p>
+
+  <figure class="algo" id="annexe-B">
+    <figcaption><span class="algo-id">Annexe B</span><span class="algo-title">MAN : méthode asymptotique numérique</span><span class="algo-src">CORMAN · UNPAS l. 1973-1980</span></figcaption>
+    <div class="algo-scroll"><pre class="pc">
+// à la première itération de Algo 4, si MAN ; procédure CORMAN
+si le modèle contient POUT ou COQ2 : abandon, on garde la prédiction de Newton
+ΔU ← 0
+pour chaque segment, 250 au plus                                          // continuation
+  K_t ← RIGI + K_σ(σ₀), + (4/Δt²)·M en dynamique
+  U₁ ← K_t⁻¹·f / √(‖K_t⁻¹·f‖² + 1) ; λ₁ ← 1 / √(‖K_t⁻¹·f‖² + 1)
+  pour p = 2 … ORDRE (12) :
+    F_p ← − Σ K_σ(σ_r)·U_{p−r} − Bᵀ·D·½ Σ ∇U_rᵀ·∇U_{p−r}
+    λ_p ← − λ₁·(K_t⁻¹·F_p · U₁) ; U_p ← K_t⁻¹·F_p + (λ_p / λ₁)·U₁
+  a_max ← rayon de validité de la série
+  si λ(a_max) &gt; 1 : a ← racine de λ(a) = 1 sur [0, a_max] ; fin ← vrai
+  sinon : a ← a_max
+  ΔU ← ΔU + Σ aᵖ·U_p ; σ et géométrie actualisées
+  si fin : sortir
+  f ← f·(1 − λ(a))
+retourner ΔU                                                               // remplace δu à i = 1
+</pre></div>
+  </figure>
+  <p class="where">La série porte sur l'élasticité géométriquement non linéaire (Green-Lagrange, <code>SIGMA 'LINE'</code>). Les approximants de Padé sont présents dans le code mais commentés. Attention : Gibiane évalue les expressions de gauche à droite, sans priorité d'opérateurs (établi dans le Fortran de l'interpréteur, § 11). <code>psc + 1.D0 ** 0.5D0</code> vaut donc (‖u‖² + 1)<sup>½</sup> : c'est bien la normalisation de type longueur d'arc.</p>
+
+  <figure class="algo" id="annexe-C">
+    <figcaption><span class="algo-id">Annexe C</span><span class="algo-title">Pilotage automatique et indirect</span><span class="algo-src">AUTOPILO · PILOINDI · UNPAS</span></figcaption>
+    <div class="algo-scroll"><pre class="pc">
+// pilotage automatique (AUTOMATIQUE), dans Algo 4
+α ← 1, ou min(α_préc / (1 − α_préc), 1) si l'on rejoue la même cible       // l. 970-979
+à chaque itération multiple de AUTORECA (1) :                              // l. 2094-2124
+  si RED2 &lt; i/20 : RED2 ← RED2 + 1 ; critère ← critère / 3              // l. 2100-2103
+  n ← max(‖ε(Δu)‖∞, ‖ε(Δu − α·Δu_él)‖∞)                                    // AUTOPILO
+  β ← AUTOCRIT / n, au plus 1/α ; Δu ← β·Δu                                // AUTOCRIT = 10⁻³
+  après F_int :                                                             // l. 3155-3205
+    si visqueux, thermique ou DEFI : α ← min(α·β, 1)
+    sinon : α ← min(α − (r·Δu) / (R_nominal·Δu), 1)
+charge ← F_n + α·ΔF ; u_imp ← α·Δu_imp ; pas de détection de non-convergence
+// pilotage indirect (CHAR_PILO) : F = F_ext + η·F_p
+à la première résolution : δu_II ← K⁻¹·F_p                                 // l. 1303-1311
+après chaque résolution :                                                   // PILOINDI, l. 2031-2037
+  pour chaque point de Gauss g de ZONE_DE_PILOTAGE :
+    n_g ← ε(u_n) / ‖ε(u_n)‖ en énergie
+    a₀ ← n_g : ε(Δu + δu) ; a₁ ← n_g : ε(δu_II)
+  Δη ← min, sur les g où a₁ &gt; 0, de (Δτ − a₀) / a₁                       // Δτ : incrément de PARAMETRE_DE_PILOTAGE
+  δu ← δu + Δη·δu_II ; η ← η + Δη
+</pre></div>
+  </figure>
+  <p class="where">Le pilotage automatique limite l'incrément de déformation, total et « plastique », à <code>AUTOCRIT</code>. Le facteur de charge α est choisi pour annuler le travail du résidu dans la direction de l'incrément. PASAPAS avance ensuite le temps de α·(TI − t) et rejoue la cible tant que α n'atteint pas 1.</p>
+
+  <figure class="algo" id="annexe-D">
+    <figcaption><span class="algo-id">Annexe D</span><span class="algo-title">Contact unilatéral</span><span class="algo-src">UNILATER · RFCO · EXCF</span></figcaption>
+    <div class="algo-scroll"><pre class="pc">
+// RESO appelle UNILATER dès que K contient des conditions unilatérales
+condenser K sur les ddl de contact (super-élément), au premier appel     // UNILATER l. 68-135
+actives ← statuts du dernier appel (INIB), sinon initialisation
+répéter                                                                     // BOUCL1, l. 184-273
+  résoudre avec les conditions actives
+  EXCITER : activer les conditions violées, relâcher celles de mauvais signe ; frottement : forces limites EXCF ou EXCC
+  si les conditions actives n'ont pas changé : sortir
+  anti-cyclage : RAPIDE, puis MOYEN à la 5e itération, puis LENT, puis opérateur stabilisé
+OK ← faux en cas d'échec → UNPAS : non-convergence de contact              // UNPAS l. 3312-3315
+</pre></div>
+  </figure>
+  <p class="where">Dans UNPAS, les relations de contact (<code>RFCO</code>) sont recalculées à chaque reconstruction de K en grands déplacements. Elles sont aussi recalculées au moment de conclure, et la convergence est refusée si les réactions changent de plus de <code>PRECISION</code>. Avec frottement, il faut au moins 2 itérations.</p>
+
+  <figure class="algo ther" id="annexe-E">
+    <figcaption><span class="algo-id">Annexe E</span><span class="algo-title">Rayonnement thermique</span><span class="algo-src">PAS_RAYO 25/05/21 · HRAYO · HRCAV</span></figcaption>
+    <div class="algo-scroll"><pre class="pc">
+// PAS_RAYO(t, appel) : appel 1 = DUPONT2 ; 2 = TRANSNON avant la boucle en temps ; 3 = TRANSNON, matrices
+si le modèle n'a pas de rayonnement : retourner rien                       // l. 23-26
+si appel ≤ 2 :                                                              // facteurs de forme, l. 57-86
+  σ ← CTE_STEFAN_BOLTZMANN, 5,673·10⁻⁸ par défaut (unités SI)
+  si REA_GEOM ou premier appel :
+    pour chaque zone de type CAVITE : F ← FFOR(zone)                       // matrice des facteurs de forme
+si appel = 1 ou 3 :                                                         // matrices et seconds membres, l. 91-211
+  T ← THER_COURANT + TREF                                                   // kelvins ; TREF = 273,15 avec CELSIUS
+  pour chaque condition de la table PRRA :                                  // l. 98-202
+    ε ← émissivité EMIS du matériau courant
+    selon le type :
+      INFINI :                                                              // l. 134-161
+        T_e ← chargement TERA(t), sinon T_IN du matériau ; ε_e ← E_IN, 1 par défaut
+        h ← σ·ε_éq·(T² + T_e²)·(T + T_e)                                     // HRAYO
+        K_r ← h·∫N·Nᵀ ; F_r ← h·∫N·T_e                                       // CONDUCTIVITE, CONVECTION
+      FAC_A_FAC :                                                           // l. 117-131
+        T₂, ε₂ ← valeurs de la face en vis-à-vis, projetées (KPRO)
+        h ← σ·ε_éq·(T² + T₂²)·(T + T₂) ; K_r ← échange entre les deux faces ; pas de F_r
+      CAVITE sans l'option TRAYO :                                          // l. 173-185
+        T_rad ← RAYE(F, ε, T) : radiosité résolue par BiCGSTAB à 10⁻⁷ près (RAYT1)
+        h ← 5,67·10⁻⁸·ε·(T² + T_rad²)·(T + T_rad)                            // HRCAV : σ n'est pas transmise
+        K_r ← h·∫N·Nᵀ ; F_r ← h·∫N·T_rad
+      CAVITE avec l'option TRAYO :                                          // l. 186-191
+        R ← RAYE(F, ε), tel que Φ = R·T⁴ ; K_r ← RAYN(R, T, σ) ∝ σ·R·T³ ; pas de F_r
+retourner K = Σ K_r (ADDI_MATRICE) et F = Σ F_r (ADDI_SECOND)               // l. 196-209
+</pre></div>
+  </figure>
+  <div class="math ther">\[
+h=\sigma\,\varepsilon_{\text{éq}}\,\big(T^2+T_e^2\big)\big(T+T_e\big)\quad\Longrightarrow\quad h\,(T-T_e)=\sigma\,\varepsilon_{\text{éq}}\,\big(T^4-T_e^4\big),
+\qquad \varepsilon_{\text{éq}}=\frac{\varepsilon_1\varepsilon_2}{1-(1-\varepsilon_1)(1-\varepsilon_2)}
+\]</div>
+  <p class="where">Le rayonnement est donc traité comme une convection dont le coefficient dépend de la température. La linéarisation est sécante : à température donnée, h·(T − T<sub>e</sub>) redonne exactement le flux rayonné. Vers l'infini avec ε<sub>e</sub> = 1, ε<sub>éq</sub> se réduit à l'émissivité de la paroi. Les conditions viennent des sous-modèles <code>RAYONNEMENT</code> (PAS_MODL l. 74-77). PAS_DEFA les range en table avec l'opérateur PRRA et exige l'émissivité <code>EMIS</code> (l. 1234-1238).</p>
+  <ul>
+    <li><strong>TRANSNON</strong> appelle PAS_RAYO à trois endroits.
+      <ul>
+        <li>Avant la boucle en temps, pour les facteurs de forme (appel 2, l. 456-462).</li>
+        <li>Avant les itérations, à T<sub>n</sub> : la matrice entre dans AA (θ·K<sub>r</sub>) et le second membre dans F (appel 3, l. 966-982).</li>
+        <li>À chaque itération, à T<sub>θ</sub><sup>(i)</sup>, pour le résidu (appel 3, l. 1424-1437).</li>
+      </ul>
+      La matrice garde h(T<sub>n</sub>), mais le résidu utilise h(T<sub>θ</sub>). À convergence, le flux rayonné vaut donc exactement σε(T⁴ − T<sub>e</sub>⁴), à la précision du critère près. Comme h varie en T³, le point fixe converge en général d'autant plus lentement que la température change dans le pas.</li>
+    <li><strong>DUPONT2</strong> l'appelle une fois par sous-pas (appel 1, l. 381-391), à la température extrapolée T*. La matrice entre dans K et reçoit les poids du schéma de Dupont. Faute d'itération, h n'est jamais réévalué à la température obtenue.</li>
+    <li><strong>TRANSLIN</strong> ne l'appelle pas : le rayonnement est ignoré.</li>
+  </ul>
+
+  <div class="two">
+    <div class="panel meca">
+      <h3>Rigidité augmentée</h3>
+      <p>Option de stabilisation de type relaxation dynamique. Une matrice donnée par l'utilisateur (<code>RIGIDITE_AUGMENTEE</code>) est ajoutée telle quelle à K, qui est alors reconstruite à chaque pas. Avec <code>AUGMENTATION_AUTOMATIQUE</code>, on ajoute c·(a<sub>M</sub>·M + a<sub>K</sub>·K), M étant la matrice de masse ou celle de l'utilisateur. Le coefficient adaptatif c part de 0,3. En grands déplacements, a<sub>M</sub> = 10·xᵀKx/xᵀMx et a<sub>K</sub> = 0,1 sont recalculés à chaque reconstruction de K, x étant la dernière correction ; sinon, ils valent 1 (l. 606-608, 1745-1762).</p>
+      <p>En mode automatique seulement, une convergence est refusée si c dépasse 0,06 ou si ‖Δε‖∞ dépasse <code>PRECDEFO</code> : c est divisé par 10 et un nouveau sous-pas repart (l. 3353-3360). Une itération dont ‖Δε‖∞ dépasse 1/20 (1/50 si Δε a triplé, 1/10 si la charge est presque annulée) est annulée, et c est multiplié par 1,5. Après trois annulations, la charge appliquée est réduite et la non-convergence détectée, avec IMAX ← i + 5 (l. 2362-2409). Le facteur <code>resmul</code> réduit le résidu appliqué (« Réduction du chargement »). Le contrôle par relations de déformation (<code>DEFO_IMP</code>) est du code mort : <code>LOG_CNTRL</code> vaut <code>FAUX</code> en dur (l. 26).</p>
+    </div>
+    <div class="panel meca">
+      <h3>Dynamique (Newmark γ = ½, β = ¼)</h3>
+      <div class="math">\[
+\Big(\mathbf K+\tfrac{4}{\Delta t^{2}}\mathbf M+\tfrac{2}{\Delta t}\mathbf C\Big)\delta\mathbf u=\mathbf F_{n+1}+\underbrace{\mathbf M\mathbf a_n+\mathbf C\mathbf v_n+\tfrac{4}{\Delta t}\mathbf M\mathbf v_n}_{\texttt{FREA1}}-\mathbf F^{int}-\tfrac{4}{\Delta t^{2}}\mathbf M\Delta\mathbf u-\tfrac{2}{\Delta t}\mathbf C\Delta\mathbf u
+\]</div>
+      <p>v<sub>n+1</sub> = 2Δu/Δt − v<sub>n</sub> ; a<sub>n+1</sub> = 2(v<sub>n+1</sub> − v<sub>n</sub>)/Δt − a<sub>n</sub>. M a<sub>n</sub> + C v<sub>n</sub> vaut F<sub>ext,n</sub> − F<sub>int,n</sub> au premier pas, puis le déséquilibre <code>FOPL</code> du pas précédent. La consolidation ajoute − θΔt H (θ = <code>TETA</code> = 1).</p>
+    </div>
+  </div>
+</section>
+
+<section id="defauts">
+  <h2><span class="num">9</span>Valeurs par défaut utiles</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Indice</th><th>Défaut</th><th>Remarque</th></tr></thead>
+    <tbody>
+      <tr><td><code>PRECISION</code> / <code>PRECDEFO</code> / <code>PRECFLEX</code></td><td class="num">1e-4</td><td><code>PRECFLEX</code> prend la valeur de <code>PRECISION</code> si celle-ci est donnée. <code>PRECISION</code> sert aussi à la thermique et à <code>CRITERE_COHERENCE</code>.</td></tr>
+      <tr><td><code>MAXITERATION</code></td><td class="num">49 → 250</td><td>Mis à 250 avec la convergence forcée ou <code>RENORMALISATION</code>, <em>même si l'utilisateur l'a donné</em> (PAS_DEFA l. 1009-1010). Ce n'est pas un plafond strict (§ 7).</td></tr>
+      <tr><td><code>DELTAITER</code> / <code>MAXSOUSPAS</code></td><td class="num">10 / 100</td><td><code>DELTAITER</code> vaut <code>MAXITERATION</code> en pilotage</td></tr>
+      <tr><td><code>CONVERGENCE_FORCEE</code> / <code>RELAXATION_NONCONV</code></td><td class="num">VRAI / 1</td><td>La convergence forcée n'est fausse que sur demande ou avec <code>CONVERGENCE_MEC_THE</code>.</td></tr>
+      <tr><td><code>K_TANGENT</code> / <code>NITER_KTANGENT</code></td><td class="num">FAUX / 1</td><td>Raideur élastique par défaut</td></tr>
+      <tr><td><code>K_SIGMA</code></td><td class="num">FAUX</td><td>Vrai en GD avec l'hypothèse <code>QUADRATIQUE</code> (défaut) ou si <code>STABILITE</code> est faux (PAS_DEFA l. 1428-1439)</td></tr>
+      <tr><td><code>HYPOTHESE_DEFORMATIONS</code></td><td class="num">LINEAIRE</td><td><code>QUADRATIQUE</code> en GD ; aussi <code>TRUESDELL</code>, <code>JAUMANN</code>, <code>UTILISATEUR</code></td></tr>
+      <tr><td><code>LAGRANGIEN</code></td><td class="num">MI_PAS</td><td><code>LAG_TOT</code> = 3 en GD ; aussi <code>TOTAL</code>, <code>FIN_PAS</code></td></tr>
+      <tr><td><code>SOUS_INCREMENT</code> / <code>DEPS_MAX</code></td><td class="num">1 / 5e-3</td><td>Recalcul automatique en GD (20 au plus), sauf si <code>SOUS_INCREMENT</code> est donné</td></tr>
+      <tr><td><code>INITIALISATION</code></td><td class="num">VRAI</td><td>Prédicteur F<sup>NL</sup></td></tr>
+      <tr><td><code>STABILITE</code></td><td class="num">VRAI</td><td>Faux dès que l'indice <code>AUTOMATIQUE</code> est fourni, sauf avec <code>AUGMENTATION_AUTOMATIQUE</code> (PAS_DEFA l. 738, 1549)</td></tr>
+      <tr><td><code>PRECISINTER</code> / <code>NITERINTER_MAX</code> / <code>NMAXSUBSTEPS</code></td><td class="num">1e-8 / 15 / 1</td><td>Intégration locale (KTAN, SSTE, ECFE) ; 5e-7 en visqueux, <code>PRECISION</code> en endommagement</td></tr>
+      <tr><td><code>NB_BOTH</code> / <code>RELAXATION_THETA</code></td><td class="num">1 / 1</td><td><code>NB_BOTH</code> passe à 10 avec <code>CONVERGENCE_MEC_THE</code></td></tr>
+      <tr><td><code>PROCEDURE_THERMIQUE</code> / <code>RELAXATION_DUPONT</code></td><td class="num">NONLINEAIRE / 0.25</td><td>TRANSNON ; <code>LINEAIRE</code> appelle TRANSLIN, <code>DUPONT</code> appelle DUPONT2. Forcé à <code>NONLINEAIRE</code> avec changement de phase, solubilité, diffusion ou THM (PAS_DEFA l. 1203-1206).</td></tr>
+      <tr><td><code>MAXSOUSITERATION</code> / <code>PRECSOUSITERATION</code></td><td class="num">500 / 1e-6</td><td>Non local</td></tr>
+      <tr><td><code>ORDRE</code> · <code>AUTOCRIT</code> · <code>AUTOPAS</code> · <code>AUTORECA</code></td><td class="num">12 · 1e-3 · 250 · 1</td><td>MAN et pilotage automatique</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="constats">
+  <h2><span class="num">10</span>Constats de lecture</h2>
+  <p>Ces points découlent du source tel qu'il est écrit, revérifié ligne à ligne. Je ne les ai pas confirmés par un calcul : chacun mérite un jeu de données d'essai.</p>
+  <div class="findings">
+    <div class="finding"><div class="head"><span class="sev risk">À risque</span><h3>1 · K_TANGENT efface l'inertie et la perméabilité</h3></div>
+      <p>L'opérateur devient « blocages + KTAN » au début du sous-pas et à chaque itération. Les termes 4/Δt² M + 2/Δt C et −θΔtH disparaissent alors qu'ils restent dans le résidu ; c'est aussi le cas de <code>RIGIDITE_CONSTANTE</code> et de l'<code>ADDI_MATRICE</code>. En grands déplacements, la reconstruction de K perd aussi C et H ; l'auteur le note en commentaire (l. 1721-1722).</p>
+      <p class="ref">l. 840-855, 918-951, 1714-1724, 1836</p></div>
+    <div class="finding"><div class="head"><span class="sev risk">À risque</span><h3>2 · Convergence forcée et lois visqueuses</h3></div>
+      <p>Avec <code>RELAXATION_NONCONV</code> = 1, il ne reste plus de temps à intégrer après un échec. Pour <code>VISCOPLASTIQUE</code>, <code>FLUAGE</code>, <code>VISCODOMMAGE</code> et <code>VISCO_EXTERNE</code>, en dynamique ou en consolidation, cela donne l'erreur 1155. Une loi visqueuse déclarée <code>NON_LINEAIRE UTILISATEUR</code> ne lève pas d'erreur, mais reçoit Δt = 0.</p>
+      <p class="ref">l. 3670-3674 ; PAS_MODL l. 179-222</p></div>
+    <div class="finding"><div class="head"><span class="sev risk">Nouveau · à risque</span><h3>DUPONT2 dégénère d'un pas à l'autre</h3></div>
+      <p><code>TET0</code> reçoit la température de fin de pas au lieu de T<sub>n−1</sub>. Le schéma à trois niveaux devient un θ-schéma à θ = ¾, avec le matériau figé au début du pas (voir § 3).</p>
+      <p>Après une reprise, le premier pas passe par TRANSNON, car <code>VIEUXPAS</code> repart à 0.</p>
+      <p class="ref">PASAPAS l. 509-514, 598 ; DUPONT2 l. 186-197, 238-240, 485 ; PAS_DEFA l. 572 ; PAS_INIT l. 84</p></div>
+    <div class="finding"><div class="head"><span class="sev risk">Nouveau · à risque</span><h3>Sources de chaleur ignorées hors TRANSNON</h3></div>
+      <p>Seul TRANSNON lit le modèle <code>SOURCE</code> (indice <code>SOURCE_Q</code>, TRANSNON l. 133). PAS_DEFA ne bascule pas vers TRANSNON quand il y a une source. Avec <code>PROCEDURE_THERMIQUE</code> à <code>LINEAIRE</code> ou <code>DUPONT</code>, la source est donc ignorée sans message. TRANSLIN ignore aussi le rayonnement.</p>
+      <p class="ref">PAS_MODL l. 86-89 ; PAS_DEFA l. 1203-1206 ; TRANSLIN et DUPONT2 en entier</p></div>
+    <div class="finding"><div class="head"><span class="sev detail">v5 · résolu</span><h3>TRANSLIN lit le WTAB de PASAPAS</h3></div>
+      <p>Les lignes 87-88 lisent <code>WTAB.'CAPACONST'</code> et <code>WTAB.'CONDCONST'</code>, alors que TRANSLIN n'a défini que <code>ETAB</code> (l. 53). Le Fortran tranche. À l'appel d'une procédure, INIPRO initialise chaque nom qu'elle emploie avec l'objet de même nom des niveaux appelants : la portée est dynamique. <code>WTAB</code> est donc celui de PASAPAS (l. 27), la même table que <code>ETAB</code>. Ce n'est pas une erreur dans PASAPAS ; appelé ailleurs, TRANSLIN lirait le <code>WTAB</code> de l'appelant.</p>
+      <p class="ref">TRANSLIN l. 53, 87-88 ; PASAPAS l. 27 ; Fortran PROCED, INIPRO</p></div>
+    <div class="finding"><div class="head"><span class="sev know">v5 · suspect</span><h3>Raideur avec relations : RRRR relue sans avoir été rangée</h3></div>
+      <p>Si la raideur rendue par <code>RIGI</code> contient des multiplicateurs (<code>ZCL</code> non vide, l. 731), UNPAS les ajoute aux blocages mais ne range pas la raideur dans <code>WTAB.RRRR</code> (l. 765-767). La ligne 771 la relit pourtant. Au premier pas d'un appel, l'indice n'existe pas, et le Fortran (REMPIL) lève alors l'erreur 535. Je ne sais pas quels modèles produisent ces relations ; il faut le tester.</p>
+      <p class="ref">UNPAS l. 711, 731-734, 765-771 ; PASAPAS l. 644-645 ; Fortran REMPIL</p></div>
+    <div class="finding"><div class="head"><span class="sev know">v5 · à connaître</span><h3>KTAN à 10⁻⁸ près</h3></div>
+      <p>UNPAS appelle KTAN avec <code>PREC</code> = <code>PRECISINTER</code>, soit 10⁻⁸ (5·10⁻⁷ en visqueux). Pour les modèles de plasticité de PENT1 (parfaite, Drucker-Prager, écrouissage cinématique ou isotrope), un point dont la contrainte équivalente dépasse le seuil de plus de 10⁻⁸ en relatif arrête KTAN sur l'erreur 275. Un point plastique resté sous le seuil de plus de 10⁻⁸ reçoit la matrice élastique. La tangente dépend donc de la précision avec laquelle COMP ramène σ sur la surface.</p>
+      <p class="ref">UNPAS l. 149, 162-163, 950, 1827 ; Fortran KTANGE, KTANGA, DOHOT1, PENT1</p></div>
+    <div class="finding"><div class="head"><span class="sev know">Nouveau</span><h3>3 · MAXITERATION donné est écrasé</h3></div>
+      <p>Dès que la convergence forcée est active (c'est le défaut), PAS_DEFA met <code>MAXITERATION</code> à 250, même si l'utilisateur a fourni une autre valeur.</p>
+      <p class="ref">PAS_DEFA l. 1001-1011</p></div>
+    <div class="finding"><div class="head"><span class="sev know">À connaître</span><h3>4 · MAXITERATION n'est pas un plafond</h3></div>
+      <p>L'atteindre déclenche la détection, qui triple la limite. Un résidu qui baisse lentement mais régulièrement peut ainsi aller jusqu'à 750 itérations. La limite modifiée n'est pas réinitialisée au sous-pas suivant.</p>
+      <p class="ref">l. 147, 1467-1472, 3439-3442, 3498-3506</p></div>
+    <div class="finding"><div class="head"><span class="sev know">À connaître</span><h3>5 · Au moins deux itérations dès que le pas déforme</h3></div>
+      <p>À l'itération 1, DEPSTDM vaut tout l'incrément de déformation. Il n'y a donc pas de convergence possible à l'itération 1 si ‖Δε‖∞ ≥ 10⁻⁴, même en élasticité linéaire.</p>
+      <p class="ref">l. 688, 1479, 2213, 3288-3334</p></div>
+    <div class="finding"><div class="head"><span class="sev know">Nouveau</span><h3>6 · PAS_AJUSTE ne voit pas les sous-pas ratés</h3></div>
+      <p><code>NOMBRE_ITERATIONS</code> ne compte que les itérations des sous-pas convergés. Un pas sauvé par la convergence forcée, dont le dernier sous-pas converge vite, peut voir son Δt augmenter.</p>
+      <p class="ref">l. 599, 3420, 3814 ; PASAPAS l. 123-158</p></div>
+    <div class="finding"><div class="head"><span class="sev know">À connaître</span><h3>7 · La convergence forcée est presque toujours active</h3></div>
+      <p>La mise à faux par <code>PAS_AJUSTE</code> (PAS_DEFA l. 732) est écrasée à la ligne 978, et le pilotage garde la valeur vraie de la ligne 194. Les branches de PASAPAS qui traitent un pas non convergé ne servent donc que si l'utilisateur désactive explicitement l'option. Dans ce cas, PAS_RESU propage l'état non convergé au pas suivant.</p>
+      <p class="ref">PAS_DEFA l. 194, 729-734, 974-980 ; PAS_RESU l. 19-42</p></div>
+    <div class="finding"><div class="head"><span class="sev detail">Détail</span><h3>8 · Couplage itéré : le matériau « de début » change à la passe 2</h3></div>
+      <p>UNPAS écrit le matériau de fin de pas dans <code>WTAB.MAT1</code> (l. 3792) et le relit comme matériau de début de pas (l. 283). Avec <code>CONVERGENCE_MEC_THE</code>, cela touche la correction « matériau variable », F<sub>int,n</sub> des éléments de structure et l'état initial passé à COMP.</p></div>
+    <div class="finding"><div class="head"><span class="sev risk">Nouveau · à risque</span><h3>Constante de Stefan-Boltzmann ignorée dans les cavités</h3></div>
+      <p>Dans la méthode des cavités par température équivalente (sans l'option <code>TRAYO</code>), PAS_RAYO appelle HRCAV sans lui passer σ. HRCAV prend alors sa valeur SI, 5,67·10⁻⁸. Un calcul mené dans d'autres unités (mm, ms…) qui fournit <code>CTE_STEFAN_BOLTZMANN</code> obtient donc un h faux pour ces cavités. Les conditions <code>INFINI</code> et <code>FAC_A_FAC</code>, ainsi que la méthode <code>TRAYO</code> (RAYN), utilisent bien la valeur fournie. RAYE (RAYT1) code aussi 5,67·10⁻⁸ en dur, mais T<sub>rad</sub> n'en dépend pas.</p>
+      <p class="ref">PAS_RAYO l. 92, 129-131, 158, 178, 190 ; HRCAV l. 6, 20-22 ; PAS_DEFA l. 206, 1239-1240</p></div>
+    <div class="finding"><div class="head"><span class="sev know">Nouveau · à connaître</span><h3>Facteurs de forme figés en grands déplacements</h3></div>
+      <p>PAS_RAYO ne recalcule les facteurs de forme des cavités qu'au premier appel ou si <code>REA_GEOM</code> est vrai. PASAPAS ne met <code>REA_GEOM</code> à vrai qu'aux passes 2 et suivantes de <code>CONVERGENCE_MEC_THE</code> en grands déplacements, et ne le remet jamais à faux. Avec une seule passe (le défaut), les facteurs de forme restent donc ceux de la géométrie initiale, même si la cavité se déforme. Les matrices, elles, sont recalculées à chaque appel, sur la géométrie courante.</p>
+      <p class="ref">PAS_RAYO l. 71-84 ; PASAPAS l. 363-369 ; PAS_DEFA l. 503</p></div>
+    <div class="finding"><div class="head"><span class="sev detail">Détail</span><h3>9 · Petites incohérences</h3></div>
+      <ul>
+        <li>Avec α &lt; 1, la température de fin de sous-incrément n'est pas mise à l'échelle, contrairement au temps et à Δε<sub>th</sub> (l. 2484-2485).</li>
+        <li>SSTE repart de V<sub>n</sub> à chaque sous-incrément (l. 2458).</li>
+        <li>Le chemin <code>DEFO_IMP</code> est inactif (<code>LOG_CNTRL</code> = <code>FAUX</code>, l. 26).</li>
+        <li>Thermique : θ = 1 et le maximum d'itérations de la mécanique, au lieu des défauts de TRANSNON.</li>
+        <li>Les indices <code>SOUS-RELAXATION</code> (TRANSLIN) et <code>SOUS_RELAXATION</code> (DUPONT2) ne sont jamais recopiés par PAS_DEFA. λ₂ vaut donc toujours 1 dans TRANSLIN et 0,5 dans DUPONT2.</li>
+        <li>DUPONT2 refuse donc tout matériau thermique qui dépend de champs mécaniques, puisque λ₂ = 0,5 ≠ 0 (l. 280-287).</li>
+        <li>Les commentaires de PAS_RAYO se contredisent sur les cavités : « méthode avec calcul de la matrice de rayonnement » est écrit au-dessus de la branche qui calcule une température équivalente, et « méthode par défaut » dans la branche <code>TRAYO</code> (l. 172-187). Seule la présence de <code>TRAYO</code> décide de la méthode.</li>
+      </ul></div>
+  </div>
+</section>
+
+<section id="corrections">
+  <h2><span class="num">11</span>Corrections successives</h2>
+  <div class="findings">
+    <div class="finding"><div class="head"><span class="sev fix">Version 5</span><h3>Quatrième revérification, sur le seul source</h3></div>
+      <ul>
+        <li>Méthode : les notices et le support de TP ne servent plus de preuve. Le site distribue aussi le Fortran des opérateurs (<code>download.php?nom=…&amp;type=source</code>). J'y ai revérifié tout ce qui venait d'une notice.</li>
+        <li>Gibiane : l'évaluation de gauche à droite est maintenant établie par le Fortran. ANASYN traite d'abord la parenthèse la plus intérieure ; PILOT lit les opérateurs un à un ; chaque opérateur prend ses opérandes en tête de pile (LIRABJ), où son résultat est remis (ECPI). 1 + 2 * 3 vaut donc 9, et aucune formule ne change.</li>
+        <li>KTAN : il ne revient pas à l'élastique en cas d'échec, contrairement à ce que dit sa notice. Il s'arrête sur l'erreur 275 quand σ dépasse la surface de charge.</li>
+        <li>CONF : ce n'est pas un simple changement d'étiquette. Il pousse σ (J⁻¹FσFᵀ) et ε (F⁻ᵀεF⁻¹), tourne le champ avec JAUMANN et ne fait rien avec UTILISATEUR. J'avais écrit que seule JAUMANN changeait le transport et que σ était une contrainte de Cauchy cumulée ; elle est en fait rangée sur FOR0 comme une Piola-Kirchhoff 2.</li>
+        <li>ACT3 : ses entrées sont les 4 derniers résidus pondérés, et ces résidus diminués de la correction précédente, et non « 3 incréments ».</li>
+        <li>Rigidité augmentée : la mise à l'échelle, le refus de convergence et l'annulation d'itération ne valent qu'en mode automatique. Le refus n'intervient que si c &gt; 0,06 ou ‖Δε‖ &gt; <code>PRECDEFO</code>.</li>
+        <li>Précisions : l'instant initial est aussi sauté (Algo 1) ; Δt × √2 n'est refusé qu'après un échec ; <code>TTOL</code> remplace le critère relatif (Algo 2) ; la raideur par défaut est gardée pour un appel, et non pour tout le calcul ; la fenêtre de détection passe à DELTAITER + i après une bascule ; 20 reconstructions de K en GD déclenchent NONCONV ; F<sup>ε</sup> et le prédicteur sont détaillés.</li>
+        <li>Constats : la question TRANSLIN et <code>WTAB</code> est résolue (portée dynamique, INIPRO). Deux constats sont ajoutés : la raideur avec relations et KTAN à 10⁻⁸.</li>
+        <li>Confirmés dans le Fortran : EPSI <code>'QUAD'</code>, ECFE, SSTE, NLOC, RAYE, RAYN, FFOR, RESO (appel d'UNILATER), KTAN <code>PERT</code>, HOOK.</li>
+      </ul></div>
+    <div class="finding"><div class="head"><span class="sev fix">Version 4</span><h3>Troisième revérification et rayonnement</h3></div>
+      <ul>
+        <li>DUPONT2 et reprise : j'avais écrit que PAS_INIT range l'avant-dernière température dans <code>TET0</code>. Il range en fait celle d'indice NSOR − 2, deux instants avant le dernier. De plus, <code>VIEUXPAS</code> repart à 0 à chaque appel, si bien que le premier pas passe toujours par TRANSNON. Le schéma à trois niveaux n'est donc vrai qu'entre sous-pas d'un même pas.</li>
+        <li>ACT3 : il est suspendu 3 ou 4 itérations selon l'endroit où le compteur est remis à 4, et non exactement 4.</li>
+        <li>Algo 6 : XCONVM est mis à 0 quand aucun moment n'est appliqué.</li>
+        <li>Gibiane évalue de gauche à droite, sans priorité d'opérateurs : un support de TP Cast3M donne 1 + 2 * 3 = 9. J'ai repassé toutes les expressions du source traduites en formules ; aucune ne change.</li>
+        <li>Ajouts : le rayonnement (Annexe E) et trois constats (§ 10).</li>
+      </ul></div>
+    <div class="finding"><div class="head"><span class="sev fix">Version 3</span><h3>Seconde revérification, ligne par ligne</h3></div>
+      <ul>
+        <li>Algo 1 : la thermique n'est appelée que si TI ≠ t. En dynamique et en consolidation, un pas de durée nulle est sauté. TI = t est admis avec <code>REEQUILIBRAGE</code>.</li>
+        <li>Algo 2 : le matériau et le résidu sont évalués à T<sub>θ</sub>, et non à T<sup>(i)</sup> (identiques pour θ = 1).</li>
+        <li>Algo 4 : GEOM2 n'existe qu'en GD. K est reconstruite toutes les max(20, <code>DELTAITER</code>) itérations.</li>
+        <li>Algo 6 : la détection et la déclaration de non-convergence sont aussi sautées quand le test l'est. Le refus « augmentation » couvre aussi la réduction du chargement. XCONV est mis à 0 quand seuls des moments sont appliqués.</li>
+        <li>ACT3 : la liste des cas qui le suspendent est maintenant complète.</li>
+        <li>Annexe A : l'ACT3 de Helmholtz intervient aux sous-itérations 6, 9, 12…, et non « après la 4e ».</li>
+        <li>Annexe C : la réduction du critère de pilotage est donnée telle qu'écrite (RED2 &lt; i/20). Je ne sais pas si Gibiane fait ici une division entière.</li>
+        <li><code>K_SIGMA</code> n'est vrai en GD qu'avec <code>QUADRATIQUE</code> ou si <code>STABILITE</code> est faux. Rigidité augmentée : j'avais oublié le facteur 10. Hypothèses : <code>UTILISATEUR</code> suit le même calcul de Δε.</li>
+        <li>Ajouts : TRANSLIN et DUPONT2 (§ 3), et trois nouveaux constats (§ 10).</li>
+      </ul></div>
+    <div class="finding"><div class="head"><span class="sev fix">Corrigé</span><h3>Opérateur dynamique reconstruit à chaque pas</h3></div>
+      <p>J'avais écrit qu'il n'était recalculé que si Δt changeait. Or <code>RECAOP</code> vaut vrai au premier appel de PASAPAS (PAS_DEFA l. 674) et n'est jamais remis à faux (UNPAS l. 792-834). Les tests sur Δt et sur le matériau ne jouent donc qu'en reprise d'un calcul.</p></div>
+    <div class="finding"><div class="head"><span class="sev fix">Corrigé</span><h3>Compteur de PAS_AJUSTE et suspension d'ACT3</h3></div>
+      <p><code>NOMBRE_ITERATIONS</code> ne compte que les sous-pas convergés, et non tous les sous-pas. ACT3 n'est suspendu qu'après certains événements, et non après chaque reconstruction de K.</p></div>
+    <div class="finding"><div class="head"><span class="sev fix">Ajouté</span><h3>Parties survolées</h3></div>
+      <p>J'ai ajouté le non local, FEFP, SSTE, MAN, le pilotage, le contact et la rigidité augmentée, ainsi que le constat sur <code>MAXITERATION</code>. J'ai aussi vérifié que l'évaluation de gauche à droite de Gibiane ne change aucune formule de cette page.</p></div>
+  </div>
+</section>
+
+<footer>Lecture des procédures Gibiane téléchargées sur www-cast3m.cea.fr, aux versions indiquées en tête. Opérateurs vérifiés dans leur source Fortran (<code>download.php?nom=…&amp;type=source</code>) : interpréteur ANASYN, PILOT, LIRABJ, ECPI, PROCED, INIPRO, REMPIL ; ACT3 ; KTANGE, KTANGA, DOHOT1, PENT1, KTAPER ; CONFIG, PIOCAP, PIOCAF, JAUCAU, OPTION ; EPSI, EPSI1, EPSI2, BST2 ; FEFP, FEFP2, ADFEFP ; SSTE, SBSTEP ; NLOCAL, NLOCA1 ; PRRAYE, RAYEN, RAYT1, RAYN, PRFORM ; RESOU ; HOOKE, HOOK2P ; FORM ; RFCO. Les notices et les supports n'ont servi qu'à orienter la lecture. Je n'ai fait que survoler VITEUNIL et VITETFOR (vitesses de contact en dynamique), ainsi que la parallélisation (<code>ASSIS</code>).</footer>
+</main>
+
+<script>
+(function () {
+  var KW = /^(pour chaque|pour|tant que|répéter|sinon si|sinon|si|retourner|sortir|continuer|selon|entrées|puis)(?=[\s:]|$)/;
+  function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function link(s) {
+    return s.replace(/\bAlgo (\d+[LD]?)\b/g, '<a href="#algo-$1">Algo $1</a>')
+            .replace(/\bAnnexe ([A-E])\b/g, '<a href="#annexe-$1">Annexe $1</a>');
+  }
+  var pres = document.querySelectorAll('pre.pc');
+  Array.prototype.forEach.call(pres, function (pre) {
+    var text = pre.textContent.replace(/^\n+/, '').replace(/\s+$/, '');
+    var lines = text.split('\n');
+    var body = document.createElement('div');
+    body.className = 'pc-body';
+    lines.forEach(function (raw, idx) {
+      var m = raw.match(/^( *)(.*)$/);
+      var depth = Math.floor(m[1].length / 2);
+      var code = m[2], cm = '';
+      var ci = code.indexOf('//');
+      if (ci >= 0) { cm = code.slice(ci + 2).trim(); code = code.slice(0, ci).replace(/\s+$/, ''); }
+      var row = document.createElement('div');
+      row.className = 'pl';
+      row.style.setProperty('--d', depth);
+      var html = '<span class="ln">' + (idx + 1) + '</span>';
+      if (!code && cm) {
+        html += '<span class="cd only">' + link(esc(cm)) + '</span>';
+      } else {
+        var c = esc(code).replace(KW, '<b class="kw">$1</b>');
+        html += '<span class="cd">' + link(c) + '</span>';
+        if (cm) html += '<span class="cm">' + link(esc(cm)) + '</span>';
+      }
+      row.innerHTML = html;
+      body.appendChild(row);
+    });
+    pre.parentNode.replaceChild(body, pre);
+  });
+})();
+</script>
