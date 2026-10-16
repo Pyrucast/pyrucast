@@ -1,0 +1,145 @@
+% ============================================================================
+%  L'algorithme de résolution de PASAPAS (Cast3M) — note de lecture du source
+%  Compilation : xelatex ou lualatex (deux passes), ou tectonic.
+%  Polices : TeX Gyre Pagella (texte et maths), DejaVu Sans Mono.
+% ============================================================================
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[a4paper,margin=2.2cm,headheight=14pt]{geometry}
+\usepackage{fontspec}
+\usepackage{amsmath,amssymb}
+\usepackage{unicode-math}
+\setmainfont{texgyrepagella}[Extension=.otf,UprightFont=*-regular,BoldFont=*-bold,ItalicFont=*-italic,BoldItalicFont=*-bolditalic]
+\setmathfont{texgyrepagella-math.otf}
+\setsansfont{texgyreheros}[Extension=.otf,UprightFont=*-regular,BoldFont=*-bold,ItalicFont=*-italic,BoldItalicFont=*-bolditalic,Scale=0.92]
+\setmonofont{DejaVuSansMono}[Extension=.ttf,BoldFont=DejaVuSansMono-Bold.ttf,Scale=0.82]
+\usepackage[french]{babel}
+\usepackage{xcolor}
+\usepackage{booktabs,longtable,tabularx,array}
+\usepackage{enumitem}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc,decorations.pathreplacing}
+\usepackage[most]{tcolorbox}
+\usepackage[noend]{algpseudocode}
+\usepackage{fancyhdr}
+\usepackage[hidelinks]{hyperref}
+\usepackage{bookmark}
+
+\numberwithin{equation}{section}
+\setlength{\parskip}{0.45em}
+\setlength{\parindent}{0pt}
+\setlist{itemsep=0.2em,topsep=0.3em}
+
+% ---------------------------------------------------------------- couleurs
+\definecolor{algframe}{HTML}{4A5D73}
+\definecolor{algtitle}{HTML}{E4EAF1}
+\definecolor{glohead}{HTML}{EEF1E6}
+\definecolor{notecol}{HTML}{8A6D1E}
+\definecolor{risk}{HTML}{9B2C2C}
+\definecolor{know}{HTML}{8A5A00}
+\definecolor{detail}{HTML}{4A5D73}
+\definecolor{ther}{HTML}{B5532A}
+\definecolor{meca}{HTML}{2F5E8C}
+
+% ---------------------------------------------------------------- en-têtes
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\sffamily PASAPAS — lecture du source}
+\fancyhead[R]{\small\sffamily\nouppercase{\leftmark}}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+% ---------------------------------------------------------------- macros
+\newcommand{\src}[1]{\texttt{\detokenize{#1}}}          % nom Gibiane
+\newcommand{\pr}[1]{\textsf{#1}}                        % nom de procédure
+\newcommand{\op}[1]{\textsf{\small #1}}                 % opérateur Gibiane
+\newcommand{\lig}[1]{l.~#1}
+\newcommand{\vc}[1]{\symbf{#1}}                         % vecteur / matrice
+\newcommand{\eps}{\varepsilon}
+\newcommand{\Deps}{\Delta\symbfit{\varepsilon}}
+\newcommand{\sig}{\symbfit{\sigma}}
+\newcommand{\vg}[1]{\symbfit{#1}}                       % grec en gras
+\newcommand{\norminf}[1]{\lVert #1\rVert_{\infty}}
+\newcommand{\algoref}[1]{\hyperref[algo:#1]{Algo~#1}}
+\newcommand{\annref}[1]{\hyperref[annexe:#1]{Annexe~#1}}
+\newcommand{\Sortir}{\textbf{sortir}}
+\newcommand{\Continuer}{\textbf{continuer}}
+\newcommand{\Retourner}{\textbf{retourner}}
+
+% ---------------------------------------------------------------- pseudo-code
+\algrenewcommand\algorithmicfor{\textbf{pour}}
+\algrenewcommand\algorithmicforall{\textbf{pour chaque}}
+\algrenewcommand\algorithmicdo{\textbf{faire}}
+\algrenewcommand\algorithmicwhile{\textbf{tant que}}
+\algrenewcommand\algorithmicif{\textbf{si}}
+\algrenewcommand\algorithmicthen{\textbf{alors}}
+\algrenewcommand\algorithmicelse{\textbf{sinon}}
+\algrenewcommand\algorithmicloop{\textbf{répéter}}
+\algrenewcommand\algorithmicreturn{\textbf{retourner}}
+\algrenewcommand\algorithmicrequire{\textbf{Entrées :}}
+\algrenewcommand\algorithmicensure{\textbf{Sorties :}}
+\algrenewcommand{\algorithmiccomment}[1]{\hfill{\footnotesize\color{gray}\,#1}}
+\algrenewcommand\alglinenumber[1]{\scriptsize\color{gray}#1}
+% bloc « étape » : une ligne dont le contenu est indenté dessous, sans ligne de fin
+\algdef{SE}[ETAPE]{Etape}{EndEtape}[1]{#1}{\algorithmicend}
+\algnotext{EndEtape}
+
+% Boîte d'algorithme : \begin{algobox}{2L}{TRANSLIN : thermique linéaire}{lignes de TRANSLIN}
+\newtcolorbox{algobox}[3]{%
+  breakable, enhanced, colback=white, colframe=algframe, boxrule=0.6pt,
+  arc=1mm, left=4pt, right=4pt, top=3pt, bottom=3pt,
+  colbacktitle=algtitle, coltitle=black, fonttitle=\sffamily\small,
+  title={\textbf{Algo~#1}\enspace #2\hfill{\footnotesize\itshape #3}},
+  before upper={\phantomsection\label{algo:#1}\small}}
+\newtcolorbox{annexbox}[3]{%
+  breakable, enhanced, colback=white, colframe=algframe, boxrule=0.6pt,
+  arc=1mm, left=4pt, right=4pt, top=3pt, bottom=3pt,
+  colbacktitle=algtitle, coltitle=black, fonttitle=\sffamily\small,
+  title={\textbf{Annexe~#1}\enspace #2\hfill{\footnotesize\itshape #3}},
+  before upper={\phantomsection\label{annexe:#1}\small}}
+
+% Encadré de remarque
+\newtcolorbox{remarque}[1][Remarque]{%
+  breakable, enhanced, colback=notecol!6, colframe=notecol!70, boxrule=0.5pt,
+  arc=1mm, left=6pt, right=6pt, top=4pt, bottom=4pt,
+  fonttitle=\sffamily\small\bfseries, coltitle=notecol!90!black,
+  attach title to upper={\enspace}, title={#1.}}
+
+% Glossaire : trois colonnes, coupé sur plusieurs pages si besoin
+\newenvironment{glossaire}[1][Glossaire]{%
+  \par\smallskip\noindent{\sffamily\bfseries\small #1}\par\nopagebreak
+  \small
+  \renewcommand{\arraystretch}{1.18}
+  \begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.17\linewidth}
+                     >{\raggedright\arraybackslash}p{0.22\linewidth}
+                     >{\raggedright\arraybackslash}p{0.555\linewidth}@{}}
+  \toprule
+  \textbf{Symbole} & \textbf{Nom dans le source} & \textbf{Contenu et usage}\\
+  \midrule\endhead
+  \bottomrule\endfoot}
+  {\end{longtable}\normalsize\vspace{-0.4em}}
+
+% Constat
+\newcommand{\constat}[3]{%
+  \par\smallskip\noindent{\sffamily\small\bfseries\color{#1}#2}\enspace{\bfseries #3}\par\nopagebreak}
+
+\title{\sffamily\bfseries L'algorithme de résolution de PASAPAS\\[0.3em]
+  \large\mdseries Cast3M — lecture commentée du source Gibiane et du Fortran des opérateurs}
+\author{}
+\date{16 octobre 2026}
+
+\begin{document}
+\maketitle
+\thispagestyle{empty}
+
+\begin{abstract}
+\noindent Cette note décrit ce que fait réellement la procédure \pr{PASAPAS} de Cast3M, telle qu'elle est écrite.
+Elle couvre la boucle en temps, le couplage thermique-mécanique, les trois procédures thermiques et le pas de mécanique \pr{UNPAS} : itérations d'équilibre, opérateur du Newton, accélération de convergence, intégration du comportement, configurations en grands déplacements, critères de convergence et de non-convergence.
+Elle traite aussi les options avancées (non local, méthode asymptotique numérique, pilotage, contact, rayonnement, rigidité augmentée, dynamique).
+Chaque algorithme est écrit en pseudo-code, précédé d'un glossaire des variables du source et suivi d'explications et des équations qu'il résout.
+Toutes les affirmations viennent de la lecture du source ; aucune n'a été confirmée par un calcul.
+\end{abstract}
+
+\setcounter{tocdepth}{2}
+\tableofcontents
+\clearpage

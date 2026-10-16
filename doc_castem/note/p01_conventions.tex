@@ -1,0 +1,210 @@
+% ============================================================================
+\section{Objet, sources et conventions}
+% ============================================================================
+
+\subsection{Objet et méthode}
+
+\pr{PASAPAS} est la procédure générale de Cast3M pour les calculs incrémentaux : elle avance dans le temps et résout, à chaque instant, un problème mécanique non linéaire, un problème thermique, ou les deux.
+Elle est écrite en Gibiane, le langage de commandes de Cast3M, et s'appuie sur une vingtaine de sous-procédures et sur des opérateurs écrits en Fortran (Esope).
+
+Cette note décrit le code tel qu'il est écrit, et non tel que la documentation le présente.
+Les procédures Gibiane ont été téléchargées sur \url{https://www-cast3m.cea.fr} (\texttt{download.php?nom=<procédure>\&type=procedure}), aux versions du tableau~\ref{tab:versions}.
+Les opérateurs cités ont été vérifiés dans leur source Fortran, que le même site distribue (\texttt{download.php?nom=<routine>\&type=source}).
+Les notices et les supports de formation n'ont servi qu'à orienter la lecture : ils peuvent être faux, et ils le sont sur au moins deux points (KTAN et CONF, § \ref{sec:ktan} et \ref{sec:conf}).
+Les numéros de ligne cités renvoient à ces versions.
+Rien de ce qui suit n'a été confirmé par un calcul : les constats du § \ref{sec:constats} méritent chacun un jeu de données d'essai.
+
+\begin{table}[ht]
+\centering\small
+\caption{Procédures lues, avec la date de version portée en tête de fichier.}
+\label{tab:versions}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Procédure & Version & Rôle\\
+\midrule
+\pr{PASAPAS}  & 26/06/09 & boucle en temps, couplage\\
+\pr{UNPAS}    & 26/09/09 & un pas de mécanique (3\,843 lignes)\\
+\pr{TRANSNON} & 26/03/20 & un pas de thermique non linéaire\\
+\pr{TRANSLIN} & 24/09/11 & un pas de thermique linéaire\\
+\pr{DUPONT2}  & 24/09/11 & un pas de thermique, schéma de Dupont\\
+\pr{PAS\_DEFA} & 26/08/05 & valeurs par défaut\\
+\pr{PAS\_MODL} & 26/05/28 & classification du modèle et du matériau\\
+\pr{PAS\_INIT} & 26/10/15 & configurations initiales\\
+\pr{PAS\_ETAT} & 26/04/14 & état aux instants intermédiaires\\
+\pr{PAS\_RESU} & 25/03/07 & transfert et sauvegarde des résultats\\
+\pr{CORMAN}   & 13/02/05 & méthode asymptotique numérique\\
+\pr{UNILATER} & 26/04/21 & conditions unilatérales (contact)\\
+\pr{PAS\_RAYO}, \pr{HRAYO}, \pr{HRCAV} & 25/05/21, 14/04/17, 12/06/07 & rayonnement\\
+\pr{AUTOPILO}, \pr{PILOINDI}, \pr{PAS\_HELM}, \pr{DEFO\_IMP} & — & pilotage, Helmholtz, contrôle de déformation\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Lire le pseudo-code}
+
+Chaque algorithme est écrit en pseudo-code, dans un cadre intitulé « Algo~$n$ » (ou « Annexe~X » pour les options).
+Les règles de lecture sont les suivantes.
+
+\begin{itemize}
+\item \textbf{Une ligne plus indentée s'exécute à l'intérieur de la ligne au-dessus} (corps d'une boucle ou d'un test). Il n'y a pas de « fin pour » ni de « fin si » : seule l'indentation porte l'imbrication.
+\item \textbf{Deux lignes alignées s'exécutent l'une après l'autre.}
+\item \textbf{« Algo~$n$ » ou « Annexe~X » dans une ligne est un appel} : le détail de cette étape est écrit ailleurs, sous ce nom.
+\item $a \gets b$ est une affectation ; \Sortir{} quitte la boucle la plus intérieure ; \Retourner{} quitte l'algorithme.
+\item Le commentaire grisé en bout de ligne donne les lignes du source, dans \pr{UNPAS} sauf mention contraire, ou le nom de la boucle Gibiane (\src{BEXTERN}, \src{ETIQ}…).
+\end{itemize}
+
+Les schémas ne contiennent aucune flèche entre boucles : une boucle contenue dans une autre est dessinée à l'intérieur de son cadre.
+
+\subsection{Notations}
+
+Les vecteurs et matrices discrets sont en gras : $\vc u$ (déplacements nodaux), $\vg\lambda$ (multiplicateurs de Lagrange), $\vc A$ (matrice des liaisons), $\vc K$ (rigidité), $\vc M$ (masse), $\vc C$ (amortissement, ou capacité thermique selon le contexte), $\vc F$ (forces).
+Les champs aux points d'intégration sont aussi en gras : $\sig$ (contraintes), $\vg\eps$ (déformations), $\vc V$ (variables internes).
+L'indice $n$ désigne le début du pas et $n+1$ sa fin ; l'exposant $(i)$ désigne l'itéré numéro $i$.
+$\Delta$ désigne un incrément cumulé depuis le début du pas et $\delta$ la correction apportée par une itération.
+$\norminf{\cdot}$ est le maximum des valeurs absolues sur tous les nœuds (ou points de Gauss) et toutes les composantes retenues.
+« GD » abrège « grands déplacements » et « HPP » « hypothèse des petites perturbations ».
+
+Les équations sont de deux natures.
+Celles qui traduisent une ligne du source sont accompagnées de sa référence.
+Les autres sont des rappels classiques, donnés pour expliquer ce que le code calcule ; le texte le signale.
+
+\subsection{Trois règles de Gibiane utiles à la lecture}
+\label{sec:gibiane}
+
+\paragraph{Les expressions s'évaluent de gauche à droite, sans priorité d'opérateurs.}
+C'est la règle la plus importante pour traduire le source en formules, et elle est établie par le Fortran de l'interpréteur :
+\begin{itemize}
+\item \texttt{ANASYN} découpe l'instruction en « phrases élémentaires » : il cherche la première parenthèse fermante et remonte à l'ouvrante correspondante. La parenthèse la plus intérieure est donc évaluée d'abord.
+\item \texttt{PILOT} lit ensuite les opérateurs un à un, dans l'ordre où ils apparaissent dans la phrase.
+\item Chaque opérateur prend ses opérandes dans une pile (\texttt{LIRABJ}) : le premier objet disponible du type voulu, en lisant de gauche à droite.
+\item Le résultat est réinséré en tête de la partie non lue de la pile (\texttt{ECPI}), où l'opérateur suivant le trouve en premier.
+\end{itemize}
+Ainsi \texttt{1 + 2 * 3} vaut $(1+2)\times 3 = 9$, et l'expression \texttt{psc + 1.D0 ** 0.5D0} de \pr{CORMAN} vaut $(\mathrm{psc}+1)^{1/2}$.
+Toutes les formules de cette note ont été dérivées en respectant cette règle.
+
+\paragraph{La portée des noms est dynamique.}
+À l'appel d'une procédure, \texttt{INIPRO} initialise chaque nom qu'elle emploie avec l'objet de même nom des niveaux appelants, s'il en existe un.
+Une procédure peut donc lire une variable de son appelant sans la recevoir en argument (§ \ref{sec:translin}).
+
+\paragraph{Lire un indice absent d'une table est une erreur.}
+\texttt{REMPIL} lève l'erreur~535 quand on lit \texttt{T.'X'} et que l'indice \texttt{'X'} n'existe pas (§ \ref{sec:constats}).
+
+% ============================================================================
+\section{Vue d'ensemble}
+\label{sec:vue}
+% ============================================================================
+
+\begin{glossaire}[Glossaire — objets partagés par toutes les procédures]
+— & \src{PRECED} & Table passée à \pr{PASAPAS} par l'utilisateur : modèle, matériau, chargement, options, et résultats des appels précédents. Toutes les sous-procédures la reçoivent.\\
+— & \src{WTAB} = \src{PRECED.'WTABLE'} & Table de travail, recréée par \pr{PAS\_DEFA} à chaque appel. Elle porte les options après défauts, les configurations, la raideur mémorisée, les compteurs.\\
+— & \src{CONTINUATION} (\src{conti}) & État convergé au début du pas : temps $t_n$, $\vc u_n$, $\sig_n$, $\vc V_n$, $T_n$\ldots\\
+— & \src{ESTIMATION} (\src{estim}) & État de fin de pas en construction ($t_{n+1}$, $\vc u_{n+1}$\ldots). \pr{PAS\_RESU} le recopie dans \src{CONTINUATION} en fin de pas.\\
+$\{t_k\}$ & \src{TEMPS_CALCULES} & Instants à atteindre, dans l'ordre.\\
+— & \src{TEMPS_SAUVES} & Instants dont les résultats sont sauvegardés dans les tables de sortie.\\
+— & \src{MODELE}, \src{CARACTERISTIQUES} & Modèle (maillage, formulation, loi) et matériau ; ils peuvent évoluer dans le temps (\src{CHAR_MODE}).\\
+— & \src{CHARGEMENT} & Chargements tabulés en temps (\op{TIRE} les évalue à un instant).\\
+— & \src{FOR0}, \src{GE0_DEB}, \src{FOR} & Configurations : de référence, de début de pas, de fin de pas (§ \ref{sec:configs}).\\
+\end{glossaire}
+
+\subsection{Le problème résolu}
+
+\paragraph{Mécanique.}
+Après discrétisation par éléments finis, on cherche à chaque instant $t_{n+1}$ les déplacements $\vc u_{n+1}$ et les multiplicateurs $\vg\lambda_{n+1}$ tels que
+\begin{equation}
+\label{eq:equilibre}
+\vc F^{int}(\vc u_{n+1}) + \vc A^{\mathsf T}\vg\lambda_{n+1} = \vc F^{ext}(t_{n+1}) + \vc F^{suiv}(\vc u_{n+1}),
+\qquad
+\vc A\,\vc u_{n+1} = \vc u^{imp}(t_{n+1}),
+\end{equation}
+où $\vc F^{int} = \int_\Omega \vc B^{\mathsf T}\sig\,\mathrm d\Omega$ (opérateur \op{BSIGMA}), $\sig$ étant obtenue en intégrant la loi de comportement sur le pas, $\vc F^{suiv}$ regroupe les chargements suiveurs (pression en GD, procédure utilisateur \src{CHARMECA}), et $\vc A\vc u = \vc u^{imp}$ représente les déplacements imposés et les relations.
+Les blocages sont traités par multiplicateurs de Lagrange : $-\vc A^{\mathsf T}\vg\lambda$ est la réaction.
+En dynamique, on ajoute $\vc M\ddot{\vc u} + \vc C\dot{\vc u}$ au premier membre ; en consolidation, un terme de couplage avec la pression de pore.
+
+\paragraph{Thermique.}
+On cherche les températures nodales $\vc T$ telles que
+\begin{equation}
+\label{eq:thermique}
+\vc C(\vc T)\,\dot{\vc T} + \vc K(\vc T)\,\vc T = \vc F(\vc T, t),
+\end{equation}
+où $\vc C$ est la capacité, $\vc K$ regroupe conduction, convection, advection et rayonnement linéarisé, et $\vc F$ les flux, sources, températures extérieures de convection et le second membre du rayonnement ; les températures imposées passent aussi par des multiplicateurs.
+
+\paragraph{Couplage.}
+La thermique agit sur la mécanique par le matériau, évalué à la température courante, et par la déformation thermique $\vg\eps^{th} = \op{EPTH}(T) - \op{EPTH}(T_{ref})$.
+La mécanique n'agit sur la thermique que par la géométrie en GD et par les procédures utilisateur (§ \ref{sec:couplage}).
+
+\subsection{Structure générale}
+
+La figure~\ref{fig:imbrication} montre l'imbrication des boucles : chaque cadre est une boucle, contenue dans celle qui l'entoure.
+Dans une passe, la thermique (cadre de gauche) s'exécute entièrement avant la mécanique (cadre de droite).
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[x=1cm,y=1cm,
+  bx/.style={draw=algframe,rounded corners=2pt,line width=0.5pt},
+  lb/.style={anchor=north west,font=\sffamily\scriptsize,inner sep=2pt,align=left}]
+  \draw[bx,fill=algtitle!35] (0,0) rectangle (16,10.2);
+  \node[lb,text width=15.6cm] at (0.05,10.15) {\textbf{PASAPAS} — \algoref{1}};
+  \draw[bx,fill=white] (0.3,0.3) rectangle (15.7,9.55);
+  \node[lb,text width=15cm] at (0.35,9.5) {pour chaque instant $T_I$ de \src{TEMPS_CALCULES} — boucle \src{BEXTERN}};
+  \draw[bx,fill=algtitle!20] (0.6,0.6) rectangle (15.4,8.85);
+  \node[lb,text width=14.5cm] at (0.65,8.8) {pour chaque passe $k$, une seule par défaut — boucle \src{BO_BOTH}};
+  % thermique
+  \draw[bx,draw=ther,fill=ther!6] (0.9,0.9) rectangle (6.7,8.1);
+  \node[lb,text width=5.6cm] at (0.95,8.05) {\textbf{\textcircled{\tiny 1} thermique de $t$ à $T_I$}\\ \algoref{2}, \algoref{2L} ou \algoref{2D}};
+  \draw[bx,draw=ther,fill=white] (1.2,1.2) rectangle (6.4,6.95);
+  \node[lb,text width=5cm] at (1.25,6.9) {pour chaque sous-pas thermique\\ boucle \src{BOUC_SO} (si \src{PAS_MAX})};
+  \draw[bx,draw=ther,fill=ther!6] (1.5,1.5) rectangle (6.1,5.8);
+  \node[lb,text width=4.5cm] at (1.55,5.75) {répéter les itérations — \src{BOU_IT1}\\ (\pr{TRANSNON} seulement)};
+  \node[font=\sffamily\scriptsize,align=center,text width=4.2cm] at (3.8,3.4) {$\vc S\,\Delta\vc T^{(i)} = \vc R^{(i-1)}$\\[2pt] critère sur la variation\\ de $\Delta\vc T$};
+  % mécanique
+  \draw[bx,draw=meca,fill=meca!6] (7,0.9) rectangle (15.1,8.1);
+  \node[lb,text width=7.9cm] at (7.05,8.05) {\textbf{\textcircled{\tiny 2} mécanique de $t$ à $T_I$} — \pr{UNPAS}, \algoref{3}};
+  \draw[bx,draw=meca,fill=white] (7.3,1.2) rectangle (14.8,7.35);
+  \node[lb,text width=7.3cm] at (7.35,7.3) {pour chaque sous-pas $s$, 100 au plus — \src{BONOCONV} (convergence forcée)};
+  \draw[bx,draw=meca,fill=meca!6] (7.6,1.5) rectangle (14.5,6.6);
+  \node[lb,text width=6.8cm] at (7.65,6.55) {répéter les itérations d'équilibre $i$ — \src{ETIQ}, \algoref{4} ; tests : \algoref{6}};
+  \draw[bx,draw=meca,fill=white] (7.9,1.8) rectangle (14.2,5.85);
+  \node[lb,text width=6.2cm] at (7.95,5.8) {pour chaque sous-incrément $k$ — \src{sousinc}, \algoref{5}};
+  \draw[bx,draw=meca,fill=meca!6] (8.2,2.1) rectangle (13.9,5.1);
+  \node[lb,text width=5.6cm] at (8.25,5.05) {répéter les sous-itérations non locales — \src{BIHL}, \annref{A} (si \src{NON_LOCAL})};
+  \node[font=\sffamily\scriptsize,align=center,text width=5cm] at (11.05,3.2) {loi de comportement \op{COMP}\\ puis régularisation de $\vc V$};
+\end{tikzpicture}
+\caption{Imbrication des boucles. Un cadre contenu dans un autre est une boucle intérieure. Dans une passe, le bloc \textcircled{\tiny 1} s'exécute avant le bloc \textcircled{\tiny 2}.}
+\label{fig:imbrication}
+\end{figure}
+
+\begin{algobox}{0}{Imbrication des boucles}{PASAPAS · TRANSNON · UNPAS}
+\begin{algorithmic}[1]
+\Etape{\pr{PASAPAS}} \Comment{\algoref{1}}
+\ForAll{instant $T_I$} \Comment{boucle \src{BEXTERN}}
+  \ForAll{passe $k$, une seule par défaut} \Comment{boucle \src{BO_BOTH}}
+    \Etape{thermique de $t$ à $T_I$} \Comment{\algoref{2}, \algoref{2L} ou \algoref{2D}}
+      \ForAll{sous-pas thermique} \Comment{\src{BOUC_SO}, si \src{PAS_MAX}}
+        \State répéter les itérations \Comment{\src{BOU_IT1}}
+      \EndFor
+    \EndEtape
+    \Etape{puis mécanique de $t$ à $T_I$} \Comment{\algoref{3}, \pr{UNPAS}}
+      \ForAll{sous-pas $s$, 100 au plus} \Comment{\src{BONOCONV}, convergence forcée}
+        \Etape{répéter les itérations $i$} \Comment{\src{ETIQ}, \algoref{4}}
+          \ForAll{sous-incrément $k$} \Comment{\src{sousinc}, \algoref{5}}
+            \State répéter les sous-itérations non locales \Comment{\src{BIHL}, \annref{A}}
+          \EndFor
+        \EndEtape
+      \EndFor
+    \EndEtape
+  \EndFor
+\EndFor
+\EndEtape
+\end{algorithmic}
+\end{algobox}
+
+\subsection{L'essentiel en six points}
+
+\begin{enumerate}
+\item \textbf{Boucle en temps.} On parcourt une liste d'instants imposés (\src{TEMPS_CALCULES}). Si l'on ne donne que \src{TEMPS_SAUVES}, le pas s'adapte au nombre d'itérations : divisé par $\sqrt2$ au-delà de 20, multiplié par $\sqrt2$ en deçà de 7 (§ \ref{sec:temps}).
+\item \textbf{Couplage étagé.} La thermique avance de $t_n$ à $t_{n+1}$, puis la mécanique utilise $T_{n+1}$. Il n'y a qu'une passe par défaut (§ \ref{sec:couplage}).
+\item \textbf{Newton modifié, accéléré.} L'opérateur des itérations est par défaut la rigidité élastique (plus $\vc K_\sigma$ en GD), gardée d'un pas à l'autre quand c'est possible. L'accélération \op{ACT3} intervient une itération sur deux. La tangente n'est utilisée qu'avec \src{K_TANGENT}, et ce n'est pas la tangente algorithmique (§ \ref{sec:operateur}).
+\item \textbf{Deux critères à $10^{-4}$.} Le résidu d'équilibre, en norme max et rapporté à une force de référence fixée en début de pas, et la variation de l'incrément de déformation entre deux itérations ; un troisième critère porte sur les moments (§ \ref{sec:criteres}).
+\item \textbf{Échec.} La non-convergence est détectée quand le critère n'a pas baissé de 1\,\% en 10 itérations, ou après \src{MAXITERATION} itérations. Par défaut, on repart alors de l'itéré non convergé comme nouvel état initial (convergence forcée), jusqu'à 100 sous-pas (§ \ref{sec:pas}).
+\item \textbf{Configurations.} En HPP, tout se fait sur la configuration initiale. En GD : début de pas pour la rigidité initiale et $\vc F^{int}_n$, mi-incrément pour $\Deps$ et la loi de comportement, fin de pas recalculée à chaque itération pour les forces internes (§ \ref{sec:configs}).
+\end{enumerate}
