@@ -743,6 +743,44 @@ h=\sigma\,\varepsilon_{\text{éq}}\,\big(T^2+T_e^2\big)\big(T+T_e\big)\quad\Long
     <li><strong>TRANSLIN</strong> ne l'appelle pas : le rayonnement est ignoré.</li>
   </ul>
 
+  <figure class="algo" id="annexe-F">
+    <figcaption><span class="algo-id">Annexe F</span><span class="algo-title">Relations non associées</span><span class="algo-src">RELA1 · RESOU · SEPARM · UNPAS</span></figcaption>
+    <div class="algo-scroll"><pre class="pc">
+// RIG = RELA CHP1 'DUAL' CHP2 ('NORM')                                     // Fortran RELA1, l. 548-828
+ligne du multiplicateur ← coefficients de CHP1 (composantes primales UX…)    // A·u = valeur imposée (FLX)
+colonne du multiplicateur ← −coefficients de CHP2 (composantes duales FX…)  // force +λ·B aux nœuds de CHP2
+si NORM : A et B ramenés à une norme 1 ; sinon ‖B‖∞ hors de [10⁻⁵, 10⁵] : erreur 1118
+marquer la matrice non symétrique (IRIGEL(7) = 2)                           // RELA1 l. 628-645
+// dans RESO
+si une matrice est non symétrique :                                          // RESOU l. 197-207
+  solveur non symétrique LDMT ; Cholesky ou gradient conjugué imposé : erreur 1126
+  ne pas éliminer la relation : le multiplicateur est gardé                  // SEPARM l. 91-92
+// dans UNPAS, la relation fait partie de ZCLIM (BLOCAGES_MECANIQUES)
+r ← F_ext + F_suiv − F_int + λ·B                                             // FCORF = ZCLIM·[u ; λ]
+λ en total = intensité de la charge pilotée
+critère : ‖B·(λ⁽ⁱ⁾ − λ⁽ⁱ⁻¹⁾)‖∞ / F_ref aux nœuds chargés
+réactions : REAC rend +λ·B aux nœuds de CHP2                                  // REACT1
+</pre></div>
+  </figure>
+  <div class="math">\[
+\begin{bmatrix}\mathbf K & -\mathbf B\\ \mathbf A & 0\end{bmatrix}
+\begin{Bmatrix}\mathbf u\\ \lambda\end{Bmatrix}
+=\begin{Bmatrix}\mathbf F\\ u^{imp}\end{Bmatrix}
+\quad\Longleftrightarrow\quad
+\mathbf K\mathbf u=\mathbf F+\lambda\,\mathbf B,\qquad \mathbf A\cdot\mathbf u=u^{imp}
+\]</div>
+  <p class="where">Une relation ordinaire impose A·u = u<sup>imp</sup>, et son multiplicateur agit sur les mêmes degrés de liberté : le système est symétrique. La syntaxe <code>RELA CHP1 'DUAL' CHP2</code> sépare les deux rôles. La ligne de la relation porte les coefficients de <code>CHP1</code>, et la colonne du multiplicateur l'opposé de ceux de <code>CHP2</code>, sur les composantes duales de ses propres nœuds. Les degrés de liberté contraints ne reçoivent aucune force. Le multiplicateur devient l'intensité d'un chargement de forme B, réglée pour qu'une combinaison de déplacements suive la valeur imposée : c'est un pilotage en déplacement, avec la charge pour inconnue, par exemple par l'ouverture d'une entaille. Le signe moins fait que λ &gt; 0 applique +λ·B. Sans <code>NORM</code>, l'erreur 1118 sort si ‖B‖∞ n'est pas dans [10⁻⁵, 10⁵] ; les erreurs 1117 et 1125 protègent la syntaxe.</p>
+  <p class="where">UNPAS ne fait aucune hypothèse de symétrie : toutes les forces de liaison viennent du produit de <code>ZCLIM</code> par [u ; λ]. Le déséquilibre contient donc la charge pilotée, λ résolu en total en est directement l'intensité, le second terme du critère exige qu'elle se stabilise, et les termes de liaison s'annulent dans F<sup>NL</sup> comme pour une relation symétrique.</p>
+  <ul>
+    <li><strong>Coût.</strong> La relation fait partie de l'opérateur : toutes les résolutions deviennent non symétriques.</li>
+    <li><strong>F<sub>ref</sub>.</strong> Son premier terme contient λ⁰·Δu<sup>imp</sup>, qui n'est plus le travail de la charge (λ⁰·B·δu⁰). Si la structure n'est chargée que par λ et part du repos, F<sub>ref</sub> dépend de l'échelle de A et B : <code>NORM</code> la fixe.</li>
+    <li><strong>Réactions.</strong> <code>REAC</code> (Fortran REACT1) calcule −(matrice de liaison)·λ, soit +λ·B aux nœuds de <code>CHP2</code> : la « réaction » de la relation est la charge pilotée.</li>
+    <li><strong>Grands déplacements.</strong> A et B restent fixes en axes globaux : la charge pilotée n'est pas suiveuse, comme pour toute <code>RELA</code>.</li>
+    <li><strong>Pilotage automatique.</strong> La valeur imposée de la relation est multipliée par α comme les autres déplacements imposés.</li>
+    <li><strong>Dynamique</strong> (déduit du source, à confirmer). Le déséquilibre reporté au pas suivant omet les forces de liaison. Le multiplicateur absorbe ce terme et les déplacements restent justes, mais la valeur rangée dans <code>DEPLACEMENTS</code> vaut λ<sub>n+1</sub> + λ<sub>n</sub>. Pour lire la charge, prendre <code>REACTIONS</code>, corrigées par celles du pas précédent (UNPAS l. 3745-3751).</li>
+    <li><strong>Contact.</strong> RESO signale la non-symétrie à UNILATER, dont le test qui évitait alors le super-élément est commenté (l. 90) ; je n'ai pas vérifié que <code>SUPER</code> gère ce cas.</li>
+  </ul>
+
   <div class="two">
     <div class="panel meca">
       <h3>Rigidité augmentée</h3>
@@ -810,6 +848,9 @@ h=\sigma\,\varepsilon_{\text{éq}}\,\big(T^2+T_e^2\big)\big(T+T_e\big)\quad\Long
     <div class="finding"><div class="head"><span class="sev know">v5 · à connaître</span><h3>KTAN à 10⁻⁸ près</h3></div>
       <p>UNPAS appelle KTAN avec <code>PREC</code> = <code>PRECISINTER</code>, soit 10⁻⁸ (5·10⁻⁷ en visqueux). Pour les modèles de plasticité de PENT1 (parfaite, Drucker-Prager, écrouissage cinématique ou isotrope), un point dont la contrainte équivalente dépasse le seuil de plus de 10⁻⁸ en relatif arrête KTAN sur l'erreur 275. Un point plastique resté sous le seuil de plus de 10⁻⁸ reçoit la matrice élastique. La tangente dépend donc de la précision avec laquelle COMP ramène σ sur la surface.</p>
       <p class="ref">UNPAS l. 149, 162-163, 950, 1827 ; Fortran KTANGE, KTANGA, DOHOT1, PENT1</p></div>
+    <div class="finding"><div class="head"><span class="sev know">v7 · à connaître</span><h3>En dynamique, le multiplicateur rangé est décalé</h3></div>
+      <p>Le déséquilibre reporté au pas suivant (<code>FOPL</code>) omet les forces de liaison. Ce terme est porté par la colonne du multiplicateur, qui l'absorbe : les déplacements restent justes, mais la valeur rangée dans <code>DEPLACEMENTS</code> vaut λ<sub>n+1</sub> + λ<sub>n</sub>. Les <code>REACTIONS</code> sont corrigées par celles du pas précédent. C'est déduit du source et reste à confirmer ; c'est important pour une relation non associée qui pilote une charge (Annexe F).</p>
+      <p class="ref">UNPAS l. 3536, 3745-3751 ; PASAPAS l. 545-550</p></div>
     <div class="finding"><div class="head"><span class="sev know">Nouveau</span><h3>3 · MAXITERATION donné est écrasé</h3></div>
       <p>Dès que la convergence forcée est active (c'est le défaut), PAS_DEFA met <code>MAXITERATION</code> à 250, même si l'utilisateur a fourni une autre valeur.</p>
       <p class="ref">PAS_DEFA l. 1001-1011</p></div>
@@ -849,6 +890,11 @@ h=\sigma\,\varepsilon_{\text{éq}}\,\big(T^2+T_e^2\big)\big(T+T_e\big)\quad\Long
 <section id="corrections">
   <h2><span class="num">11</span>Corrections successives</h2>
   <div class="findings">
+    <div class="finding"><div class="head"><span class="sev fix">Version 7</span><h3>Relations non associées</h3></div>
+      <ul>
+        <li>Ajout de l'Annexe F : relations <code>RELA … 'DUAL' …</code>, dont le multiplicateur agit ailleurs que sur les degrés de liberté contraints. Lu dans le Fortran RELA1, RESOU, RESOUC, SEPARM et REACT1, et dans UNPAS.</li>
+        <li>Nouveau constat : en dynamique, le multiplicateur rangé est décalé d'un pas.</li>
+      </ul></div>
     <div class="finding"><div class="head"><span class="sev fix">Version 5</span><h3>Quatrième revérification, sur le seul source</h3></div>
       <ul>
         <li>Méthode : les notices et le support de TP ne servent plus de preuve. Le site distribue aussi le Fortran des opérateurs (<code>download.php?nom=…&amp;type=source</code>). J'y ai revérifié tout ce qui venait d'une notice.</li>
@@ -890,7 +936,7 @@ h=\sigma\,\varepsilon_{\text{éq}}\,\big(T^2+T_e^2\big)\big(T+T_e\big)\quad\Long
   </div>
 </section>
 
-<footer>Lecture des procédures Gibiane téléchargées sur www-cast3m.cea.fr, aux versions indiquées en tête. Opérateurs vérifiés dans leur source Fortran (<code>download.php?nom=…&amp;type=source</code>) : interpréteur ANASYN, PILOT, LIRABJ, ECPI, PROCED, INIPRO, REMPIL ; ACT3 ; KTANGE, KTANGA, DOHOT1, PENT1, KTAPER ; CONFIG, PIOCAP, PIOCAF, JAUCAU, OPTION ; EPSI, EPSI1, EPSI2, BST2 ; FEFP, FEFP2, ADFEFP ; SSTE, SBSTEP ; NLOCAL, NLOCA1 ; PRRAYE, RAYEN, RAYT1, RAYN, PRFORM ; RESOU ; HOOKE, HOOK2P ; FORM ; RFCO. Les notices et les supports n'ont servi qu'à orienter la lecture. Je n'ai fait que survoler VITEUNIL et VITETFOR (vitesses de contact en dynamique), ainsi que la parallélisation (<code>ASSIS</code>).</footer>
+<footer>Lecture des procédures Gibiane téléchargées sur www-cast3m.cea.fr, aux versions indiquées en tête. Opérateurs vérifiés dans leur source Fortran (<code>download.php?nom=…&amp;type=source</code>) : interpréteur ANASYN, PILOT, LIRABJ, ECPI, PROCED, INIPRO, REMPIL ; ACT3 ; KTANGE, KTANGA, DOHOT1, PENT1, KTAPER ; CONFIG, PIOCAP, PIOCAF, JAUCAU, OPTION ; EPSI, EPSI1, EPSI2, BST2 ; FEFP, FEFP2, ADFEFP ; SSTE, SBSTEP ; NLOCAL, NLOCA1 ; PRRAYE, RAYEN, RAYT1, RAYN, PRFORM ; RESOU, RESOUC, SEPARM ; RELA1 ; REACT1 ; HOOKE, HOOK2P ; FORM ; RFCO. Les notices et les supports n'ont servi qu'à orienter la lecture. Je n'ai fait que survoler VITEUNIL et VITETFOR (vitesses de contact en dynamique), ainsi que la parallélisation (<code>ASSIS</code>).</footer>
 </main>
 
 <script>
@@ -899,7 +945,7 @@ h=\sigma\,\varepsilon_{\text{éq}}\,\big(T^2+T_e^2\big)\big(T+T_e\big)\quad\Long
   function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
   function link(s) {
     return s.replace(/\bAlgo (\d+[LD]?)\b/g, '<a href="#algo-$1">Algo $1</a>')
-            .replace(/\bAnnexe ([A-E])\b/g, '<a href="#annexe-$1">Annexe $1</a>');
+            .replace(/\bAnnexe ([A-F])\b/g, '<a href="#annexe-$1">Annexe $1</a>');
   }
   var pres = document.querySelectorAll('pre.pc');
   Array.prototype.forEach.call(pres, function (pre) {

@@ -138,7 +138,7 @@
 \begin{abstract}
 \noindent Cette note décrit ce que fait réellement la procédure \pr{PASAPAS} de Cast3M, telle qu'elle est écrite.
 Elle couvre la boucle en temps, le couplage thermique-mécanique, les trois procédures thermiques et le pas de mécanique \pr{UNPAS} : itérations d'équilibre, opérateur du Newton, accélération de convergence, intégration du comportement, configurations en grands déplacements, critères de convergence et de non-convergence.
-Elle traite aussi les options avancées (non local, méthode asymptotique numérique, pilotage, contact, rayonnement, rigidité augmentée, dynamique).
+Elle traite aussi les options avancées (non local, méthode asymptotique numérique, pilotage, contact, rayonnement, relations non associées, rigidité augmentée, dynamique).
 Chaque algorithme est écrit en pseudo-code, précédé d'un glossaire des variables du source et suivi d'explications et des équations qu'il résout.
 Toutes les affirmations viennent de la lecture du source ; aucune n'a été confirmée par un calcul.
 \end{abstract}
@@ -1958,6 +1958,93 @@ Et les facteurs de forme ne sont recalculés qu'au premier appel ou si \src{REA_
 \end{annexbox}
 
 % ----------------------------------------------------------------------------
+\subsection{Annexe F — Relations non associées (\op{RELA} \dots\ \src{'DUAL'} \dots)}
+% ----------------------------------------------------------------------------
+
+\begin{glossaire}
+$\vc A$ & \src{CHP1} & Coefficients de la relation, sur des composantes primales (\src{UX}, \src{UY}…) : la contrainte porte sur $\vc A\cdot\vc u$.\\
+$\vc B$ & \src{CHP2} & Coefficients duaux (\src{FX}, \src{FY}…), sur d'autres nœuds : la forme du chargement que le multiplicateur applique.\\
+$\lambda$ & \src{LX} & Multiplicateur de la relation ; ici, l'intensité du chargement de forme $\vc B$.\\
+$u^{imp}$ & \src{FLX} & Valeur imposée à $\vc A\cdot\vc u$, donnée par \op{DEPI} ou un chargement \src{DIMP}.\\
+— & \src{SYMRE}, \src{IRIGEL(7)} & Indicateur de matrice non symétrique : 2 pour une relation \src{DUAL} (\texttt{RELA1} \lig{628-645}).\\
+— & \src{NORM} & Option : ramener $\vc A$ et $\vc B$ à une norme euclidienne 1.\\
+— & \src{INSYM} & Côté \op{RESO} : vrai si une des matrices est non symétrique.\\
+— & \src{ZCLIM}, \src{FCORF} & Côté \pr{UNPAS} : matrices de liaison, et leur produit par $[\vc u ; \lambda]$ sur les composantes de force.\\
+— & \src{FOPL}, \src{REAPREC} & Dynamique : déséquilibre de fin de pas, et réactions du pas précédent.\\
+\end{glossaire}
+
+\paragraph{La construction.}
+Une relation ordinaire impose $\vc A\cdot\vc u = u^{imp}$, et son multiplicateur agit sur les mêmes degrés de liberté : le système est symétrique, $\big[\begin{smallmatrix}\vc K & \vc A^{\mathsf T}\\ \vc A & 0\end{smallmatrix}\big]$.
+La syntaxe \src{RIG = RELA CHP1 'DUAL' CHP2 ('NORM')} sépare les deux rôles (Fortran \texttt{RELA1}, \lig{548-828}).
+La ligne du multiplicateur reçoit les coefficients de \src{CHP1} ; la colonne reçoit l'opposé des coefficients de \src{CHP2}, sur les composantes duales de ses propres nœuds.
+Les degrés de liberté contraints ne reçoivent aucune force du multiplicateur.
+Le système devient
+\begin{equation}
+\begin{bmatrix}\vc K & -\vc B\\ \vc A & 0\end{bmatrix}
+\begin{Bmatrix}\vc u\\ \lambda\end{Bmatrix}
+=
+\begin{Bmatrix}\vc F\\ u^{imp}\end{Bmatrix}
+\qquad\Longleftrightarrow\qquad
+\vc K\vc u = \vc F + \lambda\,\vc B,\qquad \vc A\cdot\vc u = u^{imp} .
+\end{equation}
+Le multiplicateur est donc l'intensité d'un chargement de forme $\vc B$, réglée pour qu'une combinaison de déplacements suive une valeur imposée : c'est un pilotage en déplacement, avec la charge pour inconnue.
+L'usage typique est de piloter par une ouverture (par exemple l'écartement des lèvres d'une entaille) un chargement appliqué ailleurs, pour franchir un pic de charge.
+Le signe moins de la colonne fait que $\lambda > 0$ applique $+\lambda\,\vc B$.
+\src{NORM} ramène $\vc A$ et $\vc B$ à une norme unité ; sans \src{NORM}, l'erreur 1118 sort si $\lVert\vc B\rVert_\infty$ n'est pas dans $[10^{-5}, 10^{5}]$.
+Les erreurs 1117 (composante primale ou duale attendue) et 1125 (\src{LX} donné) protègent la syntaxe.
+
+\paragraph{La résolution.}
+\begin{itemize}
+\item \op{RESO} (Fortran \texttt{RESOU}, \lig{197-207}) repère la matrice non symétrique et passe au solveur non symétrique \texttt{LDMT} ; si l'utilisateur a imposé Cholesky ou le gradient conjugué, il s'arrête sur l'erreur 1126 (\lig{273-282}).
+\item \texttt{SEPARM} (appelé par \texttt{RESOUC}), qui choisit les relations à éliminer par substitution, n'élimine jamais une relation non symétrique : son multiplicateur est gardé (\texttt{SEPARM} \lig{91-92}).
+\item Avec du contact, \op{RESO} signale la non-symétrie à \pr{UNILATER}. Le test qui évitait alors la condensation en super-élément est commenté (\pr{UNILATER} \lig{90}) : la condensation est toujours faite, et l'on n'a pas vérifié que l'opérateur \op{SUPER} gère le cas non symétrique.
+\end{itemize}
+
+\paragraph{Dans UNPAS.}
+On place la relation dans \src{BLOCAGES_MECANIQUES} ; elle entre dans \src{ZCLIM}.
+\pr{UNPAS} ne fait aucune hypothèse de symétrie : toutes les forces de liaison sont calculées comme le produit de \src{ZCLIM} par $[\vc u ; \lambda]$, si bien que tout reste cohérent.
+\begin{itemize}
+\item Le déséquilibre est $\vc r = \vc F^{ext} + \vc F^{suiv} - \vc F^{int} + \lambda\,\vc B$ : la charge pilotée est dans l'équilibre.
+\item $\lambda$ est résolu en total (§ \ref{sec:systeme}) : sa valeur est directement l'intensité de la charge.
+\item Le second terme du critère, $\lVert\vc B\,(\lambda^{(i)} - \lambda^{(i-1)})\rVert_\infty / F_{ref}$, exige que la charge se stabilise.
+\item Dans $\vc F^{NL}$ (§ \ref{sec:predicteur}), les termes de liaison s'annulent comme pour une relation symétrique, puisqu'ils viennent tous du même produit.
+\end{itemize}
+
+\paragraph{Points à connaître.}
+\begin{enumerate}
+\item \textbf{Coût.} La relation fait partie de l'opérateur : toutes les résolutions du calcul deviennent non symétriques.
+\item \textbf{Référence $F_{ref}$.} Son premier terme contient $\lambda^{0}\,\Delta u^{imp}$, qui n'est plus le travail de la charge pilotée : ce travail vaut $\lambda^{0}\,\vc B\cdot\delta\vc u^{0}$. Si la structure n'est chargée que par $\lambda$ ($\vc F^{ext} = 0$) et part du repos ($\vc F^{int}_n = 0$), $F_{ref}$ repose sur ce seul terme et dépend de l'échelle de $\vc A$ et $\vc B$ : \src{NORM} la fixe.
+\item \textbf{Réactions.} \op{REAC} (Fortran \texttt{REACT1}) calcule $-(\text{matrice de liaison})\cdot\lambda$, soit $+\lambda\,\vc B$ aux nœuds de \src{CHP2} : la « réaction » de la relation est la charge pilotée.
+\item \textbf{Grands déplacements.} $\vc A$ et $\vc B$ restent fixes en axes globaux : la charge pilotée n'est pas suiveuse. C'est vrai de toute relation \op{RELA} ; seules les relations de contact sont recalculées.
+\item \textbf{Pilotage automatique.} La valeur imposée de la relation est multipliée par $\alpha$, comme les autres déplacements imposés.
+\item \textbf{Dynamique} (déduit du source, à confirmer par un calcul). Le déséquilibre reporté au pas suivant omet les forces de liaison : avec $\vc G$ la colonne du multiplicateur ($\vc A^{\mathsf T}$, ou $-\vc B$ ici),
+\begin{equation}
+\mathrm{FOPL}_n = \vc F^{ext}_n - \vc F^{int}_n = \vc M\vc a_n + \vc C\vc v_n + \vc G\,\lambda_n .
+\end{equation}
+Ce terme supplémentaire est dans l'image de $\vc G$ : le multiplicateur l'absorbe, et les déplacements restent justes. Mais la valeur rangée dans \src{DEPLACEMENTS} est $\lambda' = \lambda_{n+1} + \lambda_n$. \pr{UNPAS} corrige les réactions en retranchant celles du pas précédent (\lig{3745-3751}) ; pour lire la charge pilotée en dynamique, il faut donc prendre \src{REACTIONS}, et non le multiplicateur. Cette remarque vaut pour toute relation en dynamique (constat~\ref{c:lxdyn}).
+\end{enumerate}
+
+\begin{annexbox}{F}{Relations non associées}{RELA1 · RESOU · SEPARM · UNPAS}
+\begin{algorithmic}[1]
+\Statex \textit{// \src{RIG = RELA CHP1 'DUAL' CHP2 ('NORM')}}
+\State ligne du multiplicateur $\gets$ coefficients de \src{CHP1} (composantes primales) \Comment{$\vc A\cdot\vc u = u^{imp}$}
+\State colonne du multiplicateur $\gets -$coefficients de \src{CHP2} (composantes duales) \Comment{force $+\lambda\,\vc B$}
+\State \textbf{si} \src{NORM} : $\vc A$ et $\vc B$ ramenés à une norme 1 ; \textbf{sinon si} $\lVert\vc B\rVert_\infty \notin [10^{-5}, 10^{5}]$ : erreur 1118
+\State marquer la matrice non symétrique (\src{IRIGEL(7)} = 2) \Comment{\texttt{RELA1} \lig{628-645}}
+\Statex \textit{// dans \op{RESO}}
+\If{une matrice est non symétrique} \Comment{\texttt{RESOU} \lig{197-207}}
+  \State solveur non symétrique \texttt{LDMT} ; Cholesky ou gradient conjugué imposé : erreur 1126
+  \State ne pas éliminer la relation : le multiplicateur est gardé \Comment{\texttt{SEPARM} \lig{91-92}}
+\EndIf
+\Statex \textit{// dans \pr{UNPAS} : la relation fait partie de \src{ZCLIM}}
+\State $\vc r \gets \vc F^{ext} + \vc F^{suiv} - \vc F^{int} + \lambda\,\vc B$ \Comment{\src{FCORF} $= \src{ZCLIM}\cdot[\vc u ; \lambda]$}
+\State $\lambda$ en total $=$ intensité de la charge pilotée
+\State critère : $\lVert\vc B\,(\lambda^{(i)} - \lambda^{(i-1)})\rVert_\infty / F_{ref}$ aux nœuds chargés
+\State réactions : \op{REAC} rend $+\lambda\,\vc B$ aux nœuds de \src{CHP2} \Comment{\texttt{REACT1}}
+\end{algorithmic}
+\end{annexbox}
+
+% ----------------------------------------------------------------------------
 \subsection{Rigidité augmentée}
 \label{sec:augmentation}
 % ----------------------------------------------------------------------------
@@ -2092,6 +2179,10 @@ La mise à faux par \src{PAS_AJUSTE} (\pr{PAS\_DEFA} \lig{732}) est écrasée à
 \pr{PAS\_RAYO} ne recalcule les facteurs de forme des cavités qu'au premier appel ou si \src{REA_GEOM} est vrai, ce qui n'arrive qu'aux passes $\ge 2$ de \src{CONVERGENCE_MEC_THE} en GD. Avec une seule passe, une cavité qui se déforme garde ses facteurs de forme initiaux ; les matrices, elles, sont recalculées sur la géométrie courante.
 \hfill{\footnotesize\pr{PAS\_RAYO} \lig{71-84} ; \pr{PASAPAS} \lig{363-369} ; \pr{PAS\_DEFA} \lig{503}}
 
+\item\label{c:lxdyn} \textbf{En dynamique, le multiplicateur rangé est décalé.}
+Le déséquilibre reporté au pas suivant (\src{FOPL}) omet les forces de liaison ; le multiplicateur absorbe ce terme, si bien que les déplacements restent justes, mais la valeur rangée dans \src{DEPLACEMENTS} vaut $\lambda_{n+1} + \lambda_n$. Les \src{REACTIONS} sont corrigées par celles du pas précédent. Déduit du source, à confirmer par un calcul ; important pour une relation non associée qui pilote une charge (\annref{F}).
+\hfill{\footnotesize\pr{UNPAS} \lig{3536}, 3745-3751 ; \pr{PASAPAS} \lig{545-550}}
+
 \item\label{c:mat1} \textbf{Couplage itéré : le matériau « de début » change à la passe 2.}
 \pr{UNPAS} écrit le matériau de fin de pas dans \src{WTAB.MAT1} (\lig{3792}) et le relit comme matériau de début (\lig{283}). Avec \src{CONVERGENCE_MEC_THE}, cela touche la correction « matériau variable », $\vc F^{int}_n$ des éléments de structure et l'état initial passé à \op{COMP}.
 \end{enumerate}
@@ -2122,7 +2213,7 @@ Les lignes 87-88 lisent \src{WTAB.'CAPACONST'} alors que seule \src{ETAB} est d�
 
 \begin{itemize}
 \item \textbf{Source Gibiane.} Les procédures du tableau~\ref{tab:versions} ont été lues ligne à ligne, quatre fois. Chaque expression traduite en formule l'a été en respectant l'évaluation de gauche à droite.
-\item \textbf{Fortran des opérateurs.} Tout ce qui venait d'une notice a été revérifié dans le Fortran : interpréteur (\texttt{ANASYN}, \texttt{PILOT}, \texttt{LIRABJ}, \texttt{ECPI}, \texttt{PROCED}, \texttt{INIPRO}, \texttt{REMPIL}) ; \op{ACT3} ; \op{KTAN} (\texttt{KTANGE}, \texttt{KTANGA}, \texttt{DOHOT1}, \texttt{PENT1}, \texttt{KTAPER}) ; \op{CONF} (\texttt{CONFIG}, \texttt{PIOCAP}, \texttt{PIOCAF}, \texttt{JAUCAU}, \texttt{OPTION}) ; \op{EPSI} (\texttt{EPSI1}, \texttt{EPSI2}, \texttt{BST2}) ; \op{ECFE} (\texttt{FEFP}, \texttt{FEFP2}, \texttt{ADFEFP}) ; \op{SSTE} (\texttt{SBSTEP}) ; \op{NLOC} (\texttt{NLOCAL}, \texttt{NLOCA1}) ; \op{RAYE} (\texttt{PRRAYE}, \texttt{RAYEN}, \texttt{RAYT1}), \op{RAYN}, \op{FFOR} ; \op{RESO} (\texttt{RESOU}) ; \op{HOOK} ; \op{FORM} ; \op{RFCO}.
+\item \textbf{Fortran des opérateurs.} Tout ce qui venait d'une notice a été revérifié dans le Fortran : interpréteur (\texttt{ANASYN}, \texttt{PILOT}, \texttt{LIRABJ}, \texttt{ECPI}, \texttt{PROCED}, \texttt{INIPRO}, \texttt{REMPIL}) ; \op{ACT3} ; \op{KTAN} (\texttt{KTANGE}, \texttt{KTANGA}, \texttt{DOHOT1}, \texttt{PENT1}, \texttt{KTAPER}) ; \op{CONF} (\texttt{CONFIG}, \texttt{PIOCAP}, \texttt{PIOCAF}, \texttt{JAUCAU}, \texttt{OPTION}) ; \op{EPSI} (\texttt{EPSI1}, \texttt{EPSI2}, \texttt{BST2}) ; \op{ECFE} (\texttt{FEFP}, \texttt{FEFP2}, \texttt{ADFEFP}) ; \op{SSTE} (\texttt{SBSTEP}) ; \op{NLOC} (\texttt{NLOCAL}, \texttt{NLOCA1}) ; \op{RAYE} (\texttt{PRRAYE}, \texttt{RAYEN}, \texttt{RAYT1}), \op{RAYN}, \op{FFOR} ; \op{RESO} (\texttt{RESOU}, \texttt{RESOUC}, \texttt{SEPARM}) ; \op{RELA} (\texttt{RELA1}) ; \op{REAC} (\texttt{REACT1}) ; \op{HOOK} ; \op{FORM} ; \op{RFCO}.
 \item \textbf{Écarts avec la documentation.} La notice de \op{KTAN} annonce un retour à l'élastique en cas d'échec, que le Fortran ne fait pas ; celle de \op{CONF} décrit un transport, sans dire que c'est une poussée $J^{-1}\vc F\sig\vc F^{\mathsf T}$.
 \item \textbf{Non lu.} La correction des vitesses de contact en dynamique (\pr{VITEUNIL}, \pr{VITETFOR}), la parallélisation (\op{ASSIS}), et l'intérieur de \op{COMP} loi par loi.
 \item \textbf{Non testé.} Aucune affirmation n'a été confirmée par un calcul.
