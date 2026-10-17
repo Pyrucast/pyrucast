@@ -44,7 +44,9 @@ une physique couplée.
 Il alimente `Matrix::filter(Physics)` — le miroir de
 [`Model::filter`](model.md#nature-physique-et-filtrage) — qui renvoie une `Matrix`
 ne gardant que les blocs dont l'ensemble **contient** la nature donnée (handles
-partagés, pas de copie). Le résultat n'est **pas** assemblé : relancer
+partagés, pas de copie), et son complément `Matrix::exclude(Physics)`, qui garde
+ceux dont l'ensemble **ne la contient pas** ; les deux se composent
+(`k.filter(Thermal).exclude(Constraint)` : la conduction sans son Dirichlet). Le résultat n'est **pas** assemblé : relancer
 `Matrix::assemble` avant de résoudre. Un bloc à l'ensemble vide n'est
 sélectionné par aucune nature concrète ; l'étiqueter `Physics::Other` le rend
 atteignable. `Matrix::physics()` renvoie l'ensemble des natures présentes dans la

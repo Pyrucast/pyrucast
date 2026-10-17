@@ -32,8 +32,8 @@ use crate::models::{kernel, MatrixKind, ResidualContribution};
 /// [`SubModelKind::external_force_contribution`](crate::models::SubModelKind::external_force_contribution),
 /// resolves the material each integrated term reads — exactly as
 /// [`crate::ops::matrix::assemble_kind()`] resolves it before asking for a
-/// block — drives the kernel and gathers the result. One zone per contributing
-/// term, in model order.
+/// block — drives the kernel and gathers the result: the terms loading one node
+/// are **added**, in a single zone over every loaded node.
 ///
 /// A model whose every term is a response to `u` yields an empty field, which is
 /// the honest answer rather than a failure.
@@ -112,14 +112,13 @@ pub fn external_forces(model: &Model, materials: &ElementField) -> Result<NodeFi
             zones
         };
         for zone in built {
-            // `r = Σ rᵢ` is a **sum**, not a stack: two terms may load the same node in
-            // may load the same node in the same component, and an aggregate view would
-            // pick one instead of adding them. `+` unions the supports and sums what
-            // overlaps.
             let mut one = NodeField::empty();
             one.add_sub(zone)?;
             out = (&out + &one)?;
         }
     }
-    Ok(out)
+    // `r = Σ rᵢ` is a **sum**, not a stack: two terms may load the same node in
+    // the same component, and `+` only adds zones that share a support. The rest
+    // is added node by node here, or a reader would see one partial sum.
+    out.summed()
 }

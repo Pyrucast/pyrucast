@@ -116,6 +116,71 @@ pub fn thermal_strain(
     Ok(PyElementField { inner: ef })
 }
 
+/// Elastic stress `σ = D:ε` of a strain field at the Gauss points of every
+/// continuum sub-model of `model` — Cast3M `ELAS` applied to a strain.
+///
+/// `D` is the operator each law predicts with: the Hooke matrix of an
+/// elasticity, in its symmetry; the isotropic `D` behind a plasticity's elastic
+/// predictor; the **undamaged** `D` a damage law degrades. `strain` is in
+/// tensor convention, the layout of `deformation` and `thermal_strain`;
+/// `materials` needs only each law's elastic constants (`E`, `nu` when
+/// isotropic). One zone per continuum sub-model, its components the stresses
+/// the law writes; a sub-model with no elastic operator (conduction, bar, beam,
+/// constraint) contributes none.
+#[py_op(method_on = PyModel)]
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn elastic_stress(
+    model: PyRef<PyModel>,
+    strain: PyRef<PyElementField>,
+    materials: PyRef<PyElementField>,
+) -> PyResult<PyElementField> {
+    let ef =
+        crate::ops::element_field::elastic_stress(&model.inner, &strain.inner, &materials.inner)?;
+    Ok(PyElementField { inner: ef })
+}
+
+/// Elastic strain `ε = D⁻¹:σ` of a stress field at the Gauss points of every
+/// continuum sub-model of `model` — the inverse of `elastic_stress` (Cast3M
+/// `ELAS` applied to a stress).
+///
+/// `stress` carries the stresses each law writes (`sigma_xx`, …; the state
+/// returned by `integrate_behavior` will do); `materials` the elastic
+/// constants. The result is in tensor convention, the layout of `deformation`,
+/// so it subtracts from a strain component for component; in plane stress the
+/// out-of-plane `eps_zz` is not written. Raises when `D` is singular at a point
+/// (a zero modulus).
+#[py_op(method_on = PyModel)]
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn elastic_strain(
+    model: PyRef<PyModel>,
+    stress: PyRef<PyElementField>,
+    materials: PyRef<PyElementField>,
+) -> PyResult<PyElementField> {
+    let ef =
+        crate::ops::element_field::elastic_strain(&model.inner, &stress.inner, &materials.inner)?;
+    Ok(PyElementField { inner: ef })
+}
+
+/// Integral of every component of `field` over **each cell** (Cast3M
+/// `INTG 'ELEM'`), with the field's own quadrature: `Σ_g f(g)·|J|·w_g`, the
+/// `2πr` included on a body of revolution. The result lives on `target`, a
+/// space of the same mesh with **one point per cell** —
+/// `FiniteElementSpace(mesh, quadrature="REDUCED")`, a single point at each
+/// centroid. Integrating `1` gives every cell's measure. Raises when `target`
+/// has several points per cell or does not cover the field's mesh.
+#[py_op(method_on = PyElementField)]
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn cell_integral(
+    field: PyRef<PyElementField>,
+    target: PyRef<PyFiniteElementSpace>,
+) -> PyResult<PyElementField> {
+    let ef = crate::ops::element_field::cell_integral(&field.inner, &target.inner)?;
+    Ok(PyElementField { inner: ef })
+}
+
 /// Generalised **section strains** of a beam at the Gauss points, in whichever
 /// configuration the mesh puts it — the geometric producer of the behaviour
 /// input for `timoshenko` and `bernoulli`.

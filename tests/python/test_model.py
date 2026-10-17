@@ -142,10 +142,11 @@ def test_dirichlet_empty_constraint_mesh_rejected():
 
 def test_submodel_physics_nature():
     _, _, _, _, _, model, *_ = _seg2_heat_model(dirichlet_left=True)
-    # physics() is a list of nature tags (one per plain physics).
+    # physics() is a list of nature tags; a constraint also carries the nature
+    # of the physics it pins.
     assert [model[i].physics() for i in range(len(model))] == [
         ["thermal"],
-        ["constraint"],
+        ["constraint", "thermal"],
     ]
 
 
@@ -153,14 +154,20 @@ def test_model_filter_by_physics():
     _, _, _, _, _, model, *_ = _seg2_heat_model(dirichlet_left=True)
     assert len(model) == 2
 
+    # The thermal physics comes with the Dirichlet that pins it…
     thermal = model.filter("thermal")
-    assert len(thermal) == 1 and thermal[0].physics() == ["thermal"]
+    assert len(thermal) == 2
+    # …and `exclude` composes with `filter` to drop it.
+    conduction = thermal.exclude("constraint")
+    assert len(conduction) == 1 and conduction[0].physics() == ["thermal"]
 
     constraint = model.filter("constraint")
-    assert len(constraint) == 1 and constraint[0].physics() == ["constraint"]
+    assert len(constraint) == 1
+    assert constraint[0].physics() == ["constraint", "thermal"]
 
-    # A nature no sub-model has yields an empty model.
+    # A nature no sub-model has yields an empty model; excluding it keeps all.
     assert len(model.filter("mechanical")) == 0
+    assert len(model.exclude("mechanical")) == 2
 
 
 def test_model_filter_unknown_tag_raises():
@@ -185,10 +192,12 @@ def test_assembled_blocks_carry_physics_and_matrix_filter():
 
     kc = K.filter("constraint")
     assert len(kc) == 2  # the Dirichlet C / Cᵀ pair
-    assert all(kc[i].physics() == ["constraint"] for i in range(len(kc)))
+    assert all(kc[i].physics() == ["constraint", "thermal"] for i in range(len(kc)))
 
+    # Conduction block + the pair that pins it; `exclude` keeps the first alone.
     kt = K.filter("thermal")
-    assert len(kt) == 1
+    assert len(kt) == 3
+    assert len(kt.exclude("constraint")) == 1
 
 
 # ─── fespace / mesh recovery from the model ─────────────────────────────────

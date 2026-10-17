@@ -151,7 +151,7 @@ de physique » là où les capacités répondent à « domaine ou contrainte » 
 |---|---|
 | `Mechanical` | `truss`, `elasticity`, `plasticity`, `mazars`, `bernoulli`, `timoshenko`, `shell` |
 | `Thermal`    | `heat_conduction`, `radiation` ; `boundary_transfer` et `interface_transfer` quand leur cible est thermique |
-| `Constraint` | `dirichlet`, `mpc`, `embedded`, `contact` |
+| `Constraint` | `dirichlet`, `mpc`, `embedded`, `contact` — portée **avec** la nature de la physique qu'ils contraignent (`[Constraint, Mechanical]` pour un Dirichlet sur `u_x`) |
 | `Other`      | nature « autre / rien » explicite (aucune physique de base ne la déclare) |
 | `Diffusion`  | `fick` ; `boundary_transfer` et `interface_transfer` quand leur cible est une diffusion |
 | `Radiation`  | `radiation` — portée **en plus** de `Thermal`, donc `filter("thermal")` le rend aussi |
@@ -166,11 +166,18 @@ opérateur n'est pas partager une physique.
 
 La nature d'une physique de base est **entièrement déterminée par la variante** :
 c'est une constante par physique, exposée par `SubModelKind::physics()` — un
-**slice** `&'static [Physics]` (comme `label()`), pas un champ stocké. Le type est
-un **ensemble** pour deux raisons :
+**slice** `&'static [Physics]` (comme `label()`). Les termes qui écrivent dans
+les lignes d'une autre physique la lisent sur leur cible à la construction :
+`boundary_transfer`, `interface_transfer` et `flux` prennent sa nature, et une
+**contrainte** porte `Constraint` **plus** la nature de la physique dont elle
+fige les inconnues. Une relation qui lie les inconnues de deux physiques n'en
+porte aucune des deux : aucun sous-problème mono-physique ne saurait la
+résoudre. Le type est un **ensemble** pour trois raisons :
 
 - une physique **couplée** (par ex. un futur élément thermo-mécanique) porte
   *plusieurs* natures — `[Mechanical, Thermal]` ;
+- une contrainte appartient à la fois aux contraintes et à la physique qu'elle
+  fige — `[Constraint, Mechanical]` ;
 - un bloc de matrice monté à la main, hors assemblage, n'en porte **aucune** —
   l'ensemble vide, le cas « rien ». `Physics::Other` est la nature « autre »
   *explicite*, pour un bloc qu'on veut classer plutôt que laisser sans étiquette.
@@ -179,19 +186,25 @@ L'ensemble voyage avec chaque bloc assemblé jusqu'à la [`SubMatrix`](matrix.md
 (posé par l'assembleur sur les deux chemins, calculé et littéral, donc le couple
 C/Cᵀ d'un Dirichlet est étiqueté aussi).
 
-Deux sélecteurs symétriques en découlent — ils gardent les entités dont
-l'ensemble **contient** la nature (une physique couplée apparaît donc sous
-chacune) — tous deux à partage par compteur de références (pas de copie
-profonde) :
+Deux sélecteurs en découlent, chacun présent sur `Model` et sur `Matrix`, tous
+deux à partage par compteur de références (pas de copie profonde) :
 
-- `model.filter(Physics::Mechanical)` → un `Model` ne gardant que les
-  sous-modèles au moins mécaniques ;
-- `k.filter(Physics::Mechanical)` → une `Matrix` ne gardant que les blocs au moins
-  mécaniques (non assemblée — relancer `Matrix::assemble` avant de résoudre).
+- `filter(nature)` garde les entités dont l'ensemble **contient** la nature (une
+  physique couplée apparaît donc sous chacune) ;
+- `exclude(nature)`, son complément, garde celles dont l'ensemble **ne la
+  contient pas**.
+
+Ils se composent, une condition chacun. Comme une contrainte porte la nature de
+ce qu'elle fige, `model.filter(Physics::Mechanical)` rend la mécanique **avec**
+ses appuis — un sous-problème solvable tel quel — et
+`model.filter(Physics::Mechanical).exclude(Physics::Constraint)` la mécanique
+**seule**, par exemple pour lire ses seules inconnues de déplacement. Côté
+matrice, `k.filter(...)` rend une `Matrix` non assemblée — relancer
+`Matrix::assemble` avant de résoudre.
 
 `k.physics()` renvoie l'ensemble des natures **présentes** dans la matrice
 (dédupliqué) : une matrice agrégeant plusieurs physiques y expose plusieurs tags
-(par ex. `[Thermal, Constraint]`). Un bloc à l'ensemble vide n'est jamais
+(par ex. `[Thermal, Constraint]` pour une conduction et son Dirichlet). Un bloc à l'ensemble vide n'est jamais
 sélectionné par une nature concrète — l'étiqueter `Physics::Other` le rend
 atteignable par `filter(Physics::Other)`.
 

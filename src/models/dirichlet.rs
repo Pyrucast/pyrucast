@@ -42,6 +42,7 @@ use crate::containers::element_field::SubElementField;
 use crate::containers::mesh::Mesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
+use crate::models::transfer::{constrained_physics, constraint_physics};
 use crate::models::{
     constraint_block_pair, Constraint, ConstraintTerm, Contribution, MatrixKind, Physics, Relation,
     RelationSense, SubModelKind,
@@ -172,6 +173,9 @@ pub struct Dirichlet {
     /// solved by the active-set operator.
     #[serde(default)]
     pub(crate) sense: RelationSense,
+    /// Nature of the physics it constrains (`Mechanical` for a `u_x`), read
+    /// from the target at construction.
+    pub(crate) target_physics: Option<Physics>,
 }
 
 impl Dirichlet {
@@ -291,6 +295,7 @@ impl Dirichlet {
 
         let multiplier = default_multiplier(&imposed_variable);
         let imposed_value = default_imposed_value(&imposed_variable);
+        let target_physics = constrained_physics(target, [imposed_variable.as_str()]);
 
         Ok(Self {
             imposed_variable,
@@ -300,6 +305,7 @@ impl Dirichlet {
             imposed_mesh: share(imposed_mesh)?,
             multiplier_mesh: share(multiplier_mesh)?,
             sense,
+            target_physics,
         })
     }
 }
@@ -369,7 +375,7 @@ impl SubModelKind for Dirichlet {
     }
 
     fn physics(&self) -> &'static [Physics] {
-        &[Physics::Constraint]
+        constraint_physics(self.target_physics)
     }
 
     fn label(&self) -> &'static str {

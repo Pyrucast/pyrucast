@@ -231,3 +231,37 @@ assert abs(E[0].value(0, 0, "E_xx") - 0.105) < 1e-12
 assert F[0].components() == ["F_xx", "F_xy", "F_yx", "F_yy"]
 assert abs(F[0].value(0, 0, "F_xx") - 1.1) < 1e-12
 assert abs(H[0].value(0, 0, "H_xx") - math.log(1.1)) < 1e-12
+
+# ── opérateur élastique ────────────────────────────────────
+
+_, mesh, fes, n = _plaque()
+plasticite = pyrucast.model.plasticity_perfect(fes, "plane_stress")
+materiaux = pyrucast.element_field.material_field(
+    plasticite, [("E", 200e9), ("nu", 0.0), ("sigma_y", 1e6)]
+)
+dilatation = pyrucast.ElementField(fes, ["eps_xx", "eps_xy", "eps_yy"])
+dilatation[0].set_uniform("eps_xx", 1e-3)
+# ANCHOR: elastique
+# The stress an imposed strain would cause if nothing yielded: D:ε.
+sigma = pyrucast.element_field.elastic_stress(plasticite, dilatation, materiaux)
+# And back: the elastic strain carrying a stress, D⁻¹:σ.
+retour = pyrucast.element_field.elastic_strain(plasticite, sigma, materiaux)
+# ANCHOR_END: elastique
+assert abs(sigma[0].value(0, 0, "sigma_xx") - 2e8) < 1e-3  # far beyond sigma_y
+assert abs(retour[0].value(0, 0, "eps_xx") - 1e-3) < 1e-15
+
+# ── intégrale par maille, somme aux nœuds ──────────────────
+
+_, mesh, fes, n = _plaque()
+un = pyrucast.ElementField(fes, ["un"])
+un[0].set_uniform("un", 1.0)
+# ANCHOR: par_maille
+# One point per cell, at its centroid: where per-cell values live.
+centres = pyrucast.FiniteElementSpace(mesh, quadrature="REDUCED")
+aires = pyrucast.element_field.cell_integral(un, centres)  # ∫ 1 = the cell's area
+# Each node receives the sum over the cells around it.
+volumes = pyrucast.node_field.sum_to_nodes(aires)
+# ANCHOR_END: par_maille
+assert abs(aires[0].value(1, 0, "un") - 1.0) < 1e-12
+assert abs(volumes.value(n[1], "un") - 2.0) < 1e-12  # shared by both cells
+assert abs(volumes.value(n[0], "un") - 1.0) < 1e-12

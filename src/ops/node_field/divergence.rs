@@ -31,7 +31,8 @@ use crate::models::kernel::{self, CellGeom};
 use crate::ops::element_field::gradient::AXES;
 
 /// Weak divergence `div F` of a per-element vector `field` (see the module
-/// docs), as a [`NodeField`] — one zone per input subspace, component `"div"`.
+/// docs), as a [`NodeField`] of component `"div"` — a node shared by several
+/// input subspaces receives the **sum** of their contributions.
 ///
 /// This is the scalar case of the `Bᵀ` scatter, so it delegates to the shared
 /// driver [`crate::models::kernel::scatter_to_nodes`] (with `B` = the gradient
@@ -90,7 +91,9 @@ pub fn divergence(field: &ElementField, prefix: &str) -> Result<NodeField> {
     for sub in field {
         out.add_sub(Handle::new(subspace_divergence(sub, prefix)?))?;
     }
-    Ok(out)
+    // A node on the seam between two subspaces receives from both: added, not
+    // stacked side by side.
+    out.summed()
 }
 
 /// Weak divergence on a single subspace, via the `Bᵀ` driver.

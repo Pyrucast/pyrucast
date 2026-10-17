@@ -52,6 +52,7 @@ use crate::containers::mesh::{Mesh, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
+use crate::models::transfer::{constrained_physics, constraint_physics};
 use crate::models::{
     Constraint, ConstraintTerm, Contribution, MatrixKind, Physics, Relation, RelationSense,
     SubModelKind,
@@ -220,6 +221,9 @@ pub struct Embedded {
     hosts: Vec<HostBinding>,
     /// Constrained components (at least one).
     components: Vec<Component>,
+    /// Nature of the physics it constrains, read from the target at
+    /// construction.
+    target_physics: Option<Physics>,
 }
 
 impl Embedded {
@@ -282,6 +286,7 @@ impl Embedded {
         variables: Vec<String>,
         tol: f64,
     ) -> Result<Self> {
+        let target_physics = constrained_physics(target, variables.iter().map(String::as_str));
         // The target's own names: each variable must be one of its primals,
         // and the dual row its reaction lands in is read from it.
         let mut components: Vec<(String, String)> = Vec::with_capacity(variables.len());
@@ -396,6 +401,7 @@ impl Embedded {
             constrained_mesh,
             hosts,
             components,
+            target_physics,
         })
     }
 
@@ -528,7 +534,7 @@ impl SubModelKind for Embedded {
     }
 
     fn physics(&self) -> &'static [Physics] {
-        &[Physics::Constraint]
+        constraint_physics(self.target_physics)
     }
 
     fn label(&self) -> &'static str {

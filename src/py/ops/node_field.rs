@@ -114,12 +114,27 @@ pub fn consolidate(field: PyRef<PyNodeField>) -> PyResult<PyNodeField> {
 /// tensor case is the internal forces of a continuum when the quantity is a
 /// Cauchy stress — `divergence(stress, "sigma")` is Cast3m `BSIG` — but the
 /// operator knows nothing of mechanics: it needs only the geometry and the
-/// names. One zone per subspace.
+/// names. A node shared by several subspaces receives the sum of their
+/// contributions.
 #[py_op(method_on = PyElementField)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn divergence(field: PyRef<PyElementField>, prefix: &str) -> PyResult<PyNodeField> {
     let nf = crate::ops::node_field::divergence(&field.inner, prefix)?;
+    Ok(PyNodeField { inner: nf })
+}
+
+/// A field carrying **one point per cell** gathered at the nodes by
+/// **summation** (Cast3M `CHAN 'CHPO' 'SOMM'`): each node receives, per
+/// component, the sum of the values of the cells it belongs to — across zones
+/// too. Not a smoothing: no average, no weight. Applied to the cell measures of
+/// `cell_integral`, it gives the volume each node stands for. Raises on a zone
+/// with more than one point per cell (build it on a `REDUCED` space).
+#[py_op(method_on = PyElementField)]
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn sum_to_nodes(field: PyRef<PyElementField>) -> PyResult<PyNodeField> {
+    let nf = crate::ops::node_field::sum_to_nodes(&field.inner)?;
     Ok(PyNodeField { inner: nf })
 }
 

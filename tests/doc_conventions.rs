@@ -101,16 +101,22 @@ fn filtrer_un_modele_et_sa_matrice_par_nature() -> Result<()> {
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
     mesh.add_cell(&[a.id(), b.id()])?;
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
-    let model = model::heat_conduction(&fes)?;
+    let conduction = model::heat_conduction(&fes)?;
+    let appui = mesh::poi1_from_nodes(std::slice::from_ref(&a))?;
+    let mult = mesh::barycenter(&appui)?;
+    let bloque = model::dirichlet(&conduction, "T", &appui, &mult, RelationSense::Equality)?;
+    let model = conduction.union(&bloque)?;
     let materials = element_field::material_field(&model, &[("k", 1.0)])?;
     let k = matrix::stiffness(&model, &materials)?;
 
-    let meca = model.filter(Physics::Mechanical); // sous-modèles au moins mécaniques
+    let thermique = model.filter(Physics::Thermal); // la conduction ET son Dirichlet
+    let seule = thermique.exclude(Physics::Constraint); // la conduction seule
     let k_meca = k.filter(Physics::Mechanical); // blocs au moins mécaniques (non assemblés)
-    let natures = k.physics(); // ex. [Thermal, Constraint]
+    let natures = k.physics(); // [Thermal, Constraint]
 
-    assert!(meca.is_empty() && k_meca.is_empty()); // ce modèle est thermique
-    assert!(natures.contains(&Physics::Thermal));
+    assert_eq!((thermique.len(), seule.len()), (2, 1));
+    assert!(k_meca.is_empty()); // ce modèle est thermique
+    assert!(natures.contains(&Physics::Thermal) && natures.contains(&Physics::Constraint));
     Ok(())
 }
 // ANCHOR_END: filtrer_par_nature

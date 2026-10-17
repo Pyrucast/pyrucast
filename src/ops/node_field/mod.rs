@@ -6,7 +6,8 @@
 //!   as a field), [`divergence`](fn@divergence) (the nodal `∇·` of a
 //!   per-element field), [`restrict`](fn@restrict) /
 //!   [`restrict_like`](fn@restrict_like), [`merge`](fn@merge),
-//!   [`consolidate`](fn@consolidate);
+//!   [`consolidate`](fn@consolidate), [`sum_to_nodes`](fn@sum_to_nodes) (a
+//!   one-value-per-cell field summed at the nodes);
 //! - *nodal assembly* — [`internal_forces`](fn@internal_forces) and
 //!   [`external_forces`](fn@external_forces), the two sides of the balance
 //!   `Σ f_int = Σ f_ext` whose gap is the residual. They are assemblies like
@@ -28,6 +29,7 @@ pub mod merge;
 pub mod methods;
 pub mod positions;
 pub mod restrict;
+pub mod sum_to_nodes;
 
 pub use consolidate::consolidate;
 pub use divergence::divergence;
@@ -37,3 +39,4 @@ pub use mask::{mask, mask_sub};
 pub use merge::merge;
 pub use positions::positions;
 pub use restrict::{restrict, restrict_like};
+pub use sum_to_nodes::sum_to_nodes;

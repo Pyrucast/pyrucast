@@ -44,6 +44,7 @@ use crate::containers::element_field::SubElementField;
 use crate::containers::mesh::Mesh;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
+use crate::models::transfer::{constrained_physics, constraint_physics};
 use crate::models::{
     constraint_block_pair, Constraint, ConstraintTerm, Contribution, MatrixKind, Physics, Relation,
     RelationSense, SubModelKind,
@@ -170,6 +171,9 @@ pub struct MpcTerm {
     pub(crate) target_dual: String,
     /// Scalar coefficient `aₖ` (v1).
     pub(crate) coefficient: f64,
+    /// Nature of the physics owning `variable`, read from the target at
+    /// construction.
+    pub(crate) physics: Option<Physics>,
 }
 
 impl MpcTerm {
@@ -231,6 +235,7 @@ impl MpcTerm {
             variable: variable.to_string(),
             target_dual,
             coefficient,
+            physics: constrained_physics(target, [variable]),
         })
     }
 }
@@ -292,6 +297,9 @@ pub struct Mpc {
     /// solved by the active-set operator.
     #[serde(default)]
     pub(crate) sense: RelationSense,
+    /// Nature shared by every term's physics, `None` when the relations tie
+    /// several physics together.
+    pub(crate) target_physics: Option<Physics>,
 }
 
 impl Mpc {
@@ -413,12 +421,22 @@ impl Mpc {
             }
         }
 
+        // One nature when every term constrains the same physics; a relation
+        // across two physics belongs to neither.
+        let first = terms[0].physics;
+        let target_physics = if terms.iter().all(|t| t.physics == first) {
+            first
+        } else {
+            None
+        };
+
         Ok(Self {
             terms,
             multiplier_mesh: share(multiplier_mesh)?,
             multiplier: default_multiplier(),
             imposed_value: default_imposed_value(),
             sense,
+            target_physics,
         })
     }
 }
@@ -487,7 +505,7 @@ impl SubModelKind for Mpc {
     }
 
     fn physics(&self) -> &'static [Physics] {
-        &[Physics::Constraint]
+        constraint_physics(self.target_physics)
     }
 
     fn label(&self) -> &'static str {

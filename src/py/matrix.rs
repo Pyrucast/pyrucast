@@ -288,10 +288,21 @@ impl PyMatrix {
     /// `"constraint"`, `"other"`, `"diffusion"`, `"radiation"`). The result is
     /// **not** finalized — call `assemble` (or `finalize` for literal-only
     /// blocks) before solving.
-    fn filter(&self, physics: Physics) -> PyResult<Self> {
-        Ok(Self {
+    fn filter(&self, physics: Physics) -> Self {
+        Self {
             inner: self.inner.filter(physics),
-        })
+        }
+    }
+
+    /// `Matrix.exclude(physics)` — the complement of `filter`: a new `Matrix`
+    /// holding only the blocks **whose nature set does not contain** the given
+    /// physics. Composes with `filter`: `k.filter("thermal").exclude("constraint")`
+    /// keeps the conduction blocks without the Dirichlet pair. Not finalized,
+    /// like `filter`.
+    fn exclude(&self, physics: Physics) -> Self {
+        Self {
+            inner: self.inner.exclude(physics),
+        }
     }
 
     /// `Matrix.physics()` — the list of physics natures present across the

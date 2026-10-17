@@ -70,9 +70,11 @@ dédié pour un modèle piloté par le comportement) ; l'ordre reste identique.
 Ce regroupement est la **nature physique** (`Physics`) que chaque variante
 déclare : `Thermal` (conduction), `Radiation` (rayonnement, en plus de
 `Thermal`), `Diffusion` (Fick), `Mechanical` (barre →
-cadre 3D) et `Constraint` (les contraintes de Lagrange). On sélectionne les sous-modèles
-d'une nature avec `model.filter(Physics::Mechanical)` (et les blocs d'une
-matrice avec `k.filter(...)`) — voir
+cadre 3D) et `Constraint` (les contraintes de Lagrange, qui portent en plus la
+nature de ce qu'elles figent). On sélectionne les sous-modèles d'une nature avec
+`model.filter(Physics::Mechanical)`, on en retire une avec
+`exclude(Physics::Constraint)` (et les blocs d'une matrice de même avec
+`k.filter(...)` / `k.exclude(...)`) — voir
 [Nature physique et filtrage](model.md#nature-physique-et-filtrage).
 
 ## Ce que chacune sait produire

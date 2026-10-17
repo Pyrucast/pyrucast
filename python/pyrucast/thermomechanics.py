@@ -33,38 +33,11 @@ _ANDERSON_DEPTH = 3
 # ─────────────────────────────────────────────────────────────────────────────
 # Splitting the model per physics
 # ─────────────────────────────────────────────────────────────────────────────
-def _constrained_variable(sub):
-    """Variable constrained by a Lagrange sub-model (Dirichlet): a constraint's
-    primal is ``lambda_<var>`` — we return ``<var>`` (or ``None``)."""
-    for name in sub.primal_vars():
-        if name.startswith("lambda_"):
-            return name[len("lambda_") :]
-    return None
-
-
 def _split_model(model):
-    """Splits ``model`` into (thermal, mechanical). ``Model.filter`` shares the
-    handles (no copy), so the material / fespace zones coincide with the full
-    model. The constraints (excluded from the physics by ``filter``) are
-    unioned back into the physics whose primal variable they constrain."""
-    thermal = model.filter("thermal")
-    mechanical = model.filter("mechanical")
-    thermal_vars = set(thermal.primal_vars())
-    mechanical_vars = set(mechanical.primal_vars())
-
-    constraints = model.filter("constraint")
-    for i in range(len(constraints)):
-        sub = constraints[i]
-        var = _constrained_variable(sub)
-        if var in thermal_vars:
-            thermal = thermal | sub
-        elif var in mechanical_vars:
-            mechanical = mechanical | sub
-        else:
-            # Unattachable constraint (variable unknown to both physics):
-            # mechanical by default — the usual case never falls here.
-            mechanical = mechanical | sub
-    return thermal, mechanical
+    """Splits ``model`` into (thermal, mechanical). A constraint carries the
+    nature of the physics it pins, so each filter hands its supports over with
+    the physics; ``Model.filter`` shares the handles (no copy)."""
+    return model.filter("thermal"), model.filter("mechanical")
 
 
 def _interpolate(spec, t):
@@ -327,7 +300,7 @@ def step_by_step(data):
     # The mechanical domain alone (without the constraints): `primal_vars` of a
     # model with Dirichlet includes the `lambda_*` multipliers that
     # `deformation` refuses. Fespace and mesh are deduced from this domain.
-    mechanical_domain = model.filter("mechanical")
+    mechanical_domain = model.filter("mechanical").exclude("constraint")
     displacement_vars = mechanical_domain.primal_vars()
     has_mechanical = len(displacement_vars) > 0
 

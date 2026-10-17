@@ -53,7 +53,7 @@ Modèle et matériau;MODE;Définit un modèle (physique, formulation, élément 
 Modèle et matériau;MATE;Définit le champ de propriétés matériau;material_field / sub_material_field · le repère d'orthotropie passe par des composantes vectorielles V1X/V1Y(/V1Z, V2X..V2Z), comme MATE 'DIRECTION' V1 V2
 Modèle et matériau;CARA;Caractéristiques géométriques (sections de poutres/coques);material_field (composantes section)
 Modèle et matériau;COMP;Intègre la loi de comportement (déf -> contraintes);integrate_behavior
-Modèle et matériau;ELAS;Renvoie les caractéristiques élastiques;modèle elasticity + material_field
+Modèle et matériau;ELAS;Opérateur élastique : contraintes d'une déformation (D:ε) ou déformation d'une contrainte (D⁻¹:σ);elastic_stress / elastic_strain (D de la loi : Hooke de l'élasticité, D du prédicteur d'une plasticité, D non endommagé)
 Assemblage matrices;RIGI;Matrice de rigidité;stiffness
 Assemblage matrices;MASS;Matrice de masse;mass
 Assemblage matrices;COND;Matrice de conductivité (thermique);stiffness (heat_conduction)
@@ -84,7 +84,7 @@ Résolution;RESO (INEG);Résolution avec relations unilatérales (statut actif/i
 Champs - dérivation;GRAD;Gradient d'un champ aux points de Gauss;gradient
 Champs - dérivation;EPSI;Déformations à partir d'un déplacement;deformation (measure : linéaire, F, Green–Lagrange, Cauchy-Green, Hencky, Almansi) / beam_deformation / shell_deformation
 Champs - dérivation;SIGM;Contraintes à partir des déformations;integrate_behavior
-Champs - dérivation;REAC;Réactions nodales;—
+Champs - dérivation;REAC;Réactions nodales;−internal_forces(model.filter(constraint), état, solution, matériau) (−Cᵀλ aux nœuds contraints)
 Champs - extraction;EXCO;Extrait/renomme une composante d'un champ;filter_components (extraction, str ou liste) / rename_component (renommage)
 Champs - extraction;DEPL;Extrait le champ de déplacement;NodeField
 Champs - extraction;CHAN (CHAM);Change le support d'un champ (Gauss <-> nœuds);interp_to_gauss (nœuds -> Gauss) / divergence (Gauss -> nœuds) / node_field.consolidate
@@ -93,7 +93,8 @@ Champs - extraction;REDU;Restreint un champ à un sous-maillage;restrict
 Champs - extraction;;Reprojette un champ sur le support et les composantes d'un champ cible (combinable par + - * /);restrict_like
 Champs - assemblage;NOMC;Renomme les composantes;rename_component
 Champs - assemblage;PLUS (chp);Fusionne / additionne des champs;merge / union (|)
-Champs - réduction;INTG;Intégrale d'un champ sur un domaine;—
+Champs - réduction;INTG 'ELEM';Intégrale d'un champ maille par maille;cell_integral (résultat sur un espace à un point par maille, quadrature REDUCED)
+Champs - manipulation;CHAN 'CHPO' 'SOMM';Champ par élément vers champ nodal par somme des mailles autour de chaque nœud;sum_to_nodes (champ à un point par maille)
 Champs - réduction;RESU;Résultante d'un champ;—
 Champs - réduction;MAXI;Maximum d'un champ;NodeField.max / ElementField.max
 Champs - réduction;MINI;Minimum d'un champ;NodeField.min / ElementField.min
@@ -135,8 +136,8 @@ Non-linéaire / transitoire;LUMP;Concentration (lumping) d'une matrice masse/cap
 Non-linéaire / transitoire;PHAJ;Changement de phase / chaleur latente (thermique);—
 Non-linéaire / transitoire;EPTH;Déformation thermique (dilatation libre);thermal_strain · `alpha` accepté par l'élasticité, la plasticité et l'endommagement — sauf Drucker-Prager, où `alpha` désigne déjà la sensibilité à la pression
 Non-linéaire / transitoire;PRIN;Valeurs et directions principales (contraintes/déformations);—
-Non-linéaire / transitoire;VARI;Variables internes de la loi de comportement;ElementField (variables internes) (partiel)
-Non-linéaire / transitoire;NUAG;Interpolation par nuage de points (table -> champ);—
+Non-linéaire / transitoire;VARI;Champ variable : caractéristiques évaluées à un état (VARI 'NUAG');Evolution.interpolate(champ d'état) — chaque courbe scalaire lit ses variables par abscissa_type et écrit sa composante (ordinate_type), puis element_field.consolidate avec le matériau constant
+Non-linéaire / transitoire;NUAG;Interpolation par nuage de points (table -> champ);Evolution / SubEvolution à abscisses en tuple ((T, phi), valeur) : table lue hiérarchiquement, tables irrégulières acceptées
 Non-linéaire / transitoire;MASQ;Masque logique (sélection conditionnelle sur un champ);mask (champ 0/1 par composante · sucre `>=` `>` `<=` `<`)
 Non-linéaire / transitoire;MULT;Produit matrice-champ (M . u);__matmul__ Matrix x field (partiel)
 Non-linéaire / transitoire;XTX;Produit X transposée par X (norme au carré);xtx
@@ -146,7 +147,7 @@ Champs - manipulation;NOID;Numéros (identifiants) des nœuds;Node (numérotatio
 Champs - manipulation;SOMM;Sommets d'un maillage ou d'un élément;—
 Champs - manipulation;NATURE;Nature d'un champ (CHPO / CHML / ...);type de conteneur (NodeField/ElementField)
 Champs - manipulation;MAIL;Extrait le maillage support d'un objet;support / .mesh / row_mesh / col_mesh (support d'un bloc de matrice)
-Champs - manipulation;IPOL;Interpole une évolution en une abscisse (ou un champ) ;Evolution.interpolate / SubEvolution.interpolate (scalaire → scalaire/champ · champ → champ via courbe de transfert typée)
+Champs - manipulation;IPOL;Interpole une évolution en une abscisse (ou un champ) ;Evolution.interpolate / SubEvolution.interpolate (nombre ou tuple → scalaire/champ · champ → champ, une composante par courbe scalaire, variables lues par abscissa_type)
 Objets - gestion;SAUV;Sauvegarde des objets dans un fichier;save
 Objets - gestion;REST;Restitution (relecture) des objets d'un fichier;load
 Objets - gestion;EXIS;Teste l'existence d'un objet ou d'une composante;Python natif (in / hasattr)

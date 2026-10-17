@@ -205,37 +205,130 @@ impl SubValue {
     }
 }
 
-/// Linear blend `lo*(1-t) + hi*t` of two values of the **same** kind. For
-/// fields the per-value arithmetic of [`SubField`] (`map_all` +
-/// `merge_components`) is reused; interpolating between two tabulated values of
-/// the *same* field, a mismatched support or component set is a genuine error,
-/// so [`SubField::check_same_components`] guards the merge up front.
-fn lerp(lo: &SubValue, hi: &SubValue, t: f64) -> Result<SubValue> {
-    match (lo, hi) {
-        (SubValue::Scalar(a), SubValue::Scalar(b)) => Ok(SubValue::Scalar(a * (1.0 - t) + b * t)),
-        (SubValue::Node(a), SubValue::Node(b)) => {
-            a.check_same_components(b)?;
-            let la = a.map_all(|v| v * (1.0 - t));
-            let lb = b.map_all(|v| v * t);
-            Ok(SubValue::Node(la.merge_components(&lb, |x, y| x + y)?))
-        }
-        (SubValue::Element(a), SubValue::Element(b)) => {
-            a.check_same_components(b)?;
-            let la = a.map_all(|v| v * (1.0 - t));
-            let lb = b.map_all(|v| v * t);
-            Ok(SubValue::Element(la.merge_components(&lb, |x, y| x + y)?))
-        }
-        _ => Err(PyrucastError::Message(
-            "evolution: cannot interpolate between values of different kinds".into(),
-        )),
+/// An abscissa: a number for a curve, a tuple of numbers for a table of
+/// several variables — what the constructors take, so that one of each serves
+/// both.
+///
+/// ```
+/// # use pyrucast::containers::evolution::Abscissa;
+/// assert_eq!(2.0.coordinates(), vec![2.0]);
+/// assert_eq!([20.0, 0.5].coordinates(), vec![20.0, 0.5]);
+/// ```
+pub trait Abscissa {
+    /// The coordinates of this abscissa, one per variable.
+    fn coordinates(self) -> Vec<f64>;
+}
+
+impl Abscissa for f64 {
+    fn coordinates(self) -> Vec<f64> {
+        vec![self]
     }
+}
+
+impl Abscissa for Vec<f64> {
+    fn coordinates(self) -> Vec<f64> {
+        self
+    }
+}
+
+impl<const N: usize> Abscissa for [f64; N] {
+    fn coordinates(self) -> Vec<f64> {
+        self.to_vec()
+    }
+}
+
+/// The most variables a table may tabulate along. Bounds the samples one
+/// query weighs in (`2^MAX_ABSCISSAS`), which is what lets the weights live on
+/// the stack at every Gauss point.
+///
+/// ```
+/// # use pyrucast::containers::evolution::{OutOfRange, SubEvolution, SubValue, MAX_ABSCISSAS};
+/// // One variable too many is refused at build time.
+/// let trop = vec![0.0; MAX_ABSCISSAS + 1];
+/// assert!(SubEvolution::new(vec![(trop, SubValue::Scalar(1.0))], OutOfRange::Error).is_err());
+/// ```
+pub const MAX_ABSCISSAS: usize = 4;
+
+/// The samples one query weighs in, with their weights — at most two per
+/// variable, so at most `2^MAX_ABSCISSAS`, on the stack.
+struct Weights {
+    index: [usize; 1 << MAX_ABSCISSAS],
+    weight: [f64; 1 << MAX_ABSCISSAS],
+    len: usize,
+}
+
+impl Weights {
+    fn new() -> Self {
+        Self {
+            index: [0; 1 << MAX_ABSCISSAS],
+            weight: [0.0; 1 << MAX_ABSCISSAS],
+            len: 0,
+        }
+    }
+
+    fn push(&mut self, index: usize, weight: f64) {
+        self.index[self.len] = index;
+        self.weight[self.len] = weight;
+        self.len += 1;
+    }
+
+    fn iter(&self) -> impl Iterator<Item = (usize, f64)> + '_ {
+        self.index[..self.len]
+            .iter()
+            .copied()
+            .zip(self.weight[..self.len].iter().copied())
+    }
+}
+
+/// `Σ wᵢ·vᵢ` over the weighed samples, all of one kind. For fields the
+/// per-value arithmetic of [`SubField`] (`map_all` + `merge_components`) is
+/// reused; the samples were checked at construction to share support and
+/// components.
+fn blend(values: &[SubValue], weights: &Weights) -> Result<SubValue> {
+    let mut acc: Option<SubValue> = None;
+    for (i, w) in weights.iter() {
+        let term = match &values[i] {
+            SubValue::Scalar(v) => SubValue::Scalar(v * w),
+            SubValue::Node(f) => SubValue::Node(f.map_all(|v| v * w)),
+            SubValue::Element(f) => SubValue::Element(f.map_all(|v| v * w)),
+        };
+        acc = Some(match (acc, term) {
+            (None, t) => t,
+            (Some(SubValue::Scalar(a)), SubValue::Scalar(b)) => SubValue::Scalar(a + b),
+            // Two samples of one field: a mismatched component set is a
+            // genuine error, caught before the merge would union it.
+            (Some(SubValue::Node(a)), SubValue::Node(b)) => {
+                a.check_same_components(&b)?;
+                SubValue::Node(a.merge_components(&b, |x, y| x + y)?)
+            }
+            (Some(SubValue::Element(a)), SubValue::Element(b)) => {
+                a.check_same_components(&b)?;
+                SubValue::Element(a.merge_components(&b, |x, y| x + y)?)
+            }
+            _ => {
+                return Err(PyrucastError::Message(
+                    "evolution: cannot interpolate between values of different kinds".into(),
+                ))
+            }
+        });
+    }
+    Ok(acc.expect("a query weighs in at least one sample"))
 }
 
 // ─── SubEvolution ───────────────────────────────────────────────────────────
 
-/// One tabulated curve: abscissas (sorted, strictly increasing) and the
-/// matching values, all of the same [`ValueKind`] (and, for fields, on the
-/// same support).
+/// One tabulated function: abscissas and the matching values, all of the same
+/// [`ValueKind`] (and, for fields, on the same support).
+///
+/// A tabulated map `f : ℝᵐ → ℝⁿ`: a **curve** when each abscissa is a number
+/// (`m = 1`, sorted, strictly increasing), a **table** when it is a tuple of
+/// `m` numbers. A table is read **hierarchically**: the samples are grouped by
+/// their first coordinate, each group by the second, and so on, every
+/// innermost group being a curve. The groups need not share their abscissas —
+/// an irregular table, as material data usually comes — and a full grid gives
+/// back the multilinear interpolation. The first variable is the outer level,
+/// which matters on an irregular table: there, the order of the variables
+/// changes the result.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -250,18 +343,21 @@ fn lerp(lo: &SubValue, hi: &SubValue, t: f64) -> Result<SubValue> {
 /// ```
 #[derive(Serialize, Deserialize, Clone)]
 pub struct SubEvolution {
-    /// Strictly increasing abscissas of the samples.
+    /// The samples' abscissas, `dims` per sample, the samples in lexicographic
+    /// order of their abscissa tuples — for a curve, its abscissas, strictly
+    /// increasing.
     abscissas: Vec<f64>,
-    /// Tabulated values, aligned with `abscissas`.
+    /// How many variables each abscissa has: 1 for a curve, more for a table.
+    dims: usize,
+    /// Tabulated values, one per sample.
     values: Vec<SubValue>,
     /// Out-of-range policy used when this curve is interpolated directly.
     out_of_range: OutOfRange,
-    /// Physical **type** of the abscissa (e.g. `"T"`, `"time"`). Optional; used
-    /// to label plots and — when a field is mapped through a scalar curve — to
-    /// select which field component to look up (see
-    /// [`SubEvolution::interpolate_field`]).
-    #[serde(default)]
-    abscissa_type: Option<String>,
+    /// Physical **type** of each abscissa (e.g. `["T"]`, `["T", "phi"]`),
+    /// empty when unset. Labels plots and — when a field is mapped through a
+    /// scalar curve — names the field components each variable is read from
+    /// (see [`SubEvolution::interpolate_field`]).
+    abscissa_type: Vec<String>,
     /// Physical **type** of the ordinate, for **scalar** curves only (e.g.
     /// `"young"`). Optional; labels plots and names the component produced when
     /// a field is mapped through the curve.
@@ -270,19 +366,18 @@ pub struct SubEvolution {
 }
 
 impl SubEvolution {
-    /// Build a curve from `(abscissa, value)` samples. The samples are sorted
-    /// by abscissa; the values must be homogeneous in kind and, for fields, on
-    /// the same support with the same component count.
+    /// Build a curve or a table from `(abscissa, value)` samples — the abscissa
+    /// a number for a curve, a tuple (`[f64; m]` or `Vec<f64>`) for a table of
+    /// `m` variables. The samples are sorted; the values must be homogeneous in
+    /// kind and, for fields, on the same support with the same component count.
     ///
     /// Errors:
-    /// - no sample, a `NaN` abscissa, or duplicate abscissas;
+    /// - no sample, a `NaN` abscissa, or the same abscissa twice;
+    /// - abscissas of different lengths, or more than [`MAX_ABSCISSAS`] variables;
     /// - mixed value kinds, or field values on different supports.
     ///
     /// ```
-    /// # use pyrucast::containers::evolution::{OutOfRange, SubEvolution, SubValue, ValueKind};
-    /// # let courbe = SubEvolution::new(
-    /// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
-    /// #     OutOfRange::Clamp).unwrap();
+    /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange, SubEvolution, SubValue, ValueKind};
     /// // The samples are **sorted** at build time: giving them out of order is
     /// // legal, giving them twice at the same abscissa is not.
     /// let c = SubEvolution::new(
@@ -292,24 +387,58 @@ impl SubEvolution {
     /// assert!(SubEvolution::new(
     ///     vec![(0.0, SubValue::Scalar(1.0)), (0.0, SubValue::Scalar(2.0))],
     ///     OutOfRange::Error).is_err());
+    /// // A table of two variables, tabulated irregularly: two values of the
+    /// // second at the first's 20, three at its 500.
+    /// let t = SubEvolution::new(
+    ///     vec![([20.0, 0.0], SubValue::Scalar(300.0)), ([20.0, 1.0], SubValue::Scalar(450.0)),
+    ///          ([500.0, 0.0], SubValue::Scalar(200.0)), ([500.0, 0.5], SubValue::Scalar(260.0)),
+    ///          ([500.0, 1.0], SubValue::Scalar(320.0))],
+    ///     OutOfRange::Error)?;
+    /// assert_eq!((t.dims(), t.len()), (2, 5));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn new(mut samples: Vec<(f64, SubValue)>, out_of_range: OutOfRange) -> Result<Self> {
+    pub fn new<A: Abscissa>(samples: Vec<(A, SubValue)>, out_of_range: OutOfRange) -> Result<Self> {
         if samples.is_empty() {
             return Err(PyrucastError::Message(
                 "SubEvolution requires at least one sample".into(),
             ));
         }
+        let mut samples: Vec<(Vec<f64>, SubValue)> = samples
+            .into_iter()
+            .map(|(x, v)| (x.coordinates(), v))
+            .collect();
+        let dims = samples[0].0.len();
+        if dims == 0 || dims > MAX_ABSCISSAS {
+            return Err(PyrucastError::Message(format!(
+                "SubEvolution: an abscissa has between 1 and {MAX_ABSCISSAS} variables, \
+                 not {dims}"
+            )));
+        }
         for (x, _) in &samples {
-            if x.is_nan() {
+            if x.len() != dims {
+                return Err(PyrucastError::Message(format!(
+                    "SubEvolution: every abscissa must have {dims} variable(s) like the first, \
+                     one has {}",
+                    x.len()
+                )));
+            }
+            if x.iter().any(|c| c.is_nan()) {
                 return Err(PyrucastError::Message("SubEvolution: NaN abscissa".into()));
             }
         }
-        samples.sort_by(|a, b| a.0.partial_cmp(&b.0).expect("non-NaN abscissas"));
+        // Lexicographic order: what groups a table by its first variable, then
+        // by the second within each group, and so on.
+        samples.sort_by(|a, b| {
+            a.0.iter()
+                .zip(&b.0)
+                .map(|(x, y)| x.partial_cmp(y).expect("non-NaN abscissas"))
+                .find(|o| o.is_ne())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         for w in samples.windows(2) {
             if w[0].0 == w[1].0 {
                 return Err(PyrucastError::Message(format!(
-                    "SubEvolution: duplicate abscissa {}",
+                    "SubEvolution: duplicate abscissa {:?}",
                     w[0].0
                 )));
             }
@@ -325,33 +454,48 @@ impl SubEvolution {
                 )));
             }
         }
+        let (abscissas, values): (Vec<Vec<f64>>, Vec<SubValue>) = samples.into_iter().unzip();
         // For field values, every sample must share the first's support and
-        // component count, so the blend (guarded by `check_same_components`)
-        // is well-defined.
-        check_same_support(&samples)?;
+        // component count, so the blend is well-defined.
+        check_same_support(&values)?;
 
-        let (abscissas, values): (Vec<f64>, Vec<SubValue>) = samples.into_iter().unzip();
         Ok(SubEvolution {
-            abscissas,
+            abscissas: abscissas.concat(),
+            dims,
             values,
             out_of_range,
-            abscissa_type: None,
+            abscissa_type: Vec::new(),
             ordinate_type: None,
         })
     }
 
-    /// The abscissa's physical type, if set.
+    /// The physical type of each abscissa variable — empty when unset, else
+    /// one per variable.
     ///
     /// ```
     /// # use pyrucast::containers::evolution::{OutOfRange, SubEvolution, SubValue, ValueKind};
     /// # let courbe = SubEvolution::new(
     /// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
     /// #     OutOfRange::Clamp).unwrap();
-    /// let c = courbe.with_abscissa_type(Some("T".into()));
-    /// assert_eq!(c.abscissa_type(), Some("T"));
+    /// let c = courbe.with_abscissa_types(vec!["T".into()])?;
+    /// assert_eq!(c.abscissa_types(), ["T"]);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn abscissa_type(&self) -> Option<&str> {
-        self.abscissa_type.as_deref()
+    pub fn abscissa_types(&self) -> &[String] {
+        &self.abscissa_type
+    }
+
+    /// How many variables each abscissa has: 1 for a curve, more for a table.
+    ///
+    /// ```
+    /// # use pyrucast::containers::evolution::{OutOfRange, SubEvolution, SubValue, ValueKind};
+    /// # let courbe = SubEvolution::new(
+    /// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
+    /// #     OutOfRange::Clamp).unwrap();
+    /// assert_eq!(courbe.dims(), 1);
+    /// ```
+    pub fn dims(&self) -> usize {
+        self.dims
     }
 
     /// The ordinate's physical type (scalar curves), if set.
@@ -369,7 +513,8 @@ impl SubEvolution {
         self.ordinate_type.as_deref()
     }
 
-    /// Set (or clear) the abscissa's physical type.
+    /// Set (or clear, with an empty list) the physical type of each abscissa
+    /// variable. Errors unless one type is given per variable.
     ///
     /// ```
     /// # use pyrucast::containers::evolution::{OutOfRange, SubEvolution, SubValue, ValueKind};
@@ -377,13 +522,24 @@ impl SubEvolution {
     /// #     vec![(0.0, SubValue::Scalar(20.0)), (1.0, SubValue::Scalar(120.0))],
     /// #     OutOfRange::Clamp).unwrap();
     /// let mut c = courbe;
-    /// c.set_abscissa_type(Some("time".into()));
-    /// assert_eq!(c.abscissa_type(), Some("time"));
-    /// c.set_abscissa_type(None); // et l'on peut le retirer
-    /// assert!(c.abscissa_type().is_none());
+    /// c.set_abscissa_types(vec!["time".into()])?;
+    /// assert_eq!(c.abscissa_types(), ["time"]);
+    /// c.set_abscissa_types(Vec::new())?; // et l'on peut le retirer
+    /// assert!(c.abscissa_types().is_empty());
+    /// // One type per variable: a curve has one.
+    /// assert!(c.set_abscissa_types(vec!["T".into(), "phi".into()]).is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn set_abscissa_type(&mut self, t: Option<String>) {
-        self.abscissa_type = t;
+    pub fn set_abscissa_types(&mut self, types: Vec<String>) -> Result<()> {
+        if !types.is_empty() && types.len() != self.dims {
+            return Err(PyrucastError::Message(format!(
+                "abscissa types: {} given for an abscissa of {} variable(s) — one per variable",
+                types.len(),
+                self.dims
+            )));
+        }
+        self.abscissa_type = types;
+        Ok(())
     }
 
     /// Set (or clear) the ordinate's physical type. Errors if a type is given
@@ -413,7 +569,7 @@ impl SubEvolution {
         Ok(())
     }
 
-    /// Builder form of [`SubEvolution::set_abscissa_type`].
+    /// Builder form of [`SubEvolution::set_abscissa_types`].
     ///
     /// ```
     /// # use pyrucast::containers::evolution::{OutOfRange, SubEvolution, SubValue, ValueKind};
@@ -424,13 +580,13 @@ impl SubEvolution {
     /// let c = SubEvolution::new(
     ///     vec![(20.0, SubValue::Scalar(210_000.0)), (300.0, SubValue::Scalar(180_000.0))],
     ///     OutOfRange::Clamp)?
-    ///     .with_abscissa_type(Some("T".into()));
-    /// assert_eq!(c.abscissa_type(), Some("T"));
+    ///     .with_abscissa_types(vec!["T".into()])?;
+    /// assert_eq!(c.abscissa_types(), ["T"]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn with_abscissa_type(mut self, t: Option<String>) -> Self {
-        self.abscissa_type = t;
-        self
+    pub fn with_abscissa_types(mut self, types: Vec<String>) -> Result<Self> {
+        self.set_abscissa_types(types)?;
+        Ok(self)
     }
 
     /// Builder form of [`SubEvolution::set_ordinate_type`] (validated).
@@ -443,9 +599,9 @@ impl SubEvolution {
     /// // A Young's modulus that depends on temperature: the two types set
     /// // together make the curve a named transfer function.
     /// let c = courbe
-    ///     .with_abscissa_type(Some("T".into()))
+    ///     .with_abscissa_types(vec!["T".into()])?
     ///     .with_ordinate_type(Some("young".into()))?;
-    /// assert_eq!((c.abscissa_type(), c.ordinate_type()), (Some("T"), Some("young")));
+    /// assert_eq!((c.abscissa_types(), c.ordinate_type()), (&["T".to_string()][..], Some("young")));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn with_ordinate_type(mut self, t: Option<String>) -> Result<Self> {
@@ -463,7 +619,7 @@ impl SubEvolution {
     /// assert_eq!(courbe.len(), 2); // deux points tabulés
     /// ```
     pub fn len(&self) -> usize {
-        self.abscissas.len()
+        self.values.len()
     }
 
     /// Whether the curve holds no sample (never true for a constructed one).
@@ -476,10 +632,11 @@ impl SubEvolution {
     /// assert!(!courbe.is_empty());
     /// ```
     pub fn is_empty(&self) -> bool {
-        self.abscissas.is_empty()
+        self.values.is_empty()
     }
 
-    /// The sorted abscissas.
+    /// The abscissas, [`dims`](Self::dims) per sample in sample order — for a
+    /// curve, its abscissas, sorted strictly increasing.
     ///
     /// ```
     /// # use pyrucast::containers::evolution::{OutOfRange, SubEvolution, SubValue, ValueKind};
@@ -534,6 +691,12 @@ impl SubEvolution {
             return Err(PyrucastError::Message(
                 "scalar_series: this evolution carries fields, not scalars".into(),
             ));
+        }
+        if self.dims != 1 {
+            return Err(PyrucastError::Message(format!(
+                "scalar_series: a table of {} variables is not an X-Y curve",
+                self.dims
+            )));
         }
         Ok(self
             .abscissas
@@ -597,8 +760,9 @@ impl SubEvolution {
         )
     }
 
-    /// Interpolate at `x`. `policy` overrides the stored [`OutOfRange`] for
-    /// this single query when `Some`.
+    /// Interpolate a **curve** at `x`. `policy` overrides the stored
+    /// [`OutOfRange`] for this single query when `Some`. Errors on a table:
+    /// it takes a tuple, see [`interpolate_at`](Self::interpolate_at).
     ///
     /// ```
     /// # use pyrucast::containers::evolution::{OutOfRange, SubEvolution, SubValue, ValueKind};
@@ -616,69 +780,167 @@ impl SubEvolution {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn interpolate(&self, x: f64, policy: Option<OutOfRange>) -> Result<SubValue> {
-        let policy = policy.unwrap_or(self.out_of_range);
-        let xs = &self.abscissas;
-        let n = xs.len();
-        // `new` guarantees n >= 1.
-
-        if x < xs[0] {
-            return self.below_range(x, policy);
-        }
-        if x > xs[n - 1] {
-            return self.above_range(x, policy);
-        }
-        // In range: locate the bracketing segment.
-        match xs.binary_search_by(|v| v.partial_cmp(&x).expect("non-NaN abscissas")) {
-            Ok(i) => Ok(self.values[i].clone()), // exact hit
-            Err(i) => {
-                // xs[i-1] < x < xs[i], with 1 <= i <= n-1.
-                let (lo, hi) = (i - 1, i);
-                let t = (x - xs[lo]) / (xs[hi] - xs[lo]);
-                lerp(&self.values[lo], &self.values[hi], t)
-            }
-        }
+        self.interpolate_at(&[x], policy)
     }
 
-    fn below_range(&self, x: f64, policy: OutOfRange) -> Result<SubValue> {
-        let xs = &self.abscissas;
-        match policy {
-            OutOfRange::Error => Err(self.range_error(x)),
-            OutOfRange::Clamp => Ok(self.values[0].clone()),
-            OutOfRange::Extrapolate => {
-                if xs.len() == 1 {
-                    Ok(self.values[0].clone())
-                } else {
-                    let t = (x - xs[0]) / (xs[1] - xs[0]);
-                    lerp(&self.values[0], &self.values[1], t)
+    /// Interpolate at the abscissa `x`, one number per variable.
+    ///
+    /// A table is read level by level: the two groups of the first variable
+    /// that bracket `x[0]` are found and weighed linearly, each is read the same
+    /// way along the second variable, and so on down to the samples. Out of a
+    /// level's range, the policy applies (`Error`, `Clamp` to the nearest group,
+    /// `Extrapolate` along the two nearest); a group whose next variable takes
+    /// a **single** value is constant along it — a property measured at one
+    /// value only there does not vary with it.
+    ///
+    /// ```
+    /// # use pyrucast::containers::evolution::{OutOfRange, SubEvolution, SubValue};
+    /// let sy = SubEvolution::new(
+    ///     vec![([20.0, 0.0], SubValue::Scalar(300.0)), ([20.0, 1.0], SubValue::Scalar(450.0)),
+    ///          ([500.0, 0.0], SubValue::Scalar(200.0)), ([500.0, 0.5], SubValue::Scalar(260.0)),
+    ///          ([500.0, 1.0], SubValue::Scalar(320.0))],
+    ///     OutOfRange::Error)?;
+    /// // At T = 20 the curve in φ gives 360, at T = 500 its own curve gives
+    /// // 248; between them, linearly in T.
+    /// let attendu = 360.0 + (248.0 - 360.0) * (300.0 - 20.0) / 480.0;
+    /// assert!((sy.eval_scalar_at(&[300.0, 0.4], None)? - attendu).abs() < 1e-9);
+    /// // A tuple of the wrong length is refused.
+    /// assert!(sy.interpolate_at(&[300.0], None).is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn interpolate_at(&self, x: &[f64], policy: Option<OutOfRange>) -> Result<SubValue> {
+        self.check_arity(x)?;
+        let weights = self.weights(x, policy.unwrap_or(self.out_of_range))?;
+        blend(&self.values, &weights)
+    }
+
+    /// Refuse an abscissa with the wrong number of variables.
+    fn check_arity(&self, x: &[f64]) -> Result<()> {
+        if x.len() != self.dims {
+            return Err(PyrucastError::Message(format!(
+                "evolution: this {} takes {} variable(s), {} given",
+                if self.dims == 1 { "curve" } else { "table" },
+                self.dims,
+                x.len()
+            )));
+        }
+        Ok(())
+    }
+
+    /// The samples `x` weighs in, and their weights.
+    fn weights(&self, x: &[f64], policy: OutOfRange) -> Result<Weights> {
+        let mut out = Weights::new();
+        self.gather(0, 0, self.values.len(), x, policy, 1.0, &mut out)?;
+        Ok(out)
+    }
+
+    /// The abscissa of sample `i` along variable `level`.
+    fn coordinate(&self, i: usize, level: usize) -> f64 {
+        self.abscissas[i * self.dims + level]
+    }
+
+    /// First sample of `[lo, hi)` whose coordinate along `level` fails `keep`
+    /// — the samples of a group are sorted along the next variable, so a
+    /// binary search finds it.
+    fn partition(&self, level: usize, lo: usize, hi: usize, keep: impl Fn(f64) -> bool) -> usize {
+        let (mut lo, mut hi) = (lo, hi);
+        while lo < hi {
+            let mid = lo + (hi - lo) / 2;
+            if keep(self.coordinate(mid, level)) {
+                lo = mid + 1;
+            } else {
+                hi = mid;
+            }
+        }
+        lo
+    }
+
+    /// Weigh the samples `[s, e)` — one group, all sharing their first `level`
+    /// coordinates — at `x`, along variable `level` and the ones after it,
+    /// scaling every weight by `w`.
+    #[allow(clippy::too_many_arguments)]
+    fn gather(
+        &self,
+        level: usize,
+        s: usize,
+        e: usize,
+        x: &[f64],
+        policy: OutOfRange,
+        w: f64,
+        out: &mut Weights,
+    ) -> Result<()> {
+        let at = |i: usize| self.coordinate(i, level);
+        // The group of samples sharing sample `i`'s value along `level`.
+        let group_end = |i: usize| self.partition(level, i, e, |v| v <= at(i));
+        let group_start = |i: usize| self.partition(level, s, i, |v| v < at(i));
+        let first = (s, group_end(s));
+        let last = (group_start(e - 1), e);
+        let xl = x[level];
+        // A single value along this variable: constant along it, past the first
+        // variable (whose range is the table's own).
+        if first.1 == e && level > 0 {
+            return self.descend(level, first, x, policy, w, out);
+        }
+        let k = self.partition(level, s, e, |v| v < xl);
+        // The two groups to weigh, and the second's weight `t`.
+        let (lo, hi, t) = if k < e && at(k) == xl {
+            return self.descend(level, (k, group_end(k)), x, policy, w, out);
+        } else if k == s || k == e {
+            let below = k == s;
+            match policy {
+                OutOfRange::Error => {
+                    return Err(PyrucastError::Message(format!(
+                        "evolution: abscissa {xl}{} is outside the tabulated range [{}, {}]",
+                        match self.abscissa_type.get(level) {
+                            Some(name) if self.dims > 1 => format!(" ({name})"),
+                            _ => String::new(),
+                        },
+                        at(s),
+                        at(e - 1)
+                    )))
+                }
+                OutOfRange::Clamp => {
+                    let g = if below { first } else { last };
+                    return self.descend(level, g, x, policy, w, out);
+                }
+                OutOfRange::Extrapolate => {
+                    if first.1 == e {
+                        return self.descend(level, first, x, policy, w, out);
+                    }
+                    let (a, b) = if below {
+                        (first, (first.1, group_end(first.1)))
+                    } else {
+                        ((group_start(last.0 - 1), last.0), last)
+                    };
+                    (a, b, (xl - at(a.0)) / (at(b.0) - at(a.0)))
                 }
             }
-        }
+        } else {
+            let lo = (group_start(k - 1), k);
+            let hi = (k, group_end(k));
+            (lo, hi, (xl - at(lo.0)) / (at(hi.0) - at(lo.0)))
+        };
+        self.descend(level, lo, x, policy, w * (1.0 - t), out)?;
+        self.descend(level, hi, x, policy, w * t, out)
     }
 
-    fn above_range(&self, x: f64, policy: OutOfRange) -> Result<SubValue> {
-        let xs = &self.abscissas;
-        let n = xs.len();
-        match policy {
-            OutOfRange::Error => Err(self.range_error(x)),
-            OutOfRange::Clamp => Ok(self.values[n - 1].clone()),
-            OutOfRange::Extrapolate => {
-                if n == 1 {
-                    Ok(self.values[n - 1].clone())
-                } else {
-                    let t = (x - xs[n - 2]) / (xs[n - 1] - xs[n - 2]);
-                    lerp(&self.values[n - 2], &self.values[n - 1], t)
-                }
-            }
+    /// Carry on with the group `g` along the next variable, or weigh its
+    /// single sample when `level` was the last.
+    fn descend(
+        &self,
+        level: usize,
+        g: (usize, usize),
+        x: &[f64],
+        policy: OutOfRange,
+        w: f64,
+        out: &mut Weights,
+    ) -> Result<()> {
+        if level + 1 == self.dims {
+            out.push(g.0, w);
+            Ok(())
+        } else {
+            self.gather(level + 1, g.0, g.1, x, policy, w, out)
         }
-    }
-
-    fn range_error(&self, x: f64) -> PyrucastError {
-        let xs = &self.abscissas;
-        PyrucastError::Message(format!(
-            "evolution: abscissa {x} is outside the tabulated range [{}, {}]",
-            xs[0],
-            xs[xs.len() - 1]
-        ))
     }
 
     /// Interpolate a **scalar** curve at `x`, returning the value directly.
@@ -695,24 +957,57 @@ impl SubEvolution {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn eval_scalar(&self, x: f64, policy: Option<OutOfRange>) -> Result<f64> {
-        match self.interpolate(x, policy)? {
-            SubValue::Scalar(v) => Ok(v),
-            _ => Err(PyrucastError::Message(
-                "evolution: a field can only be mapped through a scalar-valued evolution".into(),
-            )),
-        }
+        self.eval_scalar_at(&[x], policy)
     }
 
-    /// Map every value of `field`'s abscissa-typed component through this
-    /// **scalar** curve, node by node (or Gauss point by Gauss point).
+    /// Interpolate a **scalar** curve or table at the abscissa `x`, returning
+    /// the value directly — see [`interpolate_at`](Self::interpolate_at). Errors
+    /// if it carries fields rather than scalars.
     ///
-    /// The curve acts as a transfer function `y = f(x)`: the field component
-    /// **named like the abscissa type** supplies the `x` values; the result is
-    /// a fresh single-component field on the **same support**, its component
-    /// named after the ordinate type (or `"value"` when none is set).
+    /// ```
+    /// # use pyrucast::containers::evolution::{OutOfRange, SubEvolution, SubValue};
+    /// // A full grid: the hierarchical reading is the bilinear interpolation.
+    /// let f = SubEvolution::new(
+    ///     vec![([0.0, 0.0], SubValue::Scalar(1.0)), ([0.0, 1.0], SubValue::Scalar(2.0)),
+    ///          ([1.0, 0.0], SubValue::Scalar(3.0)), ([1.0, 1.0], SubValue::Scalar(5.0))],
+    ///     OutOfRange::Error)?;
+    /// assert!((f.eval_scalar_at(&[0.5, 0.5], None)? - 2.75).abs() < 1e-12);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn eval_scalar_at(&self, x: &[f64], policy: Option<OutOfRange>) -> Result<f64> {
+        if self.kind() != ValueKind::Scalar {
+            return Err(PyrucastError::Message(
+                "evolution: a field can only be mapped through a scalar-valued evolution".into(),
+            ));
+        }
+        self.check_arity(x)?;
+        self.scalar_at(x, policy.unwrap_or(self.out_of_range))
+    }
+
+    /// The scalar value at `x` — kind and arity already checked by the caller,
+    /// once, rather than at every point.
+    fn scalar_at(&self, x: &[f64], policy: OutOfRange) -> Result<f64> {
+        let weights = self.weights(x, policy)?;
+        Ok(weights
+            .iter()
+            .map(|(i, w)| match self.values[i] {
+                SubValue::Scalar(v) => v * w,
+                _ => unreachable!("a scalar curve, checked by the caller"),
+            })
+            .sum())
+    }
+
+    /// Map `field` through this **scalar** curve or table, node by node (or
+    /// Gauss point by Gauss point).
+    ///
+    /// The function is applied like `cos` to a field: its variables are read
+    /// from the field components **named like the abscissa types**; the result
+    /// is a fresh single-component field on the **same support**, its component
+    /// named after the ordinate type (or `"value"` when none is set). See
+    /// [`Evolution::interpolate_element_field`] to apply several at once.
     ///
     /// Errors if the curve is not scalar-valued, has no abscissa type set, or
-    /// the field has no component matching that type (the requested
+    /// the field has no component matching one of them (the requested
     /// **type correspondence**).
     ///
     /// ```
@@ -736,7 +1031,7 @@ impl SubEvolution {
     /// let loi = SubEvolution::new(
     ///     vec![(20.0, SubValue::Scalar(50.0)), (120.0, SubValue::Scalar(30.0))],
     ///     OutOfRange::Clamp)?
-    ///     .with_abscissa_type(Some("T".into()))
+    ///     .with_abscissa_types(vec!["T".into()])?
     ///     .with_ordinate_type(Some("k".into()))?;
     ///
     /// let k = loi.interpolate_field(&*temp.get(0)?.read(), None)?;
@@ -748,49 +1043,87 @@ impl SubEvolution {
     where
         F: SubField + Clone,
     {
-        if self.kind() != ValueKind::Scalar {
+        map_through(std::slice::from_ref(self), field, policy)
+    }
+}
+
+/// Map `field` through every scalar curve of `curves`, one output component per
+/// curve, named after its ordinate type (`"value"` when unset).
+///
+/// What each curve reads — its kind, its variables' components in the field,
+/// its out-of-range policy — is settled **once**, before the rows are walked;
+/// a row then gathers its abscissas on the stack and weighs the samples without
+/// allocating. `policy`, when given, overrides every curve's own.
+fn map_through<F>(curves: &[SubEvolution], field: &F, policy: Option<OutOfRange>) -> Result<F>
+where
+    F: SubField + Clone,
+{
+    let mut names: Vec<String> = Vec::with_capacity(curves.len());
+    let mut reads: Vec<(Vec<usize>, OutOfRange)> = Vec::with_capacity(curves.len());
+    for curve in curves {
+        if curve.kind() != ValueKind::Scalar {
             return Err(PyrucastError::Message(
                 "evolution: a field can only be mapped through a scalar-valued evolution".into(),
             ));
         }
-        let abscissa = self.abscissa_type.as_deref().ok_or_else(|| {
-            PyrucastError::Message(
+        if curve.abscissa_type.is_empty() {
+            return Err(PyrucastError::Message(
                 "evolution: set the abscissa type to map a field \
                  (it selects which field component to look up)"
                     .into(),
-            )
-        })?;
-        let ci = field.component_index(abscissa).ok_or_else(|| {
-            PyrucastError::Message(format!(
-                "evolution: the field has no component '{abscissa}' matching the abscissa type"
-            ))
-        })?;
-        let out_name = self
+            ));
+        }
+        let mut idx = Vec::with_capacity(curve.dims);
+        for name in &curve.abscissa_type {
+            idx.push(field.component_index(name).ok_or_else(|| {
+                PyrucastError::Message(format!(
+                    "evolution: the field has no component '{name}' matching the abscissa type"
+                ))
+            })?);
+        }
+        let name = curve
             .ordinate_type
             .clone()
             .unwrap_or_else(|| "value".to_string());
-        let nc = field.component_count();
-        // Per-row map in abscissa order (each output written once ⇒
-        // thread-count-independent); short-circuits on the first out-of-range.
-        let out_vals: Vec<f64> = field
-            .values()
-            .par_chunks(nc)
-            .with_min_len((MIN_PARALLEL_LEN / nc.max(1)).max(1))
-            .map(|row| self.eval_scalar(row[ci], policy))
-            .collect::<Result<Vec<f64>>>()?;
-        let mut out = field.same_support_with(vec![out_name])?;
-        out.values_mut().copy_from_slice(&out_vals);
-        Ok(out)
+        if names.contains(&name) {
+            return Err(PyrucastError::Message(format!(
+                "evolution: two curves produce the component '{name}' — give each its own \
+                 ordinate type"
+            )));
+        }
+        names.push(name);
+        reads.push((idx, policy.unwrap_or(curve.out_of_range)));
     }
+    let nc = field.component_count();
+    let k = curves.len();
+    let mut out = field.same_support_with(names)?;
+    // Each output row written once, from its own input row ⇒ the result does
+    // not depend on the thread count; the first out-of-range point aborts.
+    field
+        .values()
+        .par_chunks(nc)
+        .zip(out.values_mut().par_chunks_mut(k))
+        .with_min_len((MIN_PARALLEL_LEN / nc.max(1)).max(1))
+        .try_for_each(|(row, slot)| -> Result<()> {
+            let mut x = [0.0_f64; MAX_ABSCISSAS];
+            for (j, (curve, (idx, policy))) in curves.iter().zip(&reads).enumerate() {
+                for (v, &i) in idx.iter().enumerate() {
+                    x[v] = row[i];
+                }
+                slot[j] = curve.scalar_at(&x[..idx.len()], *policy)?;
+            }
+            Ok(())
+        })?;
+    Ok(out)
 }
 
 /// Verify that all field samples share the first sample's support and
 /// component count (scalars are unconstrained).
-fn check_same_support(samples: &[(f64, SubValue)]) -> Result<()> {
-    match &samples[0].1 {
+fn check_same_support(samples: &[SubValue]) -> Result<()> {
+    match &samples[0] {
         SubValue::Scalar(_) => Ok(()),
         SubValue::Node(f0) => {
-            for (_, v) in &samples[1..] {
+            for v in &samples[1..] {
                 if let SubValue::Node(f) = v
                     && (!f.same_support(f0) || f.component_count() != f0.component_count())
                 {
@@ -803,7 +1136,7 @@ fn check_same_support(samples: &[(f64, SubValue)]) -> Result<()> {
             Ok(())
         }
         SubValue::Element(f0) => {
-            for (_, v) in &samples[1..] {
+            for v in &samples[1..] {
                 if let SubValue::Element(f) = v
                     && (!f.same_support(f0) || f.component_count() != f0.component_count())
                 {
@@ -821,7 +1154,8 @@ fn check_same_support(samples: &[(f64, SubValue)]) -> Result<()> {
 impl fmt::Debug for SubEvolution {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SubEvolution")
-            .field("samples", &self.abscissas.len())
+            .field("samples", &self.values.len())
+            .field("dims", &self.dims)
             .field("kind", &self.kind().label())
             .field("out_of_range", &self.out_of_range.name())
             .finish()
@@ -833,7 +1167,7 @@ impl fmt::Display for SubEvolution {
         write!(
             f,
             "SubEvolution: {} sample(s), {} value(s), out_of_range={}",
-            self.abscissas.len(),
+            self.values.len(),
             self.kind().label(),
             self.out_of_range.name()
         )
@@ -846,7 +1180,7 @@ impl crate::dump::Dump for SubEvolution {
         let headers = vec!["abscissa".to_string(), "value".to_string()];
         let rows: Vec<Vec<String>> = self
             .abscissas
-            .iter()
+            .chunks(self.dims)
             .zip(&self.values)
             .map(|(x, v)| {
                 let cell = match v {
@@ -856,7 +1190,18 @@ impl crate::dump::Dump for SubEvolution {
                     }
                     SubValue::Element(f) => format!("SubElementField({} cell(s))", f.cell_count()),
                 };
-                vec![fmt_float(*x, opts.precision), cell]
+                let abscissa = match x {
+                    [one] => fmt_float(*one, opts.precision),
+                    tuple => format!(
+                        "({})",
+                        tuple
+                            .iter()
+                            .map(|c| fmt_float(*c, opts.precision))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
+                };
+                vec![abscissa, cell]
             })
             .collect();
         format!("{self}\n{}", table(&headers, &rows, opts))
@@ -1004,6 +1349,25 @@ impl Evolution {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn interpolate(&self, x: f64, policy: Option<OutOfRange>) -> Result<Interpolated> {
+        self.interpolate_at(&[x], policy)
+    }
+
+    /// Interpolate every sub-evolution at the abscissa `x` — one number per
+    /// variable — and regroup the results; [`interpolate`](Self::interpolate)
+    /// is its one-variable form.
+    ///
+    /// ```
+    /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange};
+    /// let e = Evolution::from_scalars(
+    ///     vec![([0.0, 0.0], 1.0), ([0.0, 1.0], 2.0), ([1.0, 0.0], 3.0), ([1.0, 1.0], 5.0)],
+    ///     OutOfRange::Error)?;
+    /// match e.interpolate_at(&[0.5, 0.5], None)? {
+    ///     Interpolated::Scalars(v) => assert!((v[0] - 2.75).abs() < 1e-12),
+    ///     _ => unreachable!(),
+    /// }
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn interpolate_at(&self, x: &[f64], policy: Option<OutOfRange>) -> Result<Interpolated> {
         if self.subs.is_empty() {
             return Err(PyrucastError::Message(
                 "Evolution: cannot interpolate an empty evolution".into(),
@@ -1014,7 +1378,7 @@ impl Evolution {
             ValueKind::Scalar => {
                 let mut out = Vec::with_capacity(self.subs.len());
                 for h in &self.subs {
-                    match h.read().interpolate(x, policy)? {
+                    match h.read().interpolate_at(x, policy)? {
                         SubValue::Scalar(v) => out.push(v),
                         _ => return Err(mixed_kind_err()),
                     }
@@ -1024,7 +1388,7 @@ impl Evolution {
             ValueKind::Node => {
                 let mut field = NodeField::default();
                 for h in &self.subs {
-                    match h.read().interpolate(x, policy)? {
+                    match h.read().interpolate_at(x, policy)? {
                         SubValue::Node(sf) => field.add_sub(Handle::new(sf))?,
                         _ => return Err(mixed_kind_err()),
                     }
@@ -1034,7 +1398,7 @@ impl Evolution {
             ValueKind::Element => {
                 let mut field = ElementField::default();
                 for h in &self.subs {
-                    match h.read().interpolate(x, policy)? {
+                    match h.read().interpolate_at(x, policy)? {
                         SubValue::Element(sf) => field.add_sub(Handle::new(sf))?,
                         _ => return Err(mixed_kind_err()),
                     }
@@ -1044,8 +1408,10 @@ impl Evolution {
         }
     }
 
-    /// The abscissa's physical type (taken from the first sub-evolution), if
-    /// set. `None` for an empty evolution.
+    /// The abscissa types of the **first** sub-evolution — one per variable,
+    /// empty when unset or for an empty evolution. The curves of one evolution
+    /// may read different variables (`E(T)` beside `σ_y(T, φ)`): each keeps its
+    /// own, see [`SubEvolution::abscissa_types`].
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -1065,15 +1431,15 @@ impl Evolution {
     /// # let mut chaud = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
     /// # chaud.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
     /// let mut e = Evolution::from_scalars(vec![(0.0, 1.0), (1.0, 2.0)], OutOfRange::Clamp)?;
-    /// assert_eq!(e.abscissa_type()?, None);
-    /// e.set_abscissa_type(Some("time".into()));
-    /// assert_eq!(e.abscissa_type()?, Some("time".into()));
+    /// assert!(e.abscissa_types().is_empty());
+    /// e.set_abscissa_types(vec!["time".into()])?;
+    /// assert_eq!(e.abscissa_types(), ["time"]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn abscissa_type(&self) -> Result<Option<String>> {
+    pub fn abscissa_types(&self) -> Vec<String> {
         match self.subs.first() {
-            Some(h) => Ok(h.read().abscissa_type().map(str::to_string)),
-            None => Ok(None),
+            Some(h) => h.read().abscissa_types().to_vec(),
+            None => Vec::new(),
         }
     }
 
@@ -1109,7 +1475,9 @@ impl Evolution {
         }
     }
 
-    /// Set (or clear) the abscissa type on **every** sub-evolution.
+    /// Set (or clear, with an empty list) the abscissa types on **every**
+    /// sub-evolution — one per variable. Errors if a curve has another number
+    /// of variables.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -1130,14 +1498,15 @@ impl Evolution {
     /// # chaud.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
     /// // The type is set on **all** the zones at once.
     /// let mut e = Evolution::from_node_fields(&[(0.0, &froid), (1.0, &chaud)], OutOfRange::Clamp)?;
-    /// e.set_abscissa_type(Some("time".into()));
-    /// assert_eq!(e.abscissa_type()?, Some("time".into()));
+    /// e.set_abscissa_types(vec!["time".into()])?;
+    /// assert_eq!(e.abscissa_types(), ["time"]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn set_abscissa_type(&mut self, t: Option<String>) {
+    pub fn set_abscissa_types(&mut self, types: Vec<String>) -> Result<()> {
         for h in &self.subs {
-            h.write().set_abscissa_type(t.clone());
+            h.write().set_abscissa_types(types.clone())?;
         }
+        Ok(())
     }
 
     /// Set (or clear) the ordinate type on **every** sub-evolution. Errors on a
@@ -1175,35 +1544,41 @@ impl Evolution {
         Ok(())
     }
 
-    /// The single scalar curve of a one-curve, scalar-valued evolution — the
-    /// transfer function used to map a field ([`Evolution::interpolate_node_field`]
-    /// / [`Evolution::interpolate_element_field`]). Returns a clone. Errors
-    /// unless the evolution holds exactly one scalar sub-evolution.
-    fn single_scalar_curve(&self) -> Result<SubEvolution> {
-        if self.subs.len() != 1 {
-            return Err(PyrucastError::Message(format!(
-                "evolution: mapping a field needs a single-curve evolution, but this one has {} curve(s)",
-                self.subs.len()
-            )));
-        }
-        let sub = self.subs[0].read();
-        if sub.kind() != ValueKind::Scalar {
+    /// The curves of a scalar-valued evolution, cloned — what maps a field
+    /// ([`Evolution::interpolate_node_field`] /
+    /// [`Evolution::interpolate_element_field`]). Errors on an empty or a
+    /// field-valued evolution.
+    fn scalar_curves(&self) -> Result<Vec<SubEvolution>> {
+        if self.subs.is_empty() {
             return Err(PyrucastError::Message(
-                "evolution: a field can only be mapped through a scalar-valued evolution".into(),
+                "evolution: an empty evolution maps no field".into(),
             ));
         }
-        Ok((*sub).clone())
+        self.subs
+            .iter()
+            .map(|h| {
+                let sub = h.read();
+                if sub.kind() != ValueKind::Scalar {
+                    return Err(PyrucastError::Message(
+                        "evolution: a field can only be mapped through a scalar-valued evolution"
+                            .into(),
+                    ));
+                }
+                Ok((*sub).clone())
+            })
+            .collect()
     }
 
-    /// Map a whole [`NodeField`] through the (single, scalar) curve — see
-    /// [`SubEvolution::interpolate_field`]. Each zone's abscissa-typed
-    /// component is looked up; the result is a node field of one component
-    /// (named after the ordinate type) on the same decomposition.
+    /// Map a whole [`NodeField`] through every **scalar** curve of this
+    /// evolution, like `cos` through a field: each curve reads its variables
+    /// from the components named like its abscissa types and writes one
+    /// component, named after its ordinate type — see
+    /// [`SubEvolution::interpolate_field`]. Same decomposition as the input.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::Node;
-    /// # use pyrucast::containers::evolution::{Evolution, OutOfRange};
+    /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange};
     /// # use pyrucast::containers::field::SubField;
     /// # use pyrucast::containers::node_field::NodeField;
     /// # use pyrucast::coords::Coords;
@@ -1213,15 +1588,14 @@ impl Evolution {
     /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
     /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
     /// # let support = mesh::poi1_from_nodes(&n).unwrap();
-    /// # let temp = NodeField::from_submesh(&support.get(0).unwrap(),
-    /// #                                    vec!["T".into()]).unwrap();
+    /// # let mut temp = NodeField::from_submesh(&support.get(0).unwrap(), vec!["T".into()]).unwrap();
     /// # temp.get(0).unwrap().write().add_to_component("T", 120.0).unwrap();
     /// // The curve as a **transfer function**: it is the types that hook it
     /// // onto the field — the abscissa names the component read, the ordinate
     /// // the one produced.
     /// let mut loi = Evolution::from_scalars(
     ///     vec![(20.0, 50.0), (120.0, 30.0)], OutOfRange::Clamp)?;
-    /// loi.set_abscissa_type(Some("T".into()));
+    /// loi.set_abscissa_types(vec!["T".into()])?;
     /// loi.set_ordinate_type(Some("k".into()))?;
     /// let k = loi.interpolate_node_field(&temp, None)?;
     /// assert_eq!(k.get(0)?.read().value(n[0].id(), "k")?, 30.0);
@@ -1232,19 +1606,21 @@ impl Evolution {
         field: &NodeField,
         policy: Option<OutOfRange>,
     ) -> Result<NodeField> {
-        let curve = self.single_scalar_curve()?;
+        let curves = self.scalar_curves()?;
         let policy = Some(policy.unwrap_or(self.out_of_range));
-        field.map_subs(move |s| curve.interpolate_field(s, policy))
+        field.map_subs(move |s| map_through(&curves, s, policy))
     }
 
-    /// Map a whole [`ElementField`] through the (single, scalar) curve — see
-    /// [`Evolution::interpolate_node_field`].
+    /// Map a whole [`ElementField`] through every **scalar** curve of this
+    /// evolution — see [`Evolution::interpolate_node_field`]. Several curves give
+    /// several components: material laws `E(T)`, `σ_y(T, φ)` applied at once to
+    /// the state at the Gauss points.
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::element_field::{ElementField, SubElementField};
-    /// # use pyrucast::containers::evolution::{Evolution, Interpolated, OutOfRange};
+    /// # use pyrucast::containers::element_field::ElementField;
+    /// # use pyrucast::containers::evolution::{Evolution, OutOfRange, SubEvolution, SubValue};
     /// # use pyrucast::containers::field::SubField;
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
@@ -1256,21 +1632,24 @@ impl Evolution {
     /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let faire = |v: f64| {
-    /// #     let f = ElementField::new(&fes, vec!["T".into()]).unwrap();
-    /// #     f.get(0).unwrap().write().set_uniform("T", v).unwrap();
-    /// #     f
-    /// # };
-    /// # let (froid, chaud) = (faire(20.0), faire(120.0));
-    /// // The curve plays here the role of a **transfer function**: `T`
-    /// // supplies the abscissas, `k` is the component produced.
-    /// let mut loi =
-    ///     Evolution::from_scalars(vec![(20.0, 50.0), (120.0, 30.0)], OutOfRange::Clamp)?;
-    /// loi.set_abscissa_type(Some("T".into()));
-    /// loi.set_ordinate_type(Some("k".into()))?;
-    /// let k = loi.interpolate_element_field(&chaud, None)?;
-    /// assert_eq!(k.get(0)?.read().value(0, 0, "k")?, 30.0);
+    /// let etat = ElementField::new(&fes, vec!["T".into(), "phi".into()])?;
+    /// etat.get(0)?.write().set_uniform("T", 260.0)?;
+    /// etat.get(0)?.write().set_uniform("phi", 0.5)?;
+    /// // E depends on T alone, σ_y on (T, φ): two curves, two components.
+    /// let e_t = SubEvolution::new(vec![(20.0, SubValue::Scalar(210.0)), (500.0, SubValue::Scalar(170.0))],
+    ///     OutOfRange::Error)?.with_abscissa_types(vec!["T".into()])?.with_ordinate_type(Some("E".into()))?;
+    /// let sy = SubEvolution::new(
+    ///     vec![([20.0, 0.0], SubValue::Scalar(300.0)), ([20.0, 1.0], SubValue::Scalar(400.0)),
+    ///          ([500.0, 0.0], SubValue::Scalar(200.0)), ([500.0, 1.0], SubValue::Scalar(300.0))],
+    ///     OutOfRange::Error)?.with_abscissa_types(vec!["T".into(), "phi".into()])?
+    ///     .with_ordinate_type(Some("sigma_y".into()))?;
+    /// let mut lois = Evolution::default();
+    /// lois.add_sub(Handle::new(e_t))?;
+    /// lois.add_sub(Handle::new(sy))?;
+    /// let mat = lois.interpolate_element_field(&etat, None)?;
+    /// let z = mat.get(0)?;
+    /// assert!((z.read().value(0, 0, "E")? - 190.0).abs() < 1e-9);
+    /// assert!((z.read().value(0, 0, "sigma_y")? - 300.0).abs() < 1e-9);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn interpolate_element_field(
@@ -1278,9 +1657,9 @@ impl Evolution {
         field: &ElementField,
         policy: Option<OutOfRange>,
     ) -> Result<ElementField> {
-        let curve = self.single_scalar_curve()?;
+        let curves = self.scalar_curves()?;
         let policy = Some(policy.unwrap_or(self.out_of_range));
-        field.map_subs(move |s| curve.interpolate_field(s, policy))
+        field.map_subs(move |s| map_through(&curves, s, policy))
     }
 
     /// The aggregate's value kind (taken from the first sub-evolution).
@@ -1344,6 +1723,11 @@ impl Evolution {
     pub fn shared_abscissas(&self) -> Result<Vec<f64>> {
         if self.subs.is_empty() {
             return Err(PyrucastError::Message("Evolution: empty evolution".into()));
+        }
+        if self.subs.iter().any(|h| h.read().dims() != 1) {
+            return Err(PyrucastError::Message(
+                "Evolution: a table of several variables has no frame sequence".into(),
+            ));
         }
         let first = self.subs[0].read().abscissas().to_vec();
         for h in &self.subs[1..] {
@@ -1533,7 +1917,11 @@ impl Evolution {
         // (then to generic defaults) when the caller passes none.
         let abscissa_label = match x_label {
             Some(s) => s.to_string(),
-            None => self.abscissa_type()?.unwrap_or_else(|| "variable".into()),
+            None => self
+                .abscissa_types()
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "variable".into()),
         };
         match self.kind()? {
             ValueKind::Scalar => {
@@ -1598,7 +1986,8 @@ impl Evolution {
     }
 
     /// Build a single-curve scalar `Evolution` from `(abscissa, scalar)`
-    /// samples — the classic X→Y curve (one sub-evolution).
+    /// samples — the classic X→Y curve (one sub-evolution), or a table when the
+    /// abscissas are tuples (see [`SubEvolution::new`]).
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -1621,7 +2010,10 @@ impl Evolution {
     /// assert_eq!(e.len(), 1); // a single curve
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn from_scalars(samples: Vec<(f64, f64)>, out_of_range: OutOfRange) -> Result<Self> {
+    pub fn from_scalars<A: Abscissa>(
+        samples: Vec<(A, f64)>,
+        out_of_range: OutOfRange,
+    ) -> Result<Self> {
         let pairs = samples
             .into_iter()
             .map(|(x, v)| (x, SubValue::Scalar(v)))
@@ -1662,8 +2054,8 @@ impl Evolution {
     /// assert_eq!(e.frame_count()?, 2);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn from_node_fields(
-        samples: &[(f64, &NodeField)],
+    pub fn from_node_fields<A: Abscissa + Clone>(
+        samples: &[(A, &NodeField)],
         out_of_range: OutOfRange,
     ) -> Result<Self> {
         if samples.is_empty() {
@@ -1685,7 +2077,7 @@ impl Evolution {
             let support = first.get(z)?.read().support();
             let mut curve = Vec::with_capacity(samples.len());
             for (x, field) in samples {
-                curve.push((*x, SubValue::Node(node_sub_on(field, &support)?)));
+                curve.push((x.clone(), SubValue::Node(node_sub_on(field, &support)?)));
             }
             evolution
                 .subs
@@ -1727,8 +2119,8 @@ impl Evolution {
     /// assert_eq!(e.frame_count()?, 2);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn from_element_fields(
-        samples: &[(f64, &ElementField)],
+    pub fn from_element_fields<A: Abscissa + Clone>(
+        samples: &[(A, &ElementField)],
         out_of_range: OutOfRange,
     ) -> Result<Self> {
         if samples.is_empty() {
@@ -1750,7 +2142,10 @@ impl Evolution {
             let support = first.get(z)?.read().support();
             let mut curve = Vec::with_capacity(samples.len());
             for (x, field) in samples {
-                curve.push((*x, SubValue::Element(element_sub_on(field, &support)?)));
+                curve.push((
+                    x.clone(),
+                    SubValue::Element(element_sub_on(field, &support)?),
+                ));
             }
             evolution
                 .subs
@@ -2053,7 +2448,8 @@ mod tests {
     /// A scalar curve `T → E` (double the abscissa), typed on both axes.
     fn typed_curve() -> SubEvolution {
         scalar_curve(&[(0.0, 0.0), (10.0, 20.0)], OutOfRange::Error)
-            .with_abscissa_type(Some("T".into()))
+            .with_abscissa_types(vec!["T".into()])
+            .unwrap()
             .with_ordinate_type(Some("E".into()))
             .unwrap()
     }
@@ -2089,7 +2485,8 @@ mod tests {
     fn interpolate_field_checks_type_correspondence() {
         // Abscissa type "P" has no counterpart in a field whose component is "T".
         let se = scalar_curve(&[(0.0, 0.0), (1.0, 1.0)], OutOfRange::Error)
-            .with_abscissa_type(Some("P".into()));
+            .with_abscissa_types(vec!["P".into()])
+            .unwrap();
         let input = node_field(&poi1(1), &[0.5]);
         assert!(se.interpolate_field(&input, None).is_err());
     }
@@ -2122,7 +2519,7 @@ mod tests {
         // A single-curve typed scalar Evolution used as a transfer function.
         let mut e =
             Evolution::from_scalars(vec![(0.0, 0.0), (10.0, 20.0)], OutOfRange::Error).unwrap();
-        e.set_abscissa_type(Some("T".into()));
+        e.set_abscissa_types(vec!["T".into()]).unwrap();
         e.set_ordinate_type(Some("E".into())).unwrap();
         let sm = poi1(2);
         let input = NodeField::from_sub(node_field(&sm, &[0.0, 10.0]));
@@ -2134,23 +2531,157 @@ mod tests {
     }
 
     #[test]
-    fn aggregate_field_map_requires_single_scalar_curve() {
-        // Two curves → ambiguous, rejected.
+    fn two_curves_writing_one_component_are_refused() {
+        // Two curves, no ordinate type: both would write `value`.
         let e0 = Evolution::from_scalars(vec![(0.0, 0.0), (1.0, 1.0)], OutOfRange::Error).unwrap();
         let e1 = Evolution::from_scalars(vec![(0.0, 0.0), (1.0, 1.0)], OutOfRange::Error).unwrap();
         let mut two = e0.union(&e1).unwrap();
-        two.set_abscissa_type(Some("T".into()));
+        two.set_abscissa_types(vec!["T".into()]).unwrap();
         let input = NodeField::from_sub(node_field(&poi1(1), &[0.5]));
         assert!(two.interpolate_node_field(&input, None).is_err());
+    }
+
+    /// Several curves map a field into several components, each curve reading
+    /// its own variables — one of them, here, a table of two.
+    #[test]
+    fn curves_of_different_variables_map_one_field() {
+        let e = scalar_curve(&[(0.0, 1.0), (10.0, 3.0)], OutOfRange::Error)
+            .with_abscissa_types(vec!["T".into()])
+            .unwrap()
+            .with_ordinate_type(Some("E".into()))
+            .unwrap();
+        let table = SubEvolution::new(
+            vec![
+                ([0.0, 0.0], SubValue::Scalar(0.0)),
+                ([0.0, 1.0], SubValue::Scalar(1.0)),
+                ([10.0, 0.0], SubValue::Scalar(10.0)),
+                ([10.0, 1.0], SubValue::Scalar(11.0)),
+            ],
+            OutOfRange::Error,
+        )
+        .unwrap()
+        .with_abscissa_types(vec!["T".into(), "phi".into()])
+        .unwrap()
+        .with_ordinate_type(Some("s".into()))
+        .unwrap();
+        let mut laws = Evolution::default();
+        laws.add_sub(Handle::new(e)).unwrap();
+        laws.add_sub(Handle::new(table)).unwrap();
+        let sm = poi1(2);
+        let mut input = SubNodeField::from_poi1(&sm, vec!["phi".into(), "T".into()]).unwrap();
+        input.set(0, 0, 0.5).unwrap();
+        input.set(0, 1, 5.0).unwrap();
+        input.set(1, 0, 1.0).unwrap();
+        input.set(1, 1, 10.0).unwrap();
+        let out = laws
+            .interpolate_node_field(&NodeField::from_sub(input), None)
+            .unwrap();
+        let z = out.get(0).unwrap().read();
+        assert_eq!(z.components(), &["E".to_string(), "s".to_string()]);
+        assert!((z.get(0, 0).unwrap() - 2.0).abs() < 1e-12); // E(5)
+        assert!((z.get(0, 1).unwrap() - 5.5).abs() < 1e-12); // T + φ
+        assert!((z.get(1, 1).unwrap() - 11.0).abs() < 1e-12);
+    }
+
+    /// `f(x, y) = 1 + 2x + 3y + 4xy` is linear in each variable alone, so the
+    /// hierarchical reading reproduces it exactly — on a full grid, and on an
+    /// irregular table whose groups do not share their second abscissas.
+    #[test]
+    fn a_table_reproduces_a_bilinear_function() {
+        let f = |x: f64, y: f64| 1.0 + 2.0 * x + 3.0 * y + 4.0 * x * y;
+        let grid: Vec<([f64; 2], SubValue)> = [0.0, 1.0, 3.0]
+            .iter()
+            .flat_map(|&x| [0.0, 2.0].map(move |y| ([x, y], SubValue::Scalar(f(x, y)))))
+            .collect();
+        let irregular: Vec<([f64; 2], SubValue)> = [
+            [0.0, 0.0],
+            [0.0, 0.7],
+            [0.0, 2.0],
+            [1.0, 0.0],
+            [1.0, 2.0],
+            [3.0, 0.0],
+            [3.0, 1.2],
+            [3.0, 1.5],
+            [3.0, 2.0],
+        ]
+        .iter()
+        .rev() // given out of order: sorting is the constructor's business
+        .map(|&[x, y]| ([x, y], SubValue::Scalar(f(x, y))))
+        .collect();
+        for samples in [grid, irregular] {
+            let t = SubEvolution::new(samples, OutOfRange::Error).unwrap();
+            for (x, y) in [(0.3, 0.4), (1.0, 1.9), (2.2, 0.05), (3.0, 2.0), (0.0, 0.0)] {
+                let got = t.eval_scalar_at(&[x, y], None).unwrap();
+                assert!((got - f(x, y)).abs() < 1e-12, "f({x}, {y}): {got}");
+            }
+        }
+    }
+
+    /// Out of a level's range the policy applies; a variable measured at a
+    /// single value in a group is constant along it there.
+    #[test]
+    fn a_table_honours_ranges_and_single_values() {
+        let t = SubEvolution::new(
+            vec![
+                ([0.0, 0.0], SubValue::Scalar(1.0)),
+                ([0.0, 1.0], SubValue::Scalar(2.0)),
+                ([1.0, 0.5], SubValue::Scalar(7.0)), // one value of the second variable
+            ],
+            OutOfRange::Error,
+        )
+        .unwrap();
+        // At the first variable's 1, the second does not vary.
+        assert_eq!(t.eval_scalar_at(&[1.0, 0.9], None).unwrap(), 7.0);
+        // Halfway: (1.5 + 7) / 2 at y = 0.5.
+        assert!((t.eval_scalar_at(&[0.5, 0.5], None).unwrap() - 4.25).abs() < 1e-12);
+        // Out of the second variable's range in the first group: an error…
+        assert!(t.eval_scalar_at(&[0.0, 1.5], None).is_err());
+        // …or the clamped value, if asked for.
+        assert_eq!(
+            t.eval_scalar_at(&[0.0, 1.5], Some(OutOfRange::Clamp))
+                .unwrap(),
+            2.0
+        );
+        // Extrapolated along the two nearest values of the first variable.
+        assert!(
+            (t.eval_scalar_at(&[2.0, 0.5], Some(OutOfRange::Extrapolate))
+                .unwrap()
+                - 12.5)
+                .abs()
+                < 1e-12
+        );
+        // The wrong number of variables is refused.
+        assert!(t.eval_scalar_at(&[0.5], None).is_err());
+    }
+
+    /// Tuples of mixed lengths, and repeated tuples, are refused at build time.
+    #[test]
+    fn a_table_validates_its_abscissas() {
+        assert!(SubEvolution::new(
+            vec![
+                (vec![0.0, 0.0], SubValue::Scalar(1.0)),
+                (vec![1.0], SubValue::Scalar(2.0)),
+            ],
+            OutOfRange::Error,
+        )
+        .is_err());
+        assert!(SubEvolution::new(
+            vec![
+                ([0.0, 1.0], SubValue::Scalar(1.0)),
+                ([0.0, 1.0], SubValue::Scalar(2.0)),
+            ],
+            OutOfRange::Error,
+        )
+        .is_err());
     }
 
     #[test]
     fn types_round_trip_on_aggregate() {
         let mut e =
             Evolution::from_scalars(vec![(0.0, 0.0), (1.0, 1.0)], OutOfRange::Error).unwrap();
-        e.set_abscissa_type(Some("time".into()));
+        e.set_abscissa_types(vec!["time".into()]).unwrap();
         e.set_ordinate_type(Some("force".into())).unwrap();
-        assert_eq!(e.abscissa_type().unwrap().as_deref(), Some("time"));
+        assert_eq!(e.abscissa_types(), ["time"]);
         assert_eq!(e.ordinate_type().unwrap().as_deref(), Some("force"));
     }
 }

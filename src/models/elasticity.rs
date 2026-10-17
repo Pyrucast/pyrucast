@@ -280,6 +280,11 @@ impl Behavior for Elasticity {
         self.continuum.fespace()
     }
 
+    /// The law **is** its elastic operator, in whatever symmetry it was built.
+    fn elastic_operator(&self) -> Option<(&Continuum, MaterialSymmetry)> {
+        Some((&self.continuum, self.symmetry))
+    }
+
     fn behavior_output_components(&self) -> Vec<String> {
         self.continuum.stress_names()
     }

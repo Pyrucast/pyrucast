@@ -14,7 +14,7 @@ use crate::py::mesh::PyMesh;
 use crate::py::node_field::{PyNodeField, PySubNodeField};
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyFloat, PyList};
+use pyo3::types::{PyFloat, PyList, PyTuple};
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -33,6 +33,40 @@ fn extract_sub_value(value: &Bound<'_, PyAny>) -> PyResult<SubValue> {
     Err(PyTypeError::new_err(
         "evolution value must be a float, a SubNodeField or a SubElementField",
     ))
+}
+
+/// One abscissa: a float for a curve, a tuple (or list) of floats for a table.
+fn extract_abscissa(x: &Bound<'_, PyAny>) -> PyResult<Vec<f64>> {
+    if let Ok(v) = x.extract::<f64>() {
+        return Ok(vec![v]);
+    }
+    x.extract::<Vec<f64>>().map_err(|_| {
+        PyTypeError::new_err("an abscissa is a float, or a tuple of floats for a table")
+    })
+}
+
+/// The abscissa types: a name for a curve, a sequence of names for a table,
+/// `None` for none.
+fn extract_abscissa_types(types: Option<&Bound<'_, PyAny>>) -> PyResult<Vec<String>> {
+    match types {
+        None => Ok(Vec::new()),
+        Some(t) => match t.extract::<String>() {
+            Ok(name) => Ok(vec![name]),
+            Err(_) => t.extract::<Vec<String>>().map_err(|_| {
+                PyTypeError::new_err("abscissa_type is a name, or a sequence of names for a table")
+            }),
+        },
+    }
+}
+
+/// The abscissa types handed back: `None`, a name for a curve, a tuple of
+/// names for a table.
+fn abscissa_types_to_py(py: Python<'_>, types: &[String]) -> PyResult<Py<PyAny>> {
+    Ok(match types {
+        [] => py.None(),
+        [one] => one.into_pyobject(py)?.into_any().unbind(),
+        many => PyTuple::new(py, many)?.into_any().unbind(),
+    })
 }
 
 /// Wrap an interpolated [`SubValue`] as the matching Python object.
@@ -74,38 +108,48 @@ pub struct PySubEvolution {
 #[pymethods]
 impl PySubEvolution {
     /// `SubEvolution(samples, out_of_range="error", abscissa_type=None,
-    /// ordinate_type=None)` — one curve. `samples` is a list of
-    /// `(abscissa, value)`; the values must all be of the same kind (and, for
-    /// fields, on the same support). `out_of_range` defaults to `"error"`.
-    /// `abscissa_type` names the physical type of
-    /// the abscissa (used to label plots and to select a field component when a
-    /// field is interpolated); `ordinate_type` names the value's type (scalar
-    /// curves only).
+    /// ordinate_type=None)` — one curve, or one table. `samples` is a list of
+    /// `(abscissa, value)`; the abscissa is a float for a curve, a tuple of
+    /// floats for a table of several variables (`((T, phi), value)`), read
+    /// hierarchically — grouped by the first variable, then the second… — so
+    /// the groups need not share their abscissas. The values must all be of
+    /// the same kind (and, for fields, on the same support). `out_of_range`
+    /// defaults to `"error"`. `abscissa_type` names the physical type of each
+    /// variable — a name, or a tuple of names for a table — used to label plots
+    /// and to select the field components a field is read from when it is
+    /// interpolated; `ordinate_type` names the value's type (scalar curves
+    /// only).
     #[new]
     #[pyo3(signature = (samples, out_of_range=None, abscissa_type=None, ordinate_type=None))]
     fn py_new(
         py: Python<'_>,
-        samples: Vec<(f64, Py<PyAny>)>,
+        samples: Vec<(Py<PyAny>, Py<PyAny>)>,
         out_of_range: Option<OutOfRange>,
-        abscissa_type: Option<String>,
+        abscissa_type: Option<Py<PyAny>>,
         ordinate_type: Option<String>,
     ) -> PyResult<Self> {
         let oor = out_of_range.unwrap_or(OutOfRange::Error);
         let mut pairs = Vec::with_capacity(samples.len());
         for (x, v) in samples {
-            pairs.push((x, extract_sub_value(v.bind(py))?));
+            pairs.push((
+                extract_abscissa(x.bind(py))?,
+                extract_sub_value(v.bind(py))?,
+            ));
         }
         let mut sub = SubEvolution::new(pairs, oor)?;
-        sub.set_abscissa_type(abscissa_type);
+        sub.set_abscissa_types(extract_abscissa_types(
+            abscissa_type.as_ref().map(|t| t.bind(py)),
+        )?)?;
         sub.set_ordinate_type(ordinate_type)?;
         Ok(Self {
             handle: Handle::new(sub),
         })
     }
 
-    /// The abscissa's physical type, or `None`.
-    fn abscissa_type(&self) -> Option<String> {
-        self.handle.read().abscissa_type().map(str::to_string)
+    /// The abscissa's physical type: a name for a curve, a tuple of names for
+    /// a table, or `None`.
+    fn abscissa_type(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        abscissa_types_to_py(py, self.handle.read().abscissa_types())
     }
 
     /// The ordinate's physical type (scalar curves), or `None`.
@@ -118,9 +162,19 @@ impl PySubEvolution {
         self.handle.read().len()
     }
 
-    /// The sorted abscissas.
-    fn abscissas(&self) -> Vec<f64> {
-        self.handle.read().abscissas().to_vec()
+    /// The sorted abscissas: floats for a curve, tuples of floats for a table
+    /// (in lexicographic order).
+    fn abscissas(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let sub = self.handle.read();
+        if sub.dims() == 1 {
+            return Ok(PyList::new(py, sub.abscissas())?.into_any().unbind());
+        }
+        let tuples: Vec<Bound<'_, PyTuple>> = sub
+            .abscissas()
+            .chunks(sub.dims())
+            .map(|x| PyTuple::new(py, x))
+            .collect::<PyResult<_>>()?;
+        Ok(PyList::new(py, tuples)?.into_any().unbind())
     }
 
     /// The stored out-of-range policy name.
@@ -130,12 +184,13 @@ impl PySubEvolution {
 
     /// Interpolate at `x`.
     ///
-    /// - `x` a **float** → a float / `SubNodeField` / `SubElementField` (the
-    ///   curve's value at `x`);
+    /// - `x` a **float** (a curve) or a **tuple of floats** (a table) → a
+    ///   float / `SubNodeField` / `SubElementField`, the value at `x`;
     /// - `x` a **`SubNodeField`** or **`SubElementField`** → a field of the
-    ///   same support whose every entry is this **scalar** curve evaluated at
-    ///   the input's `abscissa_type` component (the curve as a transfer
-    ///   function). The output component is named after `ordinate_type`.
+    ///   same support whose every entry is this **scalar** curve or table
+    ///   evaluated at the input's `abscissa_type` components (applied like
+    ///   `cos` to a field). The output component is named after
+    ///   `ordinate_type`.
     ///
     /// `out_of_range` (`"error"` / `"clamp"` / `"extrapolate"`) overrides the
     /// stored policy for this query.
@@ -151,6 +206,9 @@ impl PySubEvolution {
         let sub = self.handle.read();
         if let Ok(v) = x.extract::<f64>() {
             return sub_value_to_py(py, sub.interpolate(v, policy)?);
+        }
+        if let Ok(v) = x.extract::<Vec<f64>>() {
+            return sub_value_to_py(py, sub.interpolate_at(&v, policy)?);
         }
         if let Ok(f) = x.extract::<PyRef<PySubNodeField>>() {
             let field = (*f.handle.read()).clone();
@@ -175,7 +233,7 @@ impl PySubEvolution {
             .into_any());
         }
         Err(PyTypeError::new_err(
-            "interpolate expects a float, a SubNodeField or a SubElementField",
+            "interpolate expects a float, a tuple of floats, a SubNodeField or a SubElementField",
         ))
     }
 
@@ -294,14 +352,16 @@ impl PyEvolution {
     /// tabulated at each abscissa. `steps` is a list of `(abscissa, value)`
     /// where `value` is a float, a `NodeField` or an `ElementField`; the kind
     /// is taken from the first step. Whole fields are transposed into one
-    /// curve per zone.
+    /// curve per zone. The abscissa is a float, or a tuple of floats for a
+    /// table of several variables (`((T, phi), value)`), read hierarchically
+    /// — see `SubEvolution`; `abscissa_type` is then a tuple of names.
     #[new]
     #[pyo3(signature = (steps, out_of_range=None, abscissa_type=None, ordinate_type=None))]
     fn py_new(
         py: Python<'_>,
-        steps: Vec<(f64, Py<PyAny>)>,
+        steps: Vec<(Py<PyAny>, Py<PyAny>)>,
         out_of_range: Option<OutOfRange>,
-        abscissa_type: Option<String>,
+        abscissa_type: Option<Py<PyAny>>,
         ordinate_type: Option<String>,
     ) -> PyResult<Self> {
         let oor = out_of_range.unwrap_or(OutOfRange::Error);
@@ -311,11 +371,15 @@ impl PyEvolution {
             ));
         }
         let first = steps[0].1.bind(py);
+        let abscissas: Vec<Vec<f64>> = steps
+            .iter()
+            .map(|(x, _)| extract_abscissa(x.bind(py)))
+            .collect::<PyResult<_>>()?;
 
         let mut inner = if first.extract::<f64>().is_ok() {
             let mut pairs = Vec::with_capacity(steps.len());
-            for (x, v) in &steps {
-                pairs.push((*x, v.bind(py).extract::<f64>()?));
+            for (x, (_, v)) in abscissas.iter().zip(&steps) {
+                pairs.push((x.clone(), v.bind(py).extract::<f64>()?));
             }
             Evolution::from_scalars(pairs, oor)?
         } else if first.extract::<PyRef<PyNodeField>>().is_ok() {
@@ -323,9 +387,9 @@ impl PyEvolution {
             for (_, v) in &steps {
                 fields.push(v.bind(py).extract::<PyRef<PyNodeField>>()?);
             }
-            let refs: Vec<(f64, &NodeField)> = steps
+            let refs: Vec<(Vec<f64>, &NodeField)> = abscissas
                 .iter()
-                .map(|(x, _)| *x)
+                .cloned()
                 .zip(fields.iter().map(|f| &f.inner))
                 .collect();
             Evolution::from_node_fields(&refs, oor)?
@@ -334,9 +398,9 @@ impl PyEvolution {
             for (_, v) in &steps {
                 fields.push(v.bind(py).extract::<PyRef<PyElementField>>()?);
             }
-            let refs: Vec<(f64, &ElementField)> = steps
+            let refs: Vec<(Vec<f64>, &ElementField)> = abscissas
                 .iter()
-                .map(|(x, _)| *x)
+                .cloned()
                 .zip(fields.iter().map(|f| &f.inner))
                 .collect();
             Evolution::from_element_fields(&refs, oor)?
@@ -345,7 +409,9 @@ impl PyEvolution {
                 "Evolution step value must be a float, a NodeField or an ElementField",
             ));
         };
-        inner.set_abscissa_type(abscissa_type);
+        inner.set_abscissa_types(extract_abscissa_types(
+            abscissa_type.as_ref().map(|t| t.bind(py)),
+        )?)?;
         inner.set_ordinate_type(ordinate_type)?;
         Ok(Self { inner })
     }
@@ -355,9 +421,11 @@ impl PyEvolution {
         self.inner.out_of_range().name().to_string()
     }
 
-    /// The abscissa's physical type, or `None`.
-    fn abscissa_type(&self) -> PyResult<Option<String>> {
-        Ok(self.inner.abscissa_type()?)
+    /// The abscissa types of the first curve: a name for a curve, a tuple of
+    /// names for a table, or `None`. Each curve keeps its own — `E(T)` beside
+    /// `sigma_y(T, phi)` — see `SubEvolution.abscissa_type`.
+    fn abscissa_type(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        abscissa_types_to_py(py, &self.inner.abscissa_types())
     }
 
     /// The ordinate's physical type (scalar evolutions), or `None`.
@@ -367,12 +435,15 @@ impl PyEvolution {
 
     /// Interpolate at `x`.
     ///
-    /// - `x` a **float** → every curve interpolated and regrouped: a
-    ///   `list[float]` for scalars, a `NodeField` / `ElementField` for fields;
+    /// - `x` a **float** (curves) or a **tuple of floats** (tables) → every
+    ///   curve interpolated and regrouped: a `list[float]` for scalars, a
+    ///   `NodeField` / `ElementField` for fields;
     /// - `x` a **`NodeField`** or **`ElementField`** → that field mapped
-    ///   through the (single, scalar) curve as a transfer function: each entry
-    ///   of the input's `abscissa_type` component is looked up, yielding a field
-    ///   of one component (named after `ordinate_type`) on the same support.
+    ///   through every **scalar** curve, like `cos` through a field: each curve
+    ///   reads the input's components named like its `abscissa_type` and
+    ///   writes one component, named after its `ordinate_type`, on the same
+    ///   support — material laws `E(T)`, `sigma_y(T, phi)` evaluated at the
+    ///   state in one call.
     ///
     /// `out_of_range` overrides the stored policy for this query.
     #[pyo3(signature = (x, out_of_range=None))]
@@ -384,8 +455,13 @@ impl PyEvolution {
     ) -> PyResult<Py<PyAny>> {
         let policy = out_of_range;
         let x = x.bind(py);
-        if let Ok(v) = x.extract::<f64>() {
-            return match self.inner.interpolate(v, policy)? {
+        let at = if let Ok(v) = x.extract::<f64>() {
+            Some(vec![v])
+        } else {
+            x.extract::<Vec<f64>>().ok()
+        };
+        if let Some(v) = at {
+            return match self.inner.interpolate_at(&v, policy)? {
                 Interpolated::Scalars(v) => Ok(PyList::new(py, v)?.into_any().unbind()),
                 Interpolated::Node(f) => Ok(Py::new(py, PyNodeField { inner: f })?.into_any()),
                 Interpolated::Element(f) => {
@@ -402,7 +478,7 @@ impl PyEvolution {
             return Ok(Py::new(py, PyElementField { inner: out })?.into_any());
         }
         Err(PyTypeError::new_err(
-            "interpolate expects a float, a NodeField or an ElementField",
+            "interpolate expects a float, a tuple of floats, a NodeField or an ElementField",
         ))
     }
 

@@ -275,6 +275,44 @@ l'utilisateur compose la charge thermique et la contrainte réelle
 `σ = D:(ε − ε_th)` à partir des briques (`integrate_behavior`,
 `internal_forces`) — cf. l'[exemple thermomécanique](../mecanique/elasticite.md#thermomécanique-non-couplée).
 
+### `elastic_stress(model, strain, materials)` / `elastic_strain(model, stress, materials)` → `ElementField`
+
+L'**opérateur élastique** d'un modèle aux points de Gauss, dans les deux sens
+(Cast3M `ELAS`) :
+
+\[
+\sigma = \mathbb D : \varepsilon
+\qquad\text{et}\qquad
+\varepsilon = \mathbb D^{-1} : \sigma .
+\]
+
+`D` est l'opérateur avec lequel chaque loi **prédit** — pas la réponse de la
+loi elle-même : la matrice de Hooke d'une élasticité dans sa symétrie
+(isotrope, orthotrope, anisotrope), le `D` isotrope du prédicteur élastique
+d'une plasticité, le `D` **non endommagé** que dégrade une loi
+d'endommagement. Le matériau n'a besoin que des constantes élastiques (`E`,
+`nu` en isotrope) : le `sigma_y` d'une plasticité n'y joue aucun rôle. C'est ce
+dont un solveur incrémental a besoin pour transformer un incrément de
+déformation imposé (thermique, donné) en la contrainte qu'il causerait si rien
+ne plastifiait — la pseudo-force `F* = ∫ Bᵀ D Δε*` — ou pour ramener une
+contrainte à la déformation élastique qui la porte sous d'autres modules
+(`(D⁻¹ₙ₊₁ − D⁻¹ₙ) σₙ` quand le matériau varie avec la température).
+
+L'entrée et la sortie en déformation sont en convention **tensorielle**,
+disposition de `deformation` et `thermal_strain` ; en contraintes planes,
+`elastic_strain` n'écrit pas `eps_zz`, que la loi plane ne lit pas. Une zone par
+sous-modèle continu ; un sous-modèle sans opérateur élastique (conduction,
+barre, poutre, contrainte) n'en produit pas. `elastic_strain` échoue là où `D`
+est singulier (un module nul).
+
+Deux fonctions plutôt qu'une qui lirait le sens sur les noms des composantes :
+les deux sens ne font pas la même opération, et l'état que rend
+`integrate_behavior` porte **à la fois** des `sigma_*` et des `eps_*`.
+
+```python
+{{#include ../../../tests/python/test_doc_ops_champs.py:elastique}}
+```
+
 ### `divergence(field)` → `NodeField`
 
 Divergence **faible** (consistante) d'un champ vectoriel par éléments — l'adjoint
@@ -287,9 +325,33 @@ d_i = \int_\Omega \nabla N_i \cdot F\\, d\Omega
 
 accumulé par nœud. C'est l'opérateur `Bᵀ`, transposé du gradient : il vérifie
 `⟨∇f, F⟩ = ⟨f, div F⟩`. Le champ d'entrée doit porter exactement `space_dim`
-composantes (`F_x, F_y, F_z`) ; chaque sous-espace donne une zone de sortie à
-une composante `"div"`. Ce sont des **quantités intégrées**, pas les valeurs
+composantes (`F_x, F_y, F_z`) ; la sortie porte une composante `"div"`, et un
+nœud partagé par plusieurs sous-espaces reçoit la **somme** de leurs
+contributions. Ce sont des **quantités intégrées**, pas les valeurs
 ponctuelles de `∇·F` (pas de projection L²).
+
+### `cell_integral(field, target)` → `ElementField` et `sum_to_nodes(field)` → `NodeField`
+
+Deux briques par maille (Cast3M `INTG 'ELEM'` et `CHAN 'CHPO' 'SOMM'`) :
+
+- `element_field.cell_integral` intègre chaque composante **maille par maille**,
+  avec la quadrature du champ d'entrée :
+  `v_e = Σ_g f(g)·|J|_g·w_g` (le `2πr` inclus en axisymétrique). Le résultat vit
+  sur `target`, un espace **à un point par maille** du même maillage —
+  `FiniteElementSpace(mesh, quadrature="REDUCED")`, un seul point au barycentre,
+  le support `'GRAVITE'` de Cast3M ;
+- `node_field.sum_to_nodes` rassemble un tel champ aux nœuds par **somme** :
+  chaque nœud reçoit `Σ_{e ∋ i} v_e`, la somme des valeurs des mailles qui le
+  touchent, zones confondues. Ce n'est pas un lissage : ni moyenne ni poids.
+
+Intégrer `1` donne la mesure de chaque maille ; la sommer aux nœuds donne le
+volume que représente chaque nœud — le poids d'un solveur incrémental pour
+mettre ses résidus à une échelle comparable (l'accélération d'Anderson pondère
+par `(Σ_e |Ω_e|)^{-1/2}`).
+
+```python
+{{#include ../../../tests/python/test_doc_ops_champs.py:par_maille}}
+```
 
 ### `beam_deformation(field, fespace, material)` → `ElementField`
 

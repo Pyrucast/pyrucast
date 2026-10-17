@@ -62,6 +62,7 @@ use crate::error::Result;
 use crate::handle::Handle;
 use crate::models::continuum::Continuum;
 use crate::models::owned_components;
+use crate::models::symmetry::MaterialSymmetry;
 use crate::models::tensor::Kinematics;
 use crate::models::tensor::{dual_name, primal_name};
 use crate::models::tensor::{stress_names, voigt_stress};
@@ -431,6 +432,11 @@ impl Domain for Plasticity {
 impl Behavior for Plasticity {
     fn behavior_fespace(&self) -> Handle<SubFiniteElementSpace> {
         self.continuum.fespace()
+    }
+
+    /// The isotropic `D` its elastic predictor uses, read from `E` and `nu`.
+    fn elastic_operator(&self) -> Option<(&Continuum, MaterialSymmetry)> {
+        Some((&self.continuum, MaterialSymmetry::Isotropic))
     }
 
     fn behavior_output_components(&self) -> Vec<String> {

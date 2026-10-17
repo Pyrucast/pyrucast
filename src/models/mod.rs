@@ -2017,6 +2017,19 @@ pub trait Behavior: Domain {
         false
     }
 
+    /// The **elastic operator** of this law, when it has one: the continuum it
+    /// stands on and the symmetry of its elastic constants, which head its
+    /// material contract (`E`, `nu` for an isotropic law).
+    ///
+    /// It is what a plasticity law predicts with and a damage law degrades —
+    /// the `D` of `σ = D:ε`, not the law's own response. Read by
+    /// [`elastic_stress`](fn@crate::ops::element_field::elastic_stress) and
+    /// [`elastic_strain`](fn@crate::ops::element_field::elastic_strain).
+    /// Default: none — a conduction, a bar or a beam has no continuum `D`.
+    fn elastic_operator(&self) -> Option<(&continuum::Continuum, symmetry::MaterialSymmetry)> {
+        None
+    }
+
     /// Where this physics' consistent tangent comes from — see
     /// [`TangentSource`]. Default: `Analytic`, which is the truth for every
     /// physics whose tangent is a closed form. A physics that differentiates its

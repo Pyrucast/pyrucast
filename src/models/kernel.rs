@@ -1344,6 +1344,113 @@ pub fn element_pointwise(
     Ok(out)
 }
 
+/// Produce a **one-point-per-cell** field from a per-element field, in parallel
+/// — the cell-wise counterpart of [`element_pointwise`], which keeps every
+/// Gauss point.
+///
+/// `cell(geom, values, out)` receives the geometry of one cell of `fespace`
+/// (its quadrature, the one `input` lives on), that cell's block of `input` —
+/// `n_gauss` rows of `input`'s components, contiguous — and writes the cell's
+/// `out_components.len()` values. The result lives on `target`: a subspace of
+/// the **same submesh** with a single point per cell (the centroid of the
+/// `Reduced` quadrature), so one cell, one row.
+///
+/// Both shapes are checked once, here, where the message can say which: an
+/// input that spans another quadrature, or a target that is not one point per
+/// cell of this very submesh, would otherwise be sliced wrongly in silence.
+/// Each output row is written by exactly one cell, so the result is
+/// bit-for-bit deterministic.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Interpolation, Node, QuadratureRule};
+/// # use pyrucast::containers::element_field::SubElementField;
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::kernel;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let maillage = Mesh::from_submesh(sm);
+/// let zone = FiniteElementSpace::lagrange1(&maillage)?.get(0)?;
+/// let centre = FiniteElementSpace::with(
+///     &maillage, &[(Interpolation::Lagrange1, QuadratureRule::Reduced)])?.get(0)?;
+/// let un = Handle::new(SubElementField::from_uniform_per_component(zone.clone(), vec!["un".into()], &[1.0])?);
+/// // The integral of 1 over each cell: its area, one value per cell.
+/// let aire = kernel::cellwise(&zone, &un, &centre, vec!["aire".into()], |geom, rows, out| {
+///     out[0] = (0..geom.n_gauss).map(|g| rows[g] * geom.det_j_w(g)).sum();
+///     Ok(())
+/// })?;
+/// assert_eq!(aire.gauss_count(), 1);
+/// assert!((aire.value(0, 0, "aire")? - 1.0).abs() < 1e-12);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
+pub fn cellwise(
+    fespace: &Handle<SubFiniteElementSpace>,
+    input: &Handle<SubElementField>,
+    target: &Handle<SubFiniteElementSpace>,
+    out_components: Vec<String>,
+    cell: impl Fn(&CellGeom, &[f64], &mut [f64]) -> Result<()> + Sync,
+) -> Result<SubElementField> {
+    let fe = fespace.read();
+    let submesh = fe.submesh();
+    {
+        let t = target.read();
+        if !t.submesh().same_object(&submesh) || t.gauss_count() != 1 {
+            return Err(PyrucastError::Message(format!(
+                "cellwise: the target must be one point per cell of the same submesh — it \
+                 has {} point(s) per cell{}",
+                t.gauss_count(),
+                if t.submesh().same_object(&submesh) {
+                    ""
+                } else {
+                    ", on another submesh"
+                }
+            )));
+        }
+    }
+    let out_stride = out_components.len();
+    let mut out = SubElementField::new(target.clone(), out_components)?;
+
+    let sm = submesh.read();
+    let coords_h = sm.coords();
+    let coords = coords_h.read();
+    let fin = input.read();
+    let rd = RefData::snapshot(&fe)?;
+    let n_gauss = rd.n_gauss;
+    let n_cells = fe.cell_count();
+    if fin.cell_count() != n_cells || fin.gauss_count() != n_gauss {
+        return Err(PyrucastError::Message(format!(
+            "cellwise: the input has {} cells × {} Gauss points, but its FE subspace has {} × {}",
+            fin.cell_count(),
+            fin.gauss_count(),
+            n_cells,
+            n_gauss
+        )));
+    }
+    let conn: &[NodeId] = sm.connectivity();
+    coords.ensure_all_alive(conn)?;
+    let rd_ref: &RefData = &rd;
+    let coords_ref: &Coords = &coords;
+    let in_vals = fin.values();
+    let block = n_gauss * fin.component_count();
+
+    out.values_mut()
+        .par_chunks_mut(out_stride.max(1))
+        .with_min_len((MIN_PARALLEL_LEN / n_gauss.max(1)).max(1))
+        .enumerate()
+        .try_for_each(|(c, slot)| -> Result<()> {
+            let geom = CellGeom::new(rd_ref, coords_ref, conn, c);
+            cell(&geom, &in_vals[c * block..(c + 1) * block], slot)
+        })?;
+    Ok(out)
+}
+
 /// Produce a per-element (Gauss-point) field from a **nodal** field, in parallel.
 ///
 /// The nodal counterpart of [`element_pointwise`]: where that reads an

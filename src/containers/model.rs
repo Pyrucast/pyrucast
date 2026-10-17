@@ -1093,7 +1093,8 @@ impl SubModel {
     /// let m = SubModel::dirichlet(
     ///     &cible, "T", &impose, &mult, RelationSense::Equality)?;
     /// assert_eq!(m.multiplier_nodes().len(), 1);
-    /// assert_eq!(m.physics(), &[Physics::Constraint]);
+    /// // A constraint, and a thermal one: the nature of what it pins.
+    /// assert_eq!(m.physics(), &[Physics::Constraint, Physics::Thermal]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     #[allow(clippy::too_many_arguments)]
@@ -1214,7 +1215,7 @@ impl SubModel {
     /// let m = SubModel::embedded(
     ///     &cible, &immergee, &maillage,
     ///     vec!["u_x".into(), "u_y".into()], pyrucast::models::embedded::DEFAULT_TOL)?;
-    /// assert_eq!(m.physics(), &[Physics::Constraint]);
+    /// assert_eq!(m.physics(), &[Physics::Constraint, Physics::Mechanical]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     #[allow(clippy::too_many_arguments)]
@@ -2068,12 +2069,14 @@ impl crate::dump::Dump for SubModel {
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
 /// // A model is **composed**: the physics, then the supports. Each sub-model
-/// // keeps its nature, which is what lets them be found again later.
+/// // keeps its nature, which is what lets them be found again later — the
+/// // support is thermal too, being what pins the temperature.
 /// let m = model::heat_conduction(&fes)?.union(
 ///     &model::dirichlet(&cible, "T", &impose, &mult,
 ///                       RelationSense::Equality)?)?;
 /// assert_eq!(m.len(), 2);
-/// assert_eq!(m.filter(Physics::Thermal).len(), 1);
+/// assert_eq!(m.filter(Physics::Thermal).len(), 2);
+/// assert_eq!(m.filter(Physics::Thermal).exclude(Physics::Constraint).len(), 1);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Serialize, Deserialize, Default)]
@@ -2579,13 +2582,59 @@ impl Model {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn filter(&self, physics: Physics) -> Model {
+        self.keep(|natures| natures.contains(&physics))
+    }
+
+    /// The complement of [`filter`](Self::filter): a fresh [`Model`] holding only
+    /// the sub-models **whose nature set does not contain** the given
+    /// [`Physics`].
+    ///
+    /// The two compose, one condition each: a constraint carries the nature of
+    /// the physics it pins as well as [`Physics::Constraint`], so
+    /// `filter(Mechanical)` is the mechanics **with** its supports and
+    /// `filter(Mechanical).exclude(Constraint)` the mechanics alone. Order is
+    /// preserved and handles are shared, as for `filter`.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::tensor::Kinematics;
+    /// # use pyrucast::models::{Physics, RelationSense};
+    /// # use pyrucast::ops::{mesh, model};
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// # let appui = mesh::poi1_from_nodes(&n[..1]).unwrap();
+    /// # let mult = mesh::barycenter(&appui).unwrap();
+    /// let solide = model::elasticity(&fes, Kinematics::PlaneStress)?;
+    /// let bloque = solide.union(&model::dirichlet(&solide, "u_x", &appui, &mult, RelationSense::Equality)?)?;
+    /// // The support is mechanical too: it comes with the mechanics…
+    /// assert_eq!(bloque.filter(Physics::Mechanical).len(), 2);
+    /// // …and leaves it when constraints are excluded.
+    /// let seul = bloque.filter(Physics::Mechanical).exclude(Physics::Constraint);
+    /// assert_eq!(seul.primal_vars(), vec!["u_x".to_string(), "u_y".to_string()]);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn exclude(&self, physics: Physics) -> Model {
+        self.keep(|natures| !natures.contains(&physics))
+    }
+
+    /// The sub-models whose nature set passes `keep`, handles shared.
+    fn keep(&self, keep: impl Fn(&[Physics]) -> bool) -> Model {
         // Built sub-model by sub-model rather than through `subset`: that one is
         // fallible on an out-of-range index, which selecting by predicate cannot
         // produce — and `Model`, like `Matrix`, declares no `check_push`, so
         // appending never fails either. Nothing matching yields an empty model.
         let mut out = Model::empty();
         for h in self {
-            if h.read().physics().contains(&physics) {
+            if keep(h.read().physics()) {
                 out.push(h.clone());
             }
         }
@@ -2709,13 +2758,17 @@ mod tests {
 
     #[test]
     fn physics_nature_per_submodel() {
-        // Heat conduction (Thermal) + a Dirichlet constraint (Constraint).
+        // Heat conduction (Thermal) + a Dirichlet on T: a constraint, and a
+        // thermal one, the nature of what it pins.
         let (_cfg, _, _, model, _mat) = build_seg2_heat_model(1.0, 1.0, true);
         let natures: Vec<Vec<Physics>> =
             model.iter().map(|h| h.read().physics().to_vec()).collect();
         assert_eq!(
             natures,
-            vec![vec![Physics::Thermal], vec![Physics::Constraint]]
+            vec![
+                vec![Physics::Thermal],
+                vec![Physics::Constraint, Physics::Thermal]
+            ]
         );
     }
 
@@ -2724,10 +2777,14 @@ mod tests {
         let (_cfg, _, _, model, _mat) = build_seg2_heat_model(1.0, 1.0, true);
         assert_eq!(model.len(), 2);
 
+        // The thermal physics comes with the Dirichlet that pins it…
         let thermal = model.filter(Physics::Thermal);
-        assert_eq!(thermal.len(), 1);
+        assert_eq!(thermal.len(), 2);
+        // …and leaves it when constraints are excluded.
+        let conduction = thermal.exclude(Physics::Constraint);
+        assert_eq!(conduction.len(), 1);
         assert_eq!(
-            thermal.get(0).unwrap().read().physics(),
+            conduction.get(0).unwrap().read().physics(),
             &[Physics::Thermal]
         );
 
@@ -2735,12 +2792,12 @@ mod tests {
         assert_eq!(constraint.len(), 1);
         assert_eq!(
             constraint.get(0).unwrap().read().physics(),
-            &[Physics::Constraint]
+            &[Physics::Constraint, Physics::Thermal]
         );
 
-        // A nature no sub-model has yields an empty model.
-        let mechanical = model.filter(Physics::Mechanical);
-        assert_eq!(mechanical.len(), 0);
+        // A nature no sub-model has yields an empty model; excluding one keeps all.
+        assert_eq!(model.filter(Physics::Mechanical).len(), 0);
+        assert_eq!(model.exclude(Physics::Mechanical).len(), 2);
     }
 
     #[test]
@@ -2762,12 +2819,14 @@ mod tests {
         let constraint = k.filter(Physics::Constraint);
         assert_eq!(constraint.len(), 2);
         for h in &constraint {
-            assert_eq!(h.read().physics(), &[Physics::Constraint]);
+            assert_eq!(h.read().physics(), &[Physics::Constraint, Physics::Thermal]);
         }
 
-        // The thermal filter keeps only the heat-conduction block.
+        // The thermal filter keeps the heat-conduction block and the pair that
+        // pins it; excluding the constraint leaves the conduction block alone.
         let thermal = k.filter(Physics::Thermal);
-        assert_eq!(thermal.len(), 1);
+        assert_eq!(thermal.len(), 3);
+        assert_eq!(thermal.exclude(Physics::Constraint).len(), 1);
     }
 
     /// Heat conduction on `[0, L]` with one SEG2 of length L and k = 1:

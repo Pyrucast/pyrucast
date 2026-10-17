@@ -53,6 +53,7 @@ use crate::containers::mesh::{Mesh, SubMesh};
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
+use crate::models::transfer::{constrained_physics, constraint_physics};
 use crate::models::{
     Constraint, ConstraintTerm, Contribution, MatrixKind, Physics, Relation, RelationSense,
     SubModelKind,
@@ -207,6 +208,9 @@ pub struct Contact {
     multiplier: String,
     /// This sub-model's dual — constraint row + `−g₀` slot (e.g. `contact_gap`).
     imposed_value: String,
+    /// Nature of the physics it constrains, read from the target at
+    /// construction.
+    target_physics: Option<Physics>,
 }
 
 impl Contact {
@@ -266,6 +270,7 @@ impl Contact {
         master: &Mesh,
         variables: Vec<String>,
     ) -> Result<Self> {
+        let target_physics = constrained_physics(target, variables.iter().map(String::as_str));
         // The target's own names: each variable must be one of its primals,
         // and the dual row its reaction lands in is read from it.
         let mut components: Vec<(String, String)> = Vec::with_capacity(variables.len());
@@ -358,6 +363,7 @@ impl Contact {
             components,
             multiplier: default_multiplier(),
             imposed_value: default_imposed_value(),
+            target_physics,
         })
     }
 
@@ -527,7 +533,7 @@ impl SubModelKind for Contact {
     }
 
     fn physics(&self) -> &'static [Physics] {
-        &[Physics::Constraint]
+        constraint_physics(self.target_physics)
     }
 
     fn label(&self) -> &'static str {

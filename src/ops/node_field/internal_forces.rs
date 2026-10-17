@@ -46,8 +46,10 @@ use crate::models::ResidualContribution;
 /// A behaviour-bearing domain
 /// pairs its state sub-field by FE subspace and integrates its `Bᵀ` kernel
 /// cell-by-cell; a sub-model with no term here declares none and is absent from
-/// the result. Returns a [`NodeField`] with one zone per contributing
-/// sub-model, in model order, its components that sub-model's dual variables.
+/// the result. Returns a [`NodeField`] whose components are the contributing
+/// sub-models' dual variables; where several terms load the same node — two
+/// zones meeting at a seam, a support and the body it holds — their values are
+/// **added**, in a single zone over every loaded node.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -159,13 +161,14 @@ pub fn internal_forces(
             zones
         };
         for zone in built {
-            // `r = Σ rᵢ` is a **sum**, not a stack: two terms may load the same node in
-            // the same component, and an aggregate view would pick one instead of adding
-            // them.
             out = (&out + &zone)?;
         }
     }
-    Ok(out)
+    // `r = Σ rᵢ` is a **sum**, not a stack: two terms may load the same node in
+    // the same component — two materials meeting at a seam, a support and the
+    // body it holds — and `+` only adds zones that share a support. The rest is
+    // added node by node here, or a reader would see one partial sum.
+    out.summed()
 }
 
 /// A constraint's reaction, `Cᵀ λ`, spread over the constrained nodes: term `k`
@@ -266,6 +269,58 @@ mod tests {
     use crate::ops::element_field::behavior::integrate;
     use crate::ops::element_field::material_field;
     use crate::ops::element_field::{deformation, StrainMeasure};
+
+    /// Two QUA4 in two zones, side by side: the node on the seam receives from
+    /// both, and the internal forces must **add** them — as `K·u` does. A field
+    /// that kept the zones side by side gave the seam one zone's partial sum.
+    #[test]
+    fn a_seam_between_two_zones_receives_both() {
+        let coords = Handle::new(Coords::new(2).unwrap());
+        let n: Vec<Node> = [
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [2.0, 0.0],
+            [0.0, 1.0],
+            [1.0, 1.0],
+            [2.0, 1.0],
+        ]
+        .iter()
+        .map(|p| Node::create_in(coords.clone(), p).unwrap())
+        .collect();
+        let mut left = SubMesh::new(coords.clone(), ElementType::QUA4);
+        left.add_cell(&[n[0].id(), n[1].id(), n[4].id(), n[3].id()])
+            .unwrap();
+        let mut right = SubMesh::new(coords.clone(), ElementType::QUA4);
+        right
+            .add_cell(&[n[1].id(), n[2].id(), n[5].id(), n[4].id()])
+            .unwrap();
+        let mut mesh = Mesh::from_submesh(left);
+        mesh.add_sub(Handle::new(right)).unwrap();
+        let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+        let model = crate::ops::model::elasticity(&fes, Kinematics::PlaneStress).unwrap();
+        let materials = material_field(&model, &[("E", 100.0), ("nu", 0.0)]).unwrap();
+
+        // u_x = 0.01·x²: σ_xx = 1 on the left cell, 3 on the right one.
+        let support = Handle::new(SubMesh::poi1_from_nodes(&n).unwrap());
+        let mut u = SubNodeField::from_poi1(&support, vec!["u_x".into(), "u_y".into()]).unwrap();
+        for node in &n {
+            let x = node.position().unwrap()[0];
+            u.set_value(node.id(), "u_x", 0.01 * x * x).unwrap();
+        }
+        let u = NodeField::from_sub(u);
+        let strain = deformation(&u, &fes, StrainMeasure::Linear).unwrap();
+        let stress = integrate(&model, &strain, None, &materials, None).unwrap();
+        let f_int = internal_forces(&model, &stress, &u, &materials).unwrap();
+        let ku = (&crate::ops::matrix::stiffness(&model, &materials).unwrap() * &u).unwrap();
+
+        let (fv, kv) = (f_int.view().unwrap(), ku.view().unwrap());
+        for node in [&n[1], &n[4]] {
+            let got = fv.value(node.id(), "f_x").unwrap();
+            // +½ from the left cell, −3·½ from the right one.
+            assert!((got + 1.0).abs() < 1e-12, "seam f_x = {got}, expected −1");
+            assert!((got - kv.value(node.id(), "f_x").unwrap()).abs() < 1e-12);
+        }
+    }
 
     /// Elasticity on a single TRI3: for a linear law the internal forces equal
     /// `K·u` applied to the (linear) displacement solution.

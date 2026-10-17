@@ -32,6 +32,7 @@ __all__ = [
     "bernoulli",
     "border",
     "boundary_transfer",
+    "cell_integral",
     "chain",
     "circle",
     "cleanup",
@@ -53,6 +54,8 @@ __all__ = [
     "displace",
     "divergence",
     "drucker_prager",
+    "elastic_strain",
+    "elastic_stress",
     "elasticity",
     "element_type_from_gmsh",
     "elements_on",
@@ -137,6 +140,7 @@ __all__ = [
     "sqrt",
     "stiffness",
     "sub_material_field",
+    "sum_to_nodes",
     "sweep",
     "sweep_solid",
     "symmetry_line",
@@ -653,6 +657,16 @@ class ElementField:
         zones must agree value by value, else it errors. `field` itself is left
         untouched.
         """
+    def cell_integral(self, target: FiniteElementSpace) -> ElementField:
+        r"""
+        Integral of every component of `field` over **each cell** (Cast3M
+        `INTG 'ELEM'`), with the field's own quadrature: `Σ_g f(g)·|J|·w_g`, the
+        `2πr` included on a body of revolution. The result lives on `target`, a
+        space of the same mesh with **one point per cell** —
+        `FiniteElementSpace(mesh, quadrature="REDUCED")`, a single point at each
+        centroid. Integrating `1` gives every cell's measure. Raises when `target`
+        has several points per cell or does not cover the field's mesh.
+        """
     def mask(self, ge: typing.Optional[builtins.float] = None, gt: typing.Optional[builtins.float] = None, le: typing.Optional[builtins.float] = None, lt: typing.Optional[builtins.float] = None, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> ElementField:
         r"""
         Per-component 0/1 **mask** of this field against a value band — same
@@ -743,7 +757,17 @@ class ElementField:
         tensor case is the internal forces of a continuum when the quantity is a
         Cauchy stress — `divergence(stress, "sigma")` is Cast3m `BSIG` — but the
         operator knows nothing of mechanics: it needs only the geometry and the
-        names. One zone per subspace.
+        names. A node shared by several subspaces receives the sum of their
+        contributions.
+        """
+    def sum_to_nodes(self) -> NodeField:
+        r"""
+        A field carrying **one point per cell** gathered at the nodes by
+        **summation** (Cast3M `CHAN 'CHPO' 'SOMM'`): each node receives, per
+        component, the sum of the values of the cells it belongs to — across zones
+        too. Not a smoothing: no average, no weight. Applied to the cell measures of
+        `cell_integral`, it gives the volume each node stands for. Raises on a zone
+        with more than one point per cell (build it on a `REDUCED` space).
         """
 
 @typing.final
@@ -768,22 +792,26 @@ class Evolution:
         The tabulated values as whole fields, one per shared abscissa: a
         `list[NodeField]` or a `list[ElementField]`. Raises for scalars.
         """
-    def __new__(cls, steps: typing.Sequence[tuple[builtins.float, typing.Any]], out_of_range: typing.Optional[builtins.str] = None, abscissa_type: typing.Optional[builtins.str] = None, ordinate_type: typing.Optional[builtins.str] = None) -> Evolution:
+    def __new__(cls, steps: typing.Sequence[tuple[typing.Any, typing.Any]], out_of_range: typing.Optional[builtins.str] = None, abscissa_type: typing.Optional[typing.Any] = None, ordinate_type: typing.Optional[builtins.str] = None) -> Evolution:
         r"""
         `Evolution(steps, out_of_range="error")` — build from whole values
         (`out_of_range` defaults to `"error"`)
         tabulated at each abscissa. `steps` is a list of `(abscissa, value)`
         where `value` is a float, a `NodeField` or an `ElementField`; the kind
         is taken from the first step. Whole fields are transposed into one
-        curve per zone.
+        curve per zone. The abscissa is a float, or a tuple of floats for a
+        table of several variables (`((T, phi), value)`), read hierarchically
+        — see `SubEvolution`; `abscissa_type` is then a tuple of names.
         """
     def out_of_range(self) -> builtins.str:
         r"""
         The stored out-of-range policy name.
         """
-    def abscissa_type(self) -> typing.Optional[builtins.str]:
+    def abscissa_type(self) -> typing.Any:
         r"""
-        The abscissa's physical type, or `None`.
+        The abscissa types of the first curve: a name for a curve, a tuple of
+        names for a table, or `None`. Each curve keeps its own — `E(T)` beside
+        `sigma_y(T, phi)` — see `SubEvolution.abscissa_type`.
         """
     def ordinate_type(self) -> typing.Optional[builtins.str]:
         r"""
@@ -793,12 +821,15 @@ class Evolution:
         r"""
         Interpolate at `x`.
         
-        - `x` a **float** → every curve interpolated and regrouped: a
-          `list[float]` for scalars, a `NodeField` / `ElementField` for fields;
+        - `x` a **float** (curves) or a **tuple of floats** (tables) → every
+          curve interpolated and regrouped: a `list[float]` for scalars, a
+          `NodeField` / `ElementField` for fields;
         - `x` a **`NodeField`** or **`ElementField`** → that field mapped
-          through the (single, scalar) curve as a transfer function: each entry
-          of the input's `abscissa_type` component is looked up, yielding a field
-          of one component (named after `ordinate_type`) on the same support.
+          through every **scalar** curve, like `cos` through a field: each curve
+          reads the input's components named like its `abscissa_type` and
+          writes one component, named after its `ordinate_type`, on the same
+          support — material laws `E(T)`, `sigma_y(T, phi)` evaluated at the
+          state in one call.
         
         `out_of_range` overrides the stored policy for this query.
         """
@@ -1027,6 +1058,14 @@ class Matrix:
         `"constraint"`, `"other"`, `"diffusion"`, `"radiation"`). The result is
         **not** finalized — call `assemble` (or `finalize` for literal-only
         blocks) before solving.
+        """
+    def exclude(self, physics: builtins.str) -> Matrix:
+        r"""
+        `Matrix.exclude(physics)` — the complement of `filter`: a new `Matrix`
+        holding only the blocks **whose nature set does not contain** the given
+        physics. Composes with `filter`: `k.filter("thermal").exclude("constraint")`
+        keeps the conduction blocks without the Dirichlet pair. Not finalized,
+        like `filter`.
         """
     def physics(self) -> builtins.list[builtins.str]:
         r"""
@@ -2080,6 +2119,15 @@ class Model:
         each of its filters — a radiation boundary is both `"thermal"` and
         `"radiation"`.
         """
+    def exclude(self, physics: builtins.str) -> Model:
+        r"""
+        `Model.exclude(physics)` — the complement of `filter`: a new `Model`
+        holding only the sub-models **whose nature set does not contain** the
+        given physics. The two compose, one condition each: a constraint also
+        carries the nature of the physics it pins, so
+        `model.filter("mechanical")` is the mechanics **with** its supports and
+        `model.filter("mechanical").exclude("constraint")` the mechanics alone.
+        """
     def multiplier_mesh(self) -> Mesh:
         r"""
         `Model.multiplier_mesh()` — POI1 `Mesh` of the constraint multiplier
@@ -2170,6 +2218,33 @@ class Model:
         structure. Returns nothing.
         """
     def __len__(self) -> builtins.int: ...
+    def elastic_stress(self, strain: ElementField, materials: ElementField) -> ElementField:
+        r"""
+        Elastic stress `σ = D:ε` of a strain field at the Gauss points of every
+        continuum sub-model of `model` — Cast3M `ELAS` applied to a strain.
+        
+        `D` is the operator each law predicts with: the Hooke matrix of an
+        elasticity, in its symmetry; the isotropic `D` behind a plasticity's elastic
+        predictor; the **undamaged** `D` a damage law degrades. `strain` is in
+        tensor convention, the layout of `deformation` and `thermal_strain`;
+        `materials` needs only each law's elastic constants (`E`, `nu` when
+        isotropic). One zone per continuum sub-model, its components the stresses
+        the law writes; a sub-model with no elastic operator (conduction, bar, beam,
+        constraint) contributes none.
+        """
+    def elastic_strain(self, stress: ElementField, materials: ElementField) -> ElementField:
+        r"""
+        Elastic strain `ε = D⁻¹:σ` of a stress field at the Gauss points of every
+        continuum sub-model of `model` — the inverse of `elastic_stress` (Cast3M
+        `ELAS` applied to a stress).
+        
+        `stress` carries the stresses each law writes (`sigma_xx`, …; the state
+        returned by `integrate_behavior` will do); `materials` the elastic
+        constants. The result is in tensor convention, the layout of `deformation`,
+        so it subtracts from a strain component for component; in plane stress the
+        out-of-plane `eps_zz` is not written. Raises when `D` is singular at a point
+        (a zero modulus).
+        """
     def material_field(self, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> ElementField:
         r"""
         Build a material `ElementField` applying the same uniform
@@ -2970,20 +3045,25 @@ class SubEvolution:
     is a list of `(abscissa, value)` pairs; compose several curves into an
     `Evolution` with `|`.
     """
-    def __new__(cls, samples: typing.Sequence[tuple[builtins.float, typing.Any]], out_of_range: typing.Optional[builtins.str] = None, abscissa_type: typing.Optional[builtins.str] = None, ordinate_type: typing.Optional[builtins.str] = None) -> SubEvolution:
+    def __new__(cls, samples: typing.Sequence[tuple[typing.Any, typing.Any]], out_of_range: typing.Optional[builtins.str] = None, abscissa_type: typing.Optional[typing.Any] = None, ordinate_type: typing.Optional[builtins.str] = None) -> SubEvolution:
         r"""
         `SubEvolution(samples, out_of_range="error", abscissa_type=None,
-        ordinate_type=None)` — one curve. `samples` is a list of
-        `(abscissa, value)`; the values must all be of the same kind (and, for
-        fields, on the same support). `out_of_range` defaults to `"error"`.
-        `abscissa_type` names the physical type of
-        the abscissa (used to label plots and to select a field component when a
-        field is interpolated); `ordinate_type` names the value's type (scalar
-        curves only).
+        ordinate_type=None)` — one curve, or one table. `samples` is a list of
+        `(abscissa, value)`; the abscissa is a float for a curve, a tuple of
+        floats for a table of several variables (`((T, phi), value)`), read
+        hierarchically — grouped by the first variable, then the second… — so
+        the groups need not share their abscissas. The values must all be of
+        the same kind (and, for fields, on the same support). `out_of_range`
+        defaults to `"error"`. `abscissa_type` names the physical type of each
+        variable — a name, or a tuple of names for a table — used to label plots
+        and to select the field components a field is read from when it is
+        interpolated; `ordinate_type` names the value's type (scalar curves
+        only).
         """
-    def abscissa_type(self) -> typing.Optional[builtins.str]:
+    def abscissa_type(self) -> typing.Any:
         r"""
-        The abscissa's physical type, or `None`.
+        The abscissa's physical type: a name for a curve, a tuple of names for
+        a table, or `None`.
         """
     def ordinate_type(self) -> typing.Optional[builtins.str]:
         r"""
@@ -2993,9 +3073,10 @@ class SubEvolution:
         r"""
         Number of samples.
         """
-    def abscissas(self) -> builtins.list[builtins.float]:
+    def abscissas(self) -> typing.Any:
         r"""
-        The sorted abscissas.
+        The sorted abscissas: floats for a curve, tuples of floats for a table
+        (in lexicographic order).
         """
     def out_of_range(self) -> builtins.str:
         r"""
@@ -3005,12 +3086,13 @@ class SubEvolution:
         r"""
         Interpolate at `x`.
         
-        - `x` a **float** → a float / `SubNodeField` / `SubElementField` (the
-          curve's value at `x`);
+        - `x` a **float** (a curve) or a **tuple of floats** (a table) → a
+          float / `SubNodeField` / `SubElementField`, the value at `x`;
         - `x` a **`SubNodeField`** or **`SubElementField`** → a field of the
-          same support whose every entry is this **scalar** curve evaluated at
-          the input's `abscissa_type` component (the curve as a transfer
-          function). The output component is named after `ordinate_type`.
+          same support whose every entry is this **scalar** curve or table
+          evaluated at the input's `abscissa_type` components (applied like
+          `cos` to a field). The output component is named after
+          `ordinate_type`.
         
         `out_of_range` (`"error"` / `"clamp"` / `"extrapolate"`) overrides the
         stored policy for this query.
@@ -3895,6 +3977,17 @@ def boundary_transfer(fespace: FiniteElementSpace, target: Model, components: ty
     `model = conduction | model.boundary_transfer(skin, conduction, [("T", "q")])`.
     """
 
+def cell_integral(field: ElementField, target: FiniteElementSpace) -> ElementField:
+    r"""
+    Integral of every component of `field` over **each cell** (Cast3M
+    `INTG 'ELEM'`), with the field's own quadrature: `Σ_g f(g)·|J|·w_g`, the
+    `2πr` included on a body of revolution. The result lives on `target`, a
+    space of the same mesh with **one point per cell** —
+    `FiniteElementSpace(mesh, quadrature="REDUCED")`, a single point at each
+    centroid. Integrating `1` gives every cell's measure. Raises when `target`
+    has several points per cell or does not cover the field's mesh.
+    """
+
 def chain(mesh: Mesh) -> Mesh:
     r"""
     Re-order the cells of a line mesh into a continuous chain.
@@ -4196,7 +4289,8 @@ def divergence(field: ElementField, prefix: builtins.str) -> NodeField:
     tensor case is the internal forces of a continuum when the quantity is a
     Cauchy stress — `divergence(stress, "sigma")` is Cast3m `BSIG` — but the
     operator knows nothing of mechanics: it needs only the geometry and the
-    names. One zone per subspace.
+    names. A node shared by several subspaces receives the sum of their
+    contributions.
     """
 
 def drucker_prager(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
@@ -4210,6 +4304,35 @@ def drucker_prager(fespace: FiniteElementSpace, kinematics: builtins.str) -> Mod
     and rocks, whose measured dilatancy is far below what friction alone
     would imply. A non-associated law has a **non-symmetric** tangent.
     Returns beyond the cone's apex (`I₁ = k/α`) collapse onto the tip.
+    """
+
+def elastic_strain(model: Model, stress: ElementField, materials: ElementField) -> ElementField:
+    r"""
+    Elastic strain `ε = D⁻¹:σ` of a stress field at the Gauss points of every
+    continuum sub-model of `model` — the inverse of `elastic_stress` (Cast3M
+    `ELAS` applied to a stress).
+    
+    `stress` carries the stresses each law writes (`sigma_xx`, …; the state
+    returned by `integrate_behavior` will do); `materials` the elastic
+    constants. The result is in tensor convention, the layout of `deformation`,
+    so it subtracts from a strain component for component; in plane stress the
+    out-of-plane `eps_zz` is not written. Raises when `D` is singular at a point
+    (a zero modulus).
+    """
+
+def elastic_stress(model: Model, strain: ElementField, materials: ElementField) -> ElementField:
+    r"""
+    Elastic stress `σ = D:ε` of a strain field at the Gauss points of every
+    continuum sub-model of `model` — Cast3M `ELAS` applied to a strain.
+    
+    `D` is the operator each law predicts with: the Hooke matrix of an
+    elasticity, in its symmetry; the isotropic `D` behind a plasticity's elastic
+    predictor; the **undamaged** `D` a damage law degrades. `strain` is in
+    tensor convention, the layout of `deformation` and `thermal_strain`;
+    `materials` needs only each law's elastic constants (`E`, `nu` when
+    isotropic). One zone per continuum sub-model, its components the stresses
+    the law writes; a sub-model with no elastic operator (conduction, bar, beam,
+    constraint) contributes none.
     """
 
 def elasticity(fespace: FiniteElementSpace, kinematics: builtins.str, symmetry: typing.Optional[builtins.str] = None) -> Model:
@@ -5444,6 +5567,16 @@ def sub_material_field(sub_model: SubModel, components_and_values: typing.Sequen
     SubElementField on the sub-model's FE subspace, pre-filled with the
     given uniform value per declared component. Errors for physics that
     need no material (e.g. Dirichlet).
+    """
+
+def sum_to_nodes(field: ElementField) -> NodeField:
+    r"""
+    A field carrying **one point per cell** gathered at the nodes by
+    **summation** (Cast3M `CHAN 'CHPO' 'SOMM'`): each node receives, per
+    component, the sum of the values of the cells it belongs to — across zones
+    too. Not a smoothing: no average, no weight. Applied to the cell measures of
+    `cell_integral`, it gives the volume each node stands for. Raises on a zone
+    with more than one point per cell (build it on a `REDUCED` space).
     """
 
 def sweep(mesh_a: Mesh, mesh_b: Mesh, n_layers: builtins.int, element_type: typing.Optional[builtins.str] = None) -> Mesh:

@@ -4584,13 +4584,57 @@ impl Matrix {
     /// assert!(k.filter(Physics::Mechanical).is_empty());
     /// ```
     pub fn filter(&self, physics: Physics) -> Matrix {
+        self.keep(|natures| natures.contains(&physics))
+    }
+
+    /// The complement of [`filter`](Self::filter): a fresh [`Matrix`] holding
+    /// only the blocks **whose nature set does not contain** the given
+    /// [`Physics`] — the matrix-side twin of
+    /// [`Model::exclude`](crate::containers::model::Model::exclude). The two
+    /// compose: a constraint's blocks carry the nature of the physics they pin,
+    /// so `filter(Thermal).exclude(Constraint)` keeps the conduction blocks
+    /// alone. Not assembled, like `filter`; an untagged block is never excluded.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::{Physics, RelationSense};
+    /// # use pyrucast::ops::{element_field, matrix, mesh, model};
+    /// # let coords = Handle::new(Coords::new(1).unwrap());
+    /// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+    /// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+    /// # let mut maillage = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
+    /// # maillage.add_cell(&[a.id(), b.id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
+    /// # let appui = mesh::poi1_from_nodes(&[a.clone()]).unwrap();
+    /// # let mult = mesh::barycenter(&appui).unwrap();
+    /// let conduction = model::heat_conduction(&fes)?;
+    /// let m = conduction.union(&model::dirichlet(&conduction, "T", &appui, &mult, RelationSense::Equality)?)?;
+    /// let materiaux = element_field::material_field(&m, &[("k", 1.0)])?;
+    /// let k = matrix::stiffness(&m, &materiaux)?;
+    /// // The conduction block plus the Dirichlet's C / Cᵀ pair, all thermal…
+    /// assert_eq!(k.filter(Physics::Thermal).len(), 3);
+    /// // …and the conduction block alone once the constraint is excluded.
+    /// assert_eq!(k.filter(Physics::Thermal).exclude(Physics::Constraint).len(), 1);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn exclude(&self, physics: Physics) -> Matrix {
+        self.keep(|natures| !natures.contains(&physics))
+    }
+
+    /// The blocks whose nature set passes `keep`, handles shared.
+    fn keep(&self, keep: impl Fn(&[Physics]) -> bool) -> Matrix {
         // Built block by block rather than through `subset`: that one is
         // fallible on an out-of-range index, which selecting by predicate
         // cannot produce — and `Matrix` is the one aggregate with no
         // `check_push`, so appending never fails either.
         let mut out = Matrix::empty();
         for h in self {
-            if h.read().physics().contains(&physics) {
+            if keep(h.read().physics()) {
                 out.push(h.clone());
             }
         }

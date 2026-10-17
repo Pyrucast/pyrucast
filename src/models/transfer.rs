@@ -165,6 +165,62 @@ pub fn physics_slice(physics: Physics) -> &'static [Physics] {
     }
 }
 
+/// The natures of a constraint: [`Constraint`](Physics::Constraint) first,
+/// then the nature of the physics it constrains when it constrains a single
+/// one.
+///
+/// A Dirichlet on `u_x` is a mechanical constraint: `model.filter(Mechanical)`
+/// must hand it over with the elasticity it pins, or the mechanical part of a
+/// coupled model would come out singular. A relation tying the unknowns of two
+/// physics (`None`) belongs to neither — no single-physics sub-problem could
+/// solve it — and stays a bare constraint. `Constraint` heads the slice so that
+/// whoever reads a constraint's primary nature still reads that.
+///
+/// ```
+/// # use pyrucast::models::transfer;
+/// # use pyrucast::models::Physics;
+/// assert_eq!(
+///     transfer::constraint_physics(Some(Physics::Mechanical)),
+///     &[Physics::Constraint, Physics::Mechanical]
+/// );
+/// // A relation across two physics belongs to neither.
+/// assert_eq!(transfer::constraint_physics(None), &[Physics::Constraint]);
+/// ```
+pub fn constraint_physics(target: Option<Physics>) -> &'static [Physics] {
+    match target {
+        None | Some(Physics::Constraint) => &[Physics::Constraint],
+        Some(Physics::Mechanical) => &[Physics::Constraint, Physics::Mechanical],
+        Some(Physics::Thermal) => &[Physics::Constraint, Physics::Thermal],
+        Some(Physics::Other) => &[Physics::Constraint, Physics::Other],
+        Some(Physics::Diffusion) => &[Physics::Constraint, Physics::Diffusion],
+        Some(Physics::Radiation) => &[Physics::Constraint, Physics::Radiation],
+    }
+}
+
+/// The single nature of the physics a constraint acts on, read from the model
+/// it constrains: the owner of each constrained primal, which must all agree.
+///
+/// `None` when the primals belong to several physics, or to none of `target`'s
+/// sub-models — the constraint then carries no nature beyond
+/// [`Constraint`](Physics::Constraint) (see [`constraint_physics`]). Read once,
+/// at construction.
+pub(crate) fn constrained_physics<'a>(
+    target: &Model,
+    primals: impl IntoIterator<Item = &'a str>,
+) -> Option<Physics> {
+    let mut nature: Option<Physics> = None;
+    for primal in primals {
+        let found = owner_physics(target, |sub| {
+            sub.as_kind().primal_vars().iter().any(|p| p == primal)
+        })?;
+        match nature {
+            Some(first) if first != found => return None,
+            _ => nature = Some(found),
+        }
+    }
+    nature
+}
+
 /// The nature of the first sub-model of `target` that `owns` a row — what a
 /// term writing into another physics' rows inherits instead of declaring.
 ///

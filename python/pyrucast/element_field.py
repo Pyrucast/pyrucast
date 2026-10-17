@@ -2,15 +2,18 @@
 ``ops::element_field``.
 
 Kinematics (gradient, strain and its structural variants, interpolation to the
-Gauss points, thermal expansion), material data,
-et intégration de la loi de comportement.
+Gauss points, thermal expansion), the elastic operator both ways, material
+data, and the integration of the constitutive law.
 """
 
 from ._pyrucast import (
     mask_element as mask,
     beam_deformation as beam_deformation,
+    cell_integral as cell_integral,
     consolidate_element as consolidate,
     deformation as deformation,
+    elastic_strain as elastic_strain,
+    elastic_stress as elastic_stress,
     gradient as gradient,
     integrate_behavior as integrate_behavior,
     interp_to_gauss as interp_to_gauss,
@@ -24,8 +27,11 @@ from ._pyrucast import (
 __all__ = [
     "mask",
     "beam_deformation",
+    "cell_integral",
     "consolidate",
     "deformation",
+    "elastic_strain",
+    "elastic_stress",
     "gradient",
     "integrate_behavior",
     "interp_to_gauss",

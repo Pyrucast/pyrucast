@@ -318,8 +318,14 @@ K = pyrucast.matrix.stiffness(model, materials)
 print("primal_vars =", model.primal_vars())  # ['T', 'lambda_T']
 print("dual_vars =", model.dual_vars())  # ['q', 'imposed_T']
 print(K)  # Matrix: 3 row(s) × 3 col(s), …
+
+# The Dirichlet pins the temperature: it is a constraint, and thermal too.
+thermique = model.filter("thermal")  # conduction + Dirichlet
+conduction = thermique.exclude("constraint")  # conduction alone
+print(len(thermique), len(conduction))  # 2 1
 # ANCHOR_END: model_api
 assert K.n_rows() == 3
+assert (len(thermique), len(conduction)) == (2, 1)
 
 # ── Matrice ─────────────────────────────────────────────────────────────────
 

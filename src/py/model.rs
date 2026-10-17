@@ -153,10 +153,22 @@ impl PyModel {
     /// A coupled physics declares several natures and is therefore returned by
     /// each of its filters — a radiation boundary is both `"thermal"` and
     /// `"radiation"`.
-    fn filter(&self, physics: Physics) -> PyResult<Self> {
-        Ok(Self {
+    fn filter(&self, physics: Physics) -> Self {
+        Self {
             inner: self.inner.filter(physics),
-        })
+        }
+    }
+
+    /// `Model.exclude(physics)` — the complement of `filter`: a new `Model`
+    /// holding only the sub-models **whose nature set does not contain** the
+    /// given physics. The two compose, one condition each: a constraint also
+    /// carries the nature of the physics it pins, so
+    /// `model.filter("mechanical")` is the mechanics **with** its supports and
+    /// `model.filter("mechanical").exclude("constraint")` the mechanics alone.
+    fn exclude(&self, physics: Physics) -> Self {
+        Self {
+            inner: self.inner.exclude(physics),
+        }
     }
 
     /// `Model.multiplier_mesh()` — POI1 `Mesh` of the constraint multiplier
