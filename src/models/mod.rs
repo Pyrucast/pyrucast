@@ -1931,6 +1931,18 @@ pub enum StrainOperator {
 /// A physics with a law implements both traits and returns `Some(self)` from
 /// [`SubModelKind::as_behavior`]; one without implements `Domain` alone.
 ///
+/// ## The convention every law follows
+///
+/// A law steps from A to B — the state at A, the strain at B — and computes the
+/// stress at B as **the material at B applied to the elastic strain at B**:
+/// `σ(B) = C(B) : ε_e(B)`. Elasticity and damage do it directly (their elastic
+/// strain is the strain), plasticity through `ε_e = ε − ε_p`. A stress written
+/// that way stays secant when the material depends on the state — a modulus
+/// that drops with temperature lowers the stress at the same elastic strain —
+/// so a step-by-step solver needs no correction when the materials move. An
+/// incremental `σ(A) + C(B):Δε` would carry the stress of the old modulus
+/// along instead. MFront writes its behaviours the same way.
+///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};

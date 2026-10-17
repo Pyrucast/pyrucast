@@ -40,10 +40,22 @@ de matériau et d'état précédent sont appariées par sous-espace EF.
 > **Pourquoi le montage incrémental ?** Fournir l'état de A séparément de la
 > déformation de B (plutôt que fusionnés dans un même champ) rend le fil d'état
 > robuste — un `ElementField` = une zone par support, sans ambiguïté — et ouvre
-> les **grandes déformations** et les **lois visqueuses** : elles exigent l'accès
-> à `σ(A)` et à un incrément daté, que cette interface porte déjà. En petites
-> déformations le prédicteur incrémental `σ_trial = σ(A) + C:Δε` est
-> rigoureusement identique à la forme en déformation totale.
+> les **lois visqueuses**, qui exigent un incrément daté. C'est le montage de
+> MFront (`s0` / `s1` de MGIS).
+
+> **La convention de toutes les lois.** Chaque loi calcule la contrainte en B
+> comme **le matériau de B appliqué à la déformation élastique de B** :
+> `σ(B) = C(B) : ε_e(B)`. L'élasticité et l'endommagement le font directement,
+> la plasticité par `ε_e = ε − ε_p` (prédicteur `σ_trial = C:(ε(B) − ε_p(A))`).
+> Une contrainte écrite ainsi reste **sécante** quand le matériau dépend de
+> l'état : un module qui baisse avec la température baisse la contrainte à
+> déformation élastique égale, sans aucune correction. Une forme incrémentale
+> `σ(A) + C(B):Δε` garderait la contrainte de l'ancien module — Cast3M, dont
+> toutes les lois sont incrémentales, ajoute pour cela la correction
+> `(D⁻¹(B) − D⁻¹(A)) : σ(A)` ; MFront, comme pyrucast, n'en a pas besoin. Seule
+> limite : une précontrainte donnée seule (sans déformation élastique qui la
+> porte) n'est pas représentée par une loi plastique ; elle s'introduit comme une
+> déformation plastique initiale `ε_p = −C⁻¹σ₀`.
 
 Pour une loi **linéaire**, le résultat est cohérent avec `stiffness`
 (`∫ Bᵀ·flux = K·u`) ; une loi **non linéaire** s'écarte de cette tangente — c'est

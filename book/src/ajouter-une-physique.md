@@ -294,6 +294,13 @@ sous-trait **et** redéfinir le seam correspondant pour rendre `Some(self)` :
   pas — son `h·a` est le coefficient de son propre opérateur appliqué en un
   point, et son résidu suit de l'opérateur.
 
+  **Une convention fixe la forme de la loi** : la contrainte en B est le
+  matériau de B appliqué à la déformation élastique de B,
+  `σ(B) = C(B) : ε_e(B)` — jamais `σ(A) + C:Δε`. C'est ce qui la garde juste
+  quand le matériau dépend de la température, sans que le pas-à-pas ait à
+  corriger quoi que ce soit (détail dans
+  [comportement](operateurs/comportement.md)).
+
   **Deux invariants tiennent dans ce noyau**, et ils décident de la forme du
   reste : aucun test que l'amont a déjà tranché — présence d'une composante,
   forme d'un champ, `Option` à déballer — et aucune allocation dynamique. Un

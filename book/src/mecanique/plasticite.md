@@ -79,7 +79,10 @@ retour radial.
   (`sigma_*` dans l'ordre de Voigt du modèle) suivie de l'état mis à jour et de
   l'écho de `ε(B)` full-3-D (plus `sigma_zz` pour les modèles **plans** en 2-D,
   dont le dual de Voigt l'omet) pour que `prev` soit complet. Le prédicteur
-  élastique est `σ_trial = σ(A) + C:(ε(B) − ε(A))`.
+  élastique est `σ_trial = C:(ε(B) − ε_p(A))`, les modules de B appliqués à la
+  déformation élastique — identique à `σ(A) + C:(ε(B) − ε(A))` à module
+  constant, sécant quand le module dépend de la température (voir
+  [comportement](../operateurs/comportement.md)).
 - **modèles** : `plane_stress`, `plane_strain`, `axisymmetric` (2-D) et `full_3d`
   (3-D).
 

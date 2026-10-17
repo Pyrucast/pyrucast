@@ -20,11 +20,12 @@
 //! strain `ε_p(A)`, the cumulated `p(A)` and the strain `ε(A)` — comes in as
 //! `prev` (the previous step's output, or the **rest state** on the first step,
 //! where A is the reference configuration). The elastic predictor is
-//! `σ_trial = σ(A) + C:Δε`
-//! with `Δε = ε(B) − ε(A)` — algebraically identical to `C:(ε(B) − ε_p(A))` in
-//! small strain, but the form that carries `σ(A)` explicitly, ready for a
-//! large-strain law. The output echoes the full-3-D `ε(B)` (and, in 2-D, the
-//! out-of-plane `σ_zz`) so it is a complete `prev` for the next step.
+//! `σ_trial = C:(ε(B) − ε_p(A))`, the moduli of B applied to the elastic strain
+//! — the convention of every law (see [`Behavior`]),
+//! which keeps the stress secant when the moduli depend on temperature. With
+//! constant moduli it is the incremental `σ(A) + C:Δε`. The output echoes the
+//! full-3-D `ε(B)` (and, in 2-D, the out-of-plane `σ_zz`) so it is a complete
+//! `prev` for the next step.
 //!
 //! State is always carried in **full 3-D** (six `eps_p_*` components) regardless
 //! of the 2-D/3-D kinematics, which keeps the radial return identical across plane
@@ -899,7 +900,7 @@ mod tests {
     /// Iso-result: on a **proportional** (monotone uniaxial) path, the
     /// incremental montage in N steps — threading `prev` — reproduces the
     /// single-step total-strain integration to round-off. Guards the whole
-    /// prev-threading + `σ(A) + C:Δε` predictor.
+    /// prev-threading + the elastic predictor.
     #[test]
     fn incremental_matches_single_step_on_proportional_path() {
         let pl = unit_hex();
