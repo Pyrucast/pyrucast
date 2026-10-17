@@ -11,11 +11,9 @@ Replacing ``model.elasticity`` with ``Model.plasticity`` in
 `formation/mecanique.py` is all it takes to get this script — the same call
 ``step_by_step`` gère la boucle non linéaire.
 
-A pyrucast caveat, specific to this version of the library: plasticity
-(`Model.plasticity`) does not consume the
-matériau optionnelle `alpha` (dilatation thermique, Cast3M `EPTH`) — le
-thermo-plastic coupling of Cast3M's section 9.2 (where `sigma_y` depends on
-temperature) is therefore not covered here.
+The thermo-plastic coupling of Cast3M's section 9.2 (`sigma_y` depending on
+temperature) is not part of this script: ``step_by_step`` takes it through
+``material_laws`` (see the book's "Calcul pas à pas" page).
 
 Lancement ::
 
@@ -98,14 +96,17 @@ def main() -> None:
     materiaux = pc.element_field.material_field(
         modele, [("E", E), ("nu", NU), ("sigma_y", SIGMA_Y)]
     )
+    # Pseudo-time 1 is the nominal load; the ramp carries on past it.
     charge = pc.Evolution(
-        [(0.0, effort_final * 0.0), (1.0, effort_final)], out_of_range="clamp"
+        [(0.0, effort_final * 0.0), (1.0, effort_final)], out_of_range="extrapolate"
     )
     # ANCHOR_END: chargement_evolution
 
     # ANCHOR: pas_a_pas
     data = {
-        "times": [0.0, 0.2, 0.4, 0.55, 0.7],  # pseudo-temps ∈ [0, 1]
+        # Elastic over the first steps, plastic beyond — up to 15 % past the
+        # nominal load.
+        "times": [0.0, 0.2, 0.4, 0.55, 0.7, 0.85, 1.0, 1.15],
         "model": modele,
         "loads": charge,
         "materials": materiaux,
@@ -122,6 +123,9 @@ def main() -> None:
         )
 
     dernier = data["results"][-1]
+    # What the ramp is for: elastic at first, a plastic zone at the end.
+    assert data["results"][1]["behaviour"].max("p") == 0.0
+    assert dernier["behaviour"].max("p") > 0.0
     print(f"\nzone plastique développée : p_max = {dernier['behaviour'].max('p'):.3e}")
 
     out = os.environ.get("PYRUCAST_FORMATION_IMG_DIR", tempfile.gettempdir())

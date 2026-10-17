@@ -94,18 +94,20 @@ linéairement en pseudo-temps — Cast3M `EVOL 'MANU'` :
 
 ![Déformation plastique cumulée (p)](img/plasticite.svg)
 
-> **Piège pyrucast.** Sans `free_mesh`, la norme du résidu de Newton porte
-> sur **tous** les nœuds, y compris les nœuds encastrés — dont la réaction
-> d'appui, potentiellement énorme, empêche toute convergence. `free_mesh`
-> restreint la norme aux degrés de liberté réellement libres (ici : tous
-> les nœuds d'abscisse `x > 0`). C'est l'équivalent, en plus explicite, du
-> traitement automatique des blocages par Cast3M dans `RESO`/`PASAPAS`.
+La plaque reste élastique aux premiers pas, puis une zone plastique s'ouvre
+autour du trou quand la charge approche puis dépasse sa valeur nominale : le
+Newton modifié demande alors davantage d'itérations, accélérées par Anderson.
 
-> **Non disponible dans pyrucast.** `model.plasticity_perfect` ne consomme pas
-> encore la composante matériau optionnelle `alpha` — la dépendance de
-> `sigma_y` à la température (Cast3M section 9.2 : `EVOL 'MANU' 'T' ... 'SIGY' ...`)
-> n'a donc pas d'équivalent testé ici ; seule la plasticité **isotherme**
-> est couverte.
+> **Les nœuds encastrés ne gênent pas la convergence.** Le résidu que teste
+> `step_by_step` retranche les réactions d'appui (`r = F_ext − F_int − Cᵀλ`,
+> comme Cast3M) : il s'annule aussi sur les nœuds bloqués, sans qu'il faille
+> restreindre la norme aux degrés de liberté libres.
+
+> **Thermo-plasticité.** La dépendance de `sigma_y` à la température (Cast3M
+> section 9.2 : `EVOL 'MANU' 'T' ... 'SIGY' ...`) s'écrit avec la clé
+> `material_laws` de `step_by_step`, comme `E(T)` dans
+> [Calcul pas à pas](../pas-a-pas.md) ; la dilatation thermique (`alpha`) y
+> est appliquée à toute loi, plastique comprise.
 
 ## 4. Contact unilatéral
 
