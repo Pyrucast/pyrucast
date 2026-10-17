@@ -1855,6 +1855,64 @@ pub trait Domain: Sync {
     }
 }
 
+/// How a law's input is produced from the nodal solution — the `B` of
+/// `ε = B·u`, **named** by the law ([`Behavior::strain_operator`]) and **run**
+/// by [`crate::ops::element_field::strain`](fn@crate::ops::element_field::strain).
+///
+/// The law declares, the operator runs: it holds the solution once for every
+/// sub-model, and no law handles a nodal field. Each variant is one of the
+/// geometric producers of [`crate::ops::element_field`], applied to the law's own
+/// primal unknowns on its [`behavior_fespace`](Behavior::behavior_fespace):
+///
+/// | variant | producer | what the law reads |
+/// |---|---|---|
+/// | `Deformation(m)` | `deformation` | a strain measure of the displacement (`eps_xx`, …) |
+/// | `Gradient` | `gradient` | the gradient of each unknown (`grad_T_x`, …) |
+/// | `Value` | `interp_to_gauss` | the unknown itself at the point (`T`) |
+/// | `Beam` | `beam_deformation` | section strains (`eps`, `kappa`, `gamma`, …) |
+/// | `Shell(f)` | `shell_deformation` | membrane, curvatures, drilling, shear |
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::model::SubModel;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::models::tensor::Kinematics;
+/// # use pyrucast::models::{StrainOperator, SubModelKind};
+/// # use pyrucast::ops::element_field::StrainMeasure;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+/// # let zone = fes.get(0).unwrap();
+/// let solide = SubModel::elasticity(zone.clone(), Kinematics::PlaneStrain)?;
+/// let thermique = SubModel::heat_conduction(zone)?;
+/// let entree = |m: &SubModel| m.as_kind().as_behavior().unwrap().strain_operator();
+/// // A solid reads the small-strain tensor of its displacement, conduction the
+/// // gradient of its temperature: the same `B·u`, two operators.
+/// assert_eq!(entree(&solide), StrainOperator::Deformation(StrainMeasure::Linear));
+/// assert_eq!(entree(&thermique), StrainOperator::Gradient);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StrainOperator {
+    /// A strain measure of the displacement, one component per axis.
+    Deformation(crate::ops::element_field::StrainMeasure),
+    /// The gradient of each primal unknown.
+    Gradient,
+    /// The primal unknowns themselves, interpolated at the points.
+    Value,
+    /// A beam's section strains; they read `Φ` from the material.
+    Beam,
+    /// A shell's generalized strains, in the given formulation.
+    Shell(shell::ShellModel),
+}
+
 /// The **law** capability: a pointwise constitutive evaluation producing a
 /// state, on top of a [`Domain`]'s integration.
 ///
@@ -1925,6 +1983,14 @@ pub trait Behavior: Domain {
     /// Gauss point. Declaring it is physics — naming what the law consumes —
     /// and it is what lets the kernel index instead of search.
     fn deformation_reads(&self) -> Vec<String>;
+
+    /// How the input [`deformation_reads`](Self::deformation_reads) names is
+    /// produced from the nodal solution — this law's `B`, run by
+    /// [`crate::ops::element_field::strain`](fn@crate::ops::element_field::strain).
+    ///
+    /// **Required**, deliberately: a law that forgot it would have no input, and
+    /// a default would hand it someone else's.
+    fn strain_operator(&self) -> StrainOperator;
 
     /// Components this kernel reads from the **previous state** row, in slot
     /// order. Default: none — most laws have no history.

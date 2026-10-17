@@ -129,14 +129,16 @@ pub fn internal_forces(
                         // there is a law, the primal itself at the Gauss points
                         // when there is none. A boundary transfer is of the
                         // second kind — its `∫ h·a·N` reads `a`, not a stress.
+                        // Resolved once for the zone, before the parallel region.
+                        let names = kind.internal_force_reads();
                         let per_point = match kind.as_behavior() {
-                            Some(b) => state.sub_for_fespace(&b.behavior_fespace())?,
+                            Some(b) => {
+                                state.sub_for_fespace_reading(&b.behavior_fespace(), &names)?
+                            }
                             None => kind.residual_input(&layout.fespaces[0], solution)?,
                         };
                         let guard = per_point.read();
                         let mat_guard = material.read();
-                        // Resolved once for the zone, before the parallel region.
-                        let names = kind.internal_force_reads();
                         let refs: Vec<&str> = names.iter().map(String::as_str).collect();
                         let lay = guard.resolve_components(&refs, "state")?;
                         let mat_names = domain.material_components();

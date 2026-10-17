@@ -14,12 +14,13 @@ matrice), `integrate_behavior` produit la **réponse ponctuelle exacte** comme
 C'est un **montage incrémental A → B** : la loi intègre le comportement entre
 l'état convergé du **début de pas A** et la déformation de **fin de pas B**.
 
-1. l'**entrée de déformation** `ε(B)` est construite **séparément et
-   géométriquement** par [`gradient`](champs.md) (`∇T`…), [`deformation`](champs.md)
-   (`ε`), [`beam_deformation`](champs.md) (`κ, γ`) ou
-   [`shell_deformation`](champs.md) (`ε, κ, γ`) — ces opérateurs ne dépendent
-   que de l'espace EF, pas du modèle ; le choix de *quelle* déformation nourrir
-   reste donc à l'appelant ;
+1. l'**entrée de déformation** `ε(B)` est produite par
+   [`strain(model, u, materials)`](champs.md#le-b-du-modèle--strainmodel-solution-materials--elementfield),
+   qui applique à chaque loi le producteur qu'elle déclare —
+   [`deformation`](champs.md) (`ε`), [`gradient`](champs.md) (`∇T`…),
+   [`beam_deformation`](champs.md) (`κ, γ`), [`shell_deformation`](champs.md)
+   (`ε, κ, γ`). Ces producteurs géométriques ne dépendent que de l'espace EF et
+   restent disponibles pour construire une entrée à la main ;
 2. `prev` est l'**état convergé de A** — la **sortie du pas précédent** : la
    contrainte `σ(A)`, les variables internes `VAR(A)` et la déformation `ε(A)`.
    Il vaut `None` au **premier pas**, où A est la configuration de référence
@@ -80,7 +81,8 @@ variables internes (`VAR0` → `VAR1`), voir
 
 Les **forces internes** `f = ∫ Bᵀ σ dΩ` (le `BSIG` de cast3m) sont la
 **transposée** de l'opérateur de déformation `B` : là où
-[`deformation`](champs.md) applique `B` au déplacement (`ε = B·u`),
+[`strain`](champs.md#le-b-du-modèle--strainmodel-solution-materials--elementfield)
+applique `B` au déplacement (`ε = B·u`),
 `internal_forces` applique `Bᵀ` à la contrainte et **rassemble** le résultat aux
 nœuds. C'est la **généralisation mécanique** de [`divergence`](champs.md) (qui
 est exactement `Bᵀ q` pour un transport scalaire) : une composante de sortie par

@@ -139,6 +139,7 @@ __all__ = [
     "spill_stats",
     "sqrt",
     "stiffness",
+    "strain",
     "sub_material_field",
     "sum_to_nodes",
     "sweep",
@@ -2244,6 +2245,21 @@ class Model:
         so it subtracts from a strain component for component; in plane stress the
         out-of-plane `eps_zz` is not written. Raises when `D` is singular at a point
         (a zero modulus).
+        """
+    def strain(self, solution: NodeField, materials: ElementField) -> ElementField:
+        r"""
+        The input of every law of `model`, produced from the nodal `solution` — the
+        model's `B`, of which `internal_forces` is the transpose (Cast3M `EPSI`,
+        extended to every physics).
+        
+        One zone per sub-model with a law, on its behaviour space, carrying what
+        that law reads: the small-strain tensor `eps_*` of a continuum or a bar, the
+        gradient `grad_T_*` of conduction, `T` itself for radiation, the section
+        strains of a beam, the generalized strains of a shell. Each law reads its
+        own unknowns of `solution` by name, so one solution — displacement,
+        temperature, multipliers — serves the whole model; sub-models without a law
+        produce nothing. `materials` is read by the beams alone (their `Φ`). The
+        result feeds `integrate_behavior` as is.
         """
     def material_field(self, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> ElementField:
         r"""
@@ -5557,6 +5573,22 @@ def stiffness(model: Model, materials: ElementField) -> Matrix:
     
     `materials` carries the per-zone material data: every sub-model that
     needs it picks the `SubElementField` whose FE subspace matches its own.
+    """
+
+def strain(model: Model, solution: NodeField, materials: ElementField) -> ElementField:
+    r"""
+    The input of every law of `model`, produced from the nodal `solution` — the
+    model's `B`, of which `internal_forces` is the transpose (Cast3M `EPSI`,
+    extended to every physics).
+    
+    One zone per sub-model with a law, on its behaviour space, carrying what
+    that law reads: the small-strain tensor `eps_*` of a continuum or a bar, the
+    gradient `grad_T_*` of conduction, `T` itself for radiation, the section
+    strains of a beam, the generalized strains of a shell. Each law reads its
+    own unknowns of `solution` by name, so one solution — displacement,
+    temperature, multipliers — serves the whole model; sub-models without a law
+    produce nothing. `materials` is read by the beams alone (their `Φ`). The
+    result feeds `integrate_behavior` as is.
     """
 
 def sub_material_field(sub_model: SubModel, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> SubElementField:

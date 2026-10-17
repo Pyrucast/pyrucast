@@ -60,7 +60,7 @@ use crate::models::beam::{self, bending_4x4, mass_4x4, BeamModel};
 use crate::models::owned_components;
 use crate::models::ZoneLayout;
 use crate::models::{
-    frame, frame3d, Behavior, CellGeom, Domain, MatrixLayout, Physics, SubModelKind,
+    frame, frame3d, Behavior, CellGeom, Domain, MatrixLayout, Physics, StrainOperator, SubModelKind,
 };
 use crate::models::{ElementLayout, MatrixKind};
 use serde::{Deserialize, Serialize};
@@ -469,6 +469,10 @@ impl Behavior for Timoshenko {
                 &["eps", "kappa_y", "kappa_z", "torsion", "gamma_y", "gamma_z"][..]
             }
         })
+    }
+
+    fn strain_operator(&self) -> StrainOperator {
+        StrainOperator::Beam
     }
 
     fn integrate_point(

@@ -9,6 +9,8 @@
 //!   [`shell_deformation`](fn@shell_deformation),
 //!   [`interp_to_gauss`](fn@interp_to_gauss),
 //!   [`thermal_strain`](fn@thermal_strain);
+//! - *the model's `B`* — [`strain`](fn@strain), the input of every law of a
+//!   model, each from its own producer above (Cast3M `EPSI`);
 //! - *elastic operator* — [`elastic_stress`](fn@elastic_stress) `σ = D:ε` and
 //!   its inverse [`elastic_strain`](fn@elastic_strain) (Cast3M `ELAS`);
 //! - *material data* — [`material_field`](fn@material_field) & co., the
@@ -32,6 +34,7 @@ pub mod mask;
 pub mod material_field;
 pub mod methods;
 pub mod shell_deformation;
+pub mod strain;
 pub mod thermal_strain;
 
 pub use beam_deformation::beam_deformation;
@@ -44,4 +47,5 @@ pub use interp_to_gauss::interp_to_gauss;
 pub use mask::{mask, mask_sub};
 pub use material_field::{material_field, material_field_per_sub_model, sub_material_field};
 pub use shell_deformation::shell_deformation;
+pub use strain::strain;
 pub use thermal_strain::thermal_strain;

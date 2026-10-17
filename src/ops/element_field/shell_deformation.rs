@@ -112,7 +112,7 @@ pub fn shell_deformation(
 }
 
 /// Generalised strains on one surface subspace.
-fn subspace_shell_deformation(
+pub(crate) fn subspace_shell_deformation(
     fespace: &Handle<SubFiniteElementSpace>,
     view: &NodeFieldView,
     components: &[String],

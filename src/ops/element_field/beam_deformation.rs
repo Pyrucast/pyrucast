@@ -116,7 +116,7 @@ pub fn beam_deformation(
 
 /// Section strains on one oriented `SEG2` subspace. Dispatches on the
 /// configuration's spatial dimension (2-D vs 3-D frame).
-fn subspace_beam_deformation(
+pub(crate) fn subspace_beam_deformation(
     fespace: &Handle<SubFiniteElementSpace>,
     view: &NodeFieldView,
     components: &[String],

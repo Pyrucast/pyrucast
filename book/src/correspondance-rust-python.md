@@ -195,6 +195,7 @@ par la sortie.
 | `deformation(u: &NodeField, fespace: &FiniteElementSpace, measure: StrainMeasure) -> ElementField` | `deformation(u, fespace, measure="linear") -> ElementField` (`StrainMeasure` passe par son nom : `"linear"`, `"gradient"`, `"green_lagrange"`, `"right_cauchy_green"`, `"left_cauchy_green"`, `"hencky"`, `"euler_almansi"`) |
 | `interp_to_gauss(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `interp_to_gauss(field, fespace) -> ElementField` |
 | `thermal_strain(temperature: &ElementField, material: &ElementField, fespace: &FiniteElementSpace, t_ref: f64) -> ElementField` | `thermal_strain(temperature, materials, fespace, t_ref) -> ElementField` |
+| `strain(model: &Model, solution: &NodeField, materials: &ElementField) -> ElementField` | `strain(model, solution, materials) -> ElementField` (`EPSI` : l'entrée de chaque loi ; aussi `model.strain(…)`) |
 | `elastic_stress(model: &Model, strain: &ElementField, materials: &ElementField) -> ElementField` | `elastic_stress(model, strain, materials) -> ElementField` (`σ = D:ε` ; aussi `model.elastic_stress(…)`) |
 | `elastic_strain(model: &Model, stress: &ElementField, materials: &ElementField) -> ElementField` | `elastic_strain(model, stress, materials) -> ElementField` (`ε = D⁻¹:σ` ; aussi `model.elastic_strain(…)`) |
 | `cell_integral(field: &ElementField, target: &FiniteElementSpace) -> ElementField` | `cell_integral(field, target) -> ElementField` (`target` : un point par maille, quadrature `REDUCED`) |

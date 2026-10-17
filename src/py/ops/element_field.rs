@@ -163,6 +163,30 @@ pub fn elastic_strain(
     Ok(PyElementField { inner: ef })
 }
 
+/// The input of every law of `model`, produced from the nodal `solution` — the
+/// model's `B`, of which `internal_forces` is the transpose (Cast3M `EPSI`,
+/// extended to every physics).
+///
+/// One zone per sub-model with a law, on its behaviour space, carrying what
+/// that law reads: the small-strain tensor `eps_*` of a continuum or a bar, the
+/// gradient `grad_T_*` of conduction, `T` itself for radiation, the section
+/// strains of a beam, the generalized strains of a shell. Each law reads its
+/// own unknowns of `solution` by name, so one solution — displacement,
+/// temperature, multipliers — serves the whole model; sub-models without a law
+/// produce nothing. `materials` is read by the beams alone (their `Φ`). The
+/// result feeds `integrate_behavior` as is.
+#[py_op(method_on = PyModel)]
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn strain(
+    model: PyRef<PyModel>,
+    solution: PyRef<PyNodeField>,
+    materials: PyRef<PyElementField>,
+) -> PyResult<PyElementField> {
+    let ef = crate::ops::element_field::strain(&model.inner, &solution.inner, &materials.inner)?;
+    Ok(PyElementField { inner: ef })
+}
+
 /// Integral of every component of `field` over **each cell** (Cast3M
 /// `INTG 'ELEM'`), with the field's own quadrature: `Σ_g f(g)·|J|·w_g`, the
 /// `2πr` included on a body of revolution. The result lives on `target`, a

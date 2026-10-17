@@ -32,7 +32,6 @@ out_of_range
 point_values
 pyrucast.coords.displace
 pyrucast.element_field.interp_to_gauss
-pyrucast.element_field.material_field_per_sub_model
 pyrucast.element_field.sub_material_field
 pyrucast.element_field.thermal_strain
 pyrucast.field.cosh

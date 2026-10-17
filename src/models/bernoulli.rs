@@ -55,7 +55,9 @@ use crate::handle::Handle;
 use crate::models::kernel::MAX_CELL_DOFS;
 use crate::models::owned_components;
 use crate::models::ZoneLayout;
-use crate::models::{Behavior, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{
+    Behavior, CellGeom, Domain, MatrixLayout, Physics, StrainOperator, SubModelKind,
+};
 use crate::models::{ElementLayout, MatrixKind};
 use serde::{Deserialize, Serialize};
 
@@ -455,6 +457,10 @@ impl Behavior for Bernoulli {
             BeamModel::Frame2d => &["eps", "kappa"][..],
             BeamModel::Frame3d => &["eps", "kappa_y", "kappa_z", "torsion"][..],
         })
+    }
+
+    fn strain_operator(&self) -> StrainOperator {
+        StrainOperator::Beam
     }
 
     fn integrate_point(

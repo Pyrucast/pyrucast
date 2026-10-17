@@ -34,6 +34,7 @@ use crate::error::PyrucastError;
 use crate::error::Result;
 use crate::handle::Handle;
 use crate::models::{Contribution, MatrixKind};
+use crate::ops::element_field::behavior::previous_state_names;
 
 /// Assemble the stiffness matrix `K` for `model`.
 ///
@@ -113,7 +114,13 @@ impl AssemblyInputs<'_> {
     ) -> Result<KernelInputs> {
         Ok(match self {
             Self::MaterialOnly => KernelInputs::MaterialOnly,
-            Self::State(sf) => KernelInputs::State(sf.sub_for_fespace(fespace)?),
+            Self::State(sf) => {
+                let reads = match sub.as_kind().as_domain() {
+                    Some(domain) => domain.element_state_reads(MatrixKind::Geometric),
+                    None => Vec::new(),
+                };
+                KernelInputs::State(sf.sub_for_fespace_reading(fespace, &reads)?)
+            }
             Self::Behavior {
                 deformation,
                 prev,
@@ -130,21 +137,19 @@ impl AssemblyInputs<'_> {
                         )))
                     }
                 };
-                let deformation = deformation.sub_for_fespace(fespace)?;
+                let law = sub.as_kind().as_behavior().ok_or_else(|| {
+                    PyrucastError::Message(format!(
+                        "{}: a tangent needs a behaviour",
+                        sub.as_kind().label()
+                    ))
+                })?;
+                // Two laws sharing the subspace: each takes the zone it reads.
+                let deformation =
+                    deformation.sub_for_fespace_reading(fespace, &law.deformation_reads())?;
                 // Below this line, `prev` is always a real field.
                 let prev = match prev {
-                    Some(p) => p.sub_for_fespace(fespace)?,
-                    None => Handle::new(
-                        sub.as_kind()
-                            .as_behavior()
-                            .ok_or_else(|| {
-                                PyrucastError::Message(format!(
-                                    "{}: a tangent needs a behaviour",
-                                    sub.as_kind().label()
-                                ))
-                            })?
-                            .initial_state(&deformation.read())?,
-                    ),
+                    Some(p) => p.sub_for_fespace_reading(fespace, &previous_state_names(law))?,
+                    None => Handle::new(law.initial_state(&deformation.read())?),
                 };
                 KernelInputs::Behavior {
                     deformation,

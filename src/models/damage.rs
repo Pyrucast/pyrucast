@@ -56,8 +56,11 @@ use crate::models::tensor::Kinematics;
 use crate::models::tensor::{dual_name, primal_name};
 use crate::models::tensor::{stress_count, stress_names, voigt_stress};
 use crate::models::ZoneLayout;
-use crate::models::{Behavior, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{
+    Behavior, CellGeom, Domain, MatrixLayout, Physics, StrainOperator, SubModelKind,
+};
 use crate::models::{ElementLayout, MatrixKind};
+use crate::ops::element_field::StrainMeasure;
 use law::DamageLaw;
 use serde::{Deserialize, Serialize};
 
@@ -328,6 +331,10 @@ impl Behavior for Damage {
     /// the reported `damage` + the law's own internal variables.
     fn deformation_reads(&self) -> Vec<String> {
         self.continuum.strain_reads()
+    }
+
+    fn strain_operator(&self) -> StrainOperator {
+        StrainOperator::Deformation(StrainMeasure::Linear)
     }
 
     /// The law's own internal variables — `κ` for Mazars, one per direction for

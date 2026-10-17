@@ -58,7 +58,9 @@ use crate::models::kernel::MAX_CELL_DOFS;
 use crate::models::symmetry::{self, MaterialSymmetry};
 use crate::models::ElementLayout;
 use crate::models::ZoneLayout;
-use crate::models::{Behavior, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{
+    Behavior, CellGeom, Domain, MatrixLayout, Physics, StrainOperator, SubModelKind,
+};
 use serde::{Deserialize, Serialize};
 
 /// Column DOF name of a species — `c_H2`.
@@ -479,6 +481,10 @@ impl Behavior for Fick {
     /// Fick's law: weak-form flux `D·∇c` at one Gauss point.
     fn deformation_reads(&self) -> Vec<String> {
         gradient_components(self.space_dim, &self.species)
+    }
+
+    fn strain_operator(&self) -> StrainOperator {
+        StrainOperator::Gradient
     }
 
     fn integrate_point(

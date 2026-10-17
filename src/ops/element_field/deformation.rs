@@ -269,64 +269,79 @@ pub fn deformation(
     let view = u.view()?;
     let mut out = ElementField::empty();
     for sub in fespace {
-        // Everything is settled here, once per zone: the Gauss loop below
-        // neither tests nor allocates.
-        kernel::require_field_basis(sub, "shape values")?;
-        let (space_dim, axisymmetric) = {
-            let s = sub.read();
-            (s.space_dim(), s.is_axisymmetric())
-        };
-        if components.len() != space_dim {
-            return Err(PyrucastError::Message(format!(
-                "deformation: the displacement field carries {} component(s) but the FE \
-                 space is {}-D — expected exactly one displacement component per axis",
-                components.len(),
-                space_dim
-            )));
-        }
-        // The entries (i, j) to write and their names: `i ≤ j` for a symmetric
-        // measure, every pair for F.
-        let prefix = measure.prefix();
-        let mut slots = Vec::with_capacity(space_dim * space_dim + 1);
-        for i in 0..space_dim {
-            let first = if measure.is_symmetric() { i } else { 0 };
-            for j in first..space_dim {
-                slots.push((i, j));
-            }
-        }
-        // On a body of revolution the hoop entry is an independent component.
-        // It is appended last and named `zz` (Cast3M's naming, x = r and y = z),
-        // free of clashes since the meridian plane only spans x and y. It is one
-        // more table entry, not a branch at the Gauss point.
-        if axisymmetric {
-            slots.push((2, 2));
-        }
-        let names = slots
-            .iter()
-            .map(|&(i, j)| format!("{prefix}_{}{}", AXES[i], AXES[j]))
-            .collect();
-        // The measure is chosen here, by monomorphisation: each arm compiles
-        // its own kernel, with no `match` at the Gauss point.
-        let sf = match measure {
-            StrainMeasure::Linear => produce(sub, &view, &components, names, &slots, linear),
-            StrainMeasure::Gradient => produce(sub, &view, &components, names, &slots, gradient),
-            StrainMeasure::GreenLagrange => {
-                produce(sub, &view, &components, names, &slots, green_lagrange)
-            }
-            StrainMeasure::RightCauchyGreen => {
-                produce(sub, &view, &components, names, &slots, right_cauchy_green)
-            }
-            StrainMeasure::LeftCauchyGreen => {
-                produce(sub, &view, &components, names, &slots, left_cauchy_green)
-            }
-            StrainMeasure::Hencky => produce(sub, &view, &components, names, &slots, hencky),
-            StrainMeasure::EulerAlmansi => {
-                produce(sub, &view, &components, names, &slots, euler_almansi)
-            }
-        }?;
-        out.add_sub(Handle::new(sf))?;
+        out.add_sub(Handle::new(deformation_zone(
+            sub,
+            &view,
+            &components,
+            measure,
+        )?))?;
     }
     Ok(out)
+}
+
+/// [`deformation`] on one zone, reading the displacement from `components`
+/// (named, along x, y, z in that order) — the per-zone body shared with
+/// [`strain`](fn@crate::ops::element_field::strain), which names a law's
+/// own displacement instead of every component of a solution.
+pub(crate) fn deformation_zone(
+    sub: &Handle<SubFiniteElementSpace>,
+    view: &NodeFieldView,
+    components: &[String],
+    measure: StrainMeasure,
+) -> Result<SubElementField> {
+    // Everything is settled here, once per zone: the Gauss loop below
+    // neither tests nor allocates.
+    kernel::require_field_basis(sub, "shape values")?;
+    let (space_dim, axisymmetric) = {
+        let s = sub.read();
+        (s.space_dim(), s.is_axisymmetric())
+    };
+    if components.len() != space_dim {
+        return Err(PyrucastError::Message(format!(
+            "deformation: the displacement field carries {} component(s) but the FE \
+             space is {}-D — expected exactly one displacement component per axis",
+            components.len(),
+            space_dim
+        )));
+    }
+    // The entries (i, j) to write and their names: `i ≤ j` for a symmetric
+    // measure, every pair for F.
+    let prefix = measure.prefix();
+    let mut slots = Vec::with_capacity(space_dim * space_dim + 1);
+    for i in 0..space_dim {
+        let first = if measure.is_symmetric() { i } else { 0 };
+        for j in first..space_dim {
+            slots.push((i, j));
+        }
+    }
+    // On a body of revolution the hoop entry is an independent component.
+    // It is appended last and named `zz` (Cast3M's naming, x = r and y = z),
+    // free of clashes since the meridian plane only spans x and y. It is one
+    // more table entry, not a branch at the Gauss point.
+    if axisymmetric {
+        slots.push((2, 2));
+    }
+    let names = slots
+        .iter()
+        .map(|&(i, j)| format!("{prefix}_{}{}", AXES[i], AXES[j]))
+        .collect();
+    // The measure is chosen here, by monomorphisation: each arm compiles
+    // its own kernel, with no `match` at the Gauss point.
+    match measure {
+        StrainMeasure::Linear => produce(sub, view, components, names, &slots, linear),
+        StrainMeasure::Gradient => produce(sub, view, components, names, &slots, gradient),
+        StrainMeasure::GreenLagrange => {
+            produce(sub, view, components, names, &slots, green_lagrange)
+        }
+        StrainMeasure::RightCauchyGreen => {
+            produce(sub, view, components, names, &slots, right_cauchy_green)
+        }
+        StrainMeasure::LeftCauchyGreen => {
+            produce(sub, view, components, names, &slots, left_cauchy_green)
+        }
+        StrainMeasure::Hencky => produce(sub, view, components, names, &slots, hencky),
+        StrainMeasure::EulerAlmansi => produce(sub, view, components, names, &slots, euler_almansi),
+    }
 }
 
 /// One zone, one measure: picks the axisymmetric or Cartesian kernel — a fact

@@ -265,3 +265,41 @@ volumes = pyrucast.node_field.sum_to_nodes(aires)
 assert abs(aires[0].value(1, 0, "un") - 1.0) < 1e-12
 assert abs(volumes.value(n[1], "un") - 2.0) < 1e-12  # shared by both cells
 assert abs(volumes.value(n[0], "un") - 1.0) < 1e-12
+
+# ── B du modèle : l'entrée de chaque loi ───────────────────
+
+_, mesh, fes, n = _plaque()
+solide = pyrucast.model.elasticity(fes, "plane_strain")
+couple = solide | pyrucast.model.heat_conduction(fes)
+materiaux = pyrucast.element_field.material_field_per_sub_model(
+    couple, [[("E", 200e9), ("nu", 0.3)], [("k", 45.0)]]
+)
+# u_x = 1e-3·x, u_y = 2e-3·y·x, T = 10·x + 5·y on the six nodes.
+solution = _champ_nodal(
+    mesh,
+    n,
+    ["u_x", "u_y", "T"],
+    [
+        [1e-3 * x, 2e-3 * y * x, 10 * x + 5 * y]
+        for y in (0.0, 1.0)
+        for x in (0.0, 1.0, 2.0)
+    ],
+)
+# ANCHOR: strain_modele
+# B: each law gets its own input from one solution — a strain for the solid,
+# a temperature gradient for conduction.
+eps = couple.strain(solution, materiaux)
+etat = couple.integrate_behavior(eps, materiaux)  # the laws
+f_int = couple.internal_forces(etat, solution, materiaux)  # Bᵀ: back to the nodes
+# ANCHOR_END: strain_modele
+assert [z.components() for z in eps] == [
+    ["eps_xx", "eps_xy", "eps_yy"],
+    ["grad_T_x", "grad_T_y"],
+]
+assert abs(eps[1].value(0, 0, "grad_T_x") - 10.0) < 1e-12
+# Linear laws: Bᵀ D B u is the stiffness applied to u, to rounding.
+ku = pyrucast.matrix.stiffness(couple, materiaux) * solution
+for noeud in n:
+    for dual in ("f_x", "f_y", "q"):
+        attendu = ku.value(noeud, dual)
+        assert abs(f_int.value(noeud, dual) - attendu) <= 1e-9 * (1.0 + abs(attendu))

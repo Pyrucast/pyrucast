@@ -19,7 +19,9 @@ use crate::models::owned_components;
 use crate::models::symmetry::{self, MaterialSymmetry};
 use crate::models::ElementLayout;
 use crate::models::ZoneLayout;
-use crate::models::{Behavior, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{
+    Behavior, CellGeom, Domain, MatrixLayout, Physics, StrainOperator, SubModelKind,
+};
 use serde::{Deserialize, Serialize};
 
 /// Column DOF name (temperature).
@@ -445,6 +447,10 @@ impl Behavior for HeatConduction {
     /// would read trailing state components of `input` and write updated ones.)
     fn deformation_reads(&self) -> Vec<String> {
         deformation_components(self.space_dim)
+    }
+
+    fn strain_operator(&self) -> StrainOperator {
+        StrainOperator::Gradient
     }
 
     fn integrate_point(

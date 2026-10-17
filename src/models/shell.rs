@@ -65,7 +65,9 @@ use crate::models::kernel::MAX_CELL_DOFS;
 use crate::models::owned_components;
 use crate::models::ElementLayout;
 use crate::models::ZoneLayout;
-use crate::models::{Behavior, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{
+    Behavior, CellGeom, Domain, MatrixLayout, Physics, StrainOperator, SubModelKind,
+};
 use serde::{Deserialize, Serialize};
 
 /// Primal DOF names — three translations and three rotations, as for a space
@@ -530,6 +532,10 @@ impl Behavior for Shell {
     /// produce (`eps_xx`, `kappa_xx`, `gamma_xz`, …), all in the **local** frame.
     fn deformation_reads(&self) -> Vec<String> {
         owned_components(self.model.strains())
+    }
+
+    fn strain_operator(&self) -> StrainOperator {
+        StrainOperator::Shell(self.model)
     }
 
     fn integrate_point(

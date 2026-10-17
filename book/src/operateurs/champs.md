@@ -184,7 +184,9 @@ passe directement.
 
 Ces opérateurs ne dépendent **que** de l'espace EF et du champ — aucune
 physique. Ils produisent l'`ElementField` que le
-[comportement](comportement.md) (`integrate_behavior`) consomme ensuite. Ils
+[comportement](comportement.md) (`integrate_behavior`) consomme ensuite ; au
+niveau d'un modèle, [`strain`](#le-b-du-modèle--strainmodel-solution-materials--elementfield)
+choisit pour chaque loi celui qui la nourrit. Ils
 partagent tous le même moteur parallèle : le driver `nodal_pointwise`
 (déterministe bit-à-bit, cf. [Parallélisme](../developper/parallelisme.md)),
 pendant nodal de `element_pointwise`.
@@ -400,6 +402,82 @@ réduit — le point même où la rigidité l'intègre. Ce n'est pas une
 simplification : c'est l'intégration réduite qui empêche une coque mince de
 bloquer, lue de l'autre côté. L'échantillonner ailleurs rapporterait une
 déformation que l'élément ne porte pas.
+
+## Le `B` du modèle : `strain(model, solution, materials)` → `ElementField`
+
+Les producteurs ci-dessus connaissent un espace EF, pas une loi. `strain` est
+leur pendant au niveau du **modèle** : il demande à chaque loi quel producteur
+la nourrit, l'applique à **ses** inconnues sur **son** espace, et rend l'entrée
+de toutes les lois du modèle — le `EPSI` de Cast3M, étendu à toutes les
+physiques. Aussi en méthode : `model.strain(solution, materials)`.
+
+| sous-modèle | producteur | zone rendue |
+|---|---|---|
+| élasticité, plasticité, endommagement, barre | `deformation` | `eps_*` |
+| conduction, Fick | `gradient` | `grad_T_*`, `grad_c_<espèce>_*` |
+| rayonnement | `interp_to_gauss` | `T` aux points |
+| poutres Bernoulli, Timoshenko | `beam_deformation` | `eps`, `kappa*`, `gamma*`, `torsion` |
+| coque | `shell_deformation` | `eps_*`, `kappa_*`, `drill`, `gamma_*` |
+
+Chaque loi lit **ses** inconnues de `solution` par leur nom : une même solution
+— déplacement, température, multiplicateurs — sert tout le modèle, et une
+inconnue absente vaut zéro. Les sous-modèles sans loi (contraintes, charges,
+échanges) ne produisent rien. `materials` n'est lu que par les poutres, dont la
+répartition flexion / cisaillement dépend de `Φ = 12EI/(G·A_s·L²)`. Ce que la
+loi déclare, c'est son producteur (`Behavior::strain_operator`, méthode
+**requise** : une physique nouvelle ne peut pas l'oublier) ; l'opérateur tient
+la vue de la solution une fois pour toutes les lois.
+
+**`strain` et `internal_forces` sont transposés.** Les éléments finis portent
+deux couples de variables duales : déplacement / force aux nœuds,
+déformation / contrainte aux points de Gauss. Le travail se mesure des deux
+côtés — `f·u` aux nœuds, `Σ_g w_g |J_g| σ:ε` aux points — et `Bᵀ W` est
+l'adjoint de `B` pour ces deux produits :
+
+\[
+\sigma \cdot W (B u) = (B^\mathsf{T} W \sigma) \cdot u
+\qquad \forall\, u,\ \sigma ,
+\]
+
+le principe des travaux virtuels écrit au niveau discret :
+
+```text
+   nœuds                         points de Gauss
+   u      ───── strain (B) ─────▶  ε
+                                   │  integrate_behavior (la loi)
+   f_int  ◀── internal_forces ───  σ
+                (Bᵀ W)
+```
+
+D'où `K = Bᵀ W D B`, symétrique si et seulement si `D` l'est, et, pour une loi
+linéaire, `internal_forces(integrate_behavior(strain(u))) = K·u` à l'arrondi
+près — ce que vérifie l'exemple. [`divergence`](#divergencefield--nodefield) est
+le cas scalaire du même `Bᵀ`, et l'adjoint de `gradient`. La transposition ne
+tient plus exactement en grandes transformations (elle lie alors la
+*variation* `δε = B(u) δu` aux efforts, et la tangente gagne la rigidité
+géométrique), pour un terme non variationnel (advection, pression suiveuse,
+relation non associée), et dès que les deux côtés n'utilisent pas les mêmes
+points : c'est pourquoi `shell_deformation` lit le cisaillement au point réduit
+où la rigidité l'intègre.
+
+**Un modèle couplé se passe de `consolidate`.** Deux lois sur un même maillage
+(thermique et mécanique) donnent deux zones sur un même espace. Chaque
+consommateur — `integrate_behavior` (entrée et état précédent),
+`internal_forces`, `tangent`, `geometric` — prend la zone qui porte ce qu'il lit,
+comme le matériau est déjà résolu par ses composantes.
+
+**Pourquoi `strain` et pas `deformation`.** En anglais, *deformation* désigne la
+transformation elle-même (`F`, et les tenseurs `C`, `b`, qui valent `I` en
+mouvement rigide) ; *strain* en est une **mesure**, qui s'annule en mouvement
+rigide (`ε`, `E`, `ln U`), et le mot consacré pour les déformations
+généralisées des poutres et coques. L'opérateur géométrique, qui produit les
+deux, garde donc `deformation` ; ce que lit une loi est un *strain*. Le
+gradient thermique en est un abus assumé, comme les `internal_forces` d'un
+problème thermique.
+
+```python
+{{#include ../../../tests/python/test_doc_ops_champs.py:strain_modele}}
+```
 
 ## Maths élément par élément
 

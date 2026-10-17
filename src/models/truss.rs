@@ -26,8 +26,11 @@ use crate::handle::Handle;
 use crate::models::owned_components;
 use crate::models::tensor::{dual_name, primal_name};
 use crate::models::ZoneLayout;
-use crate::models::{Behavior, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{
+    Behavior, CellGeom, Domain, MatrixLayout, Physics, StrainOperator, SubModelKind,
+};
 use crate::models::{ElementLayout, MatrixKind};
+use crate::ops::element_field::StrainMeasure;
 use serde::{Deserialize, Serialize};
 
 /// Axis suffixes for the vector components, indexed by spatial direction.
@@ -294,6 +297,10 @@ impl Behavior for Truss {
     /// and `c` the cell's unit direction cosine (from its node coordinates).
     fn deformation_reads(&self) -> Vec<String> {
         strain_names(self.space_dim)
+    }
+
+    fn strain_operator(&self) -> StrainOperator {
+        StrainOperator::Deformation(StrainMeasure::Linear)
     }
 
     fn integrate_point(

@@ -12,7 +12,7 @@
 //! accumulated per node. This is the **discrete divergence operator** `Bᵀ`,
 //! the transpose of the gradient operator: for a nodal field `f`, it satisfies
 //! `⟨∇f, F⟩ = ⟨f, div F⟩`. By integration by parts it equals
-//! `∫ N_i (∇·F) − ∮ N_i F·n` — the consistent (weak) nodal divergence, no mass
+//! `∮ N_i F·n − ∫ N_i (∇·F)` — the consistent (weak) nodal divergence, no mass
 //! solve. The input field must carry exactly `space_dim` components, taken in
 //! order as `F_x, F_y, F_z`; each input subspace yields one output zone with a
 //! single `"div"` component.

@@ -27,8 +27,11 @@ use crate::models::continuum::{elastic, voigt, Continuum};
 use crate::models::symmetry::{self, MaterialSymmetry};
 use crate::models::tensor::{dual_name, primal_name, Kinematics};
 use crate::models::ZoneLayout;
-use crate::models::{Behavior, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{
+    Behavior, CellGeom, Domain, MatrixLayout, Physics, StrainOperator, SubModelKind,
+};
 use crate::models::{ElementLayout, MatrixKind};
+use crate::ops::element_field::StrainMeasure;
 use law::{ElasticLaw, StatelessLawKind};
 use serde::{Deserialize, Serialize};
 
@@ -292,6 +295,10 @@ impl Behavior for Elasticity {
     /// Linear stress σ = D·ε at one Gauss point (material constants per cell).
     fn deformation_reads(&self) -> Vec<String> {
         self.continuum.strain_reads()
+    }
+
+    fn strain_operator(&self) -> StrainOperator {
+        StrainOperator::Deformation(StrainMeasure::Linear)
     }
 
     fn integrate_point(

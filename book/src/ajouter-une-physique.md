@@ -46,7 +46,7 @@ n'implémente que celui qui la concerne) :
 │                 element_matrix & consorts (tous fournis) }
 ├── Behavior: Domain
 │              { behavior_fespace, behavior_output_components,
-│                deformation_reads, integrate_point,
+│                deformation_reads, strain_operator, integrate_point,
 │                zone_layout, integrate_behavior, element_tangent (fournis) }
 └── Constraint  { multiplier_mesh, relations }
 ```
@@ -209,6 +209,9 @@ pub trait Domain: Sync {
     fn behavior_output_components(&self) -> Vec<String>;
     // Ce que le noyau lit, dans l'ordre de ses indices :
     fn deformation_reads(&self) -> Vec<String>;
+    // Et le `B` qui le produit depuis la solution — `Deformation(mesure)`,
+    // `Gradient`, `Value`, `Beam`, `Shell(f)` ; requis, `strain` l'exécute :
+    fn strain_operator(&self) -> StrainOperator;
     fn state_reads(&self) -> Vec<String> { Vec::new() }
     // L'état au repos, et la question « cette loi exige-t-elle un pas de
     // temps ? » — posées une fois, pas au point de Gauss :
@@ -282,8 +285,10 @@ sous-trait **et** redéfinir le seam correspondant pour rendre `Some(self)` :
   genre donné, voire aucune.
 - **Comportement** (une loi au point) : `impl Behavior` + `as_behavior()`.
   Déclarer `behavior_fespace()` + `behavior_output_components()` +
-  `deformation_reads()` + `integrate_point(...)`, la loi de constitution **en un
-  point de Gauss**. `integrate_behavior` est **fourni** : il résout la zone, puis
+  `deformation_reads()` + `strain_operator()` (quel producteur géométrique
+  fabrique cette entrée depuis la solution : c'est ce qu'exécute
+  `element_field::strain`) + `integrate_point(...)`, la loi de constitution **en
+  un point de Gauss**. `integrate_behavior` est **fourni** : il résout la zone, puis
   pilote ce noyau en parallèle sur toutes les cellules. Un élément linéaire en a
   bien une, simplement triviale (`N = E·A·ε`) ; un transfert de bord, lui, n'en a
   pas — son `h·a` est le coefficient de son propre opérateur appliqué en un

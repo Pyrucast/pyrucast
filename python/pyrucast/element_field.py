@@ -2,8 +2,9 @@
 ``ops::element_field``.
 
 Kinematics (gradient, strain and its structural variants, interpolation to the
-Gauss points, thermal expansion), the elastic operator both ways, material
-data, and the integration of the constitutive law.
+Gauss points, thermal expansion), the model's own strain operator ``strain``,
+the elastic operator both ways, material data, and the integration of the
+constitutive law.
 """
 
 from ._pyrucast import (
@@ -20,6 +21,7 @@ from ._pyrucast import (
     material_field as material_field,
     material_field_per_sub_model as material_field_per_sub_model,
     shell_deformation as shell_deformation,
+    strain as strain,
     sub_material_field as sub_material_field,
     thermal_strain as thermal_strain,
 )
@@ -38,6 +40,7 @@ __all__ = [
     "material_field",
     "material_field_per_sub_model",
     "shell_deformation",
+    "strain",
     "sub_material_field",
     "thermal_strain",
 ]

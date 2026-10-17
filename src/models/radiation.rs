@@ -64,7 +64,9 @@ use crate::models::owned_components;
 use crate::models::transfer::target_physics;
 use crate::models::ElementLayout;
 use crate::models::ZoneLayout;
-use crate::models::{Behavior, CellGeom, Domain, MatrixLayout, Physics, SubModelKind};
+use crate::models::{
+    Behavior, CellGeom, Domain, MatrixLayout, Physics, StrainOperator, SubModelKind,
+};
 use serde::{Deserialize, Serialize};
 
 /// Column DOF name (temperature) — shared with heat conduction.
@@ -341,6 +343,10 @@ impl Behavior for Radiation {
     /// that knows the law is the one that differentiates it.
     fn deformation_reads(&self) -> Vec<String> {
         vec![INPUT_COMPONENT.to_string()]
+    }
+
+    fn strain_operator(&self) -> StrainOperator {
+        StrainOperator::Value
     }
 
     fn integrate_point(

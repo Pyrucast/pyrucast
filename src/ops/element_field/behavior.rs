@@ -28,6 +28,7 @@ use crate::containers::element_field::ElementField;
 use crate::containers::model::Model;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
+use crate::models::Behavior;
 
 /// Integrate the constitutive law of `model` (Cast3m `COMP`), stepping A → B.
 ///
@@ -87,22 +88,26 @@ pub fn integrate(
     for h in model {
         // Cheap read under the sub-model lock: which FE subspaces this
         // sub-model wants for its deformation and its material.
-        let (beh_fespace, mat_fespace, mat_components) = {
+        let (beh_fespace, mat_fespace, mat_components, reads) = {
             let sub = h.read();
             (
                 sub.behavior_fespace(),
                 sub.material_fespace(),
                 sub.material_components(),
+                sub.as_kind()
+                    .as_behavior()
+                    .map(|law| (law.deformation_reads(), previous_state_names(law))),
             )
         };
-        let Some(beh_fespace) = beh_fespace else {
+        let (Some(beh_fespace), Some((input_reads, prev_reads))) = (beh_fespace, reads) else {
             continue; // constraint sub-model — no behaviour
         };
 
         // Pair the per-zone fields by FE subspace (locks SubElementField,
-        // outside the sub-model lock). The previous state is paired on the
+        // outside the sub-model lock), and — when two laws share the subspace —
+        // by what this law reads. The previous state is paired on the
         // behaviour subspace, exactly like the deformation.
-        let input = deformation.sub_for_fespace(&beh_fespace)?;
+        let input = deformation.sub_for_fespace_reading(&beh_fespace, &input_reads)?;
         // Resolve the material zone by the components this physics needs, so a
         // shared fespace carrying several component-disjoint material zones
         // resolves each physics' own zone without an explicit consolidate.
@@ -129,7 +134,7 @@ pub fn integrate(
         // gets the **rest state**, materialized here, once for the whole zone.
         // Below this line the state always exists, so no physics has to ask.
         let prev_zone = match prev {
-            Some(p) => p.sub_for_fespace(&beh_fespace)?,
+            Some(p) => p.sub_for_fespace_reading(&beh_fespace, &prev_reads)?,
             None => Handle::new(h.read().initial_state(mat)?),
         };
 
@@ -154,6 +159,18 @@ pub fn integrate(
         out.add_sub(Handle::new(state))?;
     }
     Ok(out)
+}
+
+/// The names that single out a law's **previous state** among the zones of its
+/// subspace: what it reads back, or — a law with no history — what it writes,
+/// which its own previous output carries.
+pub(crate) fn previous_state_names(law: &dyn Behavior) -> Vec<String> {
+    let reads = law.state_reads();
+    if reads.is_empty() {
+        law.behavior_output_components()
+    } else {
+        reads
+    }
 }
 
 // ─── Unit tests ────────────────────────────────────────────────────────────

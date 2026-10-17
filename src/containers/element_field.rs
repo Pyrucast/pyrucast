@@ -868,6 +868,45 @@ impl ElementField {
         }
     }
 
+    /// The zone on `fespace` handed to a consumer that reads `names`.
+    ///
+    /// The only zone of the support, whatever it carries: the consumer's own
+    /// layout then names a missing component. When **several** zones share the
+    /// support — the strains or states of two laws on one mesh, a temperature
+    /// gradient beside a strain — the one carrying every name in `names`, the
+    /// way [`sub_for_fespace_with`](Self::sub_for_fespace_with) tells material
+    /// zones apart. Errors when no zone lives on the support, or when the
+    /// names single out none or several.
+    pub(crate) fn sub_for_fespace_reading(
+        &self,
+        fespace: &Handle<SubFiniteElementSpace>,
+        names: &[String],
+    ) -> Result<Handle<SubElementField>> {
+        let zones = self.subs_for_fespace(fespace);
+        if zones.len() <= 1 || names.is_empty() {
+            return self.sub_for_fespace(fespace);
+        }
+        let n_zones = zones.len();
+        let mut carrying: Vec<Handle<SubElementField>> = zones
+            .into_iter()
+            .filter(|h| {
+                let z = h.read();
+                names.iter().all(|n| z.components().contains(n))
+            })
+            .collect();
+        match carrying.len() {
+            1 => Ok(carrying.pop().expect("length checked to be 1")),
+            0 => Err(PyrucastError::Message(format!(
+                "{n_zones} zones live on the FE space {fespace} and none carries all of \
+                 {names:?}"
+            ))),
+            n => Err(PyrucastError::Message(format!(
+                "{n} zones on the FE space {fespace} each carry all of {names:?}; the zone \
+                 is ambiguous — fuse them with element_field::consolidate"
+            ))),
+        }
+    }
+
     /// Build an `ElementField` with an explicit `components` list per
     /// subspace. `components_per_subspace.len()` must equal
     /// `fespace.len()`.
@@ -1067,6 +1106,43 @@ mod tests {
     }
 
     // ── SubElementField ─────────────────────────────────────────────────────
+
+    /// A strain and a temperature gradient side by side on one space: each
+    /// reader gets its own zone, a lone zone is handed over whatever it
+    /// carries, and names that single out nothing are an error.
+    #[test]
+    fn a_reader_takes_the_zone_carrying_what_it_reads() {
+        let fes = make_tri3_subfespace();
+        let names = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let strain = SubElementField::new(fes.clone(), names(&["eps_xx", "eps_yy"])).unwrap();
+        let gradient = SubElementField::new(fes.clone(), names(&["grad_T_x"])).unwrap();
+        let mut both = ElementField::empty();
+        both.add_sub(Handle::new(strain)).unwrap();
+        both.add_sub(Handle::new(gradient)).unwrap();
+
+        let got = both
+            .sub_for_fespace_reading(&fes, &names(&["grad_T_x"]))
+            .unwrap();
+        assert_eq!(got.read().components(), names(&["grad_T_x"]).as_slice());
+        let got = both
+            .sub_for_fespace_reading(&fes, &names(&["eps_xx"]))
+            .unwrap();
+        assert_eq!(
+            got.read().components(),
+            names(&["eps_xx", "eps_yy"]).as_slice()
+        );
+        let err = both
+            .sub_for_fespace_reading(&fes, &names(&["sigma_xx"]))
+            .unwrap_err();
+        assert!(format!("{err}").contains("none carries"), "{err}");
+
+        let mut alone = ElementField::empty();
+        let lone = SubElementField::new(fes.clone(), names(&["eps_xx"])).unwrap();
+        alone.add_sub(Handle::new(lone)).unwrap();
+        assert!(alone
+            .sub_for_fespace_reading(&fes, &names(&["sigma_xx"]))
+            .is_ok());
+    }
 
     #[test]
     fn sub_new_zero_initialized() {
