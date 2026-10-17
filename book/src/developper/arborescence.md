@@ -151,7 +151,7 @@ python/pyrucast/
 ├── node_field.py      #   en rendant leur vrai nom aux homonymes
 ├── element_field.py   #   (`consolidate_mesh as consolidate`, …)
 ├── matrix.py, model.py, field.py, measure.py, export.py, solver.py, coords.py
-├── thermomechanics.py # couche Python pure de haut niveau
+├── stepping/          # couche Python pure : le pas à pas (PASAPAS et ses procédures)
 ├── py.typed
 └── _pyrucast/
     └── __init__.pyi   # stub typé, généré par stub_gen, versionné

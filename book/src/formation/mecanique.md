@@ -72,7 +72,7 @@ support commun.
 
 Le chargement dépasse maintenant la limite élastique. Comme Cast3M pilote
 ce cas par la procédure `PASAPAS`, pyrucast fournit
-`pyrucast.thermomechanics.step_by_step` : la boucle sur les pas de charge,
+[`pyrucast.stepping.step_by_step`](../pas-a-pas.md) : la boucle sur les pas de charge,
 un Newton **modifié** (rigidité élastique, réassemblée une fois par pas) et
 son **accélération d'Anderson**. Il suffit de remplacer
 `model.elasticity` par `model.plasticity_perfect` :
@@ -110,10 +110,11 @@ linéairement en pseudo-temps — Cast3M `EVOL 'MANU'` :
 ## 4. Contact unilatéral
 
 Cast3M pilote aussi le contact par `PASAPAS` (table `tab3`, section 10).
-pyrucast ne compose pas encore thermique + plasticité + contact dans un
-même appel `step_by_step` ; le contact se résout directement par le solveur
-actif-set `pyrucast.solver.solve_unilateral`, sur un patch-test classique
-(deux blocs superposés, jeu initial, pression sur le bloc du haut) :
+Pour un seul chargement, le contact se résout directement par le solveur
+actif-set `pyrucast.solver.solve_unilateral` ; `step_by_step` le compose avec
+la thermique, la plasticité et les pas de charge quand il faut une histoire.
+Ici, un patch-test classique (deux blocs superposés, jeu initial, pression
+sur le bloc du haut) :
 
 ```python
 {{#include ../../../formation/contact.py:geometrie_contact}}

@@ -74,7 +74,7 @@ Conditions limites / chargement;SOUR;Source volumique (thermique);model.flux (ci
 Conditions limites / chargement;CONV;Échange par convection (Robin / film);model.boundary_transfer (construit contre la conduction cible ; matrice de film h∫NiNj, coefficient h_T, ambiant a_ext_T — le terme h·T_ext sort de node_field.external_forces)
 Conditions limites / chargement;CHAR;Définit un chargement (évolution temporelle);NodeField
 Résolution;RESO;Résout un système linéaire K.u = f;solve
-Résolution;PASAPAS;Procédure pas à pas (transitoire / non-linéaire);—
+Résolution;PASAPAS;Procédure pas à pas (transitoire / non-linéaire);stepping.step_by_step (Python ; une fonction par procédure : resolve_options, describe_problem, initial_state, materials_at, heat_step, mechanical_step, store_step, adjust_time_step)
 Résolution;VIBR;Modes propres de vibration;—
 Résolution;FLAM;Modes de flambage;—
 Résolution;INVE (mat.);Inverse d'une matrice;solve (résolution dense LU)

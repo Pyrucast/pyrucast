@@ -66,8 +66,6 @@ pyrucast.model.viscoplasticity_lemaitre_chaboche
 pyrucast.node_field.divergence
 pyrucast.node_field.restrict
 pyrucast.node_field.restrict_like
-pyrucast.thermomechanics.mechanical_step
-pyrucast.thermomechanics.thermal_step
 refcount
 row_dofs
 set_by_node

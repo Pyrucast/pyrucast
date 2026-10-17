@@ -210,9 +210,10 @@ layer into sub-modules named after the produced container (`pyrucast.mesh`,
 `pyrucast.element_field`, `pyrucast.matrix`, …), the containers and atoms
 staying at the top level. Versioned `.pyi` stub.
 Cooperative interruption (`Ctrl+C`) through the `Cancel` trait.
-Non-linear orchestration in pure Python: `pyrucast.thermomechanics`
-(step-by-step thermal→mechanical), modified Newton accelerated by Anderson in
-the examples.
+Non-linear orchestration in pure Python: `pyrucast.stepping`, the mirror
+of Cast3M's `PASAPAS` and of the procedures it calls (heat in three schemes,
+modified Newton accelerated by Anderson, substeps, contact, dynamics, load
+control).
 
 ## Visualisation
 
@@ -380,8 +381,7 @@ orchestration language is **Python** instead of GIBIANE:
   increment, convergence test) and the time scheme are Python functions calling
   those bricks.
 
-That is already the case in practice: `pyrucast.thermomechanics` runs a
-step-by-step thermal→mechanical scheme, and the examples run a modified Newton
-accelerated by Anderson. An equivalent of `pasapas` / `unpas` / `transnon` will
-therefore be a **Python library** shipped with the binding, not a Rust operator
+That is the case: `pyrucast.stepping` is the equivalent of `pasapas` /
+`unpas` / `transnon`, a **Python library** shipped with the binding, not a Rust
+operator
 (cf. the "Équivalent pyrucast" column of `opérateur_castem.csv`).

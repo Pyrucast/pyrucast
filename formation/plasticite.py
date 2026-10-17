@@ -3,7 +3,7 @@
 Picks the holed plate clamped on the left back up, with the hung mass's force
 **ramped up** until it passes the elastic limit —
 l'équivalent Python de la table `PASAPAS` de Cast3M (section 9 de la
-formation) : ``pyrucast.thermomechanics.step_by_step`` orchestre la boucle
+formation) : ``pyrucast.stepping.step_by_step`` orchestre la boucle
 over the load steps and, at each step, a **modified** Newton (elastic
 stiffness, sped up by Anderson acceleration).
 
@@ -90,48 +90,44 @@ def main() -> None:
 
     # ANCHOR: chargement_evolution
     pression = -FACTEUR_CHARGE * MASSE * G / (2.0 * 3.14159265 * RAYON_TROU)
-    modele = modele | pc.model.flux(arc_fes, modele, "f_y")
-    materiaux = pc.element_field.material_field(
-        modele, [("E", E), ("nu", NU), ("sigma_y", SIGMA_Y), ("phi_f_y", pression)]
+    # The pressure on the arc, as nodal forces: the loads of the computation.
+    poussee = pc.model.flux(arc_fes, modele, "f_y")
+    effort_final = pc.node_field.external_forces(
+        poussee, pc.element_field.material_field(poussee, [("phi_f_y", pression)])
     )
-    effort_final = pc.node_field.external_forces(modele, materiaux)
+    materiaux = pc.element_field.material_field(
+        modele, [("E", E), ("nu", NU), ("sigma_y", SIGMA_Y)]
+    )
     charge = pc.Evolution(
         [(0.0, effort_final * 0.0), (1.0, effort_final)], out_of_range="clamp"
     )
     # ANCHOR_END: chargement_evolution
 
     # ANCHOR: pas_a_pas
-    # Free DOFs (outside the clamped end) to norm the Newton residual —
-    # without which the large support reactions mask the real convergence.
-    x = pc.node_field.positions(plaque, ["X"])
-    ddl_libres = pc.mesh.select(x, gt=1e-6)
-
     data = {
         "times": [0.0, 0.2, 0.4, 0.55, 0.7],  # pseudo-temps ∈ [0, 1]
         "model": modele,
         "loads": charge,
         "materials": materiaux,
-        "free_mesh": ddl_libres,
-        "max_newton": 200,
     }
-    pc.thermomechanics.step_by_step(data)
+    pc.stepping.step_by_step(data)
     # ANCHOR_END: pas_a_pas
 
     print(f"{'t':>6} {'itérations':>11} {'anderson':>9} {'convergé':>9} {'p_max':>12}")
     for r in data["results"]:
-        p_max = r["state"].max("p") if r["state"] is not None else 0.0
+        p_max = r["behaviour"].max("p") if r["behaviour"] is not None else 0.0
         print(
-            f"{r['time']:>6.2f} {r['mech_iters']:>11} {r['mech_anderson']:>9} "
+            f"{r['time']:>6.2f} {r['iterations']:>11} {r['accelerations']:>9} "
             f"{r['converged']!s:>9} {p_max:>12.3e}"
         )
 
     dernier = data["results"][-1]
-    print(f"\nzone plastique développée : p_max = {dernier['state'].max('p'):.3e}")
+    print(f"\nzone plastique développée : p_max = {dernier['behaviour'].max('p'):.3e}")
 
     out = os.environ.get("PYRUCAST_FORMATION_IMG_DIR", tempfile.gettempdir())
     chemin = os.path.join(out, "plasticite.svg")
     plaque.plot(
-        save=chemin, field=dernier["state"], component="p", cmap="viridis", smooth=0
+        save=chemin, field=dernier["behaviour"], component="p", cmap="viridis", smooth=0
     )
     print(f"Plastic zone (p) written to {chemin}")
 

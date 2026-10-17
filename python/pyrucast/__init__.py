@@ -17,7 +17,7 @@ by theme**, mirroring the Rust organization:
 - `pyrucast.save` / `pyrucast.load` stay top-level: they produce no determined
   container, but a dictionary of what they were given;
 - the higher-level pure Python layer lives in its own submodules
-  (`pyrucast.thermomechanics`).
+  (`pyrucast.stepping`).
 """
 
 # ── Containers (nouns): top-level classes, same name as the Rust struct ─────
@@ -71,7 +71,7 @@ from . import (
 )
 
 # ── The higher-level pure Python layer ──────────────────────────────────────
-from . import thermomechanics as thermomechanics
+from . import stepping as stepping
 
 __all__ = [
     # conteneurs
@@ -111,5 +111,5 @@ __all__ = [
     "node_field",
     "solver",
     # couche haut niveau
-    "thermomechanics",
+    "stepping",
 ]

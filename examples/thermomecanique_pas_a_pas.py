@@ -1,6 +1,6 @@
 """**Step-by-step** thermo-mechanics above the high-level Python layer.
 
-End-to-end demo of :func:`pyrucast.thermomechanics.step_by_step`: a flat plate is heated
+End-to-end demo of :func:`pyrucast.stepping.step_by_step`: a flat plate is heated
 progressivement (histoire de température) et se dilate librement (appuis simples).
 At every instant, ``step_by_step`` solves the thermics (steady) then the
 mécanique non linéaire (Newton modifié + accélération d'Anderson), le couplage
@@ -107,7 +107,7 @@ def main():
     }
 
     # ── Step-by-step computation ────────────────────────────────────────────
-    pc.thermomechanics.step_by_step(data)
+    pc.stepping.step_by_step(data)
 
     # ── Résultats ───────────────────────────────────────────────────────────
     tip = grid[idx(NX, NY)]
@@ -116,8 +116,8 @@ def main():
         t_mean = r["temperature"].value(tip, "T")
         ux = r["displacement"].value(tip, "u_x")
         print(
-            f"{r['time']:>6.2f} {t_mean:>10.3f} {r['mech_iters']:>6} "
-            f"{r['mech_anderson']:>6} {ux:>14.6e}"
+            f"{r['time']:>6.2f} {t_mean:>10.3f} {r['iterations']:>6} "
+            f"{r['accelerations']:>6} {ux:>14.6e}"
         )
 
     # Check: free expansion ⇒ u_x = α·ΔT·L at the end.

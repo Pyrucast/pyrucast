@@ -4,9 +4,9 @@ A classic patch test: two elastic blocks stacked along `y`, separated by an
 initial gap `G0`. A pressure on the upper block closes the contact and
 transmits a uniform stress across the interface — the pyrucast equivalent of
 Cast3M's node-to-surface contact (section 10 of the training), driven here
-straight by the active-set solver `solve_unilateral` rather than by
-`step_by_step` (which cannot yet compose thermics, plasticity and contact in
-a single table).
+straight by the active-set solver `solve_unilateral`, in a single solve —
+`pyrucast.stepping.step_by_step` composes the same contact with heat,
+plasticity and load steps when a history is needed.
 
 Lancement ::
 
