@@ -52,6 +52,7 @@ __all__ = [
     "deformation",
     "dirichlet",
     "displace",
+    "displace_from",
     "divergence",
     "drucker_prager",
     "elastic_strain",
@@ -140,6 +141,7 @@ __all__ = [
     "sqrt",
     "stiffness",
     "strain",
+    "stress_measure",
     "sub_material_field",
     "sum_to_nodes",
     "sweep",
@@ -657,6 +659,20 @@ class ElementField:
         single material field readable by every physics. Components carried by two
         zones must agree value by value, else it errors. `field` itself is left
         untouched.
+        """
+    def stress_measure(self, gradient: ElementField, target: builtins.str) -> ElementField:
+        r"""
+        `stress` converted to the measure `target`, point by point, with the
+        deformation gradient `gradient` — the field `deformation(u, fespace,
+        "gradient")` produces (`F_xx, F_xy, …`).
+        
+        `target` is `"cauchy"` (`sigma_*`, the true stress), `"kirchhoff"`
+        (`tau_* = J sigma_*`), `"pk1"` (`P_*`, the nominal stress `F S`, not
+        symmetric) or `"pk2"` (`S_*`, dual of Green–Lagrange). The measure of
+        `stress` is recognised by its names, one per zone. This is how the
+        Lagrangian stress a law writes in large transformations becomes the first
+        Piola–Kirchhoff `internal_forces` reads, or the Cauchy stress of the
+        results — the stress half of Cast3M `CONF`.
         """
     def cell_integral(self, target: FiniteElementSpace) -> ElementField:
         r"""
@@ -4169,7 +4185,7 @@ def cosh(field: typing.Any) -> typing.Any:
     Element-wise hyperbolic cosine of a field.
     """
 
-def creep_blackburn(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
+def creep_blackburn(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
     `model.creep_blackburn(fespace, kinematics)` — a **saturating primary** creep
     stage plus a steady secondary one, with Blackburn's `sinh` stress
@@ -4178,9 +4194,12 @@ def creep_blackburn(fespace: FiniteElementSpace, kinematics: builtins.str) -> Mo
     
     The primary strain is tracked as its own internal variable (`p_prim`), so
     the law integrates correctly under a varying load.
+    
+    
+    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
     """
 
-def creep_lemaitre(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
+def creep_lemaitre(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
     `model.creep_lemaitre(fespace, kinematics)` — Lemaitre primary creep by
     **strain** hardening, `ṗ = (q/K)^N · p^(−M)`. Material `E`, `nu`, `K`,
@@ -4189,9 +4208,12 @@ def creep_lemaitre(fespace: FiniteElementSpace, kinematics: builtins.str) -> Mod
     The accumulated strain itself slows the flow, producing a decelerating
     primary stage with no explicit time dependence — which is what makes it
     usable under a varying load, where a time-hardening form would be wrong.
+    
+    
+    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
     """
 
-def creep_norton(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
+def creep_norton(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
     `model.creep_norton(fespace, kinematics)` — Norton-Odqvist secondary creep,
     `ṗ = (q/K)^n`. Material `E`, `nu`, `K`, `n`.
@@ -4201,9 +4223,12 @@ def creep_norton(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model
     `integrate_behavior(..., dt=...)` — and raises without one, because
     integrating a creep law as if it were instantaneous would give a
     plausible wrong answer.
+    
+    
+    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
     """
 
-def damage_sic_sic(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
+def damage_sic_sic(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
     `model.damage_sic_sic(fespace, kinematics)` — **orthotropic** damage of a
     woven SiC/SiC ceramic-matrix composite: one damage per weave direction.
@@ -4219,9 +4244,12 @@ def damage_sic_sic(fespace: FiniteElementSpace, kinematics: builtins.str) -> Mod
     Each damage **saturates** at `d_max_i` rather than reaching one: matrix
     cracking does not take the whole stiffness, and a law that let it would
     predict a collapse that does not happen. State: `kappa_1..3`, `d_1..3`.
+    
+    
+    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
     """
 
-def damage_tc(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
+def damage_tc(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
     `model.damage_tc(fespace, kinematics)` — **two** damage variables, tension
     and compression apart: `σ = (1−d⁺)σ̃⁺ + (1−d⁻)σ̃⁻`. Material `E`, `nu`,
@@ -4233,6 +4261,9 @@ def damage_tc(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
     stiffness on closure — the unilateral effect — which is what makes the
     law usable under cyclic loading. State: `r_plus`, `r_minus`, `d_plus`,
     `d_minus`.
+    
+    
+    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
     """
 
 def deformation(u: NodeField, fespace: FiniteElementSpace, measure: builtins.str = 'linear') -> ElementField:
@@ -4294,6 +4325,17 @@ def displace(field: NodeField, components: typing.Optional[typing.Sequence[built
     `["ux", "uy", "uz"][:dim]`. Mutates the field's `Coords` in place.
     """
 
+def displace_from(field: NodeField, reference: builtins.int, target: builtins.int, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> None:
+    r"""
+    Lay configuration `target` of the field's `Coords` at configuration
+    `reference` displaced by `field`: `x = X + u`, in absolute — called again,
+    it lands at `X + u` again, nothing accumulates. A node the field does not
+    define stays at its reference position; the active configuration is left as
+    it is. `components` names one displacement component per axis; `None` →
+    `["ux", "uy", "uz"][:dim]`. Cast3M `FORM` with a displacement, without
+    changing the active configuration.
+    """
+
 def divergence(field: ElementField, prefix: builtins.str) -> NodeField:
     r"""
     Weak divergence of a per-element quantity named `prefix` — the adjoint of
@@ -4309,7 +4351,7 @@ def divergence(field: ElementField, prefix: builtins.str) -> NodeField:
     contributions.
     """
 
-def drucker_prager(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
+def drucker_prager(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
     `model.drucker_prager(fespace, kinematics)` — pressure-sensitive plasticity
     with **non-associated** flow: `f = q + α·I₁ − k`, plastic potential
@@ -4320,6 +4362,9 @@ def drucker_prager(fespace: FiniteElementSpace, kinematics: builtins.str) -> Mod
     and rocks, whose measured dilatancy is far below what friction alone
     would imply. A non-associated law has a **non-symmetric** tangent.
     Returns beyond the cone's apex (`I₁ = k/α`) collapse onto the tip.
+    
+    
+    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
     """
 
 def elastic_strain(model: Model, stress: ElementField, materials: ElementField) -> ElementField:
@@ -4351,7 +4396,7 @@ def elastic_stress(model: Model, strain: ElementField, materials: ElementField) 
     constraint) contributes none.
     """
 
-def elasticity(fespace: FiniteElementSpace, kinematics: builtins.str, symmetry: typing.Optional[builtins.str] = None) -> Model:
+def elasticity(fespace: FiniteElementSpace, kinematics: builtins.str, symmetry: typing.Optional[builtins.str] = None, strain_measure: builtins.str = 'linear') -> Model:
     r"""
     `model.elasticity(fespace, kinematics, symmetry=None)` — linear-elasticity
     model spanning every subspace of `fespace`. `kinematics` is `"plane_stress"`,
@@ -4369,6 +4414,11 @@ def elasticity(fespace: FiniteElementSpace, kinematics: builtins.str, symmetry: 
     `"anisotropic"` (the 21 constants `C_11 … C_66`). The two oriented ones
     also require the material axes — `V1X, V1Y` in 2-D, `V1X…V1Z, V2X…V2Z`
     in 3-D — which are orthonormalised internally.
+    
+    `strain_measure` is the strain the law reads: `"linear"` (small strains,
+    the default), `"green_lagrange"` (large rotations: Hooke on `E` is
+    Saint-Venant–Kirchhoff) or `"hencky"` (`½ ln C`). The stress it writes is
+    the dual, named after it: `sigma_*`, `S_*` or `T_*`.
     """
 
 def element_type_from_gmsh(code: builtins.int) -> builtins.str:
@@ -4637,7 +4687,7 @@ def grid_surface2(contour: Mesh, element_type: builtins.str, size: typing.Option
     `size`, `band` and `relax` mean what they mean for `grid_surface`.
     """
 
-def gurson(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
+def gurson(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
     `model.gurson(fespace, kinematics)` — Gurson-Tvergaard-Needleman plasticity
     of a **porous** metal, where the porosity shrinks the yield surface.
@@ -4652,6 +4702,9 @@ def gurson(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
     
     The porosity is exposed as the internal variable `porosity`, starting
     from `f_0`. Void **nucleation** is not modelled — only growth.
+    
+    
+    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
     """
 
 def heat_conduction(fespace: FiniteElementSpace, symmetry: typing.Optional[builtins.str] = None) -> Model:
@@ -4867,7 +4920,7 @@ def material_field_per_sub_model(model: Model, components_and_values_per_sub_mod
     sub-model (typical for Dirichlet).
     """
 
-def mazars(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
+def mazars(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
     `model.mazars(fespace, kinematics)` — Mazars isotropic damage spanning every
     subspace of `fespace`. `kinematics` is `"plane_stress"` / `"plane_strain"` /
@@ -4875,6 +4928,9 @@ def mazars(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
     (`E`, `nu`, `eps_d0`, `A_t`, `B_t`, `A_c`, `B_c`) is supplied at
     assembly / integration time. The behaviour integration (`COMP`) carries
     the scalar history variable `kappa` (`VAR0`→`VAR1`) and outputs `damage`.
+    
+    
+    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
     """
 
 def merge(a: NodeField, b: NodeField) -> NodeField:
@@ -4955,7 +5011,7 @@ def orient(mesh: Mesh) -> Mesh:
     a fresh mesh sharing the input's nodes.
     """
 
-def ottosen(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
+def ottosen(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
     `model.ottosen(fespace, kinematics)` — Ottosen's four-parameter criterion for
     concrete, whose strength depends on the pressure **and** on the Lode
@@ -4965,6 +5021,9 @@ def ottosen(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
     Integrated by a cutting-plane return with a numerically differentiated
     normal: the criterion is exact, and the gradient — long enough that a
     hand-derived one could not be checked — is a central difference.
+    
+    
+    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
     """
 
 def pave_surface(contour: Mesh, element_type: builtins.str, size: typing.Optional[builtins.float] = None, all_quad: builtins.bool = False, relax: typing.Optional[builtins.str] = None) -> Mesh:
@@ -5040,15 +5099,18 @@ def pave_volume(envelope: Mesh, layers: builtins.int = 1, thickness: typing.Opti
     none, so without them the mesh could not be conforming.
     """
 
-def plasticity_isotropic(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
+def plasticity_isotropic(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
     `model.plasticity_isotropic(fespace, kinematics)` — von Mises with **linear
     isotropic hardening**, `σ_y(p) = σ_y + H·p`. Material `E`, `nu`,
     `sigma_y`, `H`; everything else as `plasticity_perfect` (`H = 0` would
     give it back exactly).
+    
+    
+    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
     """
 
-def plasticity_perfect(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
+def plasticity_perfect(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
     `model.plasticity_perfect(fespace, kinematics)` — **perfect** (non-hardening)
     von Mises elastoplasticity spanning every subspace of `fespace`. `kinematics`
@@ -5058,6 +5120,9 @@ def plasticity_perfect(fespace: FiniteElementSpace, kinematics: builtins.str) ->
     behaviour integration (`COMP`) carries the plastic-strain +
     cumulated-`p` internal state (`VAR0`→`VAR1`) and emits the consistent
     tangent `D_alg`.
+    
+    
+    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
     """
 
 def poi1_from_nodes(nodes: typing.Sequence[Node]) -> Mesh:
@@ -5591,6 +5656,21 @@ def strain(model: Model, solution: NodeField, materials: ElementField) -> Elemen
     result feeds `integrate_behavior` as is.
     """
 
+def stress_measure(stress: ElementField, gradient: ElementField, target: builtins.str) -> ElementField:
+    r"""
+    `stress` converted to the measure `target`, point by point, with the
+    deformation gradient `gradient` — the field `deformation(u, fespace,
+    "gradient")` produces (`F_xx, F_xy, …`).
+    
+    `target` is `"cauchy"` (`sigma_*`, the true stress), `"kirchhoff"`
+    (`tau_* = J sigma_*`), `"pk1"` (`P_*`, the nominal stress `F S`, not
+    symmetric) or `"pk2"` (`S_*`, dual of Green–Lagrange). The measure of
+    `stress` is recognised by its names, one per zone. This is how the
+    Lagrangian stress a law writes in large transformations becomes the first
+    Piola–Kirchhoff `internal_forces` reads, or the Cauchy stress of the
+    results — the stress half of Cast3M `CONF`.
+    """
+
 def sub_material_field(sub_model: SubModel, components_and_values: typing.Sequence[tuple[builtins.str, builtins.float]]) -> SubElementField:
     r"""
     Build the material `SubElementField` of one sub-model.
@@ -5681,7 +5761,7 @@ def tanh(field: typing.Any) -> typing.Any:
     Element-wise hyperbolic tangent of a field.
     """
 
-def thermal_strain(temperature: ElementField, materials: ElementField, fespace: FiniteElementSpace, t_ref: builtins.float) -> ElementField:
+def thermal_strain(temperature: ElementField, materials: ElementField, fespace: FiniteElementSpace, t_ref: builtins.float, measure: builtins.str = 'linear') -> ElementField:
     r"""
     Thermal (free-dilation) strain `ε_th = α·(T − t_ref)` at the Gauss points of
     `fespace` — Cast3M `EPTH`. `temperature` is a per-element field carrying
@@ -5691,6 +5771,11 @@ def thermal_strain(temperature: ElementField, materials: ElementField, fespace: 
     mechanical strain. Backbone of uncoupled thermomechanics: assemble the
     thermal load with `internal_forces(integrate_behavior(model, ε_th,
     materials))` and recover `σ = D:(ε − ε_th)`.
+    
+    `measure` is the strain the law reads (`"linear"`, `"green_lagrange"`,
+    `"hencky"`): the dilation of stretch `1 + α·ΔT` is given exactly in it —
+    `α·ΔT`, `½((1 + α·ΔT)² − 1)`, `ln(1 + α·ΔT)` — under its names (`eps_*`,
+    `E_*`, `H_*`).
     """
 
 def timoshenko(fespace: FiniteElementSpace) -> Model:
@@ -5830,7 +5915,7 @@ def truss(fespace: FiniteElementSpace) -> Model:
     coordinates. Material (`E`, `A`) is supplied at assembly time.
     """
 
-def viscoplasticity_chaboche(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
+def viscoplasticity_chaboche(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
     `model.viscoplasticity_chaboche(fespace, kinematics)` — a Norton flow on the
     shifted overstress `J(σ − X) − R − k`, with Armstrong-Frederick kinematic
@@ -5841,9 +5926,12 @@ def viscoplasticity_chaboche(fespace: FiniteElementSpace, kinematics: builtins.s
     loading: it translates the yield surface, so reverse yielding happens
     early — the Bauschinger effect, which no isotropic law can produce. It
     costs seven internal variables (`X_xx…X_xy`, `R`).
+    
+    
+    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
     """
 
-def viscoplasticity_lemaitre_chaboche(fespace: FiniteElementSpace, kinematics: builtins.str) -> Model:
+def viscoplasticity_lemaitre_chaboche(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:
     r"""
     `model.viscoplasticity_lemaitre_chaboche(fespace, kinematics)` — Chaboche
     viscoplasticity coupled to Lemaitre's ductile **damage**: the flow is
@@ -5853,6 +5941,9 @@ def viscoplasticity_lemaitre_chaboche(fespace: FiniteElementSpace, kinematics: b
     A damaged material flows faster, which damages it more — the coupling
     that produces tertiary creep and, at `D_c`, rupture. Adds `damage` to the
     internal state.
+    
+    
+    `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
     """
 
 def xtx(x: typing.Any, components: typing.Optional[typing.Sequence[builtins.str]] = None) -> builtins.float:

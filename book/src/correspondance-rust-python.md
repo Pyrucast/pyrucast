@@ -186,6 +186,7 @@ par la sortie.
 |---|---|
 | `set(field: &NodeField, components: Option<Vec<String>>) -> ()` | `set(field, components=None) -> None` |
 | `displace(field: &NodeField, components: Option<Vec<String>>) -> ()` | `displace(field, components=None) -> None` |
+| `displace_from(field: &NodeField, reference: usize, target: usize, components: Option<Vec<String>>) -> ()` | `displace_from(field, reference, target, components=None) -> None` (pose la configuration `target` en `X + u`, en absolu ; la configuration active ne change pas) |
 
 ### `ops::element_field` — opérateurs produisant un champ aux points de Gauss
 
@@ -194,10 +195,11 @@ par la sortie.
 | `gradient(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `gradient(field, fespace) -> ElementField` |
 | `deformation(u: &NodeField, fespace: &FiniteElementSpace, measure: StrainMeasure) -> ElementField` | `deformation(u, fespace, measure="linear") -> ElementField` (`StrainMeasure` passe par son nom : `"linear"`, `"gradient"`, `"green_lagrange"`, `"right_cauchy_green"`, `"left_cauchy_green"`, `"hencky"`, `"euler_almansi"`) |
 | `interp_to_gauss(field: &NodeField, fespace: &FiniteElementSpace) -> ElementField` | `interp_to_gauss(field, fespace) -> ElementField` |
-| `thermal_strain(temperature: &ElementField, material: &ElementField, fespace: &FiniteElementSpace, t_ref: f64) -> ElementField` | `thermal_strain(temperature, materials, fespace, t_ref) -> ElementField` |
+| `thermal_strain(temperature: &ElementField, material: &ElementField, fespace: &FiniteElementSpace, t_ref: f64, measure: StrainMeasure) -> ElementField` | `thermal_strain(temperature, materials, fespace, t_ref, measure="linear") -> ElementField` (la dilatation exacte dans la mesure de la loi) |
 | `strain(model: &Model, solution: &NodeField, materials: &ElementField) -> ElementField` | `strain(model, solution, materials) -> ElementField` (`EPSI` : l'entrée de chaque loi ; aussi `model.strain(…)`) |
 | `elastic_stress(model: &Model, strain: &ElementField, materials: &ElementField) -> ElementField` | `elastic_stress(model, strain, materials) -> ElementField` (`σ = D:ε` ; aussi `model.elastic_stress(…)`) |
 | `elastic_strain(model: &Model, stress: &ElementField, materials: &ElementField) -> ElementField` | `elastic_strain(model, stress, materials) -> ElementField` (`ε = D⁻¹:σ` ; aussi `model.elastic_strain(…)`) |
+| `stress_measure(stress: &ElementField, gradient: &ElementField, target: StressMeasure) -> ElementField` | `stress_measure(stress, gradient, target) -> ElementField` (`StressMeasure` par son nom : `"cauchy"`, `"kirchhoff"`, `"pk1"`, `"pk2"` ; aussi `stress.stress_measure(…)`) |
 | `cell_integral(field: &ElementField, target: &FiniteElementSpace) -> ElementField` | `cell_integral(field, target) -> ElementField` (`target` : un point par maille, quadrature `REDUCED`) |
 | `shell_deformation(field: &NodeField, fespace: &FiniteElementSpace, model: ShellModel) -> ElementField` | `shell_deformation(field, fespace, model) -> ElementField` |
 | `beam_deformation(field: &NodeField, fespace: &FiniteElementSpace, material: &ElementField) -> ElementField` | `beam_deformation(field, fespace, material) -> ElementField` (1-D, plan ou spatial selon le maillage ; le matériau est requis, l'interpolation dépendant de `Φ`) |
@@ -252,12 +254,12 @@ un sujet qu'on transforme.
 | `boundary_transfer(fes, target: &Model, components: Vec<(String, String)>) -> Model` | `boundary_transfer(fespace, target, components) -> Model` |
 | `interface_transfer(side_a, side_b, target: &Model, components, tol: f64) -> Model` | `interface_transfer(side_a, side_b, target, components, tol=1e-9) -> Model` — défaut `interface_transfer::DEFAULT_TOL` |
 | `truss(fes: &FiniteElementSpace) -> Model` | `truss(fespace) -> Model` |
-| `elasticity(fes, model: ElasticityModel) -> Model` | `elasticity(fespace, model, symmetry=None) -> Model` |
-| `elasticity_with_symmetry(fes, model, symmetry: MaterialSymmetry) -> Model` | *idem, via `symmetry=`* |
-| `plasticity_perfect(fes, model: ElasticityModel) -> Model` | `plasticity_perfect(fespace, model) -> Model` |
-| `plasticity_with_law(fes, model, law: PlasticLaw) -> Model` | une fonction par loi : `plasticity_isotropic`, `drucker_prager`, `ottosen`, `creep_norton`, `creep_blackburn`, `creep_lemaitre`, `viscoplasticity_chaboche`, `viscoplasticity_lemaitre_chaboche`, `gurson` — toutes `(fespace, model) -> Model` |
-| `mazars(fes, model: ElasticityModel) -> Model` | `mazars(fespace, model) -> Model` |
-| `damage_with_law(fes, model, law: DamageLaw) -> Model` | une fonction par loi : `damage_tc`, `damage_sic_sic` — `(fespace, model) -> Model` |
+| `elasticity(fes, model: ElasticityModel) -> Model` | `elasticity(fespace, model, symmetry=None, strain_measure="linear") -> Model` |
+| `elasticity_with_symmetry(fes, model, symmetry: MaterialSymmetry, measure: StrainMeasure) -> Model` | *idem, via `symmetry=` et `strain_measure=`* |
+| `plasticity_perfect(fes, model: ElasticityModel) -> Model` | `plasticity_perfect(fespace, model, strain_measure="linear") -> Model` |
+| `plasticity_with_law(fes, model, law: PlasticLaw, measure: StrainMeasure) -> Model` | une fonction par loi : `plasticity_isotropic`, `drucker_prager`, `ottosen`, `creep_norton`, `creep_blackburn`, `creep_lemaitre`, `viscoplasticity_chaboche`, `viscoplasticity_lemaitre_chaboche`, `gurson` — toutes `(fespace, model, strain_measure="linear") -> Model` |
+| `mazars(fes, model: ElasticityModel) -> Model` | `mazars(fespace, model, strain_measure="linear") -> Model` |
+| `damage_with_law(fes, model, law: DamageLaw, measure: StrainMeasure) -> Model` | une fonction par loi : `damage_tc`, `damage_sic_sic` — `(fespace, model, strain_measure="linear") -> Model` |
 | `bernoulli(fes: &FiniteElementSpace) -> Model` | `bernoulli(fespace) -> Model` |
 | `timoshenko(fes: &FiniteElementSpace) -> Model` | `timoshenko(fespace) -> Model` |
 | `shell(fes, model: ShellModel) -> Model` | `shell(fespace, model) -> Model` |

@@ -133,6 +133,7 @@ use crate::models::{
     heat_conduction, interface_transfer, mpc, plasticity, radiation, shell, timoshenko, truss,
     Constraint, MatrixKind, Physics, RelationSense, SubModelKind,
 };
+use crate::ops::element_field::StrainMeasure;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::{Arc, OnceLock};
@@ -561,7 +562,12 @@ impl SubModel {
         fespace: Handle<SubFiniteElementSpace>,
         kinematics: Kinematics,
     ) -> Result<Self> {
-        Self::elasticity_with_symmetry(fespace, kinematics, MaterialSymmetry::Isotropic)
+        Self::elasticity_with_symmetry(
+            fespace,
+            kinematics,
+            MaterialSymmetry::Isotropic,
+            StrainMeasure::Linear,
+        )
     }
 
     /// Linear elasticity with an explicit material symmetry — orthotropic and
@@ -593,8 +599,10 @@ impl SubModel {
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// // Isotropic: `E` and `nu`. Orthotropic: the per-direction moduli and the
     /// // material axes, all carried by the material field.
+    /// # use pyrucast::ops::element_field::StrainMeasure;
     /// let m = SubModel::elasticity_with_symmetry(
-    ///     zone.clone(), Kinematics::PlaneStress, MaterialSymmetry::Orthotropic)?;
+    ///     zone.clone(), Kinematics::PlaneStress, MaterialSymmetry::Orthotropic,
+    ///     StrainMeasure::Linear)?;
     /// assert!(m.material_components().unwrap().len() > 2);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -602,9 +610,10 @@ impl SubModel {
         fespace: Handle<SubFiniteElementSpace>,
         kinematics: Kinematics,
         symmetry: MaterialSymmetry,
+        measure: StrainMeasure,
     ) -> Result<Self> {
         Ok(SubModel::Elasticity(elasticity::Elasticity::with_symmetry(
-            fespace, kinematics, symmetry,
+            fespace, kinematics, symmetry, measure,
         )?))
     }
 
@@ -885,7 +894,12 @@ impl SubModel {
         fespace: Handle<SubFiniteElementSpace>,
         kinematics: Kinematics,
     ) -> Result<Self> {
-        Self::plasticity_with_law(fespace, kinematics, plasticity::law::PlasticLaw::Perfect)
+        Self::plasticity_with_law(
+            fespace,
+            kinematics,
+            plasticity::law::PlasticLaw::Perfect,
+            StrainMeasure::Linear,
+        )
     }
 
     /// Elastoplasticity with an explicit yield law — the general form.
@@ -917,8 +931,9 @@ impl SubModel {
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # use pyrucast::models::plasticity::law::PlasticLaw;
     /// // The hardening law **declares by itself** the material it requires.
+    /// # use pyrucast::ops::element_field::StrainMeasure;
     /// let m = SubModel::plasticity_with_law(
-    ///     zone.clone(), Kinematics::PlaneStrain, PlasticLaw::Perfect)?;
+    ///     zone.clone(), Kinematics::PlaneStrain, PlasticLaw::Perfect, StrainMeasure::Linear)?;
     /// assert!(m.has_behavior());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -926,9 +941,10 @@ impl SubModel {
         fespace: Handle<SubFiniteElementSpace>,
         kinematics: Kinematics,
         law: plasticity::law::PlasticLaw,
+        measure: StrainMeasure,
     ) -> Result<Self> {
         Ok(SubModel::Plasticity(plasticity::Plasticity::with_law(
-            fespace, kinematics, law,
+            fespace, kinematics, law, measure,
         )?))
     }
 
@@ -965,7 +981,12 @@ impl SubModel {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn mazars(fespace: Handle<SubFiniteElementSpace>, kinematics: Kinematics) -> Result<Self> {
-        Self::damage_with_law(fespace, kinematics, damage::law::DamageLaw::Mazars)
+        Self::damage_with_law(
+            fespace,
+            kinematics,
+            damage::law::DamageLaw::Mazars,
+            StrainMeasure::Linear,
+        )
     }
 
     /// Damage with an explicit law — Mazars, the tension/compression pair, or the
@@ -995,8 +1016,9 @@ impl SubModel {
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # use pyrucast::models::damage::law::DamageLaw;
+    /// # use pyrucast::ops::element_field::StrainMeasure;
     /// let m = SubModel::damage_with_law(
-    ///     zone.clone(), Kinematics::PlaneStress, DamageLaw::Mazars)?;
+    ///     zone.clone(), Kinematics::PlaneStress, DamageLaw::Mazars, StrainMeasure::Linear)?;
     /// assert_eq!(m.physics(), &[Physics::Mechanical]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -1004,9 +1026,10 @@ impl SubModel {
         fespace: Handle<SubFiniteElementSpace>,
         kinematics: Kinematics,
         law: damage::law::DamageLaw,
+        measure: StrainMeasure,
     ) -> Result<Self> {
         Ok(SubModel::Mazars(damage::Damage::with_law(
-            fespace, kinematics, law,
+            fespace, kinematics, law, measure,
         )?))
     }
 

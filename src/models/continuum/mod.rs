@@ -25,6 +25,7 @@
 //!   belongs to the law, and is passed to the kernels rather than stored here.
 
 pub mod elastic;
+pub(crate) mod finite_strain;
 pub mod internal_force;
 pub mod material;
 pub mod voigt;
@@ -37,8 +38,9 @@ use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::kernel::MAX_CELL_DOFS;
 use crate::models::symmetry::{self, MaterialSymmetry};
-use crate::models::tensor::{stress_names, Kinematics};
+use crate::models::tensor::{voigt_names, Kinematics};
 use crate::models::{CellGeom, ElementLayout, MatrixKind};
+use crate::ops::element_field::StrainMeasure;
 
 use elastic::RHO_SLOT;
 use voigt::{b_matrix_into, voigt_size, VoigtRows};
@@ -63,8 +65,9 @@ fn check_continuum_dimensions(label: &str, space_dim: usize, ref_dim: usize) -> 
     Ok(())
 }
 
-/// The continuum modelling of one FE subspace: its geometry, its support, and
-/// the kinematic hypothesis under which strains are measured.
+/// The continuum modelling of one FE subspace: its geometry, its support, the
+/// kinematic hypothesis under which strains are measured, and the strain
+/// measure its law reads.
 ///
 /// Held by every continuum physics — what they add is a law, not a geometry.
 ///
@@ -98,6 +101,11 @@ pub struct Continuum {
     pub(crate) support: Handle<SubMesh>,
     pub(crate) space_dim: usize,
     pub(crate) kinematics: Kinematics,
+    /// The strain measure the law reads — `linear` unless the modelling was
+    /// built for large transformations ([`with_measure`](Self::with_measure)).
+    /// Archives written before it existed read back as `linear`.
+    #[serde(default)]
+    pub(crate) measure: StrainMeasure,
 }
 
 impl Continuum {
@@ -186,7 +194,110 @@ impl Continuum {
             support,
             space_dim,
             kinematics,
+            measure: StrainMeasure::Linear,
         })
+    }
+
+    /// The same modelling, its law reading the strain `measure` — the choice a
+    /// small-strain law makes to enter large transformations.
+    ///
+    /// Hooke, J2 or Mazars relate a strain to its dual without saying which:
+    /// read on the Green–Lagrange `E` (small strains, large rotations) they
+    /// write the second Piola–Kirchhoff `S`; read on the Hencky `H = ½ ln C`
+    /// (large plastic strains) they write its dual `T`. Each pair is named for
+    /// what it holds — `E_*` / `S_*`, `H_*` / `T_*` — never renamed `eps_*` /
+    /// `sigma_*`, and the whole state stays on the reference configuration.
+    ///
+    /// Errors (`label` names the physics):
+    /// - a measure that is not a law's input — `gradient`, Cauchy–Green,
+    ///   Euler–Almansi are kinematic quantities, not strains a law reads;
+    /// - Hencky under plane stress: `ln C` needs `C_zz`, which only the law
+    ///   would know.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::continuum::Continuum;
+    /// # use pyrucast::models::tensor::Kinematics;
+    /// # use pyrucast::ops::element_field::StrainMeasure;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
+    /// let c = Continuum::new(fes.get(0)?, Kinematics::PlaneStrain, "Elasticity")?
+    ///     .with_measure(StrainMeasure::GreenLagrange, "Elasticity")?;
+    /// // The law reads E and writes S: each component says what it holds.
+    /// assert_eq!(c.strain_reads(), ["E_xx", "E_yy", "E_xy"]);
+    /// assert_eq!(c.stress_names(), ["S_xx", "S_yy", "S_xy"]);
+    /// // F is no strain a law reads.
+    /// let plain = Continuum::new(fes.get(0)?, Kinematics::PlaneStrain, "Elasticity")?;
+    /// assert!(plain.with_measure(StrainMeasure::Gradient, "Elasticity").is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn with_measure(self, measure: StrainMeasure, label: &str) -> Result<Self> {
+        match measure {
+            StrainMeasure::Linear | StrainMeasure::GreenLagrange => {}
+            StrainMeasure::Hencky if self.kinematics == Kinematics::PlaneStress => {
+                return Err(PyrucastError::Message(format!(
+                    "{label}: the Hencky measure ½ ln C needs C_zz, which plane stress leaves \
+                     to the law — use plane_strain, or green_lagrange under plane stress"
+                )));
+            }
+            StrainMeasure::Hencky => {}
+            other => {
+                return Err(PyrucastError::Message(format!(
+                    "{label}: `{}` is not a strain a law reads — the measures are `linear`, \
+                     `green_lagrange` and `hencky`",
+                    crate::named::Named::name(other)
+                )));
+            }
+        }
+        Ok(Self { measure, ..self })
+    }
+
+    /// The strain measure the law reads.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::continuum::Continuum;
+    /// # use pyrucast::models::tensor::Kinematics;
+    /// # use pyrucast::ops::element_field::StrainMeasure;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
+    /// let c = Continuum::new(fes.get(0)?, Kinematics::PlaneStrain, "Elasticity")?;
+    /// assert_eq!(c.measure(), StrainMeasure::Linear);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    #[inline]
+    pub fn measure(&self) -> StrainMeasure {
+        self.measure
+    }
+
+    /// The prefix of the stress the law writes, the dual of its measure:
+    /// `sigma` (Cauchy, small strains), `S` (second Piola–Kirchhoff, dual of
+    /// Green–Lagrange) or `T` (dual of Hencky).
+    pub(crate) fn stress_prefix(&self) -> &'static str {
+        match self.measure {
+            StrainMeasure::GreenLagrange => "S",
+            StrainMeasure::Hencky => "T",
+            // `with_measure` admits no other measure: anything else is linear.
+            _ => "sigma",
+        }
     }
 
     /// The FE subspace this modelling stands on.
@@ -294,7 +405,8 @@ impl Continuum {
         self.kinematics
     }
 
-    /// The strain components a law of this modelling reads, in Voigt order.
+    /// The strain components a law of this modelling reads, in Voigt order,
+    /// under the name of its measure (`eps`, `E` or `H`).
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -312,15 +424,16 @@ impl Continuum {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
     /// # let c = Continuum::new(fes.get(0)?, Kinematics::PlaneStress, "Elasticity")?;
-    /// // Trois composantes en plan ; l'axisymétrie en ajoute le cerceau.
+    /// // Three components in the plane; axisymmetry adds the hoop.
     /// assert_eq!(c.strain_reads(), ["eps_xx", "eps_yy", "eps_xy"]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn strain_reads(&self) -> Vec<String> {
-        voigt::strain_reads(self.space_dim, self.kinematics)
+        voigt::strain_reads(self.measure.prefix(), self.space_dim, self.kinematics)
     }
 
-    /// The stress components a law of this modelling writes, in Voigt order.
+    /// The stress components a law of this modelling writes, in Voigt order,
+    /// under the name of the dual of its measure (`sigma`, `S` or `T`).
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -342,7 +455,7 @@ impl Continuum {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn stress_names(&self) -> Vec<String> {
-        stress_names(self.space_dim, self.kinematics)
+        voigt_names(self.stress_prefix(), self.space_dim, self.kinematics)
     }
 
     /// What a continuum-mechanics **matrix** kernel reads from the state field,

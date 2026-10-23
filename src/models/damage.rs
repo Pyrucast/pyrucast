@@ -54,7 +54,7 @@ use crate::models::plasticity::law::MAX_INTERNAL_VARS;
 use crate::models::symmetry::MaterialSymmetry;
 use crate::models::tensor::Kinematics;
 use crate::models::tensor::{dual_name, primal_name};
-use crate::models::tensor::{stress_count, stress_names, voigt_stress};
+use crate::models::tensor::{stress_count, voigt_stress};
 use crate::models::ZoneLayout;
 use crate::models::{
     Behavior, CellGeom, Domain, MatrixLayout, Physics, StrainOperator, SubModelKind,
@@ -124,7 +124,12 @@ impl Damage {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(fespace: Handle<SubFiniteElementSpace>, kinematics: Kinematics) -> Result<Self> {
-        Self::with_law(fespace, kinematics, DamageLaw::Mazars)
+        Self::with_law(
+            fespace,
+            kinematics,
+            DamageLaw::Mazars,
+            StrainMeasure::Linear,
+        )
     }
 
     /// Damage with an explicit law, on an FE subspace with the given 2-D/3-D
@@ -153,8 +158,9 @@ impl Damage {
     /// # use pyrucast::models::tensor::Kinematics;
     /// // The explicit law. Damage-TC tracks two damages, hence demands
     /// // two strengths where Mazars asks for only one.
+    /// # use pyrucast::ops::element_field::StrainMeasure;
     /// let tc = Damage::with_law(
-    ///     zone.clone(), Kinematics::PlaneStress, DamageLaw::DamageTc)?;
+    ///     zone.clone(), Kinematics::PlaneStress, DamageLaw::DamageTc, StrainMeasure::Linear)?;
     /// assert!(tc.material_components().contains(&"f_t".to_string()));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -162,9 +168,11 @@ impl Damage {
         fespace: Handle<SubFiniteElementSpace>,
         kinematics: Kinematics,
         law: DamageLaw,
+        measure: StrainMeasure,
     ) -> Result<Self> {
         Ok(Self {
-            continuum: Continuum::new(fespace, kinematics, "Damage")?,
+            continuum: Continuum::new(fespace, kinematics, "Damage")?
+                .with_measure(measure, "Damage")?,
             law,
         })
     }
@@ -320,7 +328,7 @@ impl Behavior for Damage {
     }
 
     fn behavior_output_components(&self) -> Vec<String> {
-        let mut comps = stress_names(self.continuum.space_dim(), self.continuum.kinematics());
+        let mut comps = self.continuum.stress_names();
         comps.push("damage".into());
         // The law's own history and per-direction damages.
         comps.extend(self.law.internal_names());
@@ -334,7 +342,7 @@ impl Behavior for Damage {
     }
 
     fn strain_operator(&self) -> StrainOperator {
-        StrainOperator::Deformation(StrainMeasure::Linear)
+        StrainOperator::Deformation(self.continuum.measure())
     }
 
     /// The law's own internal variables — `κ` for Mazars, one per direction for

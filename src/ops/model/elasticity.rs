@@ -6,6 +6,7 @@ use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
 use crate::models::symmetry::MaterialSymmetry;
 use crate::models::tensor::Kinematics;
+use crate::ops::element_field::StrainMeasure;
 
 /// Linear-elasticity `Model` spanning **every** subspace of `fes` (same
 /// 2-D/3-D `kinematics` for all). Parent-level operator; material
@@ -39,7 +40,12 @@ use crate::models::tensor::Kinematics;
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn elasticity(fes: &FiniteElementSpace, kinematics: Kinematics) -> Result<Model> {
-    elasticity_with_symmetry(fes, kinematics, MaterialSymmetry::Isotropic)
+    elasticity_with_symmetry(
+        fes,
+        kinematics,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )
 }
 
 /// Linear-elasticity `Model` spanning **every** subspace of `fes`, with an
@@ -70,8 +76,9 @@ pub fn elasticity(fes: &FiniteElementSpace, kinematics: Kinematics) -> Result<Mo
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
+/// # use pyrucast::ops::element_field::StrainMeasure;
 /// let m = model::elasticity_with_symmetry(
-///     &fes, Kinematics::PlaneStress, MaterialSymmetry::Orthotropic)?;
+///     &fes, Kinematics::PlaneStress, MaterialSymmetry::Orthotropic, StrainMeasure::Linear)?;
 /// assert_eq!(m.len(), fes.len());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -79,8 +86,9 @@ pub fn elasticity_with_symmetry(
     fes: &FiniteElementSpace,
     kinematics: Kinematics,
     symmetry: MaterialSymmetry,
+    measure: StrainMeasure,
 ) -> Result<Model> {
     spanning(fes, |zone| {
-        SubModel::elasticity_with_symmetry(zone, kinematics, symmetry)
+        SubModel::elasticity_with_symmetry(zone, kinematics, symmetry, measure)
     })
 }

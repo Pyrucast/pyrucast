@@ -931,15 +931,30 @@ pub trait SubModelKind: Sync {
     /// [`Behavior::deformation_reads`] on the `Bᵀσ` side.
     ///
     /// Default: the continuum stress tensor, plus the hoop `σ_θθ` on a body of
-    /// revolution, matching the default kernel below.
+    /// revolution, matching the default kernel below. A law reading a
+    /// large-transformation measure is answered on the reference configuration
+    /// instead, by the whole first Piola–Kirchhoff `P = F S` (`P_xx, P_xy, …`,
+    /// hoop `P_zz`) — prepared by
+    /// [`stress_measure`](fn@crate::ops::element_field::stress_measure), since
+    /// neither `S` nor `T` is what `Bᵀ` applies to there.
     fn internal_force_reads(&self) -> Vec<String> {
         let Some(layout) = self.stiffness_layout() else {
             return Vec::new();
         };
         let space_dim = layout.fespaces[0].read().space_dim();
-        let mut names = continuum::internal_force::voigt_matrix_reads("sigma", space_dim);
+        let (mut names, prefix) = if reads_finite_strain(self) {
+            (
+                continuum::internal_force::full_matrix_reads("P", space_dim),
+                "P",
+            )
+        } else {
+            (
+                continuum::internal_force::voigt_matrix_reads("sigma", space_dim),
+                "sigma",
+            )
+        };
         if layout.fespaces[0].read().is_axisymmetric() {
-            names.push("sigma_zz".to_string());
+            names.push(format!("{prefix}_zz"));
         }
         names
     }
@@ -953,7 +968,11 @@ pub trait SubModelKind: Sync {
         _mat: &[u32],
         fe: &mut [f64],
     ) -> Result<()> {
-        continuum::internal_force::continuum_internal_force_element(geoms, stress, lay, fe)
+        if reads_finite_strain(self) {
+            continuum::internal_force::continuum_internal_force_element_full(geoms, stress, lay, fe)
+        } else {
+            continuum::internal_force::continuum_internal_force_element(geoms, stress, lay, fe)
+        }
     }
 
     /// What this term applies its `Bᵀ` to, at the points of `fespace` — read
@@ -1913,6 +1932,17 @@ pub enum StrainOperator {
     Shell(shell::ShellModel),
 }
 
+/// Whether `kind` carries a law reading a large-transformation measure
+/// (Green–Lagrange or Hencky): its residual is then written on the reference
+/// configuration with the first Piola–Kirchhoff stress.
+fn reads_finite_strain<K: SubModelKind + ?Sized>(kind: &K) -> bool {
+    matches!(
+        kind.as_behavior().map(|law| law.strain_operator()),
+        Some(StrainOperator::Deformation(measure))
+            if measure != crate::ops::element_field::StrainMeasure::Linear
+    )
+}
+
 /// The **law** capability: a pointwise constitutive evaluation producing a
 /// state, on top of a [`Domain`]'s integration.
 ///
@@ -2269,6 +2299,11 @@ macro_rules! physics_operator {
     // named at the call site — `drucker_prager(fes, m)` rather than
     // `plasticity_with_law(fes, m, PlasticLaw::DruckerPrager)`. The facade
     // duplicates nothing: it forwards to the generic operator.
+    //
+    // Every such facade is a continuum law, and every continuum law reads a
+    // strain measure: the Rust facade reads the linear one — the generic
+    // operator takes any — and the Python face takes it as `strain_measure`,
+    // `"linear"` unless said otherwise.
     (
         $(#[$rust_doc:meta])*
         pub fn $name:ident(fes $(, $arg:ident : $ty:ty)* $(,)?) = $target:path, $fixed:expr;
@@ -2279,7 +2314,7 @@ macro_rules! physics_operator {
             fes: &$crate::containers::finite_element_space::FiniteElementSpace,
             $($arg: $ty,)*
         ) -> $crate::error::Result<$crate::containers::model::Model> {
-            $target(fes, $($arg,)* $fixed)
+            $target(fes, $($arg,)* $fixed, $crate::ops::element_field::StrainMeasure::Linear)
         }
 
         #[cfg(feature = "python-api")]
@@ -2290,14 +2325,23 @@ macro_rules! physics_operator {
             use super::*;
 
             #[doc = $py_doc]
+            #[doc = "\n\n`strain_measure` is the strain the law reads: `\"linear\"` (small \
+                     strains, the default), `\"green_lagrange\"` (large rotations) or \
+                     `\"hencky\"` (large plastic strains); the stress it writes is the \
+                     dual, named after it (`sigma_*`, `S_*`, `T_*`)."]
             #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pyfunction)]
             #[::pyo3::pyfunction]
+            #[pyo3(signature = (
+                fespace, $($arg,)*
+                strain_measure = $crate::ops::element_field::StrainMeasure::Linear
+            ))]
             pub fn $name(
                 fespace: ::pyo3::PyRef<$crate::py::finite_element_space::PyFiniteElementSpace>,
                 $($arg: $ty,)*
+                strain_measure: $crate::ops::element_field::StrainMeasure,
             ) -> ::pyo3::PyResult<$crate::py::model::PyModel> {
                 Ok($crate::py::model::PyModel {
-                    inner: super::$name(&fespace.inner $(, $arg)*)?,
+                    inner: $target(&fespace.inner, $($arg,)* $fixed, strain_measure)?,
                 })
             }
         } }

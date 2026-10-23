@@ -1,4 +1,4 @@
-//! Python wrappers for [`crate::ops::coords`] — the two operators that
+//! Python wrappers for [`crate::ops::coords`] — the three operators that
 //! write back into the coordinates.
 
 use crate::py::node_field::PyNodeField;
@@ -27,5 +27,25 @@ pub fn set(field: PyRef<PyNodeField>, components: Option<Vec<String>>) -> PyResu
 #[pyo3(signature = (field, components=None))]
 pub fn displace(field: PyRef<PyNodeField>, components: Option<Vec<String>>) -> PyResult<()> {
     crate::ops::coords::displace(&field.inner, components)?;
+    Ok(())
+}
+
+/// Lay configuration `target` of the field's `Coords` at configuration
+/// `reference` displaced by `field`: `x = X + u`, in absolute — called again,
+/// it lands at `X + u` again, nothing accumulates. A node the field does not
+/// define stays at its reference position; the active configuration is left as
+/// it is. `components` names one displacement component per axis; `None` →
+/// `["ux", "uy", "uz"][:dim]`. Cast3M `FORM` with a displacement, without
+/// changing the active configuration.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (field, reference, target, components=None))]
+pub fn displace_from(
+    field: PyRef<PyNodeField>,
+    reference: usize,
+    target: usize,
+    components: Option<Vec<String>>,
+) -> PyResult<()> {
+    crate::ops::coords::displace_from(&field.inner, reference, target, components)?;
     Ok(())
 }

@@ -8,6 +8,7 @@ use crate::models::mpc::MpcTerm;
 use crate::models::symmetry::MaterialSymmetry;
 use crate::models::tensor::Kinematics;
 use crate::models::RelationSense;
+use crate::ops::element_field::StrainMeasure;
 use crate::ops::model;
 use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::py::mesh::PyMesh;
@@ -116,16 +117,22 @@ pub fn interface_transfer(
 /// `"anisotropic"` (the 21 constants `C_11 … C_66`). The two oriented ones
 /// also require the material axes — `V1X, V1Y` in 2-D, `V1X…V1Z, V2X…V2Z`
 /// in 3-D — which are orthonormalised internally.
+///
+/// `strain_measure` is the strain the law reads: `"linear"` (small strains,
+/// the default), `"green_lagrange"` (large rotations: Hooke on `E` is
+/// Saint-Venant–Kirchhoff) or `"hencky"` (`½ ln C`). The stress it writes is
+/// the dual, named after it: `sigma_*`, `S_*` or `T_*`.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (fespace, kinematics, symmetry=None))]
+#[pyo3(signature = (fespace, kinematics, symmetry=None, strain_measure=StrainMeasure::Linear))]
 pub fn elasticity(
     fespace: PyRef<PyFiniteElementSpace>,
     kinematics: Kinematics,
     symmetry: Option<MaterialSymmetry>,
+    strain_measure: StrainMeasure,
 ) -> PyResult<PyModel> {
     let s = symmetry.unwrap_or(MaterialSymmetry::Isotropic);
-    let inner = model::elasticity_with_symmetry(&fespace.inner, kinematics, s)?;
+    let inner = model::elasticity_with_symmetry(&fespace.inner, kinematics, s, strain_measure)?;
     Ok(PyModel { inner })
 }
 

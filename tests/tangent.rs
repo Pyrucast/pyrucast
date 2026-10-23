@@ -303,7 +303,12 @@ fn a_nonlinear_physics_without_tangent_errors() -> Result<()> {
     use pyrucast::models::damage::law::DamageLaw;
     use pyrucast::ops::model;
     let (fes, n) = unit_quad()?;
-    let damage = model::damage_with_law(&fes, Kinematics::PlaneStress, DamageLaw::DamageTc)?;
+    let damage = model::damage_with_law(
+        &fes,
+        Kinematics::PlaneStress,
+        DamageLaw::DamageTc,
+        StrainMeasure::Linear,
+    )?;
     let materials = material_field(
         &damage,
         &[

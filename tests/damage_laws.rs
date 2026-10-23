@@ -290,13 +290,13 @@ struct Cube {
 impl Cube {
     fn damage(law: DamageLaw, material: &[(&str, f64)]) -> Result<Self> {
         Self::build(material, |fes| {
-            model::damage_with_law(fes, Kinematics::Full3D, law)
+            model::damage_with_law(fes, Kinematics::Full3D, law, StrainMeasure::Linear)
         })
     }
 
     fn plastic(law: PlasticLaw, material: &[(&str, f64)]) -> Result<Self> {
         Self::build(material, |fes| {
-            model::plasticity_with_law(fes, Kinematics::Full3D, law)
+            model::plasticity_with_law(fes, Kinematics::Full3D, law, StrainMeasure::Linear)
         })
     }
 

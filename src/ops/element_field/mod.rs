@@ -35,6 +35,7 @@ pub mod material_field;
 pub mod methods;
 pub mod shell_deformation;
 pub mod strain;
+pub mod stress_measure;
 pub mod thermal_strain;
 
 pub use beam_deformation::beam_deformation;
@@ -48,4 +49,5 @@ pub use mask::{mask, mask_sub};
 pub use material_field::{material_field, material_field_per_sub_model, sub_material_field};
 pub use shell_deformation::shell_deformation;
 pub use strain::strain;
+pub use stress_measure::{stress_measure, StressMeasure};
 pub use thermal_strain::thermal_strain;

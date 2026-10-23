@@ -26,6 +26,7 @@ Maillage - assemblage;DIFF;Différence de maillages;—
 Maillage - assemblage;INTE;Intersection de maillages;—
 Maillage - transformation;CHAN;Change le type d'élément (POI1, passage quadratique…);to_poi1 (cas POI1) / to_quadratic (linéaire→quadratique) / convert (QUA4→TRI3, HEX8→TET4)
 Maillage - transformation;PLUS;Translate les coordonnées des nœuds;coords.displace / coords.set
+Maillage - transformation;FORM;Configuration déformée (coordonnées courantes = initiales + déplacement);coords.displace_from (pose en absolu la configuration cible X + u, sans changer la configuration active) · Coords.add_config / select
 Maillage - transformation;TOUR;Tourne (rotation) les coordonnées des nœuds;rotate
 Maillage - transformation;INVE;Inverse l'orientation des éléments;invert
 Maillage - transformation;ORIE;Oriente les éléments d'une surface/ligne;orient
@@ -49,7 +50,7 @@ Maillage - info;POIN SPHE;Nœuds d'un maillage situés sur une sphère (un cercl
 Maillage - info;POIN CYLI;Nœuds d'un maillage situés sur un cylindre (surface latérale, disques exclus);points_on_cylinder · intérieur par points_in_cylinder
 Maillage - info;POIN CONE;Nœuds d'un maillage situés sur un cône (tronqué, surface latérale);points_on_cone · intérieur par points_in_cone
 Maillage - info;POIN TORE;Nœuds d'un maillage situés sur un tore à section circulaire (3D);points_on_torus · intérieur par points_in_torus
-Modèle et matériau;MODE;Définit un modèle (physique, formulation, élément fini);model.* (heat_conduction, elasticity, plasticity_perfect, mazars…) · formulation mécanique en argument (plane_stress, plane_strain, axisymmetric, full_3d — `solid` accepté en alias) — élasticité, plasticité et Mazars · nature physique par bloc via physics() · filtrage par nature via Model.filter / Matrix.filter · symétrie matériau en argument (isotropic, orthotropic, anisotropic) — élasticité, conduction, Fick · diffusion via model.fick · transfert d'interface entre deux maillages via model.interface_transfer (blocs Contribution::Coupling, nature prise du modèle cible)
+Modèle et matériau;MODE;Définit un modèle (physique, formulation, élément fini);model.* (heat_conduction, elasticity, plasticity_perfect, mazars…) · formulation mécanique en argument (plane_stress, plane_strain, axisymmetric, full_3d — `solid` accepté en alias) — élasticité, plasticité et Mazars · nature physique par bloc via physics() · filtrage par nature via Model.filter / Matrix.filter · symétrie matériau en argument (isotropic, orthotropic, anisotropic) — élasticité, conduction, Fick · mesure de déformation en argument (strain_measure : linear, green_lagrange, hencky ; option EPSILON de Cast3M) — élasticité, plasticité, endommagement · diffusion via model.fick · transfert d'interface entre deux maillages via model.interface_transfer (blocs Contribution::Coupling, nature prise du modèle cible)
 Modèle et matériau;MATE;Définit le champ de propriétés matériau;material_field / sub_material_field · le repère d'orthotropie passe par des composantes vectorielles V1X/V1Y(/V1Z, V2X..V2Z), comme MATE 'DIRECTION' V1 V2
 Modèle et matériau;CARA;Caractéristiques géométriques (sections de poutres/coques);material_field (composantes section)
 Modèle et matériau;COMP;Intègre la loi de comportement (déf -> contraintes);integrate_behavior
@@ -82,7 +83,7 @@ Résolution;KRES;Résolution avec conditions (rigidité + blocages);solve
 Résolution;CONDENSATION;Élimination des relations linéaires (maître/esclave) au lieu de multiplicateurs;solve_eliminate
 Résolution;RESO (INEG);Résolution avec relations unilatérales (statut actif/inactif);solve_unilateral
 Champs - dérivation;GRAD;Gradient d'un champ aux points de Gauss;gradient
-Champs - dérivation;EPSI;Déformations à partir d'un déplacement;strain (avec modèle : l'entrée de chaque loi, toutes physiques) / deformation (sans ; measure : linéaire, F, Green–Lagrange, Cauchy-Green, Hencky, Almansi) / beam_deformation / shell_deformation
+Champs - dérivation;EPSI;Déformations à partir d'un déplacement;strain (avec modèle : l'entrée de chaque loi, toutes physiques ; la mesure est celle de la loi, strain_measure) / deformation (sans ; measure : linéaire, F, Green–Lagrange, Cauchy-Green, Hencky, Almansi) / beam_deformation / shell_deformation
 Champs - dérivation;SIGM;Contraintes à partir des déformations;integrate_behavior
 Champs - dérivation;REAC;Réactions nodales;−internal_forces(model.filter(constraint), état, solution, matériau) (−Cᵀλ aux nœuds contraints)
 Champs - extraction;EXCO;Extrait/renomme une composante d'un champ;filter_components (extraction, str ou liste) / rename_component (renommage)
@@ -134,7 +135,8 @@ Non-linéaire / transitoire;KEQU;Matrice équivalente (combinaison pondérée po
 Non-linéaire / transitoire;PJBA;Projette un champ sur une base de modes;—
 Non-linéaire / transitoire;LUMP;Concentration (lumping) d'une matrice masse/capacité;lump
 Non-linéaire / transitoire;PHAJ;Changement de phase / chaleur latente (thermique);—
-Non-linéaire / transitoire;EPTH;Déformation thermique (dilatation libre);thermal_strain · `alpha` accepté par l'élasticité, la plasticité et l'endommagement — sauf Drucker-Prager, où `alpha` désigne déjà la sensibilité à la pression
+Non-linéaire / transitoire;EPTH;Déformation thermique (dilatation libre);thermal_strain (measure : la dilatation exacte dans la mesure de la loi, linéaire, Green–Lagrange ou Hencky) · `alpha` accepté par l'élasticité, la plasticité et l'endommagement — sauf Drucker-Prager, où `alpha` désigne déjà la sensibilité à la pression
+Non-linéaire / transitoire;CONF;Change la configuration d'un champ (transport de contraintes et de déformations);stress_measure — partiel : les contraintes seules, entre la configuration de référence et la courante (Cauchy, Kirchhoff, Piola–Kirchhoff 1 et 2), F donné ; ni déformations ni rotation de Jaumann, inutiles en lagrangien total
 Non-linéaire / transitoire;PRIN;Valeurs et directions principales (contraintes/déformations);—
 Non-linéaire / transitoire;VARI;Champ variable : caractéristiques évaluées à un état (VARI 'NUAG');Evolution.interpolate(champ d'état) — chaque courbe scalaire lit ses variables par abscissa_type et écrit sa composante (ordinate_type), puis element_field.consolidate avec le matériau constant
 Non-linéaire / transitoire;NUAG;Interpolation par nuage de points (table -> champ);Evolution / SubEvolution à abscisses en tuple ((T, phi), valeur) : table lue hiérarchiquement, tables irrégulières acceptées

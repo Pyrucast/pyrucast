@@ -6,6 +6,7 @@ use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
 use crate::models::plasticity::law::PlasticLaw;
 use crate::models::tensor::Kinematics;
+use crate::ops::element_field::StrainMeasure;
 
 /// Elastoplastic `Model` spanning **every** subspace of `fes`, with an
 /// explicit yield law (von Mises perfect or hardening, Drucker-Prager,
@@ -36,8 +37,10 @@ use crate::models::tensor::Kinematics;
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # use pyrucast::models::plasticity::law::PlasticLaw;
+/// # use pyrucast::ops::element_field::StrainMeasure;
+/// // J2 read on the Hencky strain: large plastic strains.
 /// let m = model::plasticity_with_law(
-///     &fes, Kinematics::PlaneStrain, PlasticLaw::Perfect)?;
+///     &fes, Kinematics::PlaneStrain, PlasticLaw::Perfect, StrainMeasure::Hencky)?;
 /// assert_eq!(m.len(), fes.len());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
@@ -45,8 +48,9 @@ pub fn plasticity_with_law(
     fes: &FiniteElementSpace,
     kinematics: Kinematics,
     law: PlasticLaw,
+    measure: StrainMeasure,
 ) -> Result<Model> {
     spanning(fes, |zone| {
-        SubModel::plasticity_with_law(zone, kinematics, law)
+        SubModel::plasticity_with_law(zone, kinematics, law, measure)
     })
 }

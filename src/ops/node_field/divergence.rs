@@ -24,7 +24,8 @@ use crate::containers::node_field::{NodeField, SubNodeField};
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::continuum::internal_force::{
-    continuum_internal_force_element, voigt_matrix_reads,
+    continuum_internal_force_element, continuum_internal_force_element_full, full_matrix_reads,
+    voigt_matrix_reads,
 };
 use crate::models::kernel::MAX_CELL_DOFS;
 use crate::models::kernel::{self, CellGeom};
@@ -84,6 +85,14 @@ use crate::ops::element_field::gradient::AXES;
 ///     ds.get(0)?.read().components(),
 ///     &["div_sigma_x".to_string(), "div_sigma_y".to_string()]
 /// );
+///
+/// // A tensor carrying both `P_xy` and `P_yx` is read whole: a first
+/// // Piola–Kirchhoff stress is not symmetric.
+/// # let mut p = ElementField::new(&fes,
+/// #     vec!["P_xx".into(), "P_xy".into(), "P_yx".into(), "P_yy".into()])?;
+/// # p.get(0)?.write().set_uniform("P_xy", 5.0)?;
+/// let dp = node_field::divergence(&p, "P")?;
+/// assert_eq!(dp.get(0)?.read().components().len(), 2);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 pub fn divergence(field: &ElementField, prefix: &str) -> Result<NodeField> {
@@ -99,8 +108,9 @@ pub fn divergence(field: &ElementField, prefix: &str) -> Result<NodeField> {
 /// Weak divergence on a single subspace, via the `Bᵀ` driver.
 ///
 /// The rank is read off the **names**: `A_x, A_y` is a vector, `A_xx, A_xy,
-/// A_yy` a symmetric tensor. Nothing is counted and nothing is positional, so
-/// the two never collide — not even in 1-D, where both carry one component.
+/// A_yy` a symmetric tensor, and with `A_yx` as well a full one, read whole.
+/// Nothing is counted and nothing is positional, so the two never collide — not
+/// even in 1-D, where both carry one component.
 fn subspace_divergence(field: &Handle<SubElementField>, prefix: &str) -> Result<SubNodeField> {
     let f = field.read();
     let fespace = f.support();
@@ -116,18 +126,23 @@ fn subspace_divergence(field: &Handle<SubElementField>, prefix: &str) -> Result<
         .map(|a| format!("{prefix}_{}", AXES[a]))
         .collect();
     let mut tensor = voigt_matrix_reads(prefix, space_dim);
+    let mut full = full_matrix_reads(prefix, space_dim);
     if axisymmetric {
         tensor.push(format!("{prefix}_zz"));
+        full.push(format!("{prefix}_zz"));
     }
     let carries = |names: &[String]| names.iter().all(|n| f.components().contains(n));
     let (is_vector, is_tensor) = (carries(&vector), carries(&tensor));
+    // The full set contains the symmetric one: a field carrying it is read
+    // whole. In 1-D both are the single `A_xx`.
+    let is_full = space_dim > 1 && carries(&full);
 
     // The rank is settled **here**, once for the zone, and handed to the kernel
     // as an index array — never a name read again at the Gauss point.
     let (names, duals) = match (is_vector, is_tensor) {
         (true, false) => (vector, vec![format!("div_{prefix}")]),
         (false, true) => (
-            tensor,
+            if is_full { full } else { tensor },
             (0..space_dim)
                 .map(|a| format!("div_{prefix}_{}", AXES[a]))
                 .collect(),
@@ -161,6 +176,8 @@ fn subspace_divergence(field: &Handle<SubElementField>, prefix: &str) -> Result<
         |geoms, fe| {
             if is_vector {
                 divergence_element(geoms, &f, &lay, fe)
+            } else if is_full {
+                continuum_internal_force_element_full(geoms, &f, &lay, fe)
             } else {
                 continuum_internal_force_element(geoms, &f, &lay, fe)
             }

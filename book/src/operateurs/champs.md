@@ -19,10 +19,13 @@ chargement réparti `flux`), [Comportement](comportement.md), [Solveur](solveur.
 | `positions(mesh, components=None)` | un `NodeField` portant les coordonnées des nœuds (`"X"`, `"Y"`, `"Z"`), une zone par sous-maillage. `None` ⇒ tous les axes présents dans la dimension du `Coords`. |
 | `coords.set(field, components=None)` | **écrit** les coordonnées du `Coords` actif depuis un champ `"X"/"Y"/"Z"`. |
 | `displace(field, components=None)` | **ajoute** un champ de déplacement aux coordonnées (chaque nœud distinct traité **une seule fois**). |
+| `coords.displace_from(field, reference, target, components=None)` | **pose** la configuration `target` en `X + u`, en absolu à partir de la configuration `reference` : rappelée, elle repart de `X`, rien ne s'accumule. La configuration active ne change pas (Cast3M `FORM`). |
 
 `positions` est le pont géométrie → champ : on en tire un `NodeField` qu'on
 peut tracer, dériver, ou réinjecter après calcul (`displace` pour passer à la
-configuration déformée).
+configuration déformée). En grandes transformations, la configuration courante
+vit dans un jeu à part du même `Coords`, posé par `displace_from` : voir
+[Grandes transformations](../mecanique/grandes-transformations.md).
 
 ## Restriction, fusion, consolidation
 
@@ -255,7 +258,7 @@ finies pour Hencky et Almansi : rien n'est vérifié au point de Gauss.
 {{#include ../../../tests/python/test_doc_ops_champs.py:mesures}}
 ```
 
-### `thermal_strain(temperature, materials, fespace, t_ref)` → `ElementField`
+### `thermal_strain(temperature, materials, fespace, t_ref, measure="linear")` → `ElementField`
 
 Déformation thermique de libre dilatation (Cast3M `EPTH`), pour la
 thermomécanique **non couplée** :
@@ -276,6 +279,10 @@ déformation mécanique `ε(u) − ε_th`. Aucun couplage n'est fait ici :
 l'utilisateur compose la charge thermique et la contrainte réelle
 `σ = D:(ε − ε_th)` à partir des briques (`integrate_behavior`,
 `internal_forces`) — cf. l'[exemple thermomécanique](../mecanique/elasticite.md#thermomécanique-non-couplée).
+
+`measure` est la mesure que lit la loi : la même dilatation y est donnée
+exactement, `½((1 + αΔT)² − 1)` en Green–Lagrange (`E_*`), `ln(1 + αΔT)` en
+Hencky (`H_*`) — cf. [Grandes transformations](../mecanique/grandes-transformations.md).
 
 ### `elastic_stress(model, strain, materials)` / `elastic_strain(model, stress, materials)` → `ElementField`
 
@@ -315,6 +322,18 @@ les deux sens ne font pas la même opération, et l'état que rend
 {{#include ../../../tests/python/test_doc_ops_champs.py:elastique}}
 ```
 
+### `stress_measure(stress, gradient, target)` → `ElementField`
+
+Une contrainte convertie, point par point, d'une mesure à l'autre, avec le
+gradient de la transformation `F` (`deformation(u, fespace, "gradient")`) :
+Cauchy `sigma_*`, Kirchhoff `tau_*`, Piola–Kirchhoff 1 `P_*` (non symétrique)
+et 2 `S_*`. La mesure d'entrée se reconnaît à ses noms, une par zone ; `target`
+nomme celle qu'on veut (`"cauchy"`, `"kirchhoff"`, `"pk1"`, `"pk2"`). C'est
+ainsi que la contrainte lagrangienne d'une loi en grandes transformations
+devient la `P` que lisent les forces internes, ou la Cauchy des résultats —
+la moitié « contraintes » de Cast3M `CONF`. Formules et exemple :
+[Grandes transformations](../mecanique/grandes-transformations.md).
+
 ### `divergence(field)` → `NodeField`
 
 Divergence **faible** (consistante) d'un champ vectoriel par éléments — l'adjoint
@@ -326,7 +345,9 @@ d_i = \int_\Omega \nabla N_i \cdot F\\, d\Omega
 \\]
 
 accumulé par nœud. C'est l'opérateur `Bᵀ`, transposé du gradient : il vérifie
-`⟨∇f, F⟩ = ⟨f, div F⟩`. Le champ d'entrée doit porter exactement `space_dim`
+`⟨∇f, F⟩ = ⟨f, div F⟩`. Un tenseur se lit à ses noms : symétrique
+(`A_xx, A_xy, A_yy`), ou **plein** s'il porte aussi `A_yx` — comme la
+contrainte nominale `P` des grandes transformations. Le champ d'entrée doit porter exactement `space_dim`
 composantes (`F_x, F_y, F_z`) ; la sortie porte une composante `"div"`, et un
 nœud partagé par plusieurs sous-espaces reçoit la **somme** de leurs
 contributions. Ce sont des **quantités intégrées**, pas les valeurs
@@ -413,7 +434,7 @@ physiques. Aussi en méthode : `model.strain(solution, materials)`.
 
 | sous-modèle | producteur | zone rendue |
 |---|---|---|
-| élasticité, plasticité, endommagement, barre | `deformation` | `eps_*` |
+| élasticité, plasticité, endommagement, barre | `deformation` | `eps_*`, ou la mesure de la loi (`E_*`, `H_*`) |
 | conduction, Fick | `gradient` | `grad_T_*`, `grad_c_<espèce>_*` |
 | rayonnement | `interp_to_gauss` | `T` aux points |
 | poutres Bernoulli, Timoshenko | `beam_deformation` | `eps`, `kappa*`, `gamma*`, `torsion` |
@@ -452,13 +473,15 @@ le principe des travaux virtuels écrit au niveau discret :
 D'où `K = Bᵀ W D B`, symétrique si et seulement si `D` l'est, et, pour une loi
 linéaire, `internal_forces(integrate_behavior(strain(u))) = K·u` à l'arrondi
 près — ce que vérifie l'exemple. [`divergence`](#divergencefield--nodefield) est
-le cas scalaire du même `Bᵀ`, et l'adjoint de `gradient`. La transposition ne
-tient plus exactement en grandes transformations (elle lie alors la
-*variation* `δε = B(u) δu` aux efforts, et la tangente gagne la rigidité
-géométrique), pour un terme non variationnel (advection, pression suiveuse,
-relation non associée), et dès que les deux côtés n'utilisent pas les mêmes
-points : c'est pourquoi `shell_deformation` lit le cisaillement au point réduit
-où la rigidité l'intègre.
+le cas scalaire du même `Bᵀ`, et l'adjoint de `gradient`. En grandes
+transformations, la transposition lie la *variation* `δE = sym(Fᵀ∇₀δu)` aux
+efforts : `internal_forces` lit alors la contrainte nominale `P = F S`
+(cf. [Grandes transformations](../mecanique/grandes-transformations.md)), et la
+tangente gagne la rigidité géométrique. Elle ne tient plus pour un terme non
+variationnel (advection, pression suiveuse, relation non associée), ni dès que
+les deux côtés n'utilisent pas les mêmes points : c'est pourquoi
+`shell_deformation` lit le cisaillement au point réduit où la rigidité
+l'intègre.
 
 **Un modèle couplé se passe de `consolidate`.** Deux lois sur un même maillage
 (thermique et mécanique) donnent deux zones sur un même espace. Chaque

@@ -39,6 +39,7 @@
     - [Poutre d'Euler-Bernoulli](mecanique/bernoulli.md)
     - [Poutre de Timoshenko](mecanique/timoshenko.md)
     - [Coques](mecanique/coques.md)
+    - [Grandes transformations](mecanique/grandes-transformations.md)
   - [Contraintes](contraintes.md)
     - [Dirichlet](contraintes/dirichlet.md)
     - [Multi-points (MPC)](contraintes/mpc.md)

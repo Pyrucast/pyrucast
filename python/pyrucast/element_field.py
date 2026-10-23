@@ -3,8 +3,8 @@
 
 Kinematics (gradient, strain and its structural variants, interpolation to the
 Gauss points, thermal expansion), the model's own strain operator ``strain``,
-the elastic operator both ways, material data, and the integration of the
-constitutive law.
+the elastic operator both ways, the conversion between stress measures,
+material data, and the integration of the constitutive law.
 """
 
 from ._pyrucast import (
@@ -22,6 +22,7 @@ from ._pyrucast import (
     material_field_per_sub_model as material_field_per_sub_model,
     shell_deformation as shell_deformation,
     strain as strain,
+    stress_measure as stress_measure,
     sub_material_field as sub_material_field,
     thermal_strain as thermal_strain,
 )
@@ -41,6 +42,7 @@ __all__ = [
     "material_field_per_sub_model",
     "shell_deformation",
     "strain",
+    "stress_measure",
     "sub_material_field",
     "thermal_strain",
 ]

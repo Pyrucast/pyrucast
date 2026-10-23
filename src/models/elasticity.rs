@@ -110,7 +110,12 @@ impl Elasticity {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(fespace: Handle<SubFiniteElementSpace>, kinematics: Kinematics) -> Result<Self> {
-        Self::with_symmetry(fespace, kinematics, MaterialSymmetry::Isotropic)
+        Self::with_symmetry(
+            fespace,
+            kinematics,
+            MaterialSymmetry::Isotropic,
+            StrainMeasure::Linear,
+        )
     }
 
     /// Linear elasticity with an explicit material symmetry — the general
@@ -137,8 +142,10 @@ impl Elasticity {
     /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// // The general constructor: an orthotropic symmetry widens the material
     /// // contract, which then carries the moduli **and** the axes.
+    /// # use pyrucast::ops::element_field::StrainMeasure;
     /// let o = Elasticity::with_symmetry(
-    ///     zone.clone(), Kinematics::PlaneStress, MaterialSymmetry::Orthotropic)?;
+    ///     zone.clone(), Kinematics::PlaneStress, MaterialSymmetry::Orthotropic,
+    ///     StrainMeasure::Linear)?;
     /// assert!(o.material_components().len() > 2);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
@@ -146,9 +153,11 @@ impl Elasticity {
         fespace: Handle<SubFiniteElementSpace>,
         kinematics: Kinematics,
         symmetry: MaterialSymmetry,
+        measure: StrainMeasure,
     ) -> Result<Self> {
         Ok(Self {
-            continuum: Continuum::new(fespace, kinematics, "Elasticity")?,
+            continuum: Continuum::new(fespace, kinematics, "Elasticity")?
+                .with_measure(measure, "Elasticity")?,
             symmetry,
             law: ElasticLaw::Linear,
         })
@@ -298,7 +307,7 @@ impl Behavior for Elasticity {
     }
 
     fn strain_operator(&self) -> StrainOperator {
-        StrainOperator::Deformation(StrainMeasure::Linear)
+        StrainOperator::Deformation(self.continuum.measure())
     }
 
     fn integrate_point(

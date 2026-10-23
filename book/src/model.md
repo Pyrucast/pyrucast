@@ -110,7 +110,7 @@ opérateurs qui les déclarent et leurs variables, vus du `Model` :
 | `fick_with_symmetry(fes, sym, espèce)` | `c_<espèce>` | `j_<espèce>` | `D_1_<espèce>…` + repère ; `poro` facultatif | [Diffusion](diffusion.md) |
 | `interface_transfer(a, b, cible, comps, tol)` | libres | libres | `h_<primale>` | [Échanges](echanges.md) |
 | `truss(fes)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, A` | [Barre](mecanique/truss.md) |
-| `elasticity(fes, model)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, nu` | [Élasticité](mecanique/elasticite.md) |
+| `elasticity(fes, model)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, nu` | [Élasticité](mecanique/elasticite.md) ; en grandes transformations, [mesure de déformation](mecanique/grandes-transformations.md) |
 | `elasticity_with_symmetry(fes, model, sym)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E_1…G_23` / `C_11…C_66` + repère | [Orthotropie](mecanique/orthotropie.md) |
 | `plasticity_perfect(fes, model)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, nu, sigma_y` | [Plasticité](mecanique/plasticite.md) |
 | `plasticity_with_law(fes, model, law)` | idem | idem | selon la loi | [Lois d'écoulement](mecanique/lois-plastiques.md), [Fluage](mecanique/fluage.md) |

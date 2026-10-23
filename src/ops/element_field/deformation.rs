@@ -47,10 +47,13 @@ use crate::ops::element_field::gradient::AXES;
 /// assert_eq!(StrainMeasure::Hencky.prefix(), "H");
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize,
+)]
 pub enum StrainMeasure {
     /// Linearized (small-strain) tensor `ε = ½(∇u + ∇uᵀ)`, in **tensor**
     /// convention (`eps_xy` is half the engineering shear `γ`).
+    #[default]
     Linear,
     /// Deformation gradient `F = I + ∇u` — not symmetric, so every entry is
     /// produced, row-major.

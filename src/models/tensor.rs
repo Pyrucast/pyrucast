@@ -103,8 +103,6 @@ pub(crate) fn dual_name(a: usize) -> String {
     format!("f_{}", AXES[a])
 }
 
-/// Stress component names in Voigt order. Axisymmetric names the hoop `θθ`
-/// component `sigma_zz`, after Cast3M (`x = r`, `y = z`).
 /// Project the full 3-D stress to the kinematics's Voigt slot `r`.
 /// 2-D order is `[xx, yy, xy]`; 3-D is the full `[xx, yy, zz, yz, xz, xy]`.
 pub(crate) fn voigt_stress(
@@ -126,7 +124,7 @@ pub(crate) fn voigt_stress(
     }
 }
 
-/// How many stress components [`stress_names`] lists — the same answer without
+/// How many stress components [`voigt_names`] lists — the same answer without
 /// building the list.
 ///
 /// A behaviour kernel needs the *count* at every Gauss point (to know where its
@@ -140,24 +138,19 @@ pub(crate) fn stress_count(space_dim: usize, kinematics: Kinematics) -> usize {
     }
 }
 
-pub(crate) fn stress_names(space_dim: usize, kinematics: Kinematics) -> Vec<String> {
-    match (space_dim, kinematics) {
-        (2, Kinematics::Axisymmetric) => vec![
-            "sigma_xx".into(),
-            "sigma_yy".into(),
-            "sigma_zz".into(),
-            "sigma_xy".into(),
-        ],
-        (2, _) => vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_xy".into()],
-        _ => vec![
-            "sigma_xx".into(),
-            "sigma_yy".into(),
-            "sigma_zz".into(),
-            "sigma_yz".into(),
-            "sigma_xz".into(),
-            "sigma_xy".into(),
-        ],
-    }
+/// The Voigt components of a symmetric tensor of the continuum under `prefix`,
+/// in the order the laws' indices assume: `[xx, yy, xy]` in plane 2-D,
+/// `[xx, yy, zz, xy]` on a body of revolution (`zz` the hoop), the six
+/// `[xx, yy, zz, yz, xz, xy]` in 3-D — the hoop `θθ` named `zz` after Cast3M
+/// (`x = r`, `y = z`). The strain a law reads and the stress it writes share
+/// this layout, each under its own name.
+pub(crate) fn voigt_names(prefix: &str, space_dim: usize, kinematics: Kinematics) -> Vec<String> {
+    let suffixes: &[&str] = match (space_dim, kinematics) {
+        (2, Kinematics::Axisymmetric) => &["xx", "yy", "zz", "xy"],
+        (2, _) => &["xx", "yy", "xy"],
+        _ => &["xx", "yy", "zz", "yz", "xz", "xy"],
+    };
+    suffixes.iter().map(|s| format!("{prefix}_{s}")).collect()
 }
 
 /// First invariant `I₁ = tr(σ)`.

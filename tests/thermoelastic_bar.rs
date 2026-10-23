@@ -99,7 +99,7 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
     let t_elem = interp_to_gauss(&NodeField::from_sub(t_nodal), &fes)?;
 
     // ── Charge thermique f_th = ∫ Bᵀ D ε_th (BSIG de σ_th = D:ε_th) ─────────
-    let eps_th = thermal_strain(&t_elem, &materials, &fes, T_REF)?;
+    let eps_th = thermal_strain(&t_elem, &materials, &fes, T_REF, StrainMeasure::Linear)?;
     let sig_th =
         pyrucast::ops::element_field::behavior::integrate(&model, &eps_th, None, &materials, None)?;
     let f_th = internal_forces(&model, &sig_th, &NodeField::empty(), &materials)?;
@@ -205,7 +205,7 @@ fn thermal_expansion_reaches_plasticity_and_damage() -> Result<()> {
         let materials = pyrucast::ops::element_field::material_field(&model, &values)?;
         // The operator resolves its zone *by* `alpha`: before the fix this line
         // is where a plastic or damaging material stopped.
-        let eps_th = thermal_strain(&t_elem, &materials, &fes, T_REF)?;
+        let eps_th = thermal_strain(&t_elem, &materials, &fes, T_REF, StrainMeasure::Linear)?;
         let sigma = pyrucast::ops::element_field::behavior::integrate(
             &model, &eps_th, None, &materials, None,
         )?;

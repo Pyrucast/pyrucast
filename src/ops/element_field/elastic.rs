@@ -290,6 +290,7 @@ mod tests {
     use crate::models::tensor::Kinematics;
     use crate::ops::element_field::behavior::integrate;
     use crate::ops::element_field::material_field;
+    use crate::ops::element_field::StrainMeasure;
     use crate::ops::model;
 
     fn tri3(dim: usize, axisymmetric: bool) -> FiniteElementSpace {
@@ -346,7 +347,8 @@ mod tests {
         materials: &[(&str, f64)],
         names: &[&str],
     ) {
-        let m = model::elasticity_with_symmetry(fes, kinematics, symmetry).unwrap();
+        let m = model::elasticity_with_symmetry(fes, kinematics, symmetry, StrainMeasure::Linear)
+            .unwrap();
         let mat = material_field(&m, materials).unwrap();
         let eps = strain(fes, names);
         let ours = elastic_stress(&m, &eps, &mat).unwrap();

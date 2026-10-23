@@ -32,6 +32,7 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
+use pyrucast::ops::element_field::StrainMeasure;
 use pyrucast::ops::mesh;
 use pyrucast::ops::model;
 use pyrucast::ops::solver::lu::solve;
@@ -282,7 +283,12 @@ fn clamped_model(
     };
     let left: Vec<Node> = (0..=N).map(|j| grid[idx(0, j)].clone()).collect();
     let bottom: Vec<Node> = (0..=N).map(|i| grid[idx(i, 0)].clone()).collect();
-    let mut model = model::elasticity_with_symmetry(fes, Kinematics::PlaneStress, symmetry)?;
+    let mut model = model::elasticity_with_symmetry(
+        fes,
+        Kinematics::PlaneStress,
+        symmetry,
+        StrainMeasure::Linear,
+    )?;
     model = model.union(&roller(&model, &left, "u_x")?)?;
     model = model.union(&roller(&model, &bottom, "u_y")?)?;
     // The right edge's traction is a term of the model, not a vector built by

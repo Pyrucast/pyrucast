@@ -1,0 +1,157 @@
+# Grandes transformations
+
+Une loi de petites déformations — Hooke, von Mises, Mazars — lit `ε` et rend
+`σ`. Quand les rotations ou les déformations deviennent grandes, elle doit lire
+une **mesure** de déformation qui ne voie que ce qui déforme vraiment la
+matière. pyrucast suit la voie de MFront : le **lagrangien total**. La loi lit
+une mesure lagrangienne totale, rend sa contrainte duale, et tout son état reste
+sur la configuration de référence. Rien n'est transporté d'une configuration à
+l'autre.
+
+## Choisir la mesure
+
+La mesure est un **paramètre de construction** de la loi :
+
+```python
+{{#include ../../../tests/python/test_doc_grandes_transformations.py:modele}}
+```
+
+| `strain_measure` | la loi lit | elle écrit | domaine |
+|---|---|---|---|
+| `"linear"` (défaut) | `eps_*` : `ε = sym ∇u` | `sigma_*` : Cauchy | petites déformations, petites rotations |
+| `"green_lagrange"` | `E_*` : `E = ½(FᵀF − I)` | `S_*` : Piola–Kirchhoff 2 | petites déformations, **grandes rotations** |
+| `"hencky"` | `H_*` : `½ ln C` | `T_*` : sa duale | grandes déformations plastiques |
+
+Chaque composante porte le nom de ce qu'elle contient : une loi en
+Green–Lagrange ne lit pas des `eps_*` qui contiendraient `E`, elle lit `E_*`.
+Une loi de petites déformations relie une déformation à sa duale sans dire
+laquelle : la lire sur une autre mesure donne un **autre matériau**. Hooke sur
+`E` est Saint-Venant–Kirchhoff ; Hooke sur `H` est l'élasticité de Hencky ; J2
+sur `H` est le cadre de Miehe, Apel et Lambrecht. MFront fait ce choix dans la
+loi (`@StrainMeasure`), code_aster à la mise en données (`DEFORMATION`).
+
+Le paramètre existe pour `elasticity`, pour les dix lois de plasticité et pour
+les trois lois d'endommagement. Deux combinaisons sont refusées : une mesure qui
+n'est pas une entrée de loi (`gradient`, Cauchy–Green, Euler–Almansi, que
+[`deformation`](../operateurs/champs.md)
+sait pourtant produire) et Hencky en contraintes planes, où `ln C` demande
+`C_zz`, que seule la loi connaît.
+
+La dilatation thermique suit la mesure :
+[`thermal_strain`](../operateurs/champs.md)
+reçoit `measure` et donne l'étirement isotrope `1 + αΔT` exactement dans
+chacune — `αΔT`, `½((1 + αΔT)² − 1)`, `ln(1 + αΔT)` — sous les noms que lit
+la loi.
+
+## Une rotation rigide ne déforme rien
+
+```python
+{{#include ../../../tests/python/test_doc_grandes_transformations.py:rotation}}
+```
+
+Pour une rotation `R`, `F = R` et `E = ½(RᵀR − I) = 0` : pas de déformation,
+pas de contrainte, pas d'effort. La déformation linéarisée du même mouvement
+vaut `ε = (cos θ − 1) I`, soit `−½` sur la diagonale pour 60° : une contrainte
+fictive considérable alors que rien ne se déforme. C'est pourquoi les
+structures élancées ont besoin d'une mesure finie même quand elles se déforment
+peu.
+
+## Les forces internes : `P = F S`
+
+La contrainte que rend la loi n'est pas celle que lit l'équilibre. Les efforts
+intérieurs sont le travail virtuel de `S` dans la variation de `E` :
+
+\[
+\delta E = \operatorname{sym}\!\left(F^{\mathsf T} \nabla_0 \delta u\right),
+\qquad
+f_{ia} = \int_{\Omega_0} P_{ab}\, \frac{\partial N_i}{\partial X_b}\, dV_0,
+\qquad
+P = F\,S .
+\]
+
+`δE` est la ligne du `B` en grandes transformations : `B` dépend de `F`, ce
+qui fait de `internal_forces` l'adjoint de `strain` au point `u`. Avec `F = I`,
+on retrouve le `B` habituel. En pratique, la loi rend `S`, on la convertit
+en `P` (la contrainte nominale, **non symétrique**), et
+[`internal_forces`](../operateurs/assemblage.md) applique son `Bᵀ` sur la
+configuration de référence : c'est la même boucle qu'en petites déformations,
+qui lit simplement un tenseur plein (`P_xx, P_xy, P_yx, P_yy`).
+
+## Les mesures de contrainte : `stress_measure`
+
+`stress_measure(stress, gradient, target)` convertit, point par point, une
+contrainte d'une mesure à l'autre avec le gradient de la transformation `F`
+(`deformation(u, fes, "gradient")`). La mesure d'entrée se reconnaît à ses
+noms ; la cible est nommée par la contrainte qu'on veut :
+
+| `target` | contrainte | à partir de `S` | duale de |
+|---|---|---|---|
+| `"cauchy"` (`sigma`) | `sigma_*`, vraie contrainte | `J⁻¹ F S Fᵀ` | — (eulérienne) |
+| `"kirchhoff"` (`tau`) | `tau_*` | `F S Fᵀ` | — (eulérienne) |
+| `"pk1"` (`P`) | `P_*`, non symétrique | `F S` | `F` |
+| `"pk2"` (`S`) | `S_*` | `S` | `E` (Green–Lagrange) |
+
+```python
+{{#include ../../../tests/python/test_doc_grandes_transformations.py:cauchy}}
+```
+
+C'est la moitié « contraintes » de `CONF` de Cast3M, entre la configuration de
+référence et la courante. Le reste de `CONF` (transporter des déformations,
+tourner par Jaumann) n'a pas lieu d'être : l'état ne change jamais de
+configuration. La conversion est inversible : de la Cauchy, `"pk2"` rend `S`.
+
+## Deux configurations
+
+Le **corps** se calcule sur la configuration de référence : sa mesure, sa loi,
+son état, ses forces internes. Ce qui agit sur la **forme actuelle** se calcule
+sur une configuration courante `x = X + u` : l'opérateur de Newton, la pression
+qui suit la paroi, la conduction sur la pièce déformée. Le `Coords` les porte
+toutes les deux ; on passe de l'une à l'autre en changeant d'indice, sans
+recopier le maillage :
+
+```python
+{{#include ../../../tests/python/test_doc_grandes_transformations.py:configuration_courante}}
+```
+
+[`displace_from`](../operateurs/champs.md) pose la
+configuration courante **en absolu**, `X + u`, à partir de la référence :
+rappelée avec un autre `u`, elle repart de `X`, et rien ne s'accumule — ce
+qu'exigent un sous-pas repris ou une itération accélérée. La configuration
+active ne change pas.
+
+Les deux membres de l'équilibre sont des **forces nodales**, des vecteurs en
+axes globaux qui ne dépendent pas de la configuration où on les calcule :
+`∫Ω₀ P:∇₀δv dV₀ = ∫Ω σ:∇ˢδv dv`. On peut donc calculer les forces intérieures
+sur la référence et une charge suiveuse sur la configuration courante, puis les
+soustraire nœud par nœud.
+
+## La rigidité géométrique
+
+L'opérateur de Newton se construit sur la configuration courante avec les
+fonctions existantes : la rigidité élastique `stiffness`, et la rigidité
+géométrique `geometric` avec la contrainte de Cauchy. C'est l'opérateur de
+Cast3M en grands déplacements, `K_e(GEOM2) + K_σ`. Deux propriétés le
+justifient, que vérifient les tests de `tests/large_transformations.rs` :
+
+- la rigidité géométrique **spatiale**, `∫Ω ∇N·σ·∇N dv` sur la configuration
+  courante, est égale à la **lagrangienne**, `∫Ω₀ ∇₀N·S·∇₀N dV₀` :
+  `∇N = F⁻ᵀ∇₀N`, `dv = J dV₀` et `σ = J⁻¹FSFᵀ` se compensent au point ;
+- après une rotation rigide, la rigidité élastique évaluée sur la configuration
+  courante est la tangente exacte des forces intérieures, pour un matériau
+  isotrope. Hors rotation pure, elle en diffère d'un terme de l'ordre de la
+  déformation, ce qu'un Newton modifié tolère : l'opérateur ne règle que la
+  vitesse de convergence, la solution est fixée par le résidu.
+
+K_σ ne change donc que la convergence, sauf là où elle donne la seule raideur
+(un câble ou une membrane tendus, transversalement) et à l'approche du
+flambement, où `K + K_σ` devient singulière.
+
+## Correspondance Cast3M
+
+| Cast3M | pyrucast |
+|---|---|
+| `MODE … 'EPSILON' 'LINEAIRE'` / `'QUADRATIQUE'` | `strain_measure="linear"` / `"green_lagrange"` |
+| `LAGRANGIEN TOTAL` (loi en `(S, E)` sur `FOR0`) | la voie de pyrucast, pour toute loi |
+| `CONF` (contraintes) | `stress_measure` |
+| `FORM` avec un déplacement | `coords.displace_from` + `Coords.select` |
+| `KSIG` | `matrix.geometric` |

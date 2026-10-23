@@ -1,11 +1,13 @@
-//! Operators that **write into the coordinates** — the only two that
+//! Operators that **write into the coordinates** — the only three that
 //! do.
 //!
 //! They are the write side of
 //! [`node_field::positions`](fn@crate::ops::node_field::positions), which
 //! reads the geometry as a nodal field: [`set`](fn@set) puts absolute
-//! positions back, [`displace`](fn@displace) adds an increment. Both act on
-//! the [`Coords`](crate::coords::Coords) the field hangs from, in place.
+//! positions back, [`displace`](fn@displace) adds an increment, and
+//! [`displace_from`](fn@displace_from) lays one configuration at another
+//! plus a displacement. All act on the [`Coords`](crate::coords::Coords) the
+//! field hangs from, in place.
 
 use crate::atoms::NodeId;
 use crate::containers::field::Field;
@@ -272,4 +274,59 @@ mod tests {
         // Unknown component name.
         assert!(set(&f, Some(vec!["X".into(), "BOGUS".into()])).is_err());
     }
+}
+
+/// Lay configuration `target` at configuration `reference` displaced by
+/// `field` — `x = X + u`, in **absolute**: each node takes its `reference`
+/// position plus its value in `field`, a node the field does not define stays
+/// where the reference puts it. Called again with another `u`, it lands at
+/// `X + u` again: nothing accumulates, which a restarted substep or an
+/// accelerated iterate needs. The active configuration is left as it is.
+/// `components` names one displacement component per axis; `None` →
+/// `["ux", "uy", "uz"][..dim]`, as for [`displace`](fn@displace).
+///
+/// Errors: as [`Coords::displace_from`](crate::coords::Coords::displace_from),
+/// and a component the field lacks.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::coords as ops_coords;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let mesh = Mesh::from_submesh(sm);
+/// let current = coords.write().add_config("current");
+/// let u = NodeField::new(&mesh, vec!["u_x".into(), "u_y".into()])?;
+/// u.get(0)?.write().set_value(n[1].id(), "u_x", 0.5)?;
+/// let names = Some(vec!["u_x".to_string(), "u_y".to_string()]);
+/// ops_coords::displace_from(&u, 0, current, names)?;
+/// // The reference has not moved; the current configuration has.
+/// assert_eq!(n[1].position()?, vec![2.0, 0.0]);
+/// coords.write().select(current)?;
+/// assert_eq!(n[1].position()?, vec![2.5, 0.0]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
+pub fn displace_from(
+    field: &NodeField,
+    reference: usize,
+    target: usize,
+    components: Option<Vec<String>>,
+) -> Result<()> {
+    let coords = field.coords()?;
+    let dim = coords.read().dim() as usize;
+    let comps = resolve_axis_components(field, components, dim, &["ux", "uy", "uz"])?;
+    let increments = per_node_values(field, &comps)?;
+    coords.write().displace_from(
+        reference,
+        target,
+        increments.iter().map(|(nid, inc)| (*nid, inc.as_slice())),
+    )
 }

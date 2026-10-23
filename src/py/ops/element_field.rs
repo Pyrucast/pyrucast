@@ -2,7 +2,7 @@
 //! produce an `ElementField`.
 
 use crate::handle::Handle;
-use crate::ops::element_field::StrainMeasure;
+use crate::ops::element_field::{StrainMeasure, StressMeasure};
 use crate::py::element_field::{PyElementField, PySubElementField};
 use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::py::model::{PyModel, PySubModel};
@@ -99,20 +99,51 @@ pub fn interp_to_gauss(
 /// mechanical strain. Backbone of uncoupled thermomechanics: assemble the
 /// thermal load with `internal_forces(integrate_behavior(model, ε_th,
 /// materials))` and recover `σ = D:(ε − ε_th)`.
+///
+/// `measure` is the strain the law reads (`"linear"`, `"green_lagrange"`,
+/// `"hencky"`): the dilation of stretch `1 + α·ΔT` is given exactly in it —
+/// `α·ΔT`, `½((1 + α·ΔT)² − 1)`, `ln(1 + α·ΔT)` — under its names (`eps_*`,
+/// `E_*`, `H_*`).
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
+#[pyo3(signature = (temperature, materials, fespace, t_ref, measure=StrainMeasure::Linear))]
 pub fn thermal_strain(
     temperature: PyRef<PyElementField>,
     materials: PyRef<PyElementField>,
     fespace: PyRef<PyFiniteElementSpace>,
     t_ref: f64,
+    measure: StrainMeasure,
 ) -> PyResult<PyElementField> {
     let ef = crate::ops::element_field::thermal_strain(
         &temperature.inner,
         &materials.inner,
         &fespace.inner,
         t_ref,
+        measure,
     )?;
+    Ok(PyElementField { inner: ef })
+}
+
+/// `stress` converted to the measure `target`, point by point, with the
+/// deformation gradient `gradient` — the field `deformation(u, fespace,
+/// "gradient")` produces (`F_xx, F_xy, …`).
+///
+/// `target` is `"cauchy"` (`sigma_*`, the true stress), `"kirchhoff"`
+/// (`tau_* = J sigma_*`), `"pk1"` (`P_*`, the nominal stress `F S`, not
+/// symmetric) or `"pk2"` (`S_*`, dual of Green–Lagrange). The measure of
+/// `stress` is recognised by its names, one per zone. This is how the
+/// Lagrangian stress a law writes in large transformations becomes the first
+/// Piola–Kirchhoff `internal_forces` reads, or the Cauchy stress of the
+/// results — the stress half of Cast3M `CONF`.
+#[py_op(method_on = PyElementField)]
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn stress_measure(
+    stress: PyRef<PyElementField>,
+    gradient: PyRef<PyElementField>,
+    target: StressMeasure,
+) -> PyResult<PyElementField> {
+    let ef = crate::ops::element_field::stress_measure(&stress.inner, &gradient.inner, target)?;
     Ok(PyElementField { inner: ef })
 }
 

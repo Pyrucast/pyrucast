@@ -264,6 +264,7 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::node_field::positions, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::coords::set, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::coords::displace, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::coords::displace_from, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::node_field::restrict, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::node_field::restrict_like, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::select, m)?)?;
@@ -281,6 +282,7 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::element_field::elastic_strain, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::element_field::cell_integral, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::element_field::strain, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::element_field::stress_measure, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::node_field::sum_to_nodes, m)?)?;
     m.add_function(wrap_pyfunction!(
         py::ops::element_field::beam_deformation,

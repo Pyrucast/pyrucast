@@ -57,6 +57,14 @@ de matériau et d'état précédent sont appariées par sous-espace EF.
 > porte) n'est pas représentée par une loi plastique ; elle s'introduit comme une
 > déformation plastique initiale `ε_p = −C⁻¹σ₀`.
 
+> **La mesure que lit la loi.** Une loi continue lit la mesure de déformation
+> choisie à sa construction (`strain_measure`) et écrit sa duale, chacune sous
+> son nom : `eps_*` / `sigma_*` (`"linear"`), `E_*` / `S_*` (`"green_lagrange"`,
+> la Piola–Kirchhoff 2), `H_*` / `T_*` (`"hencky"`). Les équations de la loi ne
+> changent pas ; ce qu'elles relient, si. La convention ci-dessus vaut dans
+> chaque mesure, et l'état reste sur la configuration de référence — cf.
+> [Grandes transformations](../mecanique/grandes-transformations.md).
+
 Pour une loi **linéaire**, le résultat est cohérent avec `stiffness`
 (`∫ Bᵀ·flux = K·u`) ; une loi **non linéaire** s'écarte de cette tangente — c'est
 tout l'intérêt d'intégrer le comportement exactement.
@@ -109,6 +117,12 @@ Solides continus, barres et poutres sont donc tous couverts.
 
 Pour une loi **linéaire**, le résultat égale la rigidité appliquée à la solution
 (`K·u`) ; pour une loi **non linéaire**, il donne les forces internes exactes.
+
+Une loi en grandes transformations (`strain_measure` fini) est servie sur la
+configuration de référence par la contrainte **nominale** `P = F S`, lue entière
+(`P_xx, P_xy, P_yx, P_yy`) : `f = ∫ P·∇₀N dV₀`. On la prépare avec
+[`stress_measure`](champs.md) — cf.
+[Grandes transformations](../mecanique/grandes-transformations.md).
 
 C'est le côté **intérieur** du bilan `Σ f_int = Σ f_ext`, dont l'écart est le
 résidu d'équilibre. Le miroir nodal de [`stiffness`](assemblage.md) : là où

@@ -64,9 +64,9 @@ use crate::handle::Handle;
 use crate::models::continuum::Continuum;
 use crate::models::owned_components;
 use crate::models::symmetry::MaterialSymmetry;
+use crate::models::tensor::voigt_stress;
 use crate::models::tensor::Kinematics;
 use crate::models::tensor::{dual_name, primal_name};
-use crate::models::tensor::{stress_names, voigt_stress};
 use crate::models::ZoneLayout;
 use crate::models::{
     Behavior, CellGeom, Domain, MatrixLayout, Physics, StrainOperator, SubModelKind,
@@ -95,14 +95,19 @@ fn state_names() -> Vec<String> {
 }
 
 /// Extra state echoed for the incremental montage so the output is a **complete
-/// `prev`**: the full-3-D end-of-step strain `ε(B)` (six `eps_*`, so `ε(A)` is
-/// recoverable next step) and — in 2-D only — the out-of-plane stress `sigma_zz`
+/// `prev`**: the full-3-D end-of-step strain `ε(B)` (six components, so `ε(A)`
+/// is recoverable next step) and — in 2-D only — the out-of-plane stress `zz`
 /// that the Voigt dual omits (so `σ(A)` is fully recoverable). In 3-D the Voigt
-/// dual already carries all six stresses.
-fn echo_names(space_dim: usize, kinematics: Kinematics) -> Vec<String> {
-    let mut v: Vec<String> = TENSOR_SUFFIXES.iter().map(|s| format!("eps_{s}")).collect();
-    if echoes_sigma_zz(space_dim, kinematics) {
-        v.push("sigma_zz".into());
+/// dual already carries all six stresses. Each under the name of what it holds:
+/// the measure the law reads (`eps`, `E`, `H`) and its dual (`sigma`, `S`, `T`).
+fn echo_names(continuum: &Continuum) -> Vec<String> {
+    let strain = continuum.measure().prefix();
+    let mut v: Vec<String> = TENSOR_SUFFIXES
+        .iter()
+        .map(|s| format!("{strain}_{s}"))
+        .collect();
+    if echoes_sigma_zz(continuum.space_dim(), continuum.kinematics()) {
+        v.push(format!("{}_zz", continuum.stress_prefix()));
     }
     v
 }
@@ -178,7 +183,12 @@ impl Plasticity {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(fespace: Handle<SubFiniteElementSpace>, kinematics: Kinematics) -> Result<Self> {
-        Self::with_law(fespace, kinematics, PlasticLaw::Perfect)
+        Self::with_law(
+            fespace,
+            kinematics,
+            PlasticLaw::Perfect,
+            StrainMeasure::Linear,
+        )
     }
 
     /// Elastoplasticity with an explicit yield law, on an FE subspace with the
@@ -206,21 +216,24 @@ impl Plasticity {
     /// # use pyrucast::models::plasticity::law::PlasticLaw;
     /// // The explicit law, and the coherence check between the kinematics and
     /// // la dimension de l'espace.
+    /// # use pyrucast::ops::element_field::StrainMeasure;
     /// let p = Plasticity::with_law(
-    ///     zone.clone(), Kinematics::PlaneStrain, PlasticLaw::Isotropic)?;
+    ///     zone.clone(), Kinematics::PlaneStrain, PlasticLaw::Isotropic, StrainMeasure::Linear)?;
     /// assert!(p.material_components().contains(&"H".to_string()));
     /// // A solid model on a 2-D zone is refused.
     /// assert!(Plasticity::with_law(
-    ///     zone.clone(), Kinematics::Full3D, PlasticLaw::Perfect).is_err());
+    ///     zone.clone(), Kinematics::Full3D, PlasticLaw::Perfect, StrainMeasure::Linear).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn with_law(
         fespace: Handle<SubFiniteElementSpace>,
         kinematics: Kinematics,
         law: PlasticLaw,
+        measure: StrainMeasure,
     ) -> Result<Self> {
         Ok(Self {
-            continuum: Continuum::new(fespace, kinematics, "Plasticity")?,
+            continuum: Continuum::new(fespace, kinematics, "Plasticity")?
+                .with_measure(measure, "Plasticity")?,
             law,
         })
     }
@@ -444,12 +457,9 @@ impl Behavior for Plasticity {
     }
 
     fn behavior_output_components(&self) -> Vec<String> {
-        let mut comps = stress_names(self.continuum.space_dim(), self.continuum.kinematics());
+        let mut comps = self.continuum.stress_names();
         comps.extend(state_names());
-        comps.extend(echo_names(
-            self.continuum.space_dim(),
-            self.continuum.kinematics(),
-        ));
+        comps.extend(echo_names(&self.continuum));
         // The law's **own** internal variables (a back stress, a damage…), which
         // is how a law grows its state without any other file changing.
         comps.extend(self.law.internal_names());
@@ -501,7 +511,7 @@ impl Behavior for Plasticity {
     }
 
     fn strain_operator(&self) -> StrainOperator {
-        StrainOperator::Deformation(StrainMeasure::Linear)
+        StrainOperator::Deformation(self.continuum.measure())
     }
 
     /// What the law reads back from the state at A: the echoed strain ε(A), the
@@ -511,10 +521,14 @@ impl Behavior for Plasticity {
     /// missing one is a real inconsistency, caught once per zone.
     fn state_reads(&self) -> Vec<String> {
         let d = self.continuum.space_dim();
-        let mut v: Vec<String> = TENSOR_SUFFIXES.iter().map(|s| format!("eps_{s}")).collect();
-        v.extend(stress_names(d, self.continuum.kinematics()));
+        let strain = self.continuum.measure().prefix();
+        let mut v: Vec<String> = TENSOR_SUFFIXES
+            .iter()
+            .map(|s| format!("{strain}_{s}"))
+            .collect();
+        v.extend(self.continuum.stress_names());
         if echoes_sigma_zz(d, self.continuum.kinematics()) {
-            v.push("sigma_zz".into());
+            v.push(format!("{}_zz", self.continuum.stress_prefix()));
         }
         v.extend(state_names());
         v.extend(self.law.internal_names());
