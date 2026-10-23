@@ -399,6 +399,11 @@ impl Continuum {
     /// [`crate::models::kernel::assemble_block`]. Law-independent: the three
     /// families call it, their iteration operator being the elastic stiffness.
     ///
+    /// `D` is built at **every** Gauss point from that point's material: a
+    /// material field may vary inside a cell — moduli depending on the
+    /// temperature at the point, a heterogeneous `E(x)` — and the stiffness
+    /// integrates what the field holds, as the law does on the residual side.
+    ///
     /// ```
     /// # use pyrucast::models::tensor::Kinematics;
     /// # use pyrucast::aggregate::Aggregate;
@@ -454,64 +459,23 @@ impl Continuum {
         symmetry: MaterialSymmetry,
         ke: &mut [f64],
     ) -> Result<()> {
-        let n_nodes = geom.n_nodes;
-        let space_dim = geom.space_dim;
-        let dofs = space_dim * n_nodes;
-        // Constants read at Gauss 0 — constant material per cell — **by index**:
-        // the zone resolved the names once, so this matches none and allocates
-        // nothing.
-        let mut d = [[0.0_f64; 6]; 6];
-        let v = symmetry::elastic_constitutive_into(
-            material.row(geom.cell, 0),
-            &lay.material,
-            symmetry,
-            self.kinematics,
-            space_dim,
-            &mut d,
-        )?;
-        // The three buffers live **outside** the loop: a Gauss point must
-        // allocate nothing, and both `B` and `D·B` are of fixed size once the
-        // cell is known.
-        let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
-        let mut b: VoigtRows = [[0.0; MAX_CELL_DOFS]; 6];
-        let mut db: VoigtRows = [[0.0; MAX_CELL_DOFS]; 6];
-        for g in 0..geom.n_gauss {
-            // On a body of revolution the hoop row needs `N` and `r` at this point.
-            let hoop = if self.kinematics.is_axisymmetric() {
-                Some((geom.n_at_g(g), geom.radius(g)))
-            } else {
-                None
-            };
-            geom.dn_dx(g, &mut dn_buf[..n_nodes * space_dim])?;
-            b_matrix_into(
-                &dn_buf[..n_nodes * space_dim],
-                n_nodes,
-                space_dim,
-                hoop,
-                &mut b,
-            );
-            // DB = D·B  (voigt × dofs).
-            for r in 0..v {
-                for c in 0..dofs {
-                    let mut acc = 0.0;
-                    for w in 0..v {
-                        acc += d[r][w] * b[w][c];
-                    }
-                    db[r][c] = acc;
-                }
-            }
-            let w = geom.det_j_w(g);
-            for r in 0..dofs {
-                for c in 0..dofs {
-                    let mut acc = 0.0;
-                    for vv in 0..v {
-                        acc += b[vv][r] * db[vv][c];
-                    }
-                    ke[r * dofs + c] += acc * w;
-                }
-            }
-        }
-        Ok(())
+        // The same `Bᵀ D B` loop as the tangent, `D` being the elastic one of
+        // the point — read **by index**: the zone resolved the names once.
+        self.element_tangent_with(
+            geom,
+            |g, d| {
+                symmetry::elastic_constitutive_into(
+                    material.row(geom.cell, g),
+                    &lay.material,
+                    symmetry,
+                    self.kinematics,
+                    geom.space_dim,
+                    d,
+                )?;
+                Ok(())
+            },
+            ke,
+        )
     }
 
     /// Element kernel: local **consistent mass** `M_e = Σ_g ρ (Nᵀ N) |J| w` of
@@ -519,7 +483,7 @@ impl Continuum {
     /// component-minor** dof order as [`element_stiffness`](Self::element_stiffness)).
     /// The vector shape-function matrix is block-diagonal, so
     /// `M[(i,a),(j,b)] = δ_ab ρ ∫ N_i N_j`. Density `ρ` is read from the optional
-    /// material component `rho` (constant per cell). Pure, sequential and
+    /// material component `rho`, at every Gauss point. Pure, sequential and
     /// law-independent.
     ///
     /// ```
@@ -587,10 +551,9 @@ impl Continuum {
                 "Continuum mass matrix: material component `rho` (density) is required".into(),
             ));
         }
-        let rho = material.row(geom.cell, 0)[i_rho as usize];
         for g in 0..geom.n_gauss {
             let n = geom.n_at_g(g);
-            let w = geom.det_j_w(g) * rho;
+            let w = geom.det_j_w(g) * material.row(geom.cell, g)[i_rho as usize];
             for i in 0..n_nodes {
                 for j in 0..n_nodes {
                     let m = n[i] * n[j] * w;

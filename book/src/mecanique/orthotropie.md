@@ -95,7 +95,8 @@ Un `V1` nul, ou un `V2` parallèle à `V1`, est un repère dégénéré : il est
 ## Forme discrétisée
 
 La chaîne est celle de l'élasticité — `K_e = Σ_g Bᵀ D B |J| w`, avec le **même**
-opérateur `B`. Ce qui change tient en trois étapes, faites une fois par maille :
+opérateur `B`. Ce qui change tient en trois étapes, faites en **chaque point
+de Gauss**, puisqu'un champ matériau peut varier à l'intérieur d'une maille :
 
 1. construire `D` **dans les axes matériau**, où l'orthotropie est diagonale ;
 2. le **tourner** vers les axes globaux ;
@@ -116,12 +117,11 @@ R = \big[\\,V_1\ \ V_2\ \ V_1 \times V_2\\,\big],
 
 C'est un choix délibéré. En cisaillement **ingénieur** (`γ = 2ε`), le passage
 Voigt ↔ tenseur ne porte **aucun facteur** — `C_ijkl = D[voigt(i,j)][voigt(k,l)]`
-— et la rotation d'ordre 4 s'écrit sans la moindre convention à mémoriser. Le
-coût, quelques centaines de multiplications par maille, est négligeable devant
-l'assemblage, et il achète l'élimination de toute une famille d'erreurs
-d'indices et de facteurs 2. L'isotropie, elle, **court-circuite** ce chemin et
-garde ses formes fermées : les calculs isotropes existants conservent leurs
-nombres exacts.
+— et la rotation d'ordre 4 s'écrit sans la moindre convention à mémoriser. Ce
+calcul, payé en chaque point de Gauss, achète l'élimination de toute une
+famille d'erreurs d'indices et de facteurs 2. L'isotropie, elle,
+**court-circuite** ce chemin et garde ses formes fermées : les calculs
+isotropes existants conservent leurs nombres exacts.
 
 ## Variables et matériau
 

@@ -33,8 +33,9 @@
 //! 3. reduce it to the kinematics (plane stress / plane strain / axisymmetric / solid).
 //!
 //! The rotation of the elastic tensor goes through the **fourth-order tensor**
-//! `C_ijkl`, not through a 6×6 Bond matrix. It costs `3⁸` multiply-adds once per
-//! cell — nothing, since the material is constant per cell — and it removes the
+//! `C_ijkl`, not through a 6×6 Bond matrix. It costs `3⁸` multiply-adds each
+//! time it is built — at every Gauss point for the elastic stiffness, whose
+//! material may vary inside a cell — and it removes the
 //! whole family of index and factor-of-two mistakes that Voigt rotation
 //! formulas invite. With **engineering** shear the Voigt ↔ tensor map carries no
 //! factor at all: `C_ijkl = D[voigt(i,j)][voigt(k,l)]`.

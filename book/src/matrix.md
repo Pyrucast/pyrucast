@@ -68,7 +68,7 @@ L'ordre des DOFs dans `row_dofs()` / `col_dofs()` est l'**ordre de première ren
 ### `finalize` vs `ops::matrix`
 
 - `Matrix::finalize()` n'assemble que des blocs **littéraux** (somme des COO → CSR). Il **refuse** un bloc calculé : le noyau vit dans `models`, hors de `containers`, et l'y appeler créerait un cycle `matrix ↔ kernel`. Il renvoie alors vers `ops::matrix`.
-- `ops::matrix::stiffness(model, materials)` construit les blocs (calculés pour les physiques volumiques, littéraux pour Dirichlet) et assemble, motif mémoïsé sur le `Model`.
+- `ops::matrix::stiffness(model, materials)` construit les blocs (calculés pour les physiques volumiques, littéraux pour Dirichlet) et assemble, motif mémoïsé sur le `Model`. Pour un milieu continu, la rigidité et la masse lisent le matériau **en chaque point de Gauss** : un module ou une densité qui varie à l'intérieur d'une maille (par exemple E(T) évalué au point dans le pas à pas) est intégré tel quel, comme la loi le fait côté résidu.
 - `Matrix::assemble(&mut self)` réassemble une matrice **depuis ses blocs seuls**, sans `Model` : c'est le chemin de **composition** — combiner une sous-matrice neuve (de provenance quelconque) à une matrice existante puis réassembler. La `Matrix` ne dépendant que de ses blocs, cette composabilité de base est ainsi préservée y compris en présence de blocs calculés.
 
 Pour qui veut une matrice creuse d'une autre bibliothèque, des conversions **à la demande** existent — elles fabriquent un objet neuf et ne retiennent rien :
