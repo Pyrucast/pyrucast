@@ -27,6 +27,18 @@ def _coherent(previous, current, tolerance):
     return change <= tolerance * max(infinity_norm(current, ["T"]), 1e-300)
 
 
+def _heat_step(data, problem, state, instant, options):
+    """The heat problem of the step — in large displacements on the
+    configuration the mechanics reached at the start of the step, ``X + uₙ``:
+    the conduction of the deformed part, with no mechanics in its equation."""
+    scheme = _HEAT[options.heat_scheme]
+    if problem.configurations is None:
+        return scheme(data, problem, state, instant, options)
+    displacement = part(state.solution, problem.displacement_names)
+    with problem.configurations.current_at(displacement):
+        return scheme(data, problem, state, instant, options)
+
+
 def _one_step(data, problem, state, instant, options):
     """Heat then mechanics from ``state.time`` to ``instant``, repeated in
     passes until the temperature no longer changes when ``coherence`` is on.
@@ -37,7 +49,7 @@ def _one_step(data, problem, state, instant, options):
     previous = None
     for k in range(options.coupling_passes):
         if problem.heat is not None:
-            heat = _HEAT[options.heat_scheme](data, problem, state, instant, options)
+            heat = _heat_step(data, problem, state, instant, options)
             temperature = heat.temperature
             hook("after_heat")(data, state, heat)
         elif problem.prescribed_temperature_at(instant) is not None:

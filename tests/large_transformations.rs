@@ -670,10 +670,8 @@ fn a_pressure_follows_the_normal_of_the_active_configuration() -> Result<()> {
     for k in 0..4 {
         contour.add_cell(&[ids[k], ids[(k + 1) % 4]])?;
     }
-    let solid_model = model::elasticity(
-        &FiniteElementSpace::lagrange1(&body)?,
-        Kinematics::PlaneStrain,
-    )?;
+    let body_fes = FiniteElementSpace::lagrange1(&body)?;
+    let solid_model = model::elasticity(&body_fes, Kinematics::PlaneStrain)?;
     let load = model::flux(
         &FiniteElementSpace::lagrange1(&contour)?,
         &solid_model,
@@ -681,6 +679,15 @@ fn a_pressure_follows_the_normal_of_the_active_configuration() -> Result<()> {
     )?;
     assert_eq!(load.dual_vars(), vec!["f_x".to_string(), "f_y".to_string()]);
     let density = material_field(&load, &[("phi_n", 2.0)])?;
+    // The load feeds no matrix: asked for a geometric stiffness beside the solid
+    // it loads, it brings no block and reads no stress.
+    let both = solid_model.union(&load)?;
+    let both_materials = material_field(&both, &[("E", 1.0), ("nu", 0.3), ("phi_n", 2.0)])?;
+    let sigma = ElementField::new(
+        &body_fes,
+        vec!["sigma_xx".into(), "sigma_xy".into(), "sigma_yy".into()],
+    )?;
+    assert!(matrix::geometric(&both, &both_materials, &sigma).is_ok());
     let at = |f: &NodeField, k: usize| -> Result<[f64; 2]> {
         Ok([f.value(ids[k], "f_x")?, f.value(ids[k], "f_y")?])
     };

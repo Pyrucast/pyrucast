@@ -11,7 +11,8 @@ from typing import Callable, Optional
 
 from .. import element_field, node_field
 from .._pyrucast import ElementField, Evolution, FiniteElementSpace
-from .fields import carried
+from .configuration import configurations
+from .fields import carried, uniform
 
 __all__ = ["Problem", "describe_problem"]
 
@@ -51,6 +52,67 @@ def _nodal_weights(domain, names):
     return (volumes + 1e-300) ** -0.5
 
 
+# The strain measure a law reads, from the prefix of what it reads.
+_MEASURES = {"E": "green_lagrange", "H": "hencky"}
+
+
+def _strain_measure(domain, fespace, displacement_names, materials):
+    """The strain measure the mechanical laws read: ``"linear"``, or the one
+    large-transformation measure every law of the domain shares. The laws
+    declare it — what ``strain`` produces at rest carries its name (``E_*``,
+    ``H_*``) — the loop only reads it. Refuses a domain mixing a measure of
+    large transformations with anything else: bars, beams and shells have no
+    large-transformation formulation yet."""
+    rest = uniform(fespace.mesh(), displacement_names, 0.0)
+    names = carried(element_field.strain(domain, rest, materials))
+    prefixes = {name.split("_")[0] for name in names}
+    finite = prefixes & set(_MEASURES)
+    if not finite:
+        return "linear"
+    if len(prefixes) > 1:
+        raise ValueError(
+            "step_by_step: in large displacements every mechanical law reads the same "
+            f"strain measure, and these read {sorted(prefixes)} — bars, beams and shells "
+            "have no large-transformation formulation yet"
+        )
+    return _MEASURES[finite.pop()]
+
+
+def _sub_models(model):
+    return [model[i : i + 1] for i in range(len(model))]
+
+
+def _refuse_in_large_displacements(mechanics, heat_domain):
+    """What large displacements do not offer yet, refused with the reason."""
+    if any("contact_gap" in sub[0].dual_vars() for sub in _sub_models(mechanics)):
+        raise ValueError(
+            "step_by_step: contact is not available in large displacements — its "
+            "relations would have to follow the sliding of the projected point"
+        )
+    if heat_domain is not None:
+        for sub in _sub_models(heat_domain):
+            components = sub[0].material_components() or []
+            if "k" not in components and any(c.startswith("k_") for c in components):
+                raise ValueError(
+                    "step_by_step: an oriented conductivity is not available in large "
+                    "displacements — its material axes would have to turn with the "
+                    "part (k = J⁻¹ F K₀ Fᵀ)"
+                )
+
+
+def _follower_split(mechanics):
+    """The loads that follow the wall (``flux`` in its normal mode, density
+    ``phi_n``) and the rest of the mechanical model, ``(follower, others)``;
+    ``follower`` is ``None`` when there is none."""
+    follower, others = None, None
+    for sub in _sub_models(mechanics):
+        if (sub[0].material_components() or []) == ["phi_n"]:
+            follower = sub if follower is None else follower | sub
+        else:
+            others = sub if others is None else others | sub
+    return follower, others
+
+
 @dataclass(frozen=True)
 class Problem:
     """The model split by physics, and the data as functions of time.
@@ -86,6 +148,14 @@ class Problem:
     radiating: bool
     weights: Optional[object]
     indirect_domain: Optional[object] = None
+    # Large displacements: the strain measure the laws read (``"linear"``
+    # otherwise), the reference and current configurations, the loads that
+    # follow the wall — recomputed at every iterate on the current one — and
+    # the model whose loads are computed once per step.
+    strain_measure: str = "linear"
+    configurations: Optional[object] = None
+    follower_loads: Optional[object] = None
+    step_loads: Optional[object] = None
 
 
 def describe_problem(data, options):
@@ -95,6 +165,11 @@ def describe_problem(data, options):
     Refuses a model with neither a mechanical nor a thermal domain, and a
     prescribed temperature given alongside a thermal model (the model then
     computes it).
+
+    Large displacements are read off the laws: when the mechanical laws read a
+    large-transformation measure (``strain_measure`` of their constructor), the
+    problem carries that measure, the reference and current configurations
+    (one more set in the ``Coords``, added here once) and its follower loads.
     """
     model = data["model"]
     mechanics, mechanics_domain, mechanics_constraints = _part(model, "mechanical")
@@ -134,12 +209,28 @@ def describe_problem(data, options):
             if options.acceleration
             else None
         )
+        strain_measure = _strain_measure(
+            mechanics_domain, fespace, displacement_names, first_materials
+        )
     else:
         fespace = heat_domain.fespace()
         displacement_names = multiplier_names = translation_names = rotation_names = ()
         force_names = moment_names = ()
         duality = {}
         weights = None
+        strain_measure = "linear"
+
+    large = strain_measure != "linear"
+    if options.geometric_stiffness and not large:
+        raise ValueError(
+            "step_by_step: `geometric_stiffness` belongs to large displacements — in small "
+            "ones the residual is written on the reference geometry, and K_σ would not be "
+            "its derivative"
+        )
+    follower_loads, step_loads = None, mechanics
+    if large:
+        _refuse_in_large_displacements(mechanics, heat_domain)
+        follower_loads, step_loads = _follower_split(mechanics)
 
     laws = data.get("material_laws")
     # One output component per curve, named by its ordinate type.
@@ -176,4 +267,8 @@ def describe_problem(data, options):
             if options.indirect_control is not None
             else None
         ),
+        strain_measure=strain_measure,
+        configurations=(configurations(fespace, displacement_names) if large else None),
+        follower_loads=follower_loads,
+        step_loads=step_loads,
     )

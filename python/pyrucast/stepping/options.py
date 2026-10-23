@@ -26,8 +26,9 @@ _UNSUPPORTED = {
     "advection": "advection is not available",
     "automatic_augmentation": "automatic stiffness augmentation is not available; "
     "give an explicit `augmented_stiffness` matrix",
-    "large_displacements": "large displacements arrive with the follower loads and "
-    "configuration transport",
+    "large_displacements": "large displacements come from the laws themselves: build "
+    "them with strain_measure='green_lagrange' (large rotations) or 'hencky' (large "
+    "strains), and the computation follows",
 }
 
 # The settings a caller may give, with their defaults (``None``: decided from
@@ -58,6 +59,9 @@ _DEFAULTS = {
     "automatic_replays": 250,
     "t_ref": 0.0,
     "trace": False,
+    # Large displacements: the geometric stiffness in the operator (Cast3M
+    # K_SIGMA), on unless said otherwise; refused in small displacements.
+    "geometric_stiffness": None,
 }
 
 _HEAT_SCHEMES = ("nonlinear", "linear", "dupont")
@@ -115,6 +119,7 @@ class Options:
     automatic_replays: int
     t_ref: float
     trace: bool
+    geometric_stiffness: Optional[bool] = None
     indirect_control: Optional[dict] = None
     augmented_stiffness: object = None
     hooks: dict = field(default_factory=dict)
@@ -214,6 +219,11 @@ def resolve_options(data):
         automatic_replays=int(given["automatic_replays"]),
         t_ref=float(given["t_ref"]),
         trace=bool(given["trace"]),
+        geometric_stiffness=(
+            None
+            if given["geometric_stiffness"] is None
+            else bool(given["geometric_stiffness"])
+        ),
         indirect_control=indirect,
         augmented_stiffness=data.get("augmented_stiffness"),
         hooks=hooks,

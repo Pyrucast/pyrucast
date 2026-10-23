@@ -254,15 +254,20 @@ pub fn assemble_kind(
                 }
                 None => None,
             };
+            let contributions = sub.as_kind().contributions(sub_kind, material.as_ref())?;
             // Resolve the sub-model's own state sub-field (stress / tangent) the
             // same way, when a state aggregate is supplied and the physics reads
-            // material on a cell fespace.
+            // material on a cell fespace. A sub-model with no block of this kind
+            // — a load asked for a geometric stiffness — reads nothing, and
+            // must not be asked for a state it never had.
             let kernel_inputs = match sub.material_fespace() {
-                Some(fespace) if !tangent_by_stiffness => inputs.for_sub(&sub, &fespace)?,
+                Some(fespace) if !tangent_by_stiffness && !contributions.is_empty() => {
+                    inputs.for_sub(&sub, &fespace)?
+                }
                 _ => KernelInputs::MaterialOnly,
             };
             let mut blocks = Vec::new();
-            for c in sub.as_kind().contributions(sub_kind, material.as_ref())? {
+            for c in contributions {
                 blocks.extend(build_contribution(
                     c,
                     sub_h,

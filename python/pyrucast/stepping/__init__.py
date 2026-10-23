@@ -24,6 +24,11 @@ The parts of ``mechanical_step`` live in ``pyrucast.stepping.mechanics``:
 ``equilibrium_iterations``, ``integrate_increment``, ``convergence_status``.
 Everything is composed of pyrucast operators; only Anderson's three scalars
 are computed in Python.
+
+Large displacements follow from the laws: when they read a large-transformation
+strain measure (``strain_measure``), the body stays on the reference
+configuration and what acts on its current shape is evaluated on a current
+configuration, ``pyrucast.stepping.configuration`` (Cast3M ``FORM``).
 """
 
 from . import anderson, control, heat, mechanics

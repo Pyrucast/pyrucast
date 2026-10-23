@@ -1,9 +1,17 @@
 """One mechanical step and the parts it is made of (Cast3M ``UNPAS``).
 
-Small displacements. The unknown is the full solution — displacement and the
-constraints' multipliers — and every linear solve returns a displacement
-**correction** with the multipliers in **total**: the multipliers are then the
-current reactions, which is what lets a unilateral constraint test their sign.
+The unknown is the full solution — displacement and the constraints'
+multipliers — and every linear solve returns a displacement **correction**
+with the multipliers in **total**: the multipliers are then the current
+reactions, which is what lets a unilateral constraint test their sign.
+
+In large displacements — laws reading a large-transformation measure — the
+body stays on the reference configuration: its internal forces are those of
+the nominal stress ``P = F S``. The operator, the follower loads and the
+geometric stiffness are evaluated on the current configuration
+``x = X + u`` (``configuration.Configurations``), and the operator is rebuilt
+there at the second iteration, then every ``max(delta_iterations, 20)``
+iterations (Cast3M ``K_e(GEOM2) + K_σ``).
 
 The iteration is a modified Newton: a constant operator (the elastic
 stiffness, or the consistent tangent on request), residuals evaluated exactly
@@ -38,6 +46,13 @@ __all__ = [
 ]
 
 _TINY = 1e-300
+# Large displacements: the operator is rebuilt at least every so many
+# iterations, and a substep that needs more rebuilds than this has failed
+# (Cast3M UNPAS).
+_REBUILD_EVERY = 20
+_MAX_REBUILDS = 20
+# What the convergence tests read as a strain: the measure each law reads.
+_STRAIN_PREFIXES = ("eps", "E_", "H_")
 
 
 # ─── What a (sub)step is solved for ─────────────────────────────────────────
@@ -68,7 +83,7 @@ def _thermal_strain(problem, materials, temperature, options):
         temperature.filter_components(["T"]), problem.fespace
     )
     return element_field.thermal_strain(
-        at_points, materials, problem.fespace, options.t_ref
+        at_points, materials, problem.fespace, options.t_ref, problem.strain_measure
     )
 
 
@@ -85,7 +100,7 @@ def step_data(data, problem, state, start, t_end, temperature, options):
         problem.loads_at(t_end),
         options.hook("extra_mechanical_load")(data, state, t_end),
     ]
-    carried_loads = node_field.external_forces(problem.mechanics, materials)
+    carried_loads = node_field.external_forces(problem.step_loads, materials)
     if len(carried_loads) > 0:
         loads.append(carried_loads)
     return StepData(
@@ -143,15 +158,28 @@ class Balance:
 def balance(problem, solution, behaviour, step, inertia=None):
     """The ``Balance`` at ``solution`` with the laws' state ``behaviour``.
 
-    ``inertia``, given in dynamics, is ``M·a`` at this iterate.
+    ``inertia``, given in dynamics, is ``M·a`` at this iterate. In large
+    displacements the internal forces are those of the nominal stress
+    ``P = F S`` on the reference configuration, and the loads that follow the
+    wall are evaluated on the configuration of this iterate.
     """
     displacement = part(solution, problem.displacement_names)
+    stress = behaviour
+    if problem.configurations is not None:
+        gradient = element_field.deformation(displacement, problem.fespace, "gradient")
+        stress = element_field.stress_measure(behaviour, gradient, "pk1")
     internal = node_field.internal_forces(
-        problem.mechanics, behaviour, displacement, step.materials
+        problem.mechanics, stress, displacement, step.materials
     )
     system = internal * -1.0
     for load in step.loads:
         system = system + node_field.restrict_like(load, internal)
+    if problem.follower_loads is not None:
+        with problem.configurations.current_at(displacement):
+            follower = node_field.external_forces(
+                problem.follower_loads, step.materials
+            )
+        system = system + node_field.restrict_like(follower, internal)
     if inertia is not None:
         system = system - node_field.restrict_like(inertia, internal)
     multipliers = part(solution, problem.multiplier_names)
@@ -202,7 +230,9 @@ def _work(problem, primal, dual):
 # ─── The operator ───────────────────────────────────────────────────────────
 
 
-def iteration_operator(problem, state, step, options, strain=None, behaviour=None):
+def iteration_operator(
+    problem, state, step, options, strain=None, behaviour=None, at=None
+):
     """The operator a substep iterates with.
 
     By default the elastic stiffness at the end-of-step materials, with the
@@ -211,8 +241,16 @@ def iteration_operator(problem, state, step, options, strain=None, behaviour=Non
     its factorization is reused too. With ``tangent`` and a ``strain``, the
     consistent tangent at that iterate instead, never kept. An explicit
     ``augmented_stiffness`` is added; in dynamics, ``4/Δt² M``.
+
+    In large displacements ``at = (solution, behaviour)`` is the iterate: the
+    operator is built on the configuration ``X + u`` there — the stiffness
+    (or tangent) plus, unless ``geometric_stiffness`` is off, the geometric
+    stiffness of its Cauchy stress — and never kept from one substep to the
+    next.
     """
     dt = step.t_end - step.t_start
+    if problem.configurations is not None:
+        return _current_operator(problem, state, step, options, strain, behaviour, at)
     if options.tangent and strain is not None:
         operator = matrix.tangent(
             problem.mechanics, step.materials, strain, prev=behaviour, dt=dt
@@ -236,6 +274,45 @@ def iteration_operator(problem, state, step, options, strain=None, behaviour=Non
     return operator
 
 
+def _current_operator(problem, state, step, options, strain, behaviour, at):
+    """The operator of an iterate in large displacements: ``K_e + K_σ`` on its
+    configuration (Cast3M ``K_e(GEOM2) + K_σ``)."""
+    dt = step.t_end - step.t_start
+    solution, reached = at
+    displacement = part(solution, problem.displacement_names)
+    sigma = None
+    if options.geometric_stiffness is not False and reached is not None:
+        # F and σ belong to the reference configuration: evaluated before the
+        # current one becomes active.
+        gradient = element_field.deformation(displacement, problem.fespace, "gradient")
+        sigma = element_field.stress_measure(reached, gradient, "cauchy")
+    mass = None
+    if options.dynamics and dt > 0.0:
+        # Kept on the reference configuration for the inertia of the residual,
+        # ρ₀ dV₀: built there first.
+        mass = _mass(problem, state, step.materials) * (4.0 / dt**2)
+    with problem.configurations.current_at(displacement):
+        if options.tangent and strain is not None:
+            operator = matrix.tangent(
+                problem.mechanics, step.materials, strain, prev=behaviour, dt=dt
+            )
+        else:
+            operator = matrix.stiffness(problem.mechanics, step.materials)
+        if sigma is not None:
+            operator = operator + matrix.geometric(
+                problem.mechanics_domain, step.materials, sigma
+            )
+        if options.augmented_stiffness is not None:
+            operator = operator + options.augmented_stiffness
+        if mass is not None:
+            operator = operator + mass
+        # Folded here: assembling evaluates the blocks on the configuration
+        # active at that moment — the operator's mass therefore on the current
+        # one, an approximation the operator may make.
+        operator.assemble()
+    return operator
+
+
 def _mass(problem, state, materials):
     """The mass matrix of the mechanical domain, kept while the materials
     are the same object."""
@@ -248,15 +325,18 @@ def _mass(problem, state, materials):
 # ─── F_ref, and the predictor of the next step ──────────────────────────────
 
 
-def reference_forces(problem, step, first_correction, balance_start, internal_scale):
+def reference_forces(
+    problem, step, first_correction, balance_start, internal_scale, floor=0.0
+):
     """The force and moment scales the residual is compared to (``F_ref``,
     ``M_ref``), from the first solve of the step.
 
     ``F_ref = |δx⁰·(F_ext ; −g)| / ‖δu⁰‖∞ + 2 F_s``, bounded below by the
     largest applied force — ``F_s`` being ``internal_scale``, the largest
     internal force at the start of the step with and without its imposed
-    strain. ``M_ref`` divides the same work by the largest rotation. Each falls
-    back to 1 when vanishing (a step with nothing applied).
+    strain — and by ``floor`` (in large displacements ``‖K uₙ‖∞``, as Cast3M).
+    ``M_ref`` divides the same work by the largest rotation. Each falls back to
+    1 when vanishing (a step with nothing applied).
     """
     applied = None
     for load in step.loads:
@@ -277,7 +357,7 @@ def reference_forces(problem, step, first_correction, balance_start, internal_sc
     largest_move = infinity_norm(first_correction, problem.translation_names)
     work = abs(work) + internal_scale * largest_move
     force = work / (largest_move + _TINY) + internal_scale
-    force = max(force, infinity_norm(applied, problem.force_names))
+    force = max(force, infinity_norm(applied, problem.force_names), floor)
     if force < _TINY:
         force = 1.0
     moment = 1.0
@@ -301,10 +381,16 @@ def nonlinear_predictor(
     two steps' load increments projected on their first corrections, bounded by
     ``Δt/Δt_prev``; ``a = Δt/Δt_prev`` when the load does not move (creep,
     thermal), zero on a significant unloading; kept only when ``0 < a < 20``.
+
+    Never in large displacements: a finite rotation is not in the kernel of
+    the operator, so ``K Δx`` reads forces where nothing deforms, and the
+    operator itself changes from one step to the next — the previous step's
+    misprediction says nothing about this one's.
     """
     previous = state.nonlinear_forces
     if (
         not options.predictor
+        or problem.configurations is not None
         or options.dynamics
         or previous is None
         or not state.converged
@@ -478,12 +564,42 @@ def equilibrium_iterations(
     pause = 0
     accelerations = 0
     controlled = options.automatic or options.indirect_control is not None
+    large = problem.configurations is not None
+    rebuild_every = max(options.delta_iterations, _REBUILD_EVERY)
+    rebuilds = 0
     for i in range(1, 10**9):
         pause -= 1
         if options.tangent and i >= 2 and i % options.tangent_every == 0:
             operator = iteration_operator(
-                problem, state, step, options, strain, start.behaviour
+                problem,
+                state,
+                step,
+                options,
+                strain,
+                start.behaviour,
+                at=(solution, behaviour),
             )
+        elif large and i > 1 and (i - 2) % rebuild_every == 0:
+            # The operator of the configuration reached (Cast3M K_e(GEOM2) + K_σ),
+            # at the second iteration — the first correction has moved the
+            # geometry — then every `rebuild_every` iterations (UNPAS l. 1540-1795).
+            rebuilds += 1
+            if rebuilds > _MAX_REBUILDS:
+                return Equilibrium(
+                    "failed",
+                    solution,
+                    behaviour,
+                    strain,
+                    current,
+                    i - 1,
+                    accelerations,
+                    step,
+                    controller,
+                )
+            operator = iteration_operator(
+                problem, state, step, options, at=(solution, behaviour)
+            )
+            pause = 4
         rhs = current.system
         if accelerator is not None:
             forces = part(current.out_of_balance, problem.force_names)
@@ -531,7 +647,7 @@ def equilibrium_iterations(
         if change is not None and previous.reactions is not None:
             change = change - node_field.restrict_like(previous.reactions, change)
         reaction_change = infinity_norm(change, problem.force_names)
-        names = [n for n in carried(strain) if n.startswith("eps")]
+        names = [n for n in carried(strain) if n.startswith(_STRAIN_PREFIXES)]
         measures = {
             "force": max(
                 infinity_norm(current.out_of_balance, problem.force_names),
@@ -671,12 +787,13 @@ def mechanical_step(data, problem, state, t_end, temperature, options):
         start.strain, behaviour0 = integrate_increment(
             problem, start.solution, step, start.behaviour
         )
+        at = (start.solution, behaviour0)
         if options.tangent:
             operator = iteration_operator(
-                problem, state, step, options, start.strain, start.behaviour
+                problem, state, step, options, start.strain, start.behaviour, at=at
             )
         else:
-            operator = iteration_operator(problem, state, step, options)
+            operator = iteration_operator(problem, state, step, options, at=at)
         first = balance(
             problem,
             start.solution,
@@ -696,8 +813,14 @@ def mechanical_step(data, problem, state, t_end, temperature, options):
             internal_scale = infinity_norm(
                 first.system - _applied(step, first.system), problem.force_names
             )
+            floor = 0.0
+            if problem.configurations is not None:
+                floor = infinity_norm(
+                    operator * part(start.solution, problem.displacement_names),
+                    problem.force_names,
+                )
             reference = reference_forces(
-                problem, step, first_correction, first, internal_scale
+                problem, step, first_correction, first, internal_scale, floor
             )
         controller, control_step = _controller(
             data,

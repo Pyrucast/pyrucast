@@ -56,10 +56,10 @@ convergence forcée ou piloté), `delta_iterations` (10), `max_substeps` (100),
 `heat_scheme` (`nonlinear`, `linear`, `dupont`), `theta` (1),
 `dupont_relaxation` (¼), `coherence` et `coherence_passes` (10), `automatic`,
 `automatic_target` (1e-3), `indirect_control` (`{"load": F_p, "increment":
-Δτ}`), `augmented_stiffness`, `trace`. Une fonctionnalité absente du package
-(non local, MAN, FEFP, frottement, rayonnement de cavité, changement de phase,
-modèle évolutif, THM, advection, grands déplacements) est **refusée** avec sa
-raison, jamais ignorée.
+Δτ}`), `augmented_stiffness`, `geometric_stiffness` (vrai en grands
+déplacements), `trace`. Une fonctionnalité absente du package (non local, MAN,
+FEFP, frottement, rayonnement de cavité, changement de phase, modèle évolutif,
+THM, advection) est **refusée** avec sa raison, jamais ignorée.
 
 ## L'algorithme
 
@@ -193,6 +193,39 @@ sous pilotage.
   déformation avance de `Δτ` dans sa propre direction au point le plus
   sollicité.
 
+### Grands déplacements
+
+Il n'y a pas de clé à activer : les lois mécaniques construites avec
+`strain_measure="green_lagrange"` ou `"hencky"` déclarent leur mesure, et
+`describe_problem` la lit. Le calcul suit alors la voie du lagrangien total
+(cf. [Grandes transformations](mecanique/grandes-transformations.md)) :
+
+```text
+describe_problem : mesure lue sur les lois ; jeu « current » ajouté au Coords, une fois
+pour chaque itéré u :
+  E ← strain(u) ; S ← loi(E)                     sur la référence
+  P ← stress_measure(S, F(u), "pk1")
+  r ← F_ext − internal_forces(P) − Cᵀλ           sur la référence
+      + pression suiveuse évaluée en x = X + u   sur « current »
+opérateur : stiffness + geometric(σ)              sur « current », en x = X + u
+  construit en début de sous-pas, puis à la 2ᵉ itération,
+  puis toutes les max(delta_iterations, 20) itérations ; au-delà de 20, échec
+thermique : sur « current », en x = X + uₙ (début de pas)
+résultats : "behaviour" garde S (ou T), "cauchy" donne σ
+```
+
+L'opérateur est celui de Cast3M, `K_e(GEOM2) + K_σ` : il ne règle que la
+vitesse de convergence, la solution étant fixée par le résidu. Il est
+reconstruit dès la deuxième itération, la première correction ayant déplacé la
+géométrie (UNPAS reconstruit aussi à `i = 2`). `geometric_stiffness=False` le
+retire ; demandé en petits déplacements, il est refusé.
+
+Sont refusés en grands déplacements : le contact (ses relations devraient
+suivre le glissement du point projeté), une loi de petites déformations à côté
+d'une loi en grandes transformations (barres, poutres et coques n'ont pas
+encore de formulation en grandes transformations), la conduction orientée (ses
+axes matériau devraient tourner avec la pièce).
+
 ## Écrire sa propre boucle
 
 Chaque procédure s'appelle seule ; `step_by_step` n'est que leur
@@ -220,6 +253,9 @@ enchaînement :
 | `ACT3` | `stepping.anderson.anderson_correction` |
 | `AUTOPILO`, `PILOINDI` | `stepping.control.automatic_control`, `indirect_control` |
 | `REEV_MEC`, `REEV_THE`, `PERSO1`, `CHARMECA`, `CHARTHER`, `PARATHER` | crochets `after_mechanics`, `after_heat`, `after_step`, `extra_mechanical_load`, `extra_heat_load`, `heat_material_update` |
+| `GRANDS_DEPLACEMENTS`, `LAGRANGIEN` | la mesure des lois (`strain_measure`) ; toujours le lagrangien total |
+| `K_SIGMA` | `geometric_stiffness` |
+| `FORM` (GEOM2) | `stepping.configuration.Configurations` |
 
 ## Écarts assumés
 
@@ -236,3 +272,12 @@ enchaînement :
   `KTAN` donne la tangente continue.
 - **La rigidité augmentée** est une matrice donnée (`augmented_stiffness`) ;
   l'augmentation automatique n'est pas offerte.
+- **Grands déplacements en lagrangien total**, pour toute loi : ni Δε de
+  mi-pas (GEOMM) ni transport des contraintes, l'état restant sur la
+  référence. Le prédicteur HPP n'est pas repris.
+- **Pas de prédicteur `F_NL` en grands déplacements** : une rotation finie
+  n'est pas dans le noyau de l'opérateur, si bien que `K Δx` y lit des efforts
+  là où rien ne se déforme, et l'opérateur change d'un pas à l'autre.
+- **La thermique sur la pièce déformée** garde la capacité `ρ cp` par volume
+  de référence ; sur le volume courant il faudrait `ρ₀/J`, un écart négligeable
+  quand `J ≈ 1`.

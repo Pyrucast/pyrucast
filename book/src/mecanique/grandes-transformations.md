@@ -184,6 +184,19 @@ K_σ ne change donc que la convergence, sauf là où elle donne la seule raideur
 (un câble ou une membrane tendus, transversalement) et à l'approche du
 flambement, où `K + K_σ` devient singulière.
 
+## Dans le pas à pas
+
+`stepping.step_by_step` lit la mesure sur les lois et suit cette voie de
+lui-même : forces intérieures sur `P` en référence, pression suiveuse et
+opérateur sur la configuration courante, thermique sur la pièce déformée,
+contrainte de Cauchy dans les résultats. Voir
+[Calcul pas à pas](../pas-a-pas.md#grands-déplacements). Les tests
+`tests/python/test_stepping_large.py` y vérifient quatre formes closes : une
+bande tournée de 90° par un bord tourne sans contrainte ; un quart de carré sous
+pression suiveuse garde une contrainte de Cauchy `−p I` exacte ; un cube
+parfaitement plastique en Hencky, étiré à `λ = 1,5`, tire `A₀ σ_y / λ` ; une
+bande étirée conduit la chaleur comme une bande de longueur `λ L₀`.
+
 ## Correspondance Cast3M
 
 | Cast3M | pyrucast |
