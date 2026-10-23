@@ -146,6 +146,23 @@ axes globaux qui ne dépendent pas de la configuration où on les calcule :
 sur la référence et une charge suiveuse sur la configuration courante, puis les
 soustraire nœud par nœud.
 
+## La pression suiveuse
+
+Une pression pousse sur la paroi **où elle est**. Le mode normal de
+[`flux`](../operateurs/assemblage.md) — la ligne `"n"`, une densité `phi_n`
+portée par la normale de la maille — lit la normale de la configuration
+active : évaluée sur la configuration courante, la charge suit la paroi.
+
+```python
+{{#include ../../../tests/python/test_doc_grandes_transformations.py:pression}}
+```
+
+Pour un contour parcouru dans le sens trigonométrique, la normale `(t_y, −t_x)`
+d'une arête sort de la matière : une pression `p` qui pousse sur la paroi
+s'écrit `phi_n = −p`. Sur la plaque étirée, la paroi du bas mesure 2,4 et reçoit
+`p · 2,4` vers le haut. Comme dans Cast3M, la pression n'a pas de raideur de
+chargement : elle n'entre que dans le résidu, recalculée à chaque itéré.
+
 ## La rigidité géométrique
 
 L'opérateur de Newton se construit sur la configuration courante avec les
@@ -176,3 +193,4 @@ flambement, où `K + K_σ` devient singulière.
 | `CONF` (contraintes) | `stress_measure` |
 | `FORM` avec un déplacement | `coords.displace_from` + `Coords.select` |
 | `KSIG` | `matrix.geometric` |
+| `PRES` sur la géométrie courante | `model.flux(…, "n")` évalué sur la configuration courante |

@@ -118,3 +118,22 @@ F = pc.element_field.deformation(etire, fes, "gradient")
 P = pc.element_field.stress_measure(T, F, "pk1")
 lame, mu = 100.0 * 0.3 / (1.3 * 0.4), 100.0 / 2.6
 assert abs(P[0].value(0, 0, "P_xx") - (lame + 2.0 * mu) * math.log(1.2) / 1.2) < 1e-10
+
+# The contour of the plate, travelled counter-clockwise: its normals point out.
+contour = pc.Mesh(coords, "SEG2")
+for a, b in [(0, 1), (1, 2), (2, 5), (5, 4), (4, 3), (3, 0)]:
+    contour.unit().add_cell([noeuds[a], noeuds[b]])
+
+# ANCHOR: pression
+# A pressure p = 1 pushing on the walls: a density along the normal of each
+# cell, phi_n = −p, into every displacement row of the solid.
+pression = pc.model.flux(pc.FiniteElementSpace(contour), solide, "n")
+densite = pc.element_field.material_field(pression, [("phi_n", -1.0)])
+coords.select(courante)  # the wall where it is: x = X + u
+f_ext = pc.node_field.external_forces(pression, densite)
+coords.select(0)
+# ANCHOR_END: pression
+# On the stretched plate the bottom wall is 2.4 long: it receives p·2.4 upwards.
+bas = sum(f_ext.value(noeuds[k], "f_y") for k in (0, 1, 2))
+assert abs(bas - 2.4) < 1e-12
+assert abs(sum(f_ext.value(n, "f_x") for n in noeuds)) < 1e-12

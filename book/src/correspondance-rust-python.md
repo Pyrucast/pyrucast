@@ -250,7 +250,7 @@ un sujet qu'on transforme.
 | `fick(fes: &FiniteElementSpace, species: &str) -> Model` | `fick(fespace, species, symmetry=None) -> Model` |
 | `fick_with_symmetry(fes, symmetry: MaterialSymmetry, species: &str) -> Model` | *idem, via `symmetry=`* |
 | `radiation(fes: &FiniteElementSpace, target: &Model) -> Model` | `radiation(fespace, target) -> Model` |
-| `flux(fes: &FiniteElementSpace, target: &Model, dual: String) -> Model` | `flux(fespace, target, dual) -> Model` |
+| `flux(fes: &FiniteElementSpace, target: &Model, dual: String) -> Model` | `flux(fespace, target, dual) -> Model` (`dual="n"` : le mode normal, une pression `phi_n` le long de la normale de la maille) |
 | `boundary_transfer(fes, target: &Model, components: Vec<(String, String)>) -> Model` | `boundary_transfer(fespace, target, components) -> Model` |
 | `interface_transfer(side_a, side_b, target: &Model, components, tol: f64) -> Model` | `interface_transfer(side_a, side_b, target, components, tol=1e-9) -> Model` — défaut `interface_transfer::DEFAULT_TOL` |
 | `truss(fes: &FiniteElementSpace) -> Model` | `truss(fespace) -> Model` |

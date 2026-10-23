@@ -36,7 +36,7 @@ use pyrucast::ops::element_field::{
     deformation, material_field, strain, stress_measure, StrainMeasure, StressMeasure,
 };
 use pyrucast::ops::measure::integral_element;
-use pyrucast::ops::node_field::internal_forces;
+use pyrucast::ops::node_field::{external_forces, internal_forces};
 use pyrucast::ops::{matrix, model};
 use pyrucast::Result;
 
@@ -652,5 +652,72 @@ fn displace_from_lays_the_current_configuration_in_absolute() -> Result<()> {
     assert_eq!(moved, vec![1.1, 0.35]);
     assert_eq!(still, p.nodes[5].position()?);
     assert!(ops_coords::displace_from(&some, current, current, names()).is_err());
+    Ok(())
+}
+
+#[test]
+fn a_pressure_follows_the_normal_of_the_active_configuration() -> Result<()> {
+    // A unit square and its contour, travelled counter-clockwise.
+    let coords = Handle::new(Coords::new(2)?);
+    let nodes: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
+        .iter()
+        .map(|p| Node::create_in(coords.clone(), p))
+        .collect::<Result<_>>()?;
+    let ids: Vec<_> = nodes.iter().map(|n| n.id()).collect();
+    let mut body = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
+    body.add_cell(&ids)?;
+    let mut contour = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
+    for k in 0..4 {
+        contour.add_cell(&[ids[k], ids[(k + 1) % 4]])?;
+    }
+    let solid_model = model::elasticity(
+        &FiniteElementSpace::lagrange1(&body)?,
+        Kinematics::PlaneStrain,
+    )?;
+    let load = model::flux(
+        &FiniteElementSpace::lagrange1(&contour)?,
+        &solid_model,
+        "n".into(),
+    )?;
+    assert_eq!(load.dual_vars(), vec!["f_x".to_string(), "f_y".to_string()]);
+    let density = material_field(&load, &[("phi_n", 2.0)])?;
+    let at = |f: &NodeField, k: usize| -> Result<[f64; 2]> {
+        Ok([f.value(ids[k], "f_x")?, f.value(ids[k], "f_y")?])
+    };
+
+    let reference = external_forces(&load, &density)?;
+    // A closed contour: no resultant. Each corner gets φ·½ along each of its
+    // two outward normals.
+    let mut total = [0.0, 0.0];
+    for k in 0..4 {
+        let f = at(&reference, k)?;
+        total[0] += f[0];
+        total[1] += f[1];
+    }
+    assert!(total[0].abs() < 1e-14 && total[1].abs() < 1e-14);
+    assert_eq!(at(&reference, 0)?, [-1.0, -1.0]);
+    assert_eq!(at(&reference, 2)?, [1.0, 1.0]);
+
+    // On a configuration turned by R, the load turns with the wall.
+    let (s, c) = 0.9_f64.sin_cos();
+    let u = NodeField::new(&body, vec!["u_x".into(), "u_y".into()])?;
+    {
+        let mut z = u.get(0)?.write();
+        for n in &nodes {
+            let x = n.position()?;
+            z.set_value(n.id(), "u_x", c * x[0] - s * x[1] - x[0])?;
+            z.set_value(n.id(), "u_y", s * x[0] + c * x[1] - x[1])?;
+        }
+    }
+    let current = coords.write().add_config("current");
+    ops_coords::displace_from(&u, 0, current, Some(vec!["u_x".into(), "u_y".into()]))?;
+    coords.write().select(current)?;
+    let turned = external_forces(&load, &density)?;
+    coords.write().select(0)?;
+    for k in 0..4 {
+        let (f0, f) = (at(&reference, k)?, at(&turned, k)?);
+        let expected = [c * f0[0] - s * f0[1], s * f0[0] + c * f0[1]];
+        assert!((f[0] - expected[0]).abs() < 1e-12 && (f[1] - expected[1]).abs() < 1e-12);
+    }
     Ok(())
 }

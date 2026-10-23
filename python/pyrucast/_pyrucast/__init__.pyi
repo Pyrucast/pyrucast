@@ -4531,20 +4531,27 @@ def fick(fespace: FiniteElementSpace, species: builtins.str, symmetry: typing.Op
 
 def flux(fespace: FiniteElementSpace, target: Model, dual: builtins.str) -> Model:
     r"""
-    `model.flux(fespace, target, dual)` — une **charge répartie** :
-    les forces nodales cohérentes `∫ φ N dΓ` d'une densité donnée, versées dans
-    la ligne duale `dual` (`"q"` pour une source de chaleur, `"f_x"` pour une
-    traction) du modèle `target`, qui lui donne sa nature et atteste que la
-    ligne est bien assemblée par quelqu'un.
+    `model.flux(fespace, target, dual)` — a **distributed load**: the
+    consistent nodal forces `∫ φ N dΓ` of a given density, fed into the dual row
+    `dual` (`"q"` for a heat source, `"f_x"` for a traction) of the model
+    `target`, which gives it its kind and attests that the row is assembled by
+    someone.
     
-    Matériau : `phi_<dual>` — la densité, uniforme ou variable par point de
-    Gauss selon le champ fourni.
+    Material: `phi_<dual>` — the density, uniform or varying per Gauss point as
+    the field provides.
     
-    Sa dérivée par rapport à la solution est **nulle** : elle ne contribue à
-    aucune matrice, seulement au second membre, qu'on récupère par
-    `node_field.external_forces(model, materials)`. C'est ce qui la distingue
-    d'une physique : elle n'introduit aucune inconnue et écrit dans la ligne
-    duale d'une autre.
+    The row `"n"` is the **normal** mode, a pressure: `phi_n` acts along the
+    normal of the cell, `∫ φ n N dΓ`, into every displacement row of the target
+    (`f_x`, `f_y`, `f_z`). The normal is that of the active configuration —
+    evaluated on a configuration laid at `X + u` (`coords.displace_from`), the
+    load follows the wall. For a contour travelled counter-clockwise the normal
+    of a segment points out of the material: a pressure `p` pushing on the wall
+    is then `phi_n = -p`.
+    
+    Its derivative with respect to the solution is taken as **zero**: it feeds no
+    matrix, only the right-hand side, read by
+    `node_field.external_forces(model, materials)`. That is what sets it apart
+    from a physics: it brings no unknown and writes into the dual row of another.
     """
 
 def from_arrays(coords: Coords, node_tags: typing.Any, node_coords: typing.Any, blocks: typing.Any, *, node_fields: typing.Sequence[typing.Any] = [], cell_fields: typing.Sequence[typing.Any] = [], order: builtins.str = 'pyrucast') -> tuple[dict, builtins.list[NodeField], builtins.list[ElementField]]:

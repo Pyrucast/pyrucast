@@ -17,6 +17,13 @@
 //! The density lives in the material, named after the row it feeds — `phi_q`
 //! for a heat source, `phi_f_x` for a traction. Uniform or varying per Gauss
 //! point is the material field's business, not this physics'.
+//!
+//! **The normal mode** — the row named [`NORMAL`], `"n"` — is a pressure: the
+//! density `phi_n` acts along the normal of the cell, `f_ia = ∫ φ n_a N_i dΓ`,
+//! and feeds every displacement row of the target at once (`f_x`, `f_y`,
+//! `f_z`). The normal is that of the **active** configuration: evaluated on a
+//! configuration laid at `X + u`, the load follows the wall (Cast3M `PRES` on
+//! the current geometry), with no stiffness of its own, as in Cast3M.
 
 use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
@@ -28,6 +35,7 @@ use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::kernel::MAX_CELL_DOFS;
+use crate::models::tensor::dual_name;
 use crate::models::transfer::{owner_physics, physics_slice};
 use crate::models::{
     CellGeom, Contribution, Domain, ElementLayout, MatrixKind, MatrixLayout, Physics,
@@ -46,6 +54,16 @@ use serde::{Deserialize, Serialize};
 pub fn density_name(dual: &str) -> String {
     format!("phi_{dual}")
 }
+
+/// The row name of the **normal** mode: a density along the normal of the cell,
+/// feeding every displacement row of the target — a pressure.
+///
+/// ```
+/// # use pyrucast::models::flux;
+/// assert_eq!(flux::NORMAL, "n");
+/// assert_eq!(flux::density_name(flux::NORMAL), "phi_n");
+/// ```
+pub const NORMAL: &str = "n";
 
 /// A distributed load on one FE subspace: `∫ φ N dΓ`, into one dual row.
 ///
@@ -84,6 +102,11 @@ pub struct Flux {
     support: Handle<SubMesh>,
     dual: String,
     physics: Physics,
+    /// The rows a normal-mode load feeds — every displacement row of its space
+    /// — or empty for a load feeding its one row `dual`. Archives written
+    /// before the normal mode read back as such.
+    #[serde(default)]
+    normal_rows: Vec<String>,
 }
 
 impl Flux {
@@ -118,13 +141,15 @@ impl Flux {
     /// assert!(Flux::new(zone.clone(), &cible, String::new()).is_err());
     /// // A row the target does not assemble either: that is the whole point
     /// // de recevoir le modèle chargé.
-    /// assert!(Flux::new(zone, &cible, "f_x".into()).is_err());
+    /// assert!(Flux::new(zone.clone(), &cible, "f_x".into()).is_err());
     /// // A formulation owning its own interpolation (a beam) cannot receive a
     /// // consistent load from here: it alone knows its shape functions. Settled
     /// // at construction, not at the Gauss point.
     /// # use pyrucast::atoms::Interpolation;
     /// let poutre = FiniteElementSpace::new(&maillage, Interpolation::ModelEmbedded).unwrap();
     /// assert!(Flux::new(poutre.get(0).unwrap(), &cible, "q".into()).is_err());
+    /// // The normal mode feeds displacement rows, which a thermal target lacks.
+    /// assert!(Flux::new(zone, &cible, "n".into()).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(
@@ -139,18 +164,44 @@ impl Flux {
                     .into(),
             ));
         }
+        // The normal mode feeds every displacement row of the space, along the
+        // normal of a cell one dimension below it — both settled here.
+        let normal_rows: Vec<String> = if dual == NORMAL {
+            let (space_dim, ref_dim) = {
+                let s = fespace.read();
+                (s.space_dim(), s.ref_dim()?)
+            };
+            if ref_dim + 1 != space_dim {
+                return Err(PyrucastError::Message(format!(
+                    "Flux: the normal mode needs a boundary — cells of dimension {} in a \
+                     {space_dim}-D space — and these are of dimension {ref_dim}",
+                    space_dim.saturating_sub(1)
+                )));
+            }
+            (0..space_dim).map(dual_name).collect()
+        } else {
+            Vec::new()
+        };
         // The load's kind is that of the term it loads. The row's name does not give
         // it — the user picks it freely — but the loaded model does: we look for the
         // sub-model that owns that dual.
         // A row nobody assembles used to build a mute load; it is now a construction
         // error.
-        let physics = owner_physics(target, |sub| sub.as_kind().dual_vars().contains(&dual))
-            .ok_or_else(|| {
-                PyrucastError::Message(format!(
-                    "Flux: `{dual}` is not a dual row of the model it loads — it declares {:?}",
-                    target.dual_vars()
-                ))
-            })?;
+        let feeds: Vec<String> = if normal_rows.is_empty() {
+            vec![dual.clone()]
+        } else {
+            normal_rows.clone()
+        };
+        let physics = owner_physics(target, |sub| {
+            let duals = sub.as_kind().dual_vars();
+            feeds.iter().all(|row| duals.contains(row))
+        })
+        .ok_or_else(|| {
+            PyrucastError::Message(format!(
+                "Flux: {feeds:?} — not dual rows of the model it loads, which declares {:?}",
+                target.dual_vars()
+            ))
+        })?;
         // A distributed load weights by the **field's** shape functions: it needs
         // one, and that is a fact of the zone, settled here once and for all rather
         // than at every Gauss point. A formulation owning its own interpolation (a
@@ -164,7 +215,18 @@ impl Flux {
             support,
             dual,
             physics,
+            normal_rows,
         })
+    }
+
+    /// The rows this load feeds: `dual`, or every displacement row in the
+    /// normal mode.
+    fn rows(&self) -> Vec<String> {
+        if self.normal_rows.is_empty() {
+            vec![self.dual.clone()]
+        } else {
+            self.normal_rows.clone()
+        }
     }
 
     /// Layout of the term: the subspace it integrates on, the node support it
@@ -173,7 +235,7 @@ impl Flux {
         MatrixLayout {
             fespaces: vec![self.fespace.clone()],
             support: self.support.clone(),
-            dual_vars: vec![self.dual.clone()],
+            dual_vars: self.rows(),
             primal_vars: Vec::new(),
             ordering: DofOrdering::NodesThenVars,
             symmetry: Symmetry::None,
@@ -190,7 +252,7 @@ impl SubModelKind for Flux {
     }
 
     fn dual_vars(&self) -> Vec<String> {
-        vec![self.dual.clone()]
+        self.rows()
     }
 
     fn physics(&self) -> &'static [Physics] {
@@ -227,6 +289,9 @@ impl SubModelKind for Flux {
     ) -> Result<()> {
         let geom = &geoms[0];
         let phi = lay.material[0] as usize;
+        if !self.normal_rows.is_empty() {
+            return normal_load(geom, material, phi, fe);
+        }
         // On a C¹ basis (a Bernoulli beam) the field's basis is not the geometric
         // one: it is the basis that carries the nodal moments of a distributed load.
         // The buffer is on the stack, outside the loop.
@@ -250,12 +315,42 @@ impl SubModelKind for Flux {
 
     fn render(&self, _opts: &DumpOptions) -> String {
         format!(
-            "Flux<{}> sur {} maille(s) → {}",
+            "Flux<{}> on {} cell(s) → {}",
             self.physics.name(),
             self.fespace.read().cell_count(),
             self.dual
         )
     }
+}
+
+/// The nodal forces of a density along the normal of the cell, `f_ia = ∫ φ n_a
+/// N_i dΓ`, node-major (`fe[i * space_dim + a]`). The normal is the unit one of
+/// the active configuration — `(t_y, −t_x)` for a segment of tangent `t`, the
+/// cross product of the two tangents on a face — so the load follows whatever
+/// geometry is active.
+fn normal_load(
+    geom: &CellGeom,
+    material: &SubElementField,
+    phi: usize,
+    fe: &mut [f64],
+) -> Result<()> {
+    let d = geom.space_dim;
+    let mut shape_buf = [0.0_f64; MAX_CELL_DOFS];
+    let mut normal = [0.0_f64; 3];
+    for g in 0..geom.n_gauss {
+        let w = geom.det_j_w(g) * material.row(geom.cell, g)[phi];
+        if w == 0.0 {
+            continue;
+        }
+        geom.normal(g, &mut normal[..d])?;
+        let shape = geom.field_n_at_g(g, &mut shape_buf);
+        for i in 0..geom.n_nodes {
+            for a in 0..d {
+                fe[i * d + a] += shape[i] * normal[a] * w;
+            }
+        }
+    }
+    Ok(())
 }
 
 impl Domain for Flux {
@@ -305,5 +400,5 @@ crate::physics_operator! {
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn flux(fes, target, dual: String) via SubModel::flux;
-    python: "`model.flux(fespace, target, dual)` — une **charge répartie** :\nles forces nodales cohérentes `∫ φ N dΓ` d'une densité donnée, versées dans\nla ligne duale `dual` (`\"q\"` pour une source de chaleur, `\"f_x\"` pour une\ntraction) du modèle `target`, qui lui donne sa nature et atteste que la\nligne est bien assemblée par quelqu'un.\n\nMatériau : `phi_<dual>` — la densité, uniforme ou variable par point de\nGauss selon le champ fourni.\n\nSa dérivée par rapport à la solution est **nulle** : elle ne contribue à\naucune matrice, seulement au second membre, qu'on récupère par\n`node_field.external_forces(model, materials)`. C'est ce qui la distingue\nd'une physique : elle n'introduit aucune inconnue et écrit dans la ligne\nduale d'une autre."
+    python: "`model.flux(fespace, target, dual)` — a **distributed load**: the\nconsistent nodal forces `∫ φ N dΓ` of a given density, fed into the dual row\n`dual` (`\"q\"` for a heat source, `\"f_x\"` for a traction) of the model\n`target`, which gives it its kind and attests that the row is assembled by\nsomeone.\n\nMaterial: `phi_<dual>` — the density, uniform or varying per Gauss point as\nthe field provides.\n\nThe row `\"n\"` is the **normal** mode, a pressure: `phi_n` acts along the\nnormal of the cell, `∫ φ n N dΓ`, into every displacement row of the target\n(`f_x`, `f_y`, `f_z`). The normal is that of the active configuration —\nevaluated on a configuration laid at `X + u` (`coords.displace_from`), the\nload follows the wall. For a contour travelled counter-clockwise the normal\nof a segment points out of the material: a pressure `p` pushing on the wall\nis then `phi_n = -p`.\n\nIts derivative with respect to the solution is taken as **zero**: it feeds no\nmatrix, only the right-hand side, read by\n`node_field.external_forces(model, materials)`. That is what sets it apart\nfrom a physics: it brings no unknown and writes into the dual row of another."
 }

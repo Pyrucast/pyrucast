@@ -172,6 +172,21 @@ La mesure `|J|` venant du sous-espace EF, un **bord** s'intègre directement :
 une arête `SEG2` plongée dans un `Coords` 2-D s'intègre comme une **ligne**
 (Jacobien manifold), une surface comme une aire.
 
+**Le mode normal : une pression.** La ligne `"n"` désigne une densité portée par
+la **normale** de la maille, versée dans toutes les lignes de déplacement de la
+cible à la fois (`f_x`, `f_y`, `f_z`) — le `PRES` de Cast3M :
+
+\[
+f_{ia} = \int_\Gamma \varphi_n\, n_a\, N_i\, d\Gamma .
+\]
+
+La normale est celle de la configuration **active** : `(t_y, −t_x)` pour une
+arête de tangente `t`, qui sort de la matière quand le contour est parcouru dans
+le sens trigonométrique ; une pression `p` qui pousse sur la paroi s'écrit alors
+`phi_n = −p`. Évaluée sur une configuration posée en `X + u`, la charge **suit
+la paroi** — sans raideur de chargement, comme dans Cast3M. Voir
+[Grandes transformations](../mecanique/grandes-transformations.md).
+
 Rien n'oblige une charge à rejoindre le modèle qu'elle charge : ne contribuant à
 aucune matrice, elle se tient très bien en modèle à elle seule, avec sa propre
 densité. C'est ce qu'on fait quand deux charges alimentent la même ligne duale
