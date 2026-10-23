@@ -32,6 +32,7 @@ use crate::named::Named;
 /// | [`Kirchhoff`](Self::Kirchhoff) | `tau_` | `i ≤ j` | — (`τ = J σ`) |
 /// | [`FirstPiolaKirchhoff`](Self::FirstPiolaKirchhoff) | `P_` | every `(i, j)` | the gradient `F` |
 /// | [`SecondPiolaKirchhoff`](Self::SecondPiolaKirchhoff) | `S_` | `i ≤ j` | Green–Lagrange `E` |
+/// | [`Hencky`](Self::Hencky) | `T_` | `i ≤ j` | Hencky `H = ½ ln C` |
 ///
 /// The Lagrangian ones are the duals of a strain measure; Cauchy and Kirchhoff
 /// are Eulerian and the dual of no total measure, which is why the target is
@@ -57,6 +58,9 @@ pub enum StressMeasure {
     FirstPiolaKirchhoff,
     /// The second Piola–Kirchhoff stress `S`, dual of Green–Lagrange.
     SecondPiolaKirchhoff,
+    /// The dual `T` of the Hencky strain `H = ½ ln C`, what a law reading
+    /// Hencky writes: `S = T : ∂H/∂E`.
+    Hencky,
 }
 
 impl StressMeasure {
@@ -75,6 +79,7 @@ impl StressMeasure {
             StressMeasure::Kirchhoff => "tau",
             StressMeasure::FirstPiolaKirchhoff => "P",
             StressMeasure::SecondPiolaKirchhoff => "S",
+            StressMeasure::Hencky => "T",
         }
     }
 
@@ -109,6 +114,7 @@ impl StressMeasure {
             StressMeasure::Kirchhoff => finite_strain::pk2_from_kirchhoff,
             StressMeasure::FirstPiolaKirchhoff => finite_strain::pk2_from_pk1,
             StressMeasure::SecondPiolaKirchhoff => same,
+            StressMeasure::Hencky => finite_strain::pk2_from_hencky,
         }
     }
 
@@ -119,6 +125,7 @@ impl StressMeasure {
             StressMeasure::Kirchhoff => finite_strain::kirchhoff_from_pk2,
             StressMeasure::FirstPiolaKirchhoff => finite_strain::pk1_from_pk2,
             StressMeasure::SecondPiolaKirchhoff => same,
+            StressMeasure::Hencky => finite_strain::hencky_from_pk2,
         }
     }
 }
@@ -130,6 +137,7 @@ impl Named for StressMeasure {
         StressMeasure::Kirchhoff,
         StressMeasure::FirstPiolaKirchhoff,
         StressMeasure::SecondPiolaKirchhoff,
+        StressMeasure::Hencky,
     ];
 
     fn name(self) -> &'static str {
@@ -138,6 +146,7 @@ impl Named for StressMeasure {
             StressMeasure::Kirchhoff => "kirchhoff",
             StressMeasure::FirstPiolaKirchhoff => "pk1",
             StressMeasure::SecondPiolaKirchhoff => "pk2",
+            StressMeasure::Hencky => "hencky",
         }
     }
 
@@ -148,6 +157,7 @@ impl Named for StressMeasure {
             ("tau", StressMeasure::Kirchhoff),
             ("P", StressMeasure::FirstPiolaKirchhoff),
             ("S", StressMeasure::SecondPiolaKirchhoff),
+            ("T", StressMeasure::Hencky),
         ]
     }
 }
@@ -167,12 +177,12 @@ fn same(s: &Matrix3<f64>, _f: &Matrix3<f64>) -> Matrix3<f64> {
 /// revolution).
 ///
 /// The measure of `stress` is recognised by its **names** — `sigma_*`, `tau_*`,
-/// `P_*` or `S_*` — exactly one per zone. In 2-D the out-of-plane `zz` is read
+/// `P_*`, `S_*` or `T_*` — exactly one per zone. In 2-D the out-of-plane `zz` is read
 /// when the stress carries it (the hoop of a body of revolution, the `σ_zz` a
 /// plane-strain law echoes) and written back under the target's name; `F_zz` is
 /// 1 there unless the gradient carries it.
 ///
-/// Errors: a zone carrying none of the four measures, or more than one; no
+/// Errors: a zone carrying none of the five measures, or more than one; no
 /// gradient zone on the same FE space carrying the `F_*` read.
 ///
 /// ```
@@ -241,23 +251,26 @@ fn convert_zone(
         .copied()
         .filter(|m| carries(&m.names(space_dim)))
         .collect();
-    let source =
-        match found.as_slice() {
-            [one] => *one,
-            [] => {
-                return Err(PyrucastError::Message(format!(
-                "stress_measure: no stress among sigma_*, tau_*, P_*, S_* in this {space_dim}-D \
+    let source = match found.as_slice() {
+        [one] => *one,
+        [] => {
+            return Err(PyrucastError::Message(format!(
+            "stress_measure: no stress among sigma_*, tau_*, P_*, S_*, T_* in this {space_dim}-D \
                  zone, which carries {components:?}"
-            )))
-            }
-            several => {
-                return Err(PyrucastError::Message(format!(
+        )))
+        }
+        several => {
+            return Err(PyrucastError::Message(format!(
                 "stress_measure: the zone carries several stresses ({}), so which one to convert \
                  is ambiguous — pass them in separate fields",
-                several.iter().map(|m| m.name()).collect::<Vec<_>>().join(", ")
+                several
+                    .iter()
+                    .map(|m| m.name())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             )))
-            }
-        };
+        }
+    };
     // In 2-D the out-of-plane component closes the lists when it is there.
     let zz = space_dim == 2 && components.contains(&format!("{}_zz", source.prefix()));
     let mut reads = source.names(space_dim);

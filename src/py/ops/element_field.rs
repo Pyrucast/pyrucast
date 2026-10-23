@@ -130,7 +130,8 @@ pub fn thermal_strain(
 ///
 /// `target` is `"cauchy"` (`sigma_*`, the true stress), `"kirchhoff"`
 /// (`tau_* = J sigma_*`), `"pk1"` (`P_*`, the nominal stress `F S`, not
-/// symmetric) or `"pk2"` (`S_*`, dual of Green–Lagrange). The measure of
+/// symmetric), `"pk2"` (`S_*`, dual of Green–Lagrange) or `"hencky"` (`T_*`,
+/// dual of the Hencky strain, what a law reading Hencky writes). The measure of
 /// `stress` is recognised by its names, one per zone. This is how the
 /// Lagrangian stress a law writes in large transformations becomes the first
 /// Piola–Kirchhoff `internal_forces` reads, or the Cauchy stress of the

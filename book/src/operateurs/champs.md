@@ -327,8 +327,9 @@ les deux sens ne font pas la même opération, et l'état que rend
 Une contrainte convertie, point par point, d'une mesure à l'autre, avec le
 gradient de la transformation `F` (`deformation(u, fespace, "gradient")`) :
 Cauchy `sigma_*`, Kirchhoff `tau_*`, Piola–Kirchhoff 1 `P_*` (non symétrique)
-et 2 `S_*`. La mesure d'entrée se reconnaît à ses noms, une par zone ; `target`
-nomme celle qu'on veut (`"cauchy"`, `"kirchhoff"`, `"pk1"`, `"pk2"`). C'est
+et 2 `S_*`, duale de Hencky `T_*`. La mesure d'entrée se reconnaît à ses noms,
+une par zone ; `target` nomme celle qu'on veut (`"cauchy"`, `"kirchhoff"`,
+`"pk1"`, `"pk2"`, `"hencky"`). C'est
 ainsi que la contrainte lagrangienne d'une loi en grandes transformations
 devient la `P` que lisent les forces internes, ou la Cauchy des résultats —
 la moitié « contraintes » de Cast3M `CONF`. Formules et exemple :

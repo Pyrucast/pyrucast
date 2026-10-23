@@ -10,13 +10,19 @@
 //! | Cauchy `σ` | `J⁻¹ F S Fᵀ` | `J F⁻¹ σ F⁻ᵀ` |
 //! | Kirchhoff `τ = J σ` | `F S Fᵀ` | `F⁻¹ τ F⁻ᵀ` |
 //! | first Piola–Kirchhoff `P` | `F S` | `F⁻¹ P` |
+//! | dual `T` of Hencky `H = ½ ln C` | `S̃_ab / θ_ab` | `S̃_ab = θ_ab T̃_ab` |
 //!
-//! Pure, on the stack, branch-free: they run at every Gauss point. A degenerate
-//! `F` (`det F = 0`) yields inf/NaN — the mathematical value, not a checked
+//! The last row works in the eigenbasis of `C = FᵀF = Σ c_a N_a⊗N_a` (the
+//! tilde): `S = T : ∂H/∂E`, and `∂H/∂E` acts there entry by entry, with
+//! `θ_aa = 1/c_a` and `θ_ab = (ln c_a − ln c_b)/(c_a − c_b)` — the divided
+//! difference of `ln`, whose limit for equal eigenvalues is `1/c`.
+//!
+//! Pure, on the stack, with nothing checked: they run at every Gauss point. A
+//! degenerate `F` (`det F = 0`) yields inf/NaN — the mathematical value, not a checked
 //! case, as for the measures of
 //! [`deformation`](fn@crate::ops::element_field::deformation).
 
-use nalgebra::Matrix3;
+use nalgebra::{Matrix3, Vector3};
 
 /// `F⁻¹`, or NaN everywhere when `F` is singular.
 fn inverse(f: &Matrix3<f64>) -> Matrix3<f64> {
@@ -56,6 +62,47 @@ pub(crate) fn pk1_from_pk2(s: &Matrix3<f64>, f: &Matrix3<f64>) -> Matrix3<f64> {
     f * s
 }
 
+/// `(ln a − ln b)/(a − b)`, and its limit `1/b` when `a → b` — a series there,
+/// where the quotient would lose every digit.
+fn log_divided_difference(a: f64, b: f64) -> f64 {
+    let x = (a - b) / b;
+    if x.abs() < 1e-6 {
+        (1.0 - x / 2.0 + x * x / 3.0) / b
+    } else {
+        (a / b).ln() / (a - b)
+    }
+}
+
+/// The eigenbasis of `C = FᵀF` and the weights `θ_ab` of `∂H/∂E` in it.
+fn hencky_weights(f: &Matrix3<f64>) -> (Matrix3<f64>, Matrix3<f64>) {
+    let eig = (f.transpose() * f).symmetric_eigen();
+    let c: Vector3<f64> = eig.eigenvalues;
+    let theta = Matrix3::from_fn(|a, b| {
+        if a == b {
+            1.0 / c[a]
+        } else {
+            log_divided_difference(c[a], c[b])
+        }
+    });
+    (eig.eigenvectors, theta)
+}
+
+/// `S` from the dual `T` of the Hencky strain: `S = T : ∂H/∂E`, entry by entry
+/// in the eigenbasis of `C`.
+pub(crate) fn pk2_from_hencky(t: &Matrix3<f64>, f: &Matrix3<f64>) -> Matrix3<f64> {
+    let (q, theta) = hencky_weights(f);
+    let in_basis = q.transpose() * t * q;
+    q * in_basis.component_mul(&theta) * q.transpose()
+}
+
+/// The dual `T` of the Hencky strain from `S`: the inverse of
+/// [`pk2_from_hencky`].
+pub(crate) fn hencky_from_pk2(s: &Matrix3<f64>, f: &Matrix3<f64>) -> Matrix3<f64> {
+    let (q, theta) = hencky_weights(f);
+    let in_basis = q.transpose() * s * q;
+    q * in_basis.component_div(&theta) * q.transpose()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -76,6 +123,7 @@ mod tests {
             pk2_from_cauchy(&cauchy_from_pk2(&s, &f), &f),
             pk2_from_kirchhoff(&kirchhoff_from_pk2(&s, &f), &f),
             pk2_from_pk1(&pk1_from_pk2(&s, &f), &f),
+            pk2_from_hencky(&hencky_from_pk2(&s, &f), &f),
         ];
         for b in back {
             assert!((b - s).norm() < 1e-12 * s.norm());
@@ -90,5 +138,29 @@ mod tests {
         let s = some_s();
         let sigma = cauchy_from_pk2(&s, &r);
         assert!((sigma - r * s * r.transpose()).norm() < 1e-12 * s.norm());
+    }
+
+    #[test]
+    fn at_rest_and_in_rotation_the_hencky_dual_is_s() {
+        // C = I: every weight is 1, T and S coincide.
+        let (c, sn) = (0.6_f64, 0.8_f64);
+        let r = Matrix3::new(c, -sn, 0.0, sn, c, 0.0, 0.0, 0.0, 1.0);
+        let t = some_s();
+        for f in [Matrix3::identity(), r] {
+            assert!((pk2_from_hencky(&t, &f) - t).norm() < 1e-12 * t.norm());
+        }
+    }
+
+    #[test]
+    fn under_a_stretch_the_hencky_dual_follows_the_divided_differences() {
+        // F = diag(2, 1, 1): c = (4, 1, 1). The axial weight is 1/4, the
+        // shear between the stretched axis and another (ln 4 − ln 1)/(4 − 1),
+        // the shear between the two others their limit, 1.
+        let f = Matrix3::new(2.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0);
+        let t = Matrix3::new(8.0, 3.0, 0.0, 3.0, 1.0, 5.0, 0.0, 5.0, 2.0);
+        let s = pk2_from_hencky(&t, &f);
+        assert!((s[(0, 0)] - 2.0).abs() < 1e-12);
+        assert!((s[(0, 1)] - 3.0 * 4.0_f64.ln() / 3.0).abs() < 1e-12);
+        assert!((s[(1, 2)] - 5.0).abs() < 1e-12);
     }
 }

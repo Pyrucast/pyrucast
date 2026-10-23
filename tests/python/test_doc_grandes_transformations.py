@@ -107,3 +107,14 @@ coords.select(courante)
 assert abs(noeuds[2].position()[0] - 2.4) < 1e-14
 coords.select(0)
 assert noeuds[2].position() == [2.0, 0.0]
+
+# A law reading Hencky writes T_*, which stress_measure turns into S, then P.
+# Plane strain, stretched 1.2 along x: H_xx = ln 1.2 alone, T_xx = (λ + 2μ) H_xx,
+# S_xx = T_xx / 1.2², and the nominal stress is P_xx = T_xx / 1.2.
+hencky = pc.model.elasticity(fes, "plane_strain", strain_measure="hencky")
+T = hencky.integrate_behavior(hencky.strain(etire, materiaux), materiaux)
+assert [z.components() for z in T] == [["T_xx", "T_yy", "T_xy"]]
+F = pc.element_field.deformation(etire, fes, "gradient")
+P = pc.element_field.stress_measure(T, F, "pk1")
+lame, mu = 100.0 * 0.3 / (1.3 * 0.4), 100.0 / 2.6
+assert abs(P[0].value(0, 0, "P_xx") - (lame + 2.0 * mu) * math.log(1.2) / 1.2) < 1e-10

@@ -90,10 +90,31 @@ noms ; la cible est nommée par la contrainte qu'on veut :
 | `"kirchhoff"` (`tau`) | `tau_*` | `F S Fᵀ` | — (eulérienne) |
 | `"pk1"` (`P`) | `P_*`, non symétrique | `F S` | `F` |
 | `"pk2"` (`S`) | `S_*` | `S` | `E` (Green–Lagrange) |
+| `"hencky"` (`T`) | `T_*` | `S̃_ab / θ_ab` | `H = ½ ln C` (Hencky) |
 
 ```python
 {{#include ../../../tests/python/test_doc_grandes_transformations.py:cauchy}}
 ```
+
+**Hencky.** La duale `T` de `H = ½ ln C` se ramène à `S` par `S = T : ∂H/∂E`.
+Dans la base propre de `C = FᵀF = Σ c_a N_a⊗N_a` (le tilde), cette dérivée agit
+composante par composante :
+
+\[
+\tilde S_{ab} = \theta_{ab}\,\tilde T_{ab},
+\qquad
+\theta_{aa} = \frac{1}{c_a},
+\qquad
+\theta_{ab} = \frac{\ln c_a - \ln c_b}{c_a - c_b} \quad (a \neq b),
+\]
+
+la différence divisée du logarithme, qui tend vers `1/c` quand deux valeurs
+propres se confondent (calculée alors par son développement, sans perte de
+chiffres). En traction uniaxiale (`ν = 0`), la loi rend `T = E ln λ`, d'où
+`S = T/λ²` et une contrainte nominale `P = E ln λ / λ` ; Saint-Venant–Kirchhoff
+donne `P = λ E (λ² − 1)/2`. Les deux formes closes sont vérifiées par
+`tests/large_transformations.rs`, avec la dualité énergie–efforts dans chaque
+mesure.
 
 C'est la moitié « contraintes » de `CONF` de Cast3M, entre la configuration de
 référence et la courante. Le reste de `CONF` (transporter des déformations,

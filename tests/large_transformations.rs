@@ -279,52 +279,129 @@ fn some_motion(p: &Patch) -> Result<Vec<[f64; 2]>> {
 
 #[test]
 fn the_internal_forces_are_the_derivative_of_the_stored_energy() -> Result<()> {
-    let p = patch()?;
-    let (gl, mat) = solid(&p, StrainMeasure::GreenLagrange)?;
-    let energy = |values_u: &[[f64; 2]]| -> Result<f64> {
-        let u = displacement(&p, values_u)?;
-        let (eps, s) = state(&gl, &mat, &u)?;
-        let (e, sz) = (eps.get(0)?.read().clone(), s.get(0)?.read().clone());
-        let density = ElementField::new(&p.fes, vec!["w".into()])?;
-        {
-            let mut z = density.get(0)?.write();
-            for cell in 0..z.cell_count() {
-                for g in 0..z.gauss_count() {
-                    let w = 0.5
-                        * (e.value(cell, g, "E_xx")? * sz.value(cell, g, "S_xx")?
-                            + e.value(cell, g, "E_yy")? * sz.value(cell, g, "S_yy")?
-                            + 2.0 * e.value(cell, g, "E_xy")? * sz.value(cell, g, "S_xy")?);
-                    z.set_value(cell, g, "w", w)?;
+    // Green–Lagrange checks B(F); Hencky checks, on top, T → S.
+    for (measure, strain_name, stress_name) in [
+        (StrainMeasure::GreenLagrange, "E", "S"),
+        (StrainMeasure::Hencky, "H", "T"),
+    ] {
+        let p = patch()?;
+        let (law, mat) = solid(&p, measure)?;
+        // ∫ ½ ε:σ in the measure, tensor convention: the shear counts twice.
+        let energy = |values_u: &[[f64; 2]]| -> Result<f64> {
+            let u = displacement(&p, values_u)?;
+            let (eps, s) = state(&law, &mat, &u)?;
+            let (e, sz) = (eps.get(0)?.read().clone(), s.get(0)?.read().clone());
+            let density = ElementField::new(&p.fes, vec!["w".into()])?;
+            {
+                let mut z = density.get(0)?.write();
+                for cell in 0..z.cell_count() {
+                    for g in 0..z.gauss_count() {
+                        let pair = |ij: &str| -> Result<f64> {
+                            Ok(e.value(cell, g, &format!("{strain_name}_{ij}"))?
+                                * sz.value(cell, g, &format!("{stress_name}_{ij}"))?)
+                        };
+                        let w = 0.5 * (pair("xx")? + pair("yy")? + 2.0 * pair("xy")?);
+                        z.set_value(cell, g, "w", w)?;
+                    }
                 }
             }
+            integral_element(&density, "w")
+        };
+
+        let motion = some_motion(&p)?;
+        let u = displacement(&p, &motion)?;
+        let (_, s) = state(&law, &mat, &u)?;
+        let f = forces(&p, &law, &mat, &s, &u)?;
+
+        let h = 1e-6;
+        let mut scale = 0.0_f64;
+        let mut worst = 0.0_f64;
+        for k in 0..p.nodes.len() {
+            for a in 0..2 {
+                let (mut plus, mut minus) = (motion.clone(), motion.clone());
+                plus[k][a] += h;
+                minus[k][a] -= h;
+                let derivative = (energy(&plus)? - energy(&minus)?) / (2.0 * h);
+                let fa = force(&f, &p, k, a)?;
+                scale = scale.max(fa.abs());
+                worst = worst.max((derivative - fa).abs());
+            }
         }
-        integral_element(&density, "w")
-    };
+        assert!(scale > 1.0, "the patch is loaded");
+        assert!(
+            worst < 1e-6 * scale,
+            "{measure:?}: |∂W/∂u − f_int| = {worst}, scale {scale}"
+        );
+    }
+    Ok(())
+}
 
-    let motion = some_motion(&p)?;
-    let u = displacement(&p, &motion)?;
-    let (_, s) = state(&gl, &mat, &u)?;
-    let f = forces(&p, &gl, &mat, &s, &u)?;
-
-    let h = 1e-6;
-    let mut scale = 0.0_f64;
-    let mut worst = 0.0_f64;
-    for k in 0..p.nodes.len() {
-        for a in 0..2 {
-            let (mut plus, mut minus) = (motion.clone(), motion.clone());
-            plus[k][a] += h;
-            minus[k][a] -= h;
-            let derivative = (energy(&plus)? - energy(&minus)?) / (2.0 * h);
-            let fa = force(&f, &p, k, a)?;
-            scale = scale.max(fa.abs());
-            worst = worst.max((derivative - fa).abs());
+/// A unit HEX8 cube, `ν = 0` elasticity reading `measure`, stretched to `λ`
+/// along x with nothing else moving — the exact uniaxial state when the
+/// Poisson ratio vanishes. Returns the nominal force on the face `x = 1`.
+fn uniaxial_force(measure: StrainMeasure, lambda: f64) -> Result<(f64, f64)> {
+    let coords = Handle::new(Coords::new(3)?);
+    let mut nodes = Vec::new();
+    for z in [0.0, 1.0] {
+        for (x, y) in [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)] {
+            nodes.push(Node::create_in(coords.clone(), &[x, y, z])?);
         }
     }
-    assert!(scale > 1.0, "the patch is loaded");
-    assert!(
-        worst < 1e-6 * scale,
-        "|∂W/∂u − f_int| = {worst}, scale {scale}"
-    );
+    let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::HEX8));
+    let ids: Vec<_> = nodes.iter().map(|n| n.id()).collect();
+    mesh.add_cell(&ids)?;
+    let fes = FiniteElementSpace::lagrange1(&mesh)?;
+    let law = model::elasticity_with_symmetry(
+        &fes,
+        Kinematics::Full3D,
+        MaterialSymmetry::Isotropic,
+        measure,
+    )?;
+    let mat = material_field(&law, &[("E", 100.0), ("nu", 0.0)])?;
+    let u = NodeField::new(&mesh, vec!["u_x".into(), "u_y".into(), "u_z".into()])?;
+    {
+        let mut z = u.get(0)?.write();
+        for n in &nodes {
+            z.set_value(n.id(), "u_x", (lambda - 1.0) * n.position()?[0])?;
+        }
+    }
+    let (_, s) = state(&law, &mat, &u)?;
+    let grad = deformation(&u, &fes, StrainMeasure::Gradient)?;
+    let pk1 = stress_measure(&s, &grad, StressMeasure::FirstPiolaKirchhoff)?;
+    let f = internal_forces(&law, &pk1, &u, &mat)?;
+    let mut on_face = 0.0;
+    for n in &nodes {
+        if n.position()?[0] == 1.0 {
+            on_face += f.value(n.id(), "f_x")?;
+        }
+    }
+    Ok((on_face, values(&pk1, "P_xx")?[0]))
+}
+
+#[test]
+fn a_uniaxial_stretch_gives_the_closed_form_nominal_force() -> Result<()> {
+    // E = 100, A₀ = 1, λ = 1.5: Saint-Venant–Kirchhoff, S = E·E_xx with
+    // E_xx = ½(λ² − 1), gives P = λ S; Hencky, T = E ln λ, S = T/λ², gives
+    // P = E ln λ / λ.
+    let (lambda, young) = (1.5_f64, 100.0);
+    let expected = [
+        (
+            StrainMeasure::GreenLagrange,
+            lambda * young * 0.5 * (lambda * lambda - 1.0),
+        ),
+        (StrainMeasure::Hencky, young * lambda.ln() / lambda),
+    ];
+    for (measure, nominal) in expected {
+        let (force, p_xx) = uniaxial_force(measure, lambda)?;
+        assert!(
+            (p_xx - nominal).abs() < 1e-12 * nominal,
+            "{measure:?}: P_xx = {p_xx}"
+        );
+        assert!(
+            (force - nominal).abs() < 1e-12 * nominal,
+            "{measure:?}: F = {force}"
+        );
+    }
     Ok(())
 }
 
