@@ -90,6 +90,8 @@ NO_METHOD = {
     "beam_deformation": "exige déplacements + rotations",
     "shell_deformation": "requires the six shell DOFs, and the formulation",
     "thermal_strain": "requires a temperature, and alpha in the material",
+    "stress_measure": "requires a stress named after its measure (sigma_*, tau_*, P_*, "
+    "S_* or T_*) and a deformation gradient F_*",
     "merge": "symmetric — `a | b` is already its form",
     "psca": "symmetric — order does not matter",
 }

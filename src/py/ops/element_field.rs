@@ -136,7 +136,6 @@ pub fn thermal_strain(
 /// Lagrangian stress a law writes in large transformations becomes the first
 /// Piola–Kirchhoff `internal_forces` reads, or the Cauchy stress of the
 /// results — the stress half of Cast3M `CONF`.
-#[py_op(method_on = PyElementField)]
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 pub fn stress_measure(
