@@ -86,6 +86,34 @@ M_lumped = pyrucast.matrix.lump(M)  # diagonale
 # ANCHOR_END: lump
 assert M_lumped.n_rows() == M.n_rows()
 
+# ── freeze ─────────────────────────────────────────────────
+
+model, fes, _, noeuds = _modele_thermique()
+materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
+coords = fes.mesh().coords()
+# u_x = x: every length doubles.
+allonge = pyrucast.NodeField(fes.mesh(), ["u_x"])
+for n, x in zip(noeuds, (0.0, 0.5, 1.0), strict=True):
+    allonge[0].set_value(n, "u_x", x)
+# ANCHOR: freeze
+K = pyrucast.matrix.stiffness(model, materials)
+K_figee = pyrucast.matrix.freeze(K)  # évaluée ici, sur la configuration active
+
+# Sur une configuration où la barre est deux fois plus longue, K suit la
+# géométrie quand on la réassemble ; K_figee garde ses valeurs.
+etiree = coords.add_config("etiree")
+pyrucast.coords.displace_from(allonge, coords.active, etiree, ["u_x"])
+coords.select(etiree)
+K.assemble()
+K_figee.assemble()
+# ANCHOR_END: freeze
+milieu = noeuds[1]
+# Two SEG2 of conductance k / ℓ meet at the middle node: 2·(1/0.5) = 4 at
+# rest, 2·(1/1) = 2 once stretched.
+assert abs(K.get(milieu, "q", milieu, "T") - 2.0) < 1e-12
+assert abs(K_figee.get(milieu, "q", milieu, "T") - 4.0) < 1e-12
+coords.select(0)
+
 # ── Composition de matrices ─────────────────────────────────────────────────
 
 

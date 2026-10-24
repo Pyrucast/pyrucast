@@ -124,9 +124,10 @@ configuration. La conversion est inversible : de la Cauchy, `"pk2"` rend `S`.
 ## Deux configurations
 
 Le **corps** se calcule sur la configuration de référence : sa mesure, sa loi,
-son état, ses forces internes. Ce qui agit sur la **forme actuelle** se calcule
-sur une configuration courante `x = X + u` : l'opérateur de Newton, la pression
-qui suit la paroi, la conduction sur la pièce déformée. Le `Coords` les porte
+son état, ses forces internes, sa conduction. Ce qui agit sur la **forme
+actuelle** se calcule sur une configuration courante `x = X + u` : l'opérateur
+de Newton, la pression qui suit la paroi, les échanges thermiques de la pièce
+déformée. Le `Coords` les porte
 toutes les deux ; on passe de l'une à l'autre en changeant d'indice, sans
 recopier le maillage :
 
@@ -184,18 +185,64 @@ K_σ ne change donc que la convergence, sauf là où elle donne la seule raideur
 (un câble ou une membrane tendus, transversalement) et à l'approche du
 flambement, où `K + K_σ` devient singulière.
 
+## La conduction
+
+La conductivité donnée au matériau est la conductivité **lagrangienne** `K₀`,
+celle de la matière dans ses axes de référence. Sur la pièce déformée, elle se
+pousse en `k = J⁻¹ F K₀ Fᵀ`, comme `S` se pousse en `σ`. Écrite sur la
+référence, la conduction n'a donc rien à pousser :
+`∇T = F⁻ᵀ∇₀T` et `dv = J dV₀` donnent, au point,
+
+```text
+∫Ω ∇T · k ∇δT dv = ∫Ω₀ ∇₀T · K₀ ∇₀δT dV₀
+```
+
+et la capacité devient exacte, `ρ₀ c dV₀`. Deux conséquences :
+
+- des **axes matériau tournent avec la pièce** : sous une rotation `R`,
+  `k = R K₀ Rᵀ`, et la répartition de température d'une pièce tournée est celle
+  de la pièce au repos ;
+- une barre **étirée** à `λ` voit sa conductivité dans l'axe devenir `k λ` : la
+  chaleur qui la traverse, à écart de température donné, est celle de la barre
+  au repos.
+
+La loi écrit le **flux nominal** `K₀ ∇₀T`, par unité de surface de référence ; le
+flux de la pièce déformée s'en déduit par `q = J⁻¹ F Q₀`.
+
+Les **échanges** (convection, rayonnement, flux imposés) agissent sur la surface
+déformée : ils restent sur la configuration courante. L'opérateur réunit les
+deux : la conduction assemblée sur la référence, les échanges
+[figés](../operateurs/assemblage.md) sur la configuration courante, une matrice
+calculée s'évaluant là où elle est assemblée.
+
+Cast3M résout toute la thermique sur la géométrie courante, avec la
+conductivité donnée, sans la pousser. Il range les axes d'une conduction
+orientée dans le repère local de chaque élément (la tangente à la première
+coordonnée de référence, au centre), qu'il recalcule sur la géométrie courante
+à chaque assemblage : sous une rotation rigide, ses axes tournent avec la pièce
+comme ici ; sous une déformation, ils suivent cette ligne de l'élément, et les
+conductivités gardent leurs valeurs là où pyrucast les pousse.
+
 ## Dans le pas à pas
 
 `stepping.step_by_step` lit la mesure sur les lois et suit cette voie de
-lui-même : forces intérieures sur `P` en référence, pression suiveuse et
-opérateur sur la configuration courante, thermique sur la pièce déformée,
+lui-même : forces intérieures sur `P` et conduction en référence, pression
+suiveuse, échanges thermiques et opérateur sur la configuration courante,
 contrainte de Cauchy dans les résultats. Voir
 [Calcul pas à pas](../pas-a-pas.md#grands-déplacements). Les tests
-`tests/python/test_stepping_large.py` y vérifient quatre formes closes : une
-bande tournée de 90° par un bord tourne sans contrainte ; un quart de carré sous
-pression suiveuse garde une contrainte de Cauchy `−p I` exacte ; un cube
-parfaitement plastique en Hencky, étiré à `λ = 1,5`, tire `A₀ σ_y / λ` ; une
-bande étirée conduit la chaleur comme une bande de longueur `λ L₀`.
+`tests/python/test_stepping_large.py` y vérifient :
+
+- une bande tournée de 90° par un bord tourne sans contrainte ;
+- un quart de carré sous pression suiveuse garde une contrainte de Cauchy
+  `−p I` exacte ;
+- un cube parfaitement plastique en Hencky, étiré à `λ = 1,5`, tire
+  `A₀ σ_y / λ` ;
+- une bande étirée conduit la même chaleur qu'au repos, `k ΔT / L₀` ;
+- une bande à conduction orientée, tournée, garde en chaque nœud la
+  température du repos ;
+- une bande refroidie par convection sur une face étirée à `λ` : la face est à
+  `T₀ G_c / (G_c + G_h)`, avec `G_c = k H₀ / L₀` et `G_h = h λ H₀`, par les deux
+  schémas thermiques non linéaire et linéaire.
 
 ## Correspondance Cast3M
 

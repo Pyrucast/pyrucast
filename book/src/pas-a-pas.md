@@ -211,7 +211,10 @@ pour chaque itéré u :
 opérateur : stiffness + geometric(σ)              sur « current », en x = X + u
   construit en début de sous-pas, puis à la 2ᵉ itération,
   puis toutes les max(delta_iterations, 20) itérations ; au-delà de 20, échec
-thermique : sur « current », en x = X + uₙ (début de pas)
+thermique : conduction et capacité sur la référence (K₀, ρ₀ c dV₀) ;
+            échanges, rayonnement et flux sur « current », en x = X + uₙ
+            (début de pas), leurs matrices figées là avant de rejoindre
+            l'opérateur
 résultats : "behaviour" garde S (ou T), "cauchy" donne σ
 ```
 
@@ -221,11 +224,16 @@ reconstruit dès la deuxième itération, la première correction ayant déplac�
 géométrie (UNPAS reconstruit aussi à `i = 2`). `geometric_stiffness=False` le
 retire ; demandé en petits déplacements, il est refusé.
 
+La conductivité donnée est la conductivité lagrangienne `K₀` : sa poussée
+`J⁻¹ F K₀ Fᵀ` sur la pièce déformée donne la même équation que la conduction
+écrite sur la référence, si bien que des axes matériau tournent avec la pièce
+(cf. [Grandes transformations](mecanique/grandes-transformations.md#la-conduction)).
+Le flux de la loi est alors le flux nominal.
+
 Sont refusés en grands déplacements : le contact (ses relations devraient
 suivre le glissement du point projeté), une loi de petites déformations à côté
 d'une loi en grandes transformations (barres, poutres et coques n'ont pas
-encore de formulation en grandes transformations), la conduction orientée (ses
-axes matériau devraient tourner avec la pièce).
+encore de formulation en grandes transformations).
 
 ## Écrire sa propre boucle
 
@@ -279,6 +287,9 @@ enchaînement :
 - **Pas de prédicteur `F_NL` en grands déplacements** : une rotation finie
   n'est pas dans le noyau de l'opérateur, si bien que `K Δx` y lit des efforts
   là où rien ne se déforme, et l'opérateur change d'un pas à l'autre.
-- **La thermique sur la pièce déformée** garde la capacité `ρ cp` par volume
-  de référence ; sur le volume courant il faudrait `ρ₀/J`, un écart négligeable
-  quand `J ≈ 1`.
+- **La conduction en grands déplacements** est écrite sur la référence, avec
+  une conductivité lagrangienne `K₀`, ce qui revient à la pousser,
+  `J⁻¹ F K₀ Fᵀ`, sur la pièce déformée. Cast3M garde sur la géométrie
+  courante la conductivité donnée, ses axes suivant le repère local de chaque
+  élément : les deux s'accordent sous une rotation rigide, pas sous une
+  déformation. La capacité est exacte, `ρ₀ cp dV₀`.

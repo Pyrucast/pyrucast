@@ -67,6 +67,7 @@ __all__ = [
     "extrude",
     "fick",
     "flux",
+    "freeze",
     "from_arrays",
     "from_live_nodes",
     "gauss_to_external",
@@ -1226,6 +1227,12 @@ class Matrix:
         Lump an assembled matrix into a diagonal one by row-sum concentration
         (Cast3M `LUMP`). Applied to a consistent mass / capacity matrix it yields the
         diagonal (lumped) mass, conserving the total mass.
+        """
+    def freeze(self) -> Matrix:
+        r"""
+        Freeze a matrix: every computed block evaluated now, on the configuration
+        active at this call, into a literal block of the same structure; a frozen
+        matrix no longer follows the configuration active when it is assembled.
         """
     def solve(self, rhs: NodeField, method: builtins.str = 'lu', cache: builtins.bool = True, verbosity: builtins.str = 'silent') -> NodeField:
         r"""
@@ -4537,6 +4544,13 @@ def flux(fespace: FiniteElementSpace, target: Model, dual: builtins.str) -> Mode
     matrix, only the right-hand side, read by
     `node_field.external_forces(model, materials)`. That is what sets it apart
     from a physics: it brings no unknown and writes into the dual row of another.
+    """
+
+def freeze(matrix: Matrix) -> Matrix:
+    r"""
+    Freeze a matrix: every computed block evaluated now, on the configuration
+    active at this call, into a literal block of the same structure; a frozen
+    matrix no longer follows the configuration active when it is assembled.
     """
 
 def from_arrays(coords: Coords, node_tags: typing.Any, node_coords: typing.Any, blocks: typing.Any, *, node_fields: typing.Sequence[typing.Any] = [], cell_fields: typing.Sequence[typing.Any] = [], order: builtins.str = 'pyrucast') -> tuple[dict, builtins.list[NodeField], builtins.list[ElementField]]:

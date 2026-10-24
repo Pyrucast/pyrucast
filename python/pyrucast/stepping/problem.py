@@ -82,22 +82,32 @@ def _sub_models(model):
     return [model[i : i + 1] for i in range(len(model))]
 
 
-def _refuse_in_large_displacements(mechanics, heat_domain):
+def _refuse_in_large_displacements(mechanics):
     """What large displacements do not offer yet, refused with the reason."""
     if any("contact_gap" in sub[0].dual_vars() for sub in _sub_models(mechanics)):
         raise ValueError(
             "step_by_step: contact is not available in large displacements — its "
             "relations would have to follow the sliding of the projected point"
         )
-    if heat_domain is not None:
-        for sub in _sub_models(heat_domain):
-            components = sub[0].material_components() or []
-            if "k" not in components and any(c.startswith("k_") for c in components):
-                raise ValueError(
-                    "step_by_step: an oriented conductivity is not available in large "
-                    "displacements — its material axes would have to turn with the "
-                    "part (k = J⁻¹ F K₀ Fᵀ)"
-                )
+
+
+def _conduction_split(heat_domain):
+    """The conduction of the heat domain — the sub-models that read a
+    conductivity, ``k`` or an oriented ``k_*`` — and the rest (exchanges,
+    radiation, fluxes): ``(conduction, others)``, either ``None`` when empty.
+
+    In large displacements the conduction is written on the reference: the
+    conductivity given is the Lagrangian one, K₀, whose push-forward
+    ``J⁻¹ F K₀ Fᵀ`` on the deformed part gives the same equation; its
+    capacity ``ρ₀ c dV₀`` follows. The rest acts on the current shape."""
+    conduction, others = None, None
+    for sub in _sub_models(heat_domain):
+        components = sub[0].material_components() or []
+        if any(c == "k" or c.startswith("k_") for c in components):
+            conduction = sub if conduction is None else conduction | sub
+        else:
+            others = sub if others is None else others | sub
+    return conduction, others
 
 
 def _follower_split(mechanics):
@@ -156,6 +166,11 @@ class Problem:
     configurations: object | None = None
     follower_loads: object | None = None
     step_loads: object | None = None
+    # Large displacements: the heat model by the configuration it is written
+    # on — the conduction, with the constraints, on the reference; the rest of
+    # the domain (exchanges, radiation, fluxes) on the current shape.
+    heat_on_reference: object | None = None
+    heat_on_current: object | None = None
 
 
 def describe_problem(data, options):
@@ -169,7 +184,8 @@ def describe_problem(data, options):
     Large displacements are read off the laws: when the mechanical laws read a
     large-transformation measure (``strain_measure`` of their constructor), the
     problem carries that measure, the reference and current configurations
-    (one more set in the ``Coords``, added here once) and its follower loads.
+    (one more set in the ``Coords``, added by the first computation), its
+    follower loads, and its heat domain split by configuration.
     """
     model = data["model"]
     mechanics, mechanics_domain, mechanics_constraints = _part(model, "mechanical")
@@ -228,9 +244,14 @@ def describe_problem(data, options):
             "its derivative"
         )
     follower_loads, step_loads = None, mechanics
+    heat_on_reference = heat_on_current = None
     if large:
-        _refuse_in_large_displacements(mechanics, heat_domain)
+        _refuse_in_large_displacements(mechanics)
         follower_loads, step_loads = _follower_split(mechanics)
+        if heat_domain is not None:
+            heat_on_reference, heat_on_current = _conduction_split(heat_domain)
+            if heat_constraints is not None:
+                heat_on_reference = heat_on_reference | heat_constraints
 
     laws = data.get("material_laws")
     # One output component per curve, named by its ordinate type.
@@ -271,4 +292,6 @@ def describe_problem(data, options):
         configurations=(configurations(fespace, displacement_names) if large else None),
         follower_loads=follower_loads,
         step_loads=step_loads,
+        heat_on_reference=heat_on_reference,
+        heat_on_current=heat_on_current,
     )

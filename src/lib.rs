@@ -311,6 +311,7 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::matrix::stiffness, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::matrix::mass, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::matrix::lump, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::matrix::freeze, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::matrix::geometric, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::matrix::tangent, m)?)?;
     m.add_function(wrap_pyfunction!(models::flux::flux_py::flux, m)?)?;

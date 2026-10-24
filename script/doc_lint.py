@@ -393,7 +393,7 @@ DOC = ROOT / "target" / "doc" / "pyrucast"
 
 def delegations():
     """The **pure delegation** methods — those whose whole documentation is
-    "see [the free function]".
+    "see [the free function]" (`See […]`, or the older French `Voir […]`).
 
     Elles n'ont aucune logique : elles appellent l'opérateur, receveur compris.
     The free function is the canonical form and carries the
@@ -419,7 +419,7 @@ def delegations():
                 k -= 1
             if (
                 len(doc) == 1
-                and re.search(r"[Vv]oir \[", doc[0])
+                and re.search(r"(?:[Vv]oir|[Ss]ee) \[", doc[0])
                 and "fn@crate::ops::" in doc[0]
             ):
                 noms.add(m.group(1))

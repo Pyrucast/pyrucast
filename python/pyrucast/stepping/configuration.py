@@ -1,9 +1,10 @@
 """The configurations of a computation in large displacements (Cast3M ``FORM``).
 
 The body is computed on the **reference** configuration: its strain measure,
-its law, its state and its internal forces. What acts on its **current**
-shape — the Newton operator, a pressure that follows the wall, the conduction
-on the deformed part — is computed on a configuration laid at ``x = X + u``.
+its law, its state and its internal forces, and its conduction. What acts on
+its **current** shape — the Newton operator, a pressure that follows the wall,
+the heat exchanges of the deformed part — is computed on a configuration laid
+at ``x = X + u``.
 Both live in the same ``Coords``: the current one is created once — the first
 computation adds it, the next ones find it by its name — laid again in
 absolute whenever ``u`` moves, and active only for the length of one
@@ -28,19 +29,30 @@ class Configurations:
     current: int
     displacement_names: tuple
 
-    @contextmanager
-    def current_at(self, displacement):
-        """The block runs with the current configuration laid at
-        ``X + displacement`` and active; the reference is active again after
-        it, whatever happens inside."""
+    def lay(self, displacement):
+        """Lay the current configuration at ``X + displacement``; the
+        reference stays active."""
         coords_ops.displace_from(
             displacement, self.reference, self.current, list(self.displacement_names)
         )
+
+    @contextmanager
+    def on_current(self):
+        """The block runs with the current configuration active, as last laid;
+        the reference is active again after it, whatever happens inside."""
         self.coords.select(self.current)
         try:
             yield
         finally:
             self.coords.select(self.reference)
+
+    @contextmanager
+    def current_at(self, displacement):
+        """The block runs with the current configuration laid at
+        ``X + displacement`` and active (``lay``, then ``on_current``)."""
+        self.lay(displacement)
+        with self.on_current():
+            yield
 
 
 # The name of the current configuration in the ``Coords``: the set a

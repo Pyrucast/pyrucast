@@ -56,6 +56,26 @@ schémas explicites. La matrice d'entrée doit être assemblée et carrée.
 {{#include ../../../tests/python/test_doc_ops_assemblage.py:lump}}
 ```
 
+## `freeze(matrix)` → `Matrix`
+
+**Fige** une matrice : chaque bloc calculé est évalué **maintenant**, sur la
+configuration active à l'appel, en un bloc littéral de même structure (supports,
+variables, ordre, symétrie, natures) ; les blocs littéraux sont repris tels
+quels. Aussi méthode : `matrix.freeze()`.
+
+Un bloc calculé ne porte pas de valeurs mais une recette, exécutée à chaque
+assemblage, sur la configuration active **à ce moment-là**. Une matrice figée
+ne suit plus la configuration active : on peut ainsi sommer dans un même
+opérateur des blocs évalués sur des configurations différentes. C'est ce que
+fait le pas à pas en grands déplacements, avec la conduction sur la référence et
+les échanges de surface sur la pièce déformée (cf.
+[Grandes transformations](../mecanique/grandes-transformations.md)). Un bloc
+figé stocke ses valeurs (un COO), là où une recette ne coûtait rien.
+
+```python
+{{#include ../../../tests/python/test_doc_ops_assemblage.py:freeze}}
+```
+
 ## `geometric(model, materials, stress)` → `Matrix`
 
 Assemble la **matrice de rigidité géométrique** (initial-stress) `K_g`

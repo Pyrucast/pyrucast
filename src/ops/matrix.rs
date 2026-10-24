@@ -626,6 +626,122 @@ pub fn lump(m: &Matrix) -> Result<Matrix> {
     Ok(out)
 }
 
+/// **Freeze** a matrix: every computed block is evaluated **now** into a
+/// literal one — on the configuration active at this call, with the materials
+/// and state its recipe holds — and every literal block is shared as it is.
+///
+/// A computed block carries a recipe instead of values, and the recipe runs
+/// whenever the matrix is assembled, on the configuration active **then**.
+/// Freezing pins the values to the configuration active now, so that blocks
+/// evaluated on different configurations can be summed into one operator: the
+/// conduction of a body written on its reference configuration, its surface
+/// exchanges on the current one. Each frozen block keeps its structure
+/// (supports, variables, ordering, declared symmetry, natures); its values now
+/// take the memory of a COO, where a recipe took none.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::{element_field, matrix, model};
+/// # let coords = Handle::new(Coords::new(1).unwrap());
+/// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
+/// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
+/// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
+/// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
+/// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
+/// # let modele = model::heat_conduction(&fes).unwrap();
+/// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
+/// // A bar of length 1: its conductance is k / L = 1.
+/// let calculee = matrix::stiffness(&modele, &materiaux)?;
+/// let figee = matrix::freeze(&calculee)?;
+///
+/// // On a configuration where the bar is twice as long, the computed matrix
+/// // follows the geometry; the frozen one keeps the values it was given.
+/// let etiree = coords.write().add_config("stretched");
+/// coords.write().select(etiree)?;
+/// coords.write().set_position(b.id(), &[2.0])?;
+/// let mut calculee = calculee;
+/// calculee.assemble()?;
+/// let mut figee = figee;
+/// figee.assemble()?;
+/// assert!((calculee.get(a.id(), "q", a.id(), "T") - 0.5).abs() < 1e-12);
+/// assert!((figee.get(a.id(), "q", a.id(), "T") - 1.0).abs() < 1e-12);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
+pub fn freeze(m: &Matrix) -> Result<Matrix> {
+    let mut out = Matrix::empty();
+    for h in m.iter() {
+        let block = if h.read().recipe().is_some() {
+            Handle::new(evaluated(h)?)
+        } else {
+            h.clone()
+        };
+        out.add_sub(block)?;
+    }
+    Ok(out)
+}
+
+/// One computed block as a literal block of the same structure: assembled on
+/// its own, then each assembled entry put back at its place in the block's
+/// local numbering. The assembled values carry the block's factor already, so
+/// the literal block's factor is `1`.
+fn evaluated(h: &Handle<SubMatrix>) -> Result<SubMatrix> {
+    use crate::containers::matrix::{dof_node, dof_var, DofKey};
+    use crate::containers::mesh::SubMesh;
+    use nalgebra_sparse::CooMatrix;
+
+    let mut alone = Matrix::empty();
+    alone.add_sub(h.clone())?;
+    alone.assemble()?;
+    let (offsets, columns, values) = alone.csr_arrays()?;
+    let vars = alone.dof_vars();
+    let block = h.read();
+    let ordering = block.ordering();
+    let row_support = block.row_support().read();
+    let col_support = block.col_support().read();
+    // The assembled DOFs are the block's own: each one has its node in the
+    // support and its variable among the block's.
+    let local = |support: &SubMesh, names: &[String], key: DofKey| -> usize {
+        let node = support.node_index()[&dof_node(key)];
+        let name = &vars[dof_var(key) as usize];
+        let var = names
+            .iter()
+            .position(|n| n == name)
+            .expect("an assembled DOF of a block carries one of the block's variables");
+        ordering.to_index(node, var, support.node_index().len(), names.len())
+    };
+    let rows: Vec<usize> = (alone.row_dof_keys()?.iter())
+        .map(|&key| local(&row_support, block.dual_vars(), key))
+        .collect();
+    let cols: Vec<usize> = (alone.col_dof_keys()?.iter())
+        .map(|&key| local(&col_support, block.primal_vars(), key))
+        .collect();
+    let mut coo = CooMatrix::new(
+        row_support.node_index().len() * block.dual_vars().len(),
+        col_support.node_index().len() * block.primal_vars().len(),
+    );
+    for (r, &row) in rows.iter().enumerate() {
+        for p in offsets[r]..offsets[r + 1] {
+            coo.push(row, cols[columns[p]], values[p]);
+        }
+    }
+    let mut literal = SubMatrix::from_coo(
+        block.row_support().clone(),
+        block.col_support().clone(),
+        block.dual_vars().to_vec(),
+        block.primal_vars().to_vec(),
+        ordering,
+        block.symmetry(),
+        coo,
+    )?;
+    literal.set_physics(block.physics().to_vec());
+    Ok(literal)
+}
+
 // ─── Méthodes de délégation ────────────────────────────────────────────────
 //
 // Voir `CONVENTIONS.md` § « Le verbe exposé aussi en méthode ». Le nom change
@@ -669,6 +785,11 @@ impl Matrix {
     /// Voir [`matrix::lump`](fn@crate::ops::matrix::lump).
     pub fn lump(&self) -> Result<Matrix> {
         lump(self)
+    }
+
+    /// See [`matrix::freeze`](fn@crate::ops::matrix::freeze).
+    pub fn freeze(&self) -> Result<Matrix> {
+        freeze(self)
     }
 }
 
@@ -1147,6 +1268,54 @@ mod tests {
         assert_eq!(&pattern.row_offsets[..], offsets_ref);
         assert_eq!(&pattern.col_indices[..], cols_ref);
         assert_eq!(values, values_ref);
+    }
+
+    /// Freezing evaluates every computed block where it stands: the frozen
+    /// matrix assembles to the same values on the same DOFs, its literal blocks
+    /// are the computed matrix's own, and each block keeps the natures
+    /// `filter` reads.
+    #[test]
+    fn a_frozen_matrix_assembles_to_the_computed_values() {
+        // One variable with a Dirichlet's literal C / Cᵀ; three variables per
+        // node over several FE spaces.
+        for (model, materials) in [two_zone_heat_with_dirichlet(), multi_fespace_shell(3)] {
+            // Scaled first: the factor must reach the frozen values once.
+            let computed = &stiffness(&model, &materials).unwrap() * 2.0;
+            let mut frozen = freeze(&computed).unwrap();
+            assert_eq!(frozen.len(), computed.len());
+            for (f, c) in frozen.iter().zip(computed.iter()) {
+                assert!(f.read().recipe().is_none(), "a frozen block holds values");
+                assert_eq!(f.read().physics(), c.read().physics());
+                if c.read().recipe().is_none() {
+                    assert!(f.same_object(c), "a literal block is shared, not copied");
+                }
+            }
+            frozen.assemble().unwrap();
+            assert_eq!(frozen.row_dofs().unwrap(), computed.row_dofs().unwrap());
+            assert_eq!(frozen.col_dofs().unwrap(), computed.col_dofs().unwrap());
+            for (x, y) in frozen
+                .dense()
+                .unwrap()
+                .iter()
+                .zip(computed.dense().unwrap())
+            {
+                assert!((x - y).abs() <= 1e-12 * (1.0 + y.abs()), "{x} vs {y}");
+            }
+            // Scaling after freezing still scales.
+            let mut tripled = &freeze(&computed).unwrap() * 3.0;
+            tripled.assemble().unwrap();
+            for (x, y) in tripled
+                .dense()
+                .unwrap()
+                .iter()
+                .zip(computed.dense().unwrap())
+            {
+                assert!(
+                    (x - 3.0 * y).abs() <= 1e-12 * (1.0 + y.abs()),
+                    "{x} vs 3×{y}"
+                );
+            }
+        }
     }
 
     /// `SubMatrix::factor` scales every entry the **serial** scatter emits, on

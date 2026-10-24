@@ -9,6 +9,7 @@ container while preserving its invariant, hence a method
 """
 
 from ._pyrucast import (
+    freeze,
     geometric,
     lump,
     mass,
@@ -17,6 +18,7 @@ from ._pyrucast import (
 )
 
 __all__ = [
+    "freeze",
     "geometric",
     "lump",
     "mass",

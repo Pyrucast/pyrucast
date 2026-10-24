@@ -6,8 +6,17 @@ the multipliers of the imposed temperatures, every solve returns a
 temperature correction with the multipliers in total, and the residual comes
 from integrating the laws — conduction, radiation — at the current
 temperature. A model without heat capacity (no ``cp``) is solved steady.
+
+In large displacements the conduction is written on the reference
+configuration — the conductivity given is the Lagrangian one, K₀, and its
+push-forward ``J⁻¹ F K₀ Fᵀ`` on the deformed part gives the same equation,
+with the capacity ``ρ₀ c dV₀`` — while the exchanges, radiation and fluxes act
+on the current shape, laid at ``X + uₙ``. The reference stays active; each
+evaluation of the rest switches to the current configuration, and its
+matrices are frozen there before they join the operator.
 """
 
+from contextlib import nullcontext
 from dataclasses import dataclass
 
 from .. import element_field, matrix, node_field, solver
@@ -51,11 +60,21 @@ def _advanced(problem, temperature, increment):
     return moved if multipliers is None else moved | multipliers
 
 
+def _on_current(problem):
+    """The block on the current shape in large displacements; on the one
+    configuration otherwise."""
+    if problem.configurations is None:
+        return nullcontext()
+    return problem.configurations.on_current()
+
+
 def _loads(data, problem, state, t, materials, options):
     """The heat loads at ``t``: the given ones, the hook's, and those the
-    model carries (fluxes, the ambient of an exchange) — one field each."""
+    model carries (fluxes, the ambient of an exchange) — one field each, the
+    carried ones on the current shape."""
     loads = [problem.loads_at(t), options.hook("extra_heat_load")(data, state, t)]
-    carried_loads = node_field.external_forces(problem.heat, materials)
+    with _on_current(problem):
+        carried_loads = node_field.external_forces(problem.heat, materials)
     if len(carried_loads) > 0:
         loads.append(carried_loads)
     return [load for load in loads if load is not None]
@@ -77,15 +96,49 @@ def _laws(problem, temperature, materials, dt):
     )
 
 
+def _internal_forces(problem, behaviour, temperature, materials):
+    """``F_int(T)`` of the heat model — in large displacements the conduction
+    and the constraints on the reference, the rest on the current shape:
+    nodal fluxes, summed node by node wherever each was computed."""
+    if problem.configurations is None:
+        return node_field.internal_forces(
+            problem.heat, behaviour, temperature, materials
+        )
+    internal = node_field.internal_forces(
+        problem.heat_on_reference, behaviour, temperature, materials
+    )
+    if problem.heat_on_current is None:
+        return internal
+    with problem.configurations.on_current():
+        on_current = node_field.internal_forces(
+            problem.heat_on_current, behaviour, temperature, materials
+        )
+    return internal + node_field.restrict_like(on_current, internal)
+
+
+def _tangent(problem, materials, temperature):
+    """The heat domain's tangent at ``temperature`` — in large displacements
+    the conduction on the reference, and the rest frozen on the current shape
+    (a computed matrix is evaluated where it is assembled)."""
+    strain = element_field.strain(problem.heat_domain, temperature, materials)
+    if problem.configurations is None:
+        return matrix.tangent(problem.heat_domain, materials, strain)
+    conduction = problem.heat_on_reference.exclude("constraint")
+    tangent = matrix.tangent(conduction, materials, strain)
+    if problem.heat_on_current is not None:
+        with problem.configurations.on_current():
+            on_current = matrix.tangent(problem.heat_on_current, materials, strain)
+            tangent = tangent + on_current.freeze()
+    return tangent
+
+
 def _system(problem, loads, evaluated, behaviour, constrained, materials, extra=None):
     """``Σ loads − F(T_eval) [− extra]`` on the temperature rows and
     ``g − C T`` on the imposed rows, with ``T`` the ``constrained``
     temperature — the right-hand side whose solve returns the multipliers in
     total. Returns ``(system, out_of_balance)``, the second less ``Cᵀλ``."""
     temperature = _temperatures(problem, evaluated)
-    internal = node_field.internal_forces(
-        problem.heat, behaviour, temperature, materials
-    )
+    internal = _internal_forces(problem, behaviour, temperature, materials)
     if problem.heat_constraints is not None and constrained is not evaluated:
         shift = _temperatures(problem, constrained) - node_field.restrict_like(
             temperature, _temperatures(problem, constrained)
@@ -115,8 +168,7 @@ def _operator(problem, materials, temperature, weight, capacity_over_dt):
     ``temperature`` (the stiffness for a linear law, the radiative
     ``4σεT³`` film for radiation) scaled by the scheme's weight, the
     capacity, and the constraints left unscaled."""
-    strain = element_field.strain(problem.heat_domain, temperature, materials)
-    operator = matrix.tangent(problem.heat_domain, materials, strain) * weight
+    operator = _tangent(problem, materials, temperature) * weight
     if capacity_over_dt is not None:
         operator = operator + capacity_over_dt
     if problem.heat_constraints is not None:
@@ -269,11 +321,7 @@ def heat_step_dupont(data, problem, state, t_end, options):
     behaviour = _laws(problem, extrapolated, materials, dt)
     # The flux at the weighted temperature, linearised at T*.
     weighted = t1 * (1.0 - lam) + t0 * lam
-    tangent = matrix.tangent(
-        problem.heat_domain,
-        materials,
-        element_field.strain(problem.heat_domain, extrapolated, materials),
-    )
+    tangent = _tangent(problem, materials, extrapolated)
     system, _ = _system(
         problem,
         loads,
