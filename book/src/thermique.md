@@ -196,9 +196,10 @@ orthonormalisés en interne.
 {{#include ../../tests/python/test_doc_ops_physiques.py:orthotrope}}
 ```
 
-La conductivité isotrope reste lue **au point de Gauss**, donc variable à
-l'intérieur d'une maille ; les constantes orientées sont lues par maille, comme
-les modules mécaniques.
+Le matériau est lu **en chaque point de Gauss** — la conductivité isotrope, les
+constantes orientées et les axes matériau, comme la capacité `ρ·cp` — donc
+variable à l'intérieur d'une maille, comme les modules mécaniques : la matrice
+intègre ce que la loi lit.
 
 L'exemple Rust est un **test de patch**, qui est ce qu'appelle une conductivité
 orientée : un champ de température linéaire est harmonique pour *n'importe quel*

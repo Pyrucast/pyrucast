@@ -978,11 +978,10 @@ pub fn anisotropic_scalar(prefix: &str) -> [String; 6] {
 /// The conductivity / diffusivity **tensor** of a cell in global axes, as a
 /// `space_dim × space_dim` matrix (the leading block of the 3-D tensor).
 ///
-/// `prefix` names the physics' coefficient (`"k"`, `"D"`). Isotropy reads the
-/// bare `prefix` component **at the Gauss point** `g` — conduction has always
-/// allowed a conductivity varying inside a cell, and that is preserved;
-/// orthotropy and anisotropy read their constants per cell, like the mechanical
-/// moduli.
+/// `prefix` names the physics' coefficient (`"k"`, `"D"`). Everything is read
+/// **at the Gauss point** `g` — the constants and, for orthotropy and
+/// anisotropy, the material axes: a material field may vary inside a cell, and
+/// the matrices integrate what the law reads.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -1036,50 +1035,9 @@ pub fn transport_tensor(
         read.push(material.value(cell, g, n)?);
     }
     for n in frame {
-        read.push(material.value(cell, 0, n)?);
+        read.push(material.value(cell, g, n)?);
     }
     transport_tensor_from(|k| read[k], symmetry, space_dim)
-}
-
-/// [`transport_tensor`] **by index** — the form a matrix kernel calls.
-///
-/// `lay` gives the position of each component of the symmetry's transport
-/// contract (the scalars, then the material axes), resolved once per zone by
-/// [`ElementLayout`](crate::models::ElementLayout). The scalars are read on the
-/// Gauss row so a conductivity may vary inside a cell; the **axes** are read on
-/// the cell's first row, because a material frame is a property of the cell.
-///
-/// ```
-/// # use pyrucast::models::symmetry::{self, MaterialSymmetry};
-/// // A material field laid out the other way round: the table absorbs the
-/// // order gap, and the kernel has not a single name left to compare.
-/// let ligne = [0.0, 1.5];
-/// let k3 = symmetry::transport_tensor_by(
-///     &ligne, &ligne, &[1], MaterialSymmetry::Isotropic, 2)?;
-/// assert_eq!(k3[(0, 0)], 1.5);
-/// assert_eq!(k3[(0, 1)], 0.0);
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn transport_tensor_by(
-    gauss_row: &[f64],
-    cell_row: &[f64],
-    lay: &[u32],
-    symmetry: MaterialSymmetry,
-    space_dim: usize,
-) -> Result<Matrix3<f64>> {
-    let n_scalars = match symmetry {
-        MaterialSymmetry::Isotropic => 1,
-        MaterialSymmetry::Orthotropic => 3,
-        MaterialSymmetry::Anisotropic => 6,
-    };
-    transport_tensor_from(
-        |k| {
-            let row = if k < n_scalars { gauss_row } else { cell_row };
-            row[lay[k] as usize]
-        },
-        symmetry,
-        space_dim,
-    )
 }
 
 /// [`transport_tensor`] from a **material row** already read positionally: `v(k)`

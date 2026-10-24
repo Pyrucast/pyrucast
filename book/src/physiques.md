@@ -97,7 +97,7 @@ opérateurs (`from_name`) : c'est ce qu'on écrit, pas une paraphrase.
 
 | Physique | `tangent` | `geometric` | `mass` | Comportement (`COMP`) | Particularité de calcul |
 |---|---|---|---|---|---|
-| [`heat_conduction`](thermique.md)<br>`isotropic` `orthotropic` `anisotropic` | — | — | capacité `ρ·cp` | flux `K·∇T` | Symétrie matériau **iso / ortho / aniso**. La conductivité isotrope est lue **par point de Gauss** — donc variable à l'intérieur d'une maille ; les constantes orientées le sont par maille. |
+| [`heat_conduction`](thermique.md)<br>`isotropic` `orthotropic` `anisotropic` | — | — | capacité `ρ·cp` | flux `K·∇T` | Symétrie matériau **iso / ortho / aniso**. Le matériau est lu **en chaque point de Gauss** — conductivité, constantes orientées et axes matériau, capacité `ρ·cp` — donc variable à l'intérieur d'une maille. |
 | [`boundary_transfer`](echanges.md)<br>composantes libres | — | — | — | `h·a` | **Aveugle à l'orientation** du maillage de bord : la normale est déjà consommée en écrivant `q·n = h(T − T_ext)`, et la mesure d'intégration est une magnitude. |
 | [`radiation`](thermique.md#rayonnement-à-linfini-stefan-boltzmann) | **analytique**<br>`4σεT³` | — | — | `σε(T⁴ − T_∞⁴)` | Non linéaire. La rigidité est le film **linéarisé autour de `T_∞`**, donc constante : c'est l'opérateur dont part Newton. La tangente porte la vraie non-linéarité. Seule physique à déclarer **deux natures**, `[Thermal, Radiation]`. |
 

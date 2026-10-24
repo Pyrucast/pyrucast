@@ -566,30 +566,29 @@ pub fn element_stiffness(
 ) -> Result<()> {
     let n_nodes = geom.n_nodes;
     let space_dim = geom.space_dim;
-    let cell_row = material.row(geom.cell, 0);
-    // An oriented diffusivity is built once per cell; the isotropic scalar is
-    // read at each Gauss point, so it may vary inside a cell. The species no
-    // longer travels down here: naming `D_<species>` is the zone's business,
-    // and it did it once — this reads `lay.material` and never a name.
-    let tensor = if symmetry.has_frame() {
-        Some(symmetry::transport_tensor_by(
-            cell_row,
-            cell_row,
-            &lay.material,
-            symmetry,
-            space_dim,
-        )?)
-    } else {
-        None
-    };
+    // Everything is read at the Gauss point, the axes of an oriented
+    // diffusivity included: a material field may vary inside a cell. The
+    // species no longer travels down here: naming `D_<species>` is the zone's
+    // business, and it did it once — this reads `lay.material` and never a name.
+    let oriented = symmetry.has_frame();
     let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
     for g in 0..geom.n_gauss {
         let dn = &mut dn_buf[..n_nodes * geom.space_dim];
         geom.dn_dx(g, dn)?;
         let det_j_w = geom.det_j_w(g);
+        let row = material.row(geom.cell, g);
+        let tensor = if oriented {
+            Some(symmetry::transport_tensor_from(
+                |k| row[lay.material[k] as usize],
+                symmetry,
+                space_dim,
+            )?)
+        } else {
+            None
+        };
         match &tensor {
             None => {
-                let d = material.row(geom.cell, g)[lay.material[0] as usize];
+                let d = row[lay.material[0] as usize];
                 for i in 0..n_nodes {
                     for j in 0..n_nodes {
                         let mut grad_dot = 0.0;
@@ -675,14 +674,15 @@ pub fn element_storage(
                 "Fick storage matrix: material component `poro` (storage coefficient) is required"
                     .into(),
             )),
-            i => material.row(geom.cell, 0)[i as usize],
+            i => i as usize,
         };
     for g in 0..geom.n_gauss {
         let n = geom.n_at_g(g);
-        let det_j_w = geom.det_j_w(g);
+        // Read at the point: a storage coefficient may vary inside a cell.
+        let det_j_w = geom.det_j_w(g) * material.row(geom.cell, g)[poro];
         for i in 0..n_nodes {
             for j in 0..n_nodes {
-                ke[i * n_nodes + j] += poro * n[i] * n[j] * det_j_w;
+                ke[i * n_nodes + j] += n[i] * n[j] * det_j_w;
             }
         }
     }

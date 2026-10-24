@@ -534,30 +534,29 @@ pub fn element_stiffness(
 ) -> Result<()> {
     let n_nodes = geom.n_nodes;
     let space_dim = geom.space_dim;
-    let cell_row = material.row(geom.cell, 0);
-    // An oriented conductivity is built **once per cell** — its constants and its
-    // material axes are cell-wise. Isotropy keeps reading its scalar at each
-    // Gauss point, so a conductivity varying inside a cell still works.
-    let tensor = if symmetry.has_frame() {
-        Some(symmetry::transport_tensor_by(
-            cell_row,
-            cell_row,
-            &lay.material,
-            symmetry,
-            space_dim,
-        )?)
-    } else {
-        None
-    };
+    // Everything is read at the Gauss point — the constants and the material
+    // axes of an oriented conductivity as much as an isotropic scalar: a
+    // material field may vary inside a cell, and the law reads it there.
+    let oriented = symmetry.has_frame();
     let mut dn_buf = [0.0_f64; MAX_CELL_DOFS];
     for g in 0..geom.n_gauss {
         let dn = &mut dn_buf[..n_nodes * geom.space_dim];
         geom.dn_dx(g, dn)?;
         let det_j_w = geom.det_j_w(g);
+        let row = material.row(geom.cell, g);
+        let tensor = if oriented {
+            Some(symmetry::transport_tensor_from(
+                |k| row[lay.material[k] as usize],
+                symmetry,
+                space_dim,
+            )?)
+        } else {
+            None
+        };
         match &tensor {
             None => {
                 // The scalar conductivity, by the index the zone resolved.
-                let k = material.row(geom.cell, g)[lay.material[0] as usize];
+                let k = row[lay.material[0] as usize];
                 for i in 0..n_nodes {
                     for j in 0..n_nodes {
                         let mut grad_dot = 0.0;
@@ -590,7 +589,8 @@ pub fn element_stiffness(
 /// Element kernel: local **heat-capacity** (mass) matrix of one cell,
 ///   `C_local[i, j] = Σ_g ρ·cp · N_i N_j · |J|_g · w_g`,
 /// written into `ke` (flat row-major, side `n_nodes`, `ke[i * n_nodes + j]`).
-/// Density `rho` and specific heat `cp` are read per cell. Pure and sequential.
+/// Density `rho` and specific heat `cp` are read at every Gauss point. Pure and
+/// sequential.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -642,20 +642,20 @@ pub fn element_capacity(
     // `rho` and `cp` are the two optional components of the conduction contract
     // (`CAPACITY_COMPONENTS`): the conductivity assembly never asks for them,
     // the capacity cannot do without.
-    let row = material.row(geom.cell, 0);
-    let read = |slot: usize, what: &str| -> Result<f64> {
+    let slot = |slot: usize, what: &str| -> Result<usize> {
         match lay.optional_material[slot] {
             ABSENT_COMPONENT => Err(crate::error::PyrucastError::Message(format!(
                 "HeatConduction capacity matrix: material component `{}` ({what}) is required",
                 CAPACITY_COMPONENTS[slot]
             ))),
-            i => Ok(row[i as usize]),
+            i => Ok(i as usize),
         }
     };
-    let rho_cp = read(0, "density")? * read(1, "specific heat")?;
+    let (rho, cp) = (slot(0, "density")?, slot(1, "specific heat")?);
     for g in 0..geom.n_gauss {
         let n = geom.n_at_g(g);
-        let w = geom.det_j_w(g) * rho_cp;
+        let row = material.row(geom.cell, g);
+        let w = geom.det_j_w(g) * row[rho] * row[cp];
         for i in 0..n_nodes {
             for j in 0..n_nodes {
                 ke[i * n_nodes + j] += n[i] * n[j] * w;
