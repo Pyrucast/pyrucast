@@ -107,6 +107,23 @@ def test_a_free_strip_turned_by_one_edge_rotates_without_stress():
         assert last["cauchy"].abs().max("sigma" + name[1:]) < 1e-8
 
 
+def test_computing_again_reuses_the_current_configuration():
+    """A second computation on the same model finds the current
+    configuration the first one added, rather than adding another — and
+    gives the same answer, the set being laid again from the reference."""
+    data, node, *_ = _turned_edge("green_lagrange")
+    coords = data["model"][0:1].fespace().mesh().coords()
+    pc.stepping.step_by_step(data)
+    after_one = coords.names()
+    first = data["results"][-1]["displacement"].value(node(4, 2), "u_x")
+    pc.stepping.step_by_step(data)
+    assert coords.names() == after_one
+    assert after_one.count("stepping:current") == 1
+    assert coords.active == 0
+    again = data["results"][-1]["displacement"].value(node(4, 2), "u_x")
+    assert again == pytest.approx(first, abs=1e-12)
+
+
 def test_the_linear_strain_of_the_same_motion_is_not_zero():
     """The contrast: read on the linear strain, the same imposed rotation
     builds a stress of the order of E (ε = cos θ − 1 = −1 at 90°)."""

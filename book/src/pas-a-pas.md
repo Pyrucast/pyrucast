@@ -201,7 +201,8 @@ Il n'y a pas de clé à activer : les lois mécaniques construites avec
 (cf. [Grandes transformations](mecanique/grandes-transformations.md)) :
 
 ```text
-describe_problem : mesure lue sur les lois ; jeu « current » ajouté au Coords, une fois
+describe_problem : mesure lue sur les lois ; jeu « current » du Coords (nommé
+                   « stepping:current »), ajouté au premier calcul, retrouvé ensuite
 pour chaque itéré u :
   E ← strain(u) ; S ← loi(E)                     sur la référence
   P ← stress_measure(S, F(u), "pk1")
