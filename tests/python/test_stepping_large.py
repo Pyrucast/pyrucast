@@ -9,9 +9,8 @@ strain, the heat flux through a stretched bar.
 
 import math
 
-import pytest
-
 import pyrucast as pc
+import pytest
 
 
 def _grid(nx, ny, length, height):
@@ -54,7 +53,7 @@ def _turned_edge(measure):
     """A free 4×1 strip whose left edge is turned by θ(t) = t·π/2, one
     constraint per node and direction: (data, node, position, nx, ny)."""
     nx, ny = 4, 2
-    _, mesh, fes, node, position = _grid(nx, ny, 4.0, 1.0)
+    _, _mesh, fes, node, position = _grid(nx, ny, 4.0, 1.0)
     solid = pc.model.elasticity(fes, "plane_strain", strain_measure=measure)
     model = solid
     held = []
@@ -121,7 +120,7 @@ def test_a_follower_pressure_leaves_a_hydrostatic_cauchy_stress():
     follows them as they move: the Cauchy stress is −p I exactly, whatever the
     strain (here several per cent)."""
     p = 10.0
-    c, mesh, fes, node, _ = _grid(2, 2, 1.0, 1.0)
+    c, _mesh, fes, node, _ = _grid(2, 2, 1.0, 1.0)
     solid = pc.model.elasticity(fes, "plane_strain", strain_measure="green_lagrange")
     left, _ = _fix(solid, [node(0, j) for j in range(3)], "u_x")
     bottom, _ = _fix(solid, [node(i, 0) for i in range(3)], "u_y")
@@ -211,7 +210,7 @@ def test_heat_runs_on_the_deformed_part():
     at 0 and 100 at its ends: once stretched, the heat crosses a longer strip,
     and the gradient — hence the flux k ∇T — is ΔT / (λ L₀)."""
     k, length, stretch = 3.0, 2.0, 1.5
-    _, mesh, fes, node, _ = _grid(4, 1, length, 0.5)
+    _, _mesh, fes, node, _ = _grid(4, 1, length, 0.5)
     conduction = pc.model.heat_conduction(fes)
     solid = pc.model.elasticity(fes, "plane_strain", strain_measure="green_lagrange")
     left = [node(0, j) for j in range(2)]

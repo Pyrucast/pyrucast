@@ -5,9 +5,8 @@ the scheme must hold, such as Newmark's energy conservation — and checks the
 loop against it, never against its own output.
 """
 
-import pytest
-
 import pyrucast as pc
+import pytest
 
 E, NU, ALPHA = 200_000.0, 0.3, 1e-5
 T_REF = 20.0
@@ -67,7 +66,7 @@ def _supported_strip(law="elasticity", **kinematics):
 
 
 def test_free_thermal_expansion_is_stress_free():
-    mesh, fes, node = _strip()
+    _mesh, fes, node = _strip()
     thermal = pc.model.heat_conduction(fes)
     solid = pc.model.elasticity(fes, "plane_stress")
     left = [node(0, j) for j in range(NY + 1)]
@@ -208,7 +207,7 @@ def test_heating_then_pulling_equals_pulling_then_heating():
     )
     finals = []
     for heat_first in (True, False):
-        mesh, fes, node, solid, model = _supported_strip()
+        mesh, _fes, node, solid, model = _supported_strip()
         right = [node(NX, j) for j in range(NY + 1)]
         pull, support = _fix(solid, right, "u_x")
         model = model | pull
@@ -244,7 +243,7 @@ def test_an_elastoplastic_bar_pulled_by_its_end_yields_at_sigma_y():
     """Uniaxial tension under an imposed end displacement: σ = E ε up to
     σ_y, then σ = σ_y and the plastic strain takes the rest."""
     sigma_y = 200.0
-    mesh, fes, node, solid, model = _supported_strip("plasticity")
+    _mesh, _fes, node, solid, model = _supported_strip("plasticity")
     right = [node(NX, j) for j in range(NY + 1)]
     pull, pull_support = _fix(solid, right, "u_x")
     model = model | pull
@@ -283,7 +282,7 @@ def test_newmark_conserves_the_energy_of_a_free_vibration():
     """Average acceleration (γ = ½, β = ¼) conserves ½ vᵀMv + ½ uᵀKu exactly
     for a linear free vibration: every step keeps the kinetic energy given at
     the start."""
-    mesh, fes, node, solid, model = _supported_strip()
+    mesh, _fes, node, solid, model = _supported_strip()
     materials = pc.element_field.material_field(
         model, [("E", E), ("nu", NU), ("rho", 8e-9)]
     )

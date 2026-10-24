@@ -2,9 +2,8 @@
 
 import math
 
-import pytest
-
 import pyrucast as pc
+import pytest
 
 
 def _on_grid(coords, corners, size):

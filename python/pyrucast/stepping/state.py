@@ -6,7 +6,6 @@ next step's predictor needs — gathered in one mutable ``State``.
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 from .fields import uniform
 from .materials import materials_at
@@ -27,26 +26,26 @@ class State:
 
     time: float
     materials: object
-    solution: Optional[object] = None
-    behaviour: Optional[object] = None
-    temperature: Optional[object] = None
-    temperature_before: Optional[object] = None
-    velocity: Optional[object] = None
-    acceleration: Optional[object] = None
+    solution: object | None = None
+    behaviour: object | None = None
+    temperature: object | None = None
+    temperature_before: object | None = None
+    velocity: object | None = None
+    acceleration: object | None = None
     # Cᵀλ: the forces the constraints apply, at the last converged step.
-    reactions: Optional[object] = None
-    heat_behaviour: Optional[object] = None
+    reactions: object | None = None
+    heat_behaviour: object | None = None
     # The iteration operator, kept while it stays valid (Cast3M RRRR): the
     # materials it was built from and, in dynamics, the time step.
-    operator: Optional[object] = None
+    operator: object | None = None
     operator_key: tuple = (None, None)
-    mass: Optional[object] = None
-    mass_materials: Optional[object] = None
+    mass: object | None = None
+    mass_materials: object | None = None
     # What the next step's predictor reads (Cast3M FNONL, INCREMENT, ZDEP1, RESIDU).
-    nonlinear_forces: Optional[object] = None
-    load_increment: Optional[object] = None
-    first_correction: Optional[object] = None
-    final_residual: Optional[object] = None
+    nonlinear_forces: object | None = None
+    load_increment: object | None = None
+    first_correction: object | None = None
+    final_residual: object | None = None
     dt_before: float = 0.0
     substeps_before: int = 0
     converged: bool = True
@@ -89,7 +88,7 @@ def initial_state(data, problem, options):
     if problem.mechanics is not None:
         mesh = problem.fespace.mesh()
         names = problem.displacement_names
-        at_rest = lambda key: (  # noqa: E731
+        at_rest = lambda key: (
             initial[key] if initial.get(key) is not None else uniform(mesh, names, 0.0)
         )
         state.solution = at_rest("displacement")

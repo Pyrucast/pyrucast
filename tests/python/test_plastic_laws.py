@@ -105,9 +105,7 @@ def test_ottosen_is_far_weaker_in_tension_than_compression():
             ("sigma_c", 30.0),
         ],
     )
-    trace = lambda sub: sum(  # noqa: E731
-        sub.value(0, 0, f"sigma_{n}") for n in ("xx", "yy", "zz")
-    )
+    trace = lambda sub: sum(sub.value(0, 0, f"sigma_{n}") for n in ("xx", "yy", "zz"))
     tension = trace(_stress(model, materials, c, nodes, corners, fes, 0.01))
     compression = trace(_stress(model, materials, c, nodes, corners, fes, -0.01))
     assert abs(compression) > 3.0 * abs(tension)

@@ -9,9 +9,8 @@ is the ``mesh.nearest_node`` method and not an operator of this family.
 
 import math
 
-import pytest
-
 import pyrucast
+import pytest
 
 
 def _cloud(dim, points):

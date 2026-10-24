@@ -5,9 +5,10 @@ The requirement these tests keep: objects read back keep their coherence
 support.
 """
 
-import pytest
+import pathlib
 
 import pyrucast
+import pytest
 
 
 def line(n=3):
@@ -147,7 +148,7 @@ def test_le_fichier_est_reproductible(tmp_path):
     a, b = str(tmp_path / "a.pyr"), str(tmp_path / "b.pyr")
     for chemin in (a, b):
         pyrucast.save(chemin, {"zzz": m, "aaa": 1.0})
-    assert open(a, "rb").read() == open(b, "rb").read()
+    assert pathlib.Path(a).read_bytes() == pathlib.Path(b).read_bytes()
 
 
 def test_un_fichier_etranger_est_refuse(tmp_path):

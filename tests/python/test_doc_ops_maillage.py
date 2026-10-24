@@ -12,6 +12,7 @@ full traceback and a non-zero return code.
 
 import math
 import os
+import pathlib
 import tempfile
 import textwrap
 
@@ -750,7 +751,7 @@ _MSH = textwrap.dedent(
 _TMP = tempfile.TemporaryDirectory()
 _CWD = os.getcwd()
 os.chdir(_TMP.name)
-open("piece.msh", "w").write(_MSH)
+pathlib.Path("piece.msh").write_text(_MSH)
 
 # ANCHOR: read_gmsh
 import pyrucast

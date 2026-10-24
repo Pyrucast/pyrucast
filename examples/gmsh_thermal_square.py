@@ -104,7 +104,7 @@ def write_square_msh(path: Path, n: int) -> None:
 
 def unique_nodes(mesh: "pyrucast.Mesh") -> list["pyrucast.Node"]:
     """Distinct nodes (deduplicated by identifier) of an imported mesh."""
-    out: dict[int, "pyrucast.Node"] = {}
+    out: dict[int, pyrucast.Node] = {}
     for s, (etype, count) in enumerate(zip(mesh.element_types(), mesh.cell_counts())):
         for c in range(count):
             for k in range(NODES_PER_CELL[etype]):

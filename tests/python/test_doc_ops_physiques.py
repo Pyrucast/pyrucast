@@ -11,6 +11,8 @@ at **collection** time; an example that breaks is a collection error, with a
 full traceback and a non-zero exit code.
 """
 
+import itertools
+
 import pyrucast
 
 
@@ -23,7 +25,7 @@ def _barre_thermique(n_elements=2, dim=1):
         p[0] = i / n_elements
         noeuds.append(c.add_node(p))
     mesh = pyrucast.Mesh(c, "SEG2")
-    for a, b in zip(noeuds, noeuds[1:]):
+    for a, b in itertools.pairwise(noeuds):
         mesh.unit().add_cell([a, b])
     return c, mesh, pyrucast.FiniteElementSpace(mesh), noeuds
 
@@ -138,10 +140,10 @@ nsteps = 2
 # ANCHOR: pas_a_pas
 state = None  # VAR0 = prev; None at the first step
 for step in range(1, nsteps + 1):
-    ...  # the step's load → Newton loop on u
+    # the step's load → Newton loop on u
     eps = pyrucast.element_field.deformation(u, fes)  # ε(B)
     out = pyrucast.element_field.integrate_behavior(model, eps, materials, prev=state)
-    ...  # F_int (BSIG), résidu, correction de u
+    # F_int (BSIG), résidu, correction de u
     state = out  # commit: prev ← VAR1 for the next step
 # ANCHOR_END: pas_a_pas
 assert len(state) == 1
@@ -287,7 +289,7 @@ assert len(model.filter("thermal")) == 1
 
 def _plaque_et_bord():
     """A QUA4 plate and the FE space of its left edge."""
-    c, mesh, fes, n = _plaque_2d()
+    c, _mesh, fes, n = _plaque_2d()
     bord_mesh = pyrucast.Mesh(c, "SEG2")
     bord_mesh.unit().add_cell([n[0], n[3]])
     return fes, pyrucast.FiniteElementSpace(bord_mesh), c, n

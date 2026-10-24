@@ -129,7 +129,7 @@ class AutomaticControl:
 
     def pending(self):
         """No level change before the balance: ``α`` moves after it."""
-        return None
+        return
 
     def after_balance(self, start, solution, balance):
         """The new fraction, or ``None`` when it stays."""

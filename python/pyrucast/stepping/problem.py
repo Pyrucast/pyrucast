@@ -6,8 +6,8 @@ the convergence tests read are listed. A ``Problem`` never changes during the
 computation: everything that does lives in the ``State``.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional
 
 from .. import element_field, node_field
 from .._pyrucast import ElementField, Evolution, FiniteElementSpace
@@ -125,13 +125,13 @@ class Problem:
     """
 
     model: object
-    mechanics: Optional[object]
-    mechanics_domain: Optional[object]
-    mechanics_constraints: Optional[object]
-    heat: Optional[object]
-    heat_domain: Optional[object]
-    heat_constraints: Optional[object]
-    fespace: Optional[object]
+    mechanics: object | None
+    mechanics_domain: object | None
+    mechanics_constraints: object | None
+    heat: object | None
+    heat_domain: object | None
+    heat_constraints: object | None
+    fespace: object | None
     displacement_names: tuple
     multiplier_names: tuple
     translation_names: tuple
@@ -142,20 +142,20 @@ class Problem:
     loads_at: Callable
     base_materials_at: Callable
     prescribed_temperature_at: Callable
-    laws: Optional[object]
+    laws: object | None
     law_outputs: tuple
     transient_heat: bool
     radiating: bool
-    weights: Optional[object]
-    indirect_domain: Optional[object] = None
+    weights: object | None
+    indirect_domain: object | None = None
     # Large displacements: the strain measure the laws read (``"linear"``
     # otherwise), the reference and current configurations, the loads that
     # follow the wall — recomputed at every iterate on the current one — and
     # the model whose loads are computed once per step.
     strain_measure: str = "linear"
-    configurations: Optional[object] = None
-    follower_loads: Optional[object] = None
-    step_loads: Optional[object] = None
+    configurations: object | None = None
+    follower_loads: object | None = None
+    step_loads: object | None = None
 
 
 def describe_problem(data, options):

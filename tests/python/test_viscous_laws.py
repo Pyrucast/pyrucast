@@ -6,9 +6,8 @@ What distinguishes these from the plastic laws is that the answer depends on
 
 import math
 
-import pytest
-
 import pyrucast
+import pytest
 
 CORNERS = [
     [0.0, 0.0, 0.0],

@@ -7,7 +7,6 @@ for a setting again.
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 __all__ = ["HOOKS", "Options", "resolve_options"]
 
@@ -119,8 +118,8 @@ class Options:
     automatic_replays: int
     t_ref: float
     trace: bool
-    geometric_stiffness: Optional[bool] = None
-    indirect_control: Optional[dict] = None
+    geometric_stiffness: bool | None = None
+    indirect_control: dict | None = None
     augmented_stiffness: object = None
     hooks: dict = field(default_factory=dict)
 

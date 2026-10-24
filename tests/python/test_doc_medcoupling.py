@@ -17,7 +17,7 @@ _TMP = tempfile.TemporaryDirectory()
 _CWD = os.getcwd()
 os.chdir(_TMP.name)
 
-import pyrucast  # noqa: E402
+import pyrucast
 
 # A plate of two triangles and a quadrangle, its bottom edge, and fields.
 _coords = pyrucast.Coords(dim=2)

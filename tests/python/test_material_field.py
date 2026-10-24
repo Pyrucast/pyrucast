@@ -1,9 +1,8 @@
 """Python tests for the material-field build operators
 (sub_material_field / material_field / material_field_per_sub_model)."""
 
-import pytest
-
 import pyrucast
+import pytest
 
 
 def _two_zone_model():

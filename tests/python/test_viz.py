@@ -4,13 +4,8 @@ Skipped when pyrucast was built without the `viz` feature (i.e. when
 `Mesh.plot` is not present on the compiled module).
 """
 
-import os
-import tempfile
-
-import pytest
-
 import pyrucast
-
+import pytest
 
 _HAS_VIZ = hasattr(pyrucast.Mesh(pyrucast.Coords(2), "TRI3"), "plot")
 pytestmark = pytest.mark.skipif(

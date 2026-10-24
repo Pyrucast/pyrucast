@@ -12,9 +12,9 @@ Voir `book/src/developper/documentation-et-tests.md`.
 import pyrucast
 
 # ── The module and its submodules ───────────────────────────────────────────
-
 # ANCHOR: import
 import pyrucast as pc
+
 # ANCHOR_END: import
 
 assert hasattr(pc, "mesh")

@@ -13,6 +13,8 @@ at **collection** time; an example that breaks is a collection error, with a
 full traceback and a non-zero exit code.
 """
 
+import itertools
+
 import pyrucast
 
 
@@ -21,7 +23,7 @@ def _modele_thermique():
     c = pyrucast.Coords(1)
     noeuds = [c.add_node([x]) for x in (0.0, 0.5, 1.0)]
     mesh = pyrucast.Mesh(c, "SEG2")
-    for a, b in zip(noeuds, noeuds[1:]):
+    for a, b in itertools.pairwise(noeuds):
         mesh.unit().add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh)
 

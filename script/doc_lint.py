@@ -153,7 +153,7 @@ def inline_codes(text: str):
     positives — file names (`pyrucast.pth`), domains (`pyrucast.github.io`)
     and everyday sentences that contain a `::` by accident.
     """
-    without_blocks = re.sub(r"```.*?```", "", text, flags=re.S)
+    without_blocks = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
     return re.findall(r"`([^`\n]+)`", without_blocks)
 
 
@@ -179,8 +179,12 @@ def check_includes():
                 if not source.strip():
                     erreurs.append(f"{ou}: the included file is empty — {chemin}")
                 continue
-            debut = re.search(rf"ANCHOR:\s*{re.escape(ancre)}\s*$", source, re.M)
-            fin = re.search(rf"ANCHOR_END:\s*{re.escape(ancre)}\s*$", source, re.M)
+            debut = re.search(
+                rf"ANCHOR:\s*{re.escape(ancre)}\s*$", source, re.MULTILINE
+            )
+            fin = re.search(
+                rf"ANCHOR_END:\s*{re.escape(ancre)}\s*$", source, re.MULTILINE
+            )
             if not debut or not fin:
                 manque = "ANCHOR" if not debut else "ANCHOR_END"
                 erreurs.append(f'{ou}: {manque} "{ancre}" missing from {chemin}')
@@ -198,7 +202,7 @@ def blocs_ecrits_a_la_main(text: str) -> int:
     return sum(
         1
         for langue, corps, _ in fences(text)
-        if (langue.startswith("rust") or langue.startswith("python"))
+        if langue.startswith(("rust", "python"))
         and not any("{{#include" in ligne for ligne in corps)
     )
 
@@ -502,6 +506,7 @@ def items_documentes(publics):
         cwd=ROOT,
         capture_output=True,
         text=True,
+        check=True,
     ).stdout
     par_suffixe = {}
     for item in publics:
@@ -520,7 +525,7 @@ def items_documentes(publics):
         return all(seg in it for seg in court)
 
     documentes, ambigus = set(), []
-    for m in re.finditer(r"^\S+ - (\S+) \(line \d+\): test$", sortie, re.M):
+    for m in re.finditer(r"^\S+ - (\S+) \(line \d+\): test$", sortie, re.MULTILINE):
         # rustdoc names the doctest of a parameterized `impl` with its
         # parameters — `CellGeom<'a>::det_j_w` — where the type's page is
         # called `CellGeom`. Without this normalization, a documented item
@@ -653,12 +658,13 @@ def noms_cites():
         arbre = ast.parse(fichier.read_text(encoding="utf-8"))
         modules_etrangers, noms_etrangers = imports_etrangers(arbre)
         for noeud in ast.walk(arbre):
-            if isinstance(noeud, ast.Attribute):
-                if racine(noeud) not in modules_etrangers:
-                    vus.add(noeud.attr)
-            elif isinstance(noeud, ast.Name):
-                if noeud.id not in noms_etrangers:
-                    vus.add(noeud.id)
+            if (
+                isinstance(noeud, ast.Attribute)
+                and racine(noeud) not in modules_etrangers
+            ):
+                vus.add(noeud.attr)
+            elif isinstance(noeud, ast.Name) and noeud.id not in noms_etrangers:
+                vus.add(noeud.id)
     return vus
 
 
@@ -672,12 +678,15 @@ def imports_etrangers(arbre):
             for alias in noeud.names:
                 if alias.name.split(".")[0] != "pyrucast":
                     modules.add(alias.asname or alias.name.split(".")[0])
-        elif isinstance(noeud, ast.ImportFrom):
-            if noeud.level == 0 and (noeud.module or "").split(".")[0] != "pyrucast":
-                lies = {alias.asname or alias.name for alias in noeud.names}
-                # `from os import path`: `path` may itself be a module.
-                noms |= lies
-                modules |= lies
+        elif (
+            isinstance(noeud, ast.ImportFrom)
+            and noeud.level == 0
+            and (noeud.module or "").split(".")[0] != "pyrucast"
+        ):
+            lies = {alias.asname or alias.name for alias in noeud.names}
+            # `from os import path`: `path` may itself be a module.
+            noms |= lies
+            modules |= lies
     return modules, noms
 
 

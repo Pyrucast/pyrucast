@@ -8,9 +8,8 @@ in MSH 4.1.
 
 import textwrap
 
-import pytest
-
 import pyrucast
+import pytest
 
 SQUARE_V2 = textwrap.dedent(
     """\

@@ -1,9 +1,8 @@
 """Python tests for Evolution / SubEvolution — interpolation, types, and the
 field-through-curve transfer-function mode."""
 
-import pytest
-
 import pyrucast
+import pytest
 
 
 def _temperature_field(values):
@@ -34,7 +33,7 @@ def test_aggregate_scalar_returns_list():
 
 def test_out_of_range_override():
     se = pyrucast.SubEvolution([(0.0, 10.0), (1.0, 20.0)])
-    with pytest.raises(Exception):
+    with pytest.raises(RuntimeError, match="outside the tabulated range"):
         se.interpolate(2.0)
     assert se.interpolate(2.0, out_of_range="clamp") == 20.0
 
@@ -52,7 +51,7 @@ def test_types_round_trip():
 
 def test_ordinate_type_rejected_on_field_evolution():
     field, _ = _temperature_field([1.0, 2.0])
-    with pytest.raises(Exception):
+    with pytest.raises(RuntimeError, match="scalar evolutions only"):
         pyrucast.Evolution([(0.0, field)], ordinate_type="oops")
 
 
@@ -76,14 +75,14 @@ def test_interpolate_field_type_mismatch():
     # Abscissa type 'P' has no counterpart in a field whose component is 'T'.
     law = pyrucast.Evolution([(0.0, 0.0), (1.0, 1.0)], abscissa_type="P")
     temperature, _ = _temperature_field([0.5])
-    with pytest.raises(Exception):
+    with pytest.raises(RuntimeError, match="no component 'P'"):
         law.interpolate(temperature)
 
 
 def test_interpolate_field_requires_abscissa_type():
     law = pyrucast.Evolution([(0.0, 0.0), (1.0, 1.0)])
     temperature, _ = _temperature_field([0.5])
-    with pytest.raises(Exception):
+    with pytest.raises(RuntimeError, match="set the abscissa type"):
         law.interpolate(temperature)
 
 
@@ -93,7 +92,7 @@ def test_interpolate_field_requires_single_curve():
         [(0.0, 0.0), (1.0, 1.0)], abscissa_type="T"
     ) | pyrucast.SubEvolution([(0.0, 0.0), (1.0, 1.0)], abscissa_type="T")
     temperature, _ = _temperature_field([0.5])
-    with pytest.raises(Exception):
+    with pytest.raises(RuntimeError, match="two curves produce the component"):
         agg.interpolate(temperature)
 
 
@@ -136,5 +135,5 @@ def test_out_of_range_names_the_policy_it_applies(policy, beyond):
 def test_out_of_range_defaults_to_error():
     se = pyrucast.SubEvolution([(0.0, 10.0), (1.0, 20.0)])
     assert se.out_of_range() == "error"
-    with pytest.raises(Exception):
+    with pytest.raises(RuntimeError, match="outside the tabulated range"):
         se.interpolate(2.0)

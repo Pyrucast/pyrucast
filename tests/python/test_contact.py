@@ -7,9 +7,8 @@ the contact and transmits a uniform stress through the interface; lifting it
 releases every pair (λ = 0).
 """
 
-import pytest
-
 import pyrucast
+import pytest
 
 E = 100.0
 S = 5.0  # applied pressure
@@ -107,7 +106,7 @@ def test_patch_test_uniform_pressure_through_contact():
 
 def test_separation_releases_every_pair():
     """Lifting the top block opens every pair: λ = 0, bottom block untouched."""
-    c, bottom, top, model, contact, materials = _two_blocks()
+    _c, bottom, top, model, contact, materials = _two_blocks()
     idx = lambda i, j: j * (N + 1) + i
     lift = 0.1
 

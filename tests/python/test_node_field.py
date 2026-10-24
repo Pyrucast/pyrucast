@@ -3,9 +3,8 @@
 import gc as pygc
 import math
 
-import pytest
-
 import pyrucast
+import pytest
 
 
 def _poi1_with(n_nodes, dim=2):
@@ -36,7 +35,7 @@ def _two_zone_mesh():
 
 
 def test_from_mesh_zero_initialized():
-    c, _nodes, sm = _poi1_with(3)
+    _c, _nodes, sm = _poi1_with(3)
     f = pyrucast.NodeField(sm, ["T"])
     assert len(f) == 1
     assert f.node_count() == 3
@@ -61,7 +60,7 @@ def test_non_poi1_support_uses_distinct_nodes():
 
 
 def test_rejects_empty_components():
-    c, _nodes, sm = _poi1_with(1)
+    _c, _nodes, sm = _poi1_with(1)
     try:
         pyrucast.NodeField(sm, [])
     except RuntimeError:
@@ -71,7 +70,7 @@ def test_rejects_empty_components():
 
 
 def test_rejects_duplicate_components():
-    c, _nodes, sm = _poi1_with(1)
+    _c, _nodes, sm = _poi1_with(1)
     try:
         pyrucast.NodeField(sm, ["UX", "UX"])
     except RuntimeError:
@@ -81,7 +80,7 @@ def test_rejects_duplicate_components():
 
 
 def test_one_sub_per_submesh():
-    c, nodes, mesh = _two_zone_mesh()
+    _c, _nodes, mesh = _two_zone_mesh()
     f = pyrucast.NodeField(mesh, ["T"])
     assert len(f) == 2
     # 4 distinct nodes; the interface nodes are stored once per zone.
@@ -91,7 +90,7 @@ def test_one_sub_per_submesh():
 
 
 def test_components_per_submesh():
-    c, nodes, mesh = _two_zone_mesh()
+    _c, nodes, mesh = _two_zone_mesh()
     f = pyrucast.NodeField.with_components_per_submesh(mesh, [["T"], ["UX", "UY"]])
     assert f.components() == ["T", "UX", "UY"]
     # T lives on zone 0 only: defined at n0, absent at n3.
@@ -108,7 +107,7 @@ def test_components_per_submesh():
 
 
 def test_get_set_multi_component():
-    c, _nodes, sm = _poi1_with(2)
+    _c, _nodes, sm = _poi1_with(2)
     f = pyrucast.NodeField(sm, ["UX", "UY", "UZ"])
     sub = f.unit()
     sub.set(0, 0, 1.0)
@@ -120,7 +119,7 @@ def test_get_set_multi_component():
 
 
 def test_by_node_id_access():
-    c, nodes, sm = _poi1_with(2)
+    _c, nodes, sm = _poi1_with(2)
     f = pyrucast.NodeField(sm, ["T", "P"])
     sub = f.unit()
     ci_p = sub.component_index("P")
@@ -146,7 +145,7 @@ def test_unknown_node_or_component():
 
 
 def test_subfield_getitem_setitem():
-    c, nodes, sm = _poi1_with(2)
+    _c, nodes, sm = _poi1_with(2)
     f = pyrucast.NodeField(sm, ["UX", "UY"])
     f[0][nodes[0], "UX"] = 7.0
     f[0][nodes[1], "UY"] = -3.0
@@ -159,7 +158,7 @@ def test_subfield_getitem_setitem():
 
 
 def test_value_first_zone_wins_and_check():
-    c, nodes, mesh = _two_zone_mesh()
+    _c, nodes, mesh = _two_zone_mesh()
     f = pyrucast.NodeField(mesh, ["T"])
     interface = nodes[1]
     # Diverging values at the interface: reads pick zone 0, check() raises.
@@ -224,7 +223,7 @@ def test_values_batch_list_submesh_and_mesh():
 
 
 def test_values_batch_errors_on_absent_and_bad_arg():
-    c, nodes, mesh = _two_zone_mesh()
+    _c, nodes, mesh = _two_zone_mesh()
     f = pyrucast.NodeField.with_components_per_submesh(mesh, [["T"], ["UX", "UY"]])
     # T lives on zone 0 only: absent at n3 → raises, like value().
     try:
@@ -340,7 +339,7 @@ def test_displace_adds_displacement():
 
 
 def test_repr_str_node_field():
-    c, _nodes, sm = _poi1_with(3)
+    _c, _nodes, sm = _poi1_with(3)
     f = pyrucast.NodeField(sm, ["UX", "UY"])
     assert "NodeField" in repr(f)
     assert "1 subfield(s)" in str(f)
@@ -354,7 +353,7 @@ def test_repr_str_node_field():
 
 
 def test_subfield_add_scalar():
-    c, nodes, sm = _poi1_with(2)
+    _c, nodes, sm = _poi1_with(2)
     f = pyrucast.NodeField(sm, ["T"])
     f[0].set_value(nodes[0], "T", 1.0)
     f[0].set_value(nodes[1], "T", 2.0)
@@ -366,7 +365,7 @@ def test_subfield_add_scalar():
 
 
 def test_subfield_pow_scalar():
-    c, nodes, sm = _poi1_with(2)
+    _c, nodes, sm = _poi1_with(2)
     f = pyrucast.NodeField(sm, ["T"])
     f[0].set_value(nodes[0], "T", 2.0)
     f[0].set_value(nodes[1], "T", 3.0)
@@ -381,7 +380,7 @@ def test_subfield_pow_scalar():
 
 
 def test_field_pow_scalar_aggregate():
-    c, nodes, sm = _poi1_with(2)
+    _c, nodes, sm = _poi1_with(2)
     f = pyrucast.NodeField(sm, ["T"])
     f[0].set_value(nodes[0], "T", 3.0)
     g = f**3.0
@@ -390,7 +389,7 @@ def test_field_pow_scalar_aggregate():
 
 def test_subfield_pow_field_elementwise():
     # field ** field is strict and element-by-element.
-    c, nodes, sm = _poi1_with(2)
+    _c, nodes, sm = _poi1_with(2)
     base = pyrucast.NodeField(sm, ["T"])
     expo = pyrucast.NodeField(sm, ["T"])
     base[0].set_value(nodes[0], "T", 2.0)
@@ -403,7 +402,7 @@ def test_subfield_pow_field_elementwise():
 
 
 def test_pow_rejects_modulo():
-    c, nodes, sm = _poi1_with(1)
+    _c, nodes, sm = _poi1_with(1)
     f = pyrucast.NodeField(sm, ["T"])
     f[0].set_value(nodes[0], "T", 2.0)
     # Ternary pow(base, exp, mod) is meaningless on float fields.
@@ -419,7 +418,7 @@ def test_pow_rejects_modulo():
 
 
 def test_unary_math_on_aggregate_and_subfield():
-    c, nodes, sm = _poi1_with(3)
+    _c, nodes, sm = _poi1_with(3)
     f = pyrucast.NodeField(sm, ["T"])
     f[0].set_value(nodes[0], "T", 0.0)
     f[0].set_value(nodes[1], "T", math.pi)
@@ -453,7 +452,7 @@ def test_unary_math_matches_the_standard_library(function, reference):
     # Each value goes through the field function and through `math`, value by
     # value: the standard library is the independent reference.
     values = [0.25, 0.5, 1.5]
-    c, nodes, sm = _poi1_with(len(values))
+    _c, nodes, sm = _poi1_with(len(values))
     f = pyrucast.NodeField(sm, ["T"])
     for node, v in zip(nodes, values):
         f[0].set_value(node, "T", v)
@@ -464,7 +463,7 @@ def test_unary_math_matches_the_standard_library(function, reference):
 
 
 def test_unary_math_log_unguarded_is_nan():
-    c, nodes, sm = _poi1_with(1)
+    _c, nodes, sm = _poi1_with(1)
     f = pyrucast.NodeField(sm, ["T"])
     f[0].set_value(nodes[0], "T", -1.0)
     assert math.isnan(pyrucast.field.log(f).value(nodes[0], "T"))
@@ -482,7 +481,7 @@ def test_unary_math_rejects_bad_operand():
 def test_union_is_structural_merge():
     # `a | b` unites zones (shared handles) — it does NOT add values. The two
     # zones live on distinct support SubMeshes, so they stay separate.
-    c, nodes, mesh = _two_zone_mesh()
+    _c, nodes, mesh = _two_zone_mesh()
     a = pyrucast.NodeField(mesh[0], ["T"])
     b = pyrucast.NodeField(mesh[1], ["P"])
     a[0].set_value(nodes[0], "T", 1.0)
@@ -494,7 +493,7 @@ def test_union_is_structural_merge():
 
 
 def test_union_aggregate_plus_subfield():
-    c, nodes, mesh = _two_zone_mesh()
+    _c, _nodes, mesh = _two_zone_mesh()
     a = pyrucast.NodeField(mesh[0], ["T"])
     b = pyrucast.NodeField(mesh[1], ["T"])
     f = a | b[0]
@@ -505,7 +504,7 @@ def test_union_subfield_plus_aggregate_still_fuses_same_support():
     # Reflected form `sub | agg` (NodeField.__ror__): the sub-zone comes first,
     # and `finalize()` still fuses zones sharing a support — same result as
     # `agg | sub`, only the zone order differs.
-    c, nodes, mesh = _two_zone_mesh()
+    _c, nodes, mesh = _two_zone_mesh()
     a = pyrucast.NodeField(mesh[0], ["T"])
     a[0].set_value(nodes[0], "T", 1.0)
     b = pyrucast.NodeField(mesh, ["P"])
@@ -519,7 +518,7 @@ def test_union_subfield_plus_aggregate_still_fuses_same_support():
 def test_union_field_to_itself_dedups_by_handle():
     # Same handle on both sides: the union deduplicates by handle, so a single
     # zone remains (and the object is never re-locked).
-    c, nodes, sm = _poi1_with(1)
+    _c, _nodes, sm = _poi1_with(1)
     a = pyrucast.NodeField(sm, ["T"])
     f = a | a
     assert len(f) == 1
@@ -527,7 +526,7 @@ def test_union_field_to_itself_dedups_by_handle():
 
 
 def test_union_rejects_bad_operand():
-    c, _nodes, sm = _poi1_with(1)
+    _c, _nodes, sm = _poi1_with(1)
     f = pyrucast.NodeField(sm, ["T"])
     try:
         f | "nope"
@@ -655,7 +654,7 @@ def test_restrict_like_lands_on_target_support():
 
 
 def test_min_max_per_component():
-    c, nodes, sm = _poi1_with(3)
+    _c, nodes, sm = _poi1_with(3)
     f = pyrucast.NodeField(sm, ["U", "V"])
     for i, n in enumerate(nodes):
         f[0].set_value(n, "U", float(i + 1))  # 1, 2, 3
@@ -675,7 +674,7 @@ def test_min_max_per_component():
 
 
 def test_min_max_without_component_pool_every_component():
-    c, nodes, sm = _poi1_with(3)
+    _c, nodes, sm = _poi1_with(3)
     f = pyrucast.NodeField(sm, ["U", "V"])
     for i, n in enumerate(nodes):
         f[0].set_value(n, "U", float(i + 1))  # 1, 2, 3
@@ -688,7 +687,7 @@ def test_min_max_without_component_pool_every_component():
 
 
 def test_min_max_fold_across_zones():
-    c, nodes, mesh = _two_zone_mesh()
+    _c, nodes, mesh = _two_zone_mesh()
     f = pyrucast.NodeField(mesh, ["T"])
     f[0].set_value(nodes[0], "T", -2.0)
     f[1].set_value(nodes[3], "T", 5.0)
@@ -706,7 +705,7 @@ def test_consolidate_node_keeps_distinct_supports_separate():
     # Fusion is by support handle: the two TRI3 zones live on distinct
     # SubMeshes, so consolidate_node keeps both — but the shared interface node
     # (same value) passes the cross-support check.
-    c, nodes, mesh = _two_zone_mesh()
+    _c, nodes, mesh = _two_zone_mesh()
     f = pyrucast.NodeField(mesh, ["T"])
     f[0].set_value(nodes[0], "T", 1.0)
     f[0].set_value(nodes[1], "T", 2.0)
@@ -721,7 +720,7 @@ def test_consolidate_node_keeps_distinct_supports_separate():
 
 
 def test_consolidate_node_rejects_incoherent_field():
-    c, nodes, mesh = _two_zone_mesh()
+    _c, nodes, mesh = _two_zone_mesh()
     f = pyrucast.NodeField(mesh, ["T"])
     f[0].set_value(nodes[1], "T", 1.0)
     f[1].set_value(nodes[1], "T", 2.0)
@@ -734,7 +733,7 @@ def test_consolidate_node_rejects_incoherent_field():
 
 
 def test_consolidate_node_keeps_distinct_component_sets_separate():
-    c, nodes, mesh = _two_zone_mesh()
+    _c, _nodes, mesh = _two_zone_mesh()
     f = pyrucast.NodeField.with_components_per_submesh(mesh, [["T"], ["UX", "UY"]])
     g = pyrucast.node_field.consolidate(f)
     assert len(g) == 2
@@ -744,7 +743,7 @@ def test_consolidate_node_keeps_distinct_component_sets_separate():
 def test_subfield_union_subfield_builds_aggregate():
     # The original report: `SubNodeField | SubNodeField` must work, building a
     # NodeField (distinct supports here → two zones).
-    c, nodes, mesh = _two_zone_mesh()
+    _c, _nodes, mesh = _two_zone_mesh()
     sa = pyrucast.NodeField(mesh[0], ["T"])[0]
     sb = pyrucast.NodeField(mesh[1], ["P"])[0]
     f = sa | sb
@@ -769,7 +768,7 @@ def _two_poi1_zones():
 
 def test_subfield_plus_subfield_same_support():
     # Two node fields on the *same* POI1 mesh share the support handle.
-    c, nodes, sm = _poi1_with(2)
+    _c, nodes, sm = _poi1_with(2)
     a = pyrucast.NodeField(sm, ["T"])[0]
     b = pyrucast.NodeField(sm, ["T"])[0]
     a.set_value(nodes[0], "T", 1.0)
@@ -784,7 +783,7 @@ def test_subfield_plus_subfield_same_support():
 def test_subfield_plus_subfield_disjoint_components_passes_through():
     # Union/passthrough arithmetic: disjoint components each pass through raw,
     # no error (mirrors the Rust `subfield_operator_uses_union_passthrough`).
-    c, nodes, sm = _poi1_with(1)
+    _c, nodes, sm = _poi1_with(1)
     a = pyrucast.NodeField(sm, ["T"])[0]
     a.set_value(nodes[0], "T", 5.0)
     b = pyrucast.NodeField(sm, ["P"])[0]
@@ -796,7 +795,7 @@ def test_subfield_plus_subfield_disjoint_components_passes_through():
 
 
 def test_field_plus_field_same_decomposition():
-    c, nodes, sm = _poi1_with(2)
+    _c, nodes, sm = _poi1_with(2)
     a = pyrucast.NodeField(sm, ["T"])
     b = pyrucast.NodeField(sm, ["T"])
     a[0].set_value(nodes[0], "T", 1.0)
@@ -806,7 +805,7 @@ def test_field_plus_field_same_decomposition():
 
 
 def test_field_scalar_and_per_component():
-    c, nodes, sm = _poi1_with(2)
+    _c, nodes, sm = _poi1_with(2)
     f = pyrucast.NodeField(sm, ["T"])
     f[0].set_value(nodes[0], "T", 1.0)
     g = f * 3.0
@@ -817,7 +816,7 @@ def test_field_scalar_and_per_component():
 
 
 def test_field_plus_subfield_targets_matching_zone():
-    c, nodes, za, zb = _two_poi1_zones()
+    _c, nodes, za, zb = _two_poi1_zones()
     f = pyrucast.NodeField(za, ["T"]) | pyrucast.NodeField(zb, ["T"])
     assert len(f) == 2
     f[0].set_value(nodes[0], "T", 1.0)
@@ -831,7 +830,7 @@ def test_field_plus_subfield_targets_matching_zone():
 
 
 def test_op_bad_operand_raises_type_error():
-    c, nodes, sm = _poi1_with(1)
+    _c, _nodes, sm = _poi1_with(1)
     f = pyrucast.NodeField(sm, ["T"])
     for bad_lhs in (f, f[0]):
         try:
@@ -845,7 +844,7 @@ def test_op_bad_operand_raises_type_error():
 def test_support_submesh_is_the_zone_the_field_was_built_on():
     # The support handed back is a POI1 zone whose cells name exactly the
     # nodes the field was built on — read from the support's own cells.
-    c, nodes, mesh = _poi1_with(3)
+    _c, nodes, mesh = _poi1_with(3)
     f = pyrucast.NodeField(mesh, ["T"])
     support = f[0].support_submesh()
     assert support.element_type == "POI1"

@@ -6,9 +6,8 @@ on the same augmented system as Dirichlet. On a 1-D heat-conduction bar
 linear solution, and the single-term MPC coincides with Dirichlet.
 """
 
-import pytest
-
 import pyrucast
+import pytest
 
 N_ELEMS = 4
 H = 1.0 / N_ELEMS
@@ -47,7 +46,6 @@ def test_mpc_difference_relation_recovers_linear_solution():
     dir_mult = mult0.node(0, 0, 0)
 
     base = pyrucast.model.heat_conduction(fes)
-    dual = base.dual_of("T")  # "q"
     mesh_last = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
     mesh_first = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mult_mpc = pyrucast.mesh.barycenter(mesh_last)
@@ -140,7 +138,6 @@ def test_constraint_rhs_helper_builds_second_member():
     dirichlet = pyrucast.model.dirichlet(cible, "T", imposed0, mult0)
 
     base = pyrucast.model.heat_conduction(fes)
-    dual = base.dual_of("T")
     mesh_last = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
     mesh_first = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mult_mpc = pyrucast.mesh.barycenter(mesh_last)
@@ -170,7 +167,6 @@ def test_constraint_rhs_by_index_matches_node_keying():
     and an out-of-range index raises."""
     _, nodes, fes, _ = _heat_bar()
     base = pyrucast.model.heat_conduction(fes)
-    dual = base.dual_of("T")
     mesh_last = pyrucast.mesh.poi1_from_nodes([nodes[-1]])
     mesh_first = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mult_mpc = pyrucast.mesh.barycenter(mesh_last)
@@ -186,7 +182,7 @@ def test_constraint_rhs_by_index_matches_node_keying():
     assert abs(by_node.value(mult, "mpc_rhs") - by_index.value(mult, "mpc_rhs")) < TOL
     assert abs(by_index.value(mult, "mpc_rhs") - 1.0) < TOL
 
-    with pytest.raises(Exception):
+    with pytest.raises(RuntimeError, match="relation index 1 out of range"):
         mpc.constraint_rhs_by_index([(1, 1.0)])  # only one relation
 
 
@@ -194,13 +190,13 @@ def test_constraint_rhs_rejects_bad_input():
     """The helper rejects a constraint-free model and an unconstrained node."""
     _, nodes, fes, _ = _heat_bar()
     base = pyrucast.model.heat_conduction(fes)
-    with pytest.raises(Exception):
+    with pytest.raises(RuntimeError, match="holds no constraint sub-model"):
         base.constraint_rhs([(nodes[0], 0.0)])
 
     imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mult0 = pyrucast.mesh.barycenter(imposed0)
     dirichlet = pyrucast.model.dirichlet(base, "T", imposed0, mult0)
-    with pytest.raises(Exception):
+    with pytest.raises(RuntimeError, match="is not constrained by this Dirichlet"):
         dirichlet.constraint_rhs([(nodes[-1], 0.0)])
 
 

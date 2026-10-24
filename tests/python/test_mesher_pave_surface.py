@@ -2,9 +2,8 @@
 
 import math
 
-import pytest
-
 import pyrucast as pc
+import pytest
 
 
 def _closed_loop(coords, points):

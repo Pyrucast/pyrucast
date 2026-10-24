@@ -1,9 +1,8 @@
 """Python tests for the quadratic (Lagrange-2) element types:
 SEG3, TRI6, QUA8, TET10, PENTA15, HEX20."""
 
-import pytest
-
 import pyrucast
+import pytest
 
 
 def _tri6(coords):
@@ -43,7 +42,7 @@ def test_degree_must_match_element_type():
     c = pyrucast.Coords(2)
     m = _tri6(c)
     # LAGRANGE1 (linear) on a quadratic mesh is rejected.
-    with pytest.raises(Exception):
+    with pytest.raises(RuntimeError, match="not compatible with element type TRI6"):
         pyrucast.FiniteElementSpace(m, interpolation="LAGRANGE1")
 
 
@@ -157,7 +156,7 @@ def test_to_quadratic_rejects_points():
     c = pyrucast.Coords(2)
     a = c.add_node([0.0, 0.0])
     pts = pyrucast.mesh.poi1_from_nodes([a])
-    with pytest.raises(Exception):
+    with pytest.raises(RuntimeError, match="no quadratic counterpart"):
         pyrucast.mesh.to_quadratic(pts)
 
 
@@ -185,7 +184,7 @@ $Elements
 $EndElements
 """
     groups = pyrucast.mesh.read_gmsh_str(pyrucast.Coords(3), mesh)
-    (_, m) = groups[0] if isinstance(groups, list) else list(groups.items())[0]
+    (_, m) = groups[0] if isinstance(groups, list) else next(iter(groups.items()))
     assert m.element_types() == ["TET10"]
     # After the gmsh->pyrucast permutation, local node 8 is the (1,3) midpoint.
     assert m.node(0, 0, 8).position() == [0.5, 0.0, 0.5]

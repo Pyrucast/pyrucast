@@ -1,9 +1,8 @@
 """Python tests for `export_vtk` — writing a mesh or field to a legacy VTK
 file readable by ParaView."""
 
-import pytest
-
 import pyrucast
+import pytest
 
 
 def _square():
@@ -67,7 +66,7 @@ def test_export_binary(tmp_path):
 
 
 def test_export_evolution_as_a_series(tmp_path):
-    c, mesh, nodes = _square()
+    _c, mesh, _nodes = _square()
     fes = pyrucast.FiniteElementSpace(mesh)
     cold = pyrucast.ElementField(fes, ["s"])
     hot = pyrucast.ElementField(fes, ["s"])

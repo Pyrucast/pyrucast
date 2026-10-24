@@ -18,6 +18,7 @@ A function deliberately left unexposed is written down in `RUST_ONLY`, with its
 reason.
 """
 
+import ast
 import pathlib
 import re
 
@@ -124,12 +125,14 @@ def rust_exports():
         # may be defined elsewhere and only re-exported here, which a
         # single-segment path did not cover — the guard rail then lost the
         # operator **silently**.
-        for m in re.finditer(r"pub use (?:\w+::)+(?:\{(.*?)\}|(\w+));", text, re.S):
+        for m in re.finditer(
+            r"pub use (?:\w+::)+(?:\{(.*?)\}|(\w+));", text, re.DOTALL
+        ):
             names = m.group(1) or m.group(2)
             for name in (n.strip() for n in names.split(",")):
                 if name and name[0].islower():
                     yield module, name
-        for m in re.finditer(r"^pub fn (\w+)", text, re.M):
+        for m in re.finditer(r"^pub fn (\w+)", text, re.MULTILINE):
             yield module, m.group(1)
         if module == "solver":
             for name in SOLVER_ENTRY_POINTS:
@@ -244,6 +247,50 @@ def test_python_only_entries_are_documented_and_real():
             f"{fn}: stale exemption — Rust now exposes this name, "
             "remove it from PYTHON_ONLY"
         )
+
+
+def _declared(tree):
+    """The names a module's `__all__` lists, or `None` when it has none."""
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+            getattr(target, "id", None) == "__all__" for target in node.targets
+        ):
+            return set(ast.literal_eval(node.value))
+    return None
+
+
+def test_every_reexport_is_declared_in_all():
+    """Every name a public module takes from the extension is in its `__all__`.
+
+    `__all__` is the single declaration of what a module re-exports: for whoever
+    reads the file, for `import *`, for the mirror above, which reads it, and
+    for the strict type checkers, which take any other imported name for a
+    private one. The `x as x` aliases that once said it a second time hid an
+    omission — `mesh.copy`, imported and used, missing from `__all__`, so the
+    mirror never saw it.
+    """
+    missing = []
+    for path in sorted((ROOT / "python" / "pyrucast").glob("*.py")):
+        if path.name.startswith("_") and path.name != "__init__.py":
+            continue  # private modules re-export nothing
+        module = "pyrucast" if path.name == "__init__.py" else f"pyrucast.{path.stem}"
+        tree = ast.parse(path.read_text())
+        declared = _declared(tree) or set()
+        for node in tree.body:
+            if not (
+                isinstance(node, ast.ImportFrom)
+                and node.level == 1
+                and node.module == "_pyrucast"
+            ):
+                continue
+            for alias in node.names:
+                name = alias.asname or alias.name
+                if not name.startswith("__") and name not in declared:
+                    missing.append(f"{module}.{name}")
+    assert not missing, (
+        "taken from the extension but missing from `__all__`:\n  "
+        + "\n  ".join(missing)
+    )
 
 
 def test_beam_deformation_is_reachable():

@@ -9,11 +9,11 @@ container while preserving its invariant, hence a method
 """
 
 from ._pyrucast import (
-    geometric as geometric,
-    lump as lump,
-    mass as mass,
-    stiffness as stiffness,
-    tangent as tangent,
+    geometric,
+    lump,
+    mass,
+    stiffness,
+    tangent,
 )
 
 __all__ = [

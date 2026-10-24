@@ -5,9 +5,9 @@ espace éléments finis, normes et produits scalaires globaux.
 """
 
 from ._pyrucast import (
-    integral as integral,
-    xtx as xtx,
-    xty as xty,
+    integral,
+    xtx,
+    xty,
 )
 
 __all__ = [

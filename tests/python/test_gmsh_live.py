@@ -6,9 +6,8 @@ is what runs them, and it fails outright if gmsh is missing, rather than
 turning green on a volley of *skips*.
 """
 
-import pytest
-
 import pyrucast
+import pytest
 
 try:
     import gmsh
@@ -201,7 +200,7 @@ def test_node_views_become_fields_and_steps_an_evolution(session):
 
 def test_element_views_become_one_point_fields(session):
     square(session)
-    types, cells, _ = session.model.mesh.getElements(2)
+    _types, cells, _ = session.model.mesh.getElements(2)
     model = session.model.getCurrent()
     view = session.view.add("E")
     session.view.addHomogeneousModelData(

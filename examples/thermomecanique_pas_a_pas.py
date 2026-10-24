@@ -29,9 +29,9 @@ E, NU, ALPHA = 210_000.0, 0.3, 1e-5
 K_COND = 1.0
 T_REF, T_HOT = 20.0, 220.0  # ΔT final = 200
 LENGTH, HEIGHT = 4.0, 1.0
-NX = int(os.environ.get("PYRUCAST_NX", 8))
-NY = int(os.environ.get("PYRUCAST_NY", 3))
-NSTEPS = int(os.environ.get("PYRUCAST_NSTEPS", 5))
+NX = int(os.environ.get("PYRUCAST_NX", "8"))
+NY = int(os.environ.get("PYRUCAST_NY", "3"))
+NSTEPS = int(os.environ.get("PYRUCAST_NSTEPS", "5"))
 
 
 def main():

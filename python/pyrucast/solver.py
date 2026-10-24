@@ -5,9 +5,9 @@ constraints, and unilateral (active-set) solver for contact.
 """
 
 from ._pyrucast import (
-    solve as solve,
-    solve_eliminate as solve_eliminate,
-    solve_unilateral as solve_unilateral,
+    solve,
+    solve_eliminate,
+    solve_unilateral,
 )
 
 __all__ = ["solve", "solve_eliminate", "solve_unilateral"]

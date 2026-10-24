@@ -35,7 +35,7 @@ def _line(n_elems):
 
 
 def main() -> None:
-    nodes, seg, fes = _line(N)
+    nodes, _seg, fes = _line(N)
     pts = pyrucast.mesh.poi1_from_nodes(nodes)  # nodal (POI1) support of the same nodes
 
     # ── 1. Integral of a *nodal* field (through the shape functions N_i) ─────

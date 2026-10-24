@@ -41,7 +41,6 @@ def main():
     materials[0].set_uniform("k", 1.0)
 
     base = pyrucast.model.heat_conduction(fes)
-    dual = base.dual_of("T")  # "q"
 
     # Dirichlet T(0) = 0.
     imposed0 = pyrucast.mesh.poi1_from_nodes([nodes[0]])

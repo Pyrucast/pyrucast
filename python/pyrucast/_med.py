@@ -11,8 +11,8 @@ the work in Rust.
 """
 
 from ._pyrucast import (
-    Evolution,
     ElementField,
+    Evolution,
     NodeField,
     from_arrays,
     gauss_to_external,

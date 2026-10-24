@@ -8,6 +8,7 @@ in the interior, so the immersed node's solved value equals the field there.
 """
 
 import pyrucast
+import pytest
 
 TOL = 1e-9
 
@@ -77,10 +78,9 @@ def test_node_outside_host_is_rejected():
     host = pyrucast.Mesh(c, "HEX8")
     host.unit().add_cell(corners)
 
+    base = pyrucast.model.heat_conduction(pyrucast.FiniteElementSpace(host))
+
     outside = c.add_node([5.0, 5.0, 5.0])
     bar = pyrucast.mesh.poi1_from_nodes([outside])
-    try:
-        pyrucast.model.embedded(model, bar, host, ["T"])
-        assert False, "expected an error for a node outside the host"
-    except Exception:
-        pass
+    with pytest.raises(RuntimeError, match="lie outside the host mesh"):
+        pyrucast.model.embedded(base, bar, host, ["T"])

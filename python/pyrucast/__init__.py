@@ -21,31 +21,104 @@ by theme**, mirroring the Rust organization:
 """
 
 # ── Containers (nouns): top-level classes, same name as the Rust struct ─────
+# ── Verbs laid out by theme (mirror of `src/ops/*`) ─────────────────────────
+from . import (
+    coords as coords,
+)
+from . import (
+    element_field as element_field,
+)
+from . import (
+    export as export,
+)
+from . import (
+    field as field,
+)
+from . import (
+    matrix as matrix,
+)
+from . import (
+    measure as measure,
+)
+from . import (
+    mesh as mesh,
+)
+from . import (
+    model as model,
+)
+from . import (
+    node_field as node_field,
+)
+from . import (
+    solver as solver,
+)
+
+# ── The higher-level pure Python layer ──────────────────────────────────────
+from . import stepping as stepping
 from ._pyrucast import (
     Array as Array,
+)
+from ._pyrucast import (
     Cell as Cell,
+)
+from ._pyrucast import (
     Coords as Coords,
+)
+from ._pyrucast import (
     Element as Element,
+)
+from ._pyrucast import (
     ElementField as ElementField,
+)
+from ._pyrucast import (
     Evolution as Evolution,
+)
+from ._pyrucast import (
     FiniteElementSpace as FiniteElementSpace,
+)
+from ._pyrucast import (
     Matrix as Matrix,
+)
+from ._pyrucast import (
     Mesh as Mesh,
+)
+from ._pyrucast import (
     Model as Model,
+)
+from ._pyrucast import (
     Node as Node,
+)
+from ._pyrucast import (
     NodeField as NodeField,
+)
+from ._pyrucast import (
     SubElementField as SubElementField,
+)
+from ._pyrucast import (
     SubEvolution as SubEvolution,
+)
+from ._pyrucast import (
     SubFiniteElementSpace as SubFiniteElementSpace,
+)
+from ._pyrucast import (
     SubMatrix as SubMatrix,
+)
+from ._pyrucast import (
     SubMesh as SubMesh,
+)
+from ._pyrucast import (
     SubModel as SubModel,
+)
+from ._pyrucast import (
     SubNodeField as SubNodeField,
 )
+from ._pyrucast import __doc__, __features__, __version__  # noqa: F401
 
 # ── Sauvegarde et relecture d'un graphe d'objets ────────────────────────────
 from ._pyrucast import (
     load as load,
+)
+from ._pyrucast import (
     save as save,
 )
 
@@ -53,25 +126,6 @@ from ._pyrucast import (
 from ._pyrucast import (
     spill_stats as spill_stats,
 )
-
-from ._pyrucast import __doc__, __features__, __version__  # noqa: F401
-
-# ── Verbs laid out by theme (mirror of `src/ops/*`) ─────────────────────────
-from . import (
-    coords as coords,
-    element_field as element_field,
-    export as export,
-    field as field,
-    matrix as matrix,
-    measure as measure,
-    mesh as mesh,
-    model as model,
-    node_field as node_field,
-    solver as solver,
-)
-
-# ── The higher-level pure Python layer ──────────────────────────────────────
-from . import stepping as stepping
 
 __all__ = [
     # conteneurs
@@ -94,22 +148,22 @@ __all__ = [
     "SubMesh",
     "SubModel",
     "SubNodeField",
-    # sauvegarde / relecture
-    "load",
-    "save",
-    # diagnostics
-    "spill_stats",
     # sous-modules de verbes
     "coords",
     "element_field",
     "export",
     "field",
+    # sauvegarde / relecture
+    "load",
     "matrix",
     "measure",
     "mesh",
     "model",
     "node_field",
+    "save",
     "solver",
+    # diagnostics
+    "spill_stats",
     # couche haut niveau
     "stepping",
 ]

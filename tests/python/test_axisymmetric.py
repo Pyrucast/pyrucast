@@ -58,7 +58,7 @@ def test_coords_declare_the_revolution_frame():
 
 def test_integral_measures_the_revolved_volume():
     """∫ 1 dΩ over the meridian rectangle is π(r1² − r0²)·h, not the plane area."""
-    c, grid, mesh, fes, _ = _annulus(1.0, 3.0, 2.0, 4, 2)
+    _c, _grid, mesh, fes, _ = _annulus(1.0, 3.0, 2.0, 4, 2)
     ones = pyrucast.NodeField(mesh, ["one"])
     ones.add_to_component("one", 1.0)
 
@@ -71,7 +71,7 @@ def test_lame_thick_cylinder_under_internal_pressure():
     E, NU, P = 210_000.0, 0.3, 100.0
     A, B, H, NR, NZ = 1.0, 2.0, 0.5, 40, 1
 
-    c, grid, mesh, fes, idx = _annulus(A, B, H, NR, NZ)
+    c, grid, _mesh, fes, idx = _annulus(A, B, H, NR, NZ)
 
     # Plane strain: u_z = 0 on both z faces.
     ends = [grid[idx(i, j)] for i in range(NR + 1) for j in (0, NZ)]

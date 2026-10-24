@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Formatage — Rust et Python. Ne formate rien : il vérifie.
+# Formatage — Rust et Python — et règles de ruff. Ne corrige rien : il vérifie.
 #
 # À lancer APRÈS `cargo fmt` et `.venv/bin/ruff format .`, jamais avant :
 # le but est d'attraper ce qui part en commit mal formaté.
@@ -9,5 +9,6 @@
 # `--all` : le formatage couvre tous les membres du workspace, `macros/` compris.
 step "cargo fmt --all --check"      cargo fmt --all --check
 step "ruff format --check (Python)" ruff format --check .
+step "ruff check (Python)"          ruff check .
 
 echo "OK : formatage."

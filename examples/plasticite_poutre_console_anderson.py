@@ -168,10 +168,10 @@ def main():
     # ── Parameters (steel material, geometry, loading) ──────────────────────
     young, nu, sigma_y = 210_000.0, 0.3, 250.0
     length, height = 10.0, 1.0
-    nx = int(os.environ.get("PYRUCAST_NX", 24))
-    ny = int(os.environ.get("PYRUCAST_NY", 6))
-    nsteps = int(os.environ.get("PYRUCAST_NSTEPS", 10))
-    p_max_load = float(os.environ.get("PYRUCAST_PMAX", 5.0))
+    nx = int(os.environ.get("PYRUCAST_NX", "24"))
+    ny = int(os.environ.get("PYRUCAST_NY", "6"))
+    nsteps = int(os.environ.get("PYRUCAST_NSTEPS", "10"))
+    p_max_load = float(os.environ.get("PYRUCAST_PMAX", "5.0"))
 
     print(
         f"Plastic cantilever beam (Anderson m={ANDERSON_DEPTH}): {nx}×{ny} QUA4  "
@@ -258,7 +258,9 @@ def main():
 
         # Residual (and behaviour output) at a trial displacement `u`:
         # ε(u) → COMP → BSIG → r = F_ext − F_int, plus the norm on the free DOFs.
-        def residual_at(u):
+        # `state` and `load_scaled` are this step's: bound here, as they are
+        # what the function is called with within the step.
+        def residual_at(u, state=state, load_scaled=load_scaled):
             strain = pyrucast.element_field.deformation(u, fes)
             out = pyrucast.element_field.integrate_behavior(
                 model, strain, materials, prev=state

@@ -136,10 +136,10 @@ jobs:
           . ./.venv/bin/activate
           pip install --quiet --upgrade pip
           # `ruff` et `maturin` sont épinglés, les deux autres non, et la
-          # différence n'est pas arbitraire. `ruff format --check` compare
-          # au formatage d'une version précise : une sortie amont qui change
-          # une règle rougirait `check_format` sans qu'une ligne du projet ait
-          # bougé. `maturin` construit le module que tout le reste du job
+          # différence n'est pas arbitraire. `ruff format --check` et
+          # `ruff check` comparent au formatage et aux règles par défaut d'une
+          # version précise : une sortie amont qui change une règle rougirait
+          # `check_format` sans qu'une ligne du projet ait bougé. `maturin` construit le module que tout le reste du job
           # importe. `pytest` n'a pas de contrat de sortie, et `gmsh` doit
           # rester libre — l'intérêt de `check_gmsh` est justement de tester
           # l'interface contre le gmsh du jour ; même chose pour medcoupling.

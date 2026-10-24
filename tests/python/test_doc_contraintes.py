@@ -9,6 +9,8 @@ at **collection** time; an example that breaks is a collection error, with a
 full traceback and a non-zero exit code.
 """
 
+import itertools
+
 import pyrucast
 
 
@@ -19,7 +21,7 @@ def _barre_elastique(n=2, dim=2):
     c = pyrucast.Coords(dim)
     noeuds = [c.add_node([i / n] + [0.0] * (dim - 1)) for i in range(n + 1)]
     mesh = pyrucast.Mesh(c, "SEG2")
-    for a, b in zip(noeuds, noeuds[1:]):
+    for a, b in itertools.pairwise(noeuds):
         mesh.unit().add_cell([a, b])
     fes = pyrucast.FiniteElementSpace(mesh)
     return c, mesh, fes, noeuds

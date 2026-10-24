@@ -7,9 +7,8 @@ bound `T(1) ⋈ a` either releases (feasible, `λ = 0`) or holds active
 (`T(1) = a`, `λ = q − a` — `≤ 0` for `≥`, `≥ 0` for `≤`).
 """
 
-import pytest
-
 import pyrucast
+import pytest
 
 N_ELEMS = 4
 H = 1.0 / N_ELEMS

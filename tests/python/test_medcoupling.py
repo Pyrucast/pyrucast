@@ -10,9 +10,8 @@ numbering is checked against what medcoupling *computes* — signed measures,
 edge and face midpoints — never against a table copied from somewhere.
 """
 
-import pytest
-
 import pyrucast
+import pytest
 
 mc = pytest.importorskip("medcoupling")
 np = pytest.importorskip("numpy")
@@ -278,7 +277,7 @@ def test_element_fields_round_trip(tmp_path, gauss):
     pyrucast.export.to_medcoupling(meshes, {"S": stress}, gauss=gauss).write(
         str(path), 2
     )
-    back, fields = pyrucast.mesh.from_medcoupling(pyrucast.Coords(3), str(path))
+    _back, fields = pyrucast.mesh.from_medcoupling(pyrucast.Coords(3), str(path))
 
     def rows(field):
         """Each zone's values of its single cell, per point — or their mean."""

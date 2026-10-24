@@ -102,7 +102,7 @@ PYI = pathlib.Path(pyrucast.__file__).parent / "_pyrucast" / "__init__.pyi"
 def free_functions():
     """(name, subject type, return type) of the stub's free functions."""
     for name, args, ret in re.findall(
-        r"^def (\w+)\((.*?)\) -> ([^:]+):", PYI.read_text(), re.M
+        r"^def (\w+)\((.*?)\) -> ([^:]+):", PYI.read_text(), re.MULTILINE
     ):
         parts = [a.strip() for a in args.split(",") if a.strip()]
         if not parts:

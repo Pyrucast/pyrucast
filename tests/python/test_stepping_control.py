@@ -1,9 +1,8 @@
 """Contact, load control, adaptive steps, coupling passes and hooks of the
 step-by-step (``pyrucast.stepping``), each against a closed-form answer."""
 
-import pytest
-
 import pyrucast as pc
+import pytest
 
 E, NU = 1000.0, 0.25
 NX, NY, L, H = 4, 2, 2.0, 1.0
@@ -73,7 +72,7 @@ def test_contact_stops_the_strip_on_the_floor():
     meets the floor a gap g below; from then on the bottom stays at −g and
     the floor takes the rest, (t − E g / H)·L."""
     gap = 0.02
-    mesh, node, solid, model, materials, bottom = _hung_strip()
+    _mesh, _node, solid, model, materials, bottom = _hung_strip()
     floor, floor_support = _fix(solid, bottom, "u_y", ">=")
     model = model | floor
     pull = _edge_traction(bottom, "f_y", -1.0 * L)
@@ -119,7 +118,7 @@ def test_automatic_control_cuts_a_large_step_and_lands_on_the_target():
     """A step straining 5e-3 under a control aiming at 1e-3 per step is cut
     into several; the target is reached all the same, with the linear
     answer u_x = σ x / E."""
-    mesh, node, model, materials, unit = _pulled_strip()
+    _mesh, node, model, materials, unit = _pulled_strip()
     data = {
         "model": model,
         "times": [0.0, 1.0],
@@ -146,7 +145,7 @@ def test_indirect_control_advances_the_strain_by_the_target():
     Δτ to the strain along its own direction: the first step along
     (1, 1, 1) — ε_xx + ε_yy = (1 − ν) σ / E = Δτ —, the next ones along ε
     itself — ‖ε‖ grows by Δτ, ‖ε‖ = √(1 + ν²) σ / E."""
-    mesh, node, model, materials, unit = _pulled_strip()
+    _mesh, _node, model, materials, unit = _pulled_strip()
     target = 1e-3
     data = {
         "model": model,
@@ -168,7 +167,7 @@ def test_adaptive_steps_reach_the_targets_of_a_plastic_pull():
     """With adaptive steps the instants between two targets are the solver's
     choice; what is recorded at the targets is the plastic answer."""
     sigma_y = 2.0
-    mesh, fes, node = _strip()
+    _mesh, fes, node = _strip()
     solid = pc.model.plasticity_perfect(fes, "plane_stress")
     left = [node(0, j) for j in range(NY + 1)]
     bottom = [node(i, 0) for i in range(NX + 1)]
@@ -202,7 +201,7 @@ def test_adaptive_steps_reach_the_targets_of_a_plastic_pull():
 def test_hooks_see_every_step_and_may_add_a_load():
     """A load added by ``extra_mechanical_load`` acts like a given one; the
     after-step hook sees each step once."""
-    mesh, node, model, materials, unit = _pulled_strip()
+    _mesh, node, model, materials, unit = _pulled_strip()
     seen = []
     data = {
         "model": model,
@@ -223,7 +222,7 @@ def test_hooks_see_every_step_and_may_add_a_load():
 def test_coupling_passes_settle_on_the_one_pass_answer():
     """Without a feedback of the mechanics on the heat, a second pass gives the
     same temperature: the coherence test stops there, on the same result."""
-    mesh, fes, node = _strip()
+    _mesh, fes, node = _strip()
     conduction = pc.model.heat_conduction(fes)
     solid = pc.model.elasticity(fes, "plane_stress")
     left = [node(0, j) for j in range(NY + 1)]
@@ -262,7 +261,7 @@ def test_coupling_passes_settle_on_the_one_pass_answer():
     ],
 )
 def test_options_refuse_what_they_cannot_do(extra, message):
-    mesh, node, model, materials, unit = _pulled_strip()
+    _mesh, _node, model, materials, _unit = _pulled_strip()
     data = {"model": model, "times": [0.0, 1.0], "materials": materials, **extra}
     with pytest.raises(ValueError, match=message):
         pc.stepping.step_by_step(data)

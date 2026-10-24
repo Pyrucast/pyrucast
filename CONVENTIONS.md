@@ -322,10 +322,14 @@ implementation detail of the private namespace, not a breach of the mirror.
 
 It is the move to the maturin *mixed layout* (`python/pyrucast/` folder, private
 `_pyrucast` extension + pure Python layer) that unlocks this filing: each module
-is a real `.py` file re-exporting, in a typed way, the symbols of the flat
-extension. A single `_pyrucast/__init__.pyi` stub is still generated for the
-extension; since the sub-modules are only re-exports, the types follow them
-without a dedicated stub.
+is a real `.py` file re-exporting the symbols of the flat extension. Its
+`__all__` is the **single** declaration of what it re-exports — read by the
+mirror test, by `import *`, and by strict type checkers, which take any other
+imported name for a private one; no `x as x` alias says it a second time.
+`tests/python/test_mirror_completeness.py` checks that nothing imported from
+the extension escapes it. A single `_pyrucast/__init__.pyi` stub is still
+generated for the extension; since the sub-modules are only re-exports, the
+types follow them without a dedicated stub.
 
 ### The wrapper files mirror the Rust tree
 

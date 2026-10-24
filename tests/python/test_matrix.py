@@ -1,8 +1,7 @@
 """Python tests for the Matrix / SubMatrix containers."""
 
-import pytest
-
 import pyrucast
+import pytest
 
 
 def _poi1(c, ids):

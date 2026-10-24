@@ -8,9 +8,8 @@ closed-form profiles.
 
 import itertools
 
-import pytest
-
 import pyrucast as pc
+import pytest
 
 SIGMA_SB = 5.670374419e-8
 

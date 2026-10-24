@@ -20,7 +20,6 @@ substeps of forced convergence when an iteration stalls.
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 from .. import element_field, matrix, measure, node_field, solver
 from .anderson import Accelerator
@@ -71,7 +70,7 @@ class StepData:
     t_end: float
     materials: object
     loads: tuple
-    imposed_strain: Optional[object]
+    imposed_strain: object | None
 
 
 def _thermal_strain(problem, materials, temperature, options):
@@ -152,7 +151,7 @@ class Balance:
 
     system: object
     out_of_balance: object
-    reactions: Optional[object]
+    reactions: object | None
 
 
 def balance(problem, solution, behaviour, step, inertia=None):
@@ -472,30 +471,40 @@ def convergence_status(tracker, i, measures, options, skip, controlled):
     no longer moves the strain.
     """
     tracker.history.append(measures["force"])
-    if not skip:
-        if (
-            measures["force"] < options.precision
-            and measures["strain_change"] < options.strain_precision
-            and measures["moment"] < options.moment_precision
-        ):
-            return "relaxed" if tracker.relaxation < 1.0 else "converged"
+    if not skip and (
+        measures["force"] < options.precision
+        and measures["strain_change"] < options.strain_precision
+        and measures["moment"] < options.moment_precision
+    ):
+        return "relaxed" if tracker.relaxation < 1.0 else "converged"
     d = options.delta_iterations
     reference = 0.99 * tracker.history[i - 1 - d] if i > d else float("inf")
-    if not skip and not tracker.stalled and i > 1 and not controlled:
-        if i >= tracker.max_iterations or measures["force"] > reference:
-            tracker.stalled = True
-            tracker.max_iterations = 3 * i
-            tracker.relaxation = options.relaxation
-            skip = True
+    if (
+        not skip
+        and not tracker.stalled
+        and i > 1
+        and not controlled
+        and (i >= tracker.max_iterations or measures["force"] > reference)
+    ):
+        tracker.stalled = True
+        tracker.max_iterations = 3 * i
+        tracker.relaxation = options.relaxation
+        skip = True
     if tracker.stalled and i > 15:
         tracker.stall_tolerance *= 2.0
-    if not skip and measures["strain_increment"] < tracker.stall_tolerance:
-        if i >= tracker.max_iterations or (
-            tracker.stalled
-            and measures["force"] > reference
-            and measures["strain_increment"] >= 0.25
-        ):
-            return "failed"
+    if (
+        not skip
+        and measures["strain_increment"] < tracker.stall_tolerance
+        and (
+            i >= tracker.max_iterations
+            or (
+                tracker.stalled
+                and measures["force"] > reference
+                and measures["strain_increment"] >= 0.25
+            )
+        )
+    ):
+        return "failed"
     return "continue"
 
 
@@ -514,7 +523,7 @@ class Equilibrium:
     iterations: int
     accelerations: int
     step: StepData
-    controller: Optional[object] = None
+    controller: object | None = None
 
 
 def equilibrium_iterations(
@@ -707,12 +716,12 @@ class MechanicalOutcome:
     behaviour: object
     strain: object
     materials: object
-    reactions: Optional[object]
+    reactions: object | None
     iterations: int
     accelerations: int
     substeps: int
-    velocity: Optional[object] = None
-    acceleration: Optional[object] = None
+    velocity: object | None = None
+    acceleration: object | None = None
     # The share of the step's load applied (automatic control) and the pilot
     # load multiplier reached (indirect control).
     fraction: float = 1.0
@@ -726,7 +735,7 @@ class _Start:
     time: float
     solution: object
     behaviour: object
-    strain: Optional[object] = None
+    strain: object | None = None
 
 
 def _newmark(problem, state, step, dt):

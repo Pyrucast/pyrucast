@@ -62,10 +62,10 @@ def main():
     # ── Parameters (steel material, geometry, loading) ──────────────────────
     young, nu, sigma_y = 210_000.0, 0.3, 250.0
     length, height = 10.0, 1.0
-    nx = int(os.environ.get("PYRUCAST_NX", 24))
-    ny = int(os.environ.get("PYRUCAST_NY", 6))
-    nsteps = int(os.environ.get("PYRUCAST_NSTEPS", 10))
-    p_max_load = float(os.environ.get("PYRUCAST_PMAX", 5.0))
+    nx = int(os.environ.get("PYRUCAST_NX", "24"))
+    ny = int(os.environ.get("PYRUCAST_NY", "6"))
+    nsteps = int(os.environ.get("PYRUCAST_NSTEPS", "10"))
+    p_max_load = float(os.environ.get("PYRUCAST_PMAX", "5.0"))
 
     print(
         f"Plastic cantilever beam: {nx}×{ny} QUA4  (L={length}, H={height}), "
