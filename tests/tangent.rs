@@ -91,7 +91,7 @@ fn check_tangent_fd(
                 &format!("f_{}", AXES[ia]),
                 nodes[jn].id(),
                 &format!("u_{}", AXES[ja]),
-            );
+            )?;
             assert!(
                 (fd - analytic).abs() < 1e-4 * (analytic.abs() + 1.0),
                 "K_t[{i},{j}] analytic {analytic} vs FD {fd}"
@@ -230,8 +230,8 @@ fn elastic_regime_tangent_equals_stiffness() -> Result<()> {
         for a in ["f_x", "f_y"] {
             for j in 0..4 {
                 for b in ["u_x", "u_y"] {
-                    let t = kt.get(n[i].id(), a, n[j].id(), b);
-                    let s = k.get(n[i].id(), a, n[j].id(), b);
+                    let t = kt.get(n[i].id(), a, n[j].id(), b)?;
+                    let s = k.get(n[i].id(), a, n[j].id(), b)?;
                     assert!(
                         (t - s).abs() < tol * (s.abs() + 1.0),
                         "{a}{i} {b}{j}: {t} ≠ {s}"
@@ -259,7 +259,7 @@ fn a_linear_physics_tangent_is_its_stiffness() -> Result<()> {
 
     let kt = tangent(&conduction, &materials, &ElementField::empty(), None, None)?;
     for (j, coef) in [4.0, -1.0, -2.0, -1.0].iter().enumerate() {
-        let t = kt.get(n[0].id(), "q", n[j].id(), "T");
+        let t = kt.get(n[0].id(), "q", n[j].id(), "T").unwrap();
         assert!((t - k * coef / 6.0).abs() < 1e-12, "q0 T{j}: {t}");
     }
     assert_eq!(kt.dense()?, stiffness(&conduction, &materials)?.dense()?);

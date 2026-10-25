@@ -282,7 +282,6 @@ dérogations correspondantes sont enregistrées, avec leur raison, dans
 | `stiffness(model: &Model, materials: &ElementField) -> Matrix` | `stiffness(model, materials) -> Matrix` |
 | `mass(model: &Model, materials: &ElementField) -> Matrix` | `mass(model, materials) -> Matrix` |
 | `lump(m: &Matrix) -> Matrix` | `lump(matrix) -> Matrix` |
-| `freeze(m: &Matrix) -> Matrix` | `freeze(matrix) -> Matrix` |
 | `geometric(model: &Model, materials: &ElementField, stress: &ElementField) -> Matrix` | `geometric(model, materials, stress) -> Matrix` |
 | `tangent(model, materials, deformation, prev: Option<&ElementField>, dt: Option<f64>) -> Matrix` | `tangent(model, materials, deformation, prev=None, dt=None) -> Matrix` |
 

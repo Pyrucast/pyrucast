@@ -409,8 +409,8 @@ mod tests {
         let k: Matrix = crate::ops::matrix::stiffness(&model, &materials).unwrap();
         let tol = 1e-12;
         let expected = 1.5 / 2.0;
-        assert!((k.get(a_id, "q", a_id, "T") - expected).abs() < tol);
-        assert!((k.get(b_id, "q", b_id, "T") - expected).abs() < tol);
+        assert!((k.get(a_id, "q", a_id, "T").unwrap() - expected).abs() < tol);
+        assert!((k.get(b_id, "q", b_id, "T").unwrap() - expected).abs() < tol);
     }
 
     // ── material_field_per_sub_model ────────────────────────────────────
@@ -471,7 +471,7 @@ mod tests {
 
         let k = crate::ops::matrix::stiffness(&model, &materials).unwrap();
         let tol = 1e-12;
-        let v = |i: NodeId, j: NodeId| k.get(i, "q", j, "T");
+        let v = |i: NodeId, j: NodeId| k.get(i, "q", j, "T").unwrap();
         // n1 is shared between the two zones, so diagonal = 1.0 + 4.0 = 5.0.
         assert!((v(n0.id(), n0.id()) - 1.0).abs() < tol);
         assert!((v(n1.id(), n1.id()) - 5.0).abs() < tol);

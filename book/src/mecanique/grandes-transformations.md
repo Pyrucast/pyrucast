@@ -211,9 +211,10 @@ flux de la pièce déformée s'en déduit par `q = J⁻¹ F Q₀`.
 
 Les **échanges** (convection, rayonnement, flux imposés) agissent sur la surface
 déformée : ils restent sur la configuration courante. L'opérateur réunit les
-deux : la conduction assemblée sur la référence, les échanges
-[figés](../operateurs/assemblage.md) sur la configuration courante, une matrice
-calculée s'évaluant là où elle est assemblée.
+deux : la conduction assemblée sur la référence, les échanges assemblés sur la
+configuration courante. Une matrice garde les valeurs de la configuration où
+elle a été assemblée, et [la somme](../operateurs/assemblage.md#la-somme) les
+additionne telles quelles.
 
 Cast3M résout toute la thermique sur la géométrie courante, avec la
 conductivité donnée, sans la pousser. Il range les axes d'une conduction

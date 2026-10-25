@@ -264,9 +264,6 @@ def iteration_operator(
         operator = operator + options.augmented_stiffness
     if options.dynamics and dt > 0.0:
         operator = operator + _mass(problem, state, step.materials) * (4.0 / dt**2)
-    if options.augmented_stiffness is not None or (options.dynamics and dt > 0.0):
-        # A sum of operators is a list of blocks until folded into one system.
-        operator.assemble()
     if not (options.tangent and strain is not None):
         state.operator = operator
         state.operator_key = (step.materials, dt if options.dynamics else None)
@@ -287,8 +284,8 @@ def _current_operator(problem, state, step, options, strain, behaviour, at):
         sigma = element_field.stress_measure(reached, gradient, "cauchy")
     mass = None
     if options.dynamics and dt > 0.0:
-        # Kept on the reference configuration for the inertia of the residual,
-        # ρ₀ dV₀: built there first.
+        # On the reference configuration, ρ₀ dV₀, as the inertia of the residual:
+        # built there, it keeps those values in the sum.
         mass = _mass(problem, state, step.materials) * (4.0 / dt**2)
     with problem.configurations.current_at(displacement):
         if options.tangent and strain is not None:
@@ -301,14 +298,10 @@ def _current_operator(problem, state, step, options, strain, behaviour, at):
             operator = operator + matrix.geometric(
                 problem.mechanics_domain, step.materials, sigma
             )
-        if options.augmented_stiffness is not None:
-            operator = operator + options.augmented_stiffness
-        if mass is not None:
-            operator = operator + mass
-        # Folded here: assembling evaluates the blocks on the configuration
-        # active at that moment — the operator's mass therefore on the current
-        # one, an approximation the operator may make.
-        operator.assemble()
+    if options.augmented_stiffness is not None:
+        operator = operator + options.augmented_stiffness
+    if mass is not None:
+        operator = operator + mass
     return operator
 
 

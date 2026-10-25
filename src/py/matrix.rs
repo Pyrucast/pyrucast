@@ -65,15 +65,17 @@ impl PySubMatrix {
     }
 
     /// Value at row `(row_node, row_field)`, column `(col_node, col_field)`.
+    /// Raises on a computed block, which holds no value: read the assembled
+    /// `Matrix` it belongs to.
     fn get(
         &self,
         row_node: PyRef<'_, PyNode>,
         row_field: &str,
         col_node: PyRef<'_, PyNode>,
         col_field: &str,
-    ) -> f64 {
+    ) -> PyResult<f64> {
         let (rn, cn) = (row_node.as_node().id(), col_node.as_node().id());
-        self.handle.read().get(rn, row_field, cn, col_field)
+        Ok(self.handle.read().get(rn, row_field, cn, col_field)?)
     }
 
     /// Number of rows of this block.
@@ -261,16 +263,16 @@ impl PyMatrix {
         Ok(Self { inner: m })
     }
 
-    /// Re-assemble this matrix **from its blocks alone** — no `Model` —
-    /// mutating it in place. The composition path: after combining blocks of
-    /// any provenance (via `+`/`-`, `|` union, `add_sub`, `filter`, …),
-    /// including *computed* ones (which `finalize()` refuses — the element
-    /// kernel lives outside `containers`), call this to fold everything into
-    /// one CSR. Needed, for instance, to solve `(M/dt + K) u = …` :
-    /// `sys = m / dt + k; sys.assemble(); pyrucast.solver.solve(sys, rhs)`.
+    /// Assemble this matrix **from its blocks alone** — no `Model` — on the
+    /// configuration active now, mutating it in place. A matrix is assembled
+    /// once: on one that already is, this does nothing.
     ///
-    /// Not needed after a bare `matrix * scalar`: scaling carries the assembled
-    /// CSR along, scaled.
+    /// The composition path, for blocks put together without their values
+    /// (`|` union, `add_sub`, `filter`, `exclude`), including *computed* ones
+    /// (which `finalize()` refuses — the element kernel lives outside
+    /// `containers`). Not needed after `matrix * scalar` nor after a sum: both
+    /// carry the assembled values along — `pyrucast.solver.solve(m / dt + k,
+    /// rhs)`.
     fn assemble(&mut self) -> PyResult<()> {
         self.inner.assemble()?;
         Ok(())
@@ -376,15 +378,17 @@ impl PyMatrix {
     }
 
     /// Value at row `(row_node, row_field)`, column `(col_node, col_field)`.
+    /// Raises on an unassembled matrix carrying a computed block, whose values
+    /// do not exist yet.
     fn get(
         &self,
         row_node: PyRef<'_, PyNode>,
         row_field: &str,
         col_node: PyRef<'_, PyNode>,
         col_field: &str,
-    ) -> f64 {
+    ) -> PyResult<f64> {
         let (rn, cn) = (row_node.as_node().id(), col_node.as_node().id());
-        self.inner.get(rn, row_field, cn, col_field)
+        Ok(self.inner.get(rn, row_field, cn, col_field)?)
     }
 
     /// Dense row-major buffer of the finalized matrix (`n_rows × n_cols`).
@@ -486,25 +490,25 @@ impl<'py> SumOperand<'py> {
 // overloads submitted below.
 #[pymethods]
 impl PyMatrix {
-    /// `matrix + other` — a fresh `Matrix` holding the blocks of both, shared
-    /// and **not** deduplicated: unlike `|`, a block handed over twice counts
-    /// twice, so `k + k` is `2k` where `k | k` is `k`. Nothing is computed here;
-    /// the assembler sums whatever lands on the same global `(row, col)`. **Not**
-    /// finalized: call `assemble()` before solving.
+    /// `matrix + other` — the values each operand was assembled with, added
+    /// over the union of their DOFs: ready to solve. Nothing is evaluated
+    /// again, so a matrix built on one configuration and one built on another
+    /// add as they are. Unlike `|`, a block handed over twice counts twice:
+    /// `k + k` is `2k` where `k | k` is `k`. Raises if an operand carries a
+    /// computed block that was never assembled.
     fn __add__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyMatrix> {
         let inner = match SumOperand::extract(rhs, "matrix + x")? {
-            SumOperand::Aggregate(m) => &self.inner + &m.inner,
-            SumOperand::Block(b) => &self.inner + &*b.handle.read(),
+            SumOperand::Aggregate(m) => (&self.inner + &m.inner)?,
+            SumOperand::Block(b) => (&self.inner + &*b.handle.read())?,
         };
         Ok(PyMatrix { inner })
     }
 
-    /// `matrix - other` — as `+`, with the right-hand side's blocks negated
-    /// (which copies them, the factor living in the block).
+    /// `matrix - other` — as `+`, with the right-hand side negated.
     fn __sub__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyMatrix> {
         let inner = match SumOperand::extract(rhs, "matrix - x")? {
-            SumOperand::Aggregate(m) => &self.inner - &m.inner,
-            SumOperand::Block(b) => &self.inner - &*b.handle.read(),
+            SumOperand::Aggregate(m) => (&self.inner - &m.inner)?,
+            SumOperand::Block(b) => (&self.inner - &*b.handle.read())?,
         };
         Ok(PyMatrix { inner })
     }
@@ -517,13 +521,13 @@ impl PySubMatrix {
     /// other operand's, as `Matrix.__add__` does.
     fn __add__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyMatrix> {
         let inner = match SumOperand::extract(rhs, "sub_matrix + x")? {
-            SumOperand::Aggregate(m) => &*self.handle.read() + &m.inner,
+            SumOperand::Aggregate(m) => (&*self.handle.read() + &m.inner)?,
             // One guard at a time: `b + b` hands over the same block twice, and
             // a second read on a lock this thread already holds may deadlock
             // against a queued writer.
             SumOperand::Block(b) => {
                 let other = (*b.handle.read()).clone();
-                &*self.handle.read() + &other
+                (&*self.handle.read() + &other)?
             }
         };
         Ok(PyMatrix { inner })
@@ -532,10 +536,10 @@ impl PySubMatrix {
     /// `sub_matrix - other` — as `+`, with the right-hand side negated.
     fn __sub__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<PyMatrix> {
         let inner = match SumOperand::extract(rhs, "sub_matrix - x")? {
-            SumOperand::Aggregate(m) => &*self.handle.read() - &m.inner,
+            SumOperand::Aggregate(m) => (&*self.handle.read() - &m.inner)?,
             SumOperand::Block(b) => {
                 let other = (*b.handle.read()).clone();
-                &*self.handle.read() - &other
+                (&*self.handle.read() - &other)?
             }
         };
         Ok(PyMatrix { inner })
@@ -560,9 +564,8 @@ class PyMatrix:
         DOFs, the result is a fresh `NodeField` over the row DOFs."""
     @overload
     def __mul__(self, rhs: float) -> pyo3_stub_gen.RustType["PyMatrix"]:
-        """`matrix * scalar` → a fresh `Matrix` whose blocks carry the scaled
-        `factor` (lazy — no value is rewritten). **Not** finalized: call
-        `finalize()` (or `assemble` for computed blocks) before solving."""
+        """`matrix * scalar` → a fresh `Matrix`, its assembled values scaled
+        and its blocks carrying the scaled `factor`."""
     "# }
 }
 
@@ -571,13 +574,14 @@ pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
 class PyMatrix:
     def __add__(self, rhs: pyo3_stub_gen.RustType["PyMatrix"] | pyo3_stub_gen.RustType["PySubMatrix"]) -> pyo3_stub_gen.RustType["PyMatrix"]:
-        """`matrix + other` → a fresh `Matrix` holding the blocks of both,
-        shared and **not** deduplicated: `k + k` is `2k` where `k | k` is `k`.
-        Reach for `|` to compose one operator out of distinct parts, for `+` to
-        add two operators. **Not** finalized: call `assemble()` before solving."""
+        """`matrix + other` → the values each operand was assembled with,
+        added over the union of their DOFs: ready to solve. Nothing is
+        evaluated again, so a matrix built on one configuration and one built
+        on another add as they are. A block handed over twice counts twice:
+        `k + k` is `2k` where `k | k` is `k`. Raises if an operand carries a
+        computed block that was never assembled."""
     def __sub__(self, rhs: pyo3_stub_gen.RustType["PyMatrix"] | pyo3_stub_gen.RustType["PySubMatrix"]) -> pyo3_stub_gen.RustType["PyMatrix"]:
-        """`matrix - other` → as `+`, with the right-hand side's blocks
-        negated (which copies them, the factor living in the block)."""
+        """`matrix - other` → as `+`, with the right-hand side negated."""
     "# }
 }
 
@@ -586,8 +590,8 @@ pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
 class PySubMatrix:
     def __add__(self, rhs: pyo3_stub_gen.RustType["PyMatrix"] | pyo3_stub_gen.RustType["PySubMatrix"]) -> pyo3_stub_gen.RustType["PyMatrix"]:
-        """`sub_matrix + other` → a fresh `Matrix` holding this block and the
-        other operand's, as `Matrix.__add__` does."""
+        """`sub_matrix + other` → this block and the other operand added, as
+        `Matrix.__add__` does; a literal block's values are its own."""
     def __sub__(self, rhs: pyo3_stub_gen.RustType["PyMatrix"] | pyo3_stub_gen.RustType["PySubMatrix"]) -> pyo3_stub_gen.RustType["PyMatrix"]:
         """`sub_matrix - other` → as `+`, with the right-hand side negated."""
     def __neg__(self) -> pyo3_stub_gen.RustType["PySubMatrix"]:

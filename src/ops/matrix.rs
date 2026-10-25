@@ -68,7 +68,7 @@ use crate::ops::element_field::behavior::previous_state_names;
 ///
 /// // Un SEG2 de longueur 1, k = 1 : K = [[1, -1], [-1, 1]].
 /// assert_eq!(k.n_rows().unwrap(), 2);
-/// assert_eq!(k.get(a.id(), "q", a.id(), "T"), 1.0);
+/// assert_eq!(k.get(a.id(), "q", a.id(), "T").unwrap(), 1.0);
 /// ```
 pub fn stiffness(model: &Model, materials: &ElementField) -> Result<Matrix> {
     assemble_kind(
@@ -306,29 +306,36 @@ pub fn assemble_kind(
 // crate, so `Matrix` gains the method without the container gaining the
 // dependency.
 impl Matrix {
-    /// Assemble (or re-assemble) this matrix **from its blocks alone** — no
-    /// `Model`.
+    /// Assemble this matrix **from its blocks alone** — no `Model` — on the
+    /// configuration active now.
     ///
-    /// The sparsity is rebuilt from the current blocks
+    /// A matrix is assembled once: one that already is keeps its values, and
+    /// this does nothing (as [`Matrix::finalize`]). The values of another
+    /// configuration come from a new matrix.
+    ///
+    /// The sparsity is built from the blocks
     /// ([`crate::ops::scatter::build_pattern`], self-contained: a computed
     /// block resolves its fill through its recipe, a literal block through its
-    /// COO) and the values are scattered into it. This is the composition path:
-    /// after adding a block of any provenance to an already assembled matrix —
-    /// which [`Matrix::finalize`] cannot handle once computed blocks are
-    /// present, and which [`stiffness`] cannot reach (it only knows a `Model`)
-    /// — call this to fold the new block in.
+    /// COO) and the values are scattered into it. This is the composition path,
+    /// for a matrix whose blocks were put together without their values:
+    /// `add_sub`, `|`, `filter`, `exclude` — which [`Matrix::finalize`] cannot
+    /// handle once computed blocks are present, and which [`stiffness`] cannot
+    /// reach (it only knows a `Model`).
     ///
     /// ```ignore
     /// let mut k = crate::ops::matrix::stiffness(&model, &materials)?;
     /// k.add_sub(Handle::new(some_block))?;   // invalidates the assembled state
-    /// k.assemble()?;                    // re-assembles, new block included
+    /// k.assemble()?;                    // assembles, new block included
     /// ```
     ///
     /// Unlike [`stiffness`], this does not consult the model's cached pattern
-    /// (there is no model here), so it rebuilds the sparsity each call — fine
+    /// (there is no model here), so it builds the sparsity each call — fine
     /// for the occasional composition; hot repeated assembly of a fixed model
     /// should keep going through [`stiffness`].
     pub fn assemble(&mut self) -> Result<()> {
+        if self.is_assembled() {
+            return Ok(());
+        }
         let pattern = crate::ops::scatter::build_pattern(self)?;
         let values = crate::ops::scatter::scatter_parallel(self, &pattern)?;
         let csr = pattern.assembled_csr(values);
@@ -595,7 +602,7 @@ pub fn tangent(
 ///     x.dense().unwrap().iter().sum()
 /// };
 /// assert!((somme(&m) - somme(&diagonale)).abs() < 1e-12);
-/// assert_eq!(diagonale.get(a.id(), "q", b.id(), "T"), 0.0);
+/// assert_eq!(diagonale.get(a.id(), "q", b.id(), "T").unwrap(), 0.0);
 /// ```
 pub fn lump(m: &Matrix) -> Result<Matrix> {
     let (offsets, _, values) = m.csr_arrays()?;
@@ -624,122 +631,6 @@ pub fn lump(m: &Matrix) -> Result<Matrix> {
     let mut out = Matrix::empty();
     out.set_assembled(vars, row_keys, col_keys, diag);
     Ok(out)
-}
-
-/// **Freeze** a matrix: every computed block is evaluated **now** into a
-/// literal one — on the configuration active at this call, with the materials
-/// and state its recipe holds — and every literal block is shared as it is.
-///
-/// A computed block carries a recipe instead of values, and the recipe runs
-/// whenever the matrix is assembled, on the configuration active **then**.
-/// Freezing pins the values to the configuration active now, so that blocks
-/// evaluated on different configurations can be summed into one operator: the
-/// conduction of a body written on its reference configuration, its surface
-/// exchanges on the current one. Each frozen block keeps its structure
-/// (supports, variables, ordering, declared symmetry, natures); its values now
-/// take the memory of a COO, where a recipe took none.
-///
-/// ```
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::ops::{element_field, matrix, model};
-/// # let coords = Handle::new(Coords::new(1).unwrap());
-/// # let a = Node::create_in(coords.clone(), &[0.0]).unwrap();
-/// # let b = Node::create_in(coords.clone(), &[1.0]).unwrap();
-/// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
-/// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
-/// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-/// # let modele = model::heat_conduction(&fes).unwrap();
-/// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
-/// // A bar of length 1: its conductance is k / L = 1.
-/// let calculee = matrix::stiffness(&modele, &materiaux)?;
-/// let figee = matrix::freeze(&calculee)?;
-///
-/// // On a configuration where the bar is twice as long, the computed matrix
-/// // follows the geometry; the frozen one keeps the values it was given.
-/// let etiree = coords.write().add_config("stretched");
-/// coords.write().select(etiree)?;
-/// coords.write().set_position(b.id(), &[2.0])?;
-/// let mut calculee = calculee;
-/// calculee.assemble()?;
-/// let mut figee = figee;
-/// figee.assemble()?;
-/// assert!((calculee.get(a.id(), "q", a.id(), "T") - 0.5).abs() < 1e-12);
-/// assert!((figee.get(a.id(), "q", a.id(), "T") - 1.0).abs() < 1e-12);
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn freeze(m: &Matrix) -> Result<Matrix> {
-    let mut out = Matrix::empty();
-    for h in m.iter() {
-        let block = if h.read().recipe().is_some() {
-            Handle::new(evaluated(h)?)
-        } else {
-            h.clone()
-        };
-        out.add_sub(block)?;
-    }
-    Ok(out)
-}
-
-/// One computed block as a literal block of the same structure: assembled on
-/// its own, then each assembled entry put back at its place in the block's
-/// local numbering. The assembled values carry the block's factor already, so
-/// the literal block's factor is `1`.
-fn evaluated(h: &Handle<SubMatrix>) -> Result<SubMatrix> {
-    use crate::containers::matrix::{dof_node, dof_var, DofKey};
-    use crate::containers::mesh::SubMesh;
-    use nalgebra_sparse::CooMatrix;
-
-    let mut alone = Matrix::empty();
-    alone.add_sub(h.clone())?;
-    alone.assemble()?;
-    let (offsets, columns, values) = alone.csr_arrays()?;
-    let vars = alone.dof_vars();
-    let block = h.read();
-    let ordering = block.ordering();
-    let row_support = block.row_support().read();
-    let col_support = block.col_support().read();
-    // The assembled DOFs are the block's own: each one has its node in the
-    // support and its variable among the block's.
-    let local = |support: &SubMesh, names: &[String], key: DofKey| -> usize {
-        let node = support.node_index()[&dof_node(key)];
-        let name = &vars[dof_var(key) as usize];
-        let var = names
-            .iter()
-            .position(|n| n == name)
-            .expect("an assembled DOF of a block carries one of the block's variables");
-        ordering.to_index(node, var, support.node_index().len(), names.len())
-    };
-    let rows: Vec<usize> = (alone.row_dof_keys()?.iter())
-        .map(|&key| local(&row_support, block.dual_vars(), key))
-        .collect();
-    let cols: Vec<usize> = (alone.col_dof_keys()?.iter())
-        .map(|&key| local(&col_support, block.primal_vars(), key))
-        .collect();
-    let mut coo = CooMatrix::new(
-        row_support.node_index().len() * block.dual_vars().len(),
-        col_support.node_index().len() * block.primal_vars().len(),
-    );
-    for (r, &row) in rows.iter().enumerate() {
-        for p in offsets[r]..offsets[r + 1] {
-            coo.push(row, cols[columns[p]], values[p]);
-        }
-    }
-    let mut literal = SubMatrix::from_coo(
-        block.row_support().clone(),
-        block.col_support().clone(),
-        block.dual_vars().to_vec(),
-        block.primal_vars().to_vec(),
-        ordering,
-        block.symmetry(),
-        coo,
-    )?;
-    literal.set_physics(block.physics().to_vec());
-    Ok(literal)
 }
 
 // ─── Méthodes de délégation ────────────────────────────────────────────────
@@ -786,17 +677,12 @@ impl Matrix {
     pub fn lump(&self) -> Result<Matrix> {
         lump(self)
     }
-
-    /// See [`matrix::freeze`](fn@crate::ops::matrix::freeze).
-    pub fn freeze(&self) -> Result<Matrix> {
-        freeze(self)
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::atoms::{ElementType, Node};
+    use crate::atoms::{ElementType, Node, NodeId};
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::matrix::Symmetry;
     use crate::containers::mesh::{Mesh, SubMesh};
@@ -1270,57 +1156,6 @@ mod tests {
         assert_eq!(values, values_ref);
     }
 
-    /// Freezing evaluates every computed block where it stands: the frozen
-    /// matrix assembles to the same values on the same DOFs, its literal blocks
-    /// are the computed matrix's own, and each block keeps the natures
-    /// `filter` reads.
-    #[test]
-    fn a_frozen_matrix_assembles_to_the_computed_values() {
-        // One variable with a Dirichlet's literal C / Cᵀ; three variables per
-        // node over several FE spaces.
-        for (model, materials) in [two_zone_heat_with_dirichlet(), multi_fespace_shell(3)] {
-            // Scaled first: the factor must reach the frozen values once.
-            let computed = &stiffness(&model, &materials).unwrap() * 2.0;
-            let mut frozen = freeze(&computed).unwrap();
-            assert_eq!(frozen.len(), computed.len());
-            for (f, c) in frozen.iter().zip(computed.iter()) {
-                assert!(f.read().recipe().is_none(), "a frozen block holds values");
-                assert_eq!(f.read().physics(), c.read().physics());
-                if c.read().recipe().is_none() {
-                    assert!(f.same_object(c), "a literal block is shared, not copied");
-                }
-            }
-            frozen.assemble().unwrap();
-            assert_eq!(frozen.row_dofs().unwrap(), computed.row_dofs().unwrap());
-            assert_eq!(frozen.col_dofs().unwrap(), computed.col_dofs().unwrap());
-            for (x, y) in frozen
-                .dense()
-                .unwrap()
-                .iter()
-                .zip(computed.dense().unwrap())
-            {
-                assert!((x - y).abs() <= 1e-12 * (1.0 + y.abs()), "{x} vs {y}");
-            }
-            // Scaling after freezing still scales.
-            let mut tripled = &freeze(&computed).unwrap() * 3.0;
-            tripled.assemble().unwrap();
-            for (x, y) in tripled
-                .dense()
-                .unwrap()
-                .iter()
-                .zip(computed.dense().unwrap())
-            {
-                assert!(
-                    (x - 3.0 * y).abs() <= 1e-12 * (1.0 + y.abs()),
-                    "{x} vs 3×{y}"
-                );
-            }
-        }
-    }
-
-    /// `SubMatrix::factor` scales every entry the **serial** scatter emits, on
-    /// both branches: the computed heat-conduction blocks and the literal
-    /// Dirichlet C/Cᵀ block (`assemble_computed_blocks` mixes both, per its doc).
     #[test]
     fn scatter_serial_applies_factor_to_computed_and_literal_blocks() {
         let (model, materials) = chain_heat_with_dirichlet(6);
@@ -1388,9 +1223,9 @@ mod tests {
             );
         }
 
-        // Re-assembling from the blocks computes `Σ (v · s)` where the scaling
+        // Assembling the scaled blocks computes `Σ (v · s)` where the scaling
         // computed `(Σ v) · s`: the same quantity, to within rounding.
-        let mut reassembled = &k * 2.5;
+        let mut reassembled = assemble_computed_blocks(&model, &materials) * 2.5;
         reassembled.assemble().unwrap();
         for (x, y) in reassembled
             .to_csr()
@@ -1414,6 +1249,162 @@ mod tests {
             unassembled.finalize().is_err(),
             "finalize must still refuse an unassembled computed block"
         );
+    }
+
+    /// A bar of two SEG2 of length 1 and conductivity 1, with a second
+    /// configuration where every length doubles; and its middle node.
+    fn bar_with_a_stretched_configuration() -> (Model, ElementField, Handle<Coords>, usize, NodeId)
+    {
+        let coords = Handle::new(Coords::new(1).unwrap());
+        let nodes: Vec<Node> = [0.0, 1.0, 2.0]
+            .iter()
+            .map(|&x| Node::create_in(coords.clone(), &[x]).unwrap())
+            .collect();
+        let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+        sm.add_cell(&[nodes[0].id(), nodes[1].id()]).unwrap();
+        sm.add_cell(&[nodes[1].id(), nodes[2].id()]).unwrap();
+        let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+        let model = crate::ops::model::heat_conduction(&fes).unwrap();
+        let materials = crate::ops::element_field::material_field(&model, &[("k", 1.0)]).unwrap();
+        let stretched = coords.write().add_config("stretched");
+        coords.write().select(stretched).unwrap();
+        for (n, x) in nodes.iter().zip([0.0, 2.0, 4.0]) {
+            coords.write().set_position(n.id(), &[x]).unwrap();
+        }
+        coords.write().select(0).unwrap();
+        (model, materials, coords, stretched, nodes[1].id())
+    }
+
+    /// A sum adds the values each operand was assembled with, whatever
+    /// configuration is active when it is taken; and a matrix is assembled
+    /// once — neither another active configuration nor a second `assemble`
+    /// reaches its values.
+    #[test]
+    fn a_sum_adds_each_operand_as_it_was_assembled() {
+        let (model, materials, coords, stretched, middle) = bar_with_a_stretched_configuration();
+        let at_middle = |m: &Matrix| m.get(middle, "q", middle, "T").unwrap();
+        let close = |x: f64, y: f64| (x - y).abs() < 1e-12;
+
+        // Two conductances 1/ℓ meet at the middle node: 2 at rest, 1 stretched.
+        let on_reference = stiffness(&model, &materials).unwrap();
+        coords.write().select(stretched).unwrap();
+        let on_stretched = stiffness(&model, &materials).unwrap();
+        coords.write().select(0).unwrap();
+        assert!(close(at_middle(&on_reference), 2.0));
+        assert!(close(at_middle(&on_stretched), 1.0));
+
+        let mut sum = (&on_reference + &on_stretched).unwrap();
+        assert!(close(at_middle(&sum), 3.0), "{}", at_middle(&sum));
+        assert!(close(
+            at_middle(&(&on_reference - &on_stretched).unwrap()),
+            1.0
+        ));
+        coords.write().select(stretched).unwrap();
+        sum.assemble().unwrap();
+        assert!(
+            close(at_middle(&sum), 3.0),
+            "assembled once: {}",
+            at_middle(&sum)
+        );
+        coords.write().select(0).unwrap();
+    }
+
+    /// Operands on different degrees of freedom — a stiffness carrying a
+    /// Dirichlet's multiplier, a capacity without it — add over the union,
+    /// numbered and valued as the same blocks assembled together, with or
+    /// without a solver permutation; the sum stays symmetric entry for entry,
+    /// as the solver reads it.
+    #[test]
+    fn a_sum_over_different_dofs_equals_its_blocks_assembled_together() {
+        for permuted in [false, true] {
+            let (model, materials) = chain_heat_with_dirichlet(4);
+            if permuted {
+                let coords = model.multiplier_mesh().unwrap().coords().unwrap();
+                let capacity = coords.read().capacity();
+                let reversed: Vec<u32> = (0..capacity as u32).rev().collect();
+                coords.write().set_permutation(reversed).unwrap();
+            }
+            sum_over_different_dofs(&model, &materials);
+        }
+    }
+
+    fn sum_over_different_dofs(model: &Model, materials: &ElementField) {
+        let conduction = model.exclude(crate::models::Physics::Constraint);
+        let heat =
+            material_field_per_sub_model(&conduction, &[&[("k", 2.0), ("rho", 3.0), ("cp", 0.5)]])
+                .unwrap();
+        let k = stiffness(model, materials).unwrap();
+        let c = &mass(&conduction, &heat).unwrap() * 10.0;
+        assert_ne!(
+            c.row_dof_keys().unwrap().len(),
+            k.row_dof_keys().unwrap().len()
+        );
+
+        let sum = (&c + &k).unwrap();
+        let mut together = c.union(&k).unwrap();
+        together.assemble().unwrap();
+        let (rows, cols) = (together.row_dofs().unwrap(), together.col_dofs().unwrap());
+        assert_eq!(sum.row_dofs().unwrap(), rows);
+        assert_eq!(sum.col_dofs().unwrap(), cols);
+        for (rn, rv) in &rows {
+            for (cn, cv) in &cols {
+                let x = sum.get(*rn, rv, *cn, cv).unwrap();
+                let y = together.get(*rn, rv, *cn, cv).unwrap();
+                assert!(
+                    (x - y).abs() <= 1e-12 * (1.0 + y.abs()),
+                    "{rv}/{cv}: {x} vs {y}"
+                );
+            }
+        }
+        assert!(sum.symmetric());
+        let n = rows.len();
+        let dense = sum.dense().unwrap();
+        for i in 0..n {
+            for j in 0..n {
+                assert_eq!(dense[i * n + j], dense[j * n + i], "({i}, {j})");
+            }
+        }
+    }
+
+    /// A lumped mass holds values and no block: a sum keeps it.
+    #[test]
+    fn a_lumped_mass_survives_a_sum() {
+        let (model, materials) = chain_heat_with_dirichlet(3);
+        let conduction = model.exclude(crate::models::Physics::Constraint);
+        let heat =
+            material_field_per_sub_model(&conduction, &[&[("k", 2.0), ("rho", 1.0), ("cp", 1.0)]])
+                .unwrap();
+        let k = stiffness(&model, &materials).unwrap();
+        let lumped = lump(&mass(&conduction, &heat).unwrap()).unwrap();
+        let sum = (&k + &lumped).unwrap();
+        for (rn, rv) in sum.row_dofs().unwrap() {
+            for (cn, cv) in sum.col_dofs().unwrap() {
+                let expected =
+                    k.get(rn, &rv, cn, &cv).unwrap() + lumped.get(rn, &rv, cn, &cv).unwrap();
+                let x = sum.get(rn, &rv, cn, &cv).unwrap();
+                assert!((x - expected).abs() < 1e-12, "{rv}/{cv}: {x} vs {expected}");
+            }
+        }
+    }
+
+    /// Blocks put together without their values — `filter` here — have none to
+    /// add or read until assembled: an error, not a zero.
+    #[test]
+    fn values_never_assembled_are_an_error_to_add_or_read() {
+        let (model, materials) = chain_heat_with_dirichlet(2);
+        let k = stiffness(&model, &materials).unwrap();
+        let mut thermal = k.filter(crate::models::Physics::Thermal);
+        let a = k.row_dofs().unwrap()[0].0;
+        assert!((&thermal + &k).is_err());
+        assert!((&k - &thermal).is_err());
+        assert!(thermal.get(a, "q", a, "T").is_err());
+        let block = k.iter().find(|h| h.read().is_computed()).unwrap();
+        assert!(block.read().get(a, "q", a, "T").is_err());
+
+        thermal.assemble().unwrap();
+        let sum = (&thermal + &k).unwrap();
+        let expected = 2.0 * k.get(a, "q", a, "T").unwrap();
+        assert!((sum.get(a, "q", a, "T").unwrap() - expected).abs() < 1e-12);
     }
 
     /// The colouring is fixed and each colour's writes are disjoint, so the
@@ -1518,7 +1509,7 @@ mod tests {
         let materials = material_field_per_sub_model(&model, &[&[("k", 1.0)]]).unwrap();
 
         let mut k = stiffness(&model, &materials).unwrap();
-        let before = k.get(a.id(), "q", a.id(), "T");
+        let before = k.get(a.id(), "q", a.id(), "T").unwrap();
 
         // A hand-built literal block (no model behind it) adding +10 at (a,q)×(a,T).
         let support = Handle::new(SubMesh::poi1_from_nodes(std::slice::from_ref(&a)).unwrap());
@@ -1537,7 +1528,7 @@ mod tests {
         assert!(k.finalize().is_err());
         k.assemble().unwrap();
 
-        let after = k.get(a.id(), "q", a.id(), "T");
+        let after = k.get(a.id(), "q", a.id(), "T").unwrap();
         assert!(
             (after - (before + 10.0)).abs() <= 1e-12 * (1.0 + before.abs()),
             "composition failed: before {before}, after {after}"

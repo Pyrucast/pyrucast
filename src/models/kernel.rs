@@ -1590,7 +1590,7 @@ pub(crate) const MAX_CELL_DOFS: usize = 96;
 ///     },
 /// )?;
 /// assert_eq!((bloc.n_rows(), bloc.n_cols()), (3, 3));
-/// assert_eq!(bloc.get(n[0].id(), "q", n[0].id(), "T"), 1.0);
+/// assert_eq!(bloc.get(n[0].id(), "q", n[0].id(), "T").unwrap(), 1.0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[allow(clippy::too_many_arguments)]

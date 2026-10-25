@@ -659,7 +659,7 @@ mod tests {
         let (beam, a, _) = one_beam(&[0.0], &[l]);
         let mat = material(&beam, &[("E", e), ("I", i), ("G", g), ("A_s", a_s)]);
         let k = &beam.build_stiffness_blocks(&mat).unwrap()[0];
-        assert!((k.get(a, "f_w", a, "w") - series).abs() < 1e-9);
+        assert!((k.get(a, "f_w", a, "w").unwrap() - series).abs() < 1e-9);
 
         // 2-D: the same block, rotated, and decoupled from the axial term.
         let (frame, a2, _) = one_beam(&[0.0, 0.0], &[l, 0.0]);
@@ -668,9 +668,9 @@ mod tests {
             &[("E", e), ("A", 4.0), ("I", i), ("G", g), ("A_s", a_s)],
         );
         let k = &frame.build_stiffness_blocks(&mat).unwrap()[0];
-        assert!((k.get(a2, "f_y", a2, "u_y") - series).abs() < 1e-9);
-        assert!((k.get(a2, "f_x", a2, "u_x") - e * 4.0 / l).abs() < 1e-9);
-        assert!(k.get(a2, "f_x", a2, "u_y").abs() < 1e-9);
+        assert!((k.get(a2, "f_y", a2, "u_y").unwrap() - series).abs() < 1e-9);
+        assert!((k.get(a2, "f_x", a2, "u_x").unwrap() - e * 4.0 / l).abs() < 1e-9);
+        assert!(k.get(a2, "f_x", a2, "u_y").unwrap().abs() < 1e-9);
     }
 
     /// A vertical member puts the axial term on `u_y` — the local axes are read
@@ -685,8 +685,8 @@ mod tests {
             &[("E", e), ("A", area), ("I", 2.0), ("G", 5.0), ("A_s", 2.0)],
         );
         let k = &frame.build_stiffness_blocks(&mat).unwrap()[0];
-        assert!((k.get(a, "f_y", a, "u_y") - e * area / l).abs() < 1e-9);
-        assert!(k.get(a, "f_y", a, "u_x").abs() < 1e-9);
+        assert!((k.get(a, "f_y", a, "u_y").unwrap() - e * area / l).abs() < 1e-9);
+        assert!(k.get(a, "f_y", a, "u_x").unwrap().abs() < 1e-9);
     }
 
     /// A pure-bending beam has no axial force, so it declares no geometric

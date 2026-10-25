@@ -44,17 +44,6 @@ pub fn lump(matrix: PyRef<PyMatrix>) -> PyResult<PyMatrix> {
     Ok(PyMatrix { inner: m })
 }
 
-/// Freeze a matrix: every computed block evaluated now, on the configuration
-/// active at this call, into a literal block of the same structure; a frozen
-/// matrix no longer follows the configuration active when it is assembled.
-#[py_op(method_on = PyMatrix)]
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-#[pyfunction]
-pub fn freeze(matrix: PyRef<PyMatrix>) -> PyResult<PyMatrix> {
-    let m = crate::ops::matrix::freeze(&matrix.inner)?;
-    Ok(PyMatrix { inner: m })
-}
-
 /// Assemble the geometric (initial-stress) stiffness `K_g` of `model` (Cast3M
 /// `KSIG`), from the current stress field `stress` (Voigt-named `sigma_*`).
 /// `materials` resolves each mechanical zone, exactly like [`stiffness`].

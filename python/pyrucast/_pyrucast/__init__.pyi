@@ -67,7 +67,6 @@ __all__ = [
     "extrude",
     "fick",
     "flux",
-    "freeze",
     "from_arrays",
     "from_live_nodes",
     "gauss_to_external",
@@ -1039,16 +1038,16 @@ class Matrix:
         """
     def assemble(self) -> None:
         r"""
-        Re-assemble this matrix **from its blocks alone** — no `Model` —
-        mutating it in place. The composition path: after combining blocks of
-        any provenance (via `+`/`-`, `|` union, `add_sub`, `filter`, …),
-        including *computed* ones (which `finalize()` refuses — the element
-        kernel lives outside `containers`), call this to fold everything into
-        one CSR. Needed, for instance, to solve `(M/dt + K) u = …` :
-        `sys = m / dt + k; sys.assemble(); pyrucast.solver.solve(sys, rhs)`.
+        Assemble this matrix **from its blocks alone** — no `Model` — on the
+        configuration active now, mutating it in place. A matrix is assembled
+        once: on one that already is, this does nothing.
         
-        Not needed after a bare `matrix * scalar`: scaling carries the assembled
-        CSR along, scaled.
+        The composition path, for blocks put together without their values
+        (`|` union, `add_sub`, `filter`, `exclude`), including *computed* ones
+        (which `finalize()` refuses — the element kernel lives outside
+        `containers`). Not needed after `matrix * scalar` nor after a sum: both
+        carry the assembled values along — `pyrucast.solver.solve(m / dt + k,
+        rhs)`.
         """
     def finalize(self) -> None:
         r"""
@@ -1113,6 +1112,8 @@ class Matrix:
     def get(self, row_node: Node, row_field: builtins.str, col_node: Node, col_field: builtins.str) -> builtins.float:
         r"""
         Value at row `(row_node, row_field)`, column `(col_node, col_field)`.
+        Raises on an unassembled matrix carrying a computed block, whose values
+        do not exist yet.
         """
     def dense(self) -> builtins.list[builtins.float]:
         r"""
@@ -1152,21 +1153,21 @@ class Matrix:
     @typing.overload
     def __mul__(self, rhs: float) -> Matrix:
         r"""
-        `matrix * scalar` → a fresh `Matrix` whose blocks carry the scaled
-        `factor` (lazy — no value is rewritten). **Not** finalized: call
-        `finalize()` (or `assemble` for computed blocks) before solving.
+        `matrix * scalar` → a fresh `Matrix`, its assembled values scaled
+        and its blocks carrying the scaled `factor`.
         """
     def __add__(self, rhs: Matrix  |  SubMatrix) -> Matrix:
         r"""
-        `matrix + other` → a fresh `Matrix` holding the blocks of both,
-        shared and **not** deduplicated: `k + k` is `2k` where `k | k` is `k`.
-        Reach for `|` to compose one operator out of distinct parts, for `+` to
-        add two operators. **Not** finalized: call `assemble()` before solving.
+        `matrix + other` → the values each operand was assembled with,
+        added over the union of their DOFs: ready to solve. Nothing is
+        evaluated again, so a matrix built on one configuration and one built
+        on another add as they are. A block handed over twice counts twice:
+        `k + k` is `2k` where `k | k` is `k`. Raises if an operand carries a
+        computed block that was never assembled.
         """
     def __sub__(self, rhs: Matrix  |  SubMatrix) -> Matrix:
         r"""
-        `matrix - other` → as `+`, with the right-hand side's blocks
-        negated (which copies them, the factor living in the block).
+        `matrix - other` → as `+`, with the right-hand side negated.
         """
     @typing.overload
     def __getitem__(self, key: int) -> SubMatrix:
@@ -1227,12 +1228,6 @@ class Matrix:
         Lump an assembled matrix into a diagonal one by row-sum concentration
         (Cast3M `LUMP`). Applied to a consistent mass / capacity matrix it yields the
         diagonal (lumped) mass, conserving the total mass.
-        """
-    def freeze(self) -> Matrix:
-        r"""
-        Freeze a matrix: every computed block evaluated now, on the configuration
-        active at this call, into a literal block of the same structure; a frozen
-        matrix no longer follows the configuration active when it is assembled.
         """
     def solve(self, rhs: NodeField, method: builtins.str = 'lu', cache: builtins.bool = True, verbosity: builtins.str = 'silent') -> NodeField:
         r"""
@@ -3305,6 +3300,8 @@ class SubMatrix:
     def get(self, row_node: Node, row_field: builtins.str, col_node: Node, col_field: builtins.str) -> builtins.float:
         r"""
         Value at row `(row_node, row_field)`, column `(col_node, col_field)`.
+        Raises on a computed block, which holds no value: read the assembled
+        `Matrix` it belongs to.
         """
     def n_rows(self) -> builtins.int:
         r"""
@@ -3376,8 +3373,8 @@ class SubMatrix:
     def __len__(self) -> builtins.int: ...
     def __add__(self, rhs: Matrix  |  SubMatrix) -> Matrix:
         r"""
-        `sub_matrix + other` → a fresh `Matrix` holding this block and the
-        other operand's, as `Matrix.__add__` does.
+        `sub_matrix + other` → this block and the other operand added, as
+        `Matrix.__add__` does; a literal block's values are its own.
         """
     def __sub__(self, rhs: Matrix  |  SubMatrix) -> Matrix:
         r"""
@@ -4544,13 +4541,6 @@ def flux(fespace: FiniteElementSpace, target: Model, dual: builtins.str) -> Mode
     matrix, only the right-hand side, read by
     `node_field.external_forces(model, materials)`. That is what sets it apart
     from a physics: it brings no unknown and writes into the dual row of another.
-    """
-
-def freeze(matrix: Matrix) -> Matrix:
-    r"""
-    Freeze a matrix: every computed block evaluated now, on the configuration
-    active at this call, into a literal block of the same structure; a frozen
-    matrix no longer follows the configuration active when it is assembled.
     """
 
 def from_arrays(coords: Coords, node_tags: typing.Any, node_coords: typing.Any, blocks: typing.Any, *, node_fields: typing.Sequence[typing.Any] = [], cell_fields: typing.Sequence[typing.Any] = [], order: builtins.str = 'pyrucast') -> tuple[dict, builtins.list[NodeField], builtins.list[ElementField]]:

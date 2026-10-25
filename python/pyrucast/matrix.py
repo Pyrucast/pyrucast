@@ -1,15 +1,15 @@
 """Operators producing a matrix — mirror of ``ops::matrix`` (Rust).
 
-The assemblers proper: stiffness, mass/capacity, geometric
-géométrique, tangente cohérente, concentration diagonale.
+The assemblers proper: stiffness, mass/capacity, geometric stiffness,
+consistent tangent, diagonal lumping. Each returns a matrix assembled on the
+configuration active at the call; a sum of matrices adds those values.
 
-(Re)assembling a matrix from its blocks alone is not here: it mutates a single
+Assembling a matrix from its blocks alone is not here: it mutates a single
 container while preserving its invariant, hence a method
-— ``matrix.assemble()``, voisine de ``matrix.finalize()``.
+— ``matrix.assemble()``, next to ``matrix.finalize()``.
 """
 
 from ._pyrucast import (
-    freeze,
     geometric,
     lump,
     mass,
@@ -18,7 +18,6 @@ from ._pyrucast import (
 )
 
 __all__ = [
-    "freeze",
     "geometric",
     "lump",
     "mass",

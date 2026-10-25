@@ -209,12 +209,12 @@ pour chaque itéré u :
   r ← F_ext − internal_forces(P) − Cᵀλ           sur la référence
       + pression suiveuse évaluée en x = X + u   sur « current »
 opérateur : stiffness + geometric(σ)              sur « current », en x = X + u
+  + 4/Δt² M en dynamique                         sur la référence (ρ₀ dV₀)
   construit en début de sous-pas, puis à la 2ᵉ itération,
   puis toutes les max(delta_iterations, 20) itérations ; au-delà de 20, échec
 thermique : conduction et capacité sur la référence (K₀, ρ₀ c dV₀) ;
             échanges, rayonnement et flux sur « current », en x = X + uₙ
-            (début de pas), leurs matrices figées là avant de rejoindre
-            l'opérateur
+            (début de pas) ; l'opérateur additionne les matrices des deux
 résultats : "behaviour" garde S (ou T), "cauchy" donne σ
 ```
 

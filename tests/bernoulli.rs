@@ -384,10 +384,10 @@ fn a_bernoulli_beam_has_a_consistent_mass() -> Result<()> {
         &[("E", E), ("I", I), ("A", AREA), ("rho", RHO)],
     )?;
     let m = pyrucast::ops::matrix::mass(&model, &mat)?;
-    let total = m.get(a.id(), "f_w", a.id(), "w")
-        + m.get(a.id(), "f_w", b.id(), "w")
-        + m.get(b.id(), "f_w", a.id(), "w")
-        + m.get(b.id(), "f_w", b.id(), "w");
+    let total = m.get(a.id(), "f_w", a.id(), "w").unwrap()
+        + m.get(a.id(), "f_w", b.id(), "w").unwrap()
+        + m.get(b.id(), "f_w", a.id(), "w").unwrap()
+        + m.get(b.id(), "f_w", b.id(), "w").unwrap();
     assert!(
         (total - RHO * AREA * L).abs() < 1e-10 * RHO * AREA * L,
         "1-D: a rigid translation carries {total}, expected {}",
@@ -395,7 +395,7 @@ fn a_bernoulli_beam_has_a_consistent_mass() -> Result<()> {
     );
     // The deflection couples to the rotation — the Hermite interpolation says
     // so, and a lumped or linear mass would not.
-    assert!(m.get(a.id(), "f_w", a.id(), "theta").abs() > 1e-6);
+    assert!(m.get(a.id(), "f_w", a.id(), "theta").unwrap().abs() > 1e-6);
 
     // 2-D: the same, once the element is rotated into the plane.
     let coords = Handle::new(Coords::new(2)?);
@@ -411,10 +411,10 @@ fn a_bernoulli_beam_has_a_consistent_mass() -> Result<()> {
     )?;
     let m2 = pyrucast::ops::matrix::mass(&model2, &mat2)?;
     for (dual, primal) in [("f_x", "u_x"), ("f_y", "u_y")] {
-        let t = m2.get(a2.id(), dual, a2.id(), primal)
-            + m2.get(a2.id(), dual, b2.id(), primal)
-            + m2.get(b2.id(), dual, a2.id(), primal)
-            + m2.get(b2.id(), dual, b2.id(), primal);
+        let t = m2.get(a2.id(), dual, a2.id(), primal)?
+            + m2.get(a2.id(), dual, b2.id(), primal)?
+            + m2.get(b2.id(), dual, a2.id(), primal)?
+            + m2.get(b2.id(), dual, b2.id(), primal)?;
         assert!(
             (t - RHO * AREA * L).abs() < 1e-10 * RHO * AREA * L,
             "2-D {dual}: {t}"
@@ -467,6 +467,6 @@ fn only_an_axial_configuration_can_buckle() -> Result<()> {
     let mut state2 = pyrucast::containers::element_field::ElementField::empty();
     state2.add_sub(Handle::new(sub2))?;
     let kg2 = pyrucast::ops::matrix::geometric(&model2, &mat2, &state2)?;
-    assert!(kg2.get(a2.id(), "f_y", a2.id(), "u_y").abs() > 1e-9);
+    assert!(kg2.get(a2.id(), "f_y", a2.id(), "u_y").unwrap().abs() > 1e-9);
     Ok(())
 }

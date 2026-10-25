@@ -2865,10 +2865,10 @@ mod tests {
         assert_eq!(k.n_cols().unwrap(), 2);
         let expected = k_val / length;
         let tol = 1e-12;
-        assert!((k.get(a_id, "q", a_id, "T") - expected).abs() < tol);
-        assert!((k.get(a_id, "q", b_id, "T") + expected).abs() < tol);
-        assert!((k.get(b_id, "q", a_id, "T") + expected).abs() < tol);
-        assert!((k.get(b_id, "q", b_id, "T") - expected).abs() < tol);
+        assert!((k.get(a_id, "q", a_id, "T").unwrap() - expected).abs() < tol);
+        assert!((k.get(a_id, "q", b_id, "T").unwrap() + expected).abs() < tol);
+        assert!((k.get(b_id, "q", a_id, "T").unwrap() + expected).abs() < tol);
+        assert!((k.get(b_id, "q", b_id, "T").unwrap() - expected).abs() < tol);
     }
 
     /// Two SEG2 elements sharing the middle node form the classic
@@ -2897,7 +2897,7 @@ mod tests {
         assert_eq!(k.n_rows().unwrap(), 3);
         assert_eq!(k.n_cols().unwrap(), 3);
 
-        let v = |i: NodeId, j: NodeId| k.get(i, "q", j, "T");
+        let v = |i: NodeId, j: NodeId| k.get(i, "q", j, "T").unwrap();
         let tol = 1e-12;
         // h = 1 ⇒ K_global = [[1, -1, 0], [-1, 2, -1], [0, -1, 1]].
         assert!((v(n0.id(), n0.id()) - 1.0).abs() < tol);
@@ -2937,9 +2937,9 @@ mod tests {
             .0;
 
         // C entry: (mult, "imposed_T") × (a_id, "T") = 1
-        assert_eq!(k.get(mult, "imposed_T", a_id, "T"), 1.0);
+        assert_eq!(k.get(mult, "imposed_T", a_id, "T").unwrap(), 1.0);
         // Cᵀ entry: (a_id, "q") × (mult, "lambda_T") = 1
-        assert_eq!(k.get(a_id, "q", mult, "lambda_T"), 1.0);
+        assert_eq!(k.get(a_id, "q", mult, "lambda_T").unwrap(), 1.0);
         // Ensure lambda_T appears as a column.
         let col_dofs = k.col_dofs().unwrap();
         let lambda_col_present = col_dofs
@@ -3145,7 +3145,7 @@ mod tests {
         // For a SEG2 of length h = 1 and conductivity k:
         // K_local = (k / h) [[1, -1], [-1, 1]] = k [[1, -1], [-1, 1]].
         let tol = 1e-12;
-        let v = |i: NodeId, j: NodeId| k.get(i, "q", j, "T");
+        let v = |i: NodeId, j: NodeId| k.get(i, "q", j, "T").unwrap();
         // Diagonal at n0 = k_a only.
         assert!((v(n0.id(), n0.id()) - k_a).abs() < tol);
         // Diagonal at n1 = k_a + k_b (shared node).

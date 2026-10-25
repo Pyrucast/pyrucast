@@ -12,8 +12,9 @@ configuration — the conductivity given is the Lagrangian one, K₀, and its
 push-forward ``J⁻¹ F K₀ Fᵀ`` on the deformed part gives the same equation,
 with the capacity ``ρ₀ c dV₀`` — while the exchanges, radiation and fluxes act
 on the current shape, laid at ``X + uₙ``. The reference stays active; each
-evaluation of the rest switches to the current configuration, and its
-matrices are frozen there before they join the operator.
+evaluation of the rest switches to the current configuration. A matrix holds
+the values of the configuration it was assembled on, so the two parts add
+into one operator as they are.
 """
 
 from contextlib import nullcontext
@@ -118,8 +119,7 @@ def _internal_forces(problem, behaviour, temperature, materials):
 
 def _tangent(problem, materials, temperature):
     """The heat domain's tangent at ``temperature`` — in large displacements
-    the conduction on the reference, and the rest frozen on the current shape
-    (a computed matrix is evaluated where it is assembled)."""
+    the conduction on the reference, and the rest on the current shape."""
     strain = element_field.strain(problem.heat_domain, temperature, materials)
     if problem.configurations is None:
         return matrix.tangent(problem.heat_domain, materials, strain)
@@ -128,7 +128,7 @@ def _tangent(problem, materials, temperature):
     if problem.heat_on_current is not None:
         with problem.configurations.on_current():
             on_current = matrix.tangent(problem.heat_on_current, materials, strain)
-            tangent = tangent + on_current.freeze()
+        tangent = tangent + on_current
     return tangent
 
 
@@ -173,8 +173,6 @@ def _operator(problem, materials, temperature, weight, capacity_over_dt):
         operator = operator + capacity_over_dt
     if problem.heat_constraints is not None:
         operator = operator + matrix.stiffness(problem.heat_constraints, materials)
-    # A sum of operators is a list of blocks until folded into one system.
-    operator.assemble()
     return operator
 
 

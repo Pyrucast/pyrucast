@@ -644,13 +644,13 @@ mod tests {
         let k_ax = e * area / len;
         let tol = 1e-9;
         // Diagonal block at A.
-        assert!((k.get(a, "f_x", a, "u_x") - k_ax * c[0] * c[0]).abs() < tol);
-        assert!((k.get(a, "f_x", a, "u_y") - k_ax * c[0] * c[1]).abs() < tol);
-        assert!((k.get(a, "f_y", a, "u_y") - k_ax * c[1] * c[1]).abs() < tol);
+        assert!((k.get(a, "f_x", a, "u_x").unwrap() - k_ax * c[0] * c[0]).abs() < tol);
+        assert!((k.get(a, "f_x", a, "u_y").unwrap() - k_ax * c[0] * c[1]).abs() < tol);
+        assert!((k.get(a, "f_y", a, "u_y").unwrap() - k_ax * c[1] * c[1]).abs() < tol);
         // Coupling A–B is the negative.
-        assert!((k.get(a, "f_x", b, "u_x") + k_ax * c[0] * c[0]).abs() < tol);
-        assert!((k.get(b, "f_y", a, "u_x") + k_ax * c[1] * c[0]).abs() < tol);
-        assert!((k.get(b, "f_y", b, "u_y") - k_ax * c[1] * c[1]).abs() < tol);
+        assert!((k.get(a, "f_x", b, "u_x").unwrap() + k_ax * c[0] * c[0]).abs() < tol);
+        assert!((k.get(b, "f_y", a, "u_x").unwrap() + k_ax * c[1] * c[0]).abs() < tol);
+        assert!((k.get(b, "f_y", b, "u_y").unwrap() - k_ax * c[1] * c[1]).abs() < tol);
     }
 
     /// COMP: a pure axial strain `ε = ε₀·(c⊗c)` gives axial force `N = EA·ε₀`.

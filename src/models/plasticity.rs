@@ -1005,8 +1005,8 @@ mod tests {
             for &nj in &nodes {
                 for a in ["x", "y"] {
                     for b in ["x", "y"] {
-                        let lhs = k.get(ni, &format!("f_{a}"), nj, &format!("u_{b}"));
-                        let rhs = k.get(nj, &format!("f_{b}"), ni, &format!("u_{a}"));
+                        let lhs = k.get(ni, &format!("f_{a}"), nj, &format!("u_{b}")).unwrap();
+                        let rhs = k.get(nj, &format!("f_{b}"), ni, &format!("u_{a}")).unwrap();
                         assert!((lhs - rhs).abs() < 1e-9);
                     }
                 }

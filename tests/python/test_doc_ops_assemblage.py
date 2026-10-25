@@ -86,34 +86,6 @@ M_lumped = pyrucast.matrix.lump(M)  # diagonale
 # ANCHOR_END: lump
 assert M_lumped.n_rows() == M.n_rows()
 
-# ── freeze ─────────────────────────────────────────────────
-
-model, fes, _, noeuds = _modele_thermique()
-materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
-coords = fes.mesh().coords()
-# u_x = x: every length doubles.
-allonge = pyrucast.NodeField(fes.mesh(), ["u_x"])
-for n, x in zip(noeuds, (0.0, 0.5, 1.0), strict=True):
-    allonge[0].set_value(n, "u_x", x)
-# ANCHOR: freeze
-K = pyrucast.matrix.stiffness(model, materials)
-K_figee = pyrucast.matrix.freeze(K)  # évaluée ici, sur la configuration active
-
-# Sur une configuration où la barre est deux fois plus longue, K suit la
-# géométrie quand on la réassemble ; K_figee garde ses valeurs.
-etiree = coords.add_config("etiree")
-pyrucast.coords.displace_from(allonge, coords.active, etiree, ["u_x"])
-coords.select(etiree)
-K.assemble()
-K_figee.assemble()
-# ANCHOR_END: freeze
-milieu = noeuds[1]
-# Two SEG2 of conductance k / ℓ meet at the middle node: 2·(1/0.5) = 4 at
-# rest, 2·(1/1) = 2 once stretched.
-assert abs(K.get(milieu, "q", milieu, "T") - 2.0) < 1e-12
-assert abs(K_figee.get(milieu, "q", milieu, "T") - 4.0) < 1e-12
-coords.select(0)
-
 # ── Composition de matrices ─────────────────────────────────────────────────
 
 
@@ -141,11 +113,38 @@ dt = 0.1
 rhs = pyrucast.NodeField(multiplier, ["imposed_T"])
 rhs[0].set_value(multiplier.node(0, 0, 0), "imposed_T", 1.0)
 # ANCHOR: somme
-sys = m / dt + k
-sys.assemble()
+sys = m / dt + k  # assemblée : se résout telle quelle
 u = pyrucast.solver.solve(sys, rhs)
 # ANCHOR_END: somme
 assert u.node_count() > 0
+
+# ── somme sur deux configurations ──────────────────────────
+
+model, fes, _, noeuds = _modele_thermique()
+materials = pyrucast.element_field.material_field(model, [("k", 1.0)])
+coords = fes.mesh().coords()
+# u_x = x: every length doubles.
+allonge = pyrucast.NodeField(fes.mesh(), ["u_x"])
+for n, x in zip(noeuds, (0.0, 0.5, 1.0), strict=True):
+    allonge[0].set_value(n, "u_x", x)
+etiree = coords.add_config("etiree")
+pyrucast.coords.displace_from(allonge, coords.active, etiree, ["u_x"])
+# ANCHOR: somme_configurations
+K_repos = pyrucast.matrix.stiffness(model, materials)  # sur la configuration active
+coords.select(etiree)
+K_etiree = pyrucast.matrix.stiffness(model, materials)  # sur la barre étirée
+coords.select(0)
+
+# Chaque matrice garde les valeurs de sa configuration ; la somme les additionne.
+somme = K_repos + K_etiree
+# ANCHOR_END: somme_configurations
+milieu = noeuds[1]
+# Two SEG2 of conductance k / ℓ meet at the middle node: 2·(1/0.5) = 4 at
+# rest, 2·(1/1) = 2 once stretched.
+assert abs(somme.get(milieu, "q", milieu, "T") - 6.0) < 1e-12
+coords.select(etiree)
+assert abs(somme.get(milieu, "q", milieu, "T") - 6.0) < 1e-12
+coords.select(0)
 
 # ── Rigidité géométrique ────────────────────────────────────────────────────
 

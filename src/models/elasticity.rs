@@ -489,8 +489,8 @@ mod tests {
             for &nj in &nodes {
                 for a in ["x", "y"] {
                     for b in ["x", "y"] {
-                        let lhs = k.get(ni, &format!("f_{a}"), nj, &format!("u_{b}"));
-                        let rhs = k.get(nj, &format!("f_{b}"), ni, &format!("u_{a}"));
+                        let lhs = k.get(ni, &format!("f_{a}"), nj, &format!("u_{b}")).unwrap();
+                        let rhs = k.get(nj, &format!("f_{b}"), ni, &format!("u_{a}")).unwrap();
                         assert!((lhs - rhs).abs() < tol);
                     }
                 }
@@ -498,7 +498,10 @@ mod tests {
         }
         // A uniform translation in x ⇒ zero force everywhere (row sum = 0).
         for &ni in &nodes {
-            let row: f64 = nodes.iter().map(|&nj| k.get(ni, "f_x", nj, "u_x")).sum();
+            let row: f64 = nodes
+                .iter()
+                .map(|&nj| k.get(ni, "f_x", nj, "u_x").unwrap())
+                .sum();
             assert!(row.abs() < tol, "row sum {row} ≠ 0");
         }
     }

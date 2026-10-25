@@ -73,7 +73,7 @@
 //! assert_eq!(k.n_rows(), 2);
 //! assert_eq!(k.n_cols(), 2);
 //! assert!(k.is_symmetric());
-//! assert_eq!(k.get(a.id(), "q", a.id(), "T"), 2.0);
+//! assert_eq!(k.get(a.id(), "q", a.id(), "T").unwrap(), 2.0);
 //! ```
 
 use crate::aggregate::Aggregate;
@@ -556,7 +556,7 @@ impl crate::named::Named for Symmetry {
 /// // dual and primal, and its entries. Nothing lives in the aggregate.
 /// assert_eq!((bloc.n_rows(), bloc.n_cols()), (2, 2));
 /// assert_eq!(bloc.dual_vars(), &["q".to_string()]);
-/// assert_eq!(bloc.get(a.id(), "q", a.id(), "T"), 2.0);
+/// assert_eq!(bloc.get(a.id(), "q", a.id(), "T").unwrap(), 2.0);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Clone, Serialize, Deserialize)]
@@ -784,7 +784,7 @@ impl SubMatrix {
     /// let z = SubMatrix::from_coo(
     ///     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
     ///     DofOrdering::NodesThenVars, Symmetry::Full, coo)?;
-    /// assert_eq!(z.get(a.id(), "q", a.id(), "T"), 2.0);
+    /// assert_eq!(z.get(a.id(), "q", a.id(), "T").unwrap(), 2.0);
     /// // Indices are **local** to the block, and its size must match.
     /// assert!(SubMatrix::from_coo(
     ///     support.clone(), support.clone(), vec!["q".into()], vec!["T".into()],
@@ -1542,7 +1542,7 @@ impl SubMatrix {
     /// // assembly pour cell by cell without reading anything back.
     /// z.add_entry(a.id(), "q", a.id(), "T", 1.0)?;
     /// z.add_entry(a.id(), "q", a.id(), "T", 1.0)?;
-    /// assert_eq!(z.get(a.id(), "q", a.id(), "T"), 2.0);
+    /// assert_eq!(z.get(a.id(), "q", a.id(), "T").unwrap(), 2.0);
     /// // A node outside the support, or an undeclared variable, is an error.
     /// assert!(z.add_entry(a.id(), "f_x", a.id(), "T", 1.0).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
@@ -1736,6 +1736,9 @@ impl SubMatrix {
     /// Sum of all entries at `(row_node, row_var) × (col_node, col_var)`.
     /// Returns `0.0` if the DOF pair is unknown or has no entry.
     ///
+    /// **Errors**: a computed block holds no value — its values exist only in
+    /// the assembled [`Matrix`] it belongs to.
+    ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
@@ -1754,21 +1757,35 @@ impl SubMatrix {
     /// # bloc.add_entry(a.id(), "q", b.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", a.id(), "T", -1.0).unwrap();
     /// # bloc.add_entry(b.id(), "q", b.id(), "T", 2.0).unwrap();
-    /// assert_eq!(bloc.get(a.id(), "q", b.id(), "T"), -1.0);
+    /// assert_eq!(bloc.get(a.id(), "q", b.id(), "T")?, -1.0);
     /// // An absent coordinate returns **zero**, not an error: reading
     /// // a sparse block does not tell "zero" from "outside the pattern".
-    /// assert_eq!(bloc.get(a.id(), "q", a.id(), "absente"), 0.0);
+    /// assert_eq!(bloc.get(a.id(), "q", a.id(), "absente")?, 0.0);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn get(&self, row_node: NodeId, row_var: &str, col_node: NodeId, col_var: &str) -> f64 {
+    pub fn get(
+        &self,
+        row_node: NodeId,
+        row_var: &str,
+        col_node: NodeId,
+        col_var: &str,
+    ) -> Result<f64> {
+        if self.recipe.is_some() {
+            return Err(PyrucastError::Message(
+                "SubMatrix::get: a computed block holds no value; read the \
+                 assembled Matrix it belongs to"
+                    .into(),
+            ));
+        }
         let (row_g, col_g) = self.support_guards();
-        self.get_with(
+        Ok(self.get_with(
             &row_g,
             col_g.as_deref().unwrap_or(&row_g),
             row_node,
             row_var,
             col_node,
             col_var,
-        )
+        ))
     }
 
     /// Read guards on both supports, taking a **single** one when rows and
@@ -2414,6 +2431,136 @@ struct AssembledData {
     row_keys: std::sync::Arc<Vec<DofKey>>,
     col_keys: std::sync::Arc<Vec<DofKey>>,
     csr: AssembledCsr,
+}
+
+impl AssembledData {
+    /// `self + other`, value for value, over the union of their DOFs — the
+    /// values of a sum of matrices, each taken as it was assembled.
+    ///
+    /// Two operands assembled on one pattern (two matrices of the same model)
+    /// share its numbering and sparsity: their values add slot for slot, and
+    /// the result shares the pattern too. Otherwise the DOFs are numbered as the
+    /// blocks of both assembled together would be: `self`'s, then those only
+    /// `other` has, in `other`'s order — sorted by the solver permutation `perm`
+    /// when the coordinates carry one, as [`Matrix::finalize`] does, and as
+    /// conjugate pairs when the sum is `conjugate` (symmetric). A DOF and its
+    /// conjugate are both new or both known, so each side keeps its
+    /// rank-for-rank conjugacy.
+    fn sum(&self, other: &AssembledData, perm: Option<&[u32]>, conjugate: bool) -> AssembledData {
+        use std::sync::Arc;
+        if Arc::ptr_eq(&self.row_keys, &other.row_keys)
+            && Arc::ptr_eq(&self.col_keys, &other.col_keys)
+            && Arc::ptr_eq(&self.csr.row_offsets, &other.csr.row_offsets)
+            && Arc::ptr_eq(&self.csr.col_indices, &other.csr.col_indices)
+            && self.vars == other.vars
+        {
+            let values = self
+                .csr
+                .values
+                .iter()
+                .zip(&other.csr.values)
+                .map(|(a, b)| a + b);
+            return AssembledData {
+                vars: self.vars.clone(),
+                row_keys: self.row_keys.clone(),
+                col_keys: self.col_keys.clone(),
+                csr: AssembledCsr {
+                    row_offsets: self.csr.row_offsets.clone(),
+                    col_indices: self.csr.col_indices.clone(),
+                    values: values.collect(),
+                    ncols: self.csr.ncols,
+                },
+            };
+        }
+        // `other`'s names in the merged table: `self`'s first, then the new ones.
+        let mut vars = (*self.vars).clone();
+        let slot: Vec<u32> = other
+            .vars
+            .iter()
+            .map(|name| match vars.iter().position(|v| v == name) {
+                Some(i) => i as u32,
+                None => {
+                    vars.push(name.clone());
+                    (vars.len() - 1) as u32
+                }
+            })
+            .collect();
+        let rekey = |k: DofKey| dof_key(dof_node(k), slot[dof_var(k) as usize]);
+        let (rows, other_rows) = merged_order(&self.row_keys, &other.row_keys, rekey);
+        let (cols, other_cols) = merged_order(&self.col_keys, &other.col_keys, rekey);
+        // Where each merged rank lands once sorted by the permutation (stable,
+        // so a node's variables keep their order), for both sides at once on a
+        // symmetric sum: the conjugate shares the row's node.
+        let sorted = |keys: &[DofKey], perm: &[u32]| -> Vec<usize> {
+            let mut order: Vec<usize> = (0..keys.len()).collect();
+            order.par_sort_by_key(|&i| perm[dof_node(keys[i]).0 as usize]);
+            order
+        };
+        let (row_order, col_order): (Vec<usize>, Vec<usize>) = match perm {
+            None => ((0..rows.len()).collect(), (0..cols.len()).collect()),
+            Some(perm) if conjugate => {
+                let order = sorted(&rows, perm);
+                (order.clone(), order)
+            }
+            Some(perm) => (sorted(&rows, perm), sorted(&cols, perm)),
+        };
+        let landing = |order: &[usize]| -> Vec<usize> {
+            let mut at = vec![0; order.len()];
+            for (rank, &merged) in order.iter().enumerate() {
+                at[merged] = rank;
+            }
+            at
+        };
+        let (row_at, col_at) = (landing(&row_order), landing(&col_order));
+        let triplets: Vec<(usize, usize, f64)> = self
+            .csr
+            .triplets()
+            .map(|(r, c, v)| (row_at[r], col_at[c], v))
+            .chain(
+                other
+                    .csr
+                    .triplets()
+                    .map(|(r, c, v)| (row_at[other_rows[r]], col_at[other_cols[c]], v)),
+            )
+            .collect();
+        let row_keys: Vec<DofKey> = row_order.iter().map(|&i| rows[i]).collect();
+        let col_keys: Vec<DofKey> = col_order.iter().map(|&i| cols[i]).collect();
+        let (row_offsets, col_indices, values) =
+            csr_from_triplets_parallel(row_keys.len(), col_keys.len(), triplets);
+        AssembledData {
+            vars: Arc::new(vars),
+            csr: AssembledCsr {
+                row_offsets: Arc::new(row_offsets),
+                col_indices: Arc::new(col_indices),
+                values,
+                ncols: col_keys.len(),
+            },
+            row_keys: Arc::new(row_keys),
+            col_keys: Arc::new(col_keys),
+        }
+    }
+}
+
+/// `first`, then the keys of `second` (put through `rekey`) it lacks — and,
+/// for each key of `second`, its rank in that order.
+fn merged_order(
+    first: &[DofKey],
+    second: &[DofKey],
+    rekey: impl Fn(DofKey) -> DofKey,
+) -> (Vec<DofKey>, Vec<usize>) {
+    let mut rank: HashMap<DofKey, usize> = first.iter().enumerate().map(|(i, &k)| (k, i)).collect();
+    let mut order = first.to_vec();
+    let landed = second
+        .iter()
+        .map(|&k| {
+            let k = rekey(k);
+            *rank.entry(k).or_insert_with(|| {
+                order.push(k);
+                order.len() - 1
+            })
+        })
+        .collect();
+    (order, landed)
 }
 
 /// Aggregate of [`SubMatrix`] blocks.
@@ -3238,6 +3385,12 @@ impl Matrix {
             col_keys,
             csr,
         });
+    }
+
+    /// Whether the values are there: assembled by an assembler, finalized, or
+    /// added by a sum.
+    pub(crate) fn is_assembled(&self) -> bool {
+        self.assembled.is_some()
     }
 
     fn assembled_or_err(&self) -> Result<&AssembledData> {
@@ -4130,6 +4283,9 @@ impl Matrix {
 
     /// Sum of contributions at `(row, col)` across every block.
     ///
+    /// **Errors**: an unassembled matrix carrying a computed block — its values
+    /// do not exist until it is assembled.
+    ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
@@ -4151,12 +4307,19 @@ impl Matrix {
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Un SEG2 de longueur 1, k = 1 : K = [[1, -1], [-1, 1]].
-    /// assert_eq!(k.get(a.id(), "q", a.id(), "T"), 1.0);
-    /// assert_eq!(k.get(a.id(), "q", b.id(), "T"), -1.0);
+    /// assert_eq!(k.get(a.id(), "q", a.id(), "T")?, 1.0);
+    /// assert_eq!(k.get(a.id(), "q", b.id(), "T")?, -1.0);
     /// // A coordinate absent from the pattern is zero: reading does not raise.
-    /// assert_eq!(k.get(a.id(), "q", a.id(), "absente"), 0.0);
+    /// assert_eq!(k.get(a.id(), "q", a.id(), "absente")?, 0.0);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn get(&self, row_node: NodeId, row_field: &str, col_node: NodeId, col_field: &str) -> f64 {
+    pub fn get(
+        &self,
+        row_node: NodeId,
+        row_field: &str,
+        col_node: NodeId,
+        col_field: &str,
+    ) -> Result<f64> {
         // When assembled, the CSR is the source of truth — and the only place a
         // *computed* block's values live (its COO is empty). Fall back to the
         // per-block COO sum only for an unassembled (literal) matrix.
@@ -4167,16 +4330,24 @@ impl Matrix {
             };
             let r = find(&a.row_keys, row_node, row_field);
             let c = find(&a.col_keys, col_node, col_field);
-            return match (r, c) {
+            return Ok(match (r, c) {
                 (Some(r), Some(c)) => a.csr.slot(r, c).map_or(0.0, |k| a.csr.values[k]),
                 _ => 0.0,
-            };
+            });
+        }
+        if self.iter().any(|h| h.read().is_computed()) {
+            return Err(PyrucastError::Message(
+                "Matrix::get: this matrix carries a computed block that was never \
+                 assembled, so its values do not exist yet; assemble it first \
+                 (m.assemble())"
+                    .into(),
+            ));
         }
         let mut total = 0.0;
         for h in self {
-            total += h.read().get(row_node, row_field, col_node, col_field);
+            total += h.read().get(row_node, row_field, col_node, col_field)?;
         }
-        total
+        Ok(total)
     }
 
     /// All COO entries across every block, in block-insertion order.
@@ -5028,23 +5199,71 @@ impl Matrix {
         *self.factorization.get_mut() = None;
     }
 
-    /// A fresh [`Matrix`] holding `self`'s blocks then `other`'s, **shared** and
-    /// deliberately **not** deduplicated — the engine behind `Add`/`Sub`.
+    /// `self + other`: the values each operand was assembled with, added over
+    /// the union of their DOFs, and the blocks of both, **shared** and
+    /// deliberately **not** deduplicated, to describe the result — the engine
+    /// behind `Add`/`Sub`.
+    ///
+    /// Nothing is evaluated again. A matrix is assembled once, on the
+    /// configuration active at that moment; a sum adds those values, whatever
+    /// configuration is active when it is taken. So a matrix assembled on the
+    /// reference and one assembled on the deformed shape add as they are.
     ///
     /// This is what parts `+` from `|`: [`Aggregate::union`] drops a block whose
-    /// slot it already holds, so `k | k` is `k`, whereas a sum must count a
-    /// contribution as many times as it is handed over — `k + k` is `2k`. The
-    /// assembler sums whatever lands on the same global `(row, col)` and walks
-    /// blocks by position, so a block present twice simply contributes twice.
+    /// slot it already holds, so `k | k` is `k`, whereas a sum counts a
+    /// contribution as many times as it is handed over — `k + k` is `2k`.
     ///
-    /// Like [`filter`](Self::filter), the result is **not assembled**.
-    fn concat(&self, other: &Matrix) -> Matrix {
+    /// **Errors**: an operand that carries a computed block and was never
+    /// assembled — its values do not exist yet. A literal-only operand is
+    /// finalized on the way.
+    fn added(&self, other: &Matrix) -> Result<Matrix> {
+        let (own_a, own_b);
+        let a = match &self.assembled {
+            Some(a) => a,
+            None => {
+                own_a = self.literal_values()?;
+                &own_a
+            }
+        };
+        let b = match &other.assembled {
+            Some(b) => b,
+            None => {
+                own_b = other.literal_values()?;
+                &own_b
+            }
+        };
         let mut out = Matrix::empty();
         for h in self.iter().chain(other.iter()) {
             out.push(h.clone());
         }
         out.post_push();
-        out
+        let coords = out.iter().next().map(|h| h.read().coords());
+        let coords = coords.as_ref().map(|c| c.read());
+        let perm = coords.as_ref().and_then(|c| c.permutation());
+        let values = a.sum(b, perm, out.symmetric());
+        drop(coords);
+        out.assembled = Some(values);
+        Ok(out)
+    }
+
+    /// The values of an unassembled operand of a sum, which only literal blocks
+    /// hold.
+    fn literal_values(&self) -> Result<AssembledData> {
+        if self.iter().any(|h| h.read().is_computed()) {
+            return Err(PyrucastError::Message(
+                "matrix sum: an operand carries a computed block that was never \
+                 assembled, so its values do not exist yet; assemble it first \
+                 (m.assemble()), on the configuration it belongs to"
+                    .into(),
+            ));
+        }
+        let mut literal = Matrix::empty();
+        for h in self {
+            literal.push(h.clone());
+        }
+        literal.post_push();
+        literal.finalize()?;
+        Ok(literal.assembled.take().expect("finalize assembles"))
     }
 }
 
@@ -5139,20 +5358,20 @@ impl std::ops::Neg for Matrix {
 
 // ─── Matrix algebra: `a + b`, `a - b` ───────────────────────────────────────
 //
-// A sum is **structural**: the result holds the blocks of both operands, shared
-// and not deduplicated, and the assembler does the adding — it already sums
-// whatever lands on the same global `(row, col)`. So `M/dt + K` costs a handful
-// of refcount bumps, no value is touched, and a computed block stays computed.
-// Like `filter`, the result is not assembled: `assemble()` before solving.
+// A sum adds **values**: each operand as it was assembled, on the configuration
+// active at that moment, added over the union of their DOFs. The result is
+// assembled and ready to solve; its blocks, both operands', shared and not
+// deduplicated, describe it. Nothing is evaluated again, so a matrix built on
+// the reference and one built on the deformed shape add as they are.
 //
 // This is where `+` parts from `|`. `union` drops a block it already holds, so
-// `k | k` is `k` — right for composing an operator out of distinct pieces,
-// wrong for a sum, which must count a contribution once per handing over.
-// `k + k` is `2k`. Reach for `|` to assemble one operator from its parts, for
-// `+` to add two operators.
+// `k | k` is `k` — a set of blocks, not assembled, that `assemble()` evaluates
+// on the configuration active then. A sum counts a contribution once per
+// handing over: `k + k` is `2k`.
 //
-// `a - b` negates `b`'s blocks, which copies them (the factor lives in the
-// block); `a + b` copies nothing.
+// **Fallible**: an operand that carries a computed block and was never
+// assembled has no values to add (`(&a + &b)?`). `a - b` adds `-b`, which
+// scales `b`'s values and copies its blocks (the factor lives in the block).
 
 impl SubMatrix {
     /// This block alone in a fresh one-block [`Matrix`], copied into a new store
@@ -5176,20 +5395,20 @@ impl SubMatrix {
 macro_rules! forward_ref_binop {
     ($trait:ident, $method:ident, $lhs:ty, $rhs:ty) => {
         impl std::ops::$trait<$rhs> for &$lhs {
-            type Output = Matrix;
-            fn $method(self, rhs: $rhs) -> Matrix {
+            type Output = Result<Matrix>;
+            fn $method(self, rhs: $rhs) -> Result<Matrix> {
                 std::ops::$trait::$method(self, &rhs)
             }
         }
         impl std::ops::$trait<&$rhs> for $lhs {
-            type Output = Matrix;
-            fn $method(self, rhs: &$rhs) -> Matrix {
+            type Output = Result<Matrix>;
+            fn $method(self, rhs: &$rhs) -> Result<Matrix> {
                 std::ops::$trait::$method(&self, rhs)
             }
         }
         impl std::ops::$trait<$rhs> for $lhs {
-            type Output = Matrix;
-            fn $method(self, rhs: $rhs) -> Matrix {
+            type Output = Result<Matrix>;
+            fn $method(self, rhs: $rhs) -> Result<Matrix> {
                 std::ops::$trait::$method(&self, &rhs)
             }
         }
@@ -5197,58 +5416,58 @@ macro_rules! forward_ref_binop {
 }
 
 impl std::ops::Add<&Matrix> for &Matrix {
-    type Output = Matrix;
-    fn add(self, rhs: &Matrix) -> Matrix {
-        self.concat(rhs)
+    type Output = Result<Matrix>;
+    fn add(self, rhs: &Matrix) -> Result<Matrix> {
+        self.added(rhs)
     }
 }
 
 impl std::ops::Sub<&Matrix> for &Matrix {
-    type Output = Matrix;
-    fn sub(self, rhs: &Matrix) -> Matrix {
-        self.concat(&rhs.map_blocks(|b| -b))
+    type Output = Result<Matrix>;
+    fn sub(self, rhs: &Matrix) -> Result<Matrix> {
+        self.added(&-rhs)
     }
 }
 
 impl std::ops::Add<&SubMatrix> for &Matrix {
-    type Output = Matrix;
-    fn add(self, rhs: &SubMatrix) -> Matrix {
-        self.concat(&rhs.as_matrix())
+    type Output = Result<Matrix>;
+    fn add(self, rhs: &SubMatrix) -> Result<Matrix> {
+        self.added(&rhs.as_matrix())
     }
 }
 
 impl std::ops::Sub<&SubMatrix> for &Matrix {
-    type Output = Matrix;
-    fn sub(self, rhs: &SubMatrix) -> Matrix {
-        self.concat(&rhs.as_negated_matrix())
+    type Output = Result<Matrix>;
+    fn sub(self, rhs: &SubMatrix) -> Result<Matrix> {
+        self.added(&rhs.as_negated_matrix())
     }
 }
 
 impl std::ops::Add<&Matrix> for &SubMatrix {
-    type Output = Matrix;
-    fn add(self, rhs: &Matrix) -> Matrix {
-        self.as_matrix().concat(rhs)
+    type Output = Result<Matrix>;
+    fn add(self, rhs: &Matrix) -> Result<Matrix> {
+        self.as_matrix().added(rhs)
     }
 }
 
 impl std::ops::Sub<&Matrix> for &SubMatrix {
-    type Output = Matrix;
-    fn sub(self, rhs: &Matrix) -> Matrix {
-        self.as_matrix().concat(&rhs.map_blocks(|b| -b))
+    type Output = Result<Matrix>;
+    fn sub(self, rhs: &Matrix) -> Result<Matrix> {
+        self.as_matrix().added(&-rhs)
     }
 }
 
 impl std::ops::Add<&SubMatrix> for &SubMatrix {
-    type Output = Matrix;
-    fn add(self, rhs: &SubMatrix) -> Matrix {
-        self.as_matrix().concat(&rhs.as_matrix())
+    type Output = Result<Matrix>;
+    fn add(self, rhs: &SubMatrix) -> Result<Matrix> {
+        self.as_matrix().added(&rhs.as_matrix())
     }
 }
 
 impl std::ops::Sub<&SubMatrix> for &SubMatrix {
-    type Output = Matrix;
-    fn sub(self, rhs: &SubMatrix) -> Matrix {
-        self.as_matrix().concat(&rhs.as_negated_matrix())
+    type Output = Result<Matrix>;
+    fn sub(self, rhs: &SubMatrix) -> Result<Matrix> {
+        self.as_matrix().added(&rhs.as_negated_matrix())
     }
 }
 
@@ -5541,7 +5760,7 @@ mod tests {
             Symmetry::None,
         );
         // unknown field → 0.0
-        assert_eq!(m.get(nodes[0].id(), "x", nodes[0].id(), "y"), 0.0);
+        assert_eq!(m.get(nodes[0].id(), "x", nodes[0].id(), "y").unwrap(), 0.0);
     }
 
     #[test]
@@ -5559,7 +5778,7 @@ mod tests {
         m.add_entry(a, "q", a, "T", 2.0).unwrap();
         m.add_entry(a, "q", a, "T", 1.5).unwrap();
         m.add_entry(a, "q", a, "T", -0.5).unwrap();
-        assert_eq!(m.get(a, "q", a, "T"), 3.0);
+        assert_eq!(m.get(a, "q", a, "T").unwrap(), 3.0);
     }
 
     #[test]
@@ -5715,11 +5934,11 @@ mod tests {
         // Reference version clones, leaving `m` untouched.
         let scaled = &m * 3.0;
         assert_eq!(scaled.factor(), 3.0);
-        assert_eq!(scaled.get(a, "q", a, "T"), 6.0);
+        assert_eq!(scaled.get(a, "q", a, "T").unwrap(), 6.0);
         assert_eq!(scaled.dense(), vec![6.0]);
         assert_eq!(scaled.iter_entries()[0].4, 6.0);
         assert_eq!(
-            m.get(a, "q", a, "T"),
+            m.get(a, "q", a, "T").unwrap(),
             2.0,
             "reference Mul must not mutate m"
         );
@@ -5727,7 +5946,7 @@ mod tests {
         // Consuming version chains: ×3 then ÷2 ⇒ factor 1.5.
         let halved = scaled / 2.0;
         assert_eq!(halved.factor(), 1.5);
-        assert_eq!(halved.get(a, "q", a, "T"), 3.0);
+        assert_eq!(halved.get(a, "q", a, "T").unwrap(), 3.0);
         assert_eq!(halved.to_coo().values(), &[3.0]);
         assert_eq!(halved.to_csr().values(), &[3.0]);
         assert_eq!(halved.to_csc().values(), &[3.0]);
@@ -5827,10 +6046,10 @@ mod tests {
         m.add_entry(a, "p", c, "u", 1.0).unwrap();
         m.add_entry(b, "p", d, "v", 2.0).unwrap();
         m.add_entry(a, "q", c, "v", 3.0).unwrap();
-        assert_eq!(m.get(a, "p", c, "u"), 1.0);
-        assert_eq!(m.get(b, "p", d, "v"), 2.0);
-        assert_eq!(m.get(a, "q", c, "v"), 3.0);
-        assert_eq!(m.get(b, "q", d, "u"), 0.0);
+        assert_eq!(m.get(a, "p", c, "u").unwrap(), 1.0);
+        assert_eq!(m.get(b, "p", d, "v").unwrap(), 2.0);
+        assert_eq!(m.get(a, "q", c, "v").unwrap(), 3.0);
+        assert_eq!(m.get(b, "q", d, "u").unwrap(), 0.0);
 
         // row_dofs in VarsThenNodes order: (p,a),(p,b),(q,a),(q,b)
         let rdofs = m.row_dofs();
@@ -5857,7 +6076,7 @@ mod tests {
         // With NodesThenVars: row 0 = (node_a, p), row 1 = (node_a, q),
         //                     row 2 = (node_b, p), row 3 = (node_b, q)
         m.add_entry(a, "p", c, "u", 7.0).unwrap();
-        assert_eq!(m.get(a, "p", c, "u"), 7.0);
+        assert_eq!(m.get(a, "p", c, "u").unwrap(), 7.0);
 
         let rdofs = m.row_dofs();
         assert_eq!(rdofs[0], (a, "p".to_string()));
@@ -5986,16 +6205,16 @@ mod tests {
         assert!(!orig_h.same_object(scaled_h));
 
         // Values diverge accordingly: the source is untouched.
-        assert_eq!(orig.get(a, "q", a, "T"), 2.0);
-        assert_eq!(orig.get(b, "q", b, "T"), 3.0);
-        assert_eq!(scaled.get(a, "q", a, "T"), 20.0);
-        assert_eq!(scaled.get(b, "q", b, "T"), 30.0);
+        assert_eq!(orig.get(a, "q", a, "T").unwrap(), 2.0);
+        assert_eq!(orig.get(b, "q", b, "T").unwrap(), 3.0);
+        assert_eq!(scaled.get(a, "q", a, "T").unwrap(), 20.0);
+        assert_eq!(scaled.get(b, "q", b, "T").unwrap(), 30.0);
 
         // `/` divides the factor, chaining from the already-scaled matrix.
         let halved = &scaled / 2.0;
-        assert_eq!(halved.get(a, "q", a, "T"), 10.0);
+        assert_eq!(halved.get(a, "q", a, "T").unwrap(), 10.0);
         assert_eq!(
-            scaled.get(a, "q", a, "T"),
+            scaled.get(a, "q", a, "T").unwrap(),
             20.0,
             "/ must not mutate its source either"
         );
@@ -6035,7 +6254,7 @@ mod tests {
 
         // Assembled on arrival: no `finalize()` / `assemble()` in between.
         assert_eq!(scaled.to_csr().unwrap().values(), &[6.0, 6.0]);
-        assert_eq!(scaled.get(a, "q", a, "T"), 6.0);
+        assert_eq!(scaled.get(a, "q", a, "T").unwrap(), 6.0);
         // The sparsity is untouched, so the index arrays are *shared*, not copied.
         let (ka, sa) = (
             k.assembled.as_ref().unwrap(),
@@ -6072,7 +6291,7 @@ mod tests {
             slot,
             "sole owner: in place"
         );
-        assert_eq!(scaled.get(a, "q", a, "T"), 6.0);
+        assert_eq!(scaled.get(a, "q", a, "T").unwrap(), 6.0);
 
         // Now with a second holder of the same block.
         let shared = diag(&sup, &[a], 2.0);
@@ -6080,9 +6299,9 @@ mod tests {
         let slot = shared.iter().next().unwrap().id();
         let scaled = shared * 3.0;
         assert_ne!(scaled.iter().next().unwrap().id(), slot, "shared: rebuilt");
-        assert_eq!(scaled.get(a, "q", a, "T"), 6.0);
+        assert_eq!(scaled.get(a, "q", a, "T").unwrap(), 6.0);
         assert_eq!(
-            alias.get(a, "q", a, "T"),
+            alias.get(a, "q", a, "T").unwrap(),
             2.0,
             "the aliasing matrix is spared"
         );
@@ -6096,15 +6315,14 @@ mod tests {
         let a = nodes[0].id();
         let k = diag(&sup, &[a], 2.0);
 
-        let mut sum = &k + &k;
-        sum.finalize().unwrap();
+        let sum = (&k + &k).unwrap();
         assert_eq!(sum.len(), 2);
-        assert_eq!(sum.get(a, "q", a, "T"), 4.0, "k + k is 2k");
+        assert_eq!(sum.get(a, "q", a, "T").unwrap(), 4.0, "k + k is 2k");
 
         let mut union = k.union(&k).unwrap();
         union.finalize().unwrap();
         assert_eq!(union.len(), 1);
-        assert_eq!(union.get(a, "q", a, "T"), 2.0, "k | k is k");
+        assert_eq!(union.get(a, "q", a, "T").unwrap(), 2.0, "k | k is k");
 
         // The sum shares its operands' blocks — nothing is copied.
         assert!(sum
@@ -6113,10 +6331,10 @@ mod tests {
             .unwrap()
             .same_object(k.iter().next().unwrap()));
         // …and leaves the source alone.
-        assert_eq!(k.get(a, "q", a, "T"), 2.0);
+        assert_eq!(k.get(a, "q", a, "T").unwrap(), 2.0);
     }
 
-    /// `a - b` negates the right-hand side's blocks, which copies them; `a + b`
+    /// `a - b` adds the negated right-hand side, whose blocks are copies; `a + b`
     /// copies nothing. Both leave their operands alone.
     #[test]
     fn difference_negates_only_the_right_hand_side() {
@@ -6125,20 +6343,22 @@ mod tests {
         let x = diag(&sup, &[a], 5.0);
         let y = diag(&sup, &[a], 2.0);
 
-        let mut d = &x - &y;
-        d.finalize().unwrap();
-        assert_eq!(d.get(a, "q", a, "T"), 3.0);
-        assert_eq!(y.get(a, "q", a, "T"), 2.0, "the subtrahend is untouched");
+        let d = (&x - &y).unwrap();
+        assert_eq!(d.get(a, "q", a, "T").unwrap(), 3.0);
+        assert_eq!(
+            y.get(a, "q", a, "T").unwrap(),
+            2.0,
+            "the subtrahend is untouched"
+        );
         assert!(!d
             .iter()
             .nth(1)
             .unwrap()
             .same_object(y.iter().next().unwrap()));
 
-        // A matrix minus itself is zero — the structural sum, then the assembler.
-        let mut z = &x - &x;
-        z.finalize().unwrap();
-        assert_eq!(z.get(a, "q", a, "T"), 0.0);
+        // A matrix minus itself is zero.
+        let z = (&x - &x).unwrap();
+        assert_eq!(z.get(a, "q", a, "T").unwrap(), 0.0);
     }
 
     /// The scalar reads on either side, and the unary minus agrees with `× -1`.
@@ -6148,9 +6368,12 @@ mod tests {
         let a = nodes[0].id();
         let k = diag(&sup, &[a], 2.0);
 
-        assert_eq!((2.0 * &k).get(a, "q", a, "T"), 4.0);
-        assert_eq!((-&k).get(a, "q", a, "T"), -2.0);
-        assert_eq!((-&k).get(a, "q", a, "T"), (&k * -1.0).get(a, "q", a, "T"));
+        assert_eq!((2.0 * &k).get(a, "q", a, "T").unwrap(), 4.0);
+        assert_eq!((-&k).get(a, "q", a, "T").unwrap(), -2.0);
+        assert_eq!(
+            (-&k).get(a, "q", a, "T").unwrap(),
+            (&k * -1.0).get(a, "q", a, "T").unwrap()
+        );
 
         // On a block too.
         let blk = (*k.iter().next().unwrap().read()).clone();
@@ -6166,18 +6389,15 @@ mod tests {
         let k = diag(&sup, &[a], 2.0);
         let blk = (*k.iter().next().unwrap().read()).clone();
 
-        for mut s in [&k + &blk, &blk + &k] {
-            s.finalize().unwrap();
+        for s in [(&k + &blk).unwrap(), (&blk + &k).unwrap()] {
             assert_eq!(s.len(), 2);
-            assert_eq!(s.get(a, "q", a, "T"), 4.0);
+            assert_eq!(s.get(a, "q", a, "T").unwrap(), 4.0);
         }
-        let mut two_blocks = &blk + &blk;
-        two_blocks.finalize().unwrap();
-        assert_eq!(two_blocks.get(a, "q", a, "T"), 4.0);
+        let two_blocks = (&blk + &blk).unwrap();
+        assert_eq!(two_blocks.get(a, "q", a, "T").unwrap(), 4.0);
 
-        let mut d = &k - &blk;
-        d.finalize().unwrap();
-        assert_eq!(d.get(a, "q", a, "T"), 0.0);
+        let d = (&k - &blk).unwrap();
+        assert_eq!(d.get(a, "q", a, "T").unwrap(), 0.0);
     }
 
     /// A divisor no matrix survives is refused at the operator, not left to
@@ -6255,12 +6475,12 @@ mod tests {
 
         assert_eq!(sys.n_rows().unwrap(), 3);
         assert_eq!(sys.n_cols().unwrap(), 3);
-        assert_eq!(sys.get(a, "q", a, "T"), 2.0 + 8.0);
-        assert_eq!(sys.get(a, "q", b, "T"), -1.0);
-        assert_eq!(sys.get(b, "q", a, "T"), -1.0);
-        assert_eq!(sys.get(b, "q", b, "T"), 2.0 + 8.0);
+        assert_eq!(sys.get(a, "q", a, "T").unwrap(), 2.0 + 8.0);
+        assert_eq!(sys.get(a, "q", b, "T").unwrap(), -1.0);
+        assert_eq!(sys.get(b, "q", a, "T").unwrap(), -1.0);
+        assert_eq!(sys.get(b, "q", b, "T").unwrap(), 2.0 + 8.0);
         // Untouched by M (which doesn't carry the c DOF at all).
-        assert_eq!(sys.get(c, "q", c, "T"), 5.0);
+        assert_eq!(sys.get(c, "q", c, "T").unwrap(), 5.0);
     }
 
     #[test]

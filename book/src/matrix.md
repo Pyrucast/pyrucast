@@ -46,8 +46,8 @@ Il alimente `Matrix::filter(Physics)` — le miroir de
 ne gardant que les blocs dont l'ensemble **contient** la nature donnée (handles
 partagés, pas de copie), et son complément `Matrix::exclude(Physics)`, qui garde
 ceux dont l'ensemble **ne la contient pas** ; les deux se composent
-(`k.filter(Thermal).exclude(Constraint)` : la conduction sans son Dirichlet). Le résultat n'est **pas** assemblé : relancer
-`Matrix::assemble` avant de résoudre. Un bloc à l'ensemble vide n'est
+(`k.filter(Thermal).exclude(Constraint)` : la conduction sans son Dirichlet). Le résultat réunit
+des blocs **sans leurs valeurs** : `Matrix::assemble` les calcule, sur la configuration active. Un bloc à l'ensemble vide n'est
 sélectionné par aucune nature concrète ; l'étiqueter `Physics::Other` le rend
 atteignable. `Matrix::physics()` renvoie l'ensemble des natures présentes dans la
 matrice (dédupliqué — « plusieurs tags » au niveau de l'agrégat).
@@ -69,7 +69,8 @@ L'ordre des DOFs dans `row_dofs()` / `col_dofs()` est l'**ordre de première ren
 
 - `Matrix::finalize()` n'assemble que des blocs **littéraux** (somme des COO → CSR). Il **refuse** un bloc calculé : le noyau vit dans `models`, hors de `containers`, et l'y appeler créerait un cycle `matrix ↔ kernel`. Il renvoie alors vers `ops::matrix`.
 - `ops::matrix::stiffness(model, materials)` construit les blocs (calculés pour les physiques volumiques, littéraux pour Dirichlet) et assemble, motif mémoïsé sur le `Model`. Pour un milieu continu, la rigidité et la masse lisent le matériau **en chaque point de Gauss** : un module ou une densité qui varie à l'intérieur d'une maille (par exemple E(T) évalué au point dans le pas à pas) est intégré tel quel, comme la loi le fait côté résidu.
-- `Matrix::assemble(&mut self)` réassemble une matrice **depuis ses blocs seuls**, sans `Model` : c'est le chemin de **composition** — combiner une sous-matrice neuve (de provenance quelconque) à une matrice existante puis réassembler. La `Matrix` ne dépendant que de ses blocs, cette composabilité de base est ainsi préservée y compris en présence de blocs calculés.
+- `Matrix::assemble(&mut self)` assemble une matrice **depuis ses blocs seuls**, sans `Model`, sur la configuration active : c'est le chemin de **composition**, pour des blocs réunis sans leurs valeurs (`add_sub`, `|`, `filter`, `exclude`). La `Matrix` ne dépendant que de ses blocs, cette composabilité de base est ainsi préservée y compris en présence de blocs calculés.
+- **Une matrice est assemblée une fois.** Ses valeurs sont celles de la configuration active au moment de l'assemblage ; elles ne bougent plus ensuite, et un second `assemble()` ne fait rien (comme `finalize`). Les valeurs d'une autre configuration s'obtiennent en refaisant la matrice.
 
 Pour qui veut une matrice creuse d'une autre bibliothèque, des conversions **à la demande** existent — elles fabriquent un objet neuf et ne retiennent rien :
 
@@ -136,16 +137,27 @@ Une matrice assemblée reste donc assemblée après `* s`, et n'a pas à repasse
 
 ### La somme
 
-`a + b` rend une `Matrix` portant les blocs des deux opérandes, **partagés** et
-délibérément **non dédoublonnés**. Rien n'est calculé : c'est l'assembleur qui somme ce
-qui retombe sur le même `(row, col)` global (`build_global_triplets`,
-`scatter_serial`/`scatter_parallel`). Une somme coûte donc quelques incréments de
-compteur, ne touche aucune valeur, et laisse un bloc calculé calculé. Comme pour
-`filter`, le résultat n'est **pas assemblé** : `assemble()` avant de résoudre.
+`a + b` additionne les **valeurs** des deux opérandes, chacune telle qu'elle a été
+assemblée, sur l'union de leurs DDL : le résultat est assemblé et se résout tel quel.
+Rien n'est recalculé — aucun noyau élémentaire n'est relancé —, si bien que deux
+matrices assemblées sur deux configurations différentes s'additionnent telles quelles.
+Ses blocs sont ceux des deux opérandes, **partagés** et délibérément **non
+dédoublonnés** : ils décrivent le résultat (supports, natures, symétrie).
 
-`a - b` nie les blocs de droite, ce qui les **recopie** (le facteur vit dans le bloc) ;
-`a + b` ne copie rien. Les deux opérateurs acceptent indifféremment une `Matrix` ou une
-`SubMatrix` de chaque côté, et `-a` nie une matrice entière.
+Les DDL sont numérotés comme le seraient les blocs des deux opérandes assemblés
+ensemble : ceux de `a`, puis ceux que seule `b` apporte, triés selon la permutation
+du `Coords` s'il en porte une. Deux matrices du même modèle partagent leur motif : leurs
+valeurs s'additionnent case à case, sans rien renuméroter.
+
+La somme est **faillible** : un opérande dont des blocs calculés n'ont jamais été
+assemblés (une sortie de `filter` ou de `|`) n'a pas de valeurs à additionner, et la
+somme lève une erreur plutôt que de les calculer en silence sur la configuration du
+moment. Un opérande fait de blocs littéraux seuls est assemblé au passage. `get` lève
+la même erreur sur une matrice non assemblée qui porte un bloc calculé.
+
+`a - b` additionne `-b`, dont les blocs sont des **copies** (le facteur vit dans le
+bloc) ; `a + b` ne copie aucun bloc. Les deux opérateurs acceptent indifféremment une
+`Matrix` ou une `SubMatrix` de chaque côté, et `-a` nie une matrice entière.
 
 ```rust,ignore
 {{#include ../../tests/doc_matrix.rs:somme}}
@@ -154,13 +166,14 @@ compteur, ne touche aucune valeur, et laisse un bloc calculé calculé. Comme po
 Aucun traitement particulier n'est nécessaire quand `K` et `M` n'ont pas le même
 ensemble de DOFs (cas courant : un Dirichlet/MPC n'entre que dans la matrice de
 raideur, jamais dans la masse) — la somme prend simplement l'union des DOFs des deux
-côtés, et les blocs de `M` ne contribuent rien aux DOFs qu'ils ne portent pas.
+côtés, et `M` ne contribue rien aux DOFs qu'elle ne porte pas.
 
 ### `|` compose, `+` additionne
 
-C'est la seule chose qui les sépare, et elle ne se voit que sur des blocs partagés :
-l'union **écarte** un bloc dont elle tient déjà l'emplacement, la somme le compte à
-chaque fois qu'on le lui donne. Donc `k | k` vaut `k`, tandis que `k + k` vaut `2k`.
+L'union réunit des **blocs** et **écarte** un bloc dont elle tient déjà
+l'emplacement : son résultat n'a pas de valeurs, `assemble()` les calcule sur la
+configuration active. La somme additionne des **valeurs** et compte une contribution à
+chaque fois qu'on la lui donne. Donc `k | k` vaut `k`, tandis que `k + k` vaut `2k`.
 
 Prendre `|` pour **composer un opérateur à partir de morceaux distincts** (une raideur
 et son bloc de Dirichlet), `+` pour **additionner deux opérateurs**.
@@ -290,6 +303,5 @@ solve, voir [Calculs plus gros que la RAM](operateurs/solveur.md).
 
 - **Cache de motif non invalidé par les mutations profondes** : le motif creux mémoïsé sur le `Model` est invalidé à l'ajout d'un sous-modèle (`add_sub`), mais pas si le maillage / l'espace EF sous-jacent change *en place* (remaillage) — reconstruire le modèle dans ce cas. Le chemin de composition `m.assemble()`, lui, reconstruit toujours le motif depuis les blocs.
 - **Pas de produit matrice-matrice** : à venir avec les premiers besoins concrets (préconditionneurs, formulations couplées).
-- **La somme n'assemble pas de manière opportuniste** : `a + b` rend une matrice non assemblée même quand les deux opérandes le sont. Fusionner leurs CSR — ce qui éviterait de relancer les noyaux élémentaires dans une boucle en temps à pas variable — est possible sans changer la sémantique (l'ordre des DDL d'une concaténation est exactement celui de `a` suivi des DDL que seule `b` apporte), mais demande une addition creuse complète : retable des variables, remappage et retri des colonnes de `b`, fusion ligne à ligne. À faire quand un intégrateur en temps le justifiera.
 - La symétrie déclarée n'est pas vérifiée numériquement à l'assemblage, et ne doit pas l'être : c'est une déclaration du modèle, pas une mesure. Des tests unitaires confrontent la déclaration à la CSR réellement assemblée ; le calcul, lui, fait confiance.
 - **Une symétrie découpée en tranches de lignes n'est pas exprimable** : deux blocs rectangulaires qui sont chacun une tranche de lignes d'une matrice symétrique ne peuvent rien déclarer — ni `Full`, qui suppose un bloc carré, ni `Half`, les deux n'étant pas transposés l'un de l'autre. Le tableau assemblé est symétrique, le drapeau répond `false`, et le calcul prend le chemin général. C'est le mode de défaillance voulu : on oublie une symétrie, on n'en invente pas.
