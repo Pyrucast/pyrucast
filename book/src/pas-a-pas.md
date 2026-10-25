@@ -31,7 +31,11 @@ instant de `save_times` (par défaut `times`), l'état initial compris :
 
 Chaque enregistrement porte aussi `velocity` et `acceleration` (dynamique),
 `load_multiplier` (pilotage indirect), `iterations`, `accelerations` et
-`converged`.
+`converged`. Il garde l'état calculé, pas ce qui s'en déduit : en grands
+déplacements, `behaviour` contient la contrainte qu'écrit la loi (`S_*` ou
+`T_*`), et la contrainte de Cauchy se calcule à partir de `displacement` et
+`behaviour`, par `deformation(…, "gradient")` puis `stress_measure` (voir
+[Grandes transformations](mecanique/grandes-transformations.md)).
 
 ### Les entrées
 
@@ -215,7 +219,7 @@ opérateur : stiffness + geometric(σ)              sur « current », en x = X 
 thermique : conduction et capacité sur la référence (K₀, ρ₀ c dV₀) ;
             échanges, rayonnement et flux sur « current », en x = X + uₙ
             (début de pas) ; l'opérateur additionne les matrices des deux
-résultats : "behaviour" garde S (ou T), "cauchy" donne σ
+résultats : "behaviour" garde S (ou T) ; σ, à la demande, par stress_measure
 ```
 
 L'opérateur est celui de Cast3M, `K_e(GEOM2) + K_σ` : il ne règle que la

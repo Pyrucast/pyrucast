@@ -1,13 +1,13 @@
 //! Delegation methods — the "subject" face of the polymorphic operators.
 //!
-//! Voir `CONVENTIONS.md` § « Le verbe exposé aussi en méthode ». La fonction
+//! See `CONVENTIONS.md` § "The verb also exposed as a method". The free
 //! function stays the canonical form; these methods contain no logic.
 //!
 //! This module's operators return a field of the kind received, so the
-//! quatre saveurs (`NodeField` / `SubNodeField` / `ElementField` /
+//! four flavours (`NodeField` / `SubNodeField` / `ElementField` /
 //! `SubElementField`) carry the same methods. `psca` is not among them: the
 //! scalar product is **symmetric**, `a.psca(b)` would suggest that the order
-//! compte.
+//! matters.
 
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::node_field::{NodeField, SubNodeField};
@@ -15,51 +15,51 @@ use crate::error::Result;
 
 /// Generates, for one field flavour, the eleven element-wise maths. The mask is
 /// no longer here: `mask` produces a determined container, so it has joined
-/// `ops::node_field` et `ops::element_field`.
+/// `ops::node_field` and `ops::element_field`.
 macro_rules! field_methods {
     ($T:ty) => {
         impl $T {
-            /// Valeur absolue, voir [`field::abs`](fn@crate::ops::field::abs).
+            /// Absolute value, see [`field::abs`](fn@crate::ops::field::abs).
             pub fn abs(&self) -> Result<Self> {
                 crate::ops::field::abs(self)
             }
-            /// Racine carrée, voir [`field::sqrt`](fn@crate::ops::field::sqrt).
+            /// Square root, see [`field::sqrt`](fn@crate::ops::field::sqrt).
             pub fn sqrt(&self) -> Result<Self> {
                 crate::ops::field::sqrt(self)
             }
-            /// Exponentielle, voir [`field::exp`](fn@crate::ops::field::exp).
+            /// Exponential, see [`field::exp`](fn@crate::ops::field::exp).
             pub fn exp(&self) -> Result<Self> {
                 crate::ops::field::exp(self)
             }
-            /// Logarithme népérien, voir [`field::log`](fn@crate::ops::field::log).
+            /// Natural logarithm, see [`field::log`](fn@crate::ops::field::log).
             pub fn log(&self) -> Result<Self> {
                 crate::ops::field::log(self)
             }
-            /// Logarithme décimal, voir [`field::log10`](fn@crate::ops::field::log10).
+            /// Decimal logarithm, see [`field::log10`](fn@crate::ops::field::log10).
             pub fn log10(&self) -> Result<Self> {
                 crate::ops::field::log10(self)
             }
-            /// Cosinus, voir [`field::cos`](fn@crate::ops::field::cos).
+            /// Cosine, see [`field::cos`](fn@crate::ops::field::cos).
             pub fn cos(&self) -> Result<Self> {
                 crate::ops::field::cos(self)
             }
-            /// Sinus, voir [`field::sin`](fn@crate::ops::field::sin).
+            /// Sine, see [`field::sin`](fn@crate::ops::field::sin).
             pub fn sin(&self) -> Result<Self> {
                 crate::ops::field::sin(self)
             }
-            /// Tangente, voir [`field::tan`](fn@crate::ops::field::tan).
+            /// Tangent, see [`field::tan`](fn@crate::ops::field::tan).
             pub fn tan(&self) -> Result<Self> {
                 crate::ops::field::tan(self)
             }
-            /// Sinus hyperbolique, voir [`field::sinh`](fn@crate::ops::field::sinh).
+            /// Hyperbolic sine, see [`field::sinh`](fn@crate::ops::field::sinh).
             pub fn sinh(&self) -> Result<Self> {
                 crate::ops::field::sinh(self)
             }
-            /// Cosinus hyperbolique, voir [`field::cosh`](fn@crate::ops::field::cosh).
+            /// Hyperbolic cosine, see [`field::cosh`](fn@crate::ops::field::cosh).
             pub fn cosh(&self) -> Result<Self> {
                 crate::ops::field::cosh(self)
             }
-            /// Tangente hyperbolique, voir [`field::tanh`](fn@crate::ops::field::tanh).
+            /// Hyperbolic tangent, see [`field::tanh`](fn@crate::ops::field::tanh).
             pub fn tanh(&self) -> Result<Self> {
                 crate::ops::field::tanh(self)
             }

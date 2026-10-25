@@ -1,6 +1,5 @@
 """The record of a step (Cast3M ``PAS_RESU``)."""
 
-from .. import element_field
 from .fields import part
 
 __all__ = ["store_step"]
@@ -20,8 +19,9 @@ def store_step(data, problem, state, options, initial=False):
     ``acceleration`` in dynamics, the pilot ``load_multiplier`` under
     indirect control, and the counts ``iterations``, ``accelerations``,
     ``converged``. In large displacements ``behaviour`` holds the Lagrangian
-    stress the laws write (``S_*`` or ``T_*``), and ``cauchy`` the Cauchy
-    stress of the configuration reached (``sigma_*``).
+    stress the laws write (``S_*`` or ``T_*``); any other measure is the
+    caller's to compute from ``displacement`` and ``behaviour``, through
+    ``deformation(…, "gradient")`` and ``stress_measure``.
     """
     if not initial and (
         not state.converged or not _close(state.time, options.save_times)
@@ -41,10 +41,4 @@ def store_step(data, problem, state, options, initial=False):
         "accelerations": state.accelerations,
         "converged": state.converged,
     }
-    if problem.configurations is not None and state.behaviour is not None:
-        displacement = part(state.solution, problem.displacement_names)
-        gradient = element_field.deformation(displacement, problem.fespace, "gradient")
-        record["cauchy"] = element_field.stress_measure(
-            state.behaviour, gradient, "cauchy"
-        )
     data.setdefault("results", []).append(record)

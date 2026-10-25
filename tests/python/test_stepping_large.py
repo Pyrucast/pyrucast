@@ -90,12 +90,20 @@ def _turned_edge(measure):
     return data, node, position, nx, ny
 
 
+def _cauchy(record, fes):
+    """The Cauchy stress of a record, computed from what it holds: the
+    results keep only the Lagrangian stress the laws write."""
+    gradient = pc.element_field.deformation(record["displacement"], fes, "gradient")
+    return pc.element_field.stress_measure(record["behaviour"], gradient, "cauchy")
+
+
 def test_a_free_strip_turned_by_one_edge_rotates_without_stress():
     """Turned by 90° in four steps, the strip rotates rigidly: every node lands
     at R·X and nothing is stressed."""
     data, node, position, nx, ny = _turned_edge("green_lagrange")
     pc.stepping.step_by_step(data)
     last = data["results"][-1]
+    sigma = _cauchy(last, data["model"][0:1].fespace())
     assert all(record["converged"] for record in data["results"])
     for i in range(nx + 1):
         for j in range(ny + 1):
@@ -105,7 +113,7 @@ def test_a_free_strip_turned_by_one_edge_rotates_without_stress():
             assert u.value(node(i, j), "u_y") == pytest.approx(x - y, abs=1e-9)
     for name in ("S_xx", "S_yy", "S_xy"):
         assert last["behaviour"].abs().max(name) < 1e-8
-        assert last["cauchy"].abs().max("sigma" + name[1:]) < 1e-8
+        assert sigma.abs().max("sigma" + name[1:]) < 1e-8
 
 
 def test_computing_again_reuses_the_current_configuration():
@@ -169,7 +177,7 @@ def test_a_follower_pressure_leaves_a_hydrostatic_cauchy_stress():
     pc.stepping.step_by_step(data)
     last = data["results"][-1]
     assert last["converged"]
-    sigma = last["cauchy"]
+    sigma = _cauchy(last, fes)
     for name in ("sigma_xx", "sigma_yy"):
         assert sigma.min(name) == pytest.approx(-p, rel=1e-9)
         assert sigma.max(name) == pytest.approx(-p, rel=1e-9)

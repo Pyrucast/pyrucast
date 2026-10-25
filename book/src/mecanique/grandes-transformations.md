@@ -228,8 +228,9 @@ conductivités gardent leurs valeurs là où pyrucast les pousse.
 
 `stepping.step_by_step` lit la mesure sur les lois et suit cette voie de
 lui-même : forces intérieures sur `P` et conduction en référence, pression
-suiveuse, échanges thermiques et opérateur sur la configuration courante,
-contrainte de Cauchy dans les résultats. Voir
+suiveuse, échanges thermiques et opérateur sur la configuration courante.
+Ses résultats gardent la contrainte lagrangienne de la loi ; la Cauchy s'en
+déduit comme plus haut, avec le déplacement enregistré. Voir
 [Calcul pas à pas](../pas-a-pas.md#grands-déplacements). Les tests
 `tests/python/test_stepping_large.py` y vérifient :
 

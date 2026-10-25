@@ -393,18 +393,18 @@ DOC = ROOT / "target" / "doc" / "pyrucast"
 
 def delegations():
     """The **pure delegation** methods — those whose whole documentation is
-    "see [the free function]" (`See […]`, or the older French `Voir […]`).
+    `See [the free function]` (or `Absolute value, see […]`).
 
-    Elles n'ont aucune logique : elles appellent l'opérateur, receveur compris.
-    The free function is the canonical form and carries the
-    documentation (`CONVENTIONS.md`, « Le verbe exposé aussi en méthode ») :
-    demanding an example of them would duplicate its own, and give a second
-    text to let age.
+    They hold no logic: they call the operator, receiver included. The free
+    function is the canonical form and carries the documentation
+    (`CONVENTIONS.md`, "The verb also exposed as a method"): demanding an
+    example of them would duplicate its own, and give a second text to let
+    age.
 
     The criterion is that **intentional marker**, not the location: these
     blocks live in `src/ops/**/methods.rs` but also at the bottom of
     `src/ops/matrix.rs`, and some are macro-produced on `impl $T`. Searching
-    en laissait passer la moitié.
+    by location let half of them through.
     """
     noms = set()
     for p in (ROOT / "src").rglob("*.rs"):
@@ -419,7 +419,7 @@ def delegations():
                 k -= 1
             if (
                 len(doc) == 1
-                and re.search(r"(?:[Vv]oir|[Ss]ee) \[", doc[0])
+                and re.search(r"\b[Ss]ee \[", doc[0])
                 and "fn@crate::ops::" in doc[0]
             ):
                 noms.add(m.group(1))

@@ -633,25 +633,25 @@ pub fn lump(m: &Matrix) -> Result<Matrix> {
     Ok(out)
 }
 
-// ─── Méthodes de délégation ────────────────────────────────────────────────
+// ─── Delegation methods ─────────────────────────────────────────────────────
 //
-// Voir `CONVENTIONS.md` § « Le verbe exposé aussi en méthode ». Le nom change
+// See `CONVENTIONS.md` § "The verb also exposed as a method". The name changes
 // between the two forms: the free function gets its qualifier from its
-// module (`matrix::stiffness`), la méthode n'en a pas et doit le porter
+// module (`matrix::stiffness`), the method has none and must carry it
 // (`model.stiffness_matrix`).
 
 impl Model {
-    /// Voir [`matrix::stiffness`](fn@crate::ops::matrix::stiffness).
+    /// See [`matrix::stiffness`](fn@crate::ops::matrix::stiffness).
     pub fn stiffness_matrix(&self, materials: &ElementField) -> Result<Matrix> {
         stiffness(self, materials)
     }
 
-    /// Voir [`matrix::mass`](fn@crate::ops::matrix::mass).
+    /// See [`matrix::mass`](fn@crate::ops::matrix::mass).
     pub fn mass_matrix(&self, materials: &ElementField) -> Result<Matrix> {
         mass(self, materials)
     }
 
-    /// Voir [`matrix::geometric`](fn@crate::ops::matrix::geometric).
+    /// See [`matrix::geometric`](fn@crate::ops::matrix::geometric).
     pub fn geometric_matrix(
         &self,
         materials: &ElementField,
@@ -660,7 +660,7 @@ impl Model {
         geometric(self, materials, stress)
     }
 
-    /// Voir [`matrix::tangent`](fn@crate::ops::matrix::tangent).
+    /// See [`matrix::tangent`](fn@crate::ops::matrix::tangent).
     pub fn tangent_matrix(
         &self,
         materials: &ElementField,
@@ -673,7 +673,7 @@ impl Model {
 }
 
 impl Matrix {
-    /// Voir [`matrix::lump`](fn@crate::ops::matrix::lump).
+    /// See [`matrix::lump`](fn@crate::ops::matrix::lump).
     pub fn lump(&self) -> Result<Matrix> {
         lump(self)
     }
