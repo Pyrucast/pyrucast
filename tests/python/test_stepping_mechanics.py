@@ -34,7 +34,7 @@ def _strip(nx=NX, ny=NY, length=L, height=H):
     return mesh, pc.FiniteElementSpace(mesh), node
 
 
-def _fix(target, nodes, variable, sense=None):
+def _fix(target, nodes, variable, sense="="):
     """``variable`` held on ``nodes``, one multiplier per node; returns the
     constraint and its multiplier support (where an imposed value goes)."""
     imposed = pc.mesh.poi1_from_nodes(nodes)

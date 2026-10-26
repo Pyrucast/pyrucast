@@ -161,10 +161,11 @@ def test_eliminate_rejects_unilateral_relations():
 
 
 def test_unknown_sense_rejected():
-    """An unknown `sense` string raises a clear error at model build."""
+    """An unknown `sense` is a bad argument: a `ValueError` naming what is
+    accepted, raised at model build."""
     _, nodes, fes, _ = _heat_bar()
     imposed = pyrucast.mesh.poi1_from_nodes([nodes[0]])
     mult = pyrucast.mesh.barycenter(imposed)
     conduction = pyrucast.model.heat_conduction(fes)
-    with pytest.raises(Exception, match="sense"):
+    with pytest.raises(ValueError, match="relation sense '~'"):
         pyrucast.model.dirichlet(conduction, "T", imposed, mult, sense="~")

@@ -7,7 +7,7 @@ use crate::error::Result;
 
 /// Embedded (immersed) constraint `Model` (a single sub-model) tying each
 /// node of `immersed` to the interpolation of `host` at that node, for every
-/// `(variable, target_dual)` in `components`. Parent-level operator
+/// primal of `target` in `variables`. Parent-level operator
 /// — see [`SubModel::embedded`] and
 /// [`embedded::Embedded::new`](crate::models::embedded::Embedded::new) for the
 /// coupling weights, the per-component variable names and the errors.

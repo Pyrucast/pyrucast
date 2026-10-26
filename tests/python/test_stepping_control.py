@@ -28,7 +28,7 @@ def _strip():
     return mesh, pc.FiniteElementSpace(mesh), node
 
 
-def _fix(target, nodes, variable, sense=None):
+def _fix(target, nodes, variable, sense="="):
     imposed = pc.mesh.poi1_from_nodes(nodes)
     multipliers = pc.mesh.translate(imposed, [0.0, 0.0])
     return pc.model.dirichlet(

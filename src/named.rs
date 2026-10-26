@@ -211,6 +211,7 @@ named_enum!(
     crate::atoms::Interpolation,
     crate::atoms::QuadratureRule,
     crate::models::Physics,
+    crate::models::RelationSense,
     crate::models::damage::law::DamageLaw,
     crate::models::tensor::Kinematics,
     crate::models::plasticity::law::PlasticLaw,

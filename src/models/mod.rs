@@ -40,6 +40,7 @@ use crate::containers::node_field::NodeField;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
+use crate::named::Named;
 use serde::{Deserialize, Serialize};
 
 pub mod beam;
@@ -1303,9 +1304,13 @@ pub struct ConstraintTerm {
 /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
 /// // Equality, or inequality — what moves the constraint from the direct
-/// // solver to the active set.
-/// assert_eq!(RelationSense::parse(None)?, RelationSense::Equality);
-/// assert_eq!(RelationSense::parse(Some(">="))?, RelationSense::GreaterEqual);
+/// // solver to the active set. The Python face takes the sense by its name,
+/// // `"="` (the default), `">="` or `"<="`, and reads `≥` and `≤` as well.
+/// # use pyrucast::named::Named;
+/// assert_eq!(RelationSense::default(), RelationSense::Equality);
+/// assert_eq!(RelationSense::parse(">=")?, RelationSense::GreaterEqual);
+/// assert_eq!(RelationSense::parse("≤")?, RelationSense::LessEqual);
+/// assert!(RelationSense::parse("≠").is_err());
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -1319,60 +1324,36 @@ pub enum RelationSense {
     LessEqual,
 }
 
-impl RelationSense {
-    /// Parse the user-facing spelling: `"="` (equality), `">="` (`≥`), `"<="`
-    /// (`≤`). `None` defaults to equality. The single place the string form is
-    /// interpreted (Rust convenience constructors and the Python bindings).
-    ///
-    /// ```
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::{Model, SubModel};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::{Constraint, Domain, MatrixKind, RelationSense, SubModelKind};
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// # let volume = SubModel::heat_conduction(zone.clone(), MaterialSymmetry::Isotropic).unwrap();
-    /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
-    /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
-    /// // The **single** place the string form is interpreted: the Rust
-    /// // convenience constructors and the Python bindings all go through it.
-    /// assert_eq!(RelationSense::parse(None)?, RelationSense::Equality);
-    /// assert_eq!(RelationSense::parse(Some("<="))?, RelationSense::LessEqual);
-    /// assert!(RelationSense::parse(Some("≠")).is_err());
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn parse(sense: Option<&str>) -> Result<Self> {
-        match sense {
-            None | Some("=") | Some("==") => Ok(Self::Equality),
-            Some(">=") | Some("≥") => Ok(Self::GreaterEqual),
-            Some("<=") | Some("≤") => Ok(Self::LessEqual),
-            Some(other) => Err(PyrucastError::Message(format!(
-                "unknown relation sense '{other}' (expected '=', '>=' or '<=')"
-            ))),
+impl Named for RelationSense {
+    const LABEL: &'static str = "relation sense";
+    const VALUES: &'static [Self] = &[
+        RelationSense::Equality,
+        RelationSense::GreaterEqual,
+        RelationSense::LessEqual,
+    ];
+
+    fn name(self) -> &'static str {
+        match self {
+            RelationSense::Equality => "=",
+            RelationSense::GreaterEqual => ">=",
+            RelationSense::LessEqual => "<=",
         }
+    }
+
+    // The doubled equality of programming languages, and the mathematical
+    // symbols.
+    fn aliases() -> &'static [(&'static str, Self)] {
+        &[
+            ("==", RelationSense::Equality),
+            ("≥", RelationSense::GreaterEqual),
+            ("≤", RelationSense::LessEqual),
+        ]
     }
 }
 
 impl std::fmt::Display for RelationSense {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Self::Equality => "=",
-            Self::GreaterEqual => ">=",
-            Self::LessEqual => "<=",
-        })
+        f.write_str(self.name())
     }
 }
 

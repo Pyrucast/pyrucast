@@ -6,8 +6,8 @@ use crate::containers::model::{Model, SubModel};
 use crate::error::Result;
 use crate::models::RelationSense;
 
-/// Dirichlet `Model` (a single sub-model) constraining `imposed_variable`
-/// on the nodes of `imposed_mesh` via Lagrange multipliers carried by
+/// Dirichlet `Model` (a single sub-model) constraining `variable`, a primal of
+/// `target`, on the nodes of `imposed_mesh` via Lagrange multipliers carried by
 /// `multiplier_mesh`. Parent-level operator — see
 /// [`SubModel::dirichlet`] for the semantics of the four variable names
 /// and the two meshes.

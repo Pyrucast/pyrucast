@@ -46,13 +46,10 @@ pub fn interface_transfer(
     Ok(PyModel { inner })
 }
 
-/// `model.dirichlet(imposed_variable, target_dual, imposed_mesh,
-/// multiplier_mesh, multiplier=None, imposed_value=None, sense="=")` —
-/// Dirichlet constraint model (a single sub-model) imposed via Lagrange
-/// multipliers.
+/// `model.dirichlet(target, variable, imposed_mesh, multiplier_mesh, sense="=")`
+/// — Dirichlet constraint (a single sub-model) holding `variable` on the nodes
+/// of `imposed_mesh`, via Lagrange multipliers.
 ///
-/// `imposed_variable` is the constrained primary variable (e.g. `"T"`);
-/// `target_dual` is the dual variable of the target physics it couples
 /// `target` is the model being constrained: `variable` must be one of its
 /// primals, and its dual row is read from it — the `T → q` map is the target's
 /// business, not something to retype. `imposed_mesh` is the POI1 mesh of
@@ -68,52 +65,52 @@ pub fn interface_transfer(
 /// multiplier mesh, since `lambda_u_x` and `lambda_u_y` on one node are distinct
 /// DOFs.
 ///
-/// `sense` (`"="`, `">="` or `"<="`, default `"="`) turns the constraint
+/// `sense` (`"="`, the default, `">="` or `"<="`) turns the constraint
 /// unilateral (`u ≥ u_d` / `u ≤ u_d`) — such a model is solved with
 /// `solve_unilateral`. See the model chapter of the book for the full semantics.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (target, variable, imposed_mesh, multiplier_mesh, sense=None))]
+#[pyo3(signature = (target, variable, imposed_mesh, multiplier_mesh, sense = RelationSense::Equality))]
 pub fn dirichlet(
     target: PyRef<'_, PyModel>,
     variable: &str,
     imposed_mesh: PyRef<'_, PyMesh>,
     multiplier_mesh: PyRef<'_, PyMesh>,
-    sense: Option<String>,
+    sense: RelationSense,
 ) -> PyResult<PyModel> {
     let inner = model::dirichlet(
         &target.inner,
         variable,
         &imposed_mesh.inner,
         &multiplier_mesh.inner,
-        RelationSense::parse(sense.as_deref())?,
+        sense,
     )?;
     Ok(PyModel { inner })
 }
 
-/// `model.mpc(terms, multiplier_mesh, multiplier=None, imposed_value=None,
-/// sense="=")` — multi-point constraint (a single sub-model) imposing, per
-/// relation, `Σₖ aₖ·u(nodeₖ, varₖ) = g` via Lagrange multipliers.
+/// `model.mpc(target, terms, multiplier_mesh, sense="=")` — multi-point
+/// constraint (a single sub-model) imposing, per relation,
+/// `Σₖ aₖ·u(nodeₖ, varₖ) = g` via Lagrange multipliers.
 ///
-/// `terms` is a list of `(mesh, variable, target_dual, coefficient)` tuples:
-/// each `mesh` is a POI1 mesh (one node per relation), paired
-/// element-for-element with the others and with `multiplier_mesh` (relation
-/// `r` = cell `r` of every mesh). Find `target_dual` with
-/// `model.dual_of(variable)`. `multiplier` / `imposed_value` override the
-/// derived names `lambda_mpc` / `mpc_rhs`. The right-hand side `g` is written
-/// by the user in the load field at the multiplier node's `imposed_value`
-/// component (default `0`). `sense` (`"="`, `">="` or `"<="`, default `"="`)
-/// turns the relations unilateral (`Σ aₖ·uₖ ≥ g` / `≤ g`) — such a model is
-/// solved with `solve_unilateral`. See the constraints chapter of the book.
+/// `target` is the model being constrained. `terms` is a list of
+/// `(mesh, variable, coefficient)` tuples: each `mesh` is a POI1 mesh (one node
+/// per relation), paired element-for-element with the others and with
+/// `multiplier_mesh` (relation `r` = cell `r` of every mesh); each `variable`
+/// is a primal of `target`, whose dual row is read from it. The multiplier and
+/// right-hand-side names are derived, `lambda_mpc` / `mpc_rhs`; `g` is written
+/// by the user in the load field at the multiplier node's `mpc_rhs` component
+/// (default `0`). `sense` (`"="`, the default, `">="` or `"<="`) turns the
+/// relations unilateral (`Σ aₖ·uₖ ≥ g` / `≤ g`) — such a model is solved with
+/// `solve_unilateral`. See the constraints chapter of the book.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (target, terms, multiplier_mesh, sense=None))]
+#[pyo3(signature = (target, terms, multiplier_mesh, sense = RelationSense::Equality))]
 pub fn mpc(
     py: Python<'_>,
     target: PyRef<'_, PyModel>,
     terms: Vec<(Py<PyMesh>, String, f64)>,
     multiplier_mesh: PyRef<'_, PyMesh>,
-    sense: Option<String>,
+    sense: RelationSense,
 ) -> PyResult<PyModel> {
     let mut rust_terms = Vec::with_capacity(terms.len());
     for (mesh, variable, coefficient) in &terms {
@@ -125,69 +122,53 @@ pub fn mpc(
             *coefficient,
         )?);
     }
-    let inner = model::mpc(
-        rust_terms,
-        &multiplier_mesh.inner,
-        RelationSense::parse(sense.as_deref())?,
-    )?;
+    let inner = model::mpc(rust_terms, &multiplier_mesh.inner, sense)?;
     Ok(PyModel { inner })
 }
 
-/// `model.embedded(immersed, host, components, multipliers=None,
-/// imposed_values=None, tol=None)` — embedded (immersed) constraint (a
-/// single sub-model) tying each node of `immersed` to the interpolation of
-/// `host` at that node, via Lagrange multipliers.
+/// `model.embedded(target, immersed, host, variables, tol=1e-6)` — embedded
+/// (immersed) constraint (a single sub-model) tying each node of `immersed` to
+/// the interpolation of `host` at that node, via Lagrange multipliers.
 ///
-/// `immersed` and `host` are meshes sharing one Coords (e.g. a bar
-/// « baignée » in a volume). `components` is a list of `(variable,
-/// target_dual)` pairs — the field components to tie (e.g.
-/// `[("u_x","f_x"), ("u_y","f_y"), ("u_z","f_z")]`); find each `target_dual`
-/// with `model.dual_of(variable)`. The coupling weights are the host shape
-/// functions at each immersed node, computed once at build by locating the
-/// node in the host (an immersed node outside the host is an error).
-/// `multipliers` / `imposed_values` override the per-component derived names
-/// `lambda_<variable>` / `imposed_<variable>`; `tol` is the location
-/// tolerance (default `1e-6`). The right-hand side `g` defaults to `0` (a
-/// rigid tie). See the constraints chapter of the book.
+/// `immersed` and `host` are meshes sharing one Coords (e.g. a bar embedded in
+/// a volume). `target` is the model being constrained; `variables` lists the
+/// primals of `target` to tie (e.g. `["u_x", "u_y", "u_z"]`), each dual row
+/// read from it. The coupling weights are the host shape functions at each
+/// immersed node, computed once at build by locating the node in the host (an
+/// immersed node outside the host is an error); `tol` is the location
+/// tolerance. The multiplier and imposed-value names are derived per variable,
+/// `lambda_<variable>` / `imposed_<variable>`; the right-hand side defaults to
+/// `0` (a rigid tie). See the constraints chapter of the book.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (target, immersed, host, variables, tol=None))]
+#[pyo3(signature = (target, immersed, host, variables, tol = crate::models::embedded::DEFAULT_TOL))]
 pub fn embedded(
     target: PyRef<'_, PyModel>,
     immersed: PyRef<'_, PyMesh>,
     host: PyRef<'_, PyMesh>,
     variables: Vec<String>,
-    tol: Option<f64>,
+    tol: f64,
 ) -> PyResult<PyModel> {
-    let inner = model::embedded(
-        &target.inner,
-        &immersed.inner,
-        &host.inner,
-        variables,
-        // Flattened at the boundary: the sub-model receives a tolerance, not an
-        // absence to test for.
-        tol.unwrap_or(crate::models::embedded::DEFAULT_TOL),
-    )?;
+    let inner = model::embedded(&target.inner, &immersed.inner, &host.inner, variables, tol)?;
     Ok(PyModel { inner })
 }
 
-/// `model.contact(slave, master, components, multiplier=None,
-/// imposed_value=None)` — node-to-surface contact (a single sub-model):
-/// prevent the nodes of `slave` from penetrating the oriented `master`
-/// surface mesh, one **unilateral** relation (`≥`) per slave node.
+/// `model.contact(target, slave, master, variables)` — node-to-surface contact
+/// (a single sub-model): prevent the nodes of `slave` from penetrating the
+/// oriented `master` surface mesh, one **unilateral** relation (`≥`) per slave
+/// node.
 ///
 /// Each slave node is paired at build with its closest master facet
 /// (projection weights, facet normal, initial signed gap); the pairing is
 /// then fixed (linearised, frictionless contact). The master surface must
 /// be consistently oriented with its normal pointing toward the slave
-/// body. `components` is a list of `(variable, target_dual)` pairs — one
-/// per space dimension, in ambient order (e.g.
-/// `[("u_x","f_x"), ("u_y","f_y")]`); find each `target_dual` with
-/// `model.dual_of(variable)`. `multiplier` / `imposed_value` override the
-/// derived names `lambda_contact` / `contact_gap`.
+/// body. `target` is the model being constrained; `variables` lists its
+/// displacement primals, one per space dimension in ambient order (e.g.
+/// `["u_x", "u_y"]`), each dual row read from it. The multiplier and gap names
+/// are derived, `lambda_contact` / `contact_gap`.
 ///
 /// Solve with `solve_unilateral`; build the initial-gap right-hand side
-/// with `contact_gaps()`. See the contact chapter of the book.
+/// with `Model.contact_gaps()`. See the contact chapter of the book.
 #[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(signature = (target, slave, master, variables))]

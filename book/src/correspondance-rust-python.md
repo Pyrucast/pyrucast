@@ -263,9 +263,9 @@ un sujet qu'on transforme.
 | `bernoulli(fes: &FiniteElementSpace) -> Model` | `bernoulli(fespace) -> Model` |
 | `timoshenko(fes: &FiniteElementSpace) -> Model` | `timoshenko(fespace) -> Model` |
 | `shell(fes, model: ShellModel) -> Model` | `shell(fespace, model) -> Model` |
-| `dirichlet(target: &Model, variable: &str, imposed_mesh, multiplier_mesh, sense: RelationSense) -> Model` | `dirichlet(target, variable, imposed_mesh, multiplier_mesh, sense=None) -> Model` |
-| `mpc(terms: Vec<MpcTerm>, multiplier_mesh, sense) -> Model` | `mpc(target, terms, multiplier_mesh, sense=None) -> Model` |
-| `embedded(target: &Model, immersed, host, variables: Vec<String>, tol) -> Model` | `embedded(target, immersed, host, variables, tol=None) -> Model` |
+| `dirichlet(target: &Model, variable: &str, imposed_mesh, multiplier_mesh, sense: RelationSense) -> Model` | `dirichlet(target, variable, imposed_mesh, multiplier_mesh, sense="=") -> Model` |
+| `mpc(terms: Vec<MpcTerm>, multiplier_mesh, sense) -> Model` | `mpc(target, terms, multiplier_mesh, sense="=") -> Model` |
+| `embedded(target: &Model, immersed, host, variables: Vec<String>, tol) -> Model` | `embedded(target, immersed, host, variables, tol=1e-6) -> Model` — défaut `embedded::DEFAULT_TOL` |
 | `contact(target: &Model, slave, master, variables: Vec<String>) -> Model` | `contact(target, slave, master, variables) -> Model` |
 
 **Un argument, deux idiomes.** Un argument que Python prend en mot-clé avec
