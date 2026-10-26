@@ -21,6 +21,7 @@ use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
+use pyrucast::ops::element_field::StrainMeasure;
 use pyrucast::ops::element_field::{
     elastic_stress, gradient, interp_to_gauss, material_field, strain,
 };
@@ -45,7 +46,12 @@ fn quad() -> Result<(Mesh, FiniteElementSpace, Vec<Node>)> {
 /// Plane-stress elasticity on `fes`, with `E` and `rho` different at every
 /// Gauss point of the cell.
 fn varying(fes: &FiniteElementSpace) -> Result<(Model, ElementField)> {
-    let solid = model::elasticity(fes, Kinematics::PlaneStress)?;
+    let solid = model::elasticity(
+        fes,
+        Kinematics::PlaneStress,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     let materials = material_field(&solid, &[("E", 1.0), ("nu", 0.25), ("rho", 1.0)])?;
     {
         let mut zone = materials.get(0)?.write();
@@ -238,7 +244,7 @@ fn check_transport(
 #[test]
 fn heat_conduction_integrates_its_conductivity_and_axes_at_every_gauss_point() -> Result<()> {
     let (_, fes, _) = quad()?;
-    let law = model::heat_conduction_with_symmetry(&fes, MaterialSymmetry::Orthotropic)?;
+    let law = model::heat_conduction(&fes, MaterialSymmetry::Orthotropic)?;
     // The capacity ρ·cp, with ρ = 1: cp carries the variation.
     check_transport(&law, "T", "q", ("k_1", "k_2", "cp"), &[("rho", 1.0)])
 }
@@ -246,6 +252,6 @@ fn heat_conduction_integrates_its_conductivity_and_axes_at_every_gauss_point() -
 #[test]
 fn fick_integrates_its_diffusivity_axes_and_storage_at_every_gauss_point() -> Result<()> {
     let (_, fes, _) = quad()?;
-    let law = model::fick_with_symmetry(&fes, MaterialSymmetry::Orthotropic, "H2")?;
+    let law = model::fick(&fes, "H2", MaterialSymmetry::Orthotropic)?;
     check_transport(&law, "c_H2", "j_H2", ("D_1_H2", "D_2_H2", "poro"), &[])
 }

@@ -64,14 +64,9 @@ RUST_ONLY = {
     "vtk_mesh_string": '"to a string" variant, not exposed',
     "vtk_node_field_string": '"to a string" variant, not exposed',
     "vtk_element_field_string": '"to a string" variant, not exposed',
-    # The `*_with_symmetry` / `*_with_law` variants of `ops::model`: Rust passes
-    # an enum (`MaterialSymmetry`, `PlasticLaw`, `DamageLaw`), Python does not
-    # expose those enums. The fold differs on each side — a `symmetry=` keyword
-    # for the symmetry, one function per law for the laws (see PYTHON_ONLY) —
-    # but no operation is missing.
-    "heat_conduction_with_symmetry": "folded into `model.heat_conduction(fes, symmetry=…)`",
-    "fick_with_symmetry": "folded into `model.fick(fes, species, symmetry=…)`",
-    "elasticity_with_symmetry": "folded into `model.elasticity(fes, model, symmetry=…)`",
+    # The `*_with_law` operators of `ops::model`: Rust passes the law as an enum
+    # (`PlasticLaw`, `DamageLaw`), Python unfolds it into one function per law
+    # (see PYTHON_ONLY) — no operation is missing.
     "plasticity_with_law": "unfolded into one Python function per law (`drucker_prager`, `creep_norton`…)",
     "damage_with_law": "unfolded into one Python function per law (`damage_tc`, `gurson`…)",
     "select_cells": "dispatched by type inside `mesh.select`",

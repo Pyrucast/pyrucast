@@ -243,6 +243,8 @@ pub(crate) fn owner_physics(target: &Model, owns: impl Fn(&SubModel) -> bool) ->
 /// a single one, and `model.filter(…)` selects it by it.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
+/// # use pyrucast::ops::element_field::StrainMeasure;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -261,8 +263,8 @@ pub(crate) fn owner_physics(target: &Model, owns: impl Fn(&SubModel) -> bool) ->
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// // Le constructeur d'un échange s'en sert : la nature sort de la cible.
-/// let deux = model::heat_conduction(&fes)?
-///     .union(&model::elasticity(&fes, Kinematics::PlaneStress)?)?;
+/// let deux = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?
+///     .union(&model::elasticity(&fes, Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?)?;
 /// let film = BoundaryTransfer::new(zone.clone(), &deux, vec![("T".into(), "q".into())])?;
 /// assert_eq!(film.physics(), &[Physics::Thermal]);
 /// let appui = BoundaryTransfer::new(zone.clone(), &deux, vec![("u_x".into(), "f_x".into())])?;

@@ -5,67 +5,12 @@
 //! heterogeneous physics compose with `|`.
 
 use crate::models::mpc::MpcTerm;
-use crate::models::symmetry::MaterialSymmetry;
-use crate::models::tensor::Kinematics;
 use crate::models::RelationSense;
-use crate::ops::element_field::StrainMeasure;
 use crate::ops::model;
 use crate::py::finite_element_space::PyFiniteElementSpace;
 use crate::py::mesh::PyMesh;
 use crate::py::model::PyModel;
 use pyo3::prelude::*;
-
-/// `model.heat_conduction(fespace, symmetry=None)` — heat-conduction model
-/// spanning **every** subspace of `fespace` (one zone per subspace). A
-/// single-subspace space gives the unit case; several give one zone
-/// each. Compose heterogeneous physics with `|`:
-/// `model.heat_conduction(fes) | model.dirichlet(...)`.
-///
-/// `symmetry` is `"isotropic"` (the default), `"orthotropic"` or
-/// `"anisotropic"`, and selects which conductivity the material field must
-/// carry: the scalar `k`, the principal `k_1, k_2, k_3`, or the symmetric
-/// tensor `k_11 … k_33`. The two oriented ones also require the material
-/// axes — `V1X, V1Y` in 2-D, `V1X…V1Z, V2X…V2Z` in 3-D.
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-#[pyfunction]
-#[pyo3(signature = (fespace, symmetry=None))]
-pub fn heat_conduction(
-    fespace: PyRef<PyFiniteElementSpace>,
-    symmetry: Option<MaterialSymmetry>,
-) -> PyResult<PyModel> {
-    let s = symmetry.unwrap_or(MaterialSymmetry::Isotropic);
-    let inner = model::heat_conduction_with_symmetry(&fespace.inner, s)?;
-    Ok(PyModel { inner })
-}
-
-/// `model.fick(fespace, species, symmetry=None)` — Fickian diffusion of one
-/// named **species**, spanning every subspace of `fespace`.
-///
-/// Every name carries the species: DOFs are `c_<species>` (primal) and
-/// `j_<species>` (dual), the diffusivity is `D_<species>`, the reported flux
-/// `j_<species>_x…`. Two species therefore share a mesh without colliding —
-/// and no bare `c` can be mistaken for anything else. Its physics nature is
-/// `"diffusion"`, so `model.filter("diffusion")` isolates it from a thermal
-/// or mechanical model it is composed with.
-///
-/// `symmetry` is `"isotropic"` (the default), `"orthotropic"` or
-/// `"anisotropic"`, selecting the diffusivity the material field must carry:
-/// `D_<species>`, `D_1_<species> …`, or the symmetric `D_11_<species> …` —
-/// the oriented ones plus the material axes `V1X, V1Y, …`. Those axes and
-/// the optional storage `poro` keep **bare** names: they belong to the
-/// medium, not to what diffuses through it.
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-#[pyfunction]
-#[pyo3(signature = (fespace, species, symmetry=None))]
-pub fn fick(
-    fespace: PyRef<PyFiniteElementSpace>,
-    species: &str,
-    symmetry: Option<MaterialSymmetry>,
-) -> PyResult<PyModel> {
-    let s = symmetry.unwrap_or(MaterialSymmetry::Isotropic);
-    let inner = model::fick_with_symmetry(&fespace.inner, s, species)?;
-    Ok(PyModel { inner })
-}
 
 /// `model.interface_transfer(side_a, side_b, target, components, tol=1e-9)` —
 /// the exchange law `j·n = h(c₁ − c₂)` across an interface between two bodies
@@ -98,41 +43,6 @@ pub fn interface_transfer(
 ) -> PyResult<PyModel> {
     let inner =
         model::interface_transfer(&side_a.inner, &side_b.inner, &target.inner, components, tol)?;
-    Ok(PyModel { inner })
-}
-
-/// `model.elasticity(fespace, kinematics, symmetry=None)` — linear-elasticity
-/// model spanning every subspace of `fespace`. `kinematics` is `"plane_stress"`,
-/// `"plane_strain"` or `"axisymmetric"` (2-D), or `"full_3d"` (3-D). DOFs are
-/// the vector displacement `u_x, u_y(, u_z)`; material is supplied at
-/// assembly time.
-///
-/// `"axisymmetric"` requires a geometry built with `Coords.axisymmetric()`
-/// (`x = r`, `y = z`): the hoop strain `ε_θθ = u_r / r` comes from the kinematics,
-/// the `2πr` integration measure from the geometry, and the two must agree.
-///
-/// `symmetry` is the **material** axis, independent of the kinematic one:
-/// `"isotropic"` (the default, material `E`, `nu`), `"orthotropic"`
-/// (`E_1, E_2, E_3, nu_12, nu_13, nu_23, G_12, G_13, G_23`) or
-/// `"anisotropic"` (the 21 constants `C_11 … C_66`). The two oriented ones
-/// also require the material axes — `V1X, V1Y` in 2-D, `V1X…V1Z, V2X…V2Z`
-/// in 3-D — which are orthonormalised internally.
-///
-/// `strain_measure` is the strain the law reads: `"linear"` (small strains,
-/// the default), `"green_lagrange"` (large rotations: Hooke on `E` is
-/// Saint-Venant–Kirchhoff) or `"hencky"` (`½ ln C`). The stress it writes is
-/// the dual, named after it: `sigma_*`, `S_*` or `T_*`.
-#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
-#[pyfunction]
-#[pyo3(signature = (fespace, kinematics, symmetry=None, strain_measure=StrainMeasure::Linear))]
-pub fn elasticity(
-    fespace: PyRef<PyFiniteElementSpace>,
-    kinematics: Kinematics,
-    symmetry: Option<MaterialSymmetry>,
-    strain_measure: StrainMeasure,
-) -> PyResult<PyModel> {
-    let s = symmetry.unwrap_or(MaterialSymmetry::Isotropic);
-    let inner = model::elasticity_with_symmetry(&fespace.inner, kinematics, s, strain_measure)?;
     Ok(PyModel { inner })
 }
 

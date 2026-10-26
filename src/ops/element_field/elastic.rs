@@ -59,6 +59,7 @@ enum Direction {
 /// one.
 ///
 /// ```
+/// # use pyrucast::ops::element_field::StrainMeasure;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::ElementField;
@@ -77,7 +78,7 @@ enum Direction {
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// // A plasticity: its elastic operator is the isotropic D, and `sigma_y`
 /// // plays no part in it.
-/// let plaque = model::plasticity_perfect(&fes, Kinematics::PlaneStress)?;
+/// let plaque = model::plasticity_perfect(&fes, Kinematics::PlaneStress, StrainMeasure::Linear)?;
 /// let materiau = element_field::material_field(&plaque, &[("E", 200.0), ("nu", 0.0), ("sigma_y", 1.0)])?;
 /// let eps = ElementField::new(&fes, vec!["eps_xx".into(), "eps_xy".into(), "eps_yy".into()])?;
 /// eps.get(0)?.write().set_uniform("eps_xx", 1e-3)?;
@@ -109,6 +110,8 @@ pub fn elastic_stress(
 /// elastic strain to go back to.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
+/// # use pyrucast::ops::element_field::StrainMeasure;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::ElementField;
@@ -125,7 +128,7 @@ pub fn elastic_stress(
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// let plaque = model::elasticity(&fes, Kinematics::PlaneStress)?;
+/// let plaque = model::elasticity(&fes, Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
 /// let materiau = element_field::material_field(&plaque, &[("E", 100.0), ("nu", 0.25)])?;
 /// let sigma = ElementField::new(&fes, vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_xy".into()])?;
 /// sigma.get(0)?.write().set_uniform("sigma_xx", 1.0)?;
@@ -347,8 +350,7 @@ mod tests {
         materials: &[(&str, f64)],
         names: &[&str],
     ) {
-        let m = model::elasticity_with_symmetry(fes, kinematics, symmetry, StrainMeasure::Linear)
-            .unwrap();
+        let m = model::elasticity(fes, kinematics, symmetry, StrainMeasure::Linear).unwrap();
         let mat = material_field(&m, materials).unwrap();
         let eps = strain(fes, names);
         let ours = elastic_stress(&m, &eps, &mat).unwrap();
@@ -437,7 +439,8 @@ mod tests {
                 vec!["eps_xx", "eps_xy", "eps_xz", "eps_yy", "eps_yz", "eps_zz"],
             ),
         ] {
-            let m = model::elasticity(&fes, k).unwrap();
+            let m = model::elasticity(&fes, k, MaterialSymmetry::Isotropic, StrainMeasure::Linear)
+                .unwrap();
             let mat = material_field(&m, &[("E", 210e3), ("nu", 0.3)]).unwrap();
             let eps = strain(&fes, &names);
             let back = elastic_strain(&m, &elastic_stress(&m, &eps, &mat).unwrap(), &mat).unwrap();
@@ -456,7 +459,13 @@ mod tests {
     #[test]
     fn singular_operator_is_an_error() {
         let fes = tri3(2, false);
-        let m = model::elasticity(&fes, Kinematics::PlaneStress).unwrap();
+        let m = model::elasticity(
+            &fes,
+            Kinematics::PlaneStress,
+            MaterialSymmetry::Isotropic,
+            StrainMeasure::Linear,
+        )
+        .unwrap();
         let mat = material_field(&m, &[("E", 0.0), ("nu", 0.3)]).unwrap();
         let sigma = strain(&fes, &["sigma_xx", "sigma_yy", "sigma_xy"]);
         let err = elastic_strain(&m, &sigma, &mat).unwrap_err();
@@ -467,7 +476,7 @@ mod tests {
     #[test]
     fn a_conduction_has_no_elastic_operator() {
         let fes = tri3(2, false);
-        let m = model::heat_conduction(&fes).unwrap();
+        let m = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
         let mat = material_field(&m, &[("k", 1.0)]).unwrap();
         let eps = strain(&fes, &["eps_xx", "eps_xy", "eps_yy"]);
         assert!(elastic_stress(&m, &eps, &mat).unwrap().is_empty());

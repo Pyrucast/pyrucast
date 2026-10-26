@@ -35,9 +35,9 @@ use crate::models::RelationSense;
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// // Le modèle complet d'un problème thermique : la physique, puis l'appui.
-/// let m = model::heat_conduction(&fes)?.union(
+/// let m = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?.union(
 ///     &model::dirichlet(&cible, "T", &impose, &mult,
 ///                       RelationSense::Equality)?)?;
 /// assert_eq!(m.len(), 2);

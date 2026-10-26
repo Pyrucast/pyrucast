@@ -32,6 +32,7 @@ use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::ops::model;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::Result;
@@ -80,7 +81,7 @@ fn thermal_convection_recovers_analytical_solution() -> Result<()> {
     }
     let right_fes = FiniteElementSpace::lagrange1(&right_edge)?;
 
-    let conduction = model::heat_conduction(&fes)?;
+    let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     let convection =
         model::boundary_transfer(&right_fes, &conduction, vec![("T".into(), "q".into())])?;
     let model = conduction.union(&convection)?;

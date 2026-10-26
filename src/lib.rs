@@ -125,8 +125,11 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::solver::solve, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::solver::solve_eliminate, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::solver::solve_unilateral, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::model::heat_conduction, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::model::fick, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        models::heat_conduction::heat_conduction_py::heat_conduction,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(models::fick::fick_py::fick, m)?)?;
     m.add_function(wrap_pyfunction!(
         models::radiation::radiation_py::radiation,
         m
@@ -137,7 +140,10 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m
     )?)?;
     m.add_function(wrap_pyfunction!(models::truss::truss_py::truss, m)?)?;
-    m.add_function(wrap_pyfunction!(py::ops::model::elasticity, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        models::elasticity::elasticity_py::elasticity,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(
         models::plasticity::von_mises::plasticity_perfect_py::plasticity_perfect,
         m

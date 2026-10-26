@@ -248,21 +248,18 @@ un sujet qu'on transforme.
 
 | Rust (`ops::model::…`) | Python (`pyrucast.model.…`) |
 |---|---|
-| `heat_conduction(fes: &FiniteElementSpace) -> Model` | `heat_conduction(fespace, symmetry=None) -> Model` |
-| `heat_conduction_with_symmetry(fes, symmetry: MaterialSymmetry) -> Model` | *idem, via `symmetry=`* |
-| `fick(fes: &FiniteElementSpace, species: &str) -> Model` | `fick(fespace, species, symmetry=None) -> Model` |
-| `fick_with_symmetry(fes, symmetry: MaterialSymmetry, species: &str) -> Model` | *idem, via `symmetry=`* |
+| `heat_conduction(fes: &FiniteElementSpace, symmetry: MaterialSymmetry) -> Model` | `heat_conduction(fespace, symmetry="isotropic") -> Model` |
+| `fick(fes: &FiniteElementSpace, species: &str, symmetry: MaterialSymmetry) -> Model` | `fick(fespace, species, symmetry="isotropic") -> Model` |
 | `radiation(fes: &FiniteElementSpace, target: &Model) -> Model` | `radiation(fespace, target) -> Model` |
 | `flux(fes: &FiniteElementSpace, target: &Model, dual: String) -> Model` | `flux(fespace, target, dual) -> Model` (`dual="n"` : le mode normal, une pression `phi_n` le long de la normale de la maille) |
 | `boundary_transfer(fes, target: &Model, components: Vec<(String, String)>) -> Model` | `boundary_transfer(fespace, target, components) -> Model` |
 | `interface_transfer(side_a, side_b, target: &Model, components, tol: f64) -> Model` | `interface_transfer(side_a, side_b, target, components, tol=1e-9) -> Model` — défaut `interface_transfer::DEFAULT_TOL` |
 | `truss(fes: &FiniteElementSpace, strain_measure: StrainMeasure) -> Model` | `truss(fespace, strain_measure="linear") -> Model` |
-| `elasticity(fes, model: ElasticityModel) -> Model` | `elasticity(fespace, model, symmetry=None, strain_measure="linear") -> Model` |
-| `elasticity_with_symmetry(fes, model, symmetry: MaterialSymmetry, measure: StrainMeasure) -> Model` | *idem, via `symmetry=` et `strain_measure=`* |
-| `plasticity_perfect(fes, model: ElasticityModel) -> Model` | `plasticity_perfect(fespace, model, strain_measure="linear") -> Model` |
-| `plasticity_with_law(fes, model, law: PlasticLaw, measure: StrainMeasure) -> Model` | une fonction par loi : `plasticity_isotropic`, `drucker_prager`, `ottosen`, `creep_norton`, `creep_blackburn`, `creep_lemaitre`, `viscoplasticity_chaboche`, `viscoplasticity_lemaitre_chaboche`, `gurson` — toutes `(fespace, model, strain_measure="linear") -> Model` |
-| `mazars(fes, model: ElasticityModel) -> Model` | `mazars(fespace, model, strain_measure="linear") -> Model` |
-| `damage_with_law(fes, model, law: DamageLaw, measure: StrainMeasure) -> Model` | une fonction par loi : `damage_tc`, `damage_sic_sic` — `(fespace, model, strain_measure="linear") -> Model` |
+| `elasticity(fes, kinematics: Kinematics, symmetry: MaterialSymmetry, strain_measure: StrainMeasure) -> Model` | `elasticity(fespace, kinematics, symmetry="isotropic", strain_measure="linear") -> Model` |
+| `plasticity_perfect(fes, kinematics: Kinematics, strain_measure: StrainMeasure) -> Model` | `plasticity_perfect(fespace, kinematics, strain_measure="linear") -> Model` |
+| `plasticity_with_law(fes, kinematics, law: PlasticLaw, measure: StrainMeasure) -> Model` | une fonction par loi : `plasticity_isotropic`, `drucker_prager`, `ottosen`, `creep_norton`, `creep_blackburn`, `creep_lemaitre`, `viscoplasticity_chaboche`, `viscoplasticity_lemaitre_chaboche`, `gurson` — toutes `(fespace, kinematics, strain_measure="linear") -> Model`, qui existent aussi en Rust, `(fes, kinematics, strain_measure)` |
+| `mazars(fes, kinematics: Kinematics, strain_measure: StrainMeasure) -> Model` | `mazars(fespace, kinematics, strain_measure="linear") -> Model` |
+| `damage_with_law(fes, kinematics, law: DamageLaw, measure: StrainMeasure) -> Model` | une fonction par loi : `damage_tc`, `damage_sic_sic` — `(fespace, kinematics, strain_measure="linear") -> Model`, qui existent aussi en Rust, `(fes, kinematics, strain_measure)` |
 | `bernoulli(fes: &FiniteElementSpace) -> Model` | `bernoulli(fespace) -> Model` |
 | `timoshenko(fes: &FiniteElementSpace) -> Model` | `timoshenko(fespace) -> Model` |
 | `shell(fes, model: ShellModel) -> Model` | `shell(fespace, model) -> Model` |
@@ -271,11 +268,16 @@ un sujet qu'on transforme.
 | `embedded(target: &Model, immersed, host, variables: Vec<String>, tol) -> Model` | `embedded(target, immersed, host, variables, tol=None) -> Model` |
 | `contact(target: &Model, slave, master, variables: Vec<String>) -> Model` | `contact(target, slave, master, variables) -> Model` |
 
-**Les deux plis du catalogue.** Rust nomme la symétrie et la loi par une
-**enum** (`MaterialSymmetry`, `ElasticLaw`, `PlasticLaw`, `DamageLaw`) ; Python n'expose pas
-ces enums, et replie donc la symétrie en mot-clé `symmetry=` et déplie les lois
-en une fonction chacune. Le catalogue est le même des deux côtés — les
-dérogations correspondantes sont enregistrées, avec leur raison, dans
+**Un argument, deux idiomes.** Un argument que Python prend en mot-clé avec
+valeur par défaut (`symmetry="isotropic"`, `strain_measure="linear"`), Rust le
+reçoit explicitement (`MaterialSymmetry::Isotropic`, `StrainMeasure::Linear`) :
+Rust n'a pas d'argument par défaut. Même nom, même ordre ; c'est
+`physics_operator!` qui écrit les deux faces.
+
+**Le pli des lois.** Rust nomme la loi par une **enum** (`PlasticLaw`,
+`DamageLaw`) dans `plasticity_with_law` et `damage_with_law` ; Python déplie
+les lois en une fonction chacune, que Rust offre aussi. Les dérogations
+correspondantes sont enregistrées, avec leur raison, dans
 `tests/python/test_mirror_completeness.py`.
 
 ### `ops::matrix` — assemblage des matrices

@@ -812,6 +812,8 @@ impl Continuum {
     /// every Gauss point is a **static** call.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
+    /// # use pyrucast::ops::element_field::StrainMeasure;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::element_field::ElementField;
@@ -827,7 +829,7 @@ impl Continuum {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
     /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id(), n[3].id()])?;
     /// # let fes = FiniteElementSpace::lagrange1(&mesh)?;
-    /// # let modele = model::elasticity(&fes, Kinematics::PlaneStress)?;
+    /// # let modele = model::elasticity(&fes, Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
     /// # let materiaux = element_field::material_field(
     /// #     &modele, &[("E", 210_000.0), ("nu", 0.3)])?;
     /// # let eps = ElementField::new(

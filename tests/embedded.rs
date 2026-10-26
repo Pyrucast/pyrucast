@@ -18,7 +18,9 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::embedded::DEFAULT_TOL;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
+use pyrucast::ops::element_field::StrainMeasure;
 use pyrucast::ops::matrix::stiffness;
 use pyrucast::ops::mesh::barycenter;
 use pyrucast::ops::model;
@@ -61,7 +63,10 @@ fn immersed_node_follows_host_interpolation() -> Result<()> {
     materials.add_sub(Handle::new(mat))?;
 
     let mut model = Model::empty();
-    model.add_sub(Handle::new(SubModel::heat_conduction(sub)?))?;
+    model.add_sub(Handle::new(SubModel::heat_conduction(
+        sub,
+        MaterialSymmetry::Isotropic,
+    )?))?;
 
     // Dirichlet pinning all eight corners to the linear field.
     let mut corner_sm = SubMesh::new(coords.clone(), ElementType::POI1);
@@ -79,7 +84,10 @@ fn immersed_node_follows_host_interpolation() -> Result<()> {
     let mut bar_sm = SubMesh::new(coords.clone(), ElementType::POI1);
     bar_sm.add_cell(&[p.id()])?;
     let bar = Mesh::from_submesh(bar_sm);
-    let hote = model::heat_conduction(&FiniteElementSpace::lagrange1(&host)?)?;
+    let hote = model::heat_conduction(
+        &FiniteElementSpace::lagrange1(&host)?,
+        MaterialSymmetry::Isotropic,
+    )?;
     let emb = SubModel::embedded(&hote, &bar, &host, vec!["T".into()], DEFAULT_TOL)?;
     let emb_mult = emb.multiplier_nodes()[0];
     model.add_sub(Handle::new(emb))?;
@@ -157,7 +165,12 @@ fn immersed_node_follows_host_displacement_field() -> Result<()> {
         let mult = barycenter(&imposed)?;
         model::dirichlet(target, var, &imposed, &mult, Default::default())
     };
-    let mut model = model::elasticity(&fes, Kinematics::Full3D)?;
+    let mut model = model::elasticity(
+        &fes,
+        Kinematics::Full3D,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     model = model.union(&clamp(&model, &[0, 3, 4, 7], "u_x")?)?;
     model = model.union(&clamp(&model, &[0, 1, 4, 5], "u_y")?)?;
     model = model.union(&clamp(&model, &[0, 1, 2, 3], "u_z")?)?;
@@ -237,7 +250,12 @@ fn embedded_per_component_offset() -> Result<()> {
         let mult = barycenter(&imposed)?;
         model::dirichlet(target, var, &imposed, &mult, Default::default())
     };
-    let mut model = model::elasticity(&fes, Kinematics::Full3D)?;
+    let mut model = model::elasticity(
+        &fes,
+        Kinematics::Full3D,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     model = model.union(&clamp(&model, &[0, 3, 4, 7], "u_x")?)?;
     model = model.union(&clamp(&model, &[0, 1, 4, 5], "u_y")?)?;
     model = model.union(&clamp(&model, &[0, 1, 2, 3], "u_z")?)?;

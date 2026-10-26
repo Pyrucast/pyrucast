@@ -193,7 +193,7 @@ fn patch_model(
     symmetry: MaterialSymmetry,
 ) -> Result<(Model, Vec<(pyrucast::atoms::NodeId, f64)>)> {
     let h = 1.0 / N as f64;
-    let mut model = model::heat_conduction_with_symmetry(fes, symmetry)?;
+    let mut model = model::heat_conduction(fes, symmetry)?;
     let mut multipliers = Vec::new();
     for j in 0..=N {
         for i in 0..=N {

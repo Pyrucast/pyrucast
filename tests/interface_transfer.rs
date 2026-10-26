@@ -32,6 +32,7 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::interface_transfer::DEFAULT_TOL;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::Physics;
 use pyrucast::ops::mesh;
 use pyrucast::ops::model;
@@ -233,7 +234,7 @@ fn a_non_conforming_interface_is_rejected() -> Result<()> {
     let (b0, b1) = (node(1.5, 0.0)?, node(1.5, 1.0)?);
     let (side_a, side_b) = (edge(&a0, &a1)?, edge(&b0, &b1)?);
     // A valid target, so that it really is the geometry that gets refused.
-    let target = model::fick(&side_a, SPECIES)?;
+    let target = model::fick(&side_a, SPECIES, MaterialSymmetry::Isotropic)?;
     let err = model::interface_transfer(
         &side_a,
         &side_b,
@@ -275,7 +276,7 @@ fn a_pair_its_target_does_not_assemble_is_rejected() -> Result<()> {
     let mut m = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
     m.add_cell(&[a.id(), b.id()])?;
     let face = FiniteElementSpace::lagrange1(&m)?;
-    let diffusion = model::fick(&face, SPECIES)?;
+    let diffusion = model::fick(&face, SPECIES, MaterialSymmetry::Isotropic)?;
 
     // A thermal contact resistance on a model that does not know `T`.
     let err = model::interface_transfer(
@@ -293,7 +294,7 @@ fn a_pair_its_target_does_not_assemble_is_rejected() -> Result<()> {
     );
 
     // Primal and dual present, but not paired together: refused too.
-    let both = diffusion.union(&model::heat_conduction(&face)?)?;
+    let both = diffusion.union(&model::heat_conduction(&face, MaterialSymmetry::Isotropic)?)?;
     let err = model::interface_transfer(
         &face,
         &face,
@@ -375,8 +376,9 @@ fn two_square_model(h: f64) -> Result<(Geometry, Model, ElementField)> {
     let multiplier = mesh::barycenter(&imposed)?;
 
     // The two squares' diffusion: that is what the support constrains.
-    let fick_pair =
-        model::fick(&square(&left)?, SPECIES)?.union(&model::fick(&square(&right)?, SPECIES)?)?;
+    let fick_pair = model::fick(&square(&left)?, SPECIES, MaterialSymmetry::Isotropic)?.union(
+        &model::fick(&square(&right)?, SPECIES, MaterialSymmetry::Isotropic)?,
+    )?;
     let model = fick_pair
         .union(&model::interface_transfer(
             &face_left,

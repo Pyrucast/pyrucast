@@ -30,8 +30,10 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::models::Physics;
+use pyrucast::ops::element_field::StrainMeasure;
 use pyrucast::ops::mesh;
 use pyrucast::ops::model;
 use pyrucast::ops::solver::lu::solve;
@@ -90,7 +92,12 @@ fn each_direction_carries_its_own_stiffness() -> Result<()> {
     // The right edge rests on a foundation in **both** directions, with two
     // different stiffnesses; the left edge is held.
     let right = edge_fespace(&grid, &coords, n, idx)?;
-    let elastic = model::elasticity(&fes, Kinematics::PlaneStress)?;
+    let elastic = model::elasticity(
+        &fes,
+        Kinematics::PlaneStress,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     let mut model = elastic.union(&model::boundary_transfer(
         &right,
         &elastic,
@@ -153,13 +160,18 @@ fn the_foundation_takes_its_nature_from_the_elasticity() -> Result<()> {
     let idx = |i: usize, j: usize| j * (n + 1) + i;
     let right = edge_fespace(&grid, &coords, n, idx)?;
 
-    let elastic = model::elasticity(&fes, Kinematics::PlaneStress)?;
+    let elastic = model::elasticity(
+        &fes,
+        Kinematics::PlaneStress,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     let appui = model::boundary_transfer(&right, &elastic, vec![("u_x".into(), "f_x".into())])?;
     assert_eq!(appui.filter(Physics::Mechanical).len(), 1);
     assert!(appui.filter(Physics::Thermal).is_empty());
 
     // A conduction on the same square assembles no displacement.
-    let conduction = model::heat_conduction(&fes)?;
+    let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     let err = model::boundary_transfer(&right, &conduction, vec![("u_x".into(), "f_x".into())])
         .unwrap_err()
         .to_string();
@@ -250,7 +262,12 @@ fn free_face_displacement(n: usize, h: f64) -> Result<f64> {
     let idx = |i: usize, j: usize| j * (n + 1) + i;
     let right = edge_fespace(&grid, &coords, n, idx)?;
 
-    let elastic = model::elasticity(&fes, Kinematics::PlaneStress)?;
+    let elastic = model::elasticity(
+        &fes,
+        Kinematics::PlaneStress,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     let mut model = elastic.union(&model::boundary_transfer(
         &right,
         &elastic,

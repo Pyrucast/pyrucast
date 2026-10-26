@@ -26,6 +26,7 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::ops::mesh;
 use pyrucast::ops::model;
 use pyrucast::ops::solver::lu::solve;
@@ -73,7 +74,7 @@ fn thermal_square_recovers_analytical_solution() -> Result<()> {
         .map(|j| multiplier.node(0, j, 0))
         .collect::<Result<_>>()?;
 
-    let conduction = model::heat_conduction(&fes)?;
+    let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     let dirichlet = model::dirichlet(&conduction, "T", &imposed, &multiplier, Default::default())?;
     let model = conduction.union(&dirichlet)?;
     // ── Chargement ─────────────────────────────────────────────────────────

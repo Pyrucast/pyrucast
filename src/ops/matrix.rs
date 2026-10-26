@@ -48,6 +48,7 @@ use crate::ops::element_field::behavior::previous_state_names;
 /// The aggregate is finalized before being returned.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
@@ -62,7 +63,7 @@ use crate::ops::element_field::behavior::previous_state_names;
 /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
 /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-/// # let model = model::heat_conduction(&fes).unwrap();
+/// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
 /// let k = matrix::stiffness(&model, &materials).unwrap();
 ///
@@ -176,6 +177,7 @@ impl AssemblyInputs<'_> {
 /// state-free kinds.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::ElementField;
@@ -195,7 +197,7 @@ impl AssemblyInputs<'_> {
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-/// # let modele = model::heat_conduction(&fes).unwrap();
+/// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let materiaux = element_field::material_field(&modele,
 /// #     &[("k", 1.0), ("rho", 2.0), ("cp", 3.0)]).unwrap();
 /// // A single machinery for the four kinds: `stiffness` and `mass` are only
@@ -421,6 +423,7 @@ fn build_contribution(
 /// like [`stiffness`].
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
@@ -435,7 +438,7 @@ fn build_contribution(
 /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
 /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-/// # let model = model::heat_conduction(&fes).unwrap();
+/// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// // A conduction's capacity matrix reads `rho` **and** `cp`: it is ρ·c_p
 /// // that multiplies ∫ Nᵀ N, not the density alone.
 /// let materials =
@@ -465,6 +468,8 @@ pub fn mass(model: &Model, materials: &ElementField) -> Result<Matrix> {
 /// is still used to resolve each mechanical zone (its `E`/`nu`).
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
+/// # use pyrucast::ops::element_field::StrainMeasure;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::ElementField;
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -480,7 +485,7 @@ pub fn mass(model: &Model, materials: &ElementField) -> Result<Matrix> {
 /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
 /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id(), n[3].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-/// # let model = model::elasticity(&fes, Kinematics::PlaneStress).unwrap();
+/// # let model = model::elasticity(&fes, Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear).unwrap();
 /// # let materials =
 /// #     element_field::material_field(&model, &[("E", 210.0), ("nu", 0.3)]).unwrap();
 /// # use pyrucast::aggregate::Aggregate;
@@ -517,6 +522,8 @@ pub fn geometric(model: &Model, materials: &ElementField, stress: &ElementField)
 /// [`stiffness`].
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
+/// # use pyrucast::ops::element_field::StrainMeasure;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::ElementField;
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -532,7 +539,7 @@ pub fn geometric(model: &Model, materials: &ElementField, stress: &ElementField)
 /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::QUA4));
 /// # mesh.add_cell(&[n[0].id(), n[1].id(), n[2].id(), n[3].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-/// # let model = model::elasticity(&fes, Kinematics::PlaneStress).unwrap();
+/// # let model = model::elasticity(&fes, Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear).unwrap();
 /// # let materials =
 /// #     element_field::material_field(&model, &[("E", 210.0), ("nu", 0.3)]).unwrap();
 /// # use pyrucast::aggregate::Aggregate;
@@ -577,6 +584,7 @@ pub fn tangent(
 /// a new assembled [`Matrix`] with the same DOF layout; the input is untouched.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
 /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
@@ -591,7 +599,7 @@ pub fn tangent(
 /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
 /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-/// # let model = model::heat_conduction(&fes).unwrap();
+/// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let materials = element_field::material_field(
 /// #     &model, &[("k", 1.0), ("rho", 2.0), ("cp", 1.0)]).unwrap();
 /// let m = matrix::mass(&model, &materials).unwrap();
@@ -687,8 +695,10 @@ mod tests {
     use crate::containers::matrix::Symmetry;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
+    use crate::models::symmetry::MaterialSymmetry;
     use crate::ops::coords::in_config;
     use crate::ops::element_field::material_field_per_sub_model;
+    use crate::ops::element_field::StrainMeasure;
 
     /// Assemble the stiffness the **literal** way: every sub-model fills its
     /// `SubMatrix` blocks eagerly and `finalize` scatters them. This is the
@@ -773,7 +783,8 @@ mod tests {
         let mut model = Model::empty();
         model
             .add_sub(Handle::new(
-                SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
+                SubModel::heat_conduction(fes.get(0).unwrap(), MaterialSymmetry::Isotropic)
+                    .unwrap(),
             ))
             .unwrap();
         let imposed =
@@ -787,7 +798,8 @@ mod tests {
             .unwrap();
         model
             .add_sub(Handle::new(
-                SubModel::heat_conduction(fes.get(1).unwrap()).unwrap(),
+                SubModel::heat_conduction(fes.get(1).unwrap(), MaterialSymmetry::Isotropic)
+                    .unwrap(),
             ))
             .unwrap();
 
@@ -816,7 +828,8 @@ mod tests {
         let mut model = Model::empty();
         model
             .add_sub(Handle::new(
-                SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
+                SubModel::heat_conduction(fes.get(0).unwrap(), MaterialSymmetry::Isotropic)
+                    .unwrap(),
             ))
             .unwrap();
         let imposed =
@@ -916,7 +929,8 @@ mod tests {
         let mut model = Model::empty();
         model
             .add_sub(Handle::new(
-                SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
+                SubModel::heat_conduction(fes.get(0).unwrap(), MaterialSymmetry::Isotropic)
+                    .unwrap(),
             ))
             .unwrap();
         let imposed =
@@ -961,7 +975,8 @@ mod tests {
         host.add_cell(&corners.iter().map(|n| n.id()).collect::<Vec<_>>())
             .unwrap();
         let fes = FiniteElementSpace::lagrange1(&host).unwrap();
-        let physics = crate::ops::model::heat_conduction(&fes).unwrap();
+        let physics =
+            crate::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 
         let immersed = Node::create_in(coords, &[0.25, 0.25]).unwrap();
         let bar = Mesh::from_submesh(SubMesh::poi1_from_nodes(&[immersed]).unwrap());
@@ -1041,9 +1056,13 @@ mod tests {
             SubMesh::poi1_from_nodes(&[upper[0].clone(), upper[1].clone()]).unwrap(),
         );
 
-        let elasticity =
-            crate::ops::model::elasticity(&fes, crate::models::tensor::Kinematics::PlaneStress)
-                .unwrap();
+        let elasticity = crate::ops::model::elasticity(
+            &fes,
+            crate::models::tensor::Kinematics::PlaneStress,
+            MaterialSymmetry::Isotropic,
+            StrainMeasure::Linear,
+        )
+        .unwrap();
         let contact = crate::ops::model::contact(
             &elasticity,
             &slave,
@@ -1265,7 +1284,7 @@ mod tests {
         sm.add_cell(&[nodes[0].id(), nodes[1].id()]).unwrap();
         sm.add_cell(&[nodes[1].id(), nodes[2].id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-        let model = crate::ops::model::heat_conduction(&fes).unwrap();
+        let model = crate::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
         let materials = crate::ops::element_field::material_field(&model, &[("k", 1.0)]).unwrap();
         let stretched = coords.write().add_config("stretched");
         in_config(&coords, stretched, || {
@@ -1502,7 +1521,8 @@ mod tests {
         let mut model = Model::empty();
         model
             .add_sub(Handle::new(
-                SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
+                SubModel::heat_conduction(fes.get(0).unwrap(), MaterialSymmetry::Isotropic)
+                    .unwrap(),
             ))
             .unwrap();
         let materials = material_field_per_sub_model(&model, &[&[("k", 1.0)]]).unwrap();
@@ -1598,7 +1618,8 @@ mod tests {
         let mut model = Model::empty();
         model
             .add_sub(Handle::new(
-                SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
+                SubModel::heat_conduction(fes.get(0).unwrap(), MaterialSymmetry::Isotropic)
+                    .unwrap(),
             ))
             .unwrap();
         let materials = material_field_per_sub_model(&model, &[&[("k", 1.0)]]).unwrap();

@@ -125,6 +125,7 @@ pub fn default_imposed_value(imposed_variable: &str) -> String {
 /// `imposed_value` component.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -144,7 +145,7 @@ pub fn default_imposed_value(imposed_variable: &str) -> String {
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # use pyrucast::models::dirichlet::{self, Dirichlet};
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// // A support: `u = u_d` at the imposed nodes, through a Lagrange multiplier.
 /// let d = Dirichlet::new(&cible, "T", &impose, &mult,
 ///                        RelationSense::Equality)?;
@@ -195,6 +196,7 @@ impl Dirichlet {
     /// [`unilateral`](crate::ops::solver::unilateral).
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -214,7 +216,7 @@ impl Dirichlet {
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # use pyrucast::models::dirichlet::{self, Dirichlet};
-    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// // A support: `u = u_d` at the imposed nodes, through a Lagrange multiplier.
     /// let d = Dirichlet::new(&cible, "T", &impose, &mult,
     ///                        RelationSense::Equality)?;

@@ -15,6 +15,8 @@ use crate::handle::Handle;
 /// required component is missing from `components_and_values`.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
+/// # use pyrucast::ops::element_field::StrainMeasure;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::field::SubField;
@@ -35,7 +37,7 @@ use crate::handle::Handle;
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// let meca = model::elasticity(&fes, Kinematics::PlaneStress)?;
+/// let meca = model::elasticity(&fes, Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
 /// // The **required** components must all be there; the **optional** ones —
 /// // `alpha`, the expansion — are kept only if given, and after them. The
 /// // rest is discarded.
@@ -47,7 +49,7 @@ use crate::handle::Handle;
 /// // A missing required component is an error.
 /// assert!(element_field::sub_material_field(
 ///     &meca.get(0)?.read(), &[("E", 210e3)]).is_err());
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// // A constraint has no matter to receive.
 /// let appui = model::dirichlet(&cible, "T", &impose, &mult,
 ///                              RelationSense::Equality)?;
@@ -105,6 +107,7 @@ pub fn sub_material_field(
 /// `model`. Sub-models that need no material (`Dirichlet`, …) are skipped.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::field::SubField;
@@ -125,10 +128,10 @@ pub fn sub_material_field(
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// // The same values for **every** sub-model that asks for matter; those that
 /// // want none are skipped without an error.
-/// let modele = model::heat_conduction(&fes)?.union(
+/// let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?.union(
 ///     &model::dirichlet(&cible, "T", &impose, &mult,
 ///                       RelationSense::Equality)?)?;
 /// assert_eq!(modele.len(), 2);
@@ -164,6 +167,8 @@ pub fn material_field(
 /// slot (`&[]`) skips that sub-model — typical for `Dirichlet`.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
+/// # use pyrucast::ops::element_field::StrainMeasure;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::field::SubField;
@@ -186,8 +191,8 @@ pub fn material_field(
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// // One list **per sub-model**, when two physics live together and do not
 /// // expect the same constants.
-/// let modele = model::heat_conduction(&fes)?
-///     .union(&model::elasticity(&fes, Kinematics::PlaneStress)?)?;
+/// let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?
+///     .union(&model::elasticity(&fes, Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?)?;
 /// let mat = element_field::material_field_per_sub_model(
 ///     &modele, &[&[("k", 1.0)], &[("E", 210e3), ("nu", 0.3)]])?;
 /// assert_eq!(mat.len(), 2);
@@ -233,6 +238,8 @@ mod tests {
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
     use crate::handle::Handle;
+    use crate::models::symmetry::MaterialSymmetry;
+    use crate::ops::element_field::StrainMeasure;
 
     /// HC on a single SEG2 (+ optional Dirichlet on the left node).
     /// Returns (coords, a_id, b_id, model).
@@ -249,7 +256,8 @@ mod tests {
         let mut model = Model::empty();
         model
             .add_sub(Handle::new(
-                SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
+                SubModel::heat_conduction(fes.get(0).unwrap(), MaterialSymmetry::Isotropic)
+                    .unwrap(),
             ))
             .unwrap();
         if dirichlet_at_left {
@@ -273,7 +281,8 @@ mod tests {
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
         mesh.add_cell(&[a.id(), b.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        let hc = SubModel::heat_conduction(fes.get(0).unwrap()).unwrap();
+        let hc =
+            SubModel::heat_conduction(fes.get(0).unwrap(), MaterialSymmetry::Isotropic).unwrap();
         (coords, hc)
     }
 
@@ -306,7 +315,7 @@ mod tests {
             &Mesh::from_submesh(sm),
         )
         .unwrap();
-        let cible = crate::ops::model::heat_conduction(&fes).unwrap();
+        let cible = crate::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
         let dir =
             SubModel::dirichlet(&cible, "T", &imposed, &multiplier, Default::default()).unwrap();
         assert!(sub_material_field(&dir, &[("k", 1.0)]).is_err());
@@ -358,7 +367,13 @@ mod tests {
         let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::TRI3));
         mesh.add_cell(&[a.id(), b.id(), c.id()]).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        let el = SubModel::elasticity(fes.get(0).unwrap(), Kinematics::PlaneStress).unwrap();
+        let el = SubModel::elasticity(
+            fes.get(0).unwrap(),
+            Kinematics::PlaneStress,
+            MaterialSymmetry::Isotropic,
+            StrainMeasure::Linear,
+        )
+        .unwrap();
         (coords, el)
     }
 
@@ -439,7 +454,8 @@ mod tests {
         let mut model = Model::empty();
         model
             .add_sub(Handle::new(
-                SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
+                SubModel::heat_conduction(fes.get(0).unwrap(), MaterialSymmetry::Isotropic)
+                    .unwrap(),
             ))
             .unwrap();
         let imposed =
@@ -453,7 +469,8 @@ mod tests {
             .unwrap();
         model
             .add_sub(Handle::new(
-                SubModel::heat_conduction(fes.get(1).unwrap()).unwrap(),
+                SubModel::heat_conduction(fes.get(1).unwrap(), MaterialSymmetry::Isotropic)
+                    .unwrap(),
             ))
             .unwrap();
 

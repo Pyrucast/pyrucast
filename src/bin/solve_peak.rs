@@ -59,8 +59,10 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field::material_field;
+use pyrucast::ops::element_field::StrainMeasure;
 use pyrucast::ops::{matrix, model};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -206,7 +208,13 @@ fn build_cube(n: usize) -> (Model, ElementField) {
         }
     }
     let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    let model = model::elasticity(&fes, Kinematics::Full3D).unwrap();
+    let model = model::elasticity(
+        &fes,
+        Kinematics::Full3D,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )
+    .unwrap();
     let materials = material_field(&model, &[("E", 210e9), ("nu", 0.3)]).unwrap();
     (model, materials)
 }
@@ -294,7 +302,7 @@ fn thermal(n: usize, eliminate: bool) {
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
         let bottom = mesh::poi1_from_nodes(&nodes[..side * side]).unwrap();
         let mult = mesh::barycenter(&bottom).unwrap();
-        let conduction = model::heat_conduction(&fes).unwrap();
+        let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
         let m = conduction
             .union(
                 &model::dirichlet(&conduction, "T", &bottom, &mult, RelationSense::Equality)
@@ -396,7 +404,7 @@ fn solve_fingerprint(n: usize) -> (usize, u64) {
     let imposed = mesh::poi1_from_nodes(std::slice::from_ref(&nodes[0])).unwrap();
     let mult = mesh::barycenter(&imposed).unwrap();
     let mult_node = mult.node(0, 0, 0).unwrap();
-    let conduction = model::heat_conduction(&fes).unwrap();
+    let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     let m = conduction
         .union(
             &model::dirichlet(&conduction, "T", &imposed, &mult, RelationSense::Equality).unwrap(),

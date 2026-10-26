@@ -169,6 +169,8 @@ struct Component {
 /// multiplier node's `imposed_value` component, as for `Dirichlet` / `Mpc`.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
+/// # use pyrucast::ops::element_field::StrainMeasure;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -198,7 +200,7 @@ struct Component {
 /// // one relation per node and per component.
 /// # let cible = pyrucast::ops::model::elasticity(
 /// #     &FiniteElementSpace::lagrange1(&maillage)?,
-/// #     pyrucast::models::tensor::Kinematics::PlaneStress)?;
+/// #     pyrucast::models::tensor::Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
 /// let e = Embedded::new(&cible, &immergee, &maillage,
 ///     vec!["u_x".into(), "u_y".into()], pyrucast::models::embedded::DEFAULT_TOL)?;
 /// assert_eq!(e.relations()?.len(), 4); // deux nœuds × deux composantes
@@ -243,6 +245,8 @@ impl Embedded {
     /// - an immersed node lies in no host cell.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
+    /// # use pyrucast::ops::element_field::StrainMeasure;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -272,7 +276,7 @@ impl Embedded {
     /// // one relation per node and per component.
     /// # let cible = pyrucast::ops::model::elasticity(
     /// #     &FiniteElementSpace::lagrange1(&maillage)?,
-    /// #     pyrucast::models::tensor::Kinematics::PlaneStress)?;
+    /// #     pyrucast::models::tensor::Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
     /// let e = Embedded::new(&cible, &immergee, &maillage,
     ///     vec!["u_x".into(), "u_y".into()], pyrucast::models::embedded::DEFAULT_TOL)?;
     /// assert_eq!(e.relations()?.len(), 4); // deux nœuds × deux composantes
@@ -629,7 +633,13 @@ mod tests {
     fn cible_mecanique(host: &Mesh) -> crate::containers::model::Model {
         let fes =
             crate::containers::finite_element_space::FiniteElementSpace::lagrange1(host).unwrap();
-        crate::ops::model::elasticity(&fes, crate::models::tensor::Kinematics::Full3D).unwrap()
+        crate::ops::model::elasticity(
+            &fes,
+            crate::models::tensor::Kinematics::Full3D,
+            MaterialSymmetry::Isotropic,
+            StrainMeasure::Linear,
+        )
+        .unwrap()
     }
 
     /// The target of a test whose host is a SEG2: a bar declares the same
@@ -643,6 +653,8 @@ mod tests {
     use crate::atoms::{ElementType, Node};
     use crate::coords::Coords;
     use crate::handle::Handle;
+    use crate::models::symmetry::MaterialSymmetry;
+    use crate::ops::element_field::StrainMeasure;
 
     /// Build a unit HEX8 host and a two-node bar through its interior; check the
     /// weights and the relation structure.

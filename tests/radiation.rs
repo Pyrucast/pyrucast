@@ -30,6 +30,7 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::radiation::STEFAN_BOLTZMANN;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::Physics;
 use pyrucast::ops::element_field;
 use pyrucast::ops::model;
@@ -149,7 +150,7 @@ fn radiation_answers_to_both_of_its_natures() -> Result<()> {
 fn radiation_without_a_conduction_is_rejected() -> Result<()> {
     let (fixture, _) = radiating_square()?;
     // A diffusion assembles `c_H2`/`j_H2`, not `T`/`q`.
-    let diffusion = model::fick(&fixture.boundary_fes, "H2")?;
+    let diffusion = model::fick(&fixture.boundary_fes, "H2", MaterialSymmetry::Isotropic)?;
     let err = model::radiation(&fixture.boundary_fes, &diffusion)
         .unwrap_err()
         .to_string();
@@ -254,7 +255,10 @@ fn radiating_square() -> Result<(Fixture, ElementField)> {
 
     let mut square = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::QUA4));
     square.add_cell(&corners.iter().map(|n| n.id()).collect::<Vec<_>>())?;
-    let bulk = model::heat_conduction(&FiniteElementSpace::lagrange1(&square)?)?;
+    let bulk = model::heat_conduction(
+        &FiniteElementSpace::lagrange1(&square)?,
+        MaterialSymmetry::Isotropic,
+    )?;
 
     // The radiating edge x = 0, of unit length.
     let edge = vec![corners[0].clone(), corners[3].clone()];

@@ -14,7 +14,9 @@ use pyrucast::containers::finite_element_space::FiniteElementSpace;
 use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
+use pyrucast::ops::element_field::StrainMeasure;
 use pyrucast::ops::model;
 use pyrucast::Result;
 
@@ -35,7 +37,12 @@ fn unit_quad() -> Result<(FiniteElementSpace, [Node; 4])> {
 fn consistent_mass_of_unit_quad_matches_closed_form() -> Result<()> {
     const RHO: f64 = 2.0;
     let (fes, n) = unit_quad()?;
-    let model = model::elasticity(&fes, Kinematics::PlaneStress)?;
+    let model = model::elasticity(
+        &fes,
+        Kinematics::PlaneStress,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     let materials = pyrucast::ops::element_field::material_field(
         &model,
         &[("E", 1.0), ("nu", 0.3), ("rho", RHO)],
@@ -73,7 +80,7 @@ fn heat_capacity_of_unit_quad_matches_closed_form() -> Result<()> {
     const RHO: f64 = 3.0;
     const CP: f64 = 5.0;
     let (fes, n) = unit_quad()?;
-    let model = model::heat_conduction(&fes)?;
+    let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     // `k` is required by the physics; `rho`/`cp` are optional and kept because
     // supplied — the capacity matrix needs them, the conductivity does not.
     let materials = pyrucast::ops::element_field::material_field(
@@ -97,7 +104,12 @@ fn heat_capacity_of_unit_quad_matches_closed_form() -> Result<()> {
 fn lumped_mass_is_diagonal_and_conserves_total() -> Result<()> {
     const RHO: f64 = 2.0;
     let (fes, n) = unit_quad()?;
-    let model = model::elasticity(&fes, Kinematics::PlaneStress)?;
+    let model = model::elasticity(
+        &fes,
+        Kinematics::PlaneStress,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     let materials = pyrucast::ops::element_field::material_field(
         &model,
         &[("E", 1.0), ("nu", 0.3), ("rho", RHO)],
@@ -128,7 +140,12 @@ fn lumped_mass_is_diagonal_and_conserves_total() -> Result<()> {
 #[test]
 fn mass_requires_density() -> Result<()> {
     let (fes, _) = unit_quad()?;
-    let model = model::elasticity(&fes, Kinematics::PlaneStress)?;
+    let model = model::elasticity(
+        &fes,
+        Kinematics::PlaneStress,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     // No `rho` supplied ⇒ the mass kernel must error clearly.
     let materials =
         pyrucast::ops::element_field::material_field(&model, &[("E", 1.0), ("nu", 0.3)])?;

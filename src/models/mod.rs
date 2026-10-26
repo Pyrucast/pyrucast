@@ -78,6 +78,7 @@ pub use kernel::CellGeom;
 /// nothing (its [`matrix_layout`](SubModelKind::matrix_layout) returns `None`).
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -96,8 +97,8 @@ pub use kernel::CellGeom;
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let volume = SubModel::heat_conduction(zone.clone(), MaterialSymmetry::Isotropic).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
 /// // Four matrix kinds and **one single** machinery: the per-element kernel
 /// // differs, everything else is shared. A physics with no term for a kind
@@ -127,6 +128,7 @@ impl MatrixKind {
     /// Number of variants — the width of the per-kind pattern cache.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -145,8 +147,8 @@ impl MatrixKind {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+    /// # let volume = SubModel::heat_conduction(zone.clone(), MaterialSymmetry::Isotropic).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
     /// // Four matrix kinds and **one single** machinery: the per-element kernel
     /// // differs, everything else is shared. A physics with no term for a kind
@@ -164,6 +166,7 @@ impl MatrixKind {
     /// Dense index in `0..COUNT`, for indexing per-kind caches.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -182,8 +185,8 @@ impl MatrixKind {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+    /// # let volume = SubModel::heat_conduction(zone.clone(), MaterialSymmetry::Isotropic).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
     /// // The index serves as the rank in the pattern cache, one per kind.
     /// assert!(MatrixKind::Stiffness.index() < MatrixKind::COUNT);
@@ -233,6 +236,7 @@ pub enum TangentSource {
 /// one [`SubMesh`] gives both the row and column node sequence.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::containers::matrix::Symmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
@@ -252,8 +256,8 @@ pub enum TangentSource {
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let volume = SubModel::heat_conduction(zone.clone(), MaterialSymmetry::Isotropic).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
 /// // The **structural** declaration of a volumetric physics: enough to build
 /// // a *computed* block and pour it straight into the global CSR. Each field
@@ -300,6 +304,7 @@ pub struct MatrixLayout {
 ///
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -318,8 +323,8 @@ pub struct MatrixLayout {
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let volume = SubModel::heat_conduction(zone.clone(), MaterialSymmetry::Isotropic).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
 /// # use pyrucast::models::Contribution;
 /// // The discriminant that puts a constraint, a volumetric physics and a
@@ -369,6 +374,7 @@ pub enum Contribution {
 /// operator, where a caller can act on it.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -384,7 +390,7 @@ pub enum Contribution {
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// # let volume = SubModel::heat_conduction(zone).unwrap();
+/// # let volume = SubModel::heat_conduction(zone, MaterialSymmetry::Isotropic).unwrap();
 /// // A physics that integrates a law declares a computed recipe, on its own
 /// // layout — never the field, which the operator will produce.
 /// let declare = volume.as_kind().internal_force_contribution();
@@ -420,6 +426,7 @@ pub enum ResidualContribution {
 // ANCHOR: coupling_layout
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::containers::matrix::Symmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
@@ -439,8 +446,8 @@ pub enum ResidualContribution {
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let volume = SubModel::heat_conduction(zone.clone(), MaterialSymmetry::Isotropic).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
 /// # use pyrucast::containers::matrix::DofOrdering;
 /// # use pyrucast::models::CouplingLayout;
@@ -606,6 +613,7 @@ impl std::fmt::Display for Physics {
 /// `element_matrix`, `stiffness_layout`, `label` and `render`).
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -624,8 +632,8 @@ impl std::fmt::Display for Physics {
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let volume = SubModel::heat_conduction(zone.clone(), MaterialSymmetry::Isotropic).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
 /// // The base contract, with defaults wherever possible: a physics writes
 /// // only what is its own. **All** of the model layer goes through it,
@@ -988,6 +996,7 @@ pub trait SubModelKind: Sync {
     /// what a term reads is the term's own business.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::field::SubField;
@@ -1009,7 +1018,7 @@ pub trait SubModelKind: Sync {
     /// # let support = mesh::poi1_from_nodes(&n)?;
     /// # let mut u = NodeField::from_submesh(&support.get(0)?, vec!["T".into()])?;
     /// # u.get(0)?.write().set_uniform("T", 3.0)?;
-    /// # let conduction = pyrucast::ops::model::heat_conduction(&fes)?;
+    /// # let conduction = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     /// # let bord = SubModel::boundary_transfer(
     /// #     zone.clone(), &conduction, vec![("T".into(), "q".into())])?;
     /// // A boundary transfer reads the primal at the points, not a state: its
@@ -1052,6 +1061,7 @@ pub trait SubModelKind: Sync {
     /// constraint, having no such layout, declares nothing.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -1070,9 +1080,9 @@ pub trait SubModelKind: Sync {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
-    /// # let volume = SubModel::heat_conduction(zone).unwrap();
+    /// # let volume = SubModel::heat_conduction(zone, MaterialSymmetry::Isotropic).unwrap();
     /// // A volumetric physics declares its integral; a support declares its
     /// // relations, from which the operator draws the reaction.
     /// assert!(matches!(volume.as_kind().internal_force_contribution()[..],
@@ -1118,6 +1128,7 @@ pub trait SubModelKind: Sync {
     /// transfer and a distributed flux load will declare one.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -1133,7 +1144,7 @@ pub trait SubModelKind: Sync {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// # let volume = SubModel::heat_conduction(zone).unwrap();
+    /// # let volume = SubModel::heat_conduction(zone, MaterialSymmetry::Isotropic).unwrap();
     /// // Conduction only responds to `u`: nothing on the right of the equals sign.
     /// assert!(volume.as_kind().external_force_contribution().is_empty());
     /// ```
@@ -1164,6 +1175,7 @@ pub trait SubModelKind: Sync {
 /// share (e.g. the future condensation of the multiplier DOFs).
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -1182,8 +1194,8 @@ pub trait SubModelKind: Sync {
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let volume = SubModel::heat_conduction(zone.clone(), MaterialSymmetry::Isotropic).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
 /// // The **constraint** capability: relations, each with its multiplier node
 /// // and the component its right-hand side is written into.
@@ -1214,6 +1226,7 @@ pub trait Constraint {
 /// `target_dual`, the dual (residual) row of `variable` in its physics.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -1232,8 +1245,8 @@ pub trait Constraint {
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let volume = SubModel::heat_conduction(zone.clone(), MaterialSymmetry::Isotropic).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
 /// // One relation term: a node, its variable, and the dual of the targeted
 /// // physics — the latter is what hooks the constraint onto the physics it
@@ -1267,6 +1280,7 @@ pub struct ConstraintTerm {
 /// - [`LessEqual`](Self::LessEqual): `C·u ≤ g`, `λ ≤ 0`, `λ·(C·u − g) = 0`.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -1285,8 +1299,8 @@ pub struct ConstraintTerm {
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let volume = SubModel::heat_conduction(zone.clone(), MaterialSymmetry::Isotropic).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
 /// // Equality, or inequality — what moves the constraint from the direct
 /// // solver to the active set.
@@ -1311,6 +1325,7 @@ impl RelationSense {
     /// interpreted (Rust convenience constructors and the Python bindings).
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -1329,8 +1344,8 @@ impl RelationSense {
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+    /// # let volume = SubModel::heat_conduction(zone.clone(), MaterialSymmetry::Isotropic).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
     /// // The **single** place the string form is interpreted: the Rust
     /// // convenience constructors and the Python bindings all go through it.
@@ -1368,6 +1383,7 @@ impl std::fmt::Display for RelationSense {
 /// imposed-value component, so it is **not** carried here.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -1386,8 +1402,8 @@ impl std::fmt::Display for RelationSense {
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let volume = SubModel::heat_conduction(zone.clone(), MaterialSymmetry::Isotropic).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
 /// // One relation: its multiplier, the component its `g` is written into,
 /// // and its terms. It is the seam shared by every constraint.
@@ -1503,6 +1519,7 @@ pub(crate) fn constraint_block_pair(
 /// returns — the one line every physics whose contract is fixed needs.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -1521,8 +1538,8 @@ pub(crate) fn constraint_block_pair(
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let volume = SubModel::heat_conduction(zone.clone(), MaterialSymmetry::Isotropic).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
 /// # use pyrucast::models::owned_components;
 /// // The shortcut every physics uses to hand back its material contract
@@ -1670,6 +1687,7 @@ pub enum KernelState<'a> {
 /// distributed load does.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -1688,8 +1706,8 @@ pub enum KernelState<'a> {
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let volume = SubModel::heat_conduction(zone.clone()).unwrap();
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let volume = SubModel::heat_conduction(zone.clone(), MaterialSymmetry::Isotropic).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
 /// // Matter and behaviour are **one single** capability: the material
 /// // parameterises the constitutive law, it has no meaning without it.
@@ -1892,6 +1910,7 @@ pub trait Domain: Sync {
 /// | `Shell(f)` | `shell_deformation` | membrane, curvatures, drilling, shear |
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -1909,8 +1928,8 @@ pub trait Domain: Sync {
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
-/// let solide = SubModel::elasticity(zone.clone(), Kinematics::PlaneStrain)?;
-/// let thermique = SubModel::heat_conduction(zone)?;
+/// let solide = SubModel::elasticity(zone.clone(), Kinematics::PlaneStrain, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
+/// let thermique = SubModel::heat_conduction(zone, MaterialSymmetry::Isotropic)?;
 /// let entree = |m: &SubModel| m.as_kind().as_behavior().unwrap().strain_operator();
 /// // A solid reads the small-strain tensor of its displacement, conduction the
 /// // gradient of its temperature: the same `B·u`, two operators.
@@ -1974,6 +1993,7 @@ fn reads_finite_strain<K: SubModelKind + ?Sized>(kind: &K) -> bool {
 /// along instead. MFront writes its behaviours the same way.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -1992,9 +2012,9 @@ fn reads_finite_strain<K: SubModelKind + ?Sized>(kind: &K) -> bool {
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let appui = SubModel::dirichlet(&cible, "T", &impose, &mult, RelationSense::Equality).unwrap();
-/// # let volume = SubModel::heat_conduction(zone).unwrap();
+/// # let volume = SubModel::heat_conduction(zone, MaterialSymmetry::Isotropic).unwrap();
 /// // Conduction integrates **and** has a law; a support does neither. It is
 /// // a compile-time fact, not a run-time error.
 /// assert!(volume.as_kind().as_domain().is_some());
@@ -2283,11 +2303,33 @@ pub trait Behavior: Domain {
 /// into a Python docstring. Same shape as `define_polymorphic_pyfunction!` in
 /// `src/py/ops/field.rs`, the house precedent.
 ///
+/// What it emits for `truss` — declared `truss(fes, strain_measure: StrainMeasure
+/// = StrainMeasure::Linear) via SubModel::truss` — is an ordinary function: it
+/// sweeps the FE space, one sub-model per subspace, and Rust passes the
+/// argument the Python face defaults.
+///
 /// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::element_field::StrainMeasure;
 /// # use pyrucast::ops::model;
-/// # use pyrucast::named::Named;
-/// // The operator produced is an ordinary free function.
-/// assert_eq!(pyrucast::atoms::ElementType::from_name("SEG2").is_some(), true);
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut left = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # left.add_cell(&[n[0].id(), n[1].id()])?;
+/// # let mut right = SubMesh::new(coords.clone(), ElementType::SEG2);
+/// # right.add_cell(&[n[1].id(), n[2].id()])?;
+/// # let bars = Mesh::from_submesh(left).union(&Mesh::from_submesh(right))?;
+/// let fes = FiniteElementSpace::lagrange1(&bars)?;
+/// assert_eq!(fes.len(), 2);
+/// let cables = model::truss(&fes, StrainMeasure::GreenLagrange)?;
+/// assert_eq!(cables.len(), fes.len());
+/// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
 #[macro_export]
 macro_rules! physics_operator {
@@ -2296,14 +2338,14 @@ macro_rules! physics_operator {
     //
     // Flow and damage laws are **attributes** of one single physics (cf.
     // `models::plasticity::law`), not extra physics. They nonetheless read better
-    // named at the call site — `drucker_prager(fes, m)` rather than
-    // `plasticity_with_law(fes, m, PlasticLaw::DruckerPrager)`. The facade
+    // named at the call site — `drucker_prager(fes, k, measure)` rather than
+    // `plasticity_with_law(fes, k, PlasticLaw::DruckerPrager, measure)`. The facade
     // duplicates nothing: it forwards to the generic operator.
     //
     // Every such facade is a continuum law, and every continuum law reads a
-    // strain measure: the Rust facade reads the linear one — the generic
-    // operator takes any — and the Python face takes it as `strain_measure`,
-    // `"linear"` unless said otherwise.
+    // strain measure, so the arm adds it after the declared arguments: Rust
+    // passes it explicitly, the Python face takes it as `strain_measure`,
+    // `"linear"` unless said otherwise — one name, each language its idiom.
     (
         $(#[$rust_doc:meta])*
         pub fn $name:ident(fes $(, $arg:ident : $ty:ty)* $(,)?) = $target:path, $fixed:expr;
@@ -2313,8 +2355,9 @@ macro_rules! physics_operator {
         pub fn $name(
             fes: &$crate::containers::finite_element_space::FiniteElementSpace,
             $($arg: $ty,)*
+            strain_measure: $crate::ops::element_field::StrainMeasure,
         ) -> $crate::error::Result<$crate::containers::model::Model> {
-            $target(fes, $($arg,)* $fixed, $crate::ops::element_field::StrainMeasure::Linear)
+            $target(fes, $($arg,)* $fixed, strain_measure)
         }
 
         #[cfg(feature = "python-api")]

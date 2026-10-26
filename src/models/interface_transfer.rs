@@ -103,6 +103,7 @@ pub const DEFAULT_TOL: f64 = 1e-9;
 /// Exchange law between two conforming boundary FE subspaces.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -121,7 +122,7 @@ pub const DEFAULT_TOL: f64 = 1e-9;
 /// # let zone = fes.get(0).unwrap();
 /// // Two **conforming** borders — here the same one, which is enough to show
 /// // the contract; in practice two facing sides.
-/// let conduction = model::heat_conduction(&fes)?;
+/// let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
 /// let i = InterfaceTransfer::new(
 ///     zone.clone(), zone, &conduction, vec![("T".into(), "q".into())], DEFAULT_TOL)?;
 /// assert_eq!(i.primal_vars(), vec!["T".to_string()]);
@@ -154,6 +155,7 @@ impl InterfaceTransfer {
     /// for cell and node for node, within `tol` of each other geometrically.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -170,7 +172,7 @@ impl InterfaceTransfer {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// let diffusion = model::fick(&fes, "H2")?;
+    /// let diffusion = model::fick(&fes, "H2", MaterialSymmetry::Isotropic)?;
     /// // A coating on diffusion: the kind comes from the Fick model.
     /// let i = InterfaceTransfer::new(
     ///     zone.clone(), zone.clone(), &diffusion,

@@ -24,6 +24,7 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field::{deformation, interp_to_gauss, thermal_strain, StrainMeasure};
 use pyrucast::ops::mesh;
@@ -79,7 +80,12 @@ fn thermoelastic_constrained_bar_stress() -> Result<()> {
     let left: Vec<Node> = (0..=NY).map(|j| grid[idx(0, j)].clone()).collect();
     let right: Vec<Node> = (0..=NY).map(|j| grid[idx(NX, j)].clone()).collect();
     let bottom: Vec<Node> = (0..=NX).map(|i| grid[idx(i, 0)].clone()).collect();
-    let mut model = model::elasticity(&fes, Kinematics::PlaneStress)?;
+    let mut model = model::elasticity(
+        &fes,
+        Kinematics::PlaneStress,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     model = model.union(&clamp(&model, &left, "u_x")?)?;
     model = model.union(&clamp(&model, &right, "u_x")?)?;
     model = model.union(&clamp(&model, &bottom, "u_y")?)?;
@@ -184,12 +190,12 @@ fn thermal_expansion_reaches_plasticity_and_damage() -> Result<()> {
     for (label, model, values) in [
         (
             "plasticity",
-            model::plasticity_perfect(&fes, Kinematics::PlaneStress)?,
+            model::plasticity_perfect(&fes, Kinematics::PlaneStress, StrainMeasure::Linear)?,
             vec![("E", E), ("nu", NU), ("sigma_y", SIGMA_Y), ("alpha", ALPHA)],
         ),
         (
             "damage",
-            model::mazars(&fes, Kinematics::PlaneStress)?,
+            model::mazars(&fes, Kinematics::PlaneStress, StrainMeasure::Linear)?,
             vec![
                 ("E", E),
                 ("nu", NU),

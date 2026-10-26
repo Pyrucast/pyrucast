@@ -39,6 +39,7 @@ use crate::models::{kernel, MatrixKind, ResidualContribution};
 /// the honest answer rather than a failure.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::ElementField;
@@ -57,7 +58,7 @@ use crate::models::{kernel, MatrixKind, ResidualContribution};
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let mut mat = ElementField::new(&fes, vec!["k".into()])?;
 /// # mat.get(0)?.write().set_uniform("k", 1.0)?;
-/// let volume = model::heat_conduction(&fes)?;
+/// let volume = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
 /// // Conduction alone has no term on the right of the equals sign: the field
 /// // comes back empty, and that is the right answer.
 /// assert_eq!(node_field::external_forces(&volume, &mat)?.len(), 0);

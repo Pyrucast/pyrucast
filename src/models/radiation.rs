@@ -124,6 +124,7 @@ const OUTPUT_FLUX: &str = "flux";
 /// Radiation to infinity on a boundary FE subspace.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Interpolation, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -143,7 +144,7 @@ const OUTPUT_FLUX: &str = "flux";
 /// # use pyrucast::ops::model;
 /// // Radiation to infinity, on a border. Same DOFs as the conduction, hence
 /// // a direct coupling in its stiffness.
-/// let conduction = model::heat_conduction(&fes)?;
+/// let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
 /// let r = Radiation::new(zone, &conduction)?;
 /// assert_eq!(r.primal_vars(), vec!["T".to_string()]);
 /// assert!(r.material_components().contains(&"emis".to_string()));
@@ -167,6 +168,7 @@ impl Radiation {
     /// Errors otherwise.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Interpolation, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -186,12 +188,12 @@ impl Radiation {
     /// # use pyrucast::ops::model;
     /// // Radiation to infinity, on a border. Same DOFs as the conduction, hence
     /// // a direct coupling in its stiffness.
-    /// let conduction = model::heat_conduction(&fes)?;
+    /// let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     /// let r = Radiation::new(zone.clone(), &conduction)?;
     /// assert_eq!(r.primal_vars(), vec!["T".to_string()]);
     /// assert!(r.material_components().contains(&"emis".to_string()));
     /// // Without conduction underneath, the `q` row is assembled by nobody.
-    /// assert!(Radiation::new(zone, &model::fick(&fes, "H2")?).is_err());
+    /// assert!(Radiation::new(zone, &model::fick(&fes, "H2", MaterialSymmetry::Isotropic)?).is_err());
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn new(fespace: Handle<SubFiniteElementSpace>, target: &Model) -> Result<Self> {
@@ -461,6 +463,7 @@ crate::physics_operator! {
     /// supplied at assembly time.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -476,7 +479,7 @@ crate::physics_operator! {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// // The radiation unites with the conduction it cools: same DOFs, hence the
     /// // same blocks.
-    /// let conduction = model::heat_conduction(&fes)?;
+    /// let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     /// let m = conduction.union(&model::radiation(&fes, &conduction)?)?;
     /// assert_eq!(m.primal_vars(), vec!["T".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())

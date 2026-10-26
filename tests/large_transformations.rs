@@ -78,7 +78,7 @@ fn patch() -> Result<Patch> {
 
 /// Plane-strain elasticity reading `measure`, and its material.
 fn solid(p: &Patch, measure: StrainMeasure) -> Result<(Model, ElementField)> {
-    let solid = model::elasticity_with_symmetry(
+    let solid = model::elasticity(
         &p.fes,
         Kinematics::PlaneStrain,
         MaterialSymmetry::Isotropic,
@@ -348,7 +348,7 @@ fn uniaxial_force(measure: StrainMeasure, lambda: f64) -> Result<(f64, f64)> {
     let ids: Vec<_> = nodes.iter().map(|n| n.id()).collect();
     mesh.add_cell(&ids)?;
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
-    let law = model::elasticity_with_symmetry(
+    let law = model::elasticity(
         &fes,
         Kinematics::Full3D,
         MaterialSymmetry::Isotropic,
@@ -601,7 +601,7 @@ fn the_conversions_follow_their_formulas() -> Result<()> {
 fn the_measures_a_law_cannot_read_are_refused() -> Result<()> {
     let p = patch()?;
     let build = |kinematics, measure| {
-        model::elasticity_with_symmetry(&p.fes, kinematics, MaterialSymmetry::Isotropic, measure)
+        model::elasticity(&p.fes, kinematics, MaterialSymmetry::Isotropic, measure)
     };
     // Hencky needs C_zz, which plane stress leaves to the law.
     assert!(build(Kinematics::PlaneStress, StrainMeasure::Hencky).is_err());
@@ -667,7 +667,12 @@ fn a_pressure_follows_the_normal_of_the_active_configuration() -> Result<()> {
         contour.add_cell(&[ids[k], ids[(k + 1) % 4]])?;
     }
     let body_fes = FiniteElementSpace::lagrange1(&body)?;
-    let solid_model = model::elasticity(&body_fes, Kinematics::PlaneStrain)?;
+    let solid_model = model::elasticity(
+        &body_fes,
+        Kinematics::PlaneStrain,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     let load = model::flux(
         &FiniteElementSpace::lagrange1(&contour)?,
         &solid_model,

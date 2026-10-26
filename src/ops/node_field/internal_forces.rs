@@ -52,6 +52,8 @@ use crate::models::ResidualContribution;
 /// **added**, in a single zone over every loaded node.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
+/// # use pyrucast::ops::element_field::StrainMeasure;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::ElementField;
@@ -76,7 +78,7 @@ use crate::models::ResidualContribution;
 /// # let support = mesh::poi1_from_nodes(&n).unwrap();
 /// // The form that goes through the **model**: every sub-model brings its own
 /// // operator there, a bar not having a continuum's Bᵀ.
-/// # let modele = model::elasticity(&fes, Kinematics::PlaneStress)?;
+/// # let modele = model::elasticity(&fes, Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
 /// # let mut s = ElementField::new(&fes,
 /// #     vec!["sigma_xx".into(), "sigma_yy".into(), "sigma_xy".into()])?;
 /// # s.get(0)?.write().set_uniform("sigma_xx", 100.0)?;
@@ -267,6 +269,7 @@ mod tests {
     use crate::containers::model::SubModel;
     use crate::containers::node_field::{NodeField, SubNodeField};
     use crate::coords::Coords;
+    use crate::models::symmetry::MaterialSymmetry;
     use crate::models::tensor::Kinematics;
     use crate::ops::element_field::behavior::integrate;
     use crate::ops::element_field::material_field;
@@ -299,7 +302,13 @@ mod tests {
         let mut mesh = Mesh::from_submesh(left);
         mesh.add_sub(Handle::new(right)).unwrap();
         let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-        let model = crate::ops::model::elasticity(&fes, Kinematics::PlaneStress).unwrap();
+        let model = crate::ops::model::elasticity(
+            &fes,
+            Kinematics::PlaneStress,
+            MaterialSymmetry::Isotropic,
+            StrainMeasure::Linear,
+        )
+        .unwrap();
         let materials = material_field(&model, &[("E", 100.0), ("nu", 0.0)]).unwrap();
 
         // u_x = 0.01·x²: σ_xx = 1 on the left cell, 3 on the right one.
@@ -339,7 +348,13 @@ mod tests {
         let mut model = Model::empty();
         model
             .add_sub(Handle::new(
-                SubModel::elasticity(fes.get(0).unwrap(), Kinematics::PlaneStress).unwrap(),
+                SubModel::elasticity(
+                    fes.get(0).unwrap(),
+                    Kinematics::PlaneStress,
+                    MaterialSymmetry::Isotropic,
+                    StrainMeasure::Linear,
+                )
+                .unwrap(),
             ))
             .unwrap();
         let materials = material_field(&model, &[("E", 210.0), ("nu", 0.3)]).unwrap();
@@ -391,7 +406,13 @@ mod tests {
         let mut model = Model::empty();
         model
             .add_sub(Handle::new(
-                SubModel::elasticity(fes.get(0).unwrap(), Kinematics::PlaneStrain).unwrap(),
+                SubModel::elasticity(
+                    fes.get(0).unwrap(),
+                    Kinematics::PlaneStrain,
+                    MaterialSymmetry::Isotropic,
+                    StrainMeasure::Linear,
+                )
+                .unwrap(),
             ))
             .unwrap();
         let materials = material_field(&model, &[("E", 70.0), ("nu", 0.25)]).unwrap();

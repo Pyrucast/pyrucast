@@ -44,6 +44,7 @@ fn debug_montre_la_structure_display_le_resume() {
 
 // ANCHOR: serialisation
 use pyrucast::archive::Portable;
+use pyrucast::models::symmetry::MaterialSymmetry;
 
 #[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
 struct Pt {
@@ -75,7 +76,7 @@ fn un_modele_se_declare_et_s_assemble() -> Result<()> {
     // Dirichlet on the left. Constructors at the parent level (they sweep
     // `fes`'s subspaces), composed with `union` — a `SubModel` is never built by
     // hand (see CONVENTIONS.md).
-    let hc = model::heat_conduction(&fes)?;
+    let hc = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     // Mesh of the imposed nodes + support of the multipliers (barycenter
     // co-locates fresh nodes). The model creates no node itself.
     let imposed = mesh::poi1_from_nodes(std::slice::from_ref(&a))?;
@@ -101,7 +102,7 @@ fn filtrer_un_modele_et_sa_matrice_par_nature() -> Result<()> {
     let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
     mesh.add_cell(&[a.id(), b.id()])?;
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
-    let conduction = model::heat_conduction(&fes)?;
+    let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     let appui = mesh::poi1_from_nodes(std::slice::from_ref(&a))?;
     let mult = mesh::barycenter(&appui)?;
     let bloque = model::dirichlet(&conduction, "T", &appui, &mult, RelationSense::Equality)?;

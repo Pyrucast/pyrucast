@@ -19,7 +19,9 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
+use pyrucast::ops::element_field::StrainMeasure;
 use pyrucast::ops::mesh;
 use pyrucast::ops::model;
 use pyrucast::ops::solver::lu::solve;
@@ -68,7 +70,12 @@ fn elasticity_unit_square_uniaxial_tension() -> Result<()> {
     };
     let left: Vec<Node> = (0..=N).map(|j| grid[idx(0, j)].clone()).collect();
     let bottom: Vec<Node> = (0..=N).map(|i| grid[idx(i, 0)].clone()).collect();
-    let mut model = model::elasticity(&fes, Kinematics::PlaneStress)?;
+    let mut model = model::elasticity(
+        &fes,
+        Kinematics::PlaneStress,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     model = model.union(&roller(&model, &left, "u_x")?)?;
     model = model.union(&roller(&model, &bottom, "u_y")?)?;
 
@@ -143,7 +150,12 @@ fn elasticity_unit_cube_uniaxial_tension() -> Result<()> {
     let fes = FiniteElementSpace::lagrange1(&mesh)?;
 
     let pick = |ids: &[usize]| ids.iter().map(|&i| nodes[i].clone()).collect::<Vec<_>>();
-    let mut model = model::elasticity(&fes, Kinematics::Full3D)?;
+    let mut model = model::elasticity(
+        &fes,
+        Kinematics::Full3D,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     model = model.union(&clamp(&model, &pick(&[0, 3, 4, 7]), "u_x")?)?; // x = 0 face
     model = model.union(&clamp(&model, &pick(&[0, 1, 4, 5]), "u_y")?)?; // y = 0 face
     model = model.union(&clamp(&model, &pick(&[0, 1, 2, 3]), "u_z")?)?; // z = 0 face

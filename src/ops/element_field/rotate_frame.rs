@@ -54,7 +54,7 @@ use crate::models::symmetry::{FRAME_2D, FRAME_3D};
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()])?;
 /// # let mesh = Mesh::from_submesh(sm);
 /// # let fes = FiniteElementSpace::lagrange1(&mesh)?;
-/// let conduction = model::heat_conduction_with_symmetry(&fes, MaterialSymmetry::Orthotropic)?;
+/// let conduction = model::heat_conduction(&fes, MaterialSymmetry::Orthotropic)?;
 /// let materials = material_field(
 ///     &conduction,
 ///     &[("k_1", 9.0), ("k_2", 1.0), ("k_3", 1.0), ("V1X", 1.0), ("V1Y", 0.0)],
@@ -211,8 +211,7 @@ mod tests {
     #[test]
     fn the_axes_turn_by_the_rotation_of_the_gradient() {
         let (mesh, fes, nodes) = tet();
-        let conduction =
-            model::heat_conduction_with_symmetry(&fes, MaterialSymmetry::Orthotropic).unwrap();
+        let conduction = model::heat_conduction(&fes, MaterialSymmetry::Orthotropic).unwrap();
         let (v1, v2) = (Vector3::new(1.0, 1.0, 0.0), Vector3::new(0.0, 0.0, 2.0));
         let materials = material_field(
             &conduction,
@@ -257,7 +256,7 @@ mod tests {
     #[test]
     fn a_zone_without_axes_is_shared_and_part_of_them_refused() {
         let (mesh, fes, nodes) = tet();
-        let conduction = model::heat_conduction(&fes).unwrap();
+        let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
         let isotropic = material_field(&conduction, &[("k", 1.0)]).unwrap();
         let gradient = deformation(
             &displacement(&mesh, &nodes, &Matrix3::identity()),

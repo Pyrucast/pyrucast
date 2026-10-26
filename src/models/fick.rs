@@ -51,6 +51,7 @@ use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
 use crate::containers::matrix::Symmetry;
 use crate::containers::mesh::SubMesh;
+use crate::containers::model::SubModel;
 use crate::dump::DumpOptions;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
@@ -687,4 +688,41 @@ pub fn element_storage(
         }
     }
     Ok(())
+}
+
+crate::physics_operator! {
+    /// Fickian-diffusion `Model` of one named `species`, spanning **every**
+    /// subspace of `fes` — one [`SubModel::Fick`] per [`SubFiniteElementSpace`].
+    /// Parent-level operator.
+    ///
+    /// Every name carries the species: DOFs `c_<species>` / `j_<species>`, the
+    /// diffusivity `D_<species>`. `symmetry` selects the diffusivity the
+    /// material field must carry: `D_<species>`, the principal `D_1_<species>…`
+    /// (orthotropic) or the symmetric tensor `D_11_<species>…` (anisotropic),
+    /// the two oriented ones with the material axes. It is supplied at assembly
+    /// time.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
+    /// # use pyrucast::ops::model;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// let m = model::fick(&fes, "H2", MaterialSymmetry::Isotropic)?;
+    /// assert_eq!(m.primal_vars(), vec!["c_H2".to_string()]);
+    /// let ortho = model::fick(&fes, "H2", MaterialSymmetry::Orthotropic)?;
+    /// assert_eq!(ortho.dual_vars(), vec!["j_H2".to_string()]);
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn fick(fes, species: &str, symmetry: MaterialSymmetry = MaterialSymmetry::Isotropic) via SubModel::fick;
+    python: "`model.fick(fespace, species, symmetry=\"isotropic\")` — Fickian diffusion of\none named **species**, spanning every subspace of `fespace`.\n\nEvery name carries the species: DOFs are `c_<species>` (primal) and\n`j_<species>` (dual), the diffusivity is `D_<species>`, the reported flux\n`j_<species>_x…`. Two species therefore share a mesh without colliding —\nand no bare `c` can be mistaken for anything else. Its physics nature is\n`\"diffusion\"`, so `model.filter(\"diffusion\")` isolates it from a thermal\nor mechanical model it is composed with.\n\n`symmetry` is `\"isotropic\"` (the default), `\"orthotropic\"` or\n`\"anisotropic\"`, selecting the diffusivity the material field must carry:\n`D_<species>`, `D_1_<species> …`, or the symmetric `D_11_<species> …` —\nthe oriented ones plus the material axes `V1X, V1Y, …`. Those axes and\nthe optional storage `poro` keep **bare** names: they belong to the\nmedium, not to what diffuses through it."
 }

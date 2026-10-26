@@ -80,8 +80,8 @@ Le pipeline est toujours le même :
 4. **Matériau** — un `ElementField` portant la composante `"k"`, fabriqué
    commodément par `element_field::material_field(&model, &[("k", …)])` (les
    sous-modèles sans matériau, comme `Dirichlet`, sont ignorés).
-5. **`Model`** — `model::heat_conduction(&fes)`, composé par `|` (union) avec
-   les conditions limites.
+5. **`Model`** — `model::heat_conduction(&fes, MaterialSymmetry::Isotropic)`,
+   composé par `|` (union) avec les conditions limites.
 6. **Conditions limites :**
    - **Dirichlet** (`T` imposée) : un sous-modèle `model::dirichlet` qui impose
      la valeur via multiplicateurs de Lagrange. L'utilisateur fournit le

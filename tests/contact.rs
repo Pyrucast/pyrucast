@@ -16,7 +16,9 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
+use pyrucast::ops::element_field::StrainMeasure;
 use pyrucast::ops::mesh;
 use pyrucast::ops::model;
 use pyrucast::ops::solver::unilateral;
@@ -93,7 +95,12 @@ fn two_blocks() -> Result<TwoBlocks> {
     let slave_nodes_v: Vec<Node> = (0..=N).map(|i| top[idx(i, 0)].clone()).collect();
     let slave = Mesh::from_submesh(SubMesh::poi1_from_nodes(&slave_nodes_v)?);
 
-    let elasticite = model::elasticity(&fes, Kinematics::PlaneStress)?;
+    let elasticite = model::elasticity(
+        &fes,
+        Kinematics::PlaneStress,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     let contact = model::contact(
         &elasticite,
         &slave,
@@ -105,7 +112,12 @@ fn two_blocks() -> Result<TwoBlocks> {
     let all_nodes: Vec<Node> = bottom.iter().chain(top.iter()).cloned().collect();
     let bottom_edge: Vec<Node> = (0..=N).map(|i| bottom[idx(i, 0)].clone()).collect();
 
-    let mut model = model::elasticity(&fes, Kinematics::PlaneStress)?;
+    let mut model = model::elasticity(
+        &fes,
+        Kinematics::PlaneStress,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     model = model.union(&clamp(&model, &all_nodes, "u_x")?)?;
     model = model.union(&clamp(&model, &bottom_edge, "u_y")?)?;
     model = model.union(&contact)?;
@@ -294,7 +306,12 @@ fn contact_3d_two_cubes() -> Result<()> {
     let slave_nodes: Vec<Node> = top[0..4].to_vec();
     let slave = Mesh::from_submesh(SubMesh::poi1_from_nodes(&slave_nodes)?);
 
-    let elasticite = model::elasticity(&fes, Kinematics::Full3D)?;
+    let elasticite = model::elasticity(
+        &fes,
+        Kinematics::Full3D,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     let contact = model::contact(
         &elasticite,
         &slave,
@@ -304,7 +321,12 @@ fn contact_3d_two_cubes() -> Result<()> {
 
     // Uniaxial column: u_x = u_y = 0 everywhere, u_z = 0 at the base.
     let all_nodes: Vec<Node> = bottom.iter().chain(top.iter()).cloned().collect();
-    let mut model = model::elasticity(&fes, Kinematics::Full3D)?;
+    let mut model = model::elasticity(
+        &fes,
+        Kinematics::Full3D,
+        MaterialSymmetry::Isotropic,
+        StrainMeasure::Linear,
+    )?;
     model = model.union(&clamp(&model, &all_nodes, "u_x")?)?;
     model = model.union(&clamp(&model, &all_nodes, "u_y")?)?;
     model = model.union(&clamp(&model, &bottom[0..4], "u_z")?)?;

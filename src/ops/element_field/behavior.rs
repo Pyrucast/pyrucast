@@ -45,6 +45,8 @@ use crate::models::Behavior;
 /// feed back as `prev` at the next step.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
+/// # use pyrucast::ops::element_field::StrainMeasure;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::ElementField;
@@ -63,7 +65,7 @@ use crate::models::Behavior;
 /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
-/// # let modele = model::elasticity(&fes, Kinematics::PlaneStress).unwrap();
+/// # let modele = model::elasticity(&fes, Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear).unwrap();
 /// # let materiaux = element_field::material_field(&modele,
 /// #     &[("E", 210e3), ("nu", 0.3)]).unwrap();
 /// // The behaviour law, integrated Gauss point by Gauss point: a strain goes
@@ -185,6 +187,7 @@ mod tests {
     use crate::containers::model::SubModel;
     use crate::containers::node_field::{NodeField, SubNodeField};
     use crate::coords::Coords;
+    use crate::models::symmetry::MaterialSymmetry;
     use crate::ops::element_field::{beam_deformation, gradient};
     use crate::ops::element_field::{material_field, material_field_per_sub_model};
 
@@ -202,7 +205,8 @@ mod tests {
         let mut model = Model::empty();
         model
             .add_sub(Handle::new(
-                SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
+                SubModel::heat_conduction(fes.get(0).unwrap(), MaterialSymmetry::Isotropic)
+                    .unwrap(),
             ))
             .unwrap();
         if dirichlet {
@@ -271,12 +275,14 @@ mod tests {
         let mut model = Model::empty();
         model
             .add_sub(Handle::new(
-                SubModel::heat_conduction(fes.get(0).unwrap()).unwrap(),
+                SubModel::heat_conduction(fes.get(0).unwrap(), MaterialSymmetry::Isotropic)
+                    .unwrap(),
             ))
             .unwrap();
         model
             .add_sub(Handle::new(
-                SubModel::heat_conduction(fes.get(1).unwrap()).unwrap(),
+                SubModel::heat_conduction(fes.get(1).unwrap(), MaterialSymmetry::Isotropic)
+                    .unwrap(),
             ))
             .unwrap();
 

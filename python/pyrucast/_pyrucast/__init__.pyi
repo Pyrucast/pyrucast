@@ -4433,13 +4433,13 @@ def elastic_stress(model: Model, strain: ElementField, materials: ElementField) 
     constraint) contributes none.
     """
 
-def elasticity(fespace: FiniteElementSpace, kinematics: builtins.str, symmetry: typing.Optional[builtins.str] = None, strain_measure: builtins.str = 'linear') -> Model:
+def elasticity(fespace: FiniteElementSpace, kinematics: builtins.str, symmetry: builtins.str = 'isotropic', strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.elasticity(fespace, kinematics, symmetry=None)` — linear-elasticity
-    model spanning every subspace of `fespace`. `kinematics` is `"plane_stress"`,
-    `"plane_strain"` or `"axisymmetric"` (2-D), or `"full_3d"` (3-D). DOFs are
-    the vector displacement `u_x, u_y(, u_z)`; material is supplied at
-    assembly time.
+    `model.elasticity(fespace, kinematics, symmetry="isotropic",
+    strain_measure="linear")` — linear-elasticity model spanning every subspace of
+    `fespace`. `kinematics` is `"plane_stress"`, `"plane_strain"` or
+    `"axisymmetric"` (2-D), or `"full_3d"` (3-D). DOFs are the vector
+    displacement `u_x, u_y(, u_z)`; material is supplied at assembly time.
     
     `"axisymmetric"` requires a geometry built with `Coords.axisymmetric()`
     (`x = r`, `y = z`): the hoop strain `ε_θθ = u_r / r` comes from the kinematics,
@@ -4545,10 +4545,10 @@ def extrude(mesh: Mesh, direction: typing.Sequence[builtins.float], n_layers: bu
     displacement vector). SEG2 → QUA4, TRI3 → PENTA6, QUA4 → HEX8.
     """
 
-def fick(fespace: FiniteElementSpace, species: builtins.str, symmetry: typing.Optional[builtins.str] = None) -> Model:
+def fick(fespace: FiniteElementSpace, species: builtins.str, symmetry: builtins.str = 'isotropic') -> Model:
     r"""
-    `model.fick(fespace, species, symmetry=None)` — Fickian diffusion of one
-    named **species**, spanning every subspace of `fespace`.
+    `model.fick(fespace, species, symmetry="isotropic")` — Fickian diffusion of
+    one named **species**, spanning every subspace of `fespace`.
     
     Every name carries the species: DOFs are `c_<species>` (primal) and
     `j_<species>` (dual), the diffusivity is `D_<species>`, the reported flux
@@ -4751,13 +4751,12 @@ def gurson(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure
     `strain_measure` is the strain the law reads: `"linear"` (small strains, the default), `"green_lagrange"` (large rotations) or `"hencky"` (large plastic strains); the stress it writes is the dual, named after it (`sigma_*`, `S_*`, `T_*`).
     """
 
-def heat_conduction(fespace: FiniteElementSpace, symmetry: typing.Optional[builtins.str] = None) -> Model:
+def heat_conduction(fespace: FiniteElementSpace, symmetry: builtins.str = 'isotropic') -> Model:
     r"""
-    `model.heat_conduction(fespace, symmetry=None)` — heat-conduction model
-    spanning **every** subspace of `fespace` (one zone per subspace). A
-    single-subspace space gives the unit case; several give one zone
-    each. Compose heterogeneous physics with `|`:
-    `model.heat_conduction(fes) | model.dirichlet(...)`.
+    `model.heat_conduction(fespace, symmetry="isotropic")` — heat-conduction
+    model spanning **every** subspace of `fespace` (one zone per subspace). A
+    single-subspace space gives the unit case; several give one zone each. Compose
+    heterogeneous physics with `|`: `model.heat_conduction(fes) | model.dirichlet(...)`.
     
     `symmetry` is `"isotropic"` (the default), `"orthotropic"` or
     `"anisotropic"`, and selects which conductivity the material field must

@@ -101,8 +101,6 @@ main, chacun avec sa raison :
 
 - les **contraintes** (`dirichlet`, `mpc`, `embedded`, `contact`), portées par
   des maillages fournis par l'utilisateur et non par un espace EF ;
-- les variantes **à symétrie** (`heat_conduction`, `fick`, `elasticity`), dont
-  la face Python replie la symétrie en `symmetry=None` ;
 - `interface_transfer`, qui apparie deux espaces avec un contrôle de longueur.
 
 ### Ajouter une loi plutôt qu'une physique

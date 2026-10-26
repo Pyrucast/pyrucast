@@ -27,7 +27,9 @@ use crate::error::Result;
 use crate::handle::Handle;
 
 /// Build a `Model` covering **every** subspace of `fes`, one sub-model per
-/// subspace — the shape twelve of these operators share.
+/// subspace — the shape of every operator on a finite-element space: those
+/// [`physics_operator!`](crate::physics_operator) generates and the two generic
+/// laws, [`plasticity_with_law`] and [`damage_with_law`].
 ///
 /// Deliberately a function and not a macro: the closure is type-checked at its
 /// definition, and go-to-definition still lands on real code.
@@ -58,10 +60,7 @@ pub(crate) fn single(sub: SubModel) -> Result<Model> {
 pub mod contact;
 pub mod damage;
 pub mod dirichlet;
-pub mod elasticity;
 pub mod embedded;
-pub mod fick;
-pub mod heat_conduction;
 pub mod interface_transfer;
 pub mod mpc;
 pub mod plasticity;
@@ -71,7 +70,10 @@ pub use crate::models::boundary_transfer::boundary_transfer;
 pub use crate::models::damage::damage_tc::damage_tc;
 pub use crate::models::damage::mazars::mazars;
 pub use crate::models::damage::sic_sic::damage_sic_sic;
+pub use crate::models::elasticity::elasticity;
+pub use crate::models::fick::fick;
 pub use crate::models::flux::flux;
+pub use crate::models::heat_conduction::heat_conduction;
 pub use crate::models::plasticity::drucker_prager::drucker_prager;
 pub use crate::models::plasticity::gurson::gurson;
 pub use crate::models::plasticity::ottosen::ottosen;
@@ -89,10 +91,7 @@ pub use crate::models::truss::truss;
 pub use contact::contact;
 pub use damage::damage_with_law;
 pub use dirichlet::dirichlet;
-pub use elasticity::{elasticity, elasticity_with_symmetry};
 pub use embedded::embedded;
-pub use fick::{fick, fick_with_symmetry};
-pub use heat_conduction::{heat_conduction, heat_conduction_with_symmetry};
 pub use interface_transfer::interface_transfer;
 pub use mpc::mpc;
 pub use plasticity::plasticity_with_law;

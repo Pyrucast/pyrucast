@@ -110,8 +110,9 @@ src/
 │   │   └── behavior.rs     # intégration de la loi de comportement (COMP)
 │   ├── model/          # → Model : les déclarations de physique. Les formes
 │   │                   #   courantes sont déclarées dans models/<nom>.rs et
-│   │                   #   seulement ré-exportées ici ; les contraintes et les
-│   │                   #   variantes à symétrie gardent leur fichier
+│   │                   #   seulement ré-exportées ici ; les contraintes, le
+│   │                   #   transfert d'interface et les deux lois génériques
+│   │                   #   gardent leur fichier
 │   ├── matrix.rs       # → Matrix : stiffness, mass, geometric, tangent, lump
 │   ├── coords.rs       # écrit dans le magasin : set, displace
 │   ├── measure/        # → un nombre : integral, xtx, xty

@@ -73,6 +73,7 @@ use serde::{Deserialize, Serialize};
 /// the boundary cells of the material field.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -91,7 +92,7 @@ use serde::{Deserialize, Serialize};
 /// # let zone = fes.get(0).unwrap();
 /// // The surface exchange, against the conduction it cools: naming its DOFs
 /// // is what makes the term couple to it.
-/// let conduction = model::heat_conduction(&fes)?;
+/// let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
 /// let b = BoundaryTransfer::new(zone, &conduction, vec![("T".into(), "q".into())])?;
 /// assert_eq!(b.primal_vars(), vec!["T".to_string()]);
 /// assert_eq!(b.material_components(), vec!["h_T".to_string(), "a_ext_T".to_string()]);
@@ -127,6 +128,8 @@ impl BoundaryTransfer {
     /// of two natures.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
+    /// # use pyrucast::ops::element_field::StrainMeasure;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -144,7 +147,7 @@ impl BoundaryTransfer {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// let conduction = model::heat_conduction(&fes)?;
+    /// let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     /// // The kind is not an argument: it comes from the conduction, which
     /// // assemble `T` et `q`.
     /// let film = BoundaryTransfer::new(zone.clone(), &conduction, vec![("T".into(), "q".into())])?;
@@ -153,7 +156,7 @@ impl BoundaryTransfer {
     /// assert!(BoundaryTransfer::new(zone.clone(), &conduction, vec![("u_x".into(), "f_x".into())])
     ///     .is_err());
     /// // An exchange carries one kind: thermal and mechanical mixed, refused.
-    /// let deux = conduction.union(&model::elasticity(&fes, Kinematics::PlaneStress)?)?;
+    /// let deux = conduction.union(&model::elasticity(&fes, Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?)?;
     /// assert!(BoundaryTransfer::new(
     ///     zone.clone(), &deux, vec![("T".into(), "q".into()), ("u_x".into(), "f_x".into())])
     ///     .is_err());
@@ -375,11 +378,12 @@ crate::physics_operator! {
     /// the bulk physics whose DOFs it names and whose nature it takes:
     ///
     /// ```text
-    /// let conduction = model::heat_conduction(&bulk)?;
+    /// let conduction = model::heat_conduction(&bulk, MaterialSymmetry::Isotropic)?;
     /// conduction.union(&model::boundary_transfer(&skin, &conduction, vec![("T".into(), "q".into())])?)?
     /// ```
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -397,7 +401,7 @@ crate::physics_operator! {
     /// # let mut bord = SubMesh::new(coords.clone(), ElementType::SEG2);
     /// # bord.add_cell(&[n[0].id(), n[1].id()])?;
     /// # let fes_bord = FiniteElementSpace::lagrange1(&Mesh::from_submesh(bord))?;
-    /// let conduction = model::heat_conduction(&fes)?;
+    /// let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     /// let film = model::boundary_transfer(&fes_bord, &conduction, vec![("T".into(), "q".into())])?;
     /// assert_eq!(film.primal_vars(), vec!["T".to_string()]);
     /// // United with the conduction, it files under the same kind as it.

@@ -13,6 +13,7 @@ use crate::error::Result;
 /// coupling weights, the per-component variable names and the errors.
 ///
 /// ```
+/// # use pyrucast::ops::element_field::StrainMeasure;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -42,7 +43,7 @@ use crate::error::Result;
 /// # let immergee = Mesh::from_submesh(barre);
 /// # let cible = pyrucast::ops::model::elasticity(
 /// #     &FiniteElementSpace::lagrange1(&maillage)?,
-/// #     pyrucast::models::tensor::Kinematics::PlaneStress)?;
+/// #     pyrucast::models::tensor::Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
 /// let m = model::embedded(&cible, &immergee, &maillage,
 ///     vec!["u_x".into(), "u_y".into()], pyrucast::models::embedded::DEFAULT_TOL)?;
 /// assert_eq!(m.len(), 1);

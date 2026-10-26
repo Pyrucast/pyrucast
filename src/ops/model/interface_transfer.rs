@@ -17,6 +17,7 @@ use crate::handle::Handle;
 /// to resolve by convention.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -35,7 +36,7 @@ use crate::handle::Handle;
 /// # bord.add_cell(&[n[0].id(), n[1].id()])?;
 /// # let fes_bord = FiniteElementSpace::lagrange1(&Mesh::from_submesh(bord))?;
 /// // A contact resistance: the conduction gives the interface's kind.
-/// let conduction = model::heat_conduction(&fes)?;
+/// let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
 /// let m = model::interface_transfer(
 ///     &fes_bord, &fes_bord, &conduction, vec![("T".into(), "q".into())], DEFAULT_TOL)?;
 /// assert_eq!(m.len(), 1);

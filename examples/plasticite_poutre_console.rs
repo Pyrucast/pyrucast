@@ -142,7 +142,8 @@ fn main() -> Result<()> {
 
     // ── Model: plasticity (plane stress) + clamped end (Dirichlet) ──────────
     println!("▸ Model: J2 plasticity (plane stress) + clamped end…");
-    let mut model = model::plasticity_perfect(&fes, Kinematics::PlaneStress)?;
+    let mut model =
+        model::plasticity_perfect(&fes, Kinematics::PlaneStress, StrainMeasure::Linear)?;
 
     model = model.union(&model::dirichlet(
         &model,

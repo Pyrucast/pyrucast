@@ -12,6 +12,7 @@ use pyrucast::containers::model::{Model, SubModel};
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field::behavior::integrate;
 use pyrucast::ops::element_field::material_field;
@@ -253,7 +254,7 @@ fn a_linear_physics_tangent_is_its_stiffness() -> Result<()> {
     use pyrucast::ops::matrix::stiffness;
     use pyrucast::ops::model;
     let (fes, n) = unit_quad()?;
-    let conduction = model::heat_conduction(&fes)?;
+    let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     let k = 3.0;
     let materials = material_field(&conduction, &[("k", k)])?;
 
@@ -276,7 +277,7 @@ fn constraints_enter_the_tangent() -> Result<()> {
     use pyrucast::ops::matrix::stiffness;
     use pyrucast::ops::{mesh, model};
     let (fes, n) = unit_quad()?;
-    let conduction = model::heat_conduction(&fes)?;
+    let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     let imposed = mesh::poi1_from_nodes(&n[..1])?;
     let multiplier = mesh::barycenter(&imposed)?;
     let constrained = conduction.union(&model::dirichlet(

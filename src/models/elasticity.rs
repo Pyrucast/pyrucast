@@ -19,6 +19,7 @@ use crate::containers::element_field::SubElementField;
 use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::containers::matrix::DofOrdering;
 use crate::containers::matrix::Symmetry;
+use crate::containers::model::SubModel;
 use crate::dump::DumpOptions;
 use crate::error::Result;
 use crate::handle::Handle;
@@ -505,4 +506,52 @@ mod tests {
             assert!(row.abs() < tol, "row sum {row} ≠ 0");
         }
     }
+}
+
+crate::physics_operator! {
+    /// Linear-elasticity `Model` spanning **every** subspace of `fes` — one
+    /// [`SubModel::Elasticity`] per [`SubFiniteElementSpace`], with the same
+    /// 2-D/3-D `kinematics` for all. Parent-level operator.
+    ///
+    /// `symmetry` is the **material** axis, independent of the kinematic one:
+    /// `E`, `nu` (isotropic), the per-direction moduli (orthotropic) or the 21
+    /// constants `C_11 … C_66` (anisotropic), the two oriented ones with the
+    /// material axes. `strain_measure` is the strain the law reads — `Linear`,
+    /// `GreenLagrange` or `Hencky` — and names the stress it writes (`sigma_*`,
+    /// `S_*`, `T_*`). The material is supplied at assembly time.
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
+    /// # use pyrucast::models::tensor::Kinematics;
+    /// # use pyrucast::ops::element_field::StrainMeasure;
+    /// # use pyrucast::ops::model;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
+    /// let m = model::elasticity(
+    ///     &fes, Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
+    /// assert_eq!(m.dual_vars(), vec!["f_x".to_string(), "f_y".to_string()]);
+    /// // The material axis is independent of the kinematic one.
+    /// let ortho = model::elasticity(
+    ///     &fes, Kinematics::PlaneStress, MaterialSymmetry::Orthotropic, StrainMeasure::Linear)?;
+    /// let reads = ortho.get(0).unwrap().read().material_components().unwrap();
+    /// assert!(reads.contains(&"E_1".to_string()));
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn elasticity(
+        fes,
+        kinematics: Kinematics,
+        symmetry: MaterialSymmetry = MaterialSymmetry::Isotropic,
+        strain_measure: StrainMeasure = StrainMeasure::Linear,
+    ) via SubModel::elasticity;
+    python: "`model.elasticity(fespace, kinematics, symmetry=\"isotropic\",\nstrain_measure=\"linear\")` — linear-elasticity model spanning every subspace of\n`fespace`. `kinematics` is `\"plane_stress\"`, `\"plane_strain\"` or\n`\"axisymmetric\"` (2-D), or `\"full_3d\"` (3-D). DOFs are the vector\ndisplacement `u_x, u_y(, u_z)`; material is supplied at assembly time.\n\n`\"axisymmetric\"` requires a geometry built with `Coords.axisymmetric()`\n(`x = r`, `y = z`): the hoop strain `ε_θθ = u_r / r` comes from the kinematics,\nthe `2πr` integration measure from the geometry, and the two must agree.\n\n`symmetry` is the **material** axis, independent of the kinematic one:\n`\"isotropic\"` (the default, material `E`, `nu`), `\"orthotropic\"`\n(`E_1, E_2, E_3, nu_12, nu_13, nu_23, G_12, G_13, G_23`) or\n`\"anisotropic\"` (the 21 constants `C_11 … C_66`). The two oriented ones\nalso require the material axes — `V1X, V1Y` in 2-D, `V1X…V1Z, V2X…V2Z`\nin 3-D — which are orthonormalised internally.\n\n`strain_measure` is the strain the law reads: `\"linear\"` (small strains,\nthe default), `\"green_lagrange\"` (large rotations: Hooke on `E` is\nSaint-Venant–Kirchhoff) or `\"hencky\"` (`½ ln C`). The stress it writes is\nthe dual, named after it: `sigma_*`, `S_*` or `T_*`."
 }

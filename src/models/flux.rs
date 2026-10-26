@@ -68,6 +68,7 @@ pub const NORMAL: &str = "n";
 /// A distributed load on one FE subspace: `∫ φ N dΓ`, into one dual row.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -85,7 +86,7 @@ pub const NORMAL: &str = "n";
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// // The target: the model being loaded. It is the one that owns the "q" row.
-/// let cible = model::heat_conduction(&fes)?;
+/// let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
 /// let charge = Flux::new(zone, &cible, "q".into())?;
 /// // A load has no primal: it writes into the dual row of another
 /// // autre physique, et n'introduit aucune inconnue.
@@ -96,7 +97,7 @@ pub const NORMAL: &str = "n";
 /// assert_eq!(charge.material_components(), vec!["phi_q".to_string()]);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Flux {
     fespace: Handle<SubFiniteElementSpace>,
     support: Handle<SubMesh>,
@@ -118,6 +119,7 @@ impl Flux {
     /// physics and the proof that the row is assembled by someone.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -135,7 +137,7 @@ impl Flux {
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
     /// # let zone = fes.get(0).unwrap();
-    /// # let cible = model::heat_conduction(&fes)?;
+    /// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     /// assert!(Flux::new(zone.clone(), &cible, "q".into()).is_ok());
     /// // An empty dual row designates nothing: refused at construction.
     /// assert!(Flux::new(zone.clone(), &cible, String::new()).is_err());
@@ -377,6 +379,7 @@ crate::physics_operator! {
     /// assembled by someone at all.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -393,7 +396,7 @@ crate::physics_operator! {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// // A load distributed over the thermal model it feeds: that model owns the
     /// // "q" row, and gives its kind.
-    /// let conduction = model::heat_conduction(&fes)?;
+    /// let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     /// let charge = model::flux(&fes, &conduction, "q".into())?;
     /// assert_eq!(charge.dual_vars(), vec!["q".to_string()]);
     /// assert!(charge.primal_vars().is_empty());

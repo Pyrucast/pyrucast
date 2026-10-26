@@ -13,6 +13,7 @@ use crate::error::Result;
 /// [`unilateral`](crate::ops::solver::unilateral).
 ///
 /// ```
+/// # use pyrucast::ops::element_field::StrainMeasure;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -41,7 +42,7 @@ use crate::error::Result;
 /// # let slave = mesh::poi1_from_nodes(&n[2..3])?;
 /// # let cible = pyrucast::ops::model::elasticity(
 /// #     &FiniteElementSpace::lagrange1(&maillage)?,
-/// #     pyrucast::models::tensor::Kinematics::PlaneStress)?;
+/// #     pyrucast::models::tensor::Kinematics::PlaneStress, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
 /// let m = model::contact(&cible, &slave, &master,
 ///     vec!["u_x".into(), "u_y".into()])?;
 /// assert_eq!(m.len(), 1);

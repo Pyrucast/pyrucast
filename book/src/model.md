@@ -102,18 +102,15 @@ opérateurs qui les déclarent et leurs variables, vus du `Model` :
 
 | Opérateur (`ops::model::…`, Python `pyrucast.model.…`) | Primales | Duales | Matériau | Chapitre |
 |---|---|---|---|---|
-| `heat_conduction(fes)` | `T` | `q` | `k` | [Thermique](thermique.md) |
-| `heat_conduction_with_symmetry(fes, sym)` | `T` | `q` | `k_1…` / `k_11…` + repère | [Conduction orientée](thermique.md#conduction-orthotrope-et-anisotrope) |
+| `heat_conduction(fes, sym)` | `T` | `q` | `k` ; orientée : `k_1…` / `k_11…` + repère | [Thermique](thermique.md), [conduction orientée](thermique.md#conduction-orthotrope-et-anisotrope) |
 | `boundary_transfer(fes, cible, comps)` | libres | libres | `h_<primale>`, `a_ext_<primale>` | [Échanges](echanges.md) |
 | `radiation(fes, cible)` | `T` | `q` | `emis, T_inf` (+ `sigma` facultatif) | [Rayonnement](thermique.md#rayonnement-à-linfini-stefan-boltzmann) |
-| `fick(fes, espèce)` | `c_<espèce>` | `j_<espèce>` | `D_<espèce>` ; `poro` facultatif | [Diffusion](diffusion.md) |
-| `fick_with_symmetry(fes, sym, espèce)` | `c_<espèce>` | `j_<espèce>` | `D_1_<espèce>…` + repère ; `poro` facultatif | [Diffusion](diffusion.md) |
+| `fick(fes, espèce, sym)` | `c_<espèce>` | `j_<espèce>` | `D_<espèce>` ; orientée : `D_1_<espèce>…` + repère ; `poro` facultatif | [Diffusion](diffusion.md) |
 | `interface_transfer(a, b, cible, comps, tol)` | libres | libres | `h_<primale>` | [Échanges](echanges.md) |
-| `truss(fes)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, A` | [Barre](mecanique/truss.md) |
-| `elasticity(fes, model)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, nu` | [Élasticité](mecanique/elasticite.md) ; en grandes transformations, [mesure de déformation](mecanique/grandes-transformations.md) |
-| `elasticity_with_symmetry(fes, model, sym)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E_1…G_23` / `C_11…C_66` + repère | [Orthotropie](mecanique/orthotropie.md) |
-| `plasticity_perfect(fes, model)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, nu, sigma_y` | [Plasticité](mecanique/plasticite.md) |
-| `plasticity_with_law(fes, model, law)` | idem | idem | selon la loi | [Lois d'écoulement](mecanique/lois-plastiques.md), [Fluage](mecanique/fluage.md) |
+| `truss(fes, mesure)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, A` | [Barre](mecanique/truss.md) |
+| `elasticity(fes, cinématique, sym, mesure)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, nu` ; orientée : `E_1…G_23` / `C_11…C_66` + repère | [Élasticité](mecanique/elasticite.md), [orthotropie](mecanique/orthotropie.md) ; en grandes transformations, [mesure de déformation](mecanique/grandes-transformations.md) |
+| `plasticity_perfect(fes, cinématique, mesure)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, nu, sigma_y` | [Plasticité](mecanique/plasticite.md) |
+| `plasticity_with_law(fes, cinématique, loi, mesure)` | idem | idem | selon la loi | [Lois d'écoulement](mecanique/lois-plastiques.md), [Fluage](mecanique/fluage.md) |
 | `bernoulli(fes, model)` | selon la configuration | idem | `E, I` (+ `A`, `I_y…`) | [Euler-Bernoulli](mecanique/bernoulli.md) |
 | `timoshenko(fes)` | `w, theta` | `f_w, m_theta` | `E, I, G, A_s` | [Timoshenko](mecanique/timoshenko.md) |
 | `frame(fes)` | `u_x, u_y, rz` | `f_x, f_y, m_z` | `E, A, I, G, A_s` | [Portique 2D](mecanique/timoshenko.md) |

@@ -26,6 +26,7 @@
 //! # Example
 //!
 //! ```
+//! # use pyrucast::models::symmetry::MaterialSymmetry;
 //! use pyrucast::containers::field::SubField;
 //! use pyrucast::aggregate::Aggregate;
 //! use pyrucast::coords::Coords;
@@ -56,7 +57,7 @@
 //!
 //! let mut model = Model::empty();
 //! model
-//!     .add_sub(Handle::new(SubModel::heat_conduction(sub).unwrap()))
+//!     .add_sub(Handle::new(SubModel::heat_conduction(sub, MaterialSymmetry::Isotropic).unwrap()))
 //!     .unwrap();
 //! // Dirichlet at both ends: imposed POI1 meshes + colocated multiplier
 //! // supports minted by `barycenter`.
@@ -374,6 +375,7 @@ pub(crate) fn lu_solve_vec(lu: &SparseLu, b: &[f64]) -> Vec<f64> {
 /// room for an iterative back-end without changing the `solve` call sites.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::field::SubField;
@@ -394,8 +396,8 @@ pub(crate) fn lu_solve_vec(lu: &SparseLu, b: &[f64]) -> Vec<f64> {
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let cible = model::heat_conduction(&fes).unwrap();
-/// # let modele = model::heat_conduction(&fes).unwrap()
+/// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
+/// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
 /// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
 /// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
@@ -494,6 +496,7 @@ impl crate::named::Named for SolveMethod {
 /// reusable factorization cache enabled.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::field::SubField;
@@ -514,8 +517,8 @@ impl crate::named::Named for SolveMethod {
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let cible = model::heat_conduction(&fes).unwrap();
-/// # let modele = model::heat_conduction(&fes).unwrap()
+/// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
+/// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
 /// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
 /// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
@@ -567,6 +570,7 @@ impl Default for SolveOptions {
 /// state — never persisted.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::field::SubField;
@@ -587,8 +591,8 @@ impl Default for SolveOptions {
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let cible = model::heat_conduction(&fes).unwrap();
-/// # let modele = model::heat_conduction(&fes).unwrap()
+/// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
+/// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
 /// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
 /// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
@@ -625,6 +629,7 @@ impl Factorization {
     /// `options` names.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::field::SubField;
@@ -646,8 +651,8 @@ impl Factorization {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// # let cible = model::heat_conduction(&fes).unwrap();
-    /// # let modele = model::heat_conduction(&fes).unwrap()
+    /// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
+    /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
     /// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
     /// #                              RelationSense::Equality).unwrap()).unwrap();
     /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
@@ -722,6 +727,7 @@ impl Factorization {
 /// Uninterruptible convenience form; see [`solve_cancellable`].
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::field::SubField;
@@ -743,8 +749,8 @@ impl Factorization {
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let cible = model::heat_conduction(&fes).unwrap();
-/// # let modele = model::heat_conduction(&fes).unwrap()
+/// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
+/// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
 /// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
 /// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
@@ -770,6 +776,7 @@ pub fn solve(matrix: &Matrix, rhs: &NodeField) -> Result<NodeField> {
 /// cache).
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::field::SubField;
@@ -790,8 +797,8 @@ pub fn solve(matrix: &Matrix, rhs: &NodeField) -> Result<NodeField> {
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let cible = model::heat_conduction(&fes).unwrap();
-/// # let modele = model::heat_conduction(&fes).unwrap()
+/// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
+/// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
 /// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
 /// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
@@ -826,6 +833,7 @@ pub fn solve_with_options(
 /// the factorization is already cached, only the (cheap) substitution runs.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::field::SubField;
@@ -846,8 +854,8 @@ pub fn solve_with_options(
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let cible = model::heat_conduction(&fes).unwrap();
-/// # let modele = model::heat_conduction(&fes).unwrap()
+/// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
+/// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
 /// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
 /// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
@@ -878,6 +886,7 @@ pub fn solve_cancellable(
 /// Python binding routes to.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::field::SubField;
@@ -898,8 +907,8 @@ pub fn solve_cancellable(
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
-/// # let cible = model::heat_conduction(&fes).unwrap();
-/// # let modele = model::heat_conduction(&fes).unwrap()
+/// # let cible = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
+/// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
 /// #     .union(&model::dirichlet(&cible, "T", &impose, &mult,
 /// #                              RelationSense::Equality).unwrap()).unwrap();
 /// # let materiaux = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
@@ -990,6 +999,7 @@ mod tests {
     use crate::containers::node_field::SubNodeField;
     use crate::coords::Coords;
     use crate::handle::Handle;
+    use crate::models::symmetry::MaterialSymmetry;
 
     /// 1-D Poisson `-u'' = 0` on `[0, 1]` with `u(0) = 0` and `u(1) = 1`,
     /// discretized with `n` SEG2 elements. The analytical solution is
@@ -1022,7 +1032,9 @@ mod tests {
         // Model.
         let mut model = Model::empty();
         model
-            .add_sub(Handle::new(SubModel::heat_conduction(sub).unwrap()))
+            .add_sub(Handle::new(
+                SubModel::heat_conduction(sub, MaterialSymmetry::Isotropic).unwrap(),
+            ))
             .unwrap();
         let imposed_left =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[0])).unwrap());
@@ -1108,7 +1120,9 @@ mod tests {
         materials.add_sub(Handle::new(mat)).unwrap();
         let mut model = Model::empty();
         model
-            .add_sub(Handle::new(SubModel::heat_conduction(sub).unwrap()))
+            .add_sub(Handle::new(
+                SubModel::heat_conduction(sub, MaterialSymmetry::Isotropic).unwrap(),
+            ))
             .unwrap();
         let k = crate::ops::matrix::stiffness(&model, &materials).unwrap();
 
@@ -1146,7 +1160,9 @@ mod tests {
         materials.add_sub(Handle::new(mat)).unwrap();
         let mut model = Model::empty();
         model
-            .add_sub(Handle::new(SubModel::heat_conduction(sub).unwrap()))
+            .add_sub(Handle::new(
+                SubModel::heat_conduction(sub, MaterialSymmetry::Isotropic).unwrap(),
+            ))
             .unwrap();
         // Ground both ends so K-with-constraints is nonsingular.
         for end in [0usize, 2] {
@@ -1379,7 +1395,9 @@ mod tests {
 
         let mut model = Model::empty();
         model
-            .add_sub(Handle::new(SubModel::heat_conduction(sub).unwrap()))
+            .add_sub(Handle::new(
+                SubModel::heat_conduction(sub, MaterialSymmetry::Isotropic).unwrap(),
+            ))
             .unwrap();
         let imposed =
             Mesh::from_submesh(SubMesh::poi1_from_nodes(std::slice::from_ref(&nodes[0])).unwrap());

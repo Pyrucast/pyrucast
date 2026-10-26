@@ -54,6 +54,7 @@ use serde::{Deserialize, Serialize};
 /// Default multiplier (primal) name shared by every relation of an MPC.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -69,7 +70,7 @@ use serde::{Deserialize, Serialize};
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -89,6 +90,7 @@ pub fn default_multiplier() -> String {
 /// Default imposed-value (dual) name — the constraint-equation row and `g` slot.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -104,7 +106,7 @@ pub fn default_multiplier() -> String {
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
@@ -125,6 +127,7 @@ pub fn default_imposed_value() -> String {
 /// [`Mpc`]. Its mesh is POI1: cell `r` holds the node of relation `r`.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -140,14 +143,14 @@ pub fn default_imposed_value() -> String {
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # use pyrucast::models::mpc::{self, Mpc, MpcTerm};
 /// # let a = mesh::poi1_from_nodes(&n[..1])?;
 /// # let b = mesh::poi1_from_nodes(&n[1..2])?;
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes)?;
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
 /// // "Both nodes have the same temperature": Σ aₖ·uₖ = g, with one λ per
 /// // relation.
 /// let m = Mpc::new(
@@ -181,6 +184,7 @@ impl MpcTerm {
     /// (its submeshes are increfed so the nodes stay alive).
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -196,14 +200,14 @@ impl MpcTerm {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # use pyrucast::models::mpc::{self, Mpc, MpcTerm};
     /// # let a = mesh::poi1_from_nodes(&n[..1])?;
     /// # let b = mesh::poi1_from_nodes(&n[1..2])?;
-    /// # let cible = pyrucast::ops::model::heat_conduction(&fes)?;
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     /// // "Both nodes have the same temperature": Σ aₖ·uₖ = g, with one λ per
     /// // relation.
     /// let m = Mpc::new(
@@ -249,6 +253,7 @@ impl MpcTerm {
 /// `g = 0`).
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -264,14 +269,14 @@ impl MpcTerm {
 /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
 /// # let maillage = Mesh::from_submesh(sm);
 /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # use pyrucast::models::mpc::{self, Mpc, MpcTerm};
 /// # let a = mesh::poi1_from_nodes(&n[..1])?;
 /// # let b = mesh::poi1_from_nodes(&n[1..2])?;
-/// # let cible = pyrucast::ops::model::heat_conduction(&fes)?;
+/// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
 /// // "Both nodes have the same temperature": Σ aₖ·uₖ = g, with one λ per
 /// // relation.
 /// let m = Mpc::new(
@@ -317,6 +322,7 @@ impl Mpc {
     /// [`unilateral`](crate::ops::solver::unilateral).
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -332,14 +338,14 @@ impl Mpc {
     /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
     /// # let maillage = Mesh::from_submesh(sm);
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let cible = pyrucast::ops::model::heat_conduction(&fes).unwrap();
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
     /// # let mult = mesh::barycenter(&impose).unwrap();
     /// # use pyrucast::models::mpc::{self, Mpc, MpcTerm};
     /// # let a = mesh::poi1_from_nodes(&n[..1])?;
     /// # let b = mesh::poi1_from_nodes(&n[1..2])?;
-    /// # let cible = pyrucast::ops::model::heat_conduction(&fes)?;
+    /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     /// // "Both nodes have the same temperature": Σ aₖ·uₖ = g, with one λ per
     /// // relation.
     /// let m = Mpc::new(
@@ -606,13 +612,14 @@ mod tests {
             &Mesh::from_submesh(sm),
         )
         .unwrap();
-        crate::ops::model::heat_conduction(&fes).unwrap()
+        crate::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap()
     }
     use super::*;
     use crate::atoms::Node;
     use crate::containers::mesh::SubMesh;
     use crate::coords::Coords;
     use crate::handle::Handle;
+    use crate::models::symmetry::MaterialSymmetry;
     use crate::ops::mesh::barycenter;
 
     fn poi1(node: &Node) -> Mesh {

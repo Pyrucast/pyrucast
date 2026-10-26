@@ -283,7 +283,7 @@ fn clamped_model(
     };
     let left: Vec<Node> = (0..=N).map(|j| grid[idx(0, j)].clone()).collect();
     let bottom: Vec<Node> = (0..=N).map(|i| grid[idx(i, 0)].clone()).collect();
-    let mut model = model::elasticity_with_symmetry(
+    let mut model = model::elasticity(
         fes,
         Kinematics::PlaneStress,
         symmetry,

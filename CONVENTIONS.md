@@ -379,7 +379,8 @@ Three mechanical consequences:
    where the "1 or several" transparency lies. Precedents already in place:
    `FiniteElementSpace(mesh)` builds one sub-space per sub-mesh;
    `Mesh(config, element_type)` creates a mesh with one sub-mesh. Target:
-   `model::heat_conduction(&fes)` creates one zone per sub-space.
+   `model::heat_conduction(&fes, MaterialSymmetry::Isotropic)` creates one zone
+   per sub-space.
 
 2. **Composing = union (`|` in Python, `union` in Rust), never `add_sub` by
    hand.** To assemble heterogeneous physics / zones, one unions parents:

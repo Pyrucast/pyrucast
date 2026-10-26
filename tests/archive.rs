@@ -16,6 +16,7 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::error::Result;
 use pyrucast::handle::Handle;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::ops::model;
 
 /// A path named `name` in a directory of its own, removed with the file when
@@ -382,7 +383,7 @@ fn a_whole_study_makes_the_round_trip() -> Result<()> {
     ))?);
     let multiplier = pyrucast::ops::mesh::barycenter(&imposed)?;
     let mult = multiplier.node(0, 0, 0)?.id();
-    let conduction = model::heat_conduction(&fes)?;
+    let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     let model = conduction.union(&model::dirichlet(
         &conduction,
         "T",

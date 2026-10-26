@@ -335,6 +335,7 @@ pub enum KernelInputs {
 /// empty, correctly-sized placeholder, so structural queries still work).
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::ElementField;
@@ -355,7 +356,7 @@ pub enum KernelInputs {
 /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
 /// # let zone = fes.get(0).unwrap();
 /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-/// # let modele = model::heat_conduction(&fes).unwrap();
+/// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let mat = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
 /// // A **computed** block materializes no value: it carries the recipe
 /// // that the global assembler unwinds cell by cell, straight into the CSR.
@@ -675,6 +676,7 @@ impl SubMatrix {
     /// `recipe.fespace` and scatters straight into the global matrix.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::element_field::ElementField;
@@ -695,7 +697,7 @@ impl SubMatrix {
     /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm)).unwrap();
     /// # let zone = fes.get(0).unwrap();
     /// # let support = zone.read().submesh().read().to_poi1().unwrap();
-    /// # let modele = model::heat_conduction(&fes).unwrap();
+    /// # let modele = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let mat = element_field::material_field(&modele, &[("k", 1.0)]).unwrap();
     /// // The same seen from the constructor: a sized, empty template,
     /// // whose values will come from the sub-model's kernel.
@@ -2702,6 +2704,7 @@ pub type DofKey = u64;
 /// own for as long as it needs it, so they are reference-counted.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -2718,7 +2721,7 @@ pub type DofKey = u64;
 /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
 /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
 /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-/// # let model = model::heat_conduction(&fes).unwrap();
+/// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
 /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
 /// # let k = matrix::stiffness(&model, &materials).unwrap();
 /// // It numbers the rows: one entry per row of the assembled CSR.
@@ -3121,6 +3124,7 @@ impl AssemblyPattern {
     /// belongs at an API edge, never inside an assembly.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -3136,7 +3140,7 @@ impl AssemblyPattern {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// # let motif = scatter::build_pattern(&k)?;
@@ -3153,6 +3157,7 @@ impl AssemblyPattern {
     /// [`row_dofs`](Self::row_dofs).
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -3168,7 +3173,7 @@ impl AssemblyPattern {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// # let motif = scatter::build_pattern(&k)?;
@@ -3799,6 +3804,7 @@ impl Matrix {
     /// once when a matrix is about to be solved, never inside a loop.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -3815,7 +3821,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // A Galerkin stiffness is symmetric, and its Dirichlet's two rectangular
@@ -3891,6 +3897,7 @@ impl Matrix {
     /// If finalized, returns the cached order (consistent with the CSR).
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -3907,7 +3914,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Un DDL de ligne : (nœud, variable **duale**).
@@ -3924,6 +3931,7 @@ impl Matrix {
     /// If finalized, returns the cached order (consistent with the CSR).
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -3940,7 +3948,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Un DDL de colonne : (nœud, variable **primale**).
@@ -3955,6 +3963,7 @@ impl Matrix {
     /// indexes. Interned once, rows and columns together.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -3971,7 +3980,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // The compact form and the named form say the same thing: names are
@@ -3994,6 +4003,7 @@ impl Matrix {
     /// assembler and the solver index with.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4010,7 +4020,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // The compact form of a row DOF: the node, and the index of the
@@ -4045,6 +4055,7 @@ impl Matrix {
     /// of [`row_dof_keys`](Self::row_dof_keys).
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4061,7 +4072,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Same shape on the column side, over the **primal** variables.
@@ -4080,6 +4091,7 @@ impl Matrix {
     /// Union of all field names (dual + primal) across blocks.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4096,7 +4108,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // interned once only, rows and columns together.
@@ -4105,6 +4117,7 @@ impl Matrix {
     /// ```
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4121,7 +4134,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // interned once only, rows and columns together.
@@ -4143,6 +4156,7 @@ impl Matrix {
     /// Number of distinct row DOFs.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4159,7 +4173,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// assert_eq!(k.n_rows().unwrap(), 2); // two nodes, one dual variable
@@ -4171,6 +4185,7 @@ impl Matrix {
     /// Number of distinct column DOFs.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4187,7 +4202,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// assert_eq!(k.n_cols().unwrap(), 2);
@@ -4199,6 +4214,7 @@ impl Matrix {
     /// Total COO entries stored across all blocks (counting duplicates).
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4215,7 +4231,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Counts the entries **stored** in the blocks. A *computed* block — what
@@ -4246,6 +4262,7 @@ impl Matrix {
     /// factors private, so it is out of reach here.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
     /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
@@ -4258,7 +4275,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// let k = matrix::stiffness(&model, &materials)?;
     /// // At least an index and a value per non-zero, counted independently on
@@ -4287,6 +4304,7 @@ impl Matrix {
     /// do not exist until it is assembled.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4303,7 +4321,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Un SEG2 de longueur 1, k = 1 : K = [[1, -1], [-1, 1]].
@@ -4353,6 +4371,7 @@ impl Matrix {
     /// All COO entries across every block, in block-insertion order.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4369,7 +4388,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // One 5-tuple per entry: row node, dual var, column node,
@@ -4397,6 +4416,7 @@ impl Matrix {
     /// read the assembled matrix, [`csr_arrays`](Self::csr_arrays) borrows it.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4413,7 +4433,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // The CSR **is** the assembled state: borrowed, not rebuilt.
@@ -4429,6 +4449,7 @@ impl Matrix {
     /// The reading form of [`to_csr`](Self::to_csr), copying nothing.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4445,7 +4466,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // The CSR's three arrays, borrowed — nothing is copied.
@@ -4463,6 +4484,7 @@ impl Matrix {
     /// Assembled dense matrix. Requires [`finalize`](Self::finalize).
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4479,7 +4501,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // A nalgebra view (column-major), ready for LU or Cholesky.
@@ -4500,6 +4522,7 @@ impl Matrix {
     /// Row-major dense buffer. Requires [`finalize`](Self::finalize).
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4516,7 +4539,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Vue dense ligne-major, longueur n_rows × n_cols.
@@ -4538,6 +4561,7 @@ impl Matrix {
     /// Assembled COO (rebuilt from the CSR). Requires [`finalize`](Self::finalize).
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4554,7 +4578,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// assert_eq!(k.to_coo().unwrap().nnz(), 4);
@@ -4571,6 +4595,7 @@ impl Matrix {
     /// Assembled CSC. Requires [`finalize`](Self::finalize).
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4587,7 +4612,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// assert_eq!(k.to_csc().unwrap().ncols(), 2);
@@ -4599,6 +4624,7 @@ impl Matrix {
     /// `y = A · x` (dense). Requires [`finalize`](Self::finalize).
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4615,7 +4641,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // K · [1, 1] = 0: the rigid mode of a conduction.
@@ -4658,6 +4684,7 @@ impl Matrix {
     /// [`finalize`](Self::finalize) (the supports are structural).
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4674,7 +4701,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // Le support **ligne** : la cible de projection d'un second membre.
@@ -4690,6 +4717,7 @@ impl Matrix {
     /// field onto the exact supports of the solution before combining.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4706,7 +4734,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// // The **column** support: that of a field being multiplied.
@@ -4729,6 +4757,7 @@ impl Matrix {
     /// call [`Matrix::assemble`] before handing it to a solver.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4744,7 +4773,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// # use pyrucast::models::Physics;
@@ -4767,6 +4796,7 @@ impl Matrix {
     /// alone. Not assembled, like `filter`; an untagged block is never excluded.
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4783,7 +4813,7 @@ impl Matrix {
     /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
     /// # let appui = mesh::poi1_from_nodes(&[a.clone()]).unwrap();
     /// # let mult = mesh::barycenter(&appui).unwrap();
-    /// let conduction = model::heat_conduction(&fes)?;
+    /// let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?;
     /// let m = conduction.union(&model::dirichlet(&conduction, "T", &appui, &mult, RelationSense::Equality)?)?;
     /// let materiaux = element_field::material_field(&m, &[("k", 1.0)])?;
     /// let k = matrix::stiffness(&m, &materiaux)?;
@@ -4819,6 +4849,7 @@ impl Matrix {
     /// a heat model with a Dirichlet → `[Thermal, Constraint]`).
     ///
     /// ```
+    /// # use pyrucast::models::symmetry::MaterialSymmetry;
     /// # use pyrucast::aggregate::Aggregate;
     /// # use pyrucast::atoms::{ElementType, Node};
     /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
@@ -4834,7 +4865,7 @@ impl Matrix {
     /// # let mut mesh = Mesh::from_submesh(SubMesh::new(coords, ElementType::SEG2));
     /// # mesh.add_cell(&[a.id(), b.id()]).unwrap();
     /// # let fes = FiniteElementSpace::lagrange1(&mesh).unwrap();
-    /// # let model = model::heat_conduction(&fes).unwrap();
+    /// # let model = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
     /// # let materials = element_field::material_field(&model, &[("k", 1.0)]).unwrap();
     /// # let k = matrix::stiffness(&model, &materials).unwrap();
     /// # use pyrucast::models::Physics;

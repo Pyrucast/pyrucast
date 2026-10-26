@@ -57,6 +57,8 @@ use crate::ops::element_field::shell_deformation::subspace_shell_deformation;
 /// (`integrate_behavior` in Python) as is.
 ///
 /// ```
+/// # use pyrucast::models::symmetry::MaterialSymmetry;
+/// # use pyrucast::ops::element_field::StrainMeasure;
 /// # use pyrucast::aggregate::Aggregate;
 /// # use pyrucast::atoms::{ElementType, Node};
 /// # use pyrucast::containers::element_field::ElementField;
@@ -77,8 +79,8 @@ use crate::ops::element_field::shell_deformation::subspace_shell_deformation;
 /// # let support = mesh::poi1_from_nodes(&n).unwrap();
 /// # let mut mat = ElementField::new(&fes, vec!["k".into()])?;
 /// # mat.get(0)?.write().set_uniform("k", 1.0)?;
-/// let solide = model::elasticity(&fes, Kinematics::PlaneStrain)?;
-/// let couple = solide.union(&model::heat_conduction(&fes)?)?;
+/// let solide = model::elasticity(&fes, Kinematics::PlaneStrain, MaterialSymmetry::Isotropic, StrainMeasure::Linear)?;
+/// let couple = solide.union(&model::heat_conduction(&fes, MaterialSymmetry::Isotropic)?)?;
 /// // One solution for both physics: u_x = 0.1·x and T = 5·y.
 /// let sol = NodeField::from_submesh(&support.get(0)?,
 ///     vec!["u_x".into(), "u_y".into(), "T".into()])?;
@@ -138,6 +140,7 @@ mod tests {
     use crate::containers::finite_element_space::FiniteElementSpace;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
+    use crate::models::symmetry::MaterialSymmetry;
     use crate::models::tensor::Kinematics;
     use crate::models::RelationSense;
     use crate::ops::element_field::{self, StrainMeasure};
@@ -196,7 +199,13 @@ mod tests {
     fn a_solid_reads_the_strain_of_its_displacement() {
         let (fes, n) = square();
         let sol = solution(&n);
-        let solid = model::elasticity(&fes, Kinematics::PlaneStrain).unwrap();
+        let solid = model::elasticity(
+            &fes,
+            Kinematics::PlaneStrain,
+            MaterialSymmetry::Isotropic,
+            StrainMeasure::Linear,
+        )
+        .unwrap();
         let got = strain(&solid, &sol, &unit_material(&fes)).unwrap();
         let u = sol.filter_components(["u_x", "u_y"]).unwrap();
         let want = element_field::deformation(&u, &fes, StrainMeasure::Linear).unwrap();
@@ -211,7 +220,7 @@ mod tests {
     fn conduction_reads_the_gradient_of_its_temperature() {
         let (fes, n) = square();
         let sol = solution(&n);
-        let conduction = model::heat_conduction(&fes).unwrap();
+        let conduction = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
         let got = strain(&conduction, &sol, &unit_material(&fes)).unwrap();
         let g = got.get(0).unwrap().read();
         assert_eq!(
@@ -227,7 +236,7 @@ mod tests {
     fn diffusion_reads_the_gradient_of_its_species() {
         let (fes, n) = square();
         let got = strain(
-            &model::fick(&fes, "h").unwrap(),
+            &model::fick(&fes, "h", MaterialSymmetry::Isotropic).unwrap(),
             &solution(&n),
             &unit_material(&fes),
         );
@@ -246,7 +255,7 @@ mod tests {
         let mut edge = SubMesh::new(coords, ElementType::SEG2);
         edge.add_cell(&[n[1].id(), n[2].id()]).unwrap();
         let edge = FiniteElementSpace::lagrange1(&Mesh::from_submesh(edge)).unwrap();
-        let target = model::heat_conduction(&fes).unwrap();
+        let target = model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
         let rad = model::radiation(&edge, &target).unwrap();
         let got = strain(&rad, &solution(&n), &unit_material(&fes)).unwrap();
         let g = got.get(0).unwrap().read();
@@ -265,8 +274,16 @@ mod tests {
     fn a_coupled_model_runs_the_whole_chain() {
         let (fes, n) = square();
         let sol = solution(&n);
-        let solid = model::elasticity(&fes, Kinematics::PlaneStrain).unwrap();
-        let coupled = solid.union(&model::heat_conduction(&fes).unwrap()).unwrap();
+        let solid = model::elasticity(
+            &fes,
+            Kinematics::PlaneStrain,
+            MaterialSymmetry::Isotropic,
+            StrainMeasure::Linear,
+        )
+        .unwrap();
+        let coupled = solid
+            .union(&model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap())
+            .unwrap();
         let materials = element_field::material_field_per_sub_model(
             &coupled,
             &[&[("E", 200.0), ("nu", 0.3)], &[("k", 45.0)]],
@@ -304,7 +321,13 @@ mod tests {
     fn a_constraint_has_no_input() {
         let (fes, n) = square();
         let sol = solution(&n);
-        let solid = model::elasticity(&fes, Kinematics::PlaneStrain).unwrap();
+        let solid = model::elasticity(
+            &fes,
+            Kinematics::PlaneStrain,
+            MaterialSymmetry::Isotropic,
+            StrainMeasure::Linear,
+        )
+        .unwrap();
         let clamp = mesh::poi1_from_nodes(&n[..1]).unwrap();
         let mult = mesh::barycenter(&clamp).unwrap();
         let support = model::dirichlet(&solid, "u_x", &clamp, &mult, RelationSense::Equality);

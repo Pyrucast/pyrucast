@@ -22,6 +22,7 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::mpc::MpcTerm;
+use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::RelationSense;
 use pyrucast::ops::matrix::stiffness;
 use pyrucast::ops::mesh::barycenter;
@@ -53,7 +54,10 @@ fn heat_bar() -> Result<(Vec<Node>, Handle<Coords>, Model, ElementField)> {
     materials.add_sub(Handle::new(mat))?;
 
     let mut model = Model::empty();
-    model.add_sub(Handle::new(SubModel::heat_conduction(sub)?))?;
+    model.add_sub(Handle::new(SubModel::heat_conduction(
+        sub,
+        MaterialSymmetry::Isotropic,
+    )?))?;
 
     Ok((nodes, coords, model, materials))
 }
