@@ -20,11 +20,13 @@ chargement réparti `flux`), [Comportement](comportement.md), [Solveur](solveur.
 | `coords.set(field, components=None)` | **écrit** les coordonnées du `Coords` actif depuis un champ `"X"/"Y"/"Z"`. |
 | `displace(field, components=None)` | **ajoute** un champ de déplacement aux coordonnées (chaque nœud distinct traité **une seule fois**). |
 | `coords.displace_from(field, reference, target, components=None)` | **pose** la configuration `target` en `X + u`, en absolu à partir de la configuration `reference` : rappelée, elle repart de `X`, rien ne s'accumule. La configuration active ne change pas (Cast3M `FORM`). |
+| `Coords.in_config(config)` (méthode) | `with coords.in_config(i):` le bloc calcule sur la configuration `config` ; celle d'avant redevient active à la sortie, même après une exception. Voir [Coords](../coords.md#plusieurs-configurations). |
 
 `positions` est le pont géométrie → champ : on en tire un `NodeField` qu'on
 peut tracer, dériver, ou réinjecter après calcul (`displace` pour passer à la
 configuration déformée). En grandes transformations, la configuration courante
-vit dans un jeu à part du même `Coords`, posé par `displace_from` : voir
+vit dans un jeu à part du même `Coords`, posé par `displace_from` et rendu
+actif le temps d'un calcul par `in_config` : voir
 [Grandes transformations](../mecanique/grandes-transformations.md).
 
 ## Restriction, fusion, consolidation

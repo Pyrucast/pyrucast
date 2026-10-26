@@ -131,9 +131,8 @@ etiree = coords.add_config("etiree")
 pyrucast.coords.displace_from(allonge, coords.active, etiree, ["u_x"])
 # ANCHOR: somme_configurations
 K_repos = pyrucast.matrix.stiffness(model, materials)  # sur la configuration active
-coords.select(etiree)
-K_etiree = pyrucast.matrix.stiffness(model, materials)  # sur la barre étirée
-coords.select(0)
+with coords.in_config(etiree):
+    K_etiree = pyrucast.matrix.stiffness(model, materials)  # sur la barre étirée
 
 # Chaque matrice garde les valeurs de sa configuration ; la somme les additionne.
 somme = K_repos + K_etiree
@@ -142,9 +141,8 @@ milieu = noeuds[1]
 # Two SEG2 of conductance k / ℓ meet at the middle node: 2·(1/0.5) = 4 at
 # rest, 2·(1/1) = 2 once stretched.
 assert abs(somme.get(milieu, "q", milieu, "T") - 6.0) < 1e-12
-coords.select(etiree)
-assert abs(somme.get(milieu, "q", milieu, "T") - 6.0) < 1e-12
-coords.select(0)
+with coords.in_config(etiree):
+    assert abs(somme.get(milieu, "q", milieu, "T") - 6.0) < 1e-12
 
 # ── Rigidité géométrique ────────────────────────────────────────────────────
 

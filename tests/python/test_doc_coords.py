@@ -58,6 +58,28 @@ assert c.names() == ["default", "deformed"]
 assert c.active == 1
 
 
+# ANCHOR: in_config
+import pyrucast
+
+c = pyrucast.Coords(dim=2)
+n = c.add_node([1.0, 0.0])
+deformee = c.add_config("deformed")
+
+# Le bloc voit `deformee` ; la configuration d'avant revient à la sortie,
+# même après une exception.
+with c.in_config(deformee):
+    n.set_position([1.5, 0.0])
+    x = n.position()
+
+print(x)  # [1.5, 0.0]
+print(n.position())  # [1.0, 0.0] — la référence, de nouveau active
+# ANCHOR_END: in_config
+
+assert x == [1.5, 0.0]
+assert n.position() == [1.0, 0.0]
+assert c.active == 0
+
+
 # ── Permutation ─────────────────────────────────────────────────────────────
 
 # ANCHOR: permutation

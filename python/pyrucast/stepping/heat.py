@@ -62,11 +62,12 @@ def _advanced(problem, temperature, increment):
 
 
 def _on_current(problem):
-    """The block on the current shape in large displacements; on the one
-    configuration otherwise."""
-    if problem.configurations is None:
+    """The block on the current shape, as last laid, in large displacements;
+    on the one configuration otherwise."""
+    configurations = problem.configurations
+    if configurations is None:
         return nullcontext()
-    return problem.configurations.on_current()
+    return configurations.coords.in_config(configurations.current)
 
 
 def _loads(data, problem, state, t, materials, options):
@@ -110,7 +111,7 @@ def _internal_forces(problem, behaviour, temperature, materials):
     )
     if problem.heat_on_current is None:
         return internal
-    with problem.configurations.on_current():
+    with _on_current(problem):
         on_current = node_field.internal_forces(
             problem.heat_on_current, behaviour, temperature, materials
         )
@@ -126,7 +127,7 @@ def _tangent(problem, materials, temperature):
     conduction = problem.heat_on_reference.exclude("constraint")
     tangent = matrix.tangent(conduction, materials, strain)
     if problem.heat_on_current is not None:
-        with problem.configurations.on_current():
+        with _on_current(problem):
             on_current = matrix.tangent(problem.heat_on_current, materials, strain)
         tangent = tangent + on_current
     return tangent

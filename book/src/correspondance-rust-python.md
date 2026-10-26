@@ -180,13 +180,14 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 mais leur résultat est un vecteur nodal et non un opérateur : on se range
 par la sortie.
 
-### `ops::coords` — écriture dans le magasin de coordonnées
+### `ops::coords` — écriture dans le magasin de coordonnées, calcul dans une configuration
 
 | Rust (`ops::coords::…`) | Python (`pyrucast.coords.…`) |
 |---|---|
 | `set(field: &NodeField, components: Option<Vec<String>>) -> ()` | `set(field, components=None) -> None` |
 | `displace(field: &NodeField, components: Option<Vec<String>>) -> ()` | `displace(field, components=None) -> None` |
 | `displace_from(field: &NodeField, reference: usize, target: usize, components: Option<Vec<String>>) -> ()` | `displace_from(field, reference, target, components=None) -> None` (pose la configuration `target` en `X + u`, en absolu ; la configuration active ne change pas) |
+| `in_config(coords: &Handle<Coords>, config: usize, f: impl FnOnce() -> Result<R>) -> Result<R>` | méthode `Coords.in_config(config) -> InConfig`, gestionnaire de contexte : `with coords.in_config(i):` (le bloc calcule sur la configuration `config`, celle d'avant revient à la sortie, même après une erreur). Chaque langage a sa forme idiomatique : fermeture en Rust, `with` en Python |
 
 ### `ops::element_field` — opérateurs produisant un champ aux points de Gauss
 

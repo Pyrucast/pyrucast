@@ -487,19 +487,17 @@ def test_a_sum_adds_each_operand_as_it_was_assembled():
     second `assemble` changes nothing."""
     model, materials, coords, stretched, middle = _bar_with_a_stretched_configuration()
     on_rest = pyrucast.matrix.stiffness(model, materials)
-    coords.select(stretched)
-    on_stretched = pyrucast.matrix.stiffness(model, materials)
-    coords.select(0)
+    with coords.in_config(stretched):
+        on_stretched = pyrucast.matrix.stiffness(model, materials)
     # Two conductances 1/ℓ meet at the middle node: 4 at rest, 2 stretched.
     assert on_rest.get(middle, "q", middle, "T") == pytest.approx(4.0, abs=1e-12)
     assert on_stretched.get(middle, "q", middle, "T") == pytest.approx(2.0, abs=1e-12)
 
     total = on_rest + on_stretched
     assert total.get(middle, "q", middle, "T") == pytest.approx(6.0, abs=1e-12)
-    coords.select(stretched)
-    total.assemble()
+    with coords.in_config(stretched):
+        total.assemble()
     assert total.get(middle, "q", middle, "T") == pytest.approx(6.0, abs=1e-12)
-    coords.select(0)
 
 
 def test_a_lumped_mass_survives_a_sum():

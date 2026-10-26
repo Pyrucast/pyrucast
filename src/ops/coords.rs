@@ -1,18 +1,22 @@
-//! Operators that **write into the coordinates** — the only three that
-//! do.
+//! Operators on the **coordinates** themselves: the only three that write
+//! into them, and the one that computes in another configuration.
 //!
-//! They are the write side of
+//! The writers are the write side of
 //! [`node_field::positions`](fn@crate::ops::node_field::positions), which
 //! reads the geometry as a nodal field: [`set`](fn@set) puts absolute
 //! positions back, [`displace`](fn@displace) adds an increment, and
 //! [`displace_from`](fn@displace_from) lays one configuration at another
-//! plus a displacement. All act on the [`Coords`](crate::coords::Coords) the
-//! field hangs from, in place.
+//! plus a displacement. All act on the [`Coords`] the
+//! field hangs from, in place. [`in_config`](fn@in_config) runs a computation
+//! with another configuration active, and makes the one before it active
+//! again.
 
 use crate::atoms::NodeId;
 use crate::containers::field::Field;
 use crate::containers::node_field::NodeField;
+use crate::coords::Coords;
 use crate::error::{PyrucastError, Result};
+use crate::handle::Handle;
 
 /// Resolve the per-axis component names: one name per spatial axis, in axis
 /// order. `None` falls back to `default[..dim]`. Errors if the count does
@@ -263,6 +267,47 @@ mod tests {
     }
 
     #[test]
+    fn in_config_restores_the_previous_configuration() {
+        let coords = Handle::new(Coords::new(1).unwrap());
+        let a = coords.write().add_config("a");
+        let b = coords.write().add_config("b");
+        coords.write().select(a).unwrap();
+
+        // After a value, nested: each level gives back the one it found.
+        let seen = in_config(&coords, b, || {
+            let inner = in_config(&coords, 0, || Ok(coords.read().active()))?;
+            Ok((coords.read().active(), inner))
+        })
+        .unwrap();
+        assert_eq!(seen, (b, 0));
+        assert_eq!(coords.read().active(), a);
+
+        // After an error, which is handed back.
+        let err = in_config(&coords, b, || -> Result<()> {
+            Err(PyrucastError::Message("inside".into()))
+        });
+        assert!(err.is_err());
+        assert_eq!(coords.read().active(), a);
+
+        // After a panic, which goes on unwinding.
+        let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = in_config(&coords, b, || -> Result<()> { panic!("inside") });
+        }));
+        assert!(panicked.is_err());
+        assert_eq!(coords.read().active(), a);
+
+        // An index out of range: nothing runs, nothing changes.
+        let mut ran = false;
+        assert!(in_config(&coords, 3, || {
+            ran = true;
+            Ok(())
+        })
+        .is_err());
+        assert!(!ran);
+        assert_eq!(coords.read().active(), a);
+    }
+
+    #[test]
     fn writers_reject_wrong_component_count() {
         let coords = Handle::new(Coords::new(2).unwrap());
         let a = Node::create_in(coords.clone(), &[0.0, 0.0]).unwrap();
@@ -329,4 +374,55 @@ pub fn displace_from(
         target,
         increments.iter().map(|(nid, inc)| (*nid, inc.as_slice())),
     )
+}
+
+/// Run `f` with configuration `config` of `coords` active, then make the
+/// configuration that was active before it active again — after an error, and
+/// after a panic, too. Everything `f` computes on the geometry (matrices,
+/// normals, measures) sees `config`; what it returns is handed back.
+///
+/// The lock on `coords` is taken on entry and on exit only: `f` reads and
+/// writes the coordinates freely, and may call `in_config` again. The active
+/// configuration belongs to the `Coords`, not to the caller: another thread
+/// computing on the same `Coords` meanwhile sees `config` too.
+///
+/// Errors: `config` out of range, before `f` runs; whatever `f` returns.
+///
+/// ```
+/// # use pyrucast::atoms::Node;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::coords as ops_coords;
+/// let coords = Handle::new(Coords::new(2)?);
+/// let n = Node::create_in(coords.clone(), &[1.0, 0.0])?;
+/// let current = coords.write().add_config("current");
+///
+/// // Written in `current`, read in `current`; the reference is back after each.
+/// ops_coords::in_config(&coords, current, || n.set_position(&[2.0, 0.0]))?;
+/// let x = ops_coords::in_config(&coords, current, || n.position())?;
+/// assert_eq!(x, vec![2.0, 0.0]);
+/// assert_eq!(coords.read().active(), 0);
+/// assert_eq!(n.position()?, vec![1.0, 0.0]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
+pub fn in_config<R>(
+    coords: &Handle<Coords>,
+    config: usize,
+    f: impl FnOnce() -> Result<R>,
+) -> Result<R> {
+    let previous = {
+        let mut c = coords.write();
+        let previous = c.active();
+        c.select(config)?;
+        previous
+    };
+    // Caught only to restore, then resumed: nothing observes `f`'s state after
+    // a panic, so asserting it unwind-safe is sound.
+    let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
+    // `previous` was valid on entry, and configurations are never removed.
+    coords.write().select(previous)?;
+    match out {
+        Ok(result) => result,
+        Err(panic) => std::panic::resume_unwind(panic),
+    }
 }

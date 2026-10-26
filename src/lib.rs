@@ -330,6 +330,7 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m
     )?)?;
     m.add_class::<py::coords::PyCoords>()?;
+    m.add_class::<py::coords::PyInConfig>()?;
     m.add_class::<py::node::PyNode>()?;
     m.add_class::<py::mesh::PySubMesh>()?;
     m.add_class::<py::mesh::PyMesh>()?;

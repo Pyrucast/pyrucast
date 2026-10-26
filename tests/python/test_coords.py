@@ -81,6 +81,45 @@ def test_configs_select():
     assert n.position() == [10.0, 20.0]
 
 
+def test_in_config_gives_back_the_configuration_found():
+    c = pyrucast.Coords(2)
+    n = c.add_node([0.0, 0.0])
+    a = c.add_config("a")
+    b = c.add_config("b")
+    c.select(a)
+
+    # Nested, and the same context entered inside itself: each level gives
+    # back what it found.
+    inner = c.in_config(0)
+    with c.in_config(b):
+        n.set_position([1.0, 0.0])
+        with inner:
+            with inner:
+                assert c.active == 0
+            assert c.active == 0
+        assert c.active == b
+    assert c.active == a
+    with c.in_config(b):
+        assert n.position() == [1.0, 0.0]
+
+    # After an exception, which goes on.
+    try:
+        with c.in_config(b):
+            raise KeyError("inside")
+    except KeyError:
+        pass
+    assert c.active == a
+
+    # An index out of range raises on entry: the block never runs.
+    ran = []
+    try:
+        with c.in_config(3):
+            ran.append(True)
+    except RuntimeError:
+        pass
+    assert ran == [] and c.active == a
+
+
 def test_acquire_shares_id():
     c = pyrucast.Coords(1)
     n = c.add_node([5.0])

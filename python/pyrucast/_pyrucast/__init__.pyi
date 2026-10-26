@@ -13,6 +13,7 @@ __all__ = [
     "ElementField",
     "Evolution",
     "FiniteElementSpace",
+    "InConfig",
     "Matrix",
     "Mesh",
     "Model",
@@ -334,6 +335,15 @@ class Coords:
     def names(self) -> builtins.list[builtins.str]:
         r"""
         Names of the configurations, by index.
+        """
+    def in_config(self, config: builtins.int) -> InConfig:
+        r"""
+        `with coords.in_config(config):` — the block runs with configuration
+        `config` active; the configuration active on entry is active again
+        after it, after an exception too. Everything the block computes on the
+        geometry (matrices, normals, measures) sees `config`. The lock is taken
+        on entry and on exit only, so the block may nest another `in_config`.
+        An index out of range raises on entry, before the block runs.
         """
     def permutation(self) -> typing.Optional[builtins.list[builtins.int]]:
         r"""
@@ -1003,6 +1013,22 @@ class FiniteElementSpace:
         structure. Returns nothing.
         """
     def __len__(self) -> builtins.int: ...
+
+@typing.final
+class InConfig:
+    r"""
+    The context `Coords.in_config(config)` returns: entering makes `config`
+    active, leaving makes the configuration found on entry active again.
+    """
+    def __enter__(self) -> None:
+        r"""
+        Make the configuration active, remembering the one found.
+        """
+    def __exit__(self, _exc_type: typing.Any, _exc_value: typing.Any, _traceback: typing.Any) -> builtins.bool:
+        r"""
+        Make the configuration found on entry active again; an exception
+        raised in the block goes on.
+        """
 
 @typing.final
 class Matrix:

@@ -687,6 +687,7 @@ mod tests {
     use crate::containers::matrix::Symmetry;
     use crate::containers::mesh::{Mesh, SubMesh};
     use crate::coords::Coords;
+    use crate::ops::coords::in_config;
     use crate::ops::element_field::material_field_per_sub_model;
 
     /// Assemble the stiffness the **literal** way: every sub-model fills its
@@ -1267,11 +1268,13 @@ mod tests {
         let model = crate::ops::model::heat_conduction(&fes).unwrap();
         let materials = crate::ops::element_field::material_field(&model, &[("k", 1.0)]).unwrap();
         let stretched = coords.write().add_config("stretched");
-        coords.write().select(stretched).unwrap();
-        for (n, x) in nodes.iter().zip([0.0, 2.0, 4.0]) {
-            coords.write().set_position(n.id(), &[x]).unwrap();
-        }
-        coords.write().select(0).unwrap();
+        in_config(&coords, stretched, || {
+            for (n, x) in nodes.iter().zip([0.0, 2.0, 4.0]) {
+                n.set_position(&[x])?;
+            }
+            Ok(())
+        })
+        .unwrap();
         (model, materials, coords, stretched, nodes[1].id())
     }
 
@@ -1287,9 +1290,7 @@ mod tests {
 
         // Two conductances 1/ℓ meet at the middle node: 2 at rest, 1 stretched.
         let on_reference = stiffness(&model, &materials).unwrap();
-        coords.write().select(stretched).unwrap();
-        let on_stretched = stiffness(&model, &materials).unwrap();
-        coords.write().select(0).unwrap();
+        let on_stretched = in_config(&coords, stretched, || stiffness(&model, &materials)).unwrap();
         assert!(close(at_middle(&on_reference), 2.0));
         assert!(close(at_middle(&on_stretched), 1.0));
 
@@ -1299,14 +1300,12 @@ mod tests {
             at_middle(&(&on_reference - &on_stretched).unwrap()),
             1.0
         ));
-        coords.write().select(stretched).unwrap();
-        sum.assemble().unwrap();
+        in_config(&coords, stretched, || sum.assemble()).unwrap();
         assert!(
             close(at_middle(&sum), 3.0),
             "assembled once: {}",
             at_middle(&sum)
         );
-        coords.write().select(0).unwrap();
     }
 
     /// Operands on different degrees of freedom — a stiffness carrying a

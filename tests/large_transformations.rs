@@ -185,10 +185,7 @@ fn on_current<T>(p: &Patch, u: &NodeField, build: impl FnOnce() -> Result<T>) ->
     let current = p.coords.write().add_config("current");
     let names = Some(vec!["u_x".to_string(), "u_y".to_string()]);
     ops_coords::displace_from(u, 0, current, names)?;
-    p.coords.write().select(current)?;
-    let out = build();
-    p.coords.write().select(0)?;
-    out
+    ops_coords::in_config(&p.coords, current, build)
 }
 
 #[test]
@@ -645,10 +642,9 @@ fn displace_from_lays_the_current_configuration_in_absolute() -> Result<()> {
     for _ in 0..3 {
         ops_coords::displace_from(&some, 0, current, names())?;
     }
-    p.coords.write().select(current)?;
-    let moved = p.nodes[1].position()?;
-    let still = p.nodes[5].position()?;
-    p.coords.write().select(0)?;
+    let (moved, still) = ops_coords::in_config(&p.coords, current, || {
+        Ok((p.nodes[1].position()?, p.nodes[5].position()?))
+    })?;
     assert_eq!(moved, vec![1.1, 0.35]);
     assert_eq!(still, p.nodes[5].position()?);
     assert!(ops_coords::displace_from(&some, current, current, names()).is_err());
@@ -718,9 +714,7 @@ fn a_pressure_follows_the_normal_of_the_active_configuration() -> Result<()> {
     }
     let current = coords.write().add_config("current");
     ops_coords::displace_from(&u, 0, current, Some(vec!["u_x".into(), "u_y".into()]))?;
-    coords.write().select(current)?;
-    let turned = external_forces(&load, &density)?;
-    coords.write().select(0)?;
+    let turned = ops_coords::in_config(&coords, current, || external_forces(&load, &density))?;
     for k in 0..4 {
         let (f0, f) = (at(&reference, k)?, at(&turned, k)?);
         let expected = [c * f0[0] - s * f0[1], s * f0[0] + c * f0[1]];

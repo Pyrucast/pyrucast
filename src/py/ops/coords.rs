@@ -1,5 +1,6 @@
 //! Python wrappers for [`crate::ops::coords`] — the three operators that
-//! write back into the coordinates.
+//! write back into the coordinates. `in_config` is the method
+//! `Coords.in_config`, a context manager.
 
 use crate::py::node_field::PyNodeField;
 use pyo3::prelude::*;

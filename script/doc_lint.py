@@ -611,7 +611,10 @@ def api_python():
     and as `pyrucast.coords.Coords`. Methods that **take an operator's name**
     are ruled out — they are the delegations (`mesh.skin()` for
     `pyrucast.mesh.skin(mesh)`), exempted on the Rust side for the same
-    reason: the target carries the example.
+    reason: the target carries the example. So is a class with neither a
+    constructor nor a public method — the context manager `Coords.in_config`
+    returns: a user never writes its name nor calls anything on it, and the
+    method returning it carries the example.
     """
     import pyrucast
 
@@ -629,6 +632,8 @@ def api_python():
                 continue
             obj = getattr(mod, nom)
             if inspect.isclass(obj):
+                if not entree(obj):
+                    continue
                 classes.setdefault(id(obj), (nom, obj))
             # Prefer the façade module to the compiled extension module.
             elif callable(obj) and (id(obj) not in libres or court != "_pyrucast"):
@@ -643,6 +648,18 @@ def api_python():
             if m not in verbes:  # une délégation : sa cible porte l'exemple
                 methodes.setdefault(m, set()).add(nom_classe)
     return set(libres.values()), {n for n, _ in classes.values()}, methodes
+
+
+def entree(classe):
+    """Whether a user can reach into `classe`: build it, or call one of its
+    public methods."""
+    construit = "__new__" in vars(classe) or "__init__" in vars(classe)
+    methodes = [
+        m
+        for m in dir(classe)
+        if not m.startswith("_") and callable(getattr(classe, m, None))
+    ]
+    return construit or bool(methodes)
 
 
 def noms_cites():

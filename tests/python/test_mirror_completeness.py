@@ -78,6 +78,10 @@ RUST_ONLY = {
     "select_nodes": "dispatched by type inside `mesh.select`",
     "integral_element": "dispatched by type inside `measure.integral`",
     "consolidate": "exposed under the short name in its own Python sub-module",
+    # Idiomatic in each language: Rust takes the block as a closure, and needs
+    # the `Handle` to leave the coordinates free inside it; Python's form is a
+    # context manager on the `Coords`, beside `select` and `add_config`.
+    "in_config": "the method `Coords.in_config`, used with `with`",
     "set": "exposed under the short name in `pyrucast.coords`",
     "solve": "exposed per variant (`solve`, `solve_eliminate`, `solve_unilateral`)",
     "Band": "value type, carried by the `ge`/`gt`/`le`/`lt` arguments",

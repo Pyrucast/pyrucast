@@ -94,18 +94,16 @@ assert abs(retour[0].value(0, 0, "S_xx") - S[0].value(0, 0, "S_xx")) < 1e-12
 
 # ANCHOR: configuration_courante
 # The current configuration x = X + u, laid once in a set of its own: the
-# reference stays where it is, and switching is a change of index.
+# reference stays where it is, and in_config makes it active for one block.
 courante = coords.add_config("current")
 pc.coords.displace_from(u, 0, courante, ["u_x", "u_y"])
-coords.select(courante)
-K = pc.matrix.stiffness(solide, materiaux)  # on x = X + u
-K_sigma = pc.matrix.geometric(solide, materiaux, sigma)  # K_σ with Cauchy
-coords.select(0)
+with coords.in_config(courante):
+    K = pc.matrix.stiffness(solide, materiaux)  # on x = X + u
+    K_sigma = pc.matrix.geometric(solide, materiaux, sigma)  # K_σ with Cauchy
 # ANCHOR_END: configuration_courante
 assert coords.active == 0
-coords.select(courante)
-assert abs(noeuds[2].position()[0] - 2.4) < 1e-14
-coords.select(0)
+with coords.in_config(courante):
+    assert abs(noeuds[2].position()[0] - 2.4) < 1e-14
 assert noeuds[2].position() == [2.0, 0.0]
 
 # A law reading Hencky writes T_*, which stress_measure turns into S, then P.
@@ -129,9 +127,8 @@ for a, b in [(0, 1), (1, 2), (2, 5), (5, 4), (4, 3), (3, 0)]:
 # cell, phi_n = −p, into every displacement row of the solid.
 pression = pc.model.flux(pc.FiniteElementSpace(contour), solide, "n")
 densite = pc.element_field.material_field(pression, [("phi_n", -1.0)])
-coords.select(courante)  # the wall where it is: x = X + u
-f_ext = pc.node_field.external_forces(pression, densite)
-coords.select(0)
+with coords.in_config(courante):  # the wall where it is: x = X + u
+    f_ext = pc.node_field.external_forces(pression, densite)
 # ANCHOR_END: pression
 # On the stretched plate the bottom wall is 2.4 long: it receives p·2.4 upwards.
 bas = sum(f_ext.value(noeuds[k], "f_y") for k in (0, 1, 2))

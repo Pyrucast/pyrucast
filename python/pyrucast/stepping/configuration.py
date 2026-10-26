@@ -8,7 +8,7 @@ at ``x = X + u``.
 Both live in the same ``Coords``: the current one is created once — the first
 computation adds it, the next ones find it by its name — laid again in
 absolute whenever ``u`` moves, and active only for the length of one
-computation.
+computation (``Coords.in_config``).
 """
 
 from contextlib import contextmanager
@@ -37,21 +37,12 @@ class Configurations:
         )
 
     @contextmanager
-    def on_current(self):
-        """The block runs with the current configuration active, as last laid;
-        the reference is active again after it, whatever happens inside."""
-        self.coords.select(self.current)
-        try:
-            yield
-        finally:
-            self.coords.select(self.reference)
-
-    @contextmanager
     def current_at(self, displacement):
         """The block runs with the current configuration laid at
-        ``X + displacement`` and active (``lay``, then ``on_current``)."""
+        ``X + displacement`` and active; the configuration active before is
+        active again after it, whatever happens inside."""
         self.lay(displacement)
-        with self.on_current():
+        with self.coords.in_config(self.current):
             yield
 
 

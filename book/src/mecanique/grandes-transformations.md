@@ -129,7 +129,9 @@ actuelle** se calcule sur une configuration courante `x = X + u` : l'opérateur
 de Newton, la pression qui suit la paroi, les échanges thermiques de la pièce
 déformée. Le `Coords` les porte
 toutes les deux ; on passe de l'une à l'autre en changeant d'indice, sans
-recopier le maillage :
+recopier le maillage. [`in_config`](../coords.md#plusieurs-configurations) rend
+la courante active le temps d'un bloc, puis rétablit celle d'avant, même si le
+bloc échoue :
 
 ```python
 {{#include ../../../tests/python/test_doc_grandes_transformations.py:configuration_courante}}
