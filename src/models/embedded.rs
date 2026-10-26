@@ -230,18 +230,18 @@ pub struct Embedded {
 
 impl Embedded {
     /// Build an embedded constraint tying each node of `immersed` to the host
-    /// interpolation of `host` at that node, for every `(variable, target_dual)`
-    /// in `components`.
+    /// interpolation of `host` at that node, for every primal of `target` in
+    /// `variables`; the dual row each reaction lands in is read from `target`.
     ///
-    /// `multipliers` / `imposed_values`, when `Some`, override the per-component
-    /// defaults `lambda_<variable>` / `imposed_<variable>` (must then match
-    /// `components` in length). `tol` is the reference-domain slack of the point
-    /// location (default `1e-6`).
+    /// The multiplier and imposed-value names are derived per variable,
+    /// `lambda_<variable>` / `imposed_<variable>`. `tol` is the reference-domain
+    /// slack of the point location ([`DEFAULT_TOL`] is `1e-6`).
     ///
     /// # Errors
     ///
-    /// - `components` is empty, or an override length mismatches;
-    /// - `immersed` and `host` do not share a `Coords`;
+    /// - a variable is not a primal of `target`, or `variables` is empty;
+    /// - `immersed` and `host` do not share a `Coords`, or `immersed` carries no
+    ///   node;
     /// - an immersed node lies in no host cell.
     ///
     /// ```

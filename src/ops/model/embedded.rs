@@ -49,7 +49,6 @@ use crate::error::Result;
 /// assert_eq!(m.len(), 1);
 /// # Ok::<(), pyrucast::PyrucastError>(())
 /// ```
-#[allow(clippy::too_many_arguments)]
 pub fn embedded(
     target: &Model,
     immersed: &Mesh,

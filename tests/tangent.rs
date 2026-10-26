@@ -12,6 +12,7 @@ use pyrucast::containers::model::{Model, SubModel};
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
+use pyrucast::models::plasticity::law::PlasticLaw;
 use pyrucast::models::symmetry::MaterialSymmetry;
 use pyrucast::models::tensor::Kinematics;
 use pyrucast::ops::element_field::behavior::integrate;
@@ -204,9 +205,11 @@ fn tangent_matches_fd_solid_hex() -> Result<()> {
 
 fn plasticity_model(fes: &FiniteElementSpace, model: Kinematics) -> Result<Model> {
     let mut m = Model::empty();
-    m.add_sub(Handle::new(SubModel::plasticity_perfect(
+    m.add_sub(Handle::new(SubModel::plasticity_with_law(
         fes.get(0)?,
         model,
+        PlasticLaw::Perfect,
+        StrainMeasure::Linear,
     )?))?;
     Ok(m)
 }

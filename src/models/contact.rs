@@ -85,8 +85,8 @@ use std::collections::HashSet;
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # use pyrucast::models::contact;
-/// // Derived rather than tabulated: `multiplier` and `imposed_value` left at
-/// // `None` take these values.
+/// // Derived rather than tabulated: every contact names its reaction and its
+/// // constraint row so.
 /// assert_eq!(
 ///     (contact::default_multiplier().as_str(),
 ///      contact::default_imposed_value().as_str()),
@@ -119,8 +119,8 @@ pub fn default_multiplier() -> String {
 /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
 /// # let mult = mesh::barycenter(&impose).unwrap();
 /// # use pyrucast::models::contact;
-/// // Derived rather than tabulated: `multiplier` and `imposed_value` left at
-/// // `None` take these values.
+/// // Derived rather than tabulated: every contact names its reaction and its
+/// // constraint row so.
 /// assert_eq!(
 ///     (contact::default_multiplier().as_str(),
 ///      contact::default_imposed_value().as_str()),
@@ -217,17 +217,20 @@ pub struct Contact {
 impl Contact {
     /// Build a contact constraint preventing the nodes of `slave` from
     /// penetrating the oriented `master` surface, coupling the displacement
-    /// `components` (one `(variable, target_dual)` pair per space dimension,
-    /// in ambient order — find each dual with
-    /// [`Model::dual_of`](crate::containers::model::Model::dual_of)).
+    /// `variables` of `target` — one primal per space dimension, in ambient
+    /// order; the dual row each reaction lands in is read from `target`
+    /// ([`Model::dual_of`](crate::containers::model::Model::dual_of)).
     ///
-    /// `multiplier` / `imposed_value` default to `lambda_contact` /
-    /// `contact_gap` when `None`.
+    /// The multiplier and imposed-value names are derived:
+    /// [`default_multiplier`] (`lambda_contact`) and
+    /// [`default_imposed_value`] (`contact_gap`).
     ///
     /// # Errors
     ///
-    /// - `components` is empty or does not match the space dimension;
-    /// - `slave` and `master` do not share a `Coords`;
+    /// - a variable is not a primal of `target`;
+    /// - `variables` is empty or does not match the space dimension;
+    /// - `slave` and `master` do not share a `Coords`, or `slave` carries no
+    ///   node;
     /// - `master` is not a surface mesh (facet dim ≠ `sdim − 1`), or is empty.
     ///
     /// ```

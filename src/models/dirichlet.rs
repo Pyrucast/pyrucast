@@ -180,12 +180,12 @@ pub struct Dirichlet {
 }
 
 impl Dirichlet {
-    /// Build a Dirichlet constraint imposing `imposed_variable = u_d` on the
-    /// nodes of `imposed_mesh`, with multipliers living on `multiplier_mesh`.
+    /// Build a Dirichlet constraint imposing `variable = u_d` on the nodes of
+    /// `imposed_mesh`, with multipliers living on `multiplier_mesh`.
     ///
-    /// `target_dual` is the dual variable of the target physics (e.g. `"q"`).
-    /// `multiplier` / `imposed_value` default to `lambda_<imposed_variable>` /
-    /// `imposed_<imposed_variable>` when `None`. Both meshes must be POI1 (for
+    /// `variable` is a primal of `target`, whose dual row (e.g. `"q"`) is read
+    /// from it. The multiplier and imposed-value names are derived,
+    /// `lambda_<variable>` / `imposed_<variable>`. Both meshes must be POI1 (for
     /// now), share one [`Coords`](crate::coords::Coords),
     /// and pair element-for-element (same number of submeshes, same cell count
     /// per submesh).

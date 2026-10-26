@@ -312,8 +312,8 @@ impl Mpc {
     /// `Σₖ aₖ·u(nodeₖ, varₖ) ⋈ g` (`⋈` is `sense`, `=` by default) — the `r`-th
     /// cell of every term mesh paired with the `r`-th multiplier node.
     ///
-    /// `multiplier` / `imposed_value` default to `lambda_mpc` / `mpc_rhs` when
-    /// `None`. Every term mesh and `multiplier_mesh` must be POI1, share one
+    /// The multiplier and right-hand-side names are derived, `lambda_mpc` /
+    /// `mpc_rhs`. Every term mesh and `multiplier_mesh` must be POI1, share one
     /// [`Coords`](crate::coords::Coords), and pair element-for-element
     /// (same number of submeshes, same cell count per submesh).
     ///

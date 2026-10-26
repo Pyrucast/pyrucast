@@ -763,50 +763,6 @@ impl SubModel {
         ))
     }
 
-    /// **Perfect** (non-hardening) von Mises plasticity on an FE subspace, with
-    /// the given 2-D/3-D model. Material (`E`, `nu`, `sigma_y`) is supplied at
-    /// assembly / integration time. See [`plasticity::Plasticity::new`].
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::{Model, SubModel};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::tensor::Kinematics;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::models::{Physics, RelationSense};
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let maillage = Mesh::from_submesh(sm);
-    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// // Von Mises without hardening: `sigma_y` on top of elasticity.
-    /// let m = SubModel::plasticity_perfect(zone.clone(), Kinematics::PlaneStrain)?;
-    /// assert!(m.material_components().unwrap().contains(&"sigma_y".to_string()));
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn plasticity_perfect(
-        fespace: Handle<SubFiniteElementSpace>,
-        kinematics: Kinematics,
-    ) -> Result<Self> {
-        Self::plasticity_with_law(
-            fespace,
-            kinematics,
-            plasticity::law::PlasticLaw::Perfect,
-            StrainMeasure::Linear,
-        )
-    }
-
     /// Elastoplasticity with an explicit yield law — the general form.
     /// The material each law needs is declared by
     /// [`PlasticLaw::material_components`](plasticity::law::PlasticLaw::material_components).
@@ -840,6 +796,8 @@ impl SubModel {
     /// let m = SubModel::plasticity_with_law(
     ///     zone.clone(), Kinematics::PlaneStrain, PlasticLaw::Perfect, StrainMeasure::Linear)?;
     /// assert!(m.has_behavior());
+    /// // Von Mises without hardening: `sigma_y` on top of elasticity.
+    /// assert!(m.material_components().unwrap().contains(&"sigma_y".to_string()));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn plasticity_with_law(
@@ -851,47 +809,6 @@ impl SubModel {
         Ok(SubModel::Plasticity(plasticity::Plasticity::with_law(
             fespace, kinematics, law, measure,
         )?))
-    }
-
-    /// Mazars-damage sub-model on an FE subspace, with the given 2-D/3-D model.
-    /// Material (`E`, `nu`, `eps_d0`, `A_t`, `B_t`, `A_c`, `B_c`) is supplied at
-    /// assembly / integration time. See [`damage::Damage::new`].
-    ///
-    /// ```
-    /// # use pyrucast::aggregate::Aggregate;
-    /// # use pyrucast::atoms::{ElementType, Node};
-    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
-    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-    /// # use pyrucast::containers::model::{Model, SubModel};
-    /// # use pyrucast::coords::Coords;
-    /// # use pyrucast::handle::Handle;
-    /// # use pyrucast::models::tensor::Kinematics;
-    /// # use pyrucast::models::symmetry::MaterialSymmetry;
-    /// # use pyrucast::models::{Physics, RelationSense};
-    /// # use pyrucast::ops::mesh;
-    /// # let coords = Handle::new(Coords::new(2).unwrap());
-    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-    /// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-    /// # let maillage = Mesh::from_submesh(sm);
-    /// # let fes = FiniteElementSpace::lagrange1(&maillage).unwrap();
-    /// # let cible = pyrucast::ops::model::heat_conduction(&fes, MaterialSymmetry::Isotropic).unwrap();
-    /// # let zone = fes.get(0).unwrap();
-    /// # let impose = mesh::poi1_from_nodes(&n[..1]).unwrap();
-    /// # let mult = mesh::barycenter(&impose).unwrap();
-    /// let m = SubModel::mazars(zone.clone(), Kinematics::PlaneStress)?;
-    /// let mat = m.material_components().unwrap();
-    /// assert!(mat.contains(&"eps_d0".to_string()));
-    /// # Ok::<(), pyrucast::PyrucastError>(())
-    /// ```
-    pub fn mazars(fespace: Handle<SubFiniteElementSpace>, kinematics: Kinematics) -> Result<Self> {
-        Self::damage_with_law(
-            fespace,
-            kinematics,
-            damage::law::DamageLaw::Mazars,
-            StrainMeasure::Linear,
-        )
     }
 
     /// Damage with an explicit law — Mazars, the tension/compression pair, or the
@@ -925,6 +842,8 @@ impl SubModel {
     /// let m = SubModel::damage_with_law(
     ///     zone.clone(), Kinematics::PlaneStress, DamageLaw::Mazars, StrainMeasure::Linear)?;
     /// assert_eq!(m.physics(), &[Physics::Mechanical]);
+    /// // Mazars reads its damage threshold on top of elasticity.
+    /// assert!(m.material_components().unwrap().contains(&"eps_d0".to_string()));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
     pub fn damage_with_law(
@@ -980,14 +899,15 @@ impl SubModel {
         Ok(SubModel::Timoshenko(timoshenko::Timoshenko::new(fespace)?))
     }
 
-    /// Dirichlet sub-model: enforce `imposed_variable = u_d` on the nodes of
+    /// Dirichlet sub-model: enforce `variable = u_d` on the nodes of
     /// `imposed_mesh`, with multipliers living on `multiplier_mesh` and `u_d`
     /// supplied later by the user through the load `SubNodeField`.
     ///
-    /// `target_dual` is the dual variable name of the target physics whose
-    /// primal is being constrained (e.g. `"q"` for heat conduction, `"f_x"`
-    /// for elasticity in `x`). `multiplier` / `imposed_value` default to
-    /// `lambda_<imposed_variable>` / `imposed_<imposed_variable>` when `None`.
+    /// `variable` is a primal of `target`, the model being constrained; the dual
+    /// row its reaction lands in is read from it (e.g. `"q"` for heat
+    /// conduction, `"f_x"` for elasticity in `x`). The multiplier and
+    /// imposed-value names are derived, `lambda_<variable>` /
+    /// `imposed_<variable>`.
     /// `sense` (default equality) turns the constraint unilateral (`u ≥ u_d` /
     /// `u ≤ u_d`), solved by the active-set operator
     /// [`unilateral`](crate::ops::solver::unilateral).
@@ -1025,7 +945,6 @@ impl SubModel {
     /// assert_eq!(m.physics(), &[Physics::Constraint, Physics::Thermal]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    #[allow(clippy::too_many_arguments)]
     pub fn dirichlet(
         target: &Model,
         variable: &str,
@@ -1047,9 +966,9 @@ impl SubModel {
     ///
     /// `terms` are the `(mesh, variable, target_dual, coefficient)` terms
     /// (build them with [`mpc::MpcTerm::new`]); `multiplier_mesh` carries one
-    /// `λ` node per relation. `multiplier` / `imposed_value` default to
-    /// `lambda_mpc` / `mpc_rhs`. The right-hand side `g` is written by the user
-    /// in the load field at the multiplier node's `imposed_value` component
+    /// `λ` node per relation. The multiplier and right-hand-side names are
+    /// derived, `lambda_mpc` / `mpc_rhs`. The right-hand side `g` is written by
+    /// the user in the load field at the multiplier node's `mpc_rhs` component
     /// (default `0`). `sense` (default equality) turns the relations unilateral
     /// (`Σ aₖ·uₖ ≥ g` / `≤ g`), solved by the active-set operator
     /// [`unilateral`](crate::ops::solver::unilateral). See [`mpc::Mpc::new`].
@@ -1098,14 +1017,14 @@ impl SubModel {
     }
 
     /// Embedded (immersed) constraint sub-model: tie each node of `immersed` to
-    /// the interpolation of `host` at that node, for every `(variable,
-    /// target_dual)` in `components` (e.g. `[("u_x","f_x"), ("u_y","f_y"),
-    /// ("u_z","f_z")]`) — a bar "bathed" in a volume.
+    /// the interpolation of `host` at that node, for every primal of `target` in
+    /// `variables` (e.g. `["u_x", "u_y", "u_z"]`) — a bar embedded in a volume.
     ///
     /// The coupling weights are the host shape functions at each immersed node,
-    /// computed once at build by locating the node in the host. `multipliers` /
-    /// `imposed_values` default to `lambda_<variable>` / `imposed_<variable>`;
-    /// `tol` is the location tolerance (default `1e-6`). The right-hand side `g`
+    /// computed once at build by locating the node in the host. The multiplier
+    /// and imposed-value names are derived per variable, `lambda_<variable>` /
+    /// `imposed_<variable>`; `tol` is the location tolerance
+    /// ([`embedded::DEFAULT_TOL`] is `1e-6`). The right-hand side `g`
     /// defaults to `0` (a rigid tie). See [`embedded::Embedded::new`].
     ///
     /// ```
@@ -1147,7 +1066,6 @@ impl SubModel {
     /// assert_eq!(m.physics(), &[Physics::Constraint, Physics::Mechanical]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    #[allow(clippy::too_many_arguments)]
     pub fn embedded(
         target: &Model,
         immersed: &Mesh,

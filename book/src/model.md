@@ -111,10 +111,8 @@ opérateurs qui les déclarent et leurs variables, vus du `Model` :
 | `elasticity(fes, cinématique, sym, mesure)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, nu` ; orientée : `E_1…G_23` / `C_11…C_66` + repère | [Élasticité](mecanique/elasticite.md), [orthotropie](mecanique/orthotropie.md) ; en grandes transformations, [mesure de déformation](mecanique/grandes-transformations.md) |
 | `plasticity_perfect(fes, cinématique, mesure)` | `u_x, u_y(, u_z)` | `f_x, f_y(, f_z)` | `E, nu, sigma_y` | [Plasticité](mecanique/plasticite.md) |
 | `plasticity_with_law(fes, cinématique, loi, mesure)` | idem | idem | selon la loi | [Lois d'écoulement](mecanique/lois-plastiques.md), [Fluage](mecanique/fluage.md) |
-| `bernoulli(fes, model)` | selon la configuration | idem | `E, I` (+ `A`, `I_y…`) | [Euler-Bernoulli](mecanique/bernoulli.md) |
-| `timoshenko(fes)` | `w, theta` | `f_w, m_theta` | `E, I, G, A_s` | [Timoshenko](mecanique/timoshenko.md) |
-| `frame(fes)` | `u_x, u_y, rz` | `f_x, f_y, m_z` | `E, A, I, G, A_s` | [Portique 2D](mecanique/timoshenko.md) |
-| `frame3d(fes)` | `u_x…r_z` (6) | `f_x…m_z` (6) | `E, A, I_y, I_z, J, G, A_sy, A_sz` | [Cadre 3D](mecanique/timoshenko.md) |
+| `bernoulli(fes)` | selon la configuration | idem | `E, I` (+ `A`, `I_y…`) | [Euler-Bernoulli](mecanique/bernoulli.md) |
+| `timoshenko(fes)` | selon la configuration lue sur le maillage : `w, theta` (1-D), `u_x, u_y, r_z` (plan), `u_x…r_z` (6, espace) | `f_w, m_theta` ; `f_x, f_y, m_z` ; `f_x…m_z` | 1-D : `E, I, G, A_s` ; plan : `E, A, I, G, A_s` ; espace : `E, A, I_y, I_z, J, G, A_sy, A_sz` | [Timoshenko](mecanique/timoshenko.md) |
 | `shell(fes, model)`<br>`thick`, `kirchhoff` | `u_x…r_z` (6) | `f_x…m_z` (6) | `E, nu, h` | [Coques](mecanique/coques.md) |
 | `dirichlet(…)` | `lambda_<v>` | `imposed_<v>` | — | [Dirichlet](contraintes/dirichlet.md) |
 | `mpc(…)` | `lambda_mpc` | `mpc_rhs` | — | [Multi-points](contraintes/mpc.md) |
