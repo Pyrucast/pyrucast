@@ -337,6 +337,19 @@ devient la `P` que lisent les forces internes, ou la Cauchy des résultats —
 la moitié « contraintes » de Cast3M `CONF`. Formules et exemple :
 [Grandes transformations](../mecanique/grandes-transformations.md).
 
+### `rotate_frame(field, gradient)` → `ElementField`
+
+Un champ de matériau dont les axes (`V1X, V1Y` en 2D, `V1X…V2Z` en 3D) tournent
+avec la pièce, point par point, de la rotation `R` de la décomposition polaire
+`F = R U` : `v = R v₀`, d'où `k = R k₀ Rᵀ`. `F` est lu dans `gradient`, que
+produit `deformation(u, fespace, "gradient")` **sur la référence**. Les autres
+composantes sont recopiées telles quelles : la matière est la même, seuls ses
+axes suivent la rotation. Une zone sans axes (matériau isotrope) revient
+partagée, sans copie ; une zone qui n'en porte qu'une partie est une erreur.
+C'est ce que lit une conduction ou une diffusion calculée sur la pièce
+déformée. Pas de méthode : elle exige des axes et un gradient nommés. Exemple :
+[Grandes transformations](../mecanique/grandes-transformations.md#la-conduction).
+
 ### `divergence(field)` → `NodeField`
 
 Divergence **faible** (consistante) d'un champ vectoriel par éléments — l'adjoint

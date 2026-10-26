@@ -28,9 +28,9 @@ def _coherent(previous, current, tolerance):
 
 
 def _heat_step(data, problem, state, instant, options):
-    """The heat problem of the step — in large displacements, its exchanges
-    on the configuration the mechanics reached at the start of the step,
-    ``X + uₙ``, laid here; its conduction stays on the reference."""
+    """The heat problem of the step — in large displacements on the
+    configuration the mechanics reached at the start of the step, ``X + uₙ``,
+    laid here; the heat step computes on it, the reference staying active."""
     scheme = _HEAT[options.heat_scheme]
     if problem.configurations is not None:
         problem.configurations.lay(part(state.solution, problem.displacement_names))

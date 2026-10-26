@@ -127,6 +127,7 @@ __all__ = [
     "restrict_like",
     "revolve",
     "rotate",
+    "rotate_frame",
     "save",
     "select",
     "set_positions",
@@ -5415,6 +5416,21 @@ def rotate(mesh: Mesh, angle: builtins.float, center: typing.Sequence[builtins.f
     In 2-D, `center` is a point and `axis` is ignored. In 3-D, the rotation is
     about the line through `center` directed by `axis` (right-handed); `axis`
     is required.
+    """
+
+def rotate_frame(field: ElementField, gradient: ElementField) -> ElementField:
+    r"""
+    `field` with its material axes turned with the part: `V1*` (and `V2*` in
+    3-D) turned by the rotation `R` of the polar decomposition `F = R U` at each
+    point, `F` read from `gradient` — the field `deformation(u, fespace,
+    "gradient")` produces, computed on the **reference** configuration. Every
+    other component is copied as it is: the material is the same, only its axes
+    follow the rotation, `k = R k₀ Rᵀ`. This is what a conduction or a diffusion
+    computed on the deformed part reads.
+    
+    A zone without axes (an isotropic material) comes back as it is, shared. A
+    zone carrying part of the axes only, or a gradient missing on a zone's FE
+    space, is an error.
     """
 
 def save(path: builtins.str, objects: dict) -> None:

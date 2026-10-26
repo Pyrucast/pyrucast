@@ -134,3 +134,20 @@ with coords.in_config(courante):  # the wall where it is: x = X + u
 bas = sum(f_ext.value(noeuds[k], "f_y") for k in (0, 1, 2))
 assert abs(bas - 2.4) < 1e-12
 assert abs(sum(f_ext.value(n, "f_x") for n in noeuds)) < 1e-12
+
+# ANCHOR: axes
+# A conduction whose strong axis runs along x at rest. On the plate stretched
+# by 1.2 then turned by 60°, the axes turn with the part — by the rotation R of
+# F = R U, not by the stretch — and the conductivities stay the material's.
+conduction = pc.model.heat_conduction(fes, symmetry="orthotropic")
+axes = pc.element_field.material_field(
+    conduction,
+    [("k_1", 10.0), ("k_2", 1.0), ("k_3", 1.0), ("V1X", 1.0), ("V1Y", 0.0)],
+)
+F = pc.element_field.deformation(tourne, fes, "gradient")  # on the reference
+tournes = pc.element_field.rotate_frame(axes, F)  # V1 = (cos 60°, sin 60°)
+# ANCHOR_END: axes
+assert coords.active == 0
+assert abs(tournes[0].value(0, 0, "V1X") - c60) < 1e-12
+assert abs(tournes[0].value(0, 0, "V1Y") - s60) < 1e-12
+assert tournes[0].value(0, 0, "k_1") == 10.0

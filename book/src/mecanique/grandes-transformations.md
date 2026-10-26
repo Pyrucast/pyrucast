@@ -124,9 +124,9 @@ configuration. La conversion est inversible : de la Cauchy, `"pk2"` rend `S`.
 ## Deux configurations
 
 Le **corps** se calcule sur la configuration de référence : sa mesure, sa loi,
-son état, ses forces internes, sa conduction. Ce qui agit sur la **forme
+son état, ses forces internes. Ce qui agit sur la **forme
 actuelle** se calcule sur une configuration courante `x = X + u` : l'opérateur
-de Newton, la pression qui suit la paroi, les échanges thermiques de la pièce
+de Newton, la pression qui suit la paroi, la thermique de la pièce
 déformée. Le `Coords` les porte
 toutes les deux ; on passe de l'une à l'autre en changeant d'indice, sans
 recopier le maillage. [`in_config`](../coords.md#plusieurs-configurations) rend
@@ -189,48 +189,45 @@ flambement, où `K + K_σ` devient singulière.
 
 ## La conduction
 
-La conductivité donnée au matériau est la conductivité **lagrangienne** `K₀`,
-celle de la matière dans ses axes de référence. Sur la pièce déformée, elle se
-pousse en `k = J⁻¹ F K₀ Fᵀ`, comme `S` se pousse en `σ`. Écrite sur la
-référence, la conduction n'a donc rien à pousser :
-`∇T = F⁻ᵀ∇₀T` et `dv = J dV₀` donnent, au point,
+La conductivité donnée au matériau est celle de la matière **telle qu'elle
+est** : déformer la pièce ne change pas ses valeurs. La thermique se calcule
+donc sur la pièce déformée, avec la conductivité donnée — conduction, échanges
+(convection, rayonnement, flux imposés) — et la loi écrit le flux réel,
+`q = −k ∇T`. Une barre **étirée** à `λ` est plus longue : à écart de
+température donné, la chaleur qui la traverse est `k ΔT A / (λ L₀)`.
 
-```text
-∫Ω ∇T · k ∇δT dv = ∫Ω₀ ∇₀T · K₀ ∇₀δT dV₀
+Une conduction **orientée** porte ses axes dans le matériau (`V1*`, `V2*`),
+donnés sur la référence. Sur la pièce déformée, ils tournent avec elle, de la
+rotation `R` de la décomposition polaire `F = R U` : `k = R k₀ Rᵀ`, et la
+répartition de température d'une pièce tournée est celle de la pièce au repos.
+L'étirement `U` ne touche ni les axes ni les valeurs. `rotate_frame` tourne les
+axes d'un champ de matériau, avec `F` calculé **sur la référence** :
+
+```python
+{{#include ../../../tests/python/test_doc_grandes_transformations.py:axes}}
 ```
 
-et la capacité devient exacte, `ρ₀ c dV₀`. Deux conséquences :
+La **capacité** seule reste sur la référence : la masse se conserve,
+`ρ c dv = ρ₀ c dV₀`, si bien que la capacité de référence est exacte.
+L'opérateur réunit la conduction et les échanges, assemblés sur la
+configuration courante, et la capacité, assemblée sur la référence : une
+matrice garde les valeurs de la configuration où elle a été assemblée, et
+[la somme](../operateurs/assemblage.md#la-somme) les additionne telles quelles.
 
-- des **axes matériau tournent avec la pièce** : sous une rotation `R`,
-  `k = R K₀ Rᵀ`, et la répartition de température d'une pièce tournée est celle
-  de la pièce au repos ;
-- une barre **étirée** à `λ` voit sa conductivité dans l'axe devenir `k λ` : la
-  chaleur qui la traverse, à écart de température donné, est celle de la barre
-  au repos.
-
-La loi écrit le **flux nominal** `K₀ ∇₀T`, par unité de surface de référence ; le
-flux de la pièce déformée s'en déduit par `q = J⁻¹ F Q₀`.
-
-Les **échanges** (convection, rayonnement, flux imposés) agissent sur la surface
-déformée : ils restent sur la configuration courante. L'opérateur réunit les
-deux : la conduction assemblée sur la référence, les échanges assemblés sur la
-configuration courante. Une matrice garde les valeurs de la configuration où
-elle a été assemblée, et [la somme](../operateurs/assemblage.md#la-somme) les
-additionne telles quelles.
-
-Cast3M résout toute la thermique sur la géométrie courante, avec la
-conductivité donnée, sans la pousser. Il range les axes d'une conduction
-orientée dans le repère local de chaque élément (la tangente à la première
-coordonnée de référence, au centre), qu'il recalcule sur la géométrie courante
-à chaque assemblage : sous une rotation rigide, ses axes tournent avec la pièce
-comme ici ; sous une déformation, ils suivent cette ligne de l'élément, et les
-conductivités gardent leurs valeurs là où pyrucast les pousse.
+Cast3M résout aussi toute la thermique sur la géométrie courante, avec la
+conductivité donnée. Il range les axes d'une conduction orientée dans le repère
+local de chaque élément (la tangente à la première coordonnée de référence, au
+centre), qu'il recalcule sur la géométrie courante à chaque assemblage : sous
+une rotation rigide, ses axes tournent avec la pièce comme ici ; sous un
+cisaillement, ils suivent cette ligne de l'élément, là où pyrucast suit la
+rotation `R`.
 
 ## Dans le pas à pas
 
 `stepping.step_by_step` lit la mesure sur les lois et suit cette voie de
-lui-même : forces intérieures sur `P` et conduction en référence, pression
-suiveuse, échanges thermiques et opérateur sur la configuration courante.
+lui-même : forces intérieures sur `P` et capacité thermique en référence,
+pression suiveuse, thermique (axes matériau tournés) et opérateur sur la
+configuration courante.
 Ses résultats gardent la contrainte lagrangienne de la loi ; la Cauchy s'en
 déduit comme plus haut, avec le déplacement enregistré. Voir
 [Calcul pas à pas](../pas-a-pas.md#grands-déplacements). Les tests
@@ -241,12 +238,17 @@ déduit comme plus haut, avec le déplacement enregistré. Voir
   `−p I` exacte ;
 - un cube parfaitement plastique en Hencky, étiré à `λ = 1,5`, tire
   `A₀ σ_y / λ` ;
-- une bande étirée conduit la même chaleur qu'au repos, `k ΔT / L₀` ;
+- une bande étirée à `λ` conduit comme la bande plus longue qu'elle est, flux
+  `k ΔT / (λ L₀)` ;
 - une bande à conduction orientée, tournée, garde en chaque nœud la
   température du repos ;
-- une bande refroidie par convection sur une face étirée à `λ` : la face est à
-  `T₀ G_c / (G_c + G_h)`, avec `G_c = k H₀ / L₀` et `G_h = h λ H₀`, par les deux
-  schémas thermiques non linéaire et linéaire.
+- une bande refroidie par convection sur une face, étirée à `λ` en long et `μ`
+  en travers : la face est à `T₀ G_c / (G_c + G_h)`, avec
+  `G_c = k μ H₀ / (λ L₀)` et `G_h = h μ H₀`, par les deux schémas thermiques
+  non linéaire et linéaire ;
+- la même bande, isolée sauf sur sa face refroidie et de conductivité assez
+  grande pour rester uniforme : chaque pas implicite donne
+  `T ← T C / (C + G_h Δt)`, avec la capacité de référence `C = ρ c V₀`.
 
 ## Correspondance Cast3M
 

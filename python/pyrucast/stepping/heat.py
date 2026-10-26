@@ -7,14 +7,15 @@ temperature correction with the multipliers in total, and the residual comes
 from integrating the laws — conduction, radiation — at the current
 temperature. A model without heat capacity (no ``cp``) is solved steady.
 
-In large displacements the conduction is written on the reference
-configuration — the conductivity given is the Lagrangian one, K₀, and its
-push-forward ``J⁻¹ F K₀ Fᵀ`` on the deformed part gives the same equation,
-with the capacity ``ρ₀ c dV₀`` — while the exchanges, radiation and fluxes act
-on the current shape, laid at ``X + uₙ``. The reference stays active; each
-evaluation of the rest switches to the current configuration. A matrix holds
-the values of the configuration it was assembled on, so the two parts add
-into one operator as they are.
+In large displacements the heat runs through the deformed part, laid at
+``X + uₙ`` once per step: the conduction, the exchanges, the radiation and the
+fluxes are computed there, each evaluation in an ``in_config`` block — the
+reference stays active. The material is the material as it is; its axes, when
+it has some, turn with the part, by the rotation ``R`` of ``F = R U``
+(``rotate_frame``), so that ``k = R k₀ Rᵀ``. The capacity alone stays on the
+reference: mass conservation makes ``ρ c dv = ρ₀ c dV₀`` exact there. A matrix
+holds the values of the configuration it was assembled on, so the capacity and
+the conduction add into one operator as they are.
 """
 
 from contextlib import nullcontext
@@ -82,55 +83,51 @@ def _loads(data, problem, state, t, materials, options):
     return [load for load in loads if load is not None]
 
 
-def _materials(data, problem, state, temperature, t, options):
+def _frame_gradient(problem, state):
+    """The gradient ``F`` of the configuration the step runs on, ``X + uₙ``,
+    where the laws read material axes — computed on the reference, which is
+    active; ``None`` when there is nothing to turn."""
+    if problem.configurations is None or problem.frame_fespace is None:
+        return None
+    displacement = part(state.solution, problem.displacement_names)
+    return element_field.deformation(displacement, problem.frame_fespace, "gradient")
+
+
+def _materials(data, problem, state, temperature, t, options, gradient):
     """The materials at ``t`` and ``temperature``, through the
-    ``heat_material_update`` hook when given."""
+    ``heat_material_update`` hook when given — their axes turned with the part
+    by ``gradient`` when there is one."""
     materials = materials_at(problem, temperature, t)
     updated = options.hook("heat_material_update")(data, state)
-    return materials if updated is None else updated
+    materials = materials if updated is None else updated
+    if gradient is None:
+        return materials
+    return element_field.rotate_frame(materials, gradient)
 
 
 def _laws(problem, temperature, materials, dt):
-    """The heat laws integrated at ``temperature`` (no history)."""
-    strain = element_field.strain(problem.heat_domain, temperature, materials)
-    return element_field.integrate_behavior(
-        problem.heat_domain, strain, materials, dt=dt
-    )
+    """The heat laws integrated at ``temperature`` (no history), on the
+    current shape."""
+    with _on_current(problem):
+        strain = element_field.strain(problem.heat_domain, temperature, materials)
+        return element_field.integrate_behavior(
+            problem.heat_domain, strain, materials, dt=dt
+        )
 
 
 def _internal_forces(problem, behaviour, temperature, materials):
-    """``F_int(T)`` of the heat model — in large displacements the conduction
-    and the constraints on the reference, the rest on the current shape:
-    nodal fluxes, summed node by node wherever each was computed."""
-    if problem.configurations is None:
+    """``F_int(T)`` of the heat model, on the current shape."""
+    with _on_current(problem):
         return node_field.internal_forces(
             problem.heat, behaviour, temperature, materials
         )
-    internal = node_field.internal_forces(
-        problem.heat_on_reference, behaviour, temperature, materials
-    )
-    if problem.heat_on_current is None:
-        return internal
-    with _on_current(problem):
-        on_current = node_field.internal_forces(
-            problem.heat_on_current, behaviour, temperature, materials
-        )
-    return internal + node_field.restrict_like(on_current, internal)
 
 
 def _tangent(problem, materials, temperature):
-    """The heat domain's tangent at ``temperature`` — in large displacements
-    the conduction on the reference, and the rest on the current shape."""
-    strain = element_field.strain(problem.heat_domain, temperature, materials)
-    if problem.configurations is None:
+    """The heat domain's tangent at ``temperature``, on the current shape."""
+    with _on_current(problem):
+        strain = element_field.strain(problem.heat_domain, temperature, materials)
         return matrix.tangent(problem.heat_domain, materials, strain)
-    conduction = problem.heat_on_reference.exclude("constraint")
-    tangent = matrix.tangent(conduction, materials, strain)
-    if problem.heat_on_current is not None:
-        with _on_current(problem):
-            on_current = matrix.tangent(problem.heat_on_current, materials, strain)
-        tangent = tangent + on_current
-    return tangent
 
 
 def _system(problem, loads, evaluated, behaviour, constrained, materials, extra=None):
@@ -178,7 +175,8 @@ def _operator(problem, materials, temperature, weight, capacity_over_dt):
 
 
 def _capacity(problem, materials, dt):
-    """``C/Δt``, or ``None`` for a steady problem."""
+    """``C/Δt``, or ``None`` for a steady problem — on the active
+    configuration, the reference: ``ρ₀ c dV₀``."""
     if not problem.transient_heat or dt <= 0.0:
         return None
     return matrix.mass(problem.heat_domain, materials) * (1.0 / dt)
@@ -202,7 +200,8 @@ def heat_step(data, problem, state, t_end, options):
     dt = t_end - state.time
     theta = options.theta if problem.transient_heat else 1.0
     start = state.temperature
-    materials = _materials(data, problem, state, start, t_end, options)
+    gradient = _frame_gradient(problem, state)
+    materials = _materials(data, problem, state, start, t_end, options, gradient)
     capacity = _capacity(problem, materials, dt)
     operator = _operator(
         problem, materials, _temperatures(problem, start), theta, capacity
@@ -252,7 +251,9 @@ def heat_step(data, problem, state, t_end, options):
             )
             return HeatOutcome(True, temperature, behaviour, materials, i)
         if problem.laws is not None:
-            materials = _materials(data, problem, state, temperature, t_end, options)
+            materials = _materials(
+                data, problem, state, temperature, t_end, options, gradient
+            )
     return HeatOutcome(False, temperature, behaviour, materials, options.max_iterations)
 
 
@@ -264,7 +265,15 @@ def heat_step_linear(data, problem, state, t_end, options):
     dt = t_end - state.time
     theta = options.theta if problem.transient_heat else 1.0
     start = state.temperature
-    materials = _materials(data, problem, state, start, state.time, options)
+    materials = _materials(
+        data,
+        problem,
+        state,
+        start,
+        state.time,
+        options,
+        _frame_gradient(problem, state),
+    )
     capacity = _capacity(problem, materials, dt)
     operator = _operator(
         problem, materials, _temperatures(problem, start), theta, capacity
@@ -302,7 +311,15 @@ def heat_step_dupont(data, problem, state, t_end, options):
     t1 = _temperatures(problem, state.temperature)
     t0 = node_field.restrict_like(_temperatures(problem, before), t1)
     extrapolated = t1 + (t1 - t0) * (0.5 * dt / state.dt_before)
-    materials = _materials(data, problem, state, extrapolated, middle, options)
+    materials = _materials(
+        data,
+        problem,
+        state,
+        extrapolated,
+        middle,
+        options,
+        _frame_gradient(problem, state),
+    )
     capacity = _capacity(problem, materials, dt)
     operator = _operator(problem, materials, extrapolated, 0.5 + lam, capacity)
     imposed = (

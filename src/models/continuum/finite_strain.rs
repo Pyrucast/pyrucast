@@ -17,6 +17,10 @@
 //! `θ_aa = 1/c_a` and `θ_ab = (ln c_a − ln c_b)/(c_a − c_b)` — the divided
 //! difference of `ln`, whose limit for equal eigenvalues is `1/c`.
 //!
+//! The rotation `R` of the polar decomposition `F = R U` turns the material
+//! axes of a law computed on the current configuration
+//! ([`rotate_frame`](fn@crate::ops::element_field::rotate_frame)).
+//!
 //! Pure, on the stack, with nothing checked: they run at every Gauss point. A
 //! degenerate `F` (`det F = 0`) yields inf/NaN — the mathematical value, not a checked
 //! case, as for the measures of
@@ -103,6 +107,15 @@ pub(crate) fn hencky_from_pk2(s: &Matrix3<f64>, f: &Matrix3<f64>) -> Matrix3<f64
     q * in_basis.component_div(&theta) * q.transpose()
 }
 
+/// The rotation `R` of the polar decomposition `F = R U`: `R = F U⁻¹`, with
+/// `U⁻¹ = Σ c_a^(−½) N_a⊗N_a` in the eigenbasis of `C = FᵀF`.
+pub(crate) fn polar_rotation(f: &Matrix3<f64>) -> Matrix3<f64> {
+    let eig = (f.transpose() * f).symmetric_eigen();
+    let q = eig.eigenvectors;
+    let u_inverse = Matrix3::from_diagonal(&eig.eigenvalues.map(|c| 1.0 / c.sqrt()));
+    f * q * u_inverse * q.transpose()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -162,5 +175,18 @@ mod tests {
         assert!((s[(0, 0)] - 2.0).abs() < 1e-12);
         assert!((s[(0, 1)] - 3.0 * 4.0_f64.ln() / 3.0).abs() < 1e-12);
         assert!((s[(1, 2)] - 5.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn the_polar_rotation_is_the_rotation_a_stretch_is_composed_with() {
+        // F = R₀ U₀, with U₀ symmetric positive (stretch and shear) and R₀ a
+        // turn about an oblique axis: the decomposition gives R₀ back.
+        let axis = nalgebra::Unit::new_normalize(Vector3::new(1.0, 2.0, 0.5));
+        let r0 = nalgebra::Rotation3::from_axis_angle(&axis, 0.7).into_inner();
+        let u0 = Matrix3::new(1.3, 0.2, -0.1, 0.2, 0.8, 0.15, -0.1, 0.15, 1.1);
+        let r = polar_rotation(&(r0 * u0));
+        assert!((r - r0).norm() < 1e-12, "{r}");
+        // And a pure stretch turns nothing.
+        assert!((polar_rotation(&u0) - Matrix3::identity()).norm() < 1e-12);
     }
 }

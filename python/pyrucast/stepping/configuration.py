@@ -1,10 +1,10 @@
 """The configurations of a computation in large displacements (Cast3M ``FORM``).
 
 The body is computed on the **reference** configuration: its strain measure,
-its law, its state and its internal forces, and its conduction. What acts on
-its **current** shape — the Newton operator, a pressure that follows the wall,
-the heat exchanges of the deformed part — is computed on a configuration laid
-at ``x = X + u``.
+its law, its state and its internal forces, and its heat capacity. What acts
+on its **current** shape — the Newton operator, a pressure that follows the
+wall, the heat running through the deformed part — is computed on a
+configuration laid at ``x = X + u``.
 Both live in the same ``Coords``: the current one is created once — the first
 computation adds it, the next ones find it by its name — laid again in
 absolute whenever ``u`` moves, and active only for the length of one

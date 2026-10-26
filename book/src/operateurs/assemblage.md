@@ -142,8 +142,8 @@ l'opérateur de la dynamique, `M/dt + K` :
 ```
 
 Deux matrices assemblées sur deux configurations s'additionnent donc telles
-quelles. C'est ce que fait le pas à pas en grands déplacements : la conduction
-sur la référence, les échanges de surface sur la pièce déformée (voir
+quelles. C'est ce que fait le pas à pas en grands déplacements : la capacité
+sur la référence, la conduction et les échanges sur la pièce déformée (voir
 [Grandes transformations](../mecanique/grandes-transformations.md)).
 
 ```python

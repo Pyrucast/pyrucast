@@ -91,23 +91,22 @@ def _refuse_in_large_displacements(mechanics):
         )
 
 
-def _conduction_split(heat_domain):
-    """The conduction of the heat domain — the sub-models that read a
-    conductivity, ``k`` or an oriented ``k_*`` — and the rest (exchanges,
-    radiation, fluxes): ``(conduction, others)``, either ``None`` when empty.
-
-    In large displacements the conduction is written on the reference: the
-    conductivity given is the Lagrangian one, K₀, whose push-forward
-    ``J⁻¹ F K₀ Fᵀ`` on the deformed part gives the same equation; its
-    capacity ``ρ₀ c dV₀`` follows. The rest acts on the current shape."""
-    conduction, others = None, None
-    for sub in _sub_models(heat_domain):
-        components = sub[0].material_components() or []
-        if any(c == "k" or c.startswith("k_") for c in components):
-            conduction = sub if conduction is None else conduction | sub
-        else:
-            others = sub if others is None else others | sub
-    return conduction, others
+def _frame_fespace(model):
+    """The FE space of the laws of ``model`` that read material axes (``V1X``
+    and the others), ``None`` when none does: where the gradient that turns
+    those axes with the part is computed. Every physics counts — a zone the
+    heat and the mechanics share carries the axes of both."""
+    oriented = [
+        sub
+        for sub in _sub_models(model)
+        if "V1X" in (sub[0].material_components() or [])
+    ]
+    if not oriented:
+        return None
+    union = oriented[0]
+    for sub in oriented[1:]:
+        union = union | sub
+    return union.fespace()
 
 
 def _follower_split(mechanics):
@@ -166,11 +165,10 @@ class Problem:
     configurations: object | None = None
     follower_loads: object | None = None
     step_loads: object | None = None
-    # Large displacements: the heat model by the configuration it is written
-    # on — the conduction, with the constraints, on the reference; the rest of
-    # the domain (exchanges, radiation, fluxes) on the current shape.
-    heat_on_reference: object | None = None
-    heat_on_current: object | None = None
+    # Large displacements with heat: the FE space of the laws that read
+    # material axes, where the gradient turning them with the part is
+    # computed; ``None`` when no law does.
+    frame_fespace: object | None = None
 
 
 def describe_problem(data, options):
@@ -185,7 +183,8 @@ def describe_problem(data, options):
     large-transformation measure (``strain_measure`` of their constructor), the
     problem carries that measure, the reference and current configurations
     (one more set in the ``Coords``, added by the first computation), its
-    follower loads, and its heat domain split by configuration.
+    follower loads, and the FE space where the material axes a heat step
+    reads are turned with the part.
     """
     model = data["model"]
     mechanics, mechanics_domain, mechanics_constraints = _part(model, "mechanical")
@@ -244,14 +243,12 @@ def describe_problem(data, options):
             "its derivative"
         )
     follower_loads, step_loads = None, mechanics
-    heat_on_reference = heat_on_current = None
+    frame_fespace = None
     if large:
         _refuse_in_large_displacements(mechanics)
         follower_loads, step_loads = _follower_split(mechanics)
-        if heat_domain is not None:
-            heat_on_reference, heat_on_current = _conduction_split(heat_domain)
-            if heat_constraints is not None:
-                heat_on_reference = heat_on_reference | heat_constraints
+        if heat is not None:
+            frame_fespace = _frame_fespace(model)
 
     laws = data.get("material_laws")
     # One output component per curve, named by its ordinate type.
@@ -292,6 +289,5 @@ def describe_problem(data, options):
         configurations=(configurations(fespace, displacement_names) if large else None),
         follower_loads=follower_loads,
         step_loads=step_loads,
-        heat_on_reference=heat_on_reference,
-        heat_on_current=heat_on_current,
+        frame_fespace=frame_fespace,
     )

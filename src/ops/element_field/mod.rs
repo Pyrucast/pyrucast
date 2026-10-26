@@ -14,7 +14,8 @@
 //! - *elastic operator* — [`elastic_stress`](fn@elastic_stress) `σ = D:ε` and
 //!   its inverse [`elastic_strain`](fn@elastic_strain) (Cast3M `ELAS`);
 //! - *material data* — [`material_field`](fn@material_field) & co., the
-//!   per-zone coefficients the assemblers read;
+//!   per-zone coefficients the assemblers read, and
+//!   [`rotate_frame`](fn@rotate_frame), their axes turned with the part;
 //! - *constitutive law* — [`behavior::integrate`](fn@behavior::integrate)
 //!   (Cast3M `COMP`), the exact, possibly non-linear counterpart of the
 //!   [`crate::ops::matrix::stiffness`] linearization;
@@ -33,6 +34,7 @@ pub mod interp_to_gauss;
 pub mod mask;
 pub mod material_field;
 pub mod methods;
+pub mod rotate_frame;
 pub mod shell_deformation;
 pub mod strain;
 pub mod stress_measure;
@@ -47,6 +49,7 @@ pub use gradient::gradient;
 pub use interp_to_gauss::interp_to_gauss;
 pub use mask::{mask, mask_sub};
 pub use material_field::{material_field, material_field_per_sub_model, sub_material_field};
+pub use rotate_frame::rotate_frame;
 pub use shell_deformation::shell_deformation;
 pub use strain::strain;
 pub use stress_measure::{stress_measure, StressMeasure};

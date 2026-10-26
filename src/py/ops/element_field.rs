@@ -147,6 +147,27 @@ pub fn stress_measure(
     Ok(PyElementField { inner: ef })
 }
 
+/// `field` with its material axes turned with the part: `V1*` (and `V2*` in
+/// 3-D) turned by the rotation `R` of the polar decomposition `F = R U` at each
+/// point, `F` read from `gradient` — the field `deformation(u, fespace,
+/// "gradient")` produces, computed on the **reference** configuration. Every
+/// other component is copied as it is: the material is the same, only its axes
+/// follow the rotation, `k = R k₀ Rᵀ`. This is what a conduction or a diffusion
+/// computed on the deformed part reads.
+///
+/// A zone without axes (an isotropic material) comes back as it is, shared. A
+/// zone carrying part of the axes only, or a gradient missing on a zone's FE
+/// space, is an error.
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+pub fn rotate_frame(
+    field: PyRef<PyElementField>,
+    gradient: PyRef<PyElementField>,
+) -> PyResult<PyElementField> {
+    let ef = crate::ops::element_field::rotate_frame(&field.inner, &gradient.inner)?;
+    Ok(PyElementField { inner: ef })
+}
+
 /// Elastic stress `σ = D:ε` of a strain field at the Gauss points of every
 /// continuum sub-model of `model` — Cast3M `ELAS` applied to a strain.
 ///

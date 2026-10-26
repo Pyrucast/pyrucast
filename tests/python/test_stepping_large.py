@@ -231,12 +231,11 @@ def test_a_perfectly_plastic_bar_in_hencky_strain_pulls_with_sigma_y_over_lambda
         assert record["behaviour"].max("T_xx") == pytest.approx(sigma_y, rel=1e-4)
 
 
-def test_the_conduction_of_a_stretched_bar_is_written_on_its_reference():
+def test_a_stretched_bar_conducts_as_the_longer_bar_it_is():
     """A strip stretched to λ = 1.5 along x (ν = 0, so its height stays), held
-    at 0 and 100 at its ends. The conductivity given is the Lagrangian one, K₀:
-    on the stretched strip it pushes forward to J⁻¹ F K₀ Fᵀ = k·diag(λ, 1/λ),
-    and the heat crossing the longer strip is the heat at rest. The conduction
-    law writes K₀ ∇₀T, the nominal flux: kΔT / L₀ before and after."""
+    at 0 and 100 at its ends. The conductivity is the material's, whatever its
+    shape: the heat runs through the stretched strip, longer, and the flux the
+    law writes is the true one, kΔT / L₀ at rest and kΔT / (λL₀) stretched."""
     k, length, stretch = 3.0, 2.0, 1.5
     _, _mesh, fes, node, _ = _grid(4, 1, length, 0.5)
     conduction = pc.model.heat_conduction(fes)
@@ -272,10 +271,10 @@ def test_the_conduction_of_a_stretched_bar_is_written_on_its_reference():
     pc.stepping.step_by_step(data)
     # The first step's heat runs on the part at rest, the second on the
     # stretched one (the configuration the mechanics reached before it).
-    at_rest, stretched = fluxes
-    for flux in (at_rest, stretched):
-        assert flux.min("flux_x") == pytest.approx(k * 100.0 / length, rel=1e-9)
-        assert flux.max("flux_x") == pytest.approx(k * 100.0 / length, rel=1e-9)
+    for flux, current_length in zip(fluxes, (length, stretch * length), strict=True):
+        expected = k * 100.0 / current_length
+        assert flux.min("flux_x") == pytest.approx(expected, rel=1e-9)
+        assert flux.max("flux_x") == pytest.approx(expected, rel=1e-9)
 
 
 def _turned_with_heat(axis_angle):
@@ -316,8 +315,8 @@ def test_an_oriented_conduction_turns_with_the_part():
     """Material axes at 30° from the strip, so that the heat does not run
     straight along it: the temperature varies across the strip. Turned rigidly
     (the last heat step runs on the strip turned by 67.5°), the part carries
-    its axes along — K₀ pushed forward by F = R is R K₀ Rᵀ — and every node
-    keeps the temperature it had at rest."""
+    its axes along — turned by the rotation R of F = R U, k = R k₀ Rᵀ — and
+    every node keeps the temperature it had at rest."""
     data, node, nx, ny, temperatures = _turned_with_heat(math.pi / 6)
     pc.stepping.step_by_step(data)
     assert all(record["converged"] for record in data["results"])
@@ -332,17 +331,16 @@ def test_an_oriented_conduction_turns_with_the_part():
             )
 
 
-@pytest.mark.parametrize("scheme", ["nonlinear", "linear"])
-def test_the_exchanges_act_on_the_deformed_surface(scheme):
-    """A strip held at T₀ = 100 on its left end and cooled by convection
-    (h, ambient 0) on its right one, then stretched to λ = 1.5 across (ν = 0):
-    the conduction keeps its reference conductance G_c = k H₀ / L₀, the
-    exchange works on the stretched face, G_h = h λ H₀. In series, the face
-    sits at T₀ G_c / (G_c + G_h). The linear scheme solves once: its operator,
-    the conduction on the reference beside the exchange frozen on the
-    stretched face, must be exact."""
-    k, h, length, height, stretch = 3.0, 2.0, 2.0, 1.0, 1.5
-    c, _mesh, fes, node, _ = _grid(4, 2, length, height)
+def _cooled_strip(scheme, stretch_x, stretch_y, materials, held=None, start=None):
+    """A 4×2 strip of QUA4 on [0, 2]×[0, 1], cooled by convection (h = 2,
+    ambient 0) on its right face and stretched to ``stretch_x`` along,
+    ``stretch_y`` across (ν = 0, sliding supports) by its first mechanical
+    step; ``materials`` adds to the convection's and the solid's, ``held`` is
+    the temperature of its left end, ``start`` its uniform initial one. Runs
+    two steps of length 1 and returns (node, the temperature of each heat
+    step): the first on the part at rest, the second on the stretched one."""
+    length, height = 2.0, 1.0
+    c, mesh, fes, node, _ = _grid(4, 2, length, height)
     conduction = pc.model.heat_conduction(fes)
     face = pc.Mesh(c, "SEG2")
     for j in range(2):
@@ -351,27 +349,33 @@ def test_the_exchanges_act_on_the_deformed_surface(scheme):
         pc.FiniteElementSpace(face), conduction, [("T", "q")]
     )
     solid = pc.model.elasticity(fes, "plane_strain", strain_measure="green_lagrange")
-    held, held_support = _fix(conduction, [node(0, j) for j in range(3)], "T")
-    pull, pull_support = _fix(solid, [node(i, 2) for i in range(5)], "u_y")
+    along, along_support = _fix(solid, [node(4, j) for j in range(3)], "u_x")
+    across, across_support = _fix(solid, [node(i, 2) for i in range(5)], "u_y")
     model = (
         conduction
         | cooling
         | solid
-        | held
         | _fix(solid, [node(0, j) for j in range(3)], "u_x")[0]
         | _fix(solid, [node(i, 0) for i in range(5)], "u_y")[0]
-        | pull
+        | along
+        | across
     )
+    loads = _on(along_support, "imposed_u_x", (stretch_x - 1.0) * length) | _on(
+        across_support, "imposed_u_y", (stretch_y - 1.0) * height
+    )
+    if held is not None:
+        hold, hold_support = _fix(conduction, [node(0, j) for j in range(3)], "T")
+        model = model | hold
+        loads = loads | _on(hold_support, "imposed_T", held)
     temperatures = []
     data = {
         "model": model,
         "times": [0.0, 1.0, 2.0],
         "materials": pc.element_field.material_field(
             model,
-            [("k", k), ("h_T", h), ("a_ext_T", 0.0), ("E", 100.0), ("nu", 0.0)],
+            [("h_T", 2.0), ("a_ext_T", 0.0), ("E", 100.0), ("nu", 0.0)] + materials,
         ),
-        "loads": _on(held_support, "imposed_T", 100.0)
-        | _on(pull_support, "imposed_u_y", (stretch - 1.0) * height),
+        "loads": loads,
         "heat_scheme": scheme,
         "hooks": {
             "after_heat": lambda _data, _state, heat: temperatures.append(
@@ -379,16 +383,65 @@ def test_the_exchanges_act_on_the_deformed_surface(scheme):
             )
         },
     }
+    if start is not None:
+        initial = pc.NodeField(mesh, ["T"])
+        for zone in initial:
+            zone.add_to_component("T", start)
+        data["initial"] = {"temperature": initial}
     pc.stepping.step_by_step(data)
-    conductance = k * height / length
-    for temperature, face_length in zip(
-        temperatures, (height, stretch * height), strict=True
+    assert all(record["converged"] for record in data["results"])
+    return node, temperatures
+
+
+@pytest.mark.parametrize("scheme", ["nonlinear", "linear"])
+def test_the_heat_runs_through_the_deformed_part(scheme):
+    """A strip held at T₀ = 100 on its left end and cooled by convection on its
+    right one, then stretched to λ = 1.5 along and μ = 1.2 across: both act on
+    the part as it is, the conduction through G_c = k μH₀ / (λL₀), the exchange
+    through G_h = h μH₀. In series, the face sits at T₀ G_c / (G_c + G_h).
+    Conducting on the reference (G_c = k H₀ / L₀) or exchanging there
+    (G_h = h H₀) would put it elsewhere. The linear scheme solves once: its
+    operator must be exact."""
+    k, h, length, height, stretch_x, stretch_y = 3.0, 2.0, 2.0, 1.0, 1.5, 1.2
+    node, temperatures = _cooled_strip(
+        scheme, stretch_x, stretch_y, [("k", k)], held=100.0
+    )
+    for temperature, (lx, ly) in zip(
+        temperatures, ((1.0, 1.0), (stretch_x, stretch_y)), strict=True
     ):
-        expected = 100.0 * conductance / (conductance + h * face_length)
+        conductance = k * ly * height / (lx * length)
+        expected = 100.0 * conductance / (conductance + h * ly * height)
         for j in range(3):
             assert temperature.value(node(4, j), "T") == pytest.approx(
                 expected, rel=1e-9
             )
+
+
+@pytest.mark.parametrize("scheme", ["nonlinear", "linear"])
+def test_the_capacity_stays_on_the_reference(scheme):
+    """The same strip, insulated but for its cooled face, starting uniform at
+    T₀ = 100 with a conductivity large enough to stay uniform: each implicit
+    step gives T ← T C / (C + G_h Δt). The exchange works on the face as it is,
+    G_h = h μH₀, and the capacity is the mass's, C = ρ c V₀ whatever the
+    stretch — mass conservation, ρ c dv = ρ₀ c dV₀. On the stretched part
+    (λμ V₀) the second step would cool less."""
+    h, length, height, stretch_x, stretch_y = 2.0, 2.0, 1.0, 1.5, 1.2
+    node, temperatures = _cooled_strip(
+        scheme,
+        stretch_x,
+        stretch_y,
+        [("k", 1e9), ("rho", 1.0), ("cp", 1.0)],
+        start=100.0,
+    )
+    capacity = 1.0 * 1.0 * length * height
+    expected = 100.0
+    for temperature, ly in zip(temperatures, (1.0, stretch_y), strict=True):
+        expected *= capacity / (capacity + h * ly * height)
+        for i in range(5):
+            for j in range(3):
+                assert temperature.value(node(i, j), "T") == pytest.approx(
+                    expected, rel=1e-6
+                )
 
 
 def test_what_large_displacements_do_not_offer_is_refused():
