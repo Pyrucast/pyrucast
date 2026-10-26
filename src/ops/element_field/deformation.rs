@@ -555,11 +555,7 @@ mod tests {
             let tail = name
                 .strip_prefix(&format!("{}_", measure.prefix()))
                 .unwrap();
-            let axis = |c| {
-                AXES.iter()
-                    .position(|a| a.chars().next() == Some(c))
-                    .unwrap()
-            };
+            let axis = |c| AXES.iter().position(|a| a.starts_with(c)).unwrap();
             let mut chars = tail.chars();
             let (i, j) = (axis(chars.next().unwrap()), axis(chars.next().unwrap()));
             for g in 0..s.gauss_count() {

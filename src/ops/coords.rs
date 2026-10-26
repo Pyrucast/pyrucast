@@ -187,6 +187,112 @@ pub fn displace(field: &NodeField, components: Option<Vec<String>>) -> Result<()
     Ok(())
 }
 
+/// Lay configuration `target` at configuration `reference` displaced by
+/// `field` — `x = X + u`, in **absolute**: each node takes its `reference`
+/// position plus its value in `field`, a node the field does not define stays
+/// where the reference puts it. Called again with another `u`, it lands at
+/// `X + u` again: nothing accumulates, which a restarted substep or an
+/// accelerated iterate needs. The active configuration is left as it is.
+/// `components` names one displacement component per axis; `None` →
+/// `["ux", "uy", "uz"][..dim]`, as for [`displace`](fn@displace).
+///
+/// Errors: as [`Coords::displace_from`](crate::coords::Coords::displace_from),
+/// and a component the field lacks.
+///
+/// ```
+/// # use pyrucast::aggregate::Aggregate;
+/// # use pyrucast::atoms::{ElementType, Node};
+/// # use pyrucast::containers::field::SubField;
+/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+/// # use pyrucast::containers::node_field::NodeField;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::coords as ops_coords;
+/// # let coords = Handle::new(Coords::new(2).unwrap());
+/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
+/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
+/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
+/// # let mesh = Mesh::from_submesh(sm);
+/// let current = coords.write().add_config("current");
+/// let u = NodeField::new(&mesh, vec!["u_x".into(), "u_y".into()])?;
+/// u.get(0)?.write().set_value(n[1].id(), "u_x", 0.5)?;
+/// let names = Some(vec!["u_x".to_string(), "u_y".to_string()]);
+/// ops_coords::displace_from(&u, 0, current, names)?;
+/// // The reference has not moved; the current configuration has.
+/// assert_eq!(n[1].position()?, vec![2.0, 0.0]);
+/// coords.write().select(current)?;
+/// assert_eq!(n[1].position()?, vec![2.5, 0.0]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
+pub fn displace_from(
+    field: &NodeField,
+    reference: usize,
+    target: usize,
+    components: Option<Vec<String>>,
+) -> Result<()> {
+    let coords = field.coords()?;
+    let dim = coords.read().dim() as usize;
+    let comps = resolve_axis_components(field, components, dim, &["ux", "uy", "uz"])?;
+    let increments = per_node_values(field, &comps)?;
+    coords.write().displace_from(
+        reference,
+        target,
+        increments.iter().map(|(nid, inc)| (*nid, inc.as_slice())),
+    )
+}
+
+/// Run `f` with configuration `config` of `coords` active, then make the
+/// configuration that was active before it active again — after an error, and
+/// after a panic, too. Everything `f` computes on the geometry (matrices,
+/// normals, measures) sees `config`; what it returns is handed back.
+///
+/// The lock on `coords` is taken on entry and on exit only: `f` reads and
+/// writes the coordinates freely, and may call `in_config` again. The active
+/// configuration belongs to the `Coords`, not to the caller: another thread
+/// computing on the same `Coords` meanwhile sees `config` too.
+///
+/// Errors: `config` out of range, before `f` runs; whatever `f` returns.
+///
+/// ```
+/// # use pyrucast::atoms::Node;
+/// # use pyrucast::coords::Coords;
+/// # use pyrucast::handle::Handle;
+/// # use pyrucast::ops::coords as ops_coords;
+/// let coords = Handle::new(Coords::new(2)?);
+/// let n = Node::create_in(coords.clone(), &[1.0, 0.0])?;
+/// let current = coords.write().add_config("current");
+///
+/// // Written in `current`, read in `current`; the reference is back after each.
+/// ops_coords::in_config(&coords, current, || n.set_position(&[2.0, 0.0]))?;
+/// let x = ops_coords::in_config(&coords, current, || n.position())?;
+/// assert_eq!(x, vec![2.0, 0.0]);
+/// assert_eq!(coords.read().active(), 0);
+/// assert_eq!(n.position()?, vec![1.0, 0.0]);
+/// # Ok::<(), pyrucast::PyrucastError>(())
+/// ```
+pub fn in_config<R>(
+    coords: &Handle<Coords>,
+    config: usize,
+    f: impl FnOnce() -> Result<R>,
+) -> Result<R> {
+    let previous = {
+        let mut c = coords.write();
+        let previous = c.active();
+        c.select(config)?;
+        previous
+    };
+    // Caught only to restore, then resumed: nothing observes `f`'s state after
+    // a panic, so asserting it unwind-safe is sound.
+    let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
+    // `previous` was valid on entry, and configurations are never removed.
+    coords.write().select(previous)?;
+    match out {
+        Ok(result) => result,
+        Err(panic) => std::panic::resume_unwind(panic),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -318,111 +424,5 @@ mod tests {
         assert!(set(&f, Some(vec!["X".into()])).is_err());
         // Unknown component name.
         assert!(set(&f, Some(vec!["X".into(), "BOGUS".into()])).is_err());
-    }
-}
-
-/// Lay configuration `target` at configuration `reference` displaced by
-/// `field` — `x = X + u`, in **absolute**: each node takes its `reference`
-/// position plus its value in `field`, a node the field does not define stays
-/// where the reference puts it. Called again with another `u`, it lands at
-/// `X + u` again: nothing accumulates, which a restarted substep or an
-/// accelerated iterate needs. The active configuration is left as it is.
-/// `components` names one displacement component per axis; `None` →
-/// `["ux", "uy", "uz"][..dim]`, as for [`displace`](fn@displace).
-///
-/// Errors: as [`Coords::displace_from`](crate::coords::Coords::displace_from),
-/// and a component the field lacks.
-///
-/// ```
-/// # use pyrucast::aggregate::Aggregate;
-/// # use pyrucast::atoms::{ElementType, Node};
-/// # use pyrucast::containers::field::SubField;
-/// # use pyrucast::containers::mesh::{Mesh, SubMesh};
-/// # use pyrucast::containers::node_field::NodeField;
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::ops::coords as ops_coords;
-/// # let coords = Handle::new(Coords::new(2).unwrap());
-/// # let n: Vec<Node> = [[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]]
-/// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
-/// # let mut sm = SubMesh::new(coords.clone(), ElementType::TRI3);
-/// # sm.add_cell(&[n[0].id(), n[1].id(), n[2].id()]).unwrap();
-/// # let mesh = Mesh::from_submesh(sm);
-/// let current = coords.write().add_config("current");
-/// let u = NodeField::new(&mesh, vec!["u_x".into(), "u_y".into()])?;
-/// u.get(0)?.write().set_value(n[1].id(), "u_x", 0.5)?;
-/// let names = Some(vec!["u_x".to_string(), "u_y".to_string()]);
-/// ops_coords::displace_from(&u, 0, current, names)?;
-/// // The reference has not moved; the current configuration has.
-/// assert_eq!(n[1].position()?, vec![2.0, 0.0]);
-/// coords.write().select(current)?;
-/// assert_eq!(n[1].position()?, vec![2.5, 0.0]);
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn displace_from(
-    field: &NodeField,
-    reference: usize,
-    target: usize,
-    components: Option<Vec<String>>,
-) -> Result<()> {
-    let coords = field.coords()?;
-    let dim = coords.read().dim() as usize;
-    let comps = resolve_axis_components(field, components, dim, &["ux", "uy", "uz"])?;
-    let increments = per_node_values(field, &comps)?;
-    coords.write().displace_from(
-        reference,
-        target,
-        increments.iter().map(|(nid, inc)| (*nid, inc.as_slice())),
-    )
-}
-
-/// Run `f` with configuration `config` of `coords` active, then make the
-/// configuration that was active before it active again — after an error, and
-/// after a panic, too. Everything `f` computes on the geometry (matrices,
-/// normals, measures) sees `config`; what it returns is handed back.
-///
-/// The lock on `coords` is taken on entry and on exit only: `f` reads and
-/// writes the coordinates freely, and may call `in_config` again. The active
-/// configuration belongs to the `Coords`, not to the caller: another thread
-/// computing on the same `Coords` meanwhile sees `config` too.
-///
-/// Errors: `config` out of range, before `f` runs; whatever `f` returns.
-///
-/// ```
-/// # use pyrucast::atoms::Node;
-/// # use pyrucast::coords::Coords;
-/// # use pyrucast::handle::Handle;
-/// # use pyrucast::ops::coords as ops_coords;
-/// let coords = Handle::new(Coords::new(2)?);
-/// let n = Node::create_in(coords.clone(), &[1.0, 0.0])?;
-/// let current = coords.write().add_config("current");
-///
-/// // Written in `current`, read in `current`; the reference is back after each.
-/// ops_coords::in_config(&coords, current, || n.set_position(&[2.0, 0.0]))?;
-/// let x = ops_coords::in_config(&coords, current, || n.position())?;
-/// assert_eq!(x, vec![2.0, 0.0]);
-/// assert_eq!(coords.read().active(), 0);
-/// assert_eq!(n.position()?, vec![1.0, 0.0]);
-/// # Ok::<(), pyrucast::PyrucastError>(())
-/// ```
-pub fn in_config<R>(
-    coords: &Handle<Coords>,
-    config: usize,
-    f: impl FnOnce() -> Result<R>,
-) -> Result<R> {
-    let previous = {
-        let mut c = coords.write();
-        let previous = c.active();
-        c.select(config)?;
-        previous
-    };
-    // Caught only to restore, then resumed: nothing observes `f`'s state after
-    // a panic, so asserting it unwind-safe is sound.
-    let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
-    // `previous` was valid on entry, and configurations are never removed.
-    coords.write().select(previous)?;
-    match out {
-        Ok(result) => result,
-        Err(panic) => std::panic::resume_unwind(panic),
     }
 }

@@ -114,7 +114,7 @@ impl StressMeasure {
     }
 
     /// `S` from this measure.
-    fn to_pk2(self) -> Convert {
+    fn converter_to_pk2(self) -> Convert {
         match self {
             StressMeasure::Cauchy => finite_strain::pk2_from_cauchy,
             StressMeasure::Kirchhoff => finite_strain::pk2_from_kirchhoff,
@@ -125,7 +125,7 @@ impl StressMeasure {
     }
 
     /// This measure from `S`.
-    fn from_pk2(self) -> Convert {
+    fn converter_from_pk2(self) -> Convert {
         match self {
             StressMeasure::Cauchy => finite_strain::cauchy_from_pk2,
             StressMeasure::Kirchhoff => finite_strain::kirchhoff_from_pk2,
@@ -329,7 +329,7 @@ fn convert_zone(
             .map(|(&(i, j), &c)| (i, j, c))
             .collect()
     };
-    let (to_s, from_s) = (source.to_pk2(), target.from_pk2());
+    let (to_s, from_s) = (source.converter_to_pk2(), target.converter_from_pk2());
 
     kernel::element_pointwise(
         &fespace,
