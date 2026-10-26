@@ -53,6 +53,37 @@ pub fn restrict(field: PyRef<PyNodeField>, mesh: PyRef<PyMesh>) -> PyResult<PyNo
     })
 }
 
+/// `field` interpolated by the cells of `mesh` at the nodes of `target` —
+/// Cast3M `PROI` onto a geometry. A node of `target` inside a cell of `mesh`
+/// takes `Σ Nᵢ(ξ) f(nodeᵢ)`, the shape functions of that cell at the node
+/// (quadratic cells interpolate quadratically); every component is carried.
+///
+/// A node of `target` outside `mesh` — farther than `tol` outside every cell's
+/// reference element — gets zero, as a nodal field reads a node it does not
+/// define: projecting a patch onto a larger mesh is a normal thing. `field` is
+/// read first zone first, a node of `mesh` it does not define reading zero.
+/// `mesh` and `target` may live in different `Coords` (a field moved onto a
+/// remeshed part), each read in its active configuration. One zone per submesh
+/// of `target`, like `positions`.
+///
+/// An empty `field` or `target` gives an empty field; an empty `mesh` gives
+/// zero at every node of `target`. Errors: `field` and `mesh` on different
+/// `Coords`; `mesh` and `target` in different dimensions.
+#[py_op(method_on = PyNodeField)]
+#[cfg_attr(feature = "stub-gen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[pyfunction]
+#[pyo3(signature = (field, mesh, target, tol=1e-6))]
+pub fn project(
+    field: PyRef<PyNodeField>,
+    mesh: PyRef<PyMesh>,
+    target: PyRef<PyMesh>,
+    tol: f64,
+) -> PyResult<PyNodeField> {
+    Ok(PyNodeField {
+        inner: crate::ops::node_field::project(&field.inner, &mesh.inner, &target.inner, tol)?,
+    })
+}
+
 /// Reproject `field` onto the exact support and components of `target`,
 /// zone by zone.
 ///

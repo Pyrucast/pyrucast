@@ -3,7 +3,8 @@
 Les modules `ops::node_field`, `ops::element_field`, `ops::coords`,
 `ops::measure` et `ops::field` **dérivent et transforment** les
 [champs](../field.md) — chacun nommé d'après ce qu'il produit :
-coordonnées, restriction, fusion, et dérivations géométriques vers les points
+coordonnées, restriction, projection sur un autre maillage, fusion, et
+dérivations géométriques vers les points
 de Gauss. Ces opérateurs croisent des conteneurs (maillage + champ, espace EF
 + champ) — ce sont donc des **fonctions libres**. L'arithmétique scalaire et
 par composante, elle, reste **sur les types de champ** (cf. [Champ](../field.md)).
@@ -50,6 +51,28 @@ les sous-champs d'une même `FiniteElementSpace` fusionnent en une zone portant
 l'union de leurs composantes — utile pour réunir des zones matériau bâties par
 physique sur une fespace partagée (`k` thermique + `E`/`nu`/`alpha` mécanique) en
 un champ matériau unique lu par chaque physique.
+
+## Projection sur un autre maillage
+
+`project(field, mesh, target, tol=1e-6)` (aussi `field.project(mesh, target)`)
+porte un champ nodal aux nœuds de `target` en l'interpolant par les **mailles
+de `mesh`** : un nœud de `target` situé dans une maille de `mesh` reçoit
+`Σ Nᵢ(ξ) f(nœudᵢ)`, les fonctions de forme de cette maille en ses coordonnées
+de référence (une maille quadratique interpole quadratiquement), pour toutes
+les composantes. C'est le `PROI` de Cast3M sur une géométrie. Un champ nodal ne
+porte pas de mailles, d'où l'argument `mesh`, qui doit être sur le même
+`Coords` que le champ ; `target` peut vivre dans un autre `Coords`, pour porter
+un champ sur une pièce remaillée.
+
+Un nœud de `target` **hors** de `mesh` — au-delà de `tol` hors de l'élément de
+référence de chaque maille, un jeu sans unité — reçoit **0**, comme un champ
+nodal lit un nœud qu'il ne définit pas : on projette ainsi un patch sur un
+maillage plus grand. Le résultat a une zone par sous-maillage de `target`,
+comme `positions`. Les nœuds de `target` sont localisés une seule fois.
+
+```python
+{{#include ../../../tests/python/test_doc_ops_champs.py:projection}}
+```
 
 ## Bande de valeurs (`ge` / `gt` / `le` / `lt`)
 

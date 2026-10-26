@@ -303,3 +303,31 @@ for noeud in n:
     for dual in ("f_x", "f_y", "q"):
         attendu = ku.value(noeud, dual)
         assert abs(f_int.value(noeud, dual) - attendu) <= 1e-9 * (1.0 + abs(attendu))
+
+
+# ── Projection sur un autre maillage ────────────────────────────────────────
+
+_, mesh, fes, n = _plaque()
+temperature = _champ_nodal(
+    mesh, n, ["T"], [[t] for t in (10.0, 50.0, 90.0, 30.0, 70.0, 100.0)]
+)
+
+# ANCHOR: projection
+# La température de la plaque portée aux nœuds d'un autre maillage — ici d'un
+# autre Coords, comme une pièce remaillée — par les fonctions de forme des
+# mailles de la plaque. Un nœud hors de la plaque reçoit 0 : on projette aussi
+# un patch sur un maillage plus grand.
+autre = pyrucast.Coords(2)
+cibles = [autre.add_node(p) for p in ([0.5, 0.5], [1.5, 0.25], [3.0, 0.5])]
+nuage = pyrucast.mesh.poi1_from_nodes(cibles)
+portee = pyrucast.node_field.project(temperature, mesh, nuage)  # tol=1e-6
+# La même, en méthode : temperature.project(mesh, nuage)
+# ANCHOR_END: projection
+# Bilinear in each cell: the middle of the first is the mean of its corners,
+# (10 + 50 + 70 + 30) / 4; in the second, 70 + ¼ (85 − 70) at y = ¼.
+assert abs(portee.value(cibles[0], "T") - 40.0) < 1e-12
+assert abs(portee.value(cibles[1], "T") - 73.75) < 1e-12
+assert portee.value(cibles[2], "T") == 0.0
+assert temperature.project(mesh, nuage).value(cibles[1], "T") == portee.value(
+    cibles[1], "T"
+)

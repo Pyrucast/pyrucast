@@ -266,6 +266,7 @@ fn _pyrucast(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py::ops::coords::displace, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::coords::displace_from, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::node_field::restrict, m)?)?;
+    m.add_function(wrap_pyfunction!(py::ops::node_field::project, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::node_field::restrict_like, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::mesh::select, m)?)?;
     m.add_function(wrap_pyfunction!(py::ops::node_field::mask, m)?)?;

@@ -91,6 +91,7 @@ Champs - extraction;DEPL;Extrait le champ de déplacement;NodeField
 Champs - extraction;CHAN (CHAM);Change le support d'un champ (Gauss <-> nœuds);interp_to_gauss (nœuds -> Gauss) / divergence (Gauss -> nœuds) / node_field.consolidate
 Champs - extraction;ELNO;Passe un champ des points de Gauss aux nœuds;divergence (partiel)
 Champs - extraction;REDU;Restreint un champ à un sous-maillage;restrict
+Champs - extraction;PROI;Projette un champ aux nœuds d'une autre géométrie par les fonctions de forme;node_field.project (interpolé par les mailles de mesh aux nœuds de target, 0 hors de mesh, tol=1e-6 ; syntaxe GEO2 seule, ni modèle ni points d'intégration, ni 'MINI' ni 'POLY')
 Champs - extraction;;Reprojette un champ sur le support et les composantes d'un champ cible (combinable par + - * /);restrict_like
 Champs - assemblage;NOMC;Renomme les composantes;rename_component
 Champs - assemblage;PLUS (chp);Fusionne / additionne des champs;merge / union (|)

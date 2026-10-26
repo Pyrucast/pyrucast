@@ -30,6 +30,11 @@ impl NodeField {
     pub fn restrict_like(&self, target: &NodeField) -> Result<NodeField> {
         crate::ops::node_field::restrict_like(self, target)
     }
+
+    /// See [`node_field::project`](fn@crate::ops::node_field::project).
+    pub fn project(&self, mesh: &Mesh, target: &Mesh, tol: f64) -> Result<NodeField> {
+        crate::ops::node_field::project(self, mesh, target, tol)
+    }
 }
 
 impl ElementField {

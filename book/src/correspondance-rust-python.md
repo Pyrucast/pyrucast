@@ -168,6 +168,7 @@ signatures ci-dessous omettent le `&` et le `Result` pour la lisibilité.
 | `positions(mesh: &Mesh, components: Option<Vec<String>>) -> NodeField` | `positions(mesh, components=None) -> NodeField` |
 | `divergence(field: &ElementField, prefix: &str) -> NodeField` | `divergence(field, prefix) -> NodeField` |
 | `restrict(field: &NodeField, mesh: &Mesh) -> NodeField` | `restrict(field, mesh) -> NodeField` |
+| `project(field: &NodeField, mesh: &Mesh, target: &Mesh, tol: f64) -> NodeField` | `project(field, mesh, target, tol=1e-6) -> NodeField`, aussi méthode `field.project(mesh, target, tol=1e-6)` (interpolé par les mailles de `mesh` aux nœuds de `target`, 0 hors de `mesh`) |
 | `restrict_like(field: &NodeField, target: &NodeField) -> NodeField` | `restrict_like(field, target) -> NodeField` |
 | `merge(a: &NodeField, b: &NodeField) -> NodeField` | `merge(a, b) -> NodeField` |
 | `consolidate(field: &NodeField) -> NodeField` | `consolidate(field) -> NodeField` |

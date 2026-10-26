@@ -118,6 +118,7 @@ __all__ = [
     "points_on_sphere",
     "points_on_torus",
     "positions",
+    "project",
     "psca",
     "radiation",
     "read_gmsh",
@@ -2768,6 +2769,25 @@ class NodeField:
         
         Errors if `mesh` and `field` are attached to different `Coords`s.
         """
+    def project(self, mesh: Mesh, target: Mesh, tol: builtins.float = 1e-06) -> NodeField:
+        r"""
+        `field` interpolated by the cells of `mesh` at the nodes of `target` —
+        Cast3M `PROI` onto a geometry. A node of `target` inside a cell of `mesh`
+        takes `Σ Nᵢ(ξ) f(nodeᵢ)`, the shape functions of that cell at the node
+        (quadratic cells interpolate quadratically); every component is carried.
+        
+        A node of `target` outside `mesh` — farther than `tol` outside every cell's
+        reference element — gets zero, as a nodal field reads a node it does not
+        define: projecting a patch onto a larger mesh is a normal thing. `field` is
+        read first zone first, a node of `mesh` it does not define reading zero.
+        `mesh` and `target` may live in different `Coords` (a field moved onto a
+        remeshed part), each read in its active configuration. One zone per submesh
+        of `target`, like `positions`.
+        
+        An empty `field` or `target` gives an empty field; an empty `mesh` gives
+        zero at every node of `target`. Errors: `field` and `mesh` on different
+        `Coords`; `mesh` and `target` in different dimensions.
+        """
     def restrict_like(self, target: NodeField) -> NodeField:
         r"""
         Reproject `field` onto the exact support and components of `target`,
@@ -5268,6 +5288,26 @@ def positions(mesh: Mesh, components: typing.Optional[typing.Sequence[builtins.s
     One component per requested axis (`"X"`, `"Y"`, `"Z"`). `components=None`
     requests all the axes the mesh's `Coords` has (`["X"]` in 1-D,
     `["X", "Y"]` in 2-D, `["X", "Y", "Z"]` in 3-D).
+    """
+
+def project(field: NodeField, mesh: Mesh, target: Mesh, tol: builtins.float = 1e-06) -> NodeField:
+    r"""
+    `field` interpolated by the cells of `mesh` at the nodes of `target` —
+    Cast3M `PROI` onto a geometry. A node of `target` inside a cell of `mesh`
+    takes `Σ Nᵢ(ξ) f(nodeᵢ)`, the shape functions of that cell at the node
+    (quadratic cells interpolate quadratically); every component is carried.
+    
+    A node of `target` outside `mesh` — farther than `tol` outside every cell's
+    reference element — gets zero, as a nodal field reads a node it does not
+    define: projecting a patch onto a larger mesh is a normal thing. `field` is
+    read first zone first, a node of `mesh` it does not define reading zero.
+    `mesh` and `target` may live in different `Coords` (a field moved onto a
+    remeshed part), each read in its active configuration. One zone per submesh
+    of `target`, like `positions`.
+    
+    An empty `field` or `target` gives an empty field; an empty `mesh` gives
+    zero at every node of `target`. Errors: `field` and `mesh` on different
+    `Coords`; `mesh` and `target` in different dimensions.
     """
 
 def psca(x: typing.Any, y: typing.Any) -> typing.Any:

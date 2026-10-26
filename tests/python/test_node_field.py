@@ -850,3 +850,51 @@ def test_support_submesh_is_the_zone_the_field_was_built_on():
     assert support.element_type == "POI1"
     ids = sorted(n.id for cell in support for n in cell)
     assert ids == sorted(n.id for n in nodes)
+
+
+def _square(n):
+    """An n×n grid of QUA4 on the unit square: (mesh, nodes row by row)."""
+    c = pyrucast.Coords(2)
+    nodes = [c.add_node([i / n, j / n]) for j in range(n + 1) for i in range(n + 1)]
+    mesh = pyrucast.Mesh(c, "QUA4")
+    for j in range(n):
+        for i in range(n):
+            k = j * (n + 1) + i
+            mesh.unit().add_cell(
+                [nodes[k], nodes[k + 1], nodes[k + n + 2], nodes[k + n + 1]]
+            )
+    return mesh, nodes
+
+
+def test_project_carries_a_field_onto_another_mesh():
+    """A linear field T = 1 + 2x − y, projected by the cells of a coarse grid
+    onto the nodes of a finer one shifted half out of it (another Coords):
+    exact inside, zero outside — a patch — and the method gives the same."""
+    mesh, nodes = _square(2)
+    field = pyrucast.NodeField(mesh, ["T"])
+    for n in nodes:
+        x, y = n.position()
+        field[0].set_value(n, "T", 1.0 + 2.0 * x - y)
+    finer, fine_nodes = _square(5)
+    shift = pyrucast.NodeField(finer, ["ux", "uy"])
+    for n in fine_nodes:
+        shift[0].set_value(n, "ux", 0.5)
+    pyrucast.coords.displace(shift)
+
+    carried = pyrucast.node_field.project(field, mesh, finer)
+    assert carried.components() == ["T"]
+    for n in fine_nodes:
+        x, y = n.position()
+        expected = 1.0 + 2.0 * x - y if x <= 1.0 else 0.0
+        assert carried.value(n, "T") == pytest.approx(expected, abs=1e-12)
+    method = field.project(mesh, finer, tol=1e-6)
+    for n in fine_nodes:
+        assert method.value(n, "T") == carried.value(n, "T")
+
+
+def test_project_refuses_a_field_off_its_mesh():
+    mesh, _ = _square(1)
+    other, _ = _square(1)
+    field = pyrucast.NodeField(mesh, ["T"])
+    with pytest.raises(RuntimeError, match="different Coords"):
+        pyrucast.node_field.project(field, other, mesh)
