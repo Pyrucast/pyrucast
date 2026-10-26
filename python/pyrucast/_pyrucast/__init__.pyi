@@ -5987,12 +5987,18 @@ def triangulate_volume(envelope: Mesh, size: typing.Optional[builtins.float] = N
     refused rather than meshed badly.
     """
 
-def truss(fespace: FiniteElementSpace) -> Model:
+def truss(fespace: FiniteElementSpace, strain_measure: builtins.str = 'linear') -> Model:
     r"""
-    `model.truss(fespace)` — truss / bar (axial-force) model spanning
-    **every** subspace of `fespace` (SEG2 elements). DOFs are the vector
-    displacement `u_x, u_y(, u_z)`; the orientation is taken from the node
-    coordinates. Material (`E`, `A`) is supplied at assembly time.
+    `model.truss(fespace, strain_measure="linear")` — truss / bar
+    (axial-force) model spanning **every** subspace of `fespace` (SEG2 elements).
+    DOFs are the vector displacement `u_x, u_y(, u_z)`; the orientation is taken
+    from the node coordinates. Material (`E`, `A`) is supplied at assembly time.
+    
+    `strain_measure` is the strain the law reads: `"linear"` (the default; it
+    writes the axial force `n`) or `"green_lagrange"` (large displacements: it
+    writes the second Piola–Kirchhoff axial force `S_n`, which
+    `element_field.stress_measure` turns into the nominal force vector `P_*` or
+    the true force `n`).
     """
 
 def viscoplasticity_chaboche(fespace: FiniteElementSpace, kinematics: builtins.str, strain_measure: builtins.str = 'linear') -> Model:

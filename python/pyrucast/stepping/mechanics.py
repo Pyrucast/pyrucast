@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from .. import element_field, matrix, measure, node_field, solver
 from .anderson import Accelerator
 from .control import AutomaticControl, IndirectControl
-from .fields import carried, infinity_norm, part, shifted
+from .fields import STRAIN_PREFIXES, carried, infinity_norm, part, shifted
 from .materials import materials_at
 
 __all__ = [
@@ -50,8 +50,6 @@ _TINY = 1e-300
 # (Cast3M UNPAS).
 _REBUILD_EVERY = 20
 _MAX_REBUILDS = 20
-# What the convergence tests read as a strain: the measure each law reads.
-_STRAIN_PREFIXES = ("eps", "E_", "H_")
 
 
 # ─── What a (sub)step is solved for ─────────────────────────────────────────
@@ -649,7 +647,7 @@ def equilibrium_iterations(
         if change is not None and previous.reactions is not None:
             change = change - node_field.restrict_like(previous.reactions, change)
         reaction_change = infinity_norm(change, problem.force_names)
-        names = [n for n in carried(strain) if n.startswith(_STRAIN_PREFIXES)]
+        names = [n for n in carried(strain) if n.startswith(STRAIN_PREFIXES)]
         measures = {
             "force": max(
                 infinity_norm(current.out_of_balance, problem.force_names),
@@ -963,6 +961,13 @@ def _controller(
             target = start.time + level * (t_end - start.time)
             return step_data(data, problem, state, start, target, temperature, options)
 
+        measure = None
+        if "automatic_measure" in options.hooks:
+            hook = options.hook("automatic_measure")
+
+            def measure(increment, elastic):
+                return hook(data, state, increment, elastic)
+
         controller = AutomaticControl(
             problem,
             fraction,
@@ -970,6 +975,7 @@ def _controller(
             part(first_correction, problem.displacement_names),
             part(first.out_of_balance, problem.force_names),
             lambda increment, forces: _work(problem, increment, forces),
+            measure,
         )
         controller.level = fraction
         return controller, control_step

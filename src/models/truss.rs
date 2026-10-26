@@ -12,6 +12,14 @@
 //! Primal variables `u_x, u_y, …` (displacement, one per axis), dual `f_x, …`
 //! (nodal force). Material components `E` (Young's modulus) and `A` (section
 //! area), read from a [`SubElementField`].
+//!
+//! **In large displacements** (a cable, a shallow truss) the law reads the
+//! Green–Lagrange strain instead, on the reference configuration: along the
+//! reference direction `t₀` it is exactly `t₀·E·t₀ = (l² − L²)/2L²`, whatever
+//! the rotation. It writes the second Piola–Kirchhoff axial force
+//! `S_n = E·A·(t₀·E·t₀)`; the internal forces read the nominal force vector
+//! `P = S_n F t₀` that [`stress_measure`](fn@crate::ops::element_field::stress_measure)
+//! makes of it, and the geometric stiffness the true force `n = λ S_n`.
 
 use crate::containers::element_field::SubElementField;
 use crate::containers::field::ABSENT_COMPONENT;
@@ -37,14 +45,27 @@ use serde::{Deserialize, Serialize};
 pub(crate) const AXES: [&str; 3] = ["x", "y", "z"];
 /// Material components required by the truss physics.
 const MATERIAL_COMPONENTS: &[&str] = &["E", "A"];
+/// The true axial force: what a law in small strains writes, and what the
+/// geometric stiffness reads.
+pub(crate) const AXIAL_FORCE: &str = "n";
+/// The second Piola–Kirchhoff axial force `A₀ S`: what a law reading
+/// Green–Lagrange writes.
+pub(crate) const AXIAL_PK2: &str = "S_n";
 
-/// Strain-tensor component names (`eps_xx`, `eps_xy`, …) for `i ≤ j`, matching
-/// what [`crate::ops::element_field::deformation`] produces — the behaviour input.
-fn strain_names(space_dim: usize) -> Vec<String> {
+/// The nominal force vector `P = S_n F t₀` of a bar in large displacements:
+/// `P_x, P_y(, P_z)`, what its internal forces read.
+pub(crate) fn nominal_force_names(space_dim: usize) -> Vec<String> {
+    AXES[..space_dim].iter().map(|a| format!("P_{a}")).collect()
+}
+
+/// Strain-tensor component names (`eps_xx`, `eps_xy`, … under the linear
+/// measure, `E_xx`, … under Green–Lagrange) for `i ≤ j`, matching what
+/// [`crate::ops::element_field::deformation`] produces — the behaviour input.
+fn strain_names(prefix: &str, space_dim: usize) -> Vec<String> {
     let mut names = Vec::new();
     for i in 0..space_dim {
         for j in i..space_dim {
-            names.push(format!("eps_{}{}", AXES[i], AXES[j]));
+            names.push(format!("{prefix}_{}{}", AXES[i], AXES[j]));
         }
     }
     names
@@ -85,6 +106,11 @@ pub struct Truss {
     pub(crate) support: Handle<SubMesh>,
     /// Spatial dimension (number of displacement components per node).
     pub(crate) space_dim: usize,
+    /// The strain measure the law reads — `linear`, or `green_lagrange` in
+    /// large displacements ([`with_measure`](Self::with_measure)). Archives
+    /// written before it existed read back as `linear`.
+    #[serde(default)]
+    pub(crate) measure: StrainMeasure,
 }
 
 impl Truss {
@@ -132,7 +158,67 @@ impl Truss {
             fespace,
             support,
             space_dim,
+            measure: StrainMeasure::Linear,
         })
+    }
+
+    /// The same bar, its law reading the strain `measure`: `linear`, or
+    /// `green_lagrange` for large displacements — the law then reads `E_*` and
+    /// writes the second Piola–Kirchhoff axial force `S_n`.
+    ///
+    /// Errors:
+    /// - Hencky: along the reference direction, `t₀·½ ln C·t₀` is the stretch
+    ///   `ln λ` only while `t₀` is an eigenvector of `C`, which a bar that
+    ///   turns no longer is;
+    /// - a measure that is not a law's input (`gradient`, Cauchy–Green,
+    ///   Euler–Almansi).
+    ///
+    /// ```
+    /// # use pyrucast::aggregate::Aggregate;
+    /// # use pyrucast::atoms::{ElementType, Node};
+    /// # use pyrucast::containers::finite_element_space::FiniteElementSpace;
+    /// # use pyrucast::containers::mesh::{Mesh, SubMesh};
+    /// # use pyrucast::coords::Coords;
+    /// # use pyrucast::handle::Handle;
+    /// # use pyrucast::models::{Behavior, SubModelKind};
+    /// # use pyrucast::models::truss::Truss;
+    /// # use pyrucast::ops::element_field::StrainMeasure;
+    /// # let coords = Handle::new(Coords::new(2).unwrap());
+    /// # let n: Vec<Node> = [[0.0, 0.0], [1.0, 0.0]]
+    /// #     .iter().map(|p| Node::create_in(coords.clone(), p).unwrap()).collect();
+    /// # let mut sm = SubMesh::new(coords.clone(), ElementType::SEG2);
+    /// # sm.add_cell(&[n[0].id(), n[1].id()])?;
+    /// # let fes = FiniteElementSpace::lagrange1(&Mesh::from_submesh(sm))?;
+    /// let cable = Truss::new(fes.get(0)?)?.with_measure(StrainMeasure::GreenLagrange)?;
+    /// // The law reads E and writes the second Piola–Kirchhoff axial force …
+    /// assert_eq!(cable.deformation_reads(), ["E_xx", "E_xy", "E_yy"]);
+    /// assert_eq!(cable.behavior_output_components(), ["S_n"]);
+    /// // … the internal forces read the nominal force vector.
+    /// assert_eq!(cable.internal_force_reads(), ["P_x", "P_y"]);
+    /// let bar = Truss::new(fes.get(0)?)?;
+    /// assert!(bar.with_measure(StrainMeasure::Hencky).is_err());
+    /// # Ok::<(), pyrucast::PyrucastError>(())
+    /// ```
+    pub fn with_measure(self, measure: StrainMeasure) -> Result<Self> {
+        match measure {
+            StrainMeasure::Linear | StrainMeasure::GreenLagrange => Ok(Self { measure, ..self }),
+            StrainMeasure::Hencky => Err(PyrucastError::Message(
+                "Truss: a bar has no Hencky measure — along its reference direction t₀, \
+                 t₀·½ ln C·t₀ is ln λ only while t₀ is an eigenvector of C, which a bar \
+                 that turns no longer is; use green_lagrange"
+                    .into(),
+            )),
+            other => Err(PyrucastError::Message(format!(
+                "Truss: `{}` is not a strain a law reads — a bar reads `linear` or \
+                 `green_lagrange`",
+                crate::named::Named::name(other)
+            ))),
+        }
+    }
+
+    /// Whether the law reads Green–Lagrange (the bar in large displacements).
+    fn finite(&self) -> bool {
+        self.measure == StrainMeasure::GreenLagrange
     }
 }
 
@@ -181,8 +267,16 @@ impl SubModelKind for Truss {
     /// `c`. `N` is element-constant (linear bar), read at the first Gauss point;
     /// the closed form mirrors [`element_stiffness`]'s analytic treatment (a
     /// SEG2 in space has no square isoparametric Jacobian).
+    ///
+    /// In large displacements the bar reads the nominal force vector
+    /// `P = S_n F t₀` instead, already along the current chord:
+    /// `f_A = −P`, `f_B = +P`, on the reference configuration.
     fn internal_force_reads(&self) -> Vec<String> {
-        vec!["n".to_string()]
+        if self.finite() {
+            nominal_force_names(self.space_dim)
+        } else {
+            vec![AXIAL_FORCE.to_string()]
+        }
     }
 
     fn internal_force_element(
@@ -196,9 +290,18 @@ impl SubModelKind for Truss {
     ) -> Result<()> {
         let geom = &geoms[0];
         let d = self.space_dim;
+        let row = stress.row(geom.cell, 0);
+        if self.finite() {
+            for a in 0..d {
+                let p = row[lay[a] as usize];
+                fe[a] = -p; // node A
+                fe[d + a] = p; // node B
+            }
+            return Ok(());
+        }
         let mut c = [0.0_f64; 3];
         cell_cosine(geom, d, &mut c)?;
-        let n = stress.row(geom.cell, 0)[lay[0] as usize];
+        let n = row[lay[0] as usize];
         for a in 0..d {
             fe[a] = -n * c[a]; // node A
             fe[d + a] = n * c[a]; // node B
@@ -244,10 +347,11 @@ impl Domain for Truss {
         &["rho"]
     }
 
-    /// The bar's geometric stiffness reads its axial force.
+    /// The bar's geometric stiffness reads its true axial force, whatever the
+    /// measure its law reads.
     fn element_state_reads(&self, kind: MatrixKind) -> Vec<String> {
         match kind {
-            MatrixKind::Geometric => vec!["n".to_string()],
+            MatrixKind::Geometric => vec![AXIAL_FORCE.to_string()],
             _ => Vec::new(),
         }
     }
@@ -289,18 +393,27 @@ impl Behavior for Truss {
         self.fespace.clone()
     }
 
+    /// The axial force `n`, or the second Piola–Kirchhoff one `S_n` when the
+    /// law reads Green–Lagrange.
     fn behavior_output_components(&self) -> Vec<String> {
-        vec!["n".to_string()]
+        let name = if self.finite() {
+            AXIAL_PK2
+        } else {
+            AXIAL_FORCE
+        };
+        vec![name.to_string()]
     }
 
     /// Axial force `N = E·A·ε_axial` at one Gauss point, with `ε_axial = cᵀ ε c`
     /// and `c` the cell's unit direction cosine (from its node coordinates).
+    /// Under Green–Lagrange, on the reference configuration, the same
+    /// projection reads `t₀·E·t₀` and writes `S_n`.
     fn deformation_reads(&self) -> Vec<String> {
-        strain_names(self.space_dim)
+        strain_names(self.measure.prefix(), self.space_dim)
     }
 
     fn strain_operator(&self) -> StrainOperator {
-        StrainOperator::Deformation(StrainMeasure::Linear)
+        StrainOperator::Deformation(self.measure)
     }
 
     fn integrate_point(
@@ -342,7 +455,7 @@ impl Behavior for Truss {
 
 /// Unit direction cosine vector `c = (x_B − x_A)/L` of one `SEG2` cell, from its
 /// two node coordinates.
-fn cell_cosine(geom: &CellGeom, space_dim: usize, out: &mut [f64; 3]) -> Result<f64> {
+pub(crate) fn cell_cosine(geom: &CellGeom, space_dim: usize, out: &mut [f64; 3]) -> Result<f64> {
     let xa = geom.node_coord(0);
     let xb = geom.node_coord(1);
     for a in 0..space_dim {
@@ -517,10 +630,11 @@ pub fn element_mass(
 
 /// Element kernel: local **geometric (initial-stress) stiffness** of one bar
 /// under axial force `N`,
-///   `K_g = (N / L) · [[P, −P], [−P, P]]`,   `P = I − c⊗c`
-/// (the transverse projector, so only motion perpendicular to the bar axis is
-/// stiffened). `N` is read from the state component `n`. Same `ke` layout as
-/// [`element_stiffness`].
+///   `K_g = (N / L) · [[I, −I], [−I, I]]`
+/// — the continuum's `∫ ∇N·σ∇N dv · I` on a bar, and the stress term of the
+/// exact tangent `d(S_n F t₀)/dx = … + (S_n / L₀) I`, since `S_n / L₀ = N / L`.
+/// Every direction is stiffened, the axial one too. `N` is read from the state
+/// component `n`. Same `ke` layout as [`element_stiffness`].
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -575,10 +689,7 @@ pub fn element_geometric(
         for jj in 0..2 {
             let sign = if ii == jj { 1.0 } else { -1.0 };
             for a in 0..sd {
-                for b in 0..sd {
-                    let p = (if a == b { 1.0 } else { 0.0 }) - c[a] * c[b];
-                    ke[(ii * sd + a) * side + (jj * sd + b)] += sign * k * p;
-                }
+                ke[(ii * sd + a) * side + (jj * sd + a)] += sign * k;
             }
         }
     }
@@ -661,7 +772,8 @@ mod tests {
         let mat = material(&truss, e, area);
         let eps0 = 0.01;
 
-        let mut strain = SubElementField::new(truss.fespace.clone(), strain_names(2)).unwrap();
+        let mut strain =
+            SubElementField::new(truss.fespace.clone(), strain_names("eps", 2)).unwrap();
         // ε = ε₀ (c⊗c): eps_xx = ε₀ c_x², eps_xy = ε₀ c_x c_y, eps_yy = ε₀ c_y².
         strain.set_uniform("eps_xx", eps0 * c[0] * c[0]).unwrap();
         strain.set_uniform("eps_xy", eps0 * c[0] * c[1]).unwrap();
@@ -712,11 +824,12 @@ crate::physics_operator! {
     /// # let mut b = SubMesh::new(coords.clone(), ElementType::SEG2);
     /// # b.add_cell(&[n[0].id(), n[1].id()])?;
     /// # let barres = FiniteElementSpace::lagrange1(&Mesh::from_submesh(b))?;
-    /// let m = model::truss(&barres)?;
+    /// # use pyrucast::ops::element_field::StrainMeasure;
+    /// let m = model::truss(&barres, StrainMeasure::Linear)?;
     /// assert_eq!(m.primal_vars(), vec!["u_x".to_string(), "u_y".to_string()]);
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn truss(fes) via SubModel::truss;
-    python: "`model.truss(fespace)` — truss / bar (axial-force) model spanning\n**every** subspace of `fespace` (SEG2 elements). DOFs are the vector\ndisplacement `u_x, u_y(, u_z)`; the orientation is taken from the node\ncoordinates. Material (`E`, `A`) is supplied at assembly time."
+    pub fn truss(fes, strain_measure: StrainMeasure = StrainMeasure::Linear) via SubModel::truss;
+    python: "`model.truss(fespace, strain_measure=\"linear\")` — truss / bar\n(axial-force) model spanning **every** subspace of `fespace` (SEG2 elements).\nDOFs are the vector displacement `u_x, u_y(, u_z)`; the orientation is taken\nfrom the node coordinates. Material (`E`, `A`) is supplied at assembly time.\n\n`strain_measure` is the strain the law reads: `\"linear\"` (the default; it\nwrites the axial force `n`) or `\"green_lagrange\"` (large displacements: it\nwrites the second Piola–Kirchhoff axial force `S_n`, which\n`element_field.stress_measure` turns into the nominal force vector `P_*` or\nthe true force `n`)."
 }
 // ANCHOR_END: operator

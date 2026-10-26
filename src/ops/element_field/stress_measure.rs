@@ -10,17 +10,23 @@
 //! stiffness on the current one and for the results. This operator converts,
 //! point by point; nothing is transported, the state itself never changes
 //! configuration.
+//!
+//! A bar carries a force along its axis, not a tensor: its law writes the
+//! second Piola–Kirchhoff axial force `S_n`, which this operator turns into the
+//! nominal force vector `P = S_n F t₀` or the true force `n = λ S_n`.
 
 use nalgebra::Matrix3;
 
 use crate::aggregate::Aggregate;
 use crate::containers::element_field::{ElementField, SubElementField};
 use crate::containers::field::SubField;
+use crate::containers::finite_element_space::SubFiniteElementSpace;
 use crate::error::{PyrucastError, Result};
 use crate::handle::Handle;
 use crate::models::continuum::finite_strain;
 use crate::models::continuum::internal_force::{full_matrix_reads, voigt_matrix_reads};
 use crate::models::kernel;
+use crate::models::truss::{self, nominal_force_names, AXIAL_FORCE, AXIAL_PK2};
 use crate::named::Named;
 
 /// Which stress [`stress_measure`] produces — and which one it recognises in its
@@ -182,8 +188,15 @@ fn same(s: &Matrix3<f64>, _f: &Matrix3<f64>) -> Matrix3<f64> {
 /// plane-strain law echoes) and written back under the target's name; `F_zz` is
 /// 1 there unless the gradient carries it.
 ///
-/// Errors: a zone carrying none of the five measures, or more than one; no
-/// gradient zone on the same FE space carrying the `F_*` read.
+/// A **bar** zone is recognised by its second Piola–Kirchhoff axial force
+/// `S_n`. Along the current chord `a = F t₀`, `t₀` the bar's direction in the
+/// active configuration — the reference one, like `F` — and `|a| = λ` its
+/// stretch, it becomes the nominal force vector `P_x, P_y(, P_z) = S_n a`
+/// (`pk1`) or the true force `n = λ S_n` (`cauchy`); `pk2` leaves it as it is.
+///
+/// Errors: a zone carrying none of the five measures nor a bar's `S_n`, or
+/// more than one; a bar asked for `kirchhoff` or `hencky`; no gradient zone on
+/// the same FE space carrying the `F_*` read.
 ///
 /// ```
 /// # use pyrucast::aggregate::Aggregate;
@@ -251,24 +264,26 @@ fn convert_zone(
         .copied()
         .filter(|m| carries(&m.names(space_dim)))
         .collect();
-    let source = match found.as_slice() {
-        [one] => *one,
-        [] => {
+    let bar = components.iter().any(|c| c == AXIAL_PK2);
+    let source = match (found.as_slice(), bar) {
+        ([one], false) => *one,
+        ([], true) => return convert_bar_zone(zone, &fespace, space_dim, gradient, target),
+        ([], false) => {
             return Err(PyrucastError::Message(format!(
-            "stress_measure: no stress among sigma_*, tau_*, P_*, S_*, T_* in this {space_dim}-D \
-                 zone, which carries {components:?}"
-        )))
+                "stress_measure: no stress among sigma_*, tau_*, P_*, S_*, T_* nor a bar's \
+                 {AXIAL_PK2} in this {space_dim}-D zone, which carries {components:?}"
+            )))
         }
-        several => {
+        (several, _) => {
+            let mut names: Vec<&str> = several.iter().map(|m| m.name()).collect();
+            if bar {
+                names.push(AXIAL_PK2);
+            }
             return Err(PyrucastError::Message(format!(
                 "stress_measure: the zone carries several stresses ({}), so which one to convert \
                  is ambiguous — pass them in separate fields",
-                several
-                    .iter()
-                    .map(|m| m.name())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )))
+                names.join(", ")
+            )));
         }
     };
     // In 2-D the out-of-plane component closes the lists when it is there.
@@ -337,6 +352,77 @@ fn convert_zone(
             for (slot, &(i, j)) in out.iter_mut().zip(&write_slots) {
                 *slot = result[(i, j)];
             }
+            Ok(())
+        },
+    )
+}
+
+/// One conversion of a bar's axial force, chosen once per zone: from `S_n` and
+/// the current chord `a = F t₀`, the values of the target.
+type BarConvert = fn(f64, &[f64], &mut [f64]);
+
+fn bar_pk2(s: f64, _a: &[f64], out: &mut [f64]) {
+    out[0] = s;
+}
+
+fn bar_pk1(s: f64, a: &[f64], out: &mut [f64]) {
+    for (slot, ai) in out.iter_mut().zip(a) {
+        *slot = s * ai;
+    }
+}
+
+fn bar_cauchy(s: f64, a: &[f64], out: &mut [f64]) {
+    out[0] = s * a.iter().map(|v| v * v).sum::<f64>().sqrt();
+}
+
+/// A bar's second Piola–Kirchhoff axial force `S_n` carried to `target`,
+/// along the current chord `a = F t₀` of each point.
+fn convert_bar_zone(
+    zone: &Handle<SubElementField>,
+    fespace: &Handle<SubFiniteElementSpace>,
+    space_dim: usize,
+    gradient: &ElementField,
+    target: StressMeasure,
+) -> Result<SubElementField> {
+    let (writes, convert): (Vec<String>, BarConvert) = match target {
+        StressMeasure::SecondPiolaKirchhoff => (vec![AXIAL_PK2.to_string()], bar_pk2),
+        StressMeasure::FirstPiolaKirchhoff => (nominal_force_names(space_dim), bar_pk1),
+        StressMeasure::Cauchy => (vec![AXIAL_FORCE.to_string()], bar_cauchy),
+        other => {
+            return Err(PyrucastError::Message(format!(
+                "stress_measure: a bar carries a force along its axis, whose measures are `pk2` \
+                 ({AXIAL_PK2}), `pk1` (the nominal force vector P_*) and `cauchy` (the true \
+                 force {AXIAL_FORCE}) — not `{}`",
+                other.name()
+            )))
+        }
+    };
+    let f_names = full_matrix_reads("F", space_dim);
+    let f_zone = gradient.sub_for_fespace_reading(fespace, &f_names)?;
+    let f_idx = {
+        let refs: Vec<&str> = f_names.iter().map(String::as_str).collect();
+        f_zone.read().resolve_components(&refs, "gradient")?
+    };
+    let s_idx = zone.read().resolve_components(&[AXIAL_PK2], "stress")?[0] as usize;
+    let d = space_dim;
+
+    kernel::element_pointwise(
+        fespace,
+        zone,
+        &f_zone,
+        &f_zone,
+        writes,
+        |geom, _g, row, f_row, _, out| {
+            let mut t0 = [0.0_f64; 3];
+            truss::cell_cosine(geom, d, &mut t0)?;
+            // `F_*` row-major: `a_i = Σ_j F_ij t0_j`.
+            let mut a = [0.0_f64; 3];
+            for (i, ai) in a[..d].iter_mut().enumerate() {
+                for (j, tj) in t0[..d].iter().enumerate() {
+                    *ai += f_row[f_idx[i * d + j] as usize] * tj;
+                }
+            }
+            convert(row[s_idx], &a[..d], out);
             Ok(())
         },
     )

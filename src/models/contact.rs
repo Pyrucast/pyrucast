@@ -181,7 +181,8 @@ struct Component {
 /// // One **unilateral** relation per slave node, paired at construction with
 /// // its nearest master facet.
 /// # let cible = pyrucast::ops::model::truss(
-/// #     &FiniteElementSpace::lagrange1(&maillage)?)?;
+/// #     &FiniteElementSpace::lagrange1(&maillage)?,
+/// #     pyrucast::ops::element_field::StrainMeasure::Linear)?;
 /// let c = Contact::new(&cible, &slave, &master,
 ///     vec!["u_x".into(), "u_y".into()])?;
 /// assert_eq!(c.relations()?.len(), 1);
@@ -256,7 +257,8 @@ impl Contact {
     /// // One **unilateral** relation per slave node, paired at construction with
     /// // its nearest master facet.
     /// # let cible = pyrucast::ops::model::truss(
-    /// #     &FiniteElementSpace::lagrange1(&maillage)?)?;
+    /// #     &FiniteElementSpace::lagrange1(&maillage)?,
+    /// #     pyrucast::ops::element_field::StrainMeasure::Linear)?;
     /// let c = Contact::new(&cible, &slave, &master,
     ///     vec!["u_x".into(), "u_y".into()])?;
     /// assert_eq!(c.relations()?.len(), 1);
@@ -399,7 +401,8 @@ impl Contact {
     /// // One **unilateral** relation per slave node, paired at construction with
     /// // its nearest master facet.
     /// # let cible = pyrucast::ops::model::truss(
-    /// #     &FiniteElementSpace::lagrange1(&maillage)?)?;
+    /// #     &FiniteElementSpace::lagrange1(&maillage)?,
+    /// #     pyrucast::ops::element_field::StrainMeasure::Linear)?;
     /// let c = Contact::new(&cible, &slave, &master,
     ///     vec!["u_x".into(), "u_y".into()])?;
     /// assert_eq!(c.relations()?.len(), 1);
@@ -627,7 +630,7 @@ mod tests {
     fn cible_mecanique(master: &Mesh) -> crate::containers::model::Model {
         let fes =
             crate::containers::finite_element_space::FiniteElementSpace::lagrange1(master).unwrap();
-        crate::ops::model::truss(&fes).unwrap()
+        crate::ops::model::truss(&fes, crate::ops::element_field::StrainMeasure::Linear).unwrap()
     }
     use super::*;
     use crate::atoms::{ElementType, Node};

@@ -50,7 +50,7 @@ déplacements, `behaviour` contient la contrainte qu'écrit la loi (`S_*` ou
 | `temperature` | température imposée, sans modèle thermique | `CHARGEMENT 'T'` |
 | `initial` | `displacement`, `behaviour`, `temperature`, `velocity`, `acceleration` | indice 0 des tables |
 | `t_ref` | température sans dilatation | `TEMPERATURE_REFERENCE` |
-| `hooks` | procédures utilisateur, par nom (`HOOKS`) | `REEV_MEC`, `PERSO1`… |
+| `hooks` | procédures utilisateur, par nom (`HOOKS`) | `REEV_MEC`, `PERSO1`, `AUTOPILO`… |
 
 Les réglages et leurs valeurs par défaut sont ceux de `PAS_DEFA` :
 `precision` et `strain_precision` (1e-4), `max_iterations` (49, 250 en
@@ -192,7 +192,13 @@ sous pilotage.
   en total en portent le signe.
 - **Automatique** (`AUTOPILO`) : `Δu` est mis à l'échelle pour que sa
   déformation vaille `automatic_target`, et la fraction de charge
-  `α ← α − (r·Δu)/(R·Δu)` ; le temps n'avance que de `α`.
+  `α ← α − (r·Δu)/(R·Δu)` ; le temps n'avance que de `α`. Le crochet
+  `automatic_measure(data, state, Δu, αΔu_él)` remplace cette taille, comme la
+  redéfinition d'`AUTOPILO` : une taille **négative** retourne `Δu`. Une
+  grandeur choisie pour croître — la flèche d'un sommet — fait ainsi franchir
+  les points limites, où la réponse de l'opérateur change de sens ; la
+  déformation, toujours positive, ne le peut pas (Cast3M non plus, dont le cas
+  `snap.dgibi` redéfinit `AUTOPILO` de la même façon).
 - **Indirect** (`PILOINDI`) : `F = F_ext + η F_p`, `η` choisi pour que la
   déformation avance de `Δτ` dans sa propre direction au point le plus
   sollicité.
@@ -237,8 +243,9 @@ exacte (cf. [Grandes transformations](mecanique/grandes-transformations.md#la-co
 
 Sont refusés en grands déplacements : le contact (ses relations devraient
 suivre le glissement du point projeté), une loi de petites déformations à côté
-d'une loi en grandes transformations (barres, poutres et coques n'ont pas
-encore de formulation en grandes transformations).
+d'une loi en grandes transformations (poutres et coques n'ont pas encore de
+formulation en grandes transformations ; une barre lit `green_lagrange`, cf.
+[Les barres et les câbles](mecanique/grandes-transformations.md#les-barres-et-les-câbles)).
 
 ## Écrire sa propre boucle
 
@@ -265,7 +272,7 @@ enchaînement :
 | opérateur initial, `F_ref`, `F_NL` | `stepping.mechanics.iteration_operator`, `reference_forces`, `nonlinear_predictor` |
 | itérations, `COMP`, critères | `stepping.mechanics.equilibrium_iterations`, `integrate_increment`, `convergence_status` |
 | `ACT3` | `stepping.anderson.anderson_correction` |
-| `AUTOPILO`, `PILOINDI` | `stepping.control.automatic_control`, `indirect_control` |
+| `AUTOPILO`, `PILOINDI` | `stepping.control.automatic_control` (ou le crochet `automatic_measure`), `indirect_control` |
 | `REEV_MEC`, `REEV_THE`, `PERSO1`, `CHARMECA`, `CHARTHER`, `PARATHER` | crochets `after_mechanics`, `after_heat`, `after_step`, `extra_mechanical_load`, `extra_heat_load`, `heat_material_update` |
 | `GRANDS_DEPLACEMENTS`, `LAGRANGIEN` | la mesure des lois (`strain_measure`) ; toujours le lagrangien total |
 | `K_SIGMA` | `geometric_stiffness` |

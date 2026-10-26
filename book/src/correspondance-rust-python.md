@@ -256,7 +256,7 @@ un sujet qu'on transforme.
 | `flux(fes: &FiniteElementSpace, target: &Model, dual: String) -> Model` | `flux(fespace, target, dual) -> Model` (`dual="n"` : le mode normal, une pression `phi_n` le long de la normale de la maille) |
 | `boundary_transfer(fes, target: &Model, components: Vec<(String, String)>) -> Model` | `boundary_transfer(fespace, target, components) -> Model` |
 | `interface_transfer(side_a, side_b, target: &Model, components, tol: f64) -> Model` | `interface_transfer(side_a, side_b, target, components, tol=1e-9) -> Model` — défaut `interface_transfer::DEFAULT_TOL` |
-| `truss(fes: &FiniteElementSpace) -> Model` | `truss(fespace) -> Model` |
+| `truss(fes: &FiniteElementSpace, strain_measure: StrainMeasure) -> Model` | `truss(fespace, strain_measure="linear") -> Model` |
 | `elasticity(fes, model: ElasticityModel) -> Model` | `elasticity(fespace, model, symmetry=None, strain_measure="linear") -> Model` |
 | `elasticity_with_symmetry(fes, model, symmetry: MaterialSymmetry, measure: StrainMeasure) -> Model` | *idem, via `symmetry=` et `strain_measure=`* |
 | `plasticity_perfect(fes, model: ElasticityModel) -> Model` | `plasticity_perfect(fespace, model, strain_measure="linear") -> Model` |

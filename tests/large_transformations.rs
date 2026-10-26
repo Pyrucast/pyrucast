@@ -722,3 +722,354 @@ fn a_pressure_follows_the_normal_of_the_active_configuration() -> Result<()> {
     }
     Ok(())
 }
+
+// ─── Bars ────────────────────────────────────────────────────────────────────
+//
+// A bar in large displacements reads the Green–Lagrange strain along its
+// reference direction, `(l² − L²)/2L²`, and its law writes the second
+// Piola–Kirchhoff axial force `S_n`. Every oracle below is written by hand
+// from the node positions.
+
+/// Two bars in space, A–B then B–C, aligned with no axis.
+const CABLE: [[f64; 3]; 3] = [[0.0, 0.0, 0.0], [1.2, 0.5, -0.3], [2.0, 1.4, 0.4]];
+const BARS: [(usize, usize); 2] = [(0, 1), (1, 2)];
+const YOUNG: f64 = 100.0;
+const AREA: f64 = 0.5;
+
+struct Cable {
+    coords: Handle<Coords>,
+    mesh: Mesh,
+    fes: FiniteElementSpace,
+    nodes: Vec<Node>,
+}
+
+fn cable() -> Result<Cable> {
+    let coords = Handle::new(Coords::new(3)?);
+    let nodes: Vec<Node> = CABLE
+        .iter()
+        .map(|p| Node::create_in(coords.clone(), p))
+        .collect::<Result<_>>()?;
+    let mut mesh = Mesh::from_submesh(SubMesh::new(coords.clone(), ElementType::SEG2));
+    for (i, j) in BARS {
+        mesh.add_cell(&[nodes[i].id(), nodes[j].id()])?;
+    }
+    let fes = FiniteElementSpace::lagrange1(&mesh)?;
+    Ok(Cable {
+        coords,
+        mesh,
+        fes,
+        nodes,
+    })
+}
+
+/// The bars of `c`, their law reading `measure`, and their material.
+fn bars(c: &Cable, measure: StrainMeasure) -> Result<(Model, ElementField)> {
+    let bars = model::truss(&c.fes, measure)?;
+    let materials = material_field(&bars, &[("E", YOUNG), ("A", AREA)])?;
+    Ok((bars, materials))
+}
+
+fn cable_displacement(c: &Cable, values: &[[f64; 3]]) -> Result<NodeField> {
+    let u = NodeField::new(&c.mesh, vec!["u_x".into(), "u_y".into(), "u_z".into()])?;
+    {
+        let mut zone = u.get(0)?.write();
+        for (n, v) in c.nodes.iter().zip(values) {
+            for (a, name) in ["u_x", "u_y", "u_z"].iter().enumerate() {
+                zone.set_value(n.id(), name, v[a])?;
+            }
+        }
+    }
+    Ok(u)
+}
+
+/// A stretch, a shear and a turn: every bar lengthens and turns.
+fn cable_motion() -> Vec<[f64; 3]> {
+    let (s, c) = 0.7_f64.sin_cos();
+    CABLE
+        .iter()
+        .enumerate()
+        .map(|(k, x)| {
+            let stretched = [1.3 * x[0] + 0.2 * x[1], 0.9 * x[1], x[2] + 0.1 * x[0]];
+            let turned = [
+                c * stretched[0] - s * stretched[1],
+                s * stretched[0] + c * stretched[1],
+                stretched[2] + 0.05 * k as f64,
+            ];
+            [turned[0] - x[0], turned[1] - x[1], turned[2] - x[2]]
+        })
+        .collect()
+}
+
+fn sub(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+}
+
+fn norm(a: [f64; 3]) -> f64 {
+    (a[0] * a[0] + a[1] * a[1] + a[2] * a[2]).sqrt()
+}
+
+/// One bar moved by `u`, by hand: its rest length `L`, its chord `x_B − x_A`
+/// and its Green–Lagrange strain `(l² − L²)/2L²`.
+fn bar_by_hand(u: &[[f64; 3]], (i, j): (usize, usize)) -> (f64, [f64; 3], f64) {
+    let rest = norm(sub(CABLE[j], CABLE[i]));
+    let x = |k: usize| {
+        [
+            CABLE[k][0] + u[k][0],
+            CABLE[k][1] + u[k][1],
+            CABLE[k][2] + u[k][2],
+        ]
+    };
+    let chord = sub(x(j), x(i));
+    let l = norm(chord);
+    (rest, chord, (l * l - rest * rest) / (2.0 * rest * rest))
+}
+
+/// The internal forces of the bars' state `s`: `±P`, `P = S_n F t₀`.
+fn cable_forces(
+    c: &Cable,
+    m: &Model,
+    mat: &ElementField,
+    s: &ElementField,
+    u: &NodeField,
+) -> Result<NodeField> {
+    let f = deformation(u, &c.fes, StrainMeasure::Gradient)?;
+    let pk1 = stress_measure(s, &f, StressMeasure::FirstPiolaKirchhoff)?;
+    internal_forces(m, &pk1, u, mat)
+}
+
+/// Every nodal force of `f`, node by node, axis by axis.
+fn cable_vector(c: &Cable, f: &NodeField) -> Result<Vec<f64>> {
+    let mut out = Vec::new();
+    for n in &c.nodes {
+        for name in ["f_x", "f_y", "f_z"] {
+            out.push(f.value(n.id(), name)?);
+        }
+    }
+    Ok(out)
+}
+
+/// The value of `component` on bar `cell`, at its first point — a bar's
+/// state is uniform along it.
+fn on_bar(field: &ElementField, cell: usize, component: &str) -> Result<f64> {
+    field.get(0)?.read().value(cell, 0, component)
+}
+
+#[test]
+fn a_rigid_rotation_loads_no_bar() -> Result<()> {
+    let c = cable()?;
+    // A turn of 1.2 rad about (1, 2, 2)/3.
+    let axis = [1.0 / 3.0, 2.0 / 3.0, 2.0 / 3.0];
+    let rotation = nalgebra::Rotation3::from_axis_angle(
+        &nalgebra::Unit::new_normalize(nalgebra::Vector3::from(axis)),
+        1.2,
+    );
+    let motion: Vec<[f64; 3]> = CABLE
+        .iter()
+        .map(|x| {
+            let turned = rotation * nalgebra::Vector3::from(*x);
+            [turned[0] - x[0], turned[1] - x[1], turned[2] - x[2]]
+        })
+        .collect();
+    let u = cable_displacement(&c, &motion)?;
+
+    let (cable_gl, mat) = bars(&c, StrainMeasure::GreenLagrange)?;
+    let (_, s) = state(&cable_gl, &mat, &u)?;
+    assert!(largest(&values(&s, "S_n")?) < 1e-13);
+    let f = cable_forces(&c, &cable_gl, &mat, &s, &u)?;
+    assert!(largest(&cable_vector(&c, &f)?) < 1e-13);
+
+    // The linear strain of the same turn shortens the bars: cos θ − 1 along
+    // the axis-free part of each.
+    let (linear, mat) = bars(&c, StrainMeasure::Linear)?;
+    let (_, n) = state(&linear, &mat, &u)?;
+    assert!(largest(&values(&n, "n")?) > 1.0);
+    Ok(())
+}
+
+#[test]
+fn a_moved_bar_carries_its_forces_in_closed_form() -> Result<()> {
+    let c = cable()?;
+    let (cable_gl, mat) = bars(&c, StrainMeasure::GreenLagrange)?;
+    let motion = cable_motion();
+    let u = cable_displacement(&c, &motion)?;
+    let (_, s) = state(&cable_gl, &mat, &u)?;
+    let grad = deformation(&u, &c.fes, StrainMeasure::Gradient)?;
+    let pk1 = stress_measure(&s, &grad, StressMeasure::FirstPiolaKirchhoff)?;
+    let cauchy = stress_measure(&s, &grad, StressMeasure::Cauchy)?;
+    let pk2 = stress_measure(&s, &grad, StressMeasure::SecondPiolaKirchhoff)?;
+
+    let mut nominal = Vec::new();
+    for (cell, bar) in BARS.into_iter().enumerate() {
+        let (rest, chord, e) = bar_by_hand(&motion, bar);
+        let s_n = YOUNG * AREA * e;
+        assert!(e.abs() > 1e-2, "bar {cell} is strained");
+        assert!((on_bar(&s, cell, "S_n")? - s_n).abs() < 1e-12 * YOUNG);
+        assert_eq!(on_bar(&pk2, cell, "S_n")?, on_bar(&s, cell, "S_n")?);
+        // The true force: S_n λ, with λ = l/L.
+        let n = on_bar(&cauchy, cell, "n")?;
+        assert!((n - s_n * norm(chord) / rest).abs() < 1e-12 * YOUNG);
+        // The nominal force vector: S_n along the current chord over L.
+        let p: Vec<f64> = chord.iter().map(|x| s_n * x / rest).collect();
+        for (a, name) in ["P_x", "P_y", "P_z"].iter().enumerate() {
+            assert!((on_bar(&pk1, cell, name)? - p[a]).abs() < 1e-12 * YOUNG);
+        }
+        nominal.push(p);
+    }
+    // −P at the start of a bar, +P at its end.
+    let f = cable_vector(&c, &internal_forces(&cable_gl, &pk1, &u, &mat)?)?;
+    for a in 0..3 {
+        let expected = [-nominal[0][a], nominal[0][a] - nominal[1][a], nominal[1][a]];
+        for (k, value) in expected.iter().enumerate() {
+            assert!((f[3 * k + a] - value).abs() < 1e-12 * YOUNG);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn the_bar_forces_are_the_derivative_of_their_stored_energy() -> Result<()> {
+    let c = cable()?;
+    let (cable_gl, mat) = bars(&c, StrainMeasure::GreenLagrange)?;
+    // W = Σ ½ E A L e², by hand.
+    let energy = |u: &[[f64; 3]]| -> f64 {
+        BARS.into_iter()
+            .map(|bar| {
+                let (rest, _, e) = bar_by_hand(u, bar);
+                0.5 * YOUNG * AREA * rest * e * e
+            })
+            .sum()
+    };
+    let motion = cable_motion();
+    let u = cable_displacement(&c, &motion)?;
+    let (_, s) = state(&cable_gl, &mat, &u)?;
+    let f = cable_vector(&c, &cable_forces(&c, &cable_gl, &mat, &s, &u)?)?;
+
+    let h = 1e-6;
+    let (mut worst, scale) = (0.0_f64, largest(&f));
+    for k in 0..CABLE.len() {
+        for a in 0..3 {
+            let (mut plus, mut minus) = (motion.clone(), motion.clone());
+            plus[k][a] += h;
+            minus[k][a] -= h;
+            let derivative = (energy(&plus) - energy(&minus)) / (2.0 * h);
+            worst = worst.max((derivative - f[3 * k + a]).abs());
+        }
+    }
+    assert!(scale > 1.0, "the cable is loaded");
+    assert!(
+        worst < 1e-6 * scale,
+        "|∂W/∂u − f_int| = {worst}, scale {scale}"
+    );
+    Ok(())
+}
+
+/// Evaluate `build` with the configuration `x = X + u` of the cable active.
+fn cable_on_current<T>(c: &Cable, u: &NodeField, build: impl FnOnce() -> Result<T>) -> Result<T> {
+    let current = c.coords.write().add_config("current");
+    let names = Some(vec![
+        "u_x".to_string(),
+        "u_y".to_string(),
+        "u_z".to_string(),
+    ]);
+    ops_coords::displace_from(u, 0, current, names)?;
+    ops_coords::in_config(&c.coords, current, build)
+}
+
+/// Column `(k, a)` of `K` and of the finite-difference derivative of `f`.
+fn cable_columns(
+    c: &Cable,
+    k_mat: &Matrix,
+    motion: &[[f64; 3]],
+    (k, a): (usize, usize),
+    f: impl Fn(&NodeField) -> Result<NodeField>,
+) -> Result<(Vec<f64>, Vec<f64>)> {
+    let mut unit = vec![[0.0; 3]; CABLE.len()];
+    unit[k][a] = 1.0;
+    let column = cable_vector(c, &(k_mat * &cable_displacement(c, &unit)?)?)?;
+    let h = 1e-6;
+    let (mut plus, mut minus) = (motion.to_vec(), motion.to_vec());
+    plus[k][a] += h;
+    minus[k][a] -= h;
+    let fp = cable_vector(c, &f(&cable_displacement(c, &plus)?)?)?;
+    let fm = cable_vector(c, &f(&cable_displacement(c, &minus)?)?)?;
+    let derivative = fp
+        .iter()
+        .zip(&fm)
+        .map(|(p, m)| (p - m) / (2.0 * h))
+        .collect();
+    Ok((derivative, column))
+}
+
+#[test]
+fn the_bar_operator_is_the_derivative_of_its_forces_where_theory_says() -> Result<()> {
+    let c = cable()?;
+    let (cable_gl, mat) = bars(&c, StrainMeasure::GreenLagrange)?;
+
+    // After a rigid turn (about z): the stiffness on the current configuration
+    // is the tangent, E A / L along the turned bar.
+    let (s, co) = 0.8_f64.sin_cos();
+    let turn: Vec<[f64; 3]> = CABLE
+        .iter()
+        .map(|x| {
+            [
+                co * x[0] - s * x[1] - x[0],
+                s * x[0] + co * x[1] - x[1],
+                0.0,
+            ]
+        })
+        .collect();
+    let u = cable_displacement(&c, &turn)?;
+    let k_current = cable_on_current(&c, &u, || matrix::stiffness(&cable_gl, &mat))?;
+    for k in 0..CABLE.len() {
+        for a in 0..3 {
+            let (derivative, column) = cable_columns(&c, &k_current, &turn, (k, a), |v| {
+                let (_, s) = state(&cable_gl, &mat, v)?;
+                cable_forces(&c, &cable_gl, &mat, &s, v)
+            })?;
+            let (worst, scale) = compare(&derivative, &column);
+            assert!(
+                worst < 1e-6 * scale.max(1.0),
+                "stiffness ({k}, {a}): {worst} of {scale}"
+            );
+        }
+    }
+
+    // At frozen S_n, ∂(S_n F t₀)/∂x = S_n/L I = n/l I: the geometric stiffness
+    // on the current configuration, every direction stiffened, the axial one too.
+    let motion = cable_motion();
+    let u = cable_displacement(&c, &motion)?;
+    let (_, frozen) = state(&cable_gl, &mat, &u)?;
+    let grad = deformation(&u, &c.fes, StrainMeasure::Gradient)?;
+    let true_force = stress_measure(&frozen, &grad, StressMeasure::Cauchy)?;
+    let k_sigma = cable_on_current(&c, &u, || matrix::geometric(&cable_gl, &mat, &true_force))?;
+    for k in 0..CABLE.len() {
+        for a in 0..3 {
+            let (derivative, column) = cable_columns(&c, &k_sigma, &motion, (k, a), |v| {
+                cable_forces(&c, &cable_gl, &mat, &frozen, v)
+            })?;
+            let (worst, scale) = compare(&derivative, &column);
+            assert!(scale > 1e-1, "the cable is stressed");
+            assert!(
+                worst < 1e-6 * scale,
+                "geometric ({k}, {a}): {worst} of {scale}"
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn what_a_bar_cannot_read_or_become_is_refused() -> Result<()> {
+    let c = cable()?;
+    // Along t₀, ½ ln C is ln λ only while t₀ is an eigenvector of C.
+    assert!(model::truss(&c.fes, StrainMeasure::Hencky).is_err());
+    assert!(model::truss(&c.fes, StrainMeasure::Gradient).is_err());
+    // An axial force has no Kirchhoff nor Hencky measure.
+    let (cable_gl, mat) = bars(&c, StrainMeasure::GreenLagrange)?;
+    let u = cable_displacement(&c, &cable_motion())?;
+    let (_, s) = state(&cable_gl, &mat, &u)?;
+    let grad = deformation(&u, &c.fes, StrainMeasure::Gradient)?;
+    assert!(stress_measure(&s, &grad, StressMeasure::Kirchhoff).is_err());
+    assert!(stress_measure(&s, &grad, StressMeasure::Hencky).is_err());
+    Ok(())
+}

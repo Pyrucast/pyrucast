@@ -151,3 +151,31 @@ assert coords.active == 0
 assert abs(tournes[0].value(0, 0, "V1X") - c60) < 1e-12
 assert abs(tournes[0].value(0, 0, "V1Y") - s60) < 1e-12
 assert tournes[0].value(0, 0, "k_1") == 10.0
+
+# Une barre de longueur L = 1 le long de x, étirée à λ = 1,5 puis tournée de 60°.
+cb = pc.Coords(2)
+a, b = cb.add_node([0.0, 0.0]), cb.add_node([1.0, 0.0])
+segment = pc.Mesh(cb, "SEG2")
+segment.unit().add_cell([a, b])
+fes_barre = pc.FiniteElementSpace(segment)
+deplacement = pc.NodeField(segment, ["u_x", "u_y"])
+deplacement[0].set_value(b, "u_x", 1.5 * c60 - 1.0)
+deplacement[0].set_value(b, "u_y", 1.5 * s60)
+
+# ANCHOR: barre
+# A cable: the bar's law reads Green–Lagrange along its reference direction,
+# (l² − L²)/2L², and writes the second Piola–Kirchhoff axial force S_n.
+cable = pc.model.truss(fes_barre, strain_measure="green_lagrange")
+section = pc.element_field.material_field(cable, [("E", 100.0), ("A", 2.0)])
+S_n = cable.integrate_behavior(cable.strain(deplacement, section), section)
+F = pc.element_field.deformation(deplacement, fes_barre, "gradient")
+P = pc.element_field.stress_measure(S_n, F, "pk1")  # S_n F t₀, along the chord
+n = pc.element_field.stress_measure(S_n, F, "cauchy")  # λ S_n, the true force
+f_int = cable.internal_forces(P, deplacement, section)  # −P at a, +P at b
+# ANCHOR_END: barre
+s_n = 100.0 * 2.0 * (1.5**2 - 1.0) / 2.0
+assert abs(S_n[0].value(0, 0, "S_n") - s_n) < 1e-10
+assert abs(n[0].value(0, 0, "n") - 1.5 * s_n) < 1e-10
+assert abs(P[0].value(0, 0, "P_x") - s_n * 1.5 * c60) < 1e-10
+assert abs(f_int.value(b, "f_y") - s_n * 1.5 * s60) < 1e-10
+assert abs(f_int.value(a, "f_y") + s_n * 1.5 * s60) < 1e-10

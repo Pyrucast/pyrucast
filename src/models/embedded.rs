@@ -637,7 +637,7 @@ mod tests {
     fn cible_barre(host: &Mesh) -> crate::containers::model::Model {
         let fes =
             crate::containers::finite_element_space::FiniteElementSpace::lagrange1(host).unwrap();
-        crate::ops::model::truss(&fes).unwrap()
+        crate::ops::model::truss(&fes, crate::ops::element_field::StrainMeasure::Linear).unwrap()
     }
     use super::*;
     use crate::atoms::{ElementType, Node};

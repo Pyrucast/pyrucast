@@ -16,7 +16,7 @@ TRANSLIN            ``heat.heat_step_linear``
 DUPONT2             ``heat.heat_step_dupont``
 UNPAS               ``mechanical_step``
 ACT3                ``anderson.anderson_correction``
-AUTOPILO, PILOINDI  ``control.automatic_control``, ``control.indirect_control``
+AUTOPILO, PILOINDI  ``control.automatic_control`` (or the hook ``automatic_measure``), ``control.indirect_control``
 ==================  ===============================================
 
 The parts of ``mechanical_step`` live in ``pyrucast.stepping.mechanics``:

@@ -72,7 +72,11 @@ _HEAT_SCHEMES = ("nonlinear", "linear", "dupont")
 # ``after_heat`` and ``after_mechanics`` also receive the step's outcome (what
 # it reached, not yet committed); the two load hooks receive the time and
 # return a ``NodeField`` added to the loads, or ``None``; the material hook
-# returns the materials to use, or ``None`` to keep them.
+# returns the materials to use, or ``None`` to keep them. ``automatic_measure``
+# (Cast3M AUTOPILO) replaces the size of a step under automatic control: it
+# also receives the displacement increment and its elastic part ``α Δu_el``,
+# and returns a number — signed, a negative size turning the increment round,
+# which is how a quantity chosen to grow drives the path past a limit point.
 HOOKS = (
     "after_mechanics",
     "after_heat",
@@ -80,6 +84,7 @@ HOOKS = (
     "extra_mechanical_load",
     "extra_heat_load",
     "heat_material_update",
+    "automatic_measure",
 )
 
 
@@ -159,6 +164,11 @@ def resolve_options(data):
             "with `adaptive_step` or `automatic` control"
         )
     automatic = bool(given["automatic"])
+    if "automatic_measure" in data.get("hooks", {}) and not automatic:
+        raise ValueError(
+            "step_by_step: the `automatic_measure` hook sizes the steps of `automatic` "
+            "control, which is off"
+        )
     indirect = data.get("indirect_control")
     if automatic and indirect is not None:
         raise ValueError(

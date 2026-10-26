@@ -258,6 +258,7 @@ def test_coupling_passes_settle_on_the_one_pass_answer():
         ({"friction": True}, "friction"),
         ({"coherence": True, "adaptive_step": True}, "coherence"),
         ({"heat_scheme": "explicit"}, "heat_scheme"),
+        ({"hooks": {"automatic_measure": lambda *_: 1.0}}, "automatic_measure"),
     ],
 )
 def test_options_refuse_what_they_cannot_do(extra, message):

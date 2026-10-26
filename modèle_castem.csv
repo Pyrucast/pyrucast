@@ -145,7 +145,7 @@ MECANIQUE - impédance;IMPEDANCE ELASTIQUE;Impédance purement élastique linéa
 MECANIQUE - impédance;IMPEDANCE VOIGT;Frein visqueux en parallèle d'un ressort linéaire;—;—;—
 MECANIQUE - impédance;IMPEDANCE REUSS;Frein visqueux en série avec un ressort linéaire;—;—;—
 MECANIQUE - impédance;IMPEDANCE COMPLEXE;Élastique + frein visqueux, restreint au calcul fréquentiel;—;—;—
-MECANIQUE - élément fini;BARR (SEG2);Barre (traction/compression seule);mechanical;—;model.truss (E, A)
+MECANIQUE - élément fini;BARR (SEG2);Barre (traction/compression seule);mechanical;—;model.truss (E, A) · en grands déplacements strain_measure="green_lagrange" (effort S_n, vecteur nominal P_* par element_field.stress_measure)
 MECANIQUE - élément fini;BAEX (SEG2);Barre excentrée;—;—;—
 MECANIQUE - élément fini;POUT (SEG2/SEG3);Poutre d'Euler-Bernoulli (2D ou 3D);mechanical;—;model.bernoulli (espace HERMITE3 — configuration 1-D/plan/spatial déduite du maillage) — exacte aux nœuds
 MECANIQUE - élément fini;TIMO (SEG2);Poutre de Timoshenko (cisaillement transverse);mechanical;—;model.timoshenko (espace MODEL_EMBEDDED — configuration 1-D/plan/spatial déduite du maillage) — élément exact, corrigé par Φ

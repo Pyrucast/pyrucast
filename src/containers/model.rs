@@ -489,8 +489,10 @@ impl SubModel {
         ))
     }
 
-    /// Truss / bar sub-model on a `SEG2` FE subspace. Material data (`E`, `A`)
-    /// is supplied at assembly time. See [`truss::Truss::new`].
+    /// Truss / bar sub-model on a `SEG2` FE subspace, its law reading the
+    /// strain `measure` (`linear`, or `green_lagrange` in large displacements).
+    /// Material data (`E`, `A`) is supplied at assembly time. See
+    /// [`truss::Truss::new`] and [`truss::Truss::with_measure`].
     ///
     /// ```
     /// # use pyrucast::aggregate::Aggregate;
@@ -518,12 +520,15 @@ impl SubModel {
     /// # let mut b = SubMesh::new(coords.clone(), ElementType::SEG2);
     /// # b.add_cell(&[n[0].id(), n[1].id()])?;
     /// # let barres = FiniteElementSpace::lagrange1(&Mesh::from_submesh(b))?;
-    /// let m = SubModel::truss(barres.get(0)?)?;
+    /// # use pyrucast::ops::element_field::StrainMeasure;
+    /// let m = SubModel::truss(barres.get(0)?, StrainMeasure::Linear)?;
     /// assert_eq!(m.material_components(), Some(vec!["E".to_string(), "A".to_string()]));
     /// # Ok::<(), pyrucast::PyrucastError>(())
     /// ```
-    pub fn truss(fespace: Handle<SubFiniteElementSpace>) -> Result<Self> {
-        Ok(SubModel::Truss(truss::Truss::new(fespace)?))
+    pub fn truss(fespace: Handle<SubFiniteElementSpace>, measure: StrainMeasure) -> Result<Self> {
+        Ok(SubModel::Truss(
+            truss::Truss::new(fespace)?.with_measure(measure)?,
+        ))
     }
 
     /// **Isotropic** linear-elasticity sub-model on an FE subspace, with the

@@ -7,7 +7,11 @@ means by it — no value is ever read or written one node at a time.
 from .. import node_field
 from .._pyrucast import NodeField
 
-__all__ = ["carried", "infinity_norm", "part", "shifted", "uniform"]
+__all__ = ["STRAIN_PREFIXES", "carried", "infinity_norm", "part", "shifted", "uniform"]
+
+# What the loop reads as a strain: the measure each law reads — linear,
+# Green–Lagrange or Hencky.
+STRAIN_PREFIXES = ("eps", "E_", "H_")
 
 
 def carried(field):

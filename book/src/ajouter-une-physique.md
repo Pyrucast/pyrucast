@@ -71,6 +71,11 @@ de `src/lib.rs` (le module `_pyrucast` est plat).
 attribut de stub, le déballage des enveloppes Python : `physics_operator!` les
 émet. Un auteur de physique n'ouvre jamais `src/py/`.
 
+**Un argument peut porter une valeur par défaut**, `arg: T = défaut`, comme la
+mesure de la barre ci-dessous. Rust n'en a pas : son appelant passe
+l'argument ; la face Python le prend en mot-clé, avec cette valeur. Même nom,
+l'idiome de chaque langage.
+
 ```rust
 {{#include ../../src/models/truss.rs:operator}}
 ```

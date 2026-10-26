@@ -9,6 +9,7 @@ use pyrucast::containers::mesh::{Mesh, SubMesh};
 use pyrucast::containers::model::Model;
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
+use pyrucast::ops::element_field::StrainMeasure;
 use pyrucast::ops::model;
 use pyrucast::Result;
 
@@ -36,7 +37,7 @@ fn truss_consistent_mass_matches_closed_form() -> Result<()> {
     const RHO: f64 = 2.0;
     const AREA: f64 = 3.0;
     let (fes, a, b, len) = bar_2d(3.0, 4.0)?; // L = 5
-    let model = model::truss(&fes)?;
+    let model = model::truss(&fes, StrainMeasure::Linear)?;
     let materials = pyrucast::ops::element_field::material_field(
         &model,
         &[("E", 1.0), ("A", AREA), ("rho", RHO)],
@@ -61,48 +62,49 @@ fn truss_consistent_mass_matches_closed_form() -> Result<()> {
 }
 
 #[test]
-fn truss_geometric_stiffens_transverse_only() -> Result<()> {
+fn truss_geometric_stiffens_every_direction() -> Result<()> {
     const N: f64 = 7.0;
     let (fes, a, b, _l) = bar_2d(1.0, 0.0)?; // axis = x, L = 1
-    let model = model::truss(&fes)?;
+    let model = model::truss(&fes, StrainMeasure::Linear)?;
     let materials =
         pyrucast::ops::element_field::material_field(&model, &[("E", 1.0), ("A", 1.0)])?;
     let state = axial_force(&fes, N)?;
 
     let kg = pyrucast::ops::matrix::geometric(&model, &materials, &state)?;
     let tol = 1e-12;
-    // Axis is x ⇒ transverse is y: (N/L)[[1,-1],[-1,1]] on u_y, nothing on u_x.
-    assert!((kg.get(a.id(), "f_y", a.id(), "u_y").unwrap() - N).abs() < tol);
-    assert!((kg.get(a.id(), "f_y", b.id(), "u_y").unwrap() + N).abs() < tol);
-    assert!(kg.get(a.id(), "f_x", a.id(), "u_x").unwrap().abs() < tol);
+    // (N/L)[[1,-1],[-1,1]] on each of u_x and u_y — the axial one too, as the
+    // continuum's ∫ ∇N·σ∇N dv · I — and no coupling between them.
+    for (f, u) in [("f_x", "u_x"), ("f_y", "u_y")] {
+        assert!((kg.get(a.id(), f, a.id(), u).unwrap() - N).abs() < tol);
+        assert!((kg.get(a.id(), f, b.id(), u).unwrap() + N).abs() < tol);
+    }
     assert!(kg.get(a.id(), "f_x", a.id(), "u_y").unwrap().abs() < tol);
     Ok(())
 }
 
 #[test]
-fn truss_geometric_inclined_transverse_projector() -> Result<()> {
+fn truss_geometric_inclined_is_isotropic() -> Result<()> {
     const N: f64 = 5.0;
     let (fes, a, _b, len) = bar_2d(3.0, 4.0)?; // c = (0.6, 0.8)
-    let model = model::truss(&fes)?;
+    let model = model::truss(&fes, StrainMeasure::Linear)?;
     let materials =
         pyrucast::ops::element_field::material_field(&model, &[("E", 1.0), ("A", 1.0)])?;
     let state = axial_force(&fes, N)?;
 
     let kg = pyrucast::ops::matrix::geometric(&model, &materials, &state)?;
-    let (cx, cy) = (0.6, 0.8);
     let k = N / len;
     let tol = 1e-12;
-    // Diagonal block at A = (N/L)·(I − c⊗c).
-    assert!((kg.get(a.id(), "f_x", a.id(), "u_x").unwrap() - k * (1.0 - cx * cx)).abs() < tol);
-    assert!((kg.get(a.id(), "f_x", a.id(), "u_y").unwrap() - k * (-cx * cy)).abs() < tol);
-    assert!((kg.get(a.id(), "f_y", a.id(), "u_y").unwrap() - k * (1.0 - cy * cy)).abs() < tol);
+    // Diagonal block at A = (N/L)·I, whatever the direction of the bar.
+    assert!((kg.get(a.id(), "f_x", a.id(), "u_x").unwrap() - k).abs() < tol);
+    assert!(kg.get(a.id(), "f_x", a.id(), "u_y").unwrap().abs() < tol);
+    assert!((kg.get(a.id(), "f_y", a.id(), "u_y").unwrap() - k).abs() < tol);
     Ok(())
 }
 
 #[test]
 fn truss_mass_requires_density() -> Result<()> {
     let (fes, _a, _b, _l) = bar_2d(1.0, 0.0)?;
-    let model = model::truss(&fes)?;
+    let model = model::truss(&fes, StrainMeasure::Linear)?;
     let materials =
         pyrucast::ops::element_field::material_field(&model, &[("E", 1.0), ("A", 1.0)])?;
     assert!(pyrucast::ops::matrix::mass(&model, &materials).is_err());

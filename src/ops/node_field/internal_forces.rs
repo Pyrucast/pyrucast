@@ -435,7 +435,13 @@ mod tests {
 
         let mut model = Model::empty();
         model
-            .add_sub(Handle::new(SubModel::truss(fes.get(0).unwrap()).unwrap()))
+            .add_sub(Handle::new(
+                SubModel::truss(
+                    fes.get(0).unwrap(),
+                    crate::ops::element_field::StrainMeasure::Linear,
+                )
+                .unwrap(),
+            ))
             .unwrap();
         let materials = material_field(&model, &[("E", e), ("A", area)]).unwrap();
 

@@ -5,7 +5,8 @@ reads it off them. Every test has an answer in closed form, independent of
 the loop: a rigid rotation that strains nothing, the hydrostatic state a
 follower pressure leaves, the force of a perfectly plastic bar in Hencky
 strain, the heat through a stretched bar, an oriented conduction that turns
-with the part, an exchange on a stretched face.
+with the part, an exchange on a stretched face, a truss snapping through,
+a taut string under a weight.
 """
 
 import math
@@ -442,6 +443,130 @@ def test_the_capacity_stays_on_the_reference(scheme):
                 assert temperature.value(node(i, j), "T") == pytest.approx(
                     expected, rel=1e-6
                 )
+
+
+def _bars(points, cells):
+    """Bars in Green–Lagrange between ``points``: (nodes, mesh, bars)."""
+    c = pc.Coords(2)
+    nodes = [c.add_node(p) for p in points]
+    mesh = pc.Mesh(c, "SEG2")
+    for a, b in cells:
+        mesh.unit().add_cell([nodes[a], nodes[b]])
+    bars = pc.model.truss(pc.FiniteElementSpace(mesh), strain_measure="green_lagrange")
+    return nodes, mesh, bars
+
+
+def test_a_von_mises_truss_snaps_through_under_automatic_control():
+    """Two bars from (∓a, 0) to the apex (0, h), pushed down at the apex. With
+    w the apex deflection, l² = a² + (h − w)² and L² = a² + h², each bar
+    carries S_n = EA (l² − L²)/2L² along the chord, and the load is
+    P(w) = −2 S_n (h − w)/L: up to P_max at h − w = h/√3, down through zero
+    when the bars lie flat, to −P_max, then up again. A size measure that
+    grows with w — the apex deflection, signed — takes the automatic control
+    through both limit points, as Cast3M's own test redefines AUTOPILO."""
+    a, h, young, area, p_end = 1.0, 0.2, 1000.0, 1.0, 5.0
+    (left, apex, right), _, bars = _bars(
+        [[-a, 0.0], [0.0, h], [a, 0.0]], [(0, 1), (2, 1)]
+    )
+    model = bars
+    for nodes, variable in (
+        ([left, right], "u_x"),
+        ([left, right], "u_y"),
+        ([apex], "u_x"),
+    ):
+        model = model | _fix(bars, nodes, variable)[0]
+    push = pc.NodeField(pc.mesh.poi1_from_nodes([apex]), ["f_y"])
+    push[0].set_value(apex, "f_y", -p_end)
+    data = {
+        "model": model,
+        "times": [0.0, 1.0],
+        "materials": pc.element_field.material_field(
+            model, [("E", young), ("A", area)]
+        ),
+        # Past the first limit point the load falls below zero: so does the time.
+        "loads": pc.Evolution([(-1.0, push * -1.0), (1.0, push)]),
+        "automatic": True,
+        "automatic_target": 0.01,
+        "precision": 1e-10,
+    }
+    # Each step lands where the control puts it, not at a time to save: the
+    # path is read as it goes.
+    path = []
+    data["hooks"] = {
+        "automatic_measure": lambda d, s, du, el: -du.value(apex, "u_y"),
+        "after_step": lambda d, s: path.append(
+            (-s.solution.value(apex, "u_y"), p_end * s.time, s.converged)
+        ),
+    }
+    pc.stepping.step_by_step(data)
+
+    rest = math.hypot(a, h)
+    p_max = 2.0 * young * area * h**3 / (3.0 * math.sqrt(3.0) * rest**3)
+
+    def load(w):
+        return young * area * (h * h - (h - w) ** 2) * (h - w) / rest**3
+
+    assert all(converged for _, _, converged in path)
+    for w, p, _ in path:
+        assert p == pytest.approx(load(w), abs=1e-8 * p_max)
+    # Over the top, through the flat bars, back from the bottom, to the end.
+    assert max(p for w, p, _ in path if w < h) == pytest.approx(p_max, rel=1e-2)
+    assert min(p for _, p, _ in path) == pytest.approx(-p_max, rel=1e-2)
+    assert path[-1][1] == pytest.approx(p_end)
+    assert path[-1][0] > 2.0 * h
+
+
+@pytest.mark.parametrize("geometric", [True, False])
+def test_a_taut_string_carries_a_weight_through_its_geometric_stiffness(geometric):
+    """A string of two bars, its ends pulled apart by δ before the weight
+    hangs from its middle. Straight, it has no transverse stiffness but the
+    one its tension gives: without K_σ the operator is singular. With it, the
+    deflection w is the exact equilibrium 2 S_n w / L = P, with
+    S_n = EA ((L + δ)² + w² − L²)/2L², solved here by a scalar Newton."""
+    half, delta, young, area, weight = 1.0, 0.01, 1000.0, 1.0, 2.0
+    (left, middle, right), mesh, string = _bars(
+        [[-half, 0.0], [0.0, 0.0], [half, 0.0]], [(0, 1), (1, 2)]
+    )
+    held_left, at_left = _fix(string, [left], "u_x")
+    held_right, at_right = _fix(string, [right], "u_x")
+    model = string | held_left | held_right | _fix(string, [left, right], "u_y")[0]
+    # Taut before it is loaded: the initial state is the stretched string.
+    stretch = pc.NodeField(mesh, ["u_x", "u_y"])
+    stretch[0].set_value(left, "u_x", -delta)
+    stretch[0].set_value(right, "u_x", delta)
+    own = pc.element_field.material_field(string, [("E", young), ("A", area)])
+    tension = string.integrate_behavior(string.strain(stretch, own), own)
+    pulled = _on(at_left, "imposed_u_x", -delta) | _on(at_right, "imposed_u_x", delta)
+    hung = pc.NodeField(pc.mesh.poi1_from_nodes([middle]), ["f_y"])
+    hung[0].set_value(middle, "f_y", -weight)
+    data = {
+        "model": model,
+        "times": [0.0, 0.25, 0.5, 0.75, 1.0],
+        "materials": pc.element_field.material_field(
+            model, [("E", young), ("A", area)]
+        ),
+        "loads": pc.Evolution([(0.0, pulled | hung * 0.0), (1.0, pulled | hung)]),
+        "initial": {"displacement": stretch, "behaviour": tension},
+        "geometric_stiffness": geometric,
+        "precision": 1e-10,
+    }
+    if not geometric:
+        with pytest.raises(RuntimeError, match="singular"):
+            pc.stepping.step_by_step(data)
+        return
+    pc.stepping.step_by_step(data)
+
+    def deflection(p):
+        w = 0.1
+        for _ in range(50):
+            s = young * area * ((half + delta) ** 2 + w * w - half**2) / (2.0 * half**2)
+            ds = young * area * w / half**2
+            w -= (2.0 * s * w / half - p) / (2.0 * (s + w * ds) / half)
+        return w
+
+    for record in data["results"][1:]:
+        w = -record["displacement"].value(middle, "u_y")
+        assert w == pytest.approx(deflection(weight * record["time"]), rel=1e-8)
 
 
 def test_what_large_displacements_do_not_offer_is_refused():

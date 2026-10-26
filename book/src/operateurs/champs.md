@@ -357,7 +357,11 @@ une par zone ; `target` nomme celle qu'on veut (`"cauchy"`, `"kirchhoff"`,
 `"pk1"`, `"pk2"`, `"hencky"`). C'est
 ainsi que la contrainte lagrangienne d'une loi en grandes transformations
 devient la `P` que lisent les forces internes, ou la Cauchy des résultats —
-la moitié « contraintes » de Cast3M `CONF`. Formules et exemple :
+la moitié « contraintes » de Cast3M `CONF`. Une **barre** se reconnaît à son
+effort de Piola–Kirchhoff 2 axial `S_n` : `"pk1"` en fait le vecteur effort
+nominal `P_x, P_y(, P_z) = S_n F t₀`, `"cauchy"` l'effort vrai `n = λ S_n`
+(`t₀` sa direction sur la configuration active, la référence, comme `F`).
+Formules et exemples :
 [Grandes transformations](../mecanique/grandes-transformations.md).
 
 ### `rotate_frame(field, gradient)` → `ElementField`

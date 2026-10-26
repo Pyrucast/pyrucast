@@ -61,8 +61,8 @@ def _strain_measure(domain, fespace, displacement_names, materials):
     large-transformation measure every law of the domain shares. The laws
     declare it — what ``strain`` produces at rest carries its name (``E_*``,
     ``H_*``) — the loop only reads it. Refuses a domain mixing a measure of
-    large transformations with anything else: bars, beams and shells have no
-    large-transformation formulation yet."""
+    large transformations with anything else: beams and shells have no
+    large-transformation formulation yet, and a bar reads Green–Lagrange."""
     rest = uniform(fespace.mesh(), displacement_names, 0.0)
     names = carried(element_field.strain(domain, rest, materials))
     prefixes = {name.split("_")[0] for name in names}
@@ -72,8 +72,8 @@ def _strain_measure(domain, fespace, displacement_names, materials):
     if len(prefixes) > 1:
         raise ValueError(
             "step_by_step: in large displacements every mechanical law reads the same "
-            f"strain measure, and these read {sorted(prefixes)} — bars, beams and shells "
-            "have no large-transformation formulation yet"
+            f"strain measure, and these read {sorted(prefixes)} — beams and shells have no "
+            "large-transformation formulation yet, and a bar reads green_lagrange"
         )
     return _MEASURES[finite.pop()]
 

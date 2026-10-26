@@ -6,7 +6,7 @@ model's own strain operator.
 """
 
 from .. import element_field, field, node_field
-from .fields import part
+from .fields import STRAIN_PREFIXES, part
 
 __all__ = [
     "AutomaticControl",
@@ -16,12 +16,16 @@ __all__ = [
 ]
 
 _BIG = 1e20
+_TINY = 1e-300
 
 
 def _largest_strain(problem, increment, materials):
-    """``max |ε|`` over the strain components the increment produces."""
+    """``max |ε|`` over the strain components the increment produces, in the
+    measure the laws read."""
     strain = element_field.strain(problem.mechanics_domain, increment, materials)
-    names = [n for zone in strain for n in zone.components() if n.startswith("eps")]
+    names = [
+        n for zone in strain for n in zone.components() if n.startswith(STRAIN_PREFIXES)
+    ]
     if not names:
         return 0.0
     magnitude = strain.abs()
@@ -89,20 +93,27 @@ class AutomaticControl:
     """The automatic control of one substep (Cast3M ``AUTOMATIQUE``).
 
     The load applied is the fraction ``α`` of the step's increment. After each
-    solve the displacement increment is scaled so that its strain measure
-    (``automatic_control``) is ``target`` — divided by 3 every 20 iterations
-    when it struggles; after each balance ``α`` is moved so that the residual
-    becomes orthogonal to the increment, ``α ← α − (r·Δu)/(R·Δu)`` with ``R``
-    the residual of the full increment. The step ends at the ``α`` reached.
+    solve the displacement increment is scaled so that its size is ``target``
+    — divided by 3 every 20 iterations when it struggles; after each balance
+    ``α`` is moved so that the residual becomes orthogonal to the increment,
+    ``α ← α − (r·Δu)/(R·Δu)`` with ``R`` the residual of the full increment.
+    The step ends at the ``α`` reached.
+
+    The size is the strain measure ``automatic_control``, or what ``measure``
+    makes of the increment and its elastic part ``α Δu_el`` (the hook
+    ``automatic_measure``). A negative size turns the increment round: a
+    quantity chosen to grow keeps the path going past a limit point, where
+    the operator's response changes direction.
     """
 
-    def __init__(self, problem, fraction, target, elastic, nominal, work):
+    def __init__(self, problem, fraction, target, elastic, nominal, work, measure=None):
         self.problem = problem
         self.fraction = fraction
         self.target = target
         self.elastic = elastic
         self.nominal = nominal
         self.work = work
+        self.measure = measure
         self.reductions = 0
         self.divisor = 1.0
         self.scale = 1.0
@@ -116,10 +127,16 @@ class AutomaticControl:
         if self.reductions < i // 20:
             self.reductions += 1
             self.divisor *= 3.0
-        size = automatic_control(
-            self.problem, moved, self.elastic, self.fraction, materials
-        )
-        scale = (self.target / self.divisor) / max(size, 1e-300)
+        if self.measure is None:
+            size = automatic_control(
+                self.problem, moved, self.elastic, self.fraction, materials
+            )
+        else:
+            elastic = None if self.elastic is None else self.elastic * self.fraction
+            size = self.measure(moved, elastic)
+        if abs(size) < _TINY:
+            size = _TINY
+        scale = (self.target / self.divisor) / size
         if scale > 1.0 and self.fraction > 0.0:
             scale = min(scale, 1.0 / self.fraction)
         self.scale = scale

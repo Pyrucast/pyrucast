@@ -36,7 +36,7 @@ use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
 use pyrucast::models::shell::ShellModel;
-use pyrucast::ops::element_field::{behavior, material_field, strain};
+use pyrucast::ops::element_field::{behavior, material_field, strain, StrainMeasure};
 use pyrucast::ops::node_field::internal_forces;
 use pyrucast::ops::solver::lu::solve;
 use pyrucast::ops::{mesh, model};
@@ -290,7 +290,7 @@ fn truss_internal_forces_still_match_k_times_u() -> Result<()> {
         &[&[0.0, 0.0], &[1.2, 0.9], &[2.4, 1.8]],
         Interpolation::Lagrange1,
     )?;
-    let model = model::truss(&fes)?;
+    let model = model::truss(&fes, StrainMeasure::Linear)?;
     let materials = material_field(&model, &[("E", 210_000.0), ("A", 1.0e-2)])?;
 
     let support = Handle::new(SubMesh::poi1_from_nodes(&nodes)?);

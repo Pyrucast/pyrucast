@@ -18,6 +18,7 @@ use pyrucast::containers::model::Model;
 use pyrucast::containers::node_field::{NodeField, SubNodeField};
 use pyrucast::coords::Coords;
 use pyrucast::handle::Handle;
+use pyrucast::ops::element_field::StrainMeasure;
 use pyrucast::ops::mesh;
 use pyrucast::ops::model;
 use pyrucast::ops::solver::lu::solve;
@@ -47,7 +48,7 @@ fn truss_bar_recovers_axial_elongation() -> Result<()> {
         let multiplier = mesh::barycenter(&imposed)?;
         model::dirichlet(target, var, &imposed, &multiplier, Default::default())
     };
-    let mut model = model::truss(&fes)?;
+    let mut model = model::truss(&fes, StrainMeasure::Linear)?;
     model = model.union(&clamp(&model, &n0, "u_x")?)?;
     model = model.union(&clamp(&model, &n0, "u_y")?)?;
     model = model.union(&clamp(&model, &n1, "u_y")?)?;

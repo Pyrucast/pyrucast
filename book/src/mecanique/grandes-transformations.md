@@ -187,6 +187,46 @@ K_σ ne change donc que la convergence, sauf là où elle donne la seule raideur
 (un câble ou une membrane tendus, transversalement) et à l'approche du
 flambement, où `K + K_σ` devient singulière.
 
+## Les barres et les câbles
+
+Une barre porte un effort le long de son axe, pas un tenseur. Construite avec
+`strain_measure="green_lagrange"`, sa loi lit `E_*` et en prend la composante
+le long de la direction de référence `t₀` de la maille : sur un segment, le
+gradient est tangentiel, `F t₀ = (x_B − x_A)/L` est la corde courante rapportée
+à la longueur au repos, et
+
+\[
+t_0 \cdot E\, t_0 = \tfrac12 (\lambda^2 - 1) = \frac{l^2 - L^2}{2L^2},
+\]
+
+exactement, quelle que soit la rotation. La loi écrit l'effort de
+Piola–Kirchhoff 2 axial `S_n = E A (t₀·E t₀)`. `stress_measure` reconnaît une
+barre à ce nom et en fait :
+
+| `target` | composantes | valeur |
+|---|---|---|
+| `"pk1"` | `P_x, P_y(, P_z)` | `S_n F t₀`, le long de la corde courante |
+| `"cauchy"` | `n` | `λ S_n`, l'effort vrai |
+| `"pk2"` | `S_n` | inchangé |
+
+Les forces intérieures d'une barre en Green–Lagrange lisent `P` sur la
+référence : `−P` au premier nœud, `+P` au second. La rigidité géométrique lit
+l'effort vrai `n` sur la configuration courante et vaut `n/l · I` : c'est le
+terme de contrainte de la tangente exacte, `S_n/L₀ = n/l`, dans toutes les
+directions, l'axiale comprise. La rigidité élastique sur la configuration
+courante, `E A/l c⊗c`, diffère de la tangente exacte `E A λ²/L₀` d'un facteur
+`λ³`, comme celle du milieu continu en traction uniaxiale : seule la vitesse de
+convergence en dépend.
+
+```python
+{{#include ../../../tests/python/test_doc_grandes_transformations.py:barre}}
+```
+
+Hencky est refusé pour une barre : `t₀·½ ln C·t₀` ne vaut `ln λ` que tant que
+`t₀` est une direction propre de `C`, ce qu'une barre qui tourne n'est plus.
+Une barre tendue, un câble, n'a de raideur transversale que par `K_σ` : sans
+elle, l'opérateur du pas à pas est singulier.
+
 ## La conduction
 
 La conductivité donnée au matériau est celle de la matière **telle qu'elle
@@ -249,6 +289,12 @@ déduit comme plus haut, avec le déplacement enregistré. Voir
 - la même bande, isolée sauf sur sa face refroidie et de conductivité assez
   grande pour rester uniforme : chaque pas implicite donne
   `T ← T C / (C + G_h Δt)`, avec la capacité de référence `C = ρ c V₀`.
+- un treillis de von Mises, poussé au sommet en pilotage automatique, suit
+  `P(w) = E A ((h² − (h − w)²) (h − w)) / L³` à travers ses deux points
+  limites, la taille des pas étant la flèche du sommet (crochet
+  `automatic_measure`) ;
+- une corde tendue, chargée en son milieu, prend la flèche de l'équilibre
+  exact `2 S_n w / L = P` ; sans `K_σ`, l'opérateur est singulier.
 
 ## Correspondance Cast3M
 
@@ -259,4 +305,5 @@ déduit comme plus haut, avec le déplacement enregistré. Voir
 | `CONF` (contraintes) | `stress_measure` |
 | `FORM` avec un déplacement | `coords.displace_from` + `Coords.select` |
 | `KSIG` | `matrix.geometric` |
+| `BARR` en `GRANDS_DEPLACEMENTS` | `model.truss(fes, strain_measure="green_lagrange")` |
 | `PRES` sur la géométrie courante | `model.flux(…, "n")` évalué sur la configuration courante |

@@ -2389,9 +2389,14 @@ macro_rules! physics_operator {
             }
         } }
     };
+    // ── Physics on its FE space alone ───────────────────────────────────────
+    //
+    // An argument may carry a **Python** default (`arg: T = default`): Rust has
+    // no default arguments, so its caller passes it explicitly, while the
+    // Python face takes it as a keyword — one name, each language its idiom.
     (
         $(#[$rust_doc:meta])*
-        pub fn $name:ident(fes $(, $arg:ident : $ty:ty)* $(,)?) via $sub:path;
+        pub fn $name:ident(fes $(, $arg:ident : $ty:ty $(= $default:expr)?)* $(,)?) via $sub:path;
         python: $py_doc:literal
     ) => {
         $(#[$rust_doc])*
@@ -2418,6 +2423,7 @@ macro_rules! physics_operator {
             #[doc = $py_doc]
             #[cfg_attr(feature = "stub-gen", ::pyo3_stub_gen::derive::gen_stub_pyfunction)]
             #[::pyo3::pyfunction]
+            #[pyo3(signature = (fespace $(, $arg $(= $default)?)*))]
             pub fn $name(
                 fespace: ::pyo3::PyRef<$crate::py::finite_element_space::PyFiniteElementSpace>,
                 $($arg: $ty,)*
